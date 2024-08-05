@@ -10,7 +10,7 @@
   - Cancel any CPU order
   - Password protection on the website
 
-![image](https://github.com/user-attachments/assets/0700ddc8-93ef-4b2e-b395-6e8d20962d14)
+![image](https://github.com/user-attachments/assets/5757e707-1139-434e-99bb-eca6e4e787ff)
 
 ## Requirements:
   - An open port (configurable, terminal will be hosted at http://your-server-ip-or-domain:configured-port/ for example: http://server.kuba6000.pl:2324/)
