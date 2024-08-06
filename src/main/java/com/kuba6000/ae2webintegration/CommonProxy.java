@@ -1,5 +1,7 @@
 package com.kuba6000.ae2webintegration;
 
+import com.kuba6000.ae2webintegration.commands.ReloadCommandHandler;
+
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
@@ -12,7 +14,8 @@ public class CommonProxy {
     // preInit "Run before anything else. Read your config, create blocks, items, etc, and register them with the
     // GameRegistry." (Remove if not needed)
     public void preInit(FMLPreInitializationEvent event) {
-        Config.synchronizeConfiguration(event.getSuggestedConfigurationFile());
+        Config.init(event.getSuggestedConfigurationFile());
+        Config.synchronizeConfiguration();
 
         AE2WebIntegration.LOG.info("I am GIGAMOD at version " + Tags.VERSION);
 
@@ -31,7 +34,7 @@ public class CommonProxy {
 
     // register server commands in this event handler (Remove if not needed)
     public void serverStarting(FMLServerStartingEvent event) {
-
+        event.registerServerCommand(new ReloadCommandHandler());
     }
 
     public void serverStarted(FMLServerStartedEvent event) {

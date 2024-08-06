@@ -16,6 +16,8 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
@@ -191,27 +193,28 @@ public class AE2Controller {
 
     public static AE2Data INVALID_DATA = new AE2Data().invalid();
 
-    private static class ServerThread extends Thread {
-
-        public void run() {
-            try {
-                server = HttpServer.create(new InetSocketAddress(Config.AE_PORT), 0);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            server.createContext("/list", new ListHandler());
-            server.createContext("/get", new GetHandler());
-            server.createContext("/cancelcpu", new CancelCPUHandler());
-            server.createContext("/items", new ItemsHandler());
-            server.createContext("/order", new OrderHandler());
-            server.createContext("/job", new JobHandler());
-            server.createContext("/", new WebHandler());
-            server.setExecutor(null); // creates a default executor
-            server.start();
+    public static void startHTTPServer() {
+        try {
+            server = HttpServer.create(new InetSocketAddress(Config.AE_PORT), 0);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
+        server.createContext("/list", new ListHandler());
+        server.createContext("/get", new GetHandler());
+        server.createContext("/cancelcpu", new CancelCPUHandler());
+        server.createContext("/items", new ItemsHandler());
+        server.createContext("/order", new OrderHandler());
+        server.createContext("/job", new JobHandler());
+        server.createContext("/", new WebHandler());
+        server.setExecutor(serverThread);
+        server.start();
     }
 
-    private static ServerThread serverThread;
+    public static void stopHTTPServer() {
+        server.stop(0);
+    }
+
+    private static final ExecutorService serverThread = Executors.newCachedThreadPool();
 
     public static class GSONDetailedItem {
 
@@ -619,8 +622,7 @@ public class AE2Controller {
 
     public static void init() {
         try {
-            serverThread = new ServerThread();
-            serverThread.start();
+            startHTTPServer();
             SecurityCache.registerOpPlayer(AEControllerProfile);
         } catch (Exception e) {
             throw new RuntimeException(e);
