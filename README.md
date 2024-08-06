@@ -21,7 +21,7 @@
   - Drop the mod in your server mods folder (only on the server!)
   - Start the server
   - You can now find the config in /configs/ae2webintegration.cfg. Edit the port number and password protection for your needs
-  - Restart the server
+  - Reload the config (/ae2webintegration reload) or restart the server
   - Make sure you have opened the configured port (firewall, redirections) if you want to use it on public internet
   - Now you can visit http://your-server-ip-or-domain:configured-port/ and login popup should appear on your browser!
   - Only password is verified, you can put anything in the username ;)
