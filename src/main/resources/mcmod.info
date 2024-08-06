@@ -6,7 +6,7 @@
 		"description": "AE2 Web Integration mod",
 		"version": "${modVersion}",
 		"mcversion": "${minecraftVersion}",
-		"url": "https://github.com/kuba6000/",
+		"url": "https://github.com/kuba6000/AE2-Web-Integration",
 		"updateUrl": "",
 		"authorList": ["kuba6000"],
 		"credits": "",

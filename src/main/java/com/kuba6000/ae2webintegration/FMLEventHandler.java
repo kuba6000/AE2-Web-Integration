@@ -1,8 +1,6 @@
 package com.kuba6000.ae2webintegration;
 
-import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
-import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -10,8 +8,6 @@ import net.minecraft.util.IChatComponent;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
 import net.minecraftforge.common.util.FakePlayer;
-
-import com.mojang.authlib.GameProfile;
 
 import appeng.api.AEApi;
 import appeng.api.config.Actionable;
@@ -51,21 +47,13 @@ public class FMLEventHandler {
         IActionHost actionHost = (IActionHost) node.getMachine();
         World world = node.getWorld();
 
-        try {
-            return new PlayerSource(
-                new FakePlayer(
-                    (WorldServer) world,
-                    new GameProfile(UUID.nameUUIDFromBytes("AE2CONTROLLER".getBytes("UTF-8")), "AE2CONTROLLER")) {
+        return new PlayerSource(new FakePlayer((WorldServer) world, AE2Controller.AEControllerProfile) {
 
-                    @Override
-                    public void addChatMessage(IChatComponent message) {
-                        lastFakePlayerChatMessage = message;
-                    }
-                },
-                actionHost);
-        } catch (UnsupportedEncodingException e) {
-            throw new RuntimeException(e);
-        }
+            @Override
+            public void addChatMessage(IChatComponent message) {
+                lastFakePlayerChatMessage = message;
+            }
+        }, actionHost);
     }
 
     @SubscribeEvent

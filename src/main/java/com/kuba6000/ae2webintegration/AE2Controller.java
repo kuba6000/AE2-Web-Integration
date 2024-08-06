@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
@@ -20,6 +21,7 @@ import java.util.stream.Collectors;
 
 import com.kuba6000.ae2webintegration.utils.GSONUtils;
 import com.kuba6000.ae2webintegration.utils.HTTPUtils;
+import com.mojang.authlib.GameProfile;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -31,6 +33,7 @@ import appeng.api.networking.pathing.IPathingGrid;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.me.Grid;
+import appeng.me.cache.SecurityCache;
 
 public class AE2Controller {
 
@@ -38,6 +41,18 @@ public class AE2Controller {
     public static long timer;
     private static HttpServer server;
     public static ConcurrentHashMap<REQUEST_OPERATION, AE2Data> updates = new ConcurrentHashMap<>();
+
+    static GameProfile AEControllerProfile;
+
+    static {
+        try {
+            AEControllerProfile = new GameProfile(
+                UUID.nameUUIDFromBytes("AE2-WEB-INTEGRATION-AE2CONTROLLER".getBytes("UTF-8")),
+                "AE2CONTROLLER");
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     public static class REQUEST_OPERATION {
 
@@ -606,6 +621,7 @@ public class AE2Controller {
         try {
             serverThread = new ServerThread();
             serverThread.start();
+            SecurityCache.registerOpPlayer(AEControllerProfile);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
