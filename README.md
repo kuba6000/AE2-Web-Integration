@@ -14,7 +14,7 @@
 
 ## Requirements:
   - An open port (configurable, terminal will be hosted at http://your-server-ip-or-domain:configured-port/ for example: http://server.kuba6000.pl:2324/)
-  - Have only one big AE2 system on the server (REQUIRED: more than 5 crafting CPUs + 1+ NORMAL AE Terminal)
+  - Have only one big AE2 system on the server (REQUIRED: more than 5 crafting CPUs)
 
 ## How to use:
   - Download the latest version from releases page
