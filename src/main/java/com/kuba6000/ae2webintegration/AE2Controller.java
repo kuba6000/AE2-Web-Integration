@@ -229,7 +229,7 @@ public class AE2Controller {
         .storage()
         .createItemList();
 
-    public static HashMap<Integer, IAEItemStack> hashcodeToAEItemStack = new HashMap<>();
+    public static ConcurrentHashMap<Integer, IAEItemStack> hashcodeToAEItemStack = new ConcurrentHashMap<>();
 
     public static int nextJobID = 1;
 
@@ -330,27 +330,30 @@ public class AE2Controller {
         return false;
     }
 
+    private static AE2Data sendRequest(REQUEST_OPERATION request) {
+        requests.offer(request);
+        int timeout = 0;
+        while (!updates.containsKey(request) && timeout < 50) {
+            try {
+                Thread.sleep(200);
+                timeout++;
+            } catch (InterruptedException e) {
+                return INVALID_DATA;
+            }
+        }
+        if (timeout == 50) {
+            return INVALID_DATA;
+        }
+        return updates.remove(request);
+    }
+
     static class ListHandler implements HttpHandler {
 
         @Override
         public void handle(HttpExchange t) throws IOException {
 
             if (preHTTPHandler(t)) return;
-            REQUEST_OPERATION request;
-            requests.offer(request = new LIST_CPUS());
-            int timeout = 0;
-            while (!updates.containsKey(request) && timeout < 5) {
-                try {
-                    Thread.sleep(200);
-                    timeout++;
-                } catch (InterruptedException e) {
-                    return;
-                }
-            }
-            if (timeout == 5) {
-                return;
-            }
-            AE2Data data = updates.remove(request);
+            AE2Data data = sendRequest(new LIST_CPUS());
 
             String response = GSONUtils.GSON_BUILDER.create()
                 .toJson(data);
@@ -375,21 +378,7 @@ public class AE2Controller {
             if (!GET_PARAMS.containsKey("cpu")) {
                 return;
             }
-            REQUEST_OPERATION request;
-            requests.offer(request = new GET_CPU(GET_PARAMS.get("cpu")));
-            int timeout = 0;
-            while (!updates.containsKey(request) && timeout < 5) {
-                try {
-                    Thread.sleep(200);
-                    timeout++;
-                } catch (InterruptedException e) {
-                    return;
-                }
-            }
-            if (timeout == 5) {
-                return;
-            }
-            AE2Data data = updates.remove(request);
+            AE2Data data = sendRequest(new GET_CPU(GET_PARAMS.get("cpu")));
             String response;
             if (!data.isValid) response = GSONUtils.GSON_BUILDER.create()
                 .toJson(data);
@@ -419,21 +408,8 @@ public class AE2Controller {
             if (!GET_PARAMS.containsKey("cpu")) {
                 return;
             }
-            REQUEST_OPERATION request;
-            requests.offer(request = new CANCEL_CPU(GET_PARAMS.get("cpu")));
-            int timeout = 0;
-            while (!updates.containsKey(request) && timeout < 5) {
-                try {
-                    Thread.sleep(200);
-                    timeout++;
-                } catch (InterruptedException e) {
-                    return;
-                }
-            }
-            if (timeout == 5) {
-                return;
-            }
-            AE2Data data = updates.remove(request);
+
+            AE2Data data = sendRequest(new CANCEL_CPU(GET_PARAMS.get("cpu")));
             String response = GSONUtils.GSON_BUILDER.create()
                 .toJson(data);
 
@@ -452,21 +428,8 @@ public class AE2Controller {
         public void handle(HttpExchange t) throws IOException {
 
             if (preHTTPHandler(t)) return;
-            REQUEST_OPERATION request;
-            requests.offer(request = new GET_ITEMS());
-            int timeout = 0;
-            while (!updates.containsKey(request) && timeout < 5) {
-                try {
-                    Thread.sleep(200);
-                    timeout++;
-                } catch (InterruptedException e) {
-                    return;
-                }
-            }
-            if (timeout == 5) {
-                return;
-            }
-            AE2Data data = updates.remove(request);
+
+            AE2Data data = sendRequest(new GET_ITEMS());
 
             String response = GSONUtils.GSON_BUILDER.create()
                 .toJson(data);
@@ -497,26 +460,14 @@ public class AE2Controller {
             int quantity = Integer.parseInt(GET_PARAMS.get("quantity"));
             IAEItemStack stack = hashcodeToAEItemStack.get(hash);
 
-            if (stack == null || !stack.isCraftable()) return;
-
-            REQUEST_OPERATION request;
-            requests.offer(
-                request = new BEGIN_ORDER(
-                    stack.copy()
-                        .setStackSize(quantity)));
-            int timeout = 0;
-            while (!updates.containsKey(request) && timeout < 5) {
-                try {
-                    Thread.sleep(200);
-                    timeout++;
-                } catch (InterruptedException e) {
-                    return;
-                }
-            }
-            if (timeout == 5) {
+            if (stack == null || !stack.isCraftable()) {
                 return;
             }
-            AE2Data data = updates.remove(request);
+
+            AE2Data data = sendRequest(
+                new BEGIN_ORDER(
+                    stack.copy()
+                        .setStackSize(quantity)));
 
             String response = GSONUtils.GSON_BUILDER.create()
                 .toJson(data);
@@ -544,22 +495,11 @@ public class AE2Controller {
             int id = Integer.parseInt(GET_PARAMS.get("id"));
 
             REQUEST_OPERATION request;
-            if (GET_PARAMS.containsKey("cancel")) requests.offer(request = new CANCEL_ORDER(id));
-            else if (GET_PARAMS.containsKey("submit")) requests.offer(request = new SUBMIT_ORDER(id));
-            else requests.offer(request = new CHECK_ORDER(id));
-            int timeout = 0;
-            while (!updates.containsKey(request) && timeout < 5) {
-                try {
-                    Thread.sleep(200);
-                    timeout++;
-                } catch (InterruptedException e) {
-                    return;
-                }
-            }
-            if (timeout == 5) {
-                return;
-            }
-            AE2Data data = updates.remove(request);
+            if (GET_PARAMS.containsKey("cancel")) request = new CANCEL_ORDER(id);
+            else if (GET_PARAMS.containsKey("submit")) request = new SUBMIT_ORDER(id);
+            else request = new CHECK_ORDER(id);
+
+            AE2Data data = sendRequest(request);
 
             String response = GSONUtils.GSON_BUILDER.create()
                 .toJson(data);
