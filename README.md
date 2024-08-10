@@ -25,3 +25,8 @@
   - Make sure you have opened the configured port (firewall, redirections) if you want to use it on public internet
   - Now you can visit http://your-server-ip-or-domain:configured-port/ and login popup should appear on your browser!
   - Only password is verified, you can put anything in the username ;)
+
+## Custom website
+  - If you already have a web server and want to host the panel there, you can!
+  - Check out https://github.com/kuba6000/AE2-Web-Integration/tree/master/example_website !
+  - There you can find a simple website written in PHP ready to use, it's just simple proxy to API calls to the AE2 endpoint.
