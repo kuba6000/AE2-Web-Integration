@@ -535,7 +535,6 @@ public class AE2Controller {
             }
             response = response.replace("_REPLACE_ME_AE_SERVER_DOMAIN", "location.hostname");
             response = response.replace("_REPLACE_ME_AE_SERVER_PORT", "" + Config.AE_PORT);
-            response = response.replace("_REPLACE_ME_AE_SERVER_PASSWORD", "'" + Config.AE_PASSWORD + "'");
             byte[] raw_response = response.getBytes();
             t.sendResponseHeaders(200, raw_response.length);
             OutputStream os = t.getResponseBody();
