@@ -53,13 +53,11 @@
 <input type="checkbox" id="autorefresh"> Auto refresh
 <section id="aecontent"></section>
 <script>
-    AE_SERVER_DOMAIN = _REPLACE_ME_AE_SERVER_DOMAIN;
-    AE_SERVER_PORT = _REPLACE_ME_AE_SERVER_PORT;
     globalItemList = {};
     currentlyInOrderingScreen = false;
     currentJob = -1;
     function updateCPUList(){
-        $.getJSON('http://' + AE_SERVER_DOMAIN + ':' + AE_SERVER_PORT + '/list', function(data) {
+        $.getJSON('list', function(data) {
             clusters = data['clusters'];
             let clustersDOM = document.getElementById("clusters");
             let oldSelected = clustersDOM.selectedIndex;
@@ -81,7 +79,7 @@
     }
     updateCPUList();
     function getItemList(){
-        $.getJSON('http://' + AE_SERVER_DOMAIN + ':' + AE_SERVER_PORT + '/items', function(data){
+        $.getJSON('items', function(data){
             console.log(data);
             if (data['items']){
                 globalItemList = data['items'];
@@ -117,7 +115,7 @@
         }
         else {
             document.getElementById("aecontent").innerHTML = "<h1>SENDING REQUEST</h1>";
-            $.getJSON('http://' + AE_SERVER_DOMAIN + ':' + AE_SERVER_PORT + '/order?item=' + hashcode + "&quantity=" + quantity, function(data){
+            $.getJSON('order?item=' + hashcode + "&quantity=" + quantity, function(data){
                 console.log(data);
                 if (data['jobID']){
                     document.getElementById("aecontent").innerHTML = "<h1>SIMULATING CRAFTING</h1>";
@@ -137,7 +135,7 @@
             currentJob = -1;
             return;
         }
-        $.getJSON('http://' + AE_SERVER_DOMAIN + ':' + AE_SERVER_PORT + '/job?id=' + currentJob, function(data){
+        $.getJSON('job?id=' + currentJob, function(data){
             console.log(data);
             if (data['jobIsDone']){
                 let html = "";
@@ -190,7 +188,7 @@
             currentJob = -1;
             return;
         }
-        $.getJSON('http://' + AE_SERVER_DOMAIN + ':' + AE_SERVER_PORT + '/job?id=' + currentJob + "&cancel", function(data){
+        $.getJSON('job?id=' + currentJob + "&cancel", function(data){
             currentJob = -1;
             currentlyInOrderingScreen = false;
             getItemList();
@@ -202,7 +200,7 @@
             currentJob = -1;
             return;
         }
-        $.getJSON('http://' + AE_SERVER_DOMAIN + ':' + AE_SERVER_PORT + '/job?id=' + currentJob + "&submit", function(data){
+        $.getJSON('job?id=' + currentJob + "&submit", function(data){
             if (data['jobSubmissionFailureMessage']){
                 window.alert(data['jobSubmissionFailureMessage']);
             }
@@ -216,7 +214,7 @@
         if (selectedCPU == ""){
             return;
         }
-        $.getJSON('http://' + AE_SERVER_DOMAIN + ':' + AE_SERVER_PORT + '/cancelcpu?cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        $.getJSON('cancelcpu?cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             updateCPUList();
             selectCPU(selectedCPU);
         });
@@ -226,7 +224,7 @@
             getItemList();
             return;
         }
-        $.getJSON('http://' + AE_SERVER_DOMAIN + ':' + AE_SERVER_PORT + '/get?cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        $.getJSON('get?cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             console.log(data);
             let html = "";
             if (data['finalOutput']){
