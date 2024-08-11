@@ -36,6 +36,7 @@ import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.me.Grid;
 import appeng.me.cache.SecurityCache;
+import cpw.mods.fml.common.registry.GameRegistry;
 
 public class AE2Controller {
 
@@ -126,6 +127,19 @@ public class AE2Controller {
 
     }
 
+    public static class TRACKING_LIST extends REQUEST_OPERATION {
+
+    }
+
+    public static class GET_TRACKING extends REQUEST_OPERATION {
+
+        int id;
+
+        public GET_TRACKING(int id) {
+            this.id = id;
+        }
+    }
+
     public static ConcurrentLinkedQueue<REQUEST_OPERATION> requests = new ConcurrentLinkedQueue<>();
 
     public static class AE2Data {
@@ -164,6 +178,7 @@ public class AE2Controller {
             public IItemList<IAEItemStack> active = null;
             public IItemList<IAEItemStack> pending = null;
             public IItemList<IAEItemStack> storage = null;
+            public AE2JobTracker.JobTrackingInfo trackingInfo = null;
 
             public void initItemLists() {
                 active = AEApi.instance()
@@ -182,6 +197,8 @@ public class AE2Controller {
 
             public GSONItem finalOutput;
             public ArrayList<CompactedItem> items;
+            public boolean hasTrackingInfo = false;
+            public long timeStarted = 0L;
         }
 
         public AE2Data invalid() {
@@ -205,6 +222,8 @@ public class AE2Controller {
         server.createContext("/items", new ItemsHandler());
         server.createContext("/order", new OrderHandler());
         server.createContext("/job", new JobHandler());
+        server.createContext("/trackinghistory", new TrackingHistoryHandler());
+        server.createContext("/gettracking", new GetTrackingHandler());
         server.createContext("/", new WebHandler());
         server.setExecutor(serverThread);
         server.start();
@@ -259,6 +278,7 @@ public class AE2Controller {
         public long active = 0;
         public long pending = 0;
         public long stored = 0;
+        public long timeSpentCrafting = 0;
 
         @GSONUtils.SkipGSON
         private int hashcode = 0;
@@ -266,6 +286,15 @@ public class AE2Controller {
         public CompactedItem(String itemid, String itemname) {
             this.itemid = itemid;
             this.itemname = itemname;
+        }
+
+        public static CompactedItem create(IAEItemStack stack) {
+            return new AE2Controller.CompactedItem(
+                GameRegistry.findUniqueIdentifierFor(stack.getItem())
+                    .toString() + ":"
+                    + stack.getItemDamage(),
+                stack.getItemStack()
+                    .getDisplayName());
         }
 
         @Override
@@ -510,6 +539,75 @@ public class AE2Controller {
             os.close();
         }
 
+    }
+
+    static class TrackingHistoryHandler implements HttpHandler {
+
+        static class TrackingHistoryElement {
+
+            public long timeStarted;
+            public long timeDone;
+            public boolean wasCancelled;
+            public IAEItemStack finalOutput;
+            public int id;
+        }
+
+        @Override
+        public void handle(HttpExchange t) throws IOException {
+
+            if (preHTTPHandler(t)) return;
+
+            ArrayList<TrackingHistoryElement> jobs = new ArrayList<>(AE2JobTracker.trackingInfos.size());
+
+            for (Map.Entry<Integer, AE2JobTracker.JobTrackingInfo> integerJobTrackingInfoEntry : AE2JobTracker.trackingInfos
+                .entrySet()) {
+                TrackingHistoryElement element = new TrackingHistoryElement();
+                element.id = integerJobTrackingInfoEntry.getKey();
+                element.timeStarted = integerJobTrackingInfoEntry.getValue().timeStarted;
+                element.timeDone = integerJobTrackingInfoEntry.getValue().timeDone;
+                element.wasCancelled = integerJobTrackingInfoEntry.getValue().wasCancelled;
+                element.finalOutput = integerJobTrackingInfoEntry.getValue().finalOutput;
+                jobs.add(element);
+            }
+
+            jobs.sort((i1, i2) -> Long.compare(i2.timeDone, i1.timeDone));
+
+            String response = GSONUtils.GSON_BUILDER.create()
+                .toJson(jobs);
+            byte[] raw_response = response.getBytes();
+            t.sendResponseHeaders(200, raw_response.length);
+            OutputStream os = t.getResponseBody();
+            os.write(raw_response);
+            os.close();
+        }
+    }
+
+    static class GetTrackingHandler implements HttpHandler {
+
+        @Override
+        public void handle(HttpExchange t) throws IOException {
+
+            if (preHTTPHandler(t)) return;
+
+            Map<String, String> GET_PARAMS = HTTPUtils.parseQueryString(
+                t.getRequestURI()
+                    .getQuery());
+            if (!GET_PARAMS.containsKey("id")) {
+                return;
+            }
+            int id = Integer.parseInt(GET_PARAMS.get("id"));
+
+            AE2JobTracker.JobTrackingInfo info = AE2JobTracker.trackingInfos.get(id);
+            if (info == null) return;
+
+            String response = GSONUtils.GSON_BUILDER.create()
+                .toJson(info);
+            byte[] raw_response = response.getBytes();
+            t.sendResponseHeaders(200, raw_response.length);
+            OutputStream os = t.getResponseBody();
+            os.write(raw_response);
+            os.close();
+        }
     }
 
     static class WebHandler implements HttpHandler {

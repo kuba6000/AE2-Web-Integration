@@ -103,6 +103,7 @@ public class FMLEventHandler {
                                         cluster.getListOfItem(clusterData.active, CraftingItemList.ACTIVE);
                                         cluster.getListOfItem(clusterData.pending, CraftingItemList.PENDING);
                                         cluster.getListOfItem(clusterData.storage, CraftingItemList.STORAGE);
+                                        clusterData.trackingInfo = AE2JobTracker.trackingInfoMap.get(cpu);
                                     }
                                 } else {
                                     if (request instanceof AE2Controller.GET_CPU cpu_info

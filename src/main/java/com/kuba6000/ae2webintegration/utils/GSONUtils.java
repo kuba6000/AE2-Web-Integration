@@ -14,6 +14,7 @@ import com.google.gson.FieldAttributes;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSerializer;
 import com.kuba6000.ae2webintegration.AE2Controller;
+import com.kuba6000.ae2webintegration.AE2JobTracker;
 
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
@@ -57,34 +58,30 @@ public class GSONUtils {
         AE2Controller.AE2Data.ClusterCompactedData data = new AE2Controller.AE2Data.ClusterCompactedData();
         if (src.finalOutput == null) return context.serialize(data);
         data.finalOutput = convertToGSONItem(src.finalOutput);
+        AE2JobTracker.JobTrackingInfo info = src.trackingInfo;
+        data.hasTrackingInfo = info != null;
+        if (data.hasTrackingInfo) data.timeStarted = info.timeStarted;
         if (src.active != null) {
             HashMap<AE2Controller.CompactedItem, AE2Controller.CompactedItem> prep = new HashMap<>();
             for (IAEItemStack iaeItemStack : src.active) {
-                AE2Controller.CompactedItem compactedItem = new AE2Controller.CompactedItem(
-                    GameRegistry.findUniqueIdentifierFor(iaeItemStack.getItem())
-                        .toString() + ":"
-                        + iaeItemStack.getItemDamage(),
-                    iaeItemStack.getItemStack()
-                        .getDisplayName());
+                AE2Controller.CompactedItem compactedItem = AE2Controller.CompactedItem.create(iaeItemStack);
                 prep.computeIfAbsent(compactedItem, k -> compactedItem).active += iaeItemStack.getStackSize();
             }
             for (IAEItemStack iaeItemStack : src.pending) {
-                AE2Controller.CompactedItem compactedItem = new AE2Controller.CompactedItem(
-                    GameRegistry.findUniqueIdentifierFor(iaeItemStack.getItem())
-                        .toString() + ":"
-                        + iaeItemStack.getItemDamage(),
-                    iaeItemStack.getItemStack()
-                        .getDisplayName());
+                AE2Controller.CompactedItem compactedItem = AE2Controller.CompactedItem.create(iaeItemStack);
                 prep.computeIfAbsent(compactedItem, k -> compactedItem).pending += iaeItemStack.getStackSize();
             }
             for (IAEItemStack iaeItemStack : src.storage) {
-                AE2Controller.CompactedItem compactedItem = new AE2Controller.CompactedItem(
-                    GameRegistry.findUniqueIdentifierFor(iaeItemStack.getItem())
-                        .toString() + ":"
-                        + iaeItemStack.getItemDamage(),
-                    iaeItemStack.getItemStack()
-                        .getDisplayName());
+                AE2Controller.CompactedItem compactedItem = AE2Controller.CompactedItem.create(iaeItemStack);
                 prep.computeIfAbsent(compactedItem, k -> compactedItem).stored += iaeItemStack.getStackSize();
+            }
+
+            if (data.hasTrackingInfo) {
+                for (IAEItemStack iaeItemStack : info.timeSpentOn.keySet()) {
+                    AE2Controller.CompactedItem compactedItem = AE2Controller.CompactedItem.create(iaeItemStack);
+                    prep.computeIfAbsent(compactedItem, k -> compactedItem).timeSpentCrafting += info
+                        .getTimeSpentOn(iaeItemStack);
+                }
             }
 
             data.items = new ArrayList<>(prep.size());
