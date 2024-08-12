@@ -1,4 +1,4 @@
-package com.kuba6000.ae2webintegration.mixins.AE2;
+package com.kuba6000.ae2webintegration.mixins.AE2.MergeDisabler;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -10,7 +10,7 @@ import appeng.api.networking.security.BaseActionSource;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
-public class JobMergingDisablerMixin {
+public class CraftingCPUClusterMixin {
 
     /**
      * @author kuba6000

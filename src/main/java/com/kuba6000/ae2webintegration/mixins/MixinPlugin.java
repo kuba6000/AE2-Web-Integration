@@ -46,16 +46,6 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.CraftingCPUClusterMixin",
                 "AE2.CraftingCPUClusterAccessor"));
 
-        /*
-         * URL res = Launch.classLoader.getResource("appeng/me/cluster/implementations/CraftingCPUCluster.class");
-         * byte[] bytes;
-         * try (InputStream is = res.openStream()) {
-         * bytes = is.readAllBytes();
-         * } catch (IOException e) {
-         * throw new RuntimeException(e);
-         * }
-         */
-
         byte[] bytes = null;
         try {
             bytes = Launch.classLoader.getClassBytes("appeng.me.cluster.implementations.CraftingCPUCluster");
@@ -68,7 +58,12 @@ public class MixinPlugin implements IMixinConfigPlugin {
         cr.accept(cn, 0);
 
         if (cn.methods.stream()
-            .anyMatch(m -> m.name.equals("mergeJob"))) mixins.add("AE2.JobMergingDisablerMixin");
+            .anyMatch(m -> m.name.equals("mergeJob")))
+            mixins.addAll(
+                Arrays.asList(
+                    "AE2.MergeDisabler.CraftingCPUClusterMixin",
+                    "AE2.MergeDisabler.ContainerCraftConfirmMixin",
+                    "AE2.MergeDisabler.CraftingGridCacheMixin"));
 
         return mixins;
     }
