@@ -1,11 +1,13 @@
 package com.kuba6000.ae2webintegration;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingCPUClusterAccessor;
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingLinkAccessor;
+import com.kuba6000.ae2webintegration.utils.GSONUtils;
 
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingLink;
@@ -13,6 +15,7 @@ import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.crafting.CraftingLink;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
+import cpw.mods.fml.common.registry.GameRegistry;
 
 public class AE2JobTracker {
 
@@ -36,6 +39,41 @@ public class AE2JobTracker {
                 time += System.nanoTime() - additionalTime;
             }
             return time;
+        }
+    }
+
+    public static class CompactedJobTrackingInfo {
+
+        public static class CompactedTrackingGSONItem {
+
+            public String itemid;
+            public String itemname;
+            long timeSpentOn;
+            long craftedTotal;
+        }
+
+        public AE2Controller.GSONItem finalOutput;
+        public long timeStarted;
+        public long timeDone;
+        public ArrayList<CompactedTrackingGSONItem> items = new ArrayList<>();
+
+        public CompactedJobTrackingInfo(JobTrackingInfo info) {
+            this.finalOutput = GSONUtils.convertToGSONItem(info.finalOutput);
+            this.timeStarted = info.timeStarted;
+            this.timeDone = info.timeDone;
+            for (Map.Entry<IAEItemStack, Long> iaeItemStackLongEntry : info.timeSpentOn.entrySet()) {
+                IAEItemStack stack = iaeItemStackLongEntry.getKey();
+                long spent = iaeItemStackLongEntry.getValue();
+                CompactedTrackingGSONItem item = new CompactedTrackingGSONItem();
+                item.itemid = GameRegistry.findUniqueIdentifierFor(stack.getItem())
+                    .toString() + ":"
+                    + stack.getItemDamage();
+                item.itemname = stack.getItemStack()
+                    .getDisplayName();
+                item.timeSpentOn = spent;
+                item.craftedTotal = info.craftedTotal.get(stack);
+                items.add(item);
+            }
         }
     }
 

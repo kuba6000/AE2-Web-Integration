@@ -40,7 +40,7 @@ public class GSONUtils {
         }
     };
 
-    private static AE2Controller.GSONItem convertToGSONItem(IAEItemStack src) {
+    public static AE2Controller.GSONItem convertToGSONItem(IAEItemStack src) {
         return new AE2Controller.GSONItem(
             GameRegistry.findUniqueIdentifierFor(src.getItem())
                 .toString() + ":"
@@ -116,11 +116,15 @@ public class GSONUtils {
         return context.serialize(list);
     };
 
+    private static final JsonSerializer<AE2JobTracker.JobTrackingInfo> JOB_TRACKING_INFO_JSON_SERIALIZER = (src,
+        typeOfSrc, context) -> context.serialize(new AE2JobTracker.CompactedJobTrackingInfo(src));
+
     public static final GsonBuilder GSON_BUILDER = new GsonBuilder().addSerializationExclusionStrategy(GSONStrategy)
         .addDeserializationExclusionStrategy(GSONStrategy)
         .registerTypeAdapter(IItemList.class, AE2_ITEM_LIST_JSON_SERIALIZER)
         .registerTypeAdapter(IAEItemStack.class, AE2_ITEM_STACK_JSON_SERIALIZER)
         .registerTypeAdapter(AE2Controller.AE2Data.ClusterData.class, CLUSTER_DATA_JSON_SERIALIZER)
+        .registerTypeAdapter(AE2JobTracker.JobTrackingInfo.class, JOB_TRACKING_INFO_JSON_SERIALIZER)
         .serializeNulls();
 
 }
