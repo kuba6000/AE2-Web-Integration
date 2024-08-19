@@ -622,6 +622,25 @@ public class AE2Controller {
                 return;
             }
 
+            // only accept index file
+            String path = t.getRequestURI()
+                .getPath();
+            if (!path.equals("/") && !path.isEmpty()
+                && !path.equals("/index.php")
+                && !path.equals("/index.html")
+                && !path.equals("/index.htm")
+                && !path.equals("/index.asp")
+                && !path.equals("/index.aspx")
+                && !path.equals("/index.jsp")) {
+                String response = "<h1>Invalid url! (ERROR 404)</h1>";
+                byte[] raw_response = response.getBytes();
+                t.sendResponseHeaders(404, raw_response.length);
+                OutputStream os = t.getResponseBody();
+                os.write(raw_response);
+                os.close();
+                return;
+            }
+
             String response;
             try (InputStream is = AE2Controller.class.getResourceAsStream("/assets/webpage.html")) {
                 if (is == null) return;
