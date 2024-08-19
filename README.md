@@ -4,13 +4,13 @@
 ### THIS MOD IS ONLY FOR PRIVATE SERVERS, SUPPORTS ONLY ONE AE SYSTEM AND SERVER-SIDED ONLY
 
 ## Current features:
-  - AE2 terminal (item list)
+  - AE2 terminal (item list+sorting+filtering)
   - Start a new order
   - Check any CPU status
   - Cancel any CPU order
-  - Password protection on the website
+  - Password protection on the website (via authoarization header, described here: https://en.wikipedia.org/wiki/Basic_access_authentication)
 
-![image](https://github.com/user-attachments/assets/5757e707-1139-434e-99bb-eca6e4e787ff)
+![image](https://github.com/user-attachments/assets/32f16a17-846e-42d1-b8fc-16e8caf377e4)
 
 ## Requirements:
   - An open port (configurable, terminal will be hosted at http://your-server-ip-or-domain:configured-port/ for example: http://server.kuba6000.pl:2324/)
