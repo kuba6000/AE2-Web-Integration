@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 
 import com.kuba6000.ae2webintegration.utils.GSONUtils;
 import com.kuba6000.ae2webintegration.utils.HTTPUtils;
+import com.kuba6000.ae2webintegration.utils.VersionChecker;
 import com.mojang.authlib.GameProfile;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -279,6 +280,9 @@ public class AE2Controller {
         public long pending = 0;
         public long stored = 0;
         public long timeSpentCrafting = 0;
+        public long craftedTotal = 0;
+        public double shareInCraftingTime = 0d;
+        public double craftsPerSec = 0d;
 
         @GSONUtils.SkipGSON
         private int hashcode = 0;
@@ -650,6 +654,7 @@ public class AE2Controller {
                         .collect(Collectors.joining(System.lineSeparator()));
                 }
             }
+            response = response.replace("_REPLACE_ME_VERSION_OUTDATED", VersionChecker.isOutdated() ? "true" : "false");
             byte[] raw_response = response.getBytes();
             t.sendResponseHeaders(200, raw_response.length);
             OutputStream os = t.getResponseBody();

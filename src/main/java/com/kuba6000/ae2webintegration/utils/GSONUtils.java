@@ -79,8 +79,13 @@ public class GSONUtils {
             if (data.hasTrackingInfo) {
                 for (IAEItemStack iaeItemStack : info.timeSpentOn.keySet()) {
                     AE2Controller.CompactedItem compactedItem = AE2Controller.CompactedItem.create(iaeItemStack);
-                    prep.computeIfAbsent(compactedItem, k -> compactedItem).timeSpentCrafting += info
-                        .getTimeSpentOn(iaeItemStack);
+                    AE2Controller.CompactedItem finalCompactedItem = compactedItem;
+                    compactedItem = prep.computeIfAbsent(compactedItem, k -> finalCompactedItem);
+                    compactedItem.timeSpentCrafting += info.getTimeSpentOn(iaeItemStack);
+                    compactedItem.craftedTotal += info.craftedTotal.getOrDefault(iaeItemStack, 0L);
+                    compactedItem.shareInCraftingTime += info.getShareInCraftingTime(iaeItemStack);
+                    compactedItem.craftsPerSec = (double) compactedItem.craftedTotal
+                        / (compactedItem.timeSpentCrafting / 1e9d);
                 }
             }
 

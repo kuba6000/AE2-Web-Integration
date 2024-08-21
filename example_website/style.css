@@ -107,6 +107,17 @@ button:hover{
 #terminalcontent td{
     height: auto;
 }
+#terminalcontent td.button{
+    background-color: #9e9e9e;
+    border: 0;
+    border-radius: 2px;
+    padding: 5px;
+    transition: 0.2s;
+}
+#terminalcontent td.button:hover{
+    background-color: #858585;
+    cursor: pointer;
+}
 #terminalsubcontainer{
     width: 10%;
     float: left;

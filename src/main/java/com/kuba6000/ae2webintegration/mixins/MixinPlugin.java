@@ -8,6 +8,8 @@ import java.util.Set;
 
 import net.minecraft.launchwrapper.Launch;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.spongepowered.asm.lib.ClassReader;
 import org.spongepowered.asm.lib.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
@@ -15,6 +17,8 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
 @SuppressWarnings("unused")
 public class MixinPlugin implements IMixinConfigPlugin {
+
+    private static final Logger LOG = LogManager.getLogger("AE2WebIntegration mixins");
 
     @Override
     public void onLoad(String mixinPackage) {
@@ -58,12 +62,16 @@ public class MixinPlugin implements IMixinConfigPlugin {
         cr.accept(cn, 0);
 
         if (cn.methods.stream()
-            .anyMatch(m -> m.name.equals("mergeJob")))
+            .anyMatch(m -> m.name.equals("mergeJob"))) {
+            LOG.warn("Job merging detected, completely disabling it!!!!!!!!!!!!!");
             mixins.addAll(
                 Arrays.asList(
                     "AE2.MergeDisabler.CraftingCPUClusterMixin",
                     "AE2.MergeDisabler.ContainerCraftConfirmMixin",
                     "AE2.MergeDisabler.CraftingGridCacheMixin"));
+        }
+
+        LOG.info("MIXING INTO AE2 LETS GOOOOOOOOOOOOOOOOOOOOOOOOO");
 
         return mixins;
     }

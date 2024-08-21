@@ -40,6 +40,20 @@ public class AE2JobTracker {
             }
             return time;
         }
+
+        public double getShareInCraftingTime(IAEItemStack stack) {
+            long total = 0L;
+            long stackTime = 0L;
+            for (IAEItemStack iaeItemStack : timeSpentOn.keySet()) {
+                long timeSpent = getTimeSpentOn(iaeItemStack);
+                total += timeSpent;
+                if (stack.isSameType(iaeItemStack)) {
+                    stackTime = timeSpent;
+                }
+            }
+            if (total == 0L) return 1d;
+            return (double) stackTime / (double) total;
+        }
     }
 
     public static class CompactedJobTrackingInfo {
@@ -48,19 +62,23 @@ public class AE2JobTracker {
 
             public String itemid;
             public String itemname;
-            long timeSpentOn;
-            long craftedTotal;
+            public long timeSpentOn;
+            public long craftedTotal;
+            public double shareInCraftingTime = 0d;
+            public double craftsPerSec = 0d;
         }
 
         public AE2Controller.GSONItem finalOutput;
         public long timeStarted;
         public long timeDone;
+        public boolean wasCancelled;
         public ArrayList<CompactedTrackingGSONItem> items = new ArrayList<>();
 
         public CompactedJobTrackingInfo(JobTrackingInfo info) {
             this.finalOutput = GSONUtils.convertToGSONItem(info.finalOutput);
             this.timeStarted = info.timeStarted;
             this.timeDone = info.timeDone;
+            this.wasCancelled = info.wasCancelled;
             for (Map.Entry<IAEItemStack, Long> iaeItemStackLongEntry : info.timeSpentOn.entrySet()) {
                 IAEItemStack stack = iaeItemStackLongEntry.getKey();
                 long spent = iaeItemStackLongEntry.getValue();
@@ -72,8 +90,11 @@ public class AE2JobTracker {
                     .getDisplayName();
                 item.timeSpentOn = spent;
                 item.craftedTotal = info.craftedTotal.get(stack);
+                item.shareInCraftingTime = info.getShareInCraftingTime(stack);
+                item.craftsPerSec = (double) item.craftedTotal / (item.timeSpentOn / 1e9d);
                 items.add(item);
             }
+            items.sort((i1, i2) -> Double.compare(i2.shareInCraftingTime, i1.shareInCraftingTime));
         }
     }
 
