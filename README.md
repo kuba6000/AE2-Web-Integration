@@ -2,15 +2,20 @@
 
 ### Host your AE2 terminal on web to quickly check on your storage/orders when not in game!  
 ### THIS MOD IS ONLY FOR PRIVATE SERVERS, SUPPORTS ONLY ONE AE SYSTEM AND SERVER-SIDED ONLY
+### THIS MOD IS COMPATIBLE ONLY WITH [GTNH FORK OF AE2](https://github.com/GTNewHorizons/Applied-Energistics-2-Unofficial)
+
+### JOB MERGING IS CURRENTLY NOT SUPPORTED AND COMPLETELY DISABLED BY THIS MOD!!!
 
 ## Current features:
   - AE2 terminal (item list+sorting+filtering)
   - Start a new order
   - Check any CPU status
   - Cancel any CPU order
+  - Order tracking
   - Password protection on the website (via authoarization header, described here: https://en.wikipedia.org/wiki/Basic_access_authentication)
 
-![image](https://github.com/user-attachments/assets/32f16a17-846e-42d1-b8fc-16e8caf377e4)
+![image](https://github.com/user-attachments/assets/6a2a08a5-1938-4feb-97ea-6f787daedacd)
+![image](https://github.com/user-attachments/assets/dc5e4f2f-ab6f-484f-9c13-dfff7a21cc11)
 
 ## Requirements:
   - An open port (configurable, terminal will be hosted at http://your-server-ip-or-domain:configured-port/ for example: http://server.kuba6000.pl:2324/)
