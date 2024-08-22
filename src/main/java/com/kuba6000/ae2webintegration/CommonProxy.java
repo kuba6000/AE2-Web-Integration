@@ -1,6 +1,7 @@
 package com.kuba6000.ae2webintegration;
 
 import com.kuba6000.ae2webintegration.commands.ReloadCommandHandler;
+import com.kuba6000.ae2webintegration.utils.VersionChecker;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
@@ -17,7 +18,10 @@ public class CommonProxy {
         Config.init(event.getSuggestedConfigurationFile());
         Config.synchronizeConfiguration();
 
-        AE2WebIntegration.LOG.info("I am GIGAMOD at version " + Tags.VERSION);
+        AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + Tags.VERSION);
+        if (VersionChecker.isOutdated()) AE2WebIntegration.LOG.warn(
+            "You are not on latest version ! Consider updating to {} at https://github.com/kuba6000/AE2-Web-Integration/releases/latest",
+            VersionChecker.getLatestTag());
 
         FMLCommonHandler.instance()
             .bus()

@@ -4,10 +4,15 @@ import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
+import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.IChatComponent;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
 import net.minecraftforge.common.util.FakePlayer;
+
+import com.kuba6000.ae2webintegration.utils.VersionChecker;
 
 import appeng.api.AEApi;
 import appeng.api.config.Actionable;
@@ -34,6 +39,7 @@ import appeng.me.Grid;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import appeng.parts.reporting.AbstractPartTerminal;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
+import cpw.mods.fml.common.gameevent.PlayerEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import cpw.mods.fml.common.registry.GameRegistry;
 
@@ -103,6 +109,7 @@ public class FMLEventHandler {
                                         cluster.getListOfItem(clusterData.active, CraftingItemList.ACTIVE);
                                         cluster.getListOfItem(clusterData.pending, CraftingItemList.PENDING);
                                         cluster.getListOfItem(clusterData.storage, CraftingItemList.STORAGE);
+                                        clusterData.trackingInfo = AE2JobTracker.trackingInfoMap.get(cpu);
                                     }
                                 } else {
                                     if (request instanceof AE2Controller.GET_CPU cpu_info
@@ -296,6 +303,15 @@ public class FMLEventHandler {
                 }
             }
         }
+    }
+
+    @SubscribeEvent
+    public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!(event.player instanceof EntityPlayerMP)) return;
+        if (VersionChecker.isOutdated()) event.player.addChatMessage(
+            new ChatComponentText(
+                EnumChatFormatting.GREEN.toString() + EnumChatFormatting.BOLD
+                    + "----> AE2WebIntegration -> New version detected! Consider updating at https://github.com/kuba6000/AE2-Web-Integration/releases/latest"));
     }
 
 }

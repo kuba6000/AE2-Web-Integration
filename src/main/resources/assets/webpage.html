@@ -113,6 +113,17 @@
         #terminalcontent td{
             height: auto;
         }
+        #terminalcontent td.button{
+            background-color: #9e9e9e;
+            border: 0;
+            border-radius: 2px;
+            padding: 5px;
+            transition: 0.2s;
+        }
+        #terminalcontent td.button:hover{
+            background-color: #858585;
+            cursor: pointer;
+        }
         #terminalsubcontainer{
             width: 10%;
             float: left;
@@ -206,12 +217,14 @@
         </section>
         <section id='terminalCPUList' style='display: none;'>...</section>
         <section id='terminalCPUListForJob' style='display: none;'>...</section>
+        <section id='terminalHistoryDetails' style='display: none;'>...</section>
     </section>
     <section id="terminalwindow">
         <section id="terminalheader">
             <section id="terminalTerminalHeader">
                 Terminal <input type="text" id="searchtext" placeholder="Search string" onkeyup="searchStringChanged(this);">
                 <button onclick='openCraftingStatus();'>Crafting</button>
+                <button onclick='openCraftingHistory();'>Crafting History</button>
                 <button onclick='refreshTerminal();'>Refresh</button>
             </section>
             <section id="terminalCPUHeader" style="display: none;">
@@ -222,6 +235,11 @@
             <section id='terminalJobHeader' style='display: none;'>
                 <span id="terminalJobHeaderText"></span>
                 <button onclick='cancelCurrentJob();' class='redtext'>Cancel</button>
+            </section>
+            <section id='terminalHistoryHeader' style='display: none;'>
+                <span id="terminalHistoryHeaderText"></span>
+                <button onclick='closeCraftingStatus();'>Terminal</button>
+                <button onclick='refreshTerminal();' id="terminalHistoryHeaderRefresh">Refresh</button>
             </section>
         </section>
         <section id="terminalcontent"></section>
@@ -246,9 +264,10 @@
 </section>
 
 <script>
+    const isOutdated = _REPLACE_ME_VERSION_OUTDATED;
     globalItemList = {};
     globalCPUList = {};
-    currentWindow = 0; // 0 - main, 1 - CPU, 2 - Order screen
+    currentWindow = 0; // 0 - main, 1 - CPU, 2 - Order screen, 3 - History window
     selectedCPU = 0;
     filteringOptions = {
         searchString: "",
@@ -268,6 +287,7 @@
         ["terminalOptions", "terminalTerminalHeader"],
         ["terminalCPUList", "terminalCPUHeader"],
         ["terminalCPUListForJob", "terminalJobHeader"],
+        ["terminalHistoryHeader", "terminalHistoryDetails"],
     ];
     const sortByDisplay = ['A-Z', '# of items', 'Mod'];
     const sortOrderDisplay = ['Ascending', 'Descending'];
@@ -361,11 +381,13 @@
         setCookie("numberFormat", settings.numberFormat, 7);
         refreshDisplay();
     }
-    function refreshTerminal(){
+    function refreshTerminal() {
         if (currentWindow == 0)
             getItemList();
         else if (currentWindow == 1)
             displayCPUDetails();
+        else if (currentWindow == 3)
+            getCraftingHistory();
     }
     function refreshDisplay(){
         if (currentWindow == 0)
@@ -440,6 +462,30 @@
                 return num;
         }
     }
+    function formatTimeNs(ns){
+        return formatTime(Number(ns) / 1e9);
+    }
+    function formatTime(time){
+        let s = Number(time);
+        let format = 's';
+        if(s > 60){
+            s /= 60;
+            format = 'm';
+        }
+        if(s > 60){
+            s /= 60;
+            format = 'h';
+        }
+        return Intl.NumberFormat('en-US', {
+                    maximumFractionDigits: 3
+                }).format(s) + format;
+    }
+    function formatPercent(percent){
+        return Intl.NumberFormat('en-US', {
+            style: "percent",
+            maximumFractionDigits: 2
+        }).format(percent);
+    }
     function displayCPUList(){
         let html = "";
         for (let key in globalCPUList){
@@ -465,11 +511,11 @@
                     selectedCPU + ": Crafting " + data['finalOutput']['itemname'] + " x" + data['finalOutput']['quantity'] + "<button onclick='cancelJobOnCPU(\"" + selectedCPU + "\");' class='redtext'>Cancel</button>";
             else
                 document.getElementById("terminalCPUHeaderText").innerHTML = selectedCPU + ": Idle";
-
+            let hasTrackingInfo = data['hasTrackingInfo'];
             html += "<table><tr>";
             let grid_i_max = settings.itemsPerRow;
             let grid_i = 0;
-            if(data['items']){
+            if (data['items']){
                 let items = data['items'];
                 for(let i = 0; i < items.length; i++){
                     let item = items[i];
@@ -480,7 +526,12 @@
                         el = 'pending';
                     else
                         el = 'storage';
-                    html += "<td class='" + el + "'>" + item['itemname'] + "<br>Crafting: " + formatNumber(item['active']) + "<br>Scheduled: " + formatNumber(item['pending']) + "<br>Stored: " + formatNumber(item['stored']) + "</td>";
+                    html += "<td class='" + el + "'>" + item['itemname'] + "<br>Crafting: " + formatNumber(item['active']) + "<br>Scheduled: " + formatNumber(item['pending']) + "<br>Stored: " + formatNumber(item['stored']);
+                    if (hasTrackingInfo && item['timeSpentCrafting']){
+                        html += "<br>Spent crafting: " + formatTimeNs(item['timeSpentCrafting']) + " (" + formatPercent(item['shareInCraftingTime']) + ")";
+                        html += "<br>Crafted total: " + formatNumber(item['craftedTotal']) + " (" + formatNumber(item['craftsPerSec']) + "/s)";
+                    }
+                    html += "</td>";
                     grid_i++;
                     if(grid_i == grid_i_max){
                         html += "</tr><tr>";
@@ -525,6 +576,10 @@
         setCurrentScreen(0);
         getItemList();
     }
+    function openCraftingHistory(){
+        setCurrentScreen(3);
+        getCraftingHistory();
+    }
     function displayItemList(){
         let html = "<table>";
         let grid_i_max = settings.itemsPerRow;
@@ -545,7 +600,7 @@
         for(; grid_i < grid_i_max; grid_i ++){
             html += "<td></td>";
         }
-        html += "</tr>";
+        html += "</tr></table>";
         document.getElementById("terminalcontent").innerHTML = html;
     }
     function getItemList(){
@@ -561,7 +616,74 @@
             popLoadingScreen(message);
         });
     }
+    function getCraftingHistory(){
+        let message = "Asking for tracking history list...";
+        pushLoadingScreen(message);
+        $.getJSON('trackinghistory', function(data){
+            console.log(data);
+            let html = "<table>";
+            for (let i = 0; i < data.length; i++){
+                let trackingHistoryInfo = data[i];
+                html += "<tr><td class='button' onclick='openTrackingData(" + trackingHistoryInfo['id'] + ");'>";
+                html += "Job for " + trackingHistoryInfo['finalOutput']['itemname'] + " x" + trackingHistoryInfo['finalOutput']['quantity'];
+                if (trackingHistoryInfo['wasCancelled']){
+                    html += " (was cancelled)";
+                }
+                html += "<br>Started " + new Date(Number(trackingHistoryInfo['timeStarted']) * 1000).toLocaleString();
+                html += "<br>Completed " + new Date(Number(trackingHistoryInfo['timeDone']) * 1000).toLocaleString();
+                html += "<br>Completed in " + formatTime(Number(trackingHistoryInfo['timeDone']) - Number(trackingHistoryInfo['timeStarted']));
+                html += "</td></tr>";
+            }
+            html += "</table>";
+            document.getElementById("terminalcontent").innerHTML = html;
+            document.getElementById("terminalHistoryHeaderText").innerHTML = "Tracking history";
+            document.getElementById("terminalHistoryHeaderRefresh").innerHTML = "Refresh";
+            document.getElementById("terminalHistoryDetails").innerHTML = "...";
+            popLoadingScreen(message);
+        });
+    }
+    function openTrackingData(id){
+        let message = "Asking for tracking data...";
+        pushLoadingScreen(message);
+        $.getJSON('gettracking?id=' + id, function(data){
+            console.log(data);
+            let html = "<table>";
+            let grid_i_max = settings.itemsPerRow;
+            let grid_i = 0;
+            html += "<tr>";
+            let items = data['items'];
+            for(let i = 0; i < items.length; i++){
+                let item = items[i];
+                html += "<td class='storage'>" + item['itemname'] + " x" + formatNumber(item['craftedTotal']);
+                html += "<br>Spent crafting: " + formatTimeNs(item['timeSpentOn']) + " (" + formatPercent(item['shareInCraftingTime']) + ")";
+                html += "<br>Efficiency: " + formatNumber(item['craftsPerSec']) + "/s";
+                html += "</td>";
+                grid_i++;
+                if(grid_i == grid_i_max){
+                    html += "</tr><tr>";
+                    grid_i = 0;
+                }
+            }
+            for(; grid_i < grid_i_max; grid_i ++){
+                html += "<td></td>";
+            }
+            html += "</tr></table>";
+            document.getElementById("terminalcontent").innerHTML = html;
 
+            document.getElementById("terminalHistoryHeaderText").innerHTML = "Tracking history - " + data['finalOutput']['itemname'] + " x" + formatNumber(data['finalOutput']['quantity']);
+            document.getElementById("terminalHistoryHeaderRefresh").innerHTML = "Close";
+            html = "";
+            if(data['wasCancelled'])
+            {
+                html += "Was cancelled!<br>";
+            }
+            html += "Started " + new Date(Number(data['timeStarted']) * 1000).toLocaleString();
+            html += "<br>Completed " + new Date(Number(data['timeDone']) * 1000).toLocaleString();
+            html += "<br>Completed in " + formatTime(Number(data['timeDone']) - Number(data['timeStarted']));
+            document.getElementById("terminalHistoryDetails").innerHTML = html;
+            popLoadingScreen(message);
+        });
+    }
     function beginOrderingItem(hashcode){
         console.log(hashcode);
         let quantity = Number(window.prompt("How much to order?", "1"));
@@ -722,6 +844,11 @@
 
     updateCPUList();
     getItemList();
+
+    function showAlertIfOutdated() {
+        if (isOutdated) alert("New version detected! Consider updating at https://github.com/kuba6000/AE2-Web-Integration/releases/latest");
+    }
+    setTimeout(showAlertIfOutdated, 1000);
 
 </script>
 <br><br>
