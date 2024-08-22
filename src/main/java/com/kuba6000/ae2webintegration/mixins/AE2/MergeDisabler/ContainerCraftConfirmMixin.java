@@ -12,7 +12,7 @@ import appeng.container.implementations.CraftingCPUStatus;
 public class ContainerCraftConfirmMixin {
 
     @Inject(method = "cpuCraftingSameItem", at = @At("HEAD"), cancellable = true)
-    void ae2webinterface$cpuCraftingSameItem(CraftingCPUStatus c, CallbackInfoReturnable<Boolean> cir) {
+    void ae2webintegration$cpuCraftingSameItem(CraftingCPUStatus c, CallbackInfoReturnable<Boolean> cir) {
         cir.setReturnValue(false);
     }
 
