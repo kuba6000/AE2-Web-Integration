@@ -41,7 +41,7 @@ public class VersionChecker {
             }
 
         } catch (Exception ignored) {
-            
+
         }
     }
 
