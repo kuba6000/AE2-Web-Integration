@@ -40,8 +40,8 @@ public class VersionChecker {
                 }
             }
 
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        } catch (Exception ignored) {
+            
         }
     }
 
