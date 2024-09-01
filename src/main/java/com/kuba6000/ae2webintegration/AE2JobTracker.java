@@ -309,10 +309,19 @@ public class AE2JobTracker {
             info.craftedTotal.merge(iaeItemStackLongEntry.getKey(), iaeItemStackLongEntry.getValue(), Long::sum);
         }
         info.waitingFor.clear();
+        final long now = System.nanoTime();
+        final long nowTimeStamp = System.currentTimeMillis() / 1000L;
         for (Map.Entry<IAEItemStack, Long> iaeItemStackLongEntry : info.startedWaitingFor.entrySet()) {
-            info.timeSpentOn
-                .merge(iaeItemStackLongEntry.getKey(), System.nanoTime() - iaeItemStackLongEntry.getValue(), Long::sum);
+            info.timeSpentOn.merge(iaeItemStackLongEntry.getKey(), now - iaeItemStackLongEntry.getValue(), Long::sum);
         }
+        for (Map.Entry<AEInterface, Long> entry : info.interfaceStarted.entrySet()) {
+            info.interfaceShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
+                .add(Pair.of(entry.getValue(), nowTimeStamp));
+        }
+        info.interfaceStarted.clear();
+        info.interfaceWaitingFor.clear();
+        info.interfaceWaitingForLookup.clear();
+        info.interfaceLookup.clear();
         info.startedWaitingFor.clear();
         info.isDone = true;
         info.timeDone = System.currentTimeMillis() / 1000L;
