@@ -1,6 +1,7 @@
 package com.kuba6000.ae2webintegration;
 
 import com.kuba6000.ae2webintegration.commands.ReloadCommandHandler;
+import com.kuba6000.ae2webintegration.discord.DiscordManager;
 import com.kuba6000.ae2webintegration.utils.VersionChecker;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -44,6 +45,9 @@ public class CommonProxy {
 
     public void serverStarted(FMLServerStartedEvent event) {
         AE2Controller.init();
+        DiscordManager.init();
+        DiscordManager.postMessageNonBlocking(
+            new DiscordManager.DiscordEmbed("AE2 Web Integration", "Discord integration started!"));
     }
 
     public void serverStopping(FMLServerStoppingEvent event) {
