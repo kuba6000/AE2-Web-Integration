@@ -68,9 +68,8 @@ public class JSON_CompactedJobTrackingInfo {
             item.timeSpentOn = spent;
             item.craftedTotal = info.craftedTotal.get(stack);
             item.shareInCraftingTime = info.getShareInCraftingTime(stack);
-            item.shareInCraftingTimeCombined = Math
-                .min(((double) (long) (item.timeSpentOn / 1e9d)) / (double) elapsed, 1d);
-            item.craftsPerSec = (double) item.craftedTotal / (item.timeSpentOn / 1e9d);
+            item.shareInCraftingTimeCombined = Math.min(((double) item.timeSpentOn) / (double) elapsed, 1d);
+            item.craftsPerSec = (double) item.craftedTotal / (item.timeSpentOn / 1000d);
             items.add(item);
         }
         items.sort((i1, i2) -> Double.compare(i2.shareInCraftingTime, i1.shareInCraftingTime));

@@ -126,6 +126,7 @@ public class Job extends ISyncedRequest {
                         }
                         jobData.plan.add(jobItem);
                     }
+                    // TODO Move sorting to javascript!
                     jobData.plan.sort((i1, i2) -> {
                         if (i1.missing > 0 && i2.missing > 0) return Long.compare(i2.missing, i1.missing);
                         else if (i1.missing > 0 && i2.missing == 0) return -1;

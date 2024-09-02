@@ -101,7 +101,7 @@ public class AE2JobTracker {
             if (time == null) return 0L;
             Long additionalTime = startedWaitingFor.get(stack);
             if (additionalTime != null) {
-                time += System.nanoTime() - additionalTime;
+                time += System.currentTimeMillis() - additionalTime;
             }
             return time;
         }
@@ -137,11 +137,11 @@ public class AE2JobTracker {
                 } else if (AE2Controller.activeGrid != grid) return;
                 JobTrackingInfo info;
                 trackingInfoMap.put(cpu, info = new JobTrackingInfo());
-                info.timeStarted = System.currentTimeMillis() / 1000L;
+                info.timeStarted = System.currentTimeMillis();
                 info.finalOutput = cpu.getFinalOutput()
                     .copy();
                 for (IAEItemStack iaeItemStack : ((CraftingCPUClusterAccessor) (Object) cpuCluster).getWaitingFor()) {
-                    info.startedWaitingFor.put(iaeItemStack, System.nanoTime());
+                    info.startedWaitingFor.put(iaeItemStack, System.currentTimeMillis());
                     info.timeSpentOn.put(iaeItemStack, 0L);
                     info.craftedTotal.put(iaeItemStack, 0L);
                     info.waitingFor.put(iaeItemStack, iaeItemStack.getStackSize());
@@ -158,7 +158,7 @@ public class AE2JobTracker {
         IAEItemStack found = waitingFor.findPrecise(diff);
         if (found != null && found.getStackSize() > 0L) {
             if (!info.startedWaitingFor.containsKey(found)) {
-                info.startedWaitingFor.put(found, System.nanoTime());
+                info.startedWaitingFor.put(found, System.currentTimeMillis());
                 info.timeSpentOn.putIfAbsent(found, 0L);
                 info.waitingFor.put(found, found.getStackSize());
             } else {
@@ -172,9 +172,9 @@ public class AE2JobTracker {
         } else {
             if (info.startedWaitingFor.containsKey(diff)) {
                 long started = info.startedWaitingFor.remove(diff);
-                long ended = System.nanoTime();
+                long ended = System.currentTimeMillis();
                 long elapsed = ended - started;
-                long endedReal = System.currentTimeMillis() / 1000L;
+                long endedReal = System.currentTimeMillis();
                 info.timeSpentOn.merge(diff, elapsed, Long::sum);
                 info.craftedTotal.merge(diff, info.waitingFor.remove(diff), Long::sum);
                 if (info.interfaceWaitingForLookup.containsKey(diff)) {
@@ -206,7 +206,7 @@ public class AE2JobTracker {
             final AEInterface aeInterfaceToLookup = new AEInterface(name);
             final AEInterface aeInterface = info.interfaceLookup
                 .computeIfAbsent(aeInterfaceToLookup, k -> aeInterfaceToLookup);
-            info.interfaceStarted.computeIfAbsent(aeInterface, k -> System.currentTimeMillis() / 1000L);
+            info.interfaceStarted.computeIfAbsent(aeInterface, k -> System.currentTimeMillis());
             final HashSet<IAEItemStack> itemList = info.interfaceWaitingFor
                 .computeIfAbsent(aeInterface, k -> new HashSet<>());
 
@@ -225,14 +225,13 @@ public class AE2JobTracker {
             info.craftedTotal.merge(iaeItemStackLongEntry.getKey(), iaeItemStackLongEntry.getValue(), Long::sum);
         }
         info.waitingFor.clear();
-        final long now = System.nanoTime();
-        final long nowTimeStamp = System.currentTimeMillis() / 1000L;
+        final long now = System.currentTimeMillis();
         for (Map.Entry<IAEItemStack, Long> iaeItemStackLongEntry : info.startedWaitingFor.entrySet()) {
             info.timeSpentOn.merge(iaeItemStackLongEntry.getKey(), now - iaeItemStackLongEntry.getValue(), Long::sum);
         }
         for (Map.Entry<AEInterface, Long> entry : info.interfaceStarted.entrySet()) {
             info.interfaceShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
-                .add(Pair.of(entry.getValue(), nowTimeStamp));
+                .add(Pair.of(entry.getValue(), now));
         }
         info.interfaceStarted.clear();
         info.interfaceWaitingFor.clear();
@@ -240,7 +239,7 @@ public class AE2JobTracker {
         info.interfaceLookup.clear();
         info.startedWaitingFor.clear();
         info.isDone = true;
-        info.timeDone = System.currentTimeMillis() / 1000L;
+        info.timeDone = System.currentTimeMillis();
         trackingInfos.put(nextFreeTrackingInfoID++, info);
     }
 

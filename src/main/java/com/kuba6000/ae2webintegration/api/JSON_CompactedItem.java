@@ -20,6 +20,7 @@ public class JSON_CompactedItem {
     public long timeSpentCrafting = 0;
     public long craftedTotal = 0;
     public double shareInCraftingTime = 0d;
+    public double shareInCraftingTimeCombined = 0d;
     public double craftsPerSec = 0d;
 
     public JSON_CompactedItem(IAEItemStack itemStack) {
