@@ -1077,16 +1077,10 @@
         let message = "Submitting job...";
         pushLoadingScreen(message);
         $.getJSON('job?id=' + currentJob + "&submit", function(data){
-            if(data.status !== "OK"){
+            if (data.status !== "OK"){
                 alert(data.status + ": " + data.data);
-                popLoadingScreen(message);
-                return;
             }
-            data = data.data;
             popLoadingScreen(message);
-            // if (data['jobSubmissionFailureMessage']){
-            //     window.alert(data['jobSubmissionFailureMessage']);
-            // }
             setCurrentScreen(0);
             refreshTerminal();
         });
