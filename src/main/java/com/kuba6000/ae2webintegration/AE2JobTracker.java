@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.lang3.tuple.Pair;
 
+import com.kuba6000.ae2webintegration.discord.DiscordManager;
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingCPUClusterAccessor;
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingLinkAccessor;
 
@@ -241,13 +242,28 @@ public class AE2JobTracker {
         info.isDone = true;
         info.timeDone = System.currentTimeMillis();
         trackingInfos.put(nextFreeTrackingInfoID++, info);
+        double took = info.timeDone - info.timeStarted;
+        took /= 1000d;
+        DiscordManager.postMessageNonBlocking(
+            new DiscordManager.DiscordEmbed(
+                "AE2 Job Tracker",
+                "Crafting for `" + info.finalOutput.getItemStack()
+                    .getDisplayName()
+                    + " x"
+                    + info.finalOutput.getStackSize()
+                    + "` "
+                    + (info.wasCancelled ? "cancelled" : "completed")
+                    + "!\nIt took "
+                    + took
+                    + "s",
+                info.wasCancelled ? 15548997 : 5763719));
     }
 
     public static void cancelCrafting(ICraftingCPU cpu) {
         JobTrackingInfo info = trackingInfoMap.get(cpu);
         if (info == null) return;
-        completeCrafting(cpu);
         info.wasCancelled = true;
+        completeCrafting(cpu);
     }
 
 }
