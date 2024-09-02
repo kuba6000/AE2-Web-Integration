@@ -39,6 +39,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <title>AE2</title>
@@ -84,6 +85,7 @@
                 <span id="terminalCPUHeaderText"></span>
                 <button onclick='closeCraftingStatus();'>Terminal</button>
                 <button onclick='refreshTerminal();'>Refresh</button>
+                <button onclick='cancelJobOnCPU(selectedCPU);' class='redtext'>Cancel</button>
             </section>
             <section id='terminalJobHeader' style='display: none;'>
                 <span id="terminalJobHeaderText"></span>
@@ -92,7 +94,7 @@
             <section id='terminalHistoryHeader' style='display: none;'>
                 <span id="terminalHistoryHeaderText"></span>
                 <button onclick='closeCraftingStatus();'>Terminal</button>
-                <button onclick='refreshTerminal();' id="terminalHistoryHeaderRefresh">Refresh</button>
+                <button onclick='getCraftingHistory();' id="terminalHistoryHeaderRefresh">Refresh</button>
             </section>
         </section>
         <section id="terminalcontent"></section>
@@ -247,8 +249,10 @@
             getItemList();
         else if (currentWindow == 1)
             displayCPUDetails();
-        else if (currentWindow == 3)
-            getCraftingHistory();
+        else if (currentWindow == 3) {
+            if (!document.getElementById('toggleInterfaceShare'))
+                getCraftingHistory();
+        }
     }
     function refreshDisplay(){
         if (currentWindow == 0)
@@ -442,7 +446,7 @@
             let html = "";
             if (data['finalOutput'])
                 document.getElementById("terminalCPUHeaderText").innerHTML =
-                    selectedCPU + ": Crafting " + formatItemName(data['finalOutput'], false) + " x" + data['finalOutput']['quantity'] + "<button onclick='cancelJobOnCPU(\"" + selectedCPU + "\");' class='redtext'>Cancel</button>";
+                    selectedCPU + ": Crafting " + formatItemName(data['finalOutput'], false) + " x" + data['finalOutput']['quantity'];
             else
                 document.getElementById("terminalCPUHeaderText").innerHTML = selectedCPU + ": Idle";
             let hasTrackingInfo = data['hasTrackingInfo'];
@@ -645,8 +649,8 @@
             {
                 html += "Was cancelled!<br>";
             }
-            html += "Started " + new Date(Number(data['timeStarted'])).toLocaleString();
-            html += "<br>Completed " + new Date(Number(data['timeDone'])).toLocaleString();
+            html += "Started:<br>- " + new Date(Number(data['timeStarted'])).toLocaleString();
+            html += "<br>Completed:<br>- " + new Date(Number(data['timeDone'])).toLocaleString();
             html += "<br>Completed in " + formatTime(Number(data['timeDone']) - Number(data['timeStarted']));
             document.getElementById("terminalHistoryDetails").innerHTML = html;
 
@@ -864,6 +868,8 @@
 
     function autoRefresher(){
         setTimeout(autoRefresher, 10000);
+        if (loadingMessages.length > 0)
+            return;
         updateCPUList();
         if (settings.autoRefresh){
             refreshTerminal();

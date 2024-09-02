@@ -21,6 +21,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
+import org.apache.commons.io.IOUtils;
+
 import com.kuba6000.ae2webintegration.ae2request.async.GetTracking;
 import com.kuba6000.ae2webintegration.ae2request.async.GetTrackingHistory;
 import com.kuba6000.ae2webintegration.ae2request.async.IAsyncRequest;
@@ -271,6 +273,23 @@ public class AE2Controller {
                 && !path.equals("/index.asp")
                 && !path.equals("/index.aspx")
                 && !path.equals("/index.jsp")) {
+
+                if (path.equals("/favicon.ico")) {
+                    t.getResponseHeaders()
+                        .set("Content-Type", "image/x-icon");
+                    try (InputStream is = AE2Controller.class.getResourceAsStream("/assets/favicon.ico")) {
+                        if (is == null) return;
+
+                        byte[] raw_response = IOUtils.toByteArray(is);
+                        is.read(raw_response);
+                        t.sendResponseHeaders(200, raw_response.length);
+                        OutputStream os = t.getResponseBody();
+                        os.write(raw_response);
+                        os.close();
+                    }
+                    return;
+                }
+
                 String response = "<h1>Invalid url! (ERROR 404)</h1>";
                 byte[] raw_response = response.getBytes();
                 t.sendResponseHeaders(404, raw_response.length);
