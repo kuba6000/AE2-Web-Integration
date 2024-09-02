@@ -145,6 +145,10 @@ button:hover{
     background-color: rgb(0, 137, 155);
 }
 
+#terminalHistoryDetails{
+    padding: 5px;
+}
+
 #overlay {
     position: fixed; /* Sit on top of the page content */
     display: none; /* Hidden by default */
