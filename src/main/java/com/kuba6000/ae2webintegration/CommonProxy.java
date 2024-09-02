@@ -9,6 +9,7 @@ import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
+import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 
 public class CommonProxy {
 
@@ -44,4 +45,9 @@ public class CommonProxy {
     public void serverStarted(FMLServerStartedEvent event) {
         AE2Controller.init();
     }
+
+    public void serverStopping(FMLServerStoppingEvent event) {
+        AE2Controller.stopHTTPServer();
+    }
+
 }

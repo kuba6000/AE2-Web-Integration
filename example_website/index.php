@@ -25,12 +25,12 @@
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
         $return = curl_exec($ch);
         curl_close($ch);
-    
+
         print($return);
 
         exit;
     }
-    
+
     // website
 ?>
 <!DOCTYPE html>
@@ -40,6 +40,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="style.css">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <title>AE2</title>
 </head>
 <body>
@@ -69,12 +70,14 @@
         </section>
         <section id='terminalCPUList' style='display: none;'>...</section>
         <section id='terminalCPUListForJob' style='display: none;'>...</section>
+        <section id='terminalHistoryDetails' style='display: none;'>...</section>
     </section>
     <section id="terminalwindow">
         <section id="terminalheader">
             <section id="terminalTerminalHeader">
                 Terminal <input type="text" id="searchtext" placeholder="Search string" onkeyup="searchStringChanged(this);">
                 <button onclick='openCraftingStatus();'>Crafting</button>
+                <button onclick='openCraftingHistory();'>Crafting History</button>
                 <button onclick='refreshTerminal();'>Refresh</button>
             </section>
             <section id="terminalCPUHeader" style="display: none;">
@@ -85,6 +88,11 @@
             <section id='terminalJobHeader' style='display: none;'>
                 <span id="terminalJobHeaderText"></span>
                 <button onclick='cancelCurrentJob();' class='redtext'>Cancel</button>
+            </section>
+            <section id='terminalHistoryHeader' style='display: none;'>
+                <span id="terminalHistoryHeaderText"></span>
+                <button onclick='closeCraftingStatus();'>Terminal</button>
+                <button onclick='refreshTerminal();' id="terminalHistoryHeaderRefresh">Refresh</button>
             </section>
         </section>
         <section id="terminalcontent"></section>
@@ -104,14 +112,17 @@
                 <option value=4>No format</option>
             </select>
             <label for="numberformat"> Number format</label>
+            <br>
+            <input type="checkbox" name="showitemid" id="showitemid" onchange="changeShowItemID(this);"> <label for="showitemid">Show item id</label>
         </section>
     </section>
 </section>
 
 <script>
+    const isOutdated = false;//_REPLACE_ME_VERSION_OUTDATED; <?php // TODO: NO IMPLEMENTATION ?>
     globalItemList = {};
     globalCPUList = {};
-    currentWindow = 0; // 0 - main, 1 - CPU, 2 - Order screen
+    currentWindow = 0; // 0 - main, 1 - CPU, 2 - Order screen, 3 - History window
     selectedCPU = 0;
     filteringOptions = {
         searchString: "",
@@ -126,11 +137,13 @@
         autoRefresh: false,
         itemsPerRow: 5,
         numberFormat: 0,
+        showItemID: false,
     }
     const screens = [
         ["terminalOptions", "terminalTerminalHeader"],
         ["terminalCPUList", "terminalCPUHeader"],
         ["terminalCPUListForJob", "terminalJobHeader"],
+        ["terminalHistoryHeader", "terminalHistoryDetails"],
     ];
     const sortByDisplay = ['A-Z', '# of items', 'Mod'];
     const sortOrderDisplay = ['Ascending', 'Descending'];
@@ -146,7 +159,7 @@
         let sortOrder = sortingOptions.sortOrder == 1 ? -1 : 1;
         if (sortingOptions.sortBy == 0){
             globalItemList.sort(function(i1,i2){
-                return i1['itemname'].localeCompare(i2['itemname']) * sortOrder;
+                return skipSpecialFormat(i1['itemname']).localeCompare(skipSpecialFormat(i2['itemname'])) * sortOrder;
             });
         }
         else if(sortingOptions.sortBy == 1){
@@ -224,11 +237,18 @@
         setCookie("numberFormat", settings.numberFormat, 7);
         refreshDisplay();
     }
-    function refreshTerminal(){
+    function changeShowItemID(el){
+        settings.showItemID = el.checked;
+        setCookie("showItemID", settings.showItemID ? 1 : 0, 7);
+        refreshDisplay();
+    }
+    function refreshTerminal() {
         if (currentWindow == 0)
             getItemList();
         else if (currentWindow == 1)
             displayCPUDetails();
+        else if (currentWindow == 3)
+            getCraftingHistory();
     }
     function refreshDisplay(){
         if (currentWindow == 0)
@@ -276,6 +296,9 @@
         cookie = getCookie("numberFormat");
         if (cookie != "")
             settings.numberFormat = Number(cookie);
+        cookie = getCookie("showItemID");
+        if (cookie != "")
+            settings.showItemID = Number(cookie) == 1;
         document.getElementById('sortByButton').innerHTML = sortByDisplay[sortingOptions.sortBy];
         document.getElementById('storedCraftableButton').innerHTML = storedCraftableDisplay[filteringOptions.storedCraftable];
         document.getElementById('itemsFluidsButton').innerHTML = itemsTypeDisplay[filteringOptions.itemsType];
@@ -283,6 +306,7 @@
         document.getElementById('autorefresh').checked = settings.autoRefresh;
         document.getElementById('itemsperrow').value = settings.itemsPerRow;
         document.getElementById('numberformat').value = settings.numberFormat;
+        document.getElementById('showitemid').checked = settings.showItemID;
     }
     initSettings();
     function formatNumber(num){
@@ -303,6 +327,93 @@
                 return num;
         }
     }
+    function formatTime(time){
+        let s = Number(time) / 1000;
+        let format = 's';
+        if(s > 60){
+            s /= 60;
+            format = 'm';
+        }
+        if(s > 60){
+            s /= 60;
+            format = 'h';
+        }
+        return Intl.NumberFormat('en-US', {
+                    maximumFractionDigits: 3
+                }).format(s) + format;
+    }
+    function formatPercent(percent){
+        return Intl.NumberFormat('en-US', {
+            style: "percent",
+            maximumFractionDigits: 2
+        }).format(percent);
+    }
+    const extraSpecialFormatChars = "klmno";
+    const extraSpecialFormatResetChar = 'r';
+    function parseSpecialFormat(itemName) {
+        let formattedItemName = "";
+        let spanCounter = 0;
+        let extraSpecialCounter = 0;
+        for (let i = 0; i < itemName.length; i++){
+            char = itemName[i];
+            if (char == '§'){
+                let specialChar = itemName[++i];
+                if (extraSpecialFormatChars.indexOf(specialChar) != -1) {
+                    extraSpecialCounter++;
+                }
+                else if (specialChar == extraSpecialFormatResetChar) {
+                    for (let j = 0; j < spanCounter; j++){
+                        formattedItemName += "</span>";
+                    }
+                    spanCounter = 0;
+                    extraSpecialCounter = 0;
+                    continue;
+                }
+                else if (extraSpecialCounter > 0) {
+                    for (let j = 0; j < extraSpecialCounter; j++){
+                        formattedItemName += "</span>";
+                    }
+                    spanCounter -= extraSpecialCounter;
+                    extraSpecialCounter = 0;
+                }
+                formattedItemName += "<span class='minecraftSpecialFormat_" + specialChar + "'>";
+                spanCounter++;
+            }
+            else
+            {
+                formattedItemName += char;
+            }
+        }
+        for (let i = 0; i < spanCounter; i++){
+            formattedItemName += "</span>";
+        }
+        return formattedItemName;
+    }
+    function skipSpecialFormat(itemName) {
+        if (itemName.indexOf('§') == -1){
+            return itemName;
+        }
+        let skippedItemName = "";
+        for (let i = 0; i < itemName.length; i++){
+            char = itemName[i];
+            if (char == '§'){
+                i++;
+                continue;
+            }
+            skippedItemName += char;
+        }
+        return skippedItemName;
+    }
+    function formatItemName(itemObject, allowNewLines=true) {
+        let itemName = itemObject['itemname'];
+        if (itemName.indexOf('§') != -1){
+            itemName = parseSpecialFormat(itemName);
+        }
+        let html = itemName;
+        if (settings.showItemID)
+            html += (allowNewLines ? "<br>" : "") + " " + itemObject['itemid'];
+        return html;
+    }
     function displayCPUList(){
         let html = "";
         for (let key in globalCPUList){
@@ -312,7 +423,7 @@
                 html += "class='selected'";
             html += ">" + key;
             if (cluster['finalOutput'])
-                html += " - " + cluster['finalOutput']['itemname'] + " x" + cluster['finalOutput']['quantity'];
+                html += " - " + formatItemName(cluster['finalOutput'], false) + " x" + cluster['finalOutput']['quantity'];
             html += "</button>";
         }
         document.getElementById('terminalCPUList').innerHTML = html;
@@ -322,17 +433,23 @@
         pushLoadingScreen(message);
         $.getJSON('get?cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             console.log(data);
+            if(data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                popLoadingScreen(message);
+                return;
+            }
+            data = data.data;
             let html = "";
             if (data['finalOutput'])
                 document.getElementById("terminalCPUHeaderText").innerHTML =
-                    selectedCPU + ": Crafting " + data['finalOutput']['itemname'] + " x" + data['finalOutput']['quantity'] + "<button onclick='cancelJobOnCPU(\"" + selectedCPU + "\");' class='redtext'>Cancel</button>";
+                    selectedCPU + ": Crafting " + formatItemName(data['finalOutput'], false) + " x" + data['finalOutput']['quantity'] + "<button onclick='cancelJobOnCPU(\"" + selectedCPU + "\");' class='redtext'>Cancel</button>";
             else
                 document.getElementById("terminalCPUHeaderText").innerHTML = selectedCPU + ": Idle";
-
+            let hasTrackingInfo = data['hasTrackingInfo'];
             html += "<table><tr>";
             let grid_i_max = settings.itemsPerRow;
             let grid_i = 0;
-            if(data['items']){
+            if (data['items']){
                 let items = data['items'];
                 for(let i = 0; i < items.length; i++){
                     let item = items[i];
@@ -343,7 +460,12 @@
                         el = 'pending';
                     else
                         el = 'storage';
-                    html += "<td class='" + el + "'>" + item['itemname'] + "<br>Crafting: " + formatNumber(item['active']) + "<br>Scheduled: " + formatNumber(item['pending']) + "<br>Stored: " + formatNumber(item['stored']) + "</td>";
+                    html += "<td class='" + el + "'>" + formatItemName(item) + "<br>Crafting: " + formatNumber(item['active']) + "<br>Scheduled: " + formatNumber(item['pending']) + "<br>Stored: " + formatNumber(item['stored']);
+                    if (hasTrackingInfo && item['timeSpentCrafting']){
+                        html += "<br>Time: " + formatTime(item['timeSpentCrafting']) + " (" + formatPercent(item['shareInCraftingTimeCombined']) + ")";
+                        html += "<br>Crafted total: " + formatNumber(item['craftedTotal']) + " (" + formatNumber(item['craftsPerSec']) + "/s)";
+                    }
+                    html += "</td>";
                     grid_i++;
                     if(grid_i == grid_i_max){
                         html += "</tr><tr>";
@@ -361,7 +483,12 @@
     }
     function updateCPUList(){
         $.getJSON('list', function(data) {
-            clusters = data['clusters'];
+            if(data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                return;
+            }
+            data = data.data;
+            clusters = data;
             globalCPUList = clusters;
             if(!globalCPUList[selectedCPU])
                 selectedCPU = Object.keys(globalCPUList)[0];
@@ -388,6 +515,10 @@
         setCurrentScreen(0);
         getItemList();
     }
+    function openCraftingHistory(){
+        setCurrentScreen(3);
+        getCraftingHistory();
+    }
     function displayItemList(){
         let html = "<table>";
         let grid_i_max = settings.itemsPerRow;
@@ -398,7 +529,7 @@
             let item = items[i];
             if (!shouldDisplay(item))
                 continue;
-            html += "<td class='storage'>" + item['itemname'] + "<br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+            html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
             grid_i++;
             if(grid_i == grid_i_max){
                 html += "</tr><tr>";
@@ -408,7 +539,7 @@
         for(; grid_i < grid_i_max; grid_i ++){
             html += "<td></td>";
         }
-        html += "</tr>";
+        html += "</tr></table>";
         document.getElementById("terminalcontent").innerHTML = html;
     }
     function getItemList(){
@@ -416,15 +547,183 @@
         pushLoadingScreen(message);
         $.getJSON('items', function(data){
             console.log(data);
-            if (data['items']){
-                globalItemList = data['items'];
-                sortItemList();
-                displayItemList();
+            if(data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                popLoadingScreen(message);
+                return;
             }
+            data = data.data;
+            globalItemList = data;
+            sortItemList();
+            displayItemList();
             popLoadingScreen(message);
         });
     }
+    function getCraftingHistory(){
+        let message = "Asking for tracking history list...";
+        pushLoadingScreen(message);
+        $.getJSON('trackinghistory', function(data){
+            console.log(data);
+            if(data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                popLoadingScreen(message);
+                return;
+            }
+            data = data.data;
+            let html = "<table>";
+            for (let i = 0; i < data.length; i++){
+                let trackingHistoryInfo = data[i];
+                html += "<tr><td class='button' onclick='openTrackingData(" + trackingHistoryInfo['id'] + ");'>";
+                html += "Job for " + formatItemName(trackingHistoryInfo['finalOutput'], false) + " x" + trackingHistoryInfo['finalOutput']['quantity'];
+                if (trackingHistoryInfo['wasCancelled']){
+                    html += " (was cancelled)";
+                }
+                html += "<br>Started " + new Date(Number(trackingHistoryInfo['timeStarted'])).toLocaleString();
+                html += "<br>Completed " + new Date(Number(trackingHistoryInfo['timeDone'])).toLocaleString();
+                html += "<br>Completed in " + formatTime(Number(trackingHistoryInfo['timeDone']) - Number(trackingHistoryInfo['timeStarted']));
+                html += "</td></tr>";
+            }
+            html += "</table>";
+            document.getElementById("terminalcontent").innerHTML = html;
+            document.getElementById("terminalHistoryHeaderText").innerHTML = "Tracking history";
+            document.getElementById("terminalHistoryHeaderRefresh").innerHTML = "Refresh";
+            document.getElementById("terminalHistoryDetails").innerHTML = "...";
+            popLoadingScreen(message);
+        });
+    }
+    function showInterfaceShare(){
+        document.getElementById('toggleInterfaceShare').innerHTML = "Hide interface usage chart";
+        document.getElementById('toggleInterfaceShare').onclick = hideInterfaceShare;
+        document.getElementById("myChart").style.display = 'block';
+    }
+    function hideInterfaceShare(){
+        document.getElementById('toggleInterfaceShare').innerHTML = "Show interface usage chart";
+        document.getElementById('toggleInterfaceShare').onclick = showInterfaceShare;
+        document.getElementById("myChart").style.display = 'none';
+    }
+    function openTrackingData(id){
+        let message = "Asking for tracking data...";
+        pushLoadingScreen(message);
+        $.getJSON('gettracking?id=' + id, function(data){
+            console.log(data);
+            if(data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                popLoadingScreen(message);
+                return;
+            }
+            data = data.data;
 
+            let html = "<button onclick='showInterfaceShare();' id='toggleInterfaceShare' style='width: 90%; font-size: 110%; margin: 10px 5%;'>Show interface usage chart</button><canvas id='myChart' style='width:100%;max-width:100%'></canvas>";
+
+            html += "<table>";
+            let grid_i_max = settings.itemsPerRow;
+            let grid_i = 0;
+            html += "<tr>";
+            let items = data['items'];
+            for(let i = 0; i < items.length; i++){
+                let item = items[i];
+                html += "<td class='storage'>" + formatItemName(item, false) + " x" + formatNumber(item['craftedTotal']);
+                html += "<br>Time: " + formatTime(item['timeSpentOn']) + " (" + formatPercent(item['shareInCraftingTimeCombined']) + ")";
+                html += "<br>Efficiency: " + formatNumber(item['craftsPerSec']) + "/s";
+                html += "</td>";
+                grid_i++;
+                if(grid_i == grid_i_max){
+                    html += "</tr><tr>";
+                    grid_i = 0;
+                }
+            }
+            for(; grid_i < grid_i_max; grid_i ++){
+                html += "<td></td>";
+            }
+            html += "</tr></table>";
+            document.getElementById("terminalcontent").innerHTML = html;
+
+            document.getElementById("terminalHistoryHeaderText").innerHTML = "Tracking history - " + formatItemName(data['finalOutput'], false) + " x" + formatNumber(data['finalOutput']['quantity']);
+            document.getElementById("terminalHistoryHeaderRefresh").innerHTML = "Close";
+            html = "";
+            if(data['wasCancelled'])
+            {
+                html += "Was cancelled!<br>";
+            }
+            html += "Started " + new Date(Number(data['timeStarted'])).toLocaleString();
+            html += "<br>Completed " + new Date(Number(data['timeDone'])).toLocaleString();
+            html += "<br>Completed in " + formatTime(Number(data['timeDone']) - Number(data['timeStarted']));
+            document.getElementById("terminalHistoryDetails").innerHTML = html;
+
+            let xValues = [];
+            let interfaceShare = data['interfaceShare'];
+            let dataSet = [];
+            for (let i = 0; i < interfaceShare.length; i++){
+                let AEInterface = interfaceShare[i];
+                xValues.push(AEInterface['name']);
+                let timings = AEInterface['timings'];
+                for (let j = 0; j < timings.length; j++)
+                {
+                    let timing = timings[j];
+                    if (dataSet.length <= j) {
+                        dataSet.push({backgroundColor: "gainsboro", data: {}});
+                    }
+                    dataSet[j].data[AEInterface['name']] = [timing['started'], timing['ended']];
+                }
+            }
+
+            console.log(dataSet);
+
+            Chart.defaults.backgroundColor = '#9BD0F5';
+            Chart.defaults.borderColor = '#000';
+            Chart.defaults.color = '#000';
+
+            new Chart("myChart", {
+                type: "bar",
+                data: {
+                    labels: xValues,
+                    datasets: dataSet
+                },
+                options: {
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = [];
+                                    if (context.parsed._custom !== null) {
+                                        label.push('From ' + new Date(context.parsed._custom.start).toLocaleString());
+                                        label.push('To ' + new Date(context.parsed._custom.end).toLocaleString());
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: "Interface share"
+                    },
+                    responsive: true,
+                    scales: {
+                        x: {
+                            stacked: true,
+                        },
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                // Include a dollar sign in the ticks
+                                callback: function(value, index, ticks) {
+                                    return new Date(value).toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            document.getElementById("myChart").style.display = 'none';
+
+            popLoadingScreen(message);
+        });
+    }
     function beginOrderingItem(hashcode){
         console.log(hashcode);
         let quantity = Number(window.prompt("How much to order?", "1"));
@@ -436,6 +735,12 @@
             pushLoadingScreen(message);
             $.getJSON('order?item=' + hashcode + "&quantity=" + quantity, function(data){
                 console.log(data);
+                if(data.status !== "OK"){
+                    alert(data.status + ": " + data.data);
+                    popLoadingScreen(message);
+                    return;
+                }
+                data = data.data;
                 if (data['jobID']){
                     setCurrentScreen(2);
                     document.getElementById("terminalcontent").innerHTML = ";)";
@@ -459,27 +764,31 @@
                 return;
             }
             console.log(data);
-            if (data['jobIsDone']){
+            if (data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                return;
+            }
+            data = data.data;
+            if (data['isDone']){
                 let html = "";
-                let jobData = data['jobData'];
                 let htmlHeader = "";
-                if (jobData['isSimulating']){
+                if (data['isSimulating']){
                     htmlHeader += "[Simulation :(] ";
                 }
-                htmlHeader += "Crafting Plan - " + jobData['bytesTotal'] + "bytes";
-                if (!jobData['isSimulating']){
+                htmlHeader += "Crafting Plan - " + data['bytesTotal'] + "bytes";
+                if (!data['isSimulating']){
                     htmlHeader += "<button onclick='startCurrentJob();'>Start</button>";
                 }
                 document.getElementById("terminalJobHeaderText").innerHTML = htmlHeader;
-                if (jobData['plan']){
+                if (data['plan']){
                     html += "<table><tr>";
                     let grid_i_max = settings.itemsPerRow;
                     let grid_i = 0;
-                    let items = jobData['plan'];
+                    let items = data['plan'];
                     for(let i = 0; i < items.length; i++){
                         let item = items[i];
 
-                        html += "<td class='" + (item['missing'] > 0 ? 'missing' : 'storage') + "'>" + item['itemname'];
+                        html += "<td class='" + (item['missing'] > 0 ? 'missing' : 'storage') + "'>" + formatItemName(item);
                         if (item['missing'] > 0)
                             html += "<br>Missing: " + formatNumber(item['missing']);
                         if (item['requested'] > 0)
@@ -488,6 +797,8 @@
                             html += "<br>Steps: " + formatNumber(item['steps']);
                         if (item['stored'] > 0)
                             html += "<br>Available: " + formatNumber(item['stored']);
+                        if (item['usedPercent'] > 0)
+                            html += "<br>Used: " + formatPercent(item['usedPercent']);
                         html += "</td>";
 
                         grid_i++;
@@ -516,7 +827,11 @@
         setCurrentScreen(0);
         refreshTerminal();
         $.getJSON('job?id=' + currentJob + "&cancel", function(data){
-
+            if(data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                return;
+            }
+            data = data.data;
         });
     }
     function startCurrentJob(){
@@ -526,10 +841,10 @@
         let message = "Submitting job...";
         pushLoadingScreen(message);
         $.getJSON('job?id=' + currentJob + "&submit", function(data){
-            popLoadingScreen(message);
-            if (data['jobSubmissionFailureMessage']){
-                window.alert(data['jobSubmissionFailureMessage']);
+            if (data.status !== "OK"){
+                alert(data.status + ": " + data.data);
             }
+            popLoadingScreen(message);
             setCurrentScreen(0);
             refreshTerminal();
         });
@@ -585,6 +900,11 @@
 
     updateCPUList();
     getItemList();
+
+    function showAlertIfOutdated() {
+        if (isOutdated) alert("New version detected! Consider updating at https://github.com/kuba6000/AE2-Web-Integration/releases/latest");
+    }
+    setTimeout(showAlertIfOutdated, 1000);
 
 </script>
 <br><br>

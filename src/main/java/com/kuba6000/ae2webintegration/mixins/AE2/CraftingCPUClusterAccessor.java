@@ -2,7 +2,9 @@ package com.kuba6000.ae2webintegration.mixins.AE2;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.gen.Invoker;
 
+import appeng.api.networking.IGrid;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
@@ -12,5 +14,8 @@ public interface CraftingCPUClusterAccessor {
 
     @Accessor
     IItemList<IAEItemStack> getWaitingFor();
+
+    @Invoker
+    IGrid callGetGrid();
 
 }

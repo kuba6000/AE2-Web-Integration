@@ -2,22 +2,82 @@ package com.kuba6000.ae2webintegration;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.commons.lang3.tuple.Pair;
+
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingCPUClusterAccessor;
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingLinkAccessor;
-import com.kuba6000.ae2webintegration.utils.GSONUtils;
 
+import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingLink;
+import appeng.api.networking.crafting.ICraftingMedium;
+import appeng.api.networking.crafting.ICraftingPatternDetails;
+import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
+import appeng.api.util.IInterfaceViewable;
 import appeng.crafting.CraftingLink;
+import appeng.me.Grid;
+import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
-import cpw.mods.fml.common.registry.GameRegistry;
 
 public class AE2JobTracker {
+
+    public static class AEInterface {
+
+        public String name;
+
+        AEInterface(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public int hashCode() {
+            return name.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (!(obj instanceof AEInterface)) return false;
+            return ((AEInterface) obj).name.equals(this.name);
+        }
+    }
+
+    private static final IdentityHashMap<ICraftingMedium, IInterfaceViewable> mediumToViewable = new IdentityHashMap<>();
+    private static boolean isUpdatingPatterns = false;
+    private static ICraftingProvider currentCraftingProvider = null;
+
+    public static void updatingPatterns(CraftingGridCache craftingGrid, IGrid grid) {
+        if (!AE2Controller.isValid()) {
+            if (craftingGrid.getCpus()
+                .size() >= 5) {
+                AE2Controller.activeGrid = (Grid) grid;
+            } else return;
+        } else if (AE2Controller.activeGrid != grid) return;
+        mediumToViewable.clear();
+        isUpdatingPatterns = true;
+    }
+
+    public static void provideCrafting(CraftingGridCache craftingGrid, IGrid grid, ICraftingProvider provider) {
+        if (!isUpdatingPatterns) return;
+        currentCraftingProvider = provider;
+    }
+
+    public static void addCraftingOption(CraftingGridCache craftingGrid, IGrid grid, ICraftingMedium medium) {
+        if (!isUpdatingPatterns) return;
+        if (currentCraftingProvider == null) return;
+        if (currentCraftingProvider instanceof IInterfaceViewable viewable && !mediumToViewable.containsKey(medium))
+            mediumToViewable.put(medium, viewable);
+    }
+
+    public static void doneUpdatingPatterns(CraftingGridCache craftingGrid, IGrid grid) {
+        isUpdatingPatterns = false;
+    }
 
     public static class JobTrackingInfo {
 
@@ -28,6 +88,11 @@ public class AE2JobTracker {
         public HashMap<IAEItemStack, Long> startedWaitingFor = new HashMap<>();
         public HashMap<IAEItemStack, Long> craftedTotal = new HashMap<>();
         public HashMap<IAEItemStack, Long> waitingFor = new HashMap<>();
+        public HashMap<AEInterface, ArrayList<Pair<Long, Long>>> interfaceShare = new HashMap<>();
+        public HashMap<AEInterface, Long> interfaceStarted = new HashMap<>();
+        public HashMap<AEInterface, AEInterface> interfaceLookup = new HashMap<>();
+        public HashMap<AEInterface, HashSet<IAEItemStack>> interfaceWaitingFor = new HashMap<>();
+        public HashMap<IAEItemStack, HashMap<AEInterface, HashSet<IAEItemStack>>> interfaceWaitingForLookup = new HashMap<>();
         public boolean isDone = false;
         public boolean wasCancelled = false;
 
@@ -36,7 +101,7 @@ public class AE2JobTracker {
             if (time == null) return 0L;
             Long additionalTime = startedWaitingFor.get(stack);
             if (additionalTime != null) {
-                time += System.nanoTime() - additionalTime;
+                time += System.currentTimeMillis() - additionalTime;
             }
             return time;
         }
@@ -56,64 +121,27 @@ public class AE2JobTracker {
         }
     }
 
-    public static class CompactedJobTrackingInfo {
-
-        public static class CompactedTrackingGSONItem {
-
-            public String itemid;
-            public String itemname;
-            public long timeSpentOn;
-            public long craftedTotal;
-            public double shareInCraftingTime = 0d;
-            public double craftsPerSec = 0d;
-        }
-
-        public AE2Controller.GSONItem finalOutput;
-        public long timeStarted;
-        public long timeDone;
-        public boolean wasCancelled;
-        public ArrayList<CompactedTrackingGSONItem> items = new ArrayList<>();
-
-        public CompactedJobTrackingInfo(JobTrackingInfo info) {
-            this.finalOutput = GSONUtils.convertToGSONItem(info.finalOutput);
-            this.timeStarted = info.timeStarted;
-            this.timeDone = info.timeDone;
-            this.wasCancelled = info.wasCancelled;
-            for (Map.Entry<IAEItemStack, Long> iaeItemStackLongEntry : info.timeSpentOn.entrySet()) {
-                IAEItemStack stack = iaeItemStackLongEntry.getKey();
-                long spent = iaeItemStackLongEntry.getValue();
-                CompactedTrackingGSONItem item = new CompactedTrackingGSONItem();
-                item.itemid = GameRegistry.findUniqueIdentifierFor(stack.getItem())
-                    .toString() + ":"
-                    + stack.getItemDamage();
-                item.itemname = stack.getItemStack()
-                    .getDisplayName();
-                item.timeSpentOn = spent;
-                item.craftedTotal = info.craftedTotal.get(stack);
-                item.shareInCraftingTime = info.getShareInCraftingTime(stack);
-                item.craftsPerSec = (double) item.craftedTotal / (item.timeSpentOn / 1e9d);
-                items.add(item);
-            }
-            items.sort((i1, i2) -> Double.compare(i2.shareInCraftingTime, i1.shareInCraftingTime));
-        }
-    }
-
     public static HashMap<ICraftingCPU, JobTrackingInfo> trackingInfoMap = new HashMap<>();
     public static ConcurrentHashMap<Integer, JobTrackingInfo> trackingInfos = new ConcurrentHashMap<>();
 
     private static int nextFreeTrackingInfoID = 1;
 
-    public static void addJob(ICraftingLink link) {
+    public static void addJob(ICraftingLink link, CraftingGridCache cache, IGrid grid) {
         if (link instanceof CraftingLink craftingLink) {
             ICraftingCPU cpu = ((CraftingLinkAccessor) craftingLink).callGetCpu();
             if (cpu instanceof CraftingCPUCluster cpuCluster) {
+                if (!AE2Controller.isValid()) {
+                    if (cache.getCpus()
+                        .size() >= 5) AE2Controller.activeGrid = (Grid) grid;
+                    else return;
+                } else if (AE2Controller.activeGrid != grid) return;
                 JobTrackingInfo info;
                 trackingInfoMap.put(cpu, info = new JobTrackingInfo());
-                info.timeStarted = System.currentTimeMillis() / 1000L;
+                info.timeStarted = System.currentTimeMillis();
                 info.finalOutput = cpu.getFinalOutput()
                     .copy();
                 for (IAEItemStack iaeItemStack : ((CraftingCPUClusterAccessor) (Object) cpuCluster).getWaitingFor()) {
-                    info.startedWaitingFor.put(iaeItemStack, System.nanoTime());
+                    info.startedWaitingFor.put(iaeItemStack, System.currentTimeMillis());
                     info.timeSpentOn.put(iaeItemStack, 0L);
                     info.craftedTotal.put(iaeItemStack, 0L);
                     info.waitingFor.put(iaeItemStack, iaeItemStack.getStackSize());
@@ -130,7 +158,7 @@ public class AE2JobTracker {
         IAEItemStack found = waitingFor.findPrecise(diff);
         if (found != null && found.getStackSize() > 0L) {
             if (!info.startedWaitingFor.containsKey(found)) {
-                info.startedWaitingFor.put(found, System.nanoTime());
+                info.startedWaitingFor.put(found, System.currentTimeMillis());
                 info.timeSpentOn.putIfAbsent(found, 0L);
                 info.waitingFor.put(found, found.getStackSize());
             } else {
@@ -143,10 +171,49 @@ public class AE2JobTracker {
             }
         } else {
             if (info.startedWaitingFor.containsKey(diff)) {
-                Long started = info.startedWaitingFor.remove(diff);
-                Long elapsed = System.nanoTime() - started;
+                long started = info.startedWaitingFor.remove(diff);
+                long ended = System.currentTimeMillis();
+                long elapsed = ended - started;
+                long endedReal = System.currentTimeMillis();
                 info.timeSpentOn.merge(diff, elapsed, Long::sum);
                 info.craftedTotal.merge(diff, info.waitingFor.remove(diff), Long::sum);
+                if (info.interfaceWaitingForLookup.containsKey(diff)) {
+                    for (Map.Entry<AEInterface, HashSet<IAEItemStack>> entry : info.interfaceWaitingForLookup.get(diff)
+                        .entrySet()) {
+                        AEInterface aeInterface = entry.getKey();
+                        HashSet<IAEItemStack> itemList = entry.getValue();
+                        itemList.remove(diff);
+                        if (itemList.isEmpty()) {
+                            info.interfaceWaitingFor.remove(aeInterface);
+                            long interfaceStarted = info.interfaceStarted.remove(aeInterface);
+                            info.interfaceShare.computeIfAbsent(aeInterface, k -> new ArrayList<>())
+                                .add(Pair.of(interfaceStarted, endedReal));
+                        }
+                    }
+                    info.interfaceWaitingForLookup.remove(diff);
+                }
+            }
+        }
+    }
+
+    public static void pushedPattern(CraftingCPUCluster cpu, ICraftingMedium medium, ICraftingPatternDetails details) {
+        JobTrackingInfo info = trackingInfoMap.get(cpu);
+        if (info == null) return;
+        IInterfaceViewable viewable = mediumToViewable.get(medium);
+        if (viewable != null) {
+            String name = viewable.getName();
+            if (name == null) name = "[NULL]";
+            final AEInterface aeInterfaceToLookup = new AEInterface(name);
+            final AEInterface aeInterface = info.interfaceLookup
+                .computeIfAbsent(aeInterfaceToLookup, k -> aeInterfaceToLookup);
+            info.interfaceStarted.computeIfAbsent(aeInterface, k -> System.currentTimeMillis());
+            final HashSet<IAEItemStack> itemList = info.interfaceWaitingFor
+                .computeIfAbsent(aeInterface, k -> new HashSet<>());
+
+            for (IAEItemStack out : details.getCondensedOutputs()) {
+                info.interfaceWaitingForLookup.computeIfAbsent(out, k -> new HashMap<>())
+                    .putIfAbsent(aeInterface, itemList);
+                itemList.add(out);
             }
         }
     }
@@ -158,13 +225,21 @@ public class AE2JobTracker {
             info.craftedTotal.merge(iaeItemStackLongEntry.getKey(), iaeItemStackLongEntry.getValue(), Long::sum);
         }
         info.waitingFor.clear();
+        final long now = System.currentTimeMillis();
         for (Map.Entry<IAEItemStack, Long> iaeItemStackLongEntry : info.startedWaitingFor.entrySet()) {
-            info.timeSpentOn
-                .merge(iaeItemStackLongEntry.getKey(), System.nanoTime() - iaeItemStackLongEntry.getValue(), Long::sum);
+            info.timeSpentOn.merge(iaeItemStackLongEntry.getKey(), now - iaeItemStackLongEntry.getValue(), Long::sum);
         }
+        for (Map.Entry<AEInterface, Long> entry : info.interfaceStarted.entrySet()) {
+            info.interfaceShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
+                .add(Pair.of(entry.getValue(), now));
+        }
+        info.interfaceStarted.clear();
+        info.interfaceWaitingFor.clear();
+        info.interfaceWaitingForLookup.clear();
+        info.interfaceLookup.clear();
         info.startedWaitingFor.clear();
         info.isDone = true;
-        info.timeDone = System.currentTimeMillis() / 1000L;
+        info.timeDone = System.currentTimeMillis();
         trackingInfos.put(nextFreeTrackingInfoID++, info);
     }
 

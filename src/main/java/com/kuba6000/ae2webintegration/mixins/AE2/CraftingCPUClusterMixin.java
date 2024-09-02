@@ -1,9 +1,12 @@
 package com.kuba6000.ae2webintegration.mixins.AE2;
 
+import net.minecraft.inventory.InventoryCrafting;
+
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -11,6 +14,8 @@ import com.kuba6000.ae2webintegration.AE2JobTracker;
 import com.llamalad7.mixinextras.sugar.Local;
 
 import appeng.api.networking.crafting.ICraftingCPU;
+import appeng.api.networking.crafting.ICraftingMedium;
+import appeng.api.networking.crafting.ICraftingPatternDetails;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
@@ -45,6 +50,20 @@ public class CraftingCPUClusterMixin {
             ordinal = 2))
     void ae2webintegration$fixCpuCluster(CallbackInfoReturnable<IAEStack> cir, @Local(ordinal = 1) IAEItemStack is) {
         postCraftingStatusChange(is);
+    }
+
+    @Redirect(
+        method = "executeCrafting",
+        at = @At(
+            value = "INVOKE",
+            target = "Lappeng/api/networking/crafting/ICraftingMedium;pushPattern(Lappeng/api/networking/crafting/ICraftingPatternDetails;Lnet/minecraft/inventory/InventoryCrafting;)Z"))
+    private boolean ae2webintegration$pushPattern(ICraftingMedium medium, ICraftingPatternDetails details,
+        InventoryCrafting ic) {
+        if (medium.pushPattern(details, ic)) {
+            AE2JobTracker.pushedPattern((CraftingCPUCluster) (Object) this, medium, details);
+            return true;
+        }
+        return false;
     }
 
 }

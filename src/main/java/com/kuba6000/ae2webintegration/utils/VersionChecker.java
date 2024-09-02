@@ -1,7 +1,6 @@
 package com.kuba6000.ae2webintegration.utils;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -21,8 +20,9 @@ public class VersionChecker {
         if (lastChecked != 0L) {
             if (!Tags.VERSION.equals(latestTag)) return;
             long elapsed = System.currentTimeMillis() - lastChecked;
-            if (latestTag == null && elapsed < 5 * 60 * 1000) { // 5 minutes
-                return;
+            if (latestTag == null) {
+                if (elapsed < 5 * 60 * 1000) // 5 minutes
+                    return;
             } else if (elapsed < 5 * 60 * 60 * 1000) { // 5 hours
                 return;
             }
@@ -39,8 +39,8 @@ public class VersionChecker {
                 }
             }
 
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        } catch (Exception ignored) {
+
         }
     }
 
