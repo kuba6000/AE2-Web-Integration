@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.lang3.tuple.Pair;
 
+import com.kuba6000.ae2webintegration.api.JSON_Item;
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingCPUClusterAccessor;
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingLinkAccessor;
 import com.kuba6000.ae2webintegration.utils.GSONUtils;
@@ -136,7 +137,7 @@ public class AE2JobTracker {
             public double craftsPerSec = 0d;
         }
 
-        public AE2Controller.GSONItem finalOutput;
+        public JSON_Item finalOutput;
         public long timeStarted;
         public long timeDone;
         public boolean wasCancelled;
