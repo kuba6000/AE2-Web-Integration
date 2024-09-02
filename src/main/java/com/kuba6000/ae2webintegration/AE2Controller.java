@@ -9,7 +9,6 @@ import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -22,14 +21,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
-import com.kuba6000.ae2webintegration.ae2sync.CancelCPU;
-import com.kuba6000.ae2webintegration.ae2sync.GetCPU;
-import com.kuba6000.ae2webintegration.ae2sync.GetCPUList;
-import com.kuba6000.ae2webintegration.ae2sync.GetItems;
-import com.kuba6000.ae2webintegration.ae2sync.ISyncedRequest;
-import com.kuba6000.ae2webintegration.ae2sync.Job;
-import com.kuba6000.ae2webintegration.ae2sync.Order;
-import com.kuba6000.ae2webintegration.utils.GSONUtils;
+import com.kuba6000.ae2webintegration.ae2request.async.GetTracking;
+import com.kuba6000.ae2webintegration.ae2request.async.GetTrackingHistory;
+import com.kuba6000.ae2webintegration.ae2request.async.IAsyncRequest;
+import com.kuba6000.ae2webintegration.ae2request.sync.CancelCPU;
+import com.kuba6000.ae2webintegration.ae2request.sync.GetCPU;
+import com.kuba6000.ae2webintegration.ae2request.sync.GetCPUList;
+import com.kuba6000.ae2webintegration.ae2request.sync.GetItems;
+import com.kuba6000.ae2webintegration.ae2request.sync.ISyncedRequest;
+import com.kuba6000.ae2webintegration.ae2request.sync.Job;
+import com.kuba6000.ae2webintegration.ae2request.sync.Order;
 import com.kuba6000.ae2webintegration.utils.HTTPUtils;
 import com.kuba6000.ae2webintegration.utils.VersionChecker;
 import com.mojang.authlib.GameProfile;
@@ -78,8 +79,8 @@ public class AE2Controller {
         server.createContext("/items", new SyncedRequestHandler(GetItems.class));
         server.createContext("/order", new SyncedRequestHandler(Order.class));
         server.createContext("/job", new SyncedRequestHandler(Job.class));
-        server.createContext("/trackinghistory", new TrackingHistoryHandler());
-        server.createContext("/gettracking", new GetTrackingHandler());
+        server.createContext("/trackinghistory", new ASyncRequestHandler(GetTrackingHistory.class));
+        server.createContext("/gettracking", new ASyncRequestHandler(GetTracking.class));
         server.createContext("/", new WebHandler());
         server.setExecutor(serverThread);
         server.start();
@@ -208,73 +209,44 @@ public class AE2Controller {
 
     }
 
-    static class TrackingHistoryHandler implements HttpHandler {
+    static class ASyncRequestHandler implements HttpHandler {
 
-        static class TrackingHistoryElement {
+        private final Constructor<? extends IAsyncRequest> factory;
 
-            public long timeStarted;
-            public long timeDone;
-            public boolean wasCancelled;
-            public IAEItemStack finalOutput;
-            public int id;
-        }
-
-        @Override
-        public void handle(HttpExchange t) throws IOException {
-
-            if (preHTTPHandler(t)) return;
-
-            ArrayList<TrackingHistoryElement> jobs = new ArrayList<>(AE2JobTracker.trackingInfos.size());
-
-            for (Map.Entry<Integer, AE2JobTracker.JobTrackingInfo> integerJobTrackingInfoEntry : AE2JobTracker.trackingInfos
-                .entrySet()) {
-                TrackingHistoryElement element = new TrackingHistoryElement();
-                element.id = integerJobTrackingInfoEntry.getKey();
-                element.timeStarted = integerJobTrackingInfoEntry.getValue().timeStarted;
-                element.timeDone = integerJobTrackingInfoEntry.getValue().timeDone;
-                element.wasCancelled = integerJobTrackingInfoEntry.getValue().wasCancelled;
-                element.finalOutput = integerJobTrackingInfoEntry.getValue().finalOutput;
-                jobs.add(element);
+        public ASyncRequestHandler(Class<? extends IAsyncRequest> syncedRequestClass) {
+            try {
+                factory = syncedRequestClass.getConstructor();
+            } catch (NoSuchMethodException e) {
+                throw new RuntimeException(e);
             }
-
-            jobs.sort((i1, i2) -> Long.compare(i2.timeDone, i1.timeDone));
-
-            String response = GSONUtils.GSON_BUILDER.create()
-                .toJson(jobs);
-            byte[] raw_response = response.getBytes();
-            t.sendResponseHeaders(200, raw_response.length);
-            OutputStream os = t.getResponseBody();
-            os.write(raw_response);
-            os.close();
         }
-    }
-
-    static class GetTrackingHandler implements HttpHandler {
 
         @Override
         public void handle(HttpExchange t) throws IOException {
-
             if (preHTTPHandler(t)) return;
 
             Map<String, String> GET_PARAMS = HTTPUtils.parseQueryString(
                 t.getRequestURI()
                     .getQuery());
-            if (!GET_PARAMS.containsKey("id")) {
-                return;
+
+            IAsyncRequest syncedRequest;
+
+            try {
+                syncedRequest = factory.newInstance();
+            } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+                throw new RuntimeException(e);
             }
-            int id = Integer.parseInt(GET_PARAMS.get("id"));
 
-            AE2JobTracker.JobTrackingInfo info = AE2JobTracker.trackingInfos.get(id);
-            if (info == null) return;
+            syncedRequest.handle(GET_PARAMS);
 
-            String response = GSONUtils.GSON_BUILDER.create()
-                .toJson(info);
-            byte[] raw_response = response.getBytes();
+            byte[] raw_response = syncedRequest.getJSON()
+                .getBytes();
             t.sendResponseHeaders(200, raw_response.length);
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
             os.close();
         }
+
     }
 
     static class WebHandler implements HttpHandler {

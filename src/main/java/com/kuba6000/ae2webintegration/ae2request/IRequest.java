@@ -1,4 +1,4 @@
-package com.kuba6000.ae2webintegration.ae2sync;
+package com.kuba6000.ae2webintegration.ae2request;
 
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -6,9 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.google.gson.GsonBuilder;
 import com.kuba6000.ae2webintegration.utils.GSONUtils;
 
-import appeng.me.Grid;
-
-public abstract class ISyncedRequest {
+public abstract class IRequest {
 
     protected static GsonBuilder JSONBuilder = GSONUtils.GSON_BUILDER;
 
@@ -22,15 +20,13 @@ public abstract class ISyncedRequest {
     protected String status = "TIMEOUT";
     protected Object data = null;
 
-    abstract public boolean init(Map<String, String> getParams);
-
-    abstract public void handle(Grid grid);
+    abstract public void handle(Map<String, String> getParams);
 
     Object getData() {
         return data;
     }
 
-    void setData(Object data) {
+    protected void setData(Object data) {
         this.data = data;
     }
 

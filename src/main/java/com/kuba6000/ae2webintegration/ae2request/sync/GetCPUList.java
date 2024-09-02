@@ -1,6 +1,6 @@
-package com.kuba6000.ae2webintegration.ae2sync;
+package com.kuba6000.ae2webintegration.ae2request.sync;
 
-import static com.kuba6000.ae2webintegration.utils.GSONUtils.convertToGSONItem;
+import static com.kuba6000.ae2webintegration.api.JSON_Item.create;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -57,7 +57,7 @@ public class GetCPUList extends ISyncedRequest {
             cpuInfo.size = cluster.getAvailableStorage();
             cpuInfo.usedSize = cluster.getUsedStorage();
             if (cpuInfo.isBusy = cluster.isBusy()) {
-                cpuInfo.finalOutput = convertToGSONItem(cluster.getFinalOutput());
+                cpuInfo.finalOutput = create(cluster.getFinalOutput());
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.trackingInfoMap.get(cluster);
                 if (cpuInfo.hasTrackingInfo = trackingInfo != null) {
                     cpuInfo.timeStarted = trackingInfo.timeStarted;

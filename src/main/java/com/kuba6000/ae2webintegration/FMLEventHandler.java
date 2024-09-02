@@ -4,7 +4,7 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.EnumChatFormatting;
 
-import com.kuba6000.ae2webintegration.ae2sync.ISyncedRequest;
+import com.kuba6000.ae2webintegration.ae2request.sync.ISyncedRequest;
 import com.kuba6000.ae2webintegration.utils.VersionChecker;
 
 import appeng.api.networking.crafting.ICraftingGrid;

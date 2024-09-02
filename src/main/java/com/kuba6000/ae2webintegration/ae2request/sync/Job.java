@@ -1,6 +1,4 @@
-package com.kuba6000.ae2webintegration.ae2sync;
-
-import static com.kuba6000.ae2webintegration.ae2sync.Order.getPlayerSource;
+package com.kuba6000.ae2webintegration.ae2request.sync;
 
 import java.util.ArrayList;
 import java.util.Map;
@@ -86,7 +84,7 @@ public class Job extends ISyncedRequest {
                     ICraftingJob craftingJob = job.get();
                     IStorageGrid storageGrid = grid.getCache(IStorageGrid.class);
                     IMEInventory<IAEItemStack> items = storageGrid.getItemInventory();
-                    final BaseActionSource host = getPlayerSource();
+                    final BaseActionSource host = Order.getPlayerSource();
                     jobData.isSimulating = craftingJob.isSimulation();
                     jobData.bytesTotal = craftingJob.getByteTotal();
                     IItemList<IAEItemStack> plan;
@@ -155,7 +153,8 @@ public class Job extends ISyncedRequest {
                 try {
                     lastFakePlayerChatMessage = null;
                     ICraftingJob craftingJob = job.get();
-                    ICraftingLink linked = craftingGrid.submitJob(craftingJob, null, null, true, getPlayerSource());
+                    ICraftingLink linked = craftingGrid
+                        .submitJob(craftingJob, null, null, true, Order.getPlayerSource());
                     if (linked == null) {
                         if (lastFakePlayerChatMessage != null) {
                             deny("FAIL");

@@ -1,4 +1,4 @@
-package com.kuba6000.ae2webintegration.ae2sync;
+package com.kuba6000.ae2webintegration.ae2request.sync;
 
 import java.util.Map;
 

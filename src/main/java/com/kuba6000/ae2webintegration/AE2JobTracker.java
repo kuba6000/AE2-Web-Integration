@@ -9,10 +9,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.lang3.tuple.Pair;
 
-import com.kuba6000.ae2webintegration.api.JSON_Item;
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingCPUClusterAccessor;
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingLinkAccessor;
-import com.kuba6000.ae2webintegration.utils.GSONUtils;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingCPU;
@@ -27,7 +25,6 @@ import appeng.crafting.CraftingLink;
 import appeng.me.Grid;
 import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
-import cpw.mods.fml.common.registry.GameRegistry;
 
 public class AE2JobTracker {
 
@@ -121,88 +118,6 @@ public class AE2JobTracker {
             }
             if (total == 0L) return 1d;
             return (double) stackTime / (double) total;
-        }
-    }
-
-    public static class CompactedJobTrackingInfo {
-
-        public static class CompactedTrackingGSONItem {
-
-            public String itemid;
-            public String itemname;
-            public long timeSpentOn;
-            public long craftedTotal;
-            public double shareInCraftingTime = 0d;
-            public double shareInCraftingTimeCombined = 0d;
-            public double craftsPerSec = 0d;
-        }
-
-        public JSON_Item finalOutput;
-        public long timeStarted;
-        public long timeDone;
-        public boolean wasCancelled;
-        public ArrayList<CompactedTrackingGSONItem> items = new ArrayList<>();
-
-        public static class AEInterfaceGSON {
-
-            String name;
-
-            public static class timingClass {
-
-                long started;
-                long ended;
-
-                public timingClass(long started, long ended) {
-                    this.started = started;
-                    this.ended = ended;
-                }
-            }
-
-            public ArrayList<timingClass> timings = new ArrayList<>();
-            public long timingsCombined;
-        }
-
-        public ArrayList<AEInterfaceGSON> interfaceShare = new ArrayList<>();
-
-        public CompactedJobTrackingInfo(JobTrackingInfo info) {
-            this.finalOutput = GSONUtils.convertToGSONItem(info.finalOutput);
-            this.timeStarted = info.timeStarted;
-            this.timeDone = info.timeDone;
-            long elapsed = this.timeDone - this.timeStarted;
-            this.wasCancelled = info.wasCancelled;
-            for (Map.Entry<IAEItemStack, Long> iaeItemStackLongEntry : info.timeSpentOn.entrySet()) {
-                IAEItemStack stack = iaeItemStackLongEntry.getKey();
-                long spent = iaeItemStackLongEntry.getValue();
-                CompactedTrackingGSONItem item = new CompactedTrackingGSONItem();
-                item.itemid = GameRegistry.findUniqueIdentifierFor(stack.getItem())
-                    .toString() + ":"
-                    + stack.getItemDamage();
-                item.itemname = stack.getItemStack()
-                    .getDisplayName();
-                item.timeSpentOn = spent;
-                item.craftedTotal = info.craftedTotal.get(stack);
-                item.shareInCraftingTime = info.getShareInCraftingTime(stack);
-                item.shareInCraftingTimeCombined = Math
-                    .min(((double) (long) (item.timeSpentOn / 1e9d)) / (double) elapsed, 1d);
-                item.craftsPerSec = (double) item.craftedTotal / (item.timeSpentOn / 1e9d);
-                items.add(item);
-            }
-            items.sort((i1, i2) -> Double.compare(i2.shareInCraftingTime, i1.shareInCraftingTime));
-            for (Map.Entry<AEInterface, ArrayList<Pair<Long, Long>>> entry : info.interfaceShare.entrySet()) {
-                AEInterfaceGSON interfaceGSON = new AEInterfaceGSON();
-                interfaceGSON.name = entry.getKey().name;
-                for (Pair<Long, Long> longLongPair : entry.getValue()) {
-                    interfaceGSON.timings
-                        .add(new AEInterfaceGSON.timingClass(longLongPair.getKey(), longLongPair.getValue()));
-                }
-                long interfaceElapsed = 0L;
-                for (Pair<Long, Long> pair : entry.getValue()) {
-                    interfaceElapsed += pair.getValue() - pair.getKey();
-                }
-                interfaceGSON.timingsCombined = interfaceElapsed;
-                interfaceShare.add(interfaceGSON);
-            }
-            interfaceShare.sort((i1, i2) -> Long.compare(i2.timingsCombined, i1.timingsCombined));
         }
     }
 

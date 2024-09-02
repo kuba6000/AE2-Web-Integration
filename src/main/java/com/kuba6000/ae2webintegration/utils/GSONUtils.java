@@ -8,12 +8,6 @@ import java.lang.annotation.Target;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonSerializer;
-import com.kuba6000.ae2webintegration.AE2JobTracker;
-import com.kuba6000.ae2webintegration.api.JSON_Item;
-
-import appeng.api.storage.data.IAEItemStack;
-import cpw.mods.fml.common.registry.GameRegistry;
 
 public class GSONUtils {
 
@@ -34,22 +28,8 @@ public class GSONUtils {
         }
     };
 
-    public static JSON_Item convertToGSONItem(IAEItemStack src) {
-        return new JSON_Item(
-            GameRegistry.findUniqueIdentifierFor(src.getItem())
-                .toString() + ":"
-                + src.getItemDamage(),
-            src.getItemStack()
-                .getDisplayName(),
-            src.getStackSize());
-    }
-
-    private static final JsonSerializer<AE2JobTracker.JobTrackingInfo> JOB_TRACKING_INFO_JSON_SERIALIZER = (src,
-        typeOfSrc, context) -> context.serialize(new AE2JobTracker.CompactedJobTrackingInfo(src));
-
     public static final GsonBuilder GSON_BUILDER = new GsonBuilder().addSerializationExclusionStrategy(GSONStrategy)
         .addDeserializationExclusionStrategy(GSONStrategy)
-        .registerTypeAdapter(AE2JobTracker.JobTrackingInfo.class, JOB_TRACKING_INFO_JSON_SERIALIZER)
         .serializeNulls();
 
 }
