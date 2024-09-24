@@ -11,18 +11,15 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import com.kuba6000.ae2webintegration.discord.DiscordManager;
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingCPUClusterAccessor;
-import com.kuba6000.ae2webintegration.mixins.AE2.CraftingLinkAccessor;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingCPU;
-import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.crafting.ICraftingMedium;
 import appeng.api.networking.crafting.ICraftingPatternDetails;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.api.util.IInterfaceViewable;
-import appeng.crafting.CraftingLink;
 import appeng.me.Grid;
 import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
@@ -127,28 +124,29 @@ public class AE2JobTracker {
 
     private static int nextFreeTrackingInfoID = 1;
 
-    public static void addJob(ICraftingLink link, CraftingGridCache cache, IGrid grid) {
-        if (link instanceof CraftingLink craftingLink) {
-            ICraftingCPU cpu = ((CraftingLinkAccessor) craftingLink).callGetCpu();
-            if (cpu instanceof CraftingCPUCluster cpuCluster) {
-                if (!AE2Controller.isValid()) {
-                    if (cache.getCpus()
-                        .size() >= 5) AE2Controller.activeGrid = (Grid) grid;
-                    else return;
-                } else if (AE2Controller.activeGrid != grid) return;
-                JobTrackingInfo info;
-                trackingInfoMap.put(cpu, info = new JobTrackingInfo());
-                info.timeStarted = System.currentTimeMillis();
-                info.finalOutput = cpu.getFinalOutput()
-                    .copy();
-                for (IAEItemStack iaeItemStack : ((CraftingCPUClusterAccessor) (Object) cpuCluster).getWaitingFor()) {
-                    info.startedWaitingFor.put(iaeItemStack, System.currentTimeMillis());
-                    info.timeSpentOn.put(iaeItemStack, 0L);
-                    info.craftedTotal.put(iaeItemStack, 0L);
-                    info.waitingFor.put(iaeItemStack, iaeItemStack.getStackSize());
-                }
-            }
+    public static void addJob(CraftingCPUCluster cpuCluster, CraftingGridCache cache, IGrid grid, boolean isMerging) {
+        if (!AE2Controller.isValid()) {
+            if (cache.getCpus()
+                .size() >= 5) AE2Controller.activeGrid = (Grid) grid;
+            else return;
+        } else if (AE2Controller.activeGrid != grid) return;
+        JobTrackingInfo info;
+        if (isMerging) {
+            info = trackingInfoMap.get(cpuCluster);
+            if (info == null) return; // We can't start tracking mid crafting :P
+        } else {
+            trackingInfoMap.put(cpuCluster, info = new JobTrackingInfo());
+            info.timeStarted = System.currentTimeMillis();
         }
+        info.finalOutput = cpuCluster.getFinalOutput()
+            .copy();
+        // is this needed?
+        // for (IAEItemStack iaeItemStack : ((CraftingCPUClusterAccessor) (Object) cpuCluster).getWaitingFor()) {
+        // info.startedWaitingFor.put(iaeItemStack, System.currentTimeMillis());
+        // info.timeSpentOn.put(iaeItemStack, 0L);
+        // info.craftedTotal.put(iaeItemStack, 0L);
+        // info.waitingFor.put(iaeItemStack, iaeItemStack.getStackSize());
+        // }
     }
 
     public static void updateCraftingStatus(ICraftingCPU cpu, IAEItemStack diff) {

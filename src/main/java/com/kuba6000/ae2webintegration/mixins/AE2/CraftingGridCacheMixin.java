@@ -7,12 +7,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.kuba6000.ae2webintegration.AE2JobTracker;
 
 import appeng.api.networking.IGrid;
-import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.crafting.ICraftingMedium;
@@ -22,6 +20,7 @@ import appeng.api.networking.crafting.ICraftingProviderHelper;
 import appeng.api.networking.crafting.ICraftingRequester;
 import appeng.api.networking.security.BaseActionSource;
 import appeng.me.cache.CraftingGridCache;
+import appeng.me.cluster.implementations.CraftingCPUCluster;
 
 @Mixin(value = CraftingGridCache.class, remap = false)
 public class CraftingGridCacheMixin {
@@ -30,13 +29,22 @@ public class CraftingGridCacheMixin {
     @Shadow
     private IGrid grid;
 
-    @Inject(method = "submitJob", at = @At("RETURN"))
-    void ae2webintegration$submitJob(ICraftingJob job, ICraftingRequester requestingMachine, ICraftingCPU target,
-        boolean prioritizePower, BaseActionSource src, CallbackInfoReturnable<ICraftingLink> cir) {
-        ICraftingLink link = cir.getReturnValue();
-        if (link != null) { // job started successfully
-            AE2JobTracker.addJob(link, (CraftingGridCache) (Object) this, grid);
+    @Redirect(
+        method = "submitJob",
+        at = @At(
+            value = "INVOKE",
+            target = "Lappeng/me/cluster/implementations/CraftingCPUCluster;submitJob(Lappeng/api/networking/IGrid;Lappeng/api/networking/crafting/ICraftingJob;Lappeng/api/networking/security/BaseActionSource;Lappeng/api/networking/crafting/ICraftingRequester;)Lappeng/api/networking/crafting/ICraftingLink;"))
+    ICraftingLink ae2webintegration$submitJob(CraftingCPUCluster instance, IGrid craftID, ICraftingJob whatLink,
+        BaseActionSource list, ICraftingRequester e) {
+        boolean isMerging = false;
+        if (instance.isBusy()) {
+            isMerging = true;
         }
+        ICraftingLink link = instance.submitJob(craftID, whatLink, list, e);
+        if (link != null) { // job started successfully
+            AE2JobTracker.addJob(instance, (CraftingGridCache) (Object) this, grid, isMerging);
+        }
+        return link;
     }
 
     @Inject(
