@@ -4,22 +4,20 @@
 ### THIS MOD IS ONLY FOR PRIVATE SERVERS, SUPPORTS ONLY ONE AE SYSTEM AND SERVER-SIDED ONLY
 ### THIS MOD IS COMPATIBLE ONLY WITH [GTNH FORK OF AE2](https://github.com/GTNewHorizons/Applied-Energistics-2-Unofficial)
 
-### JOB MERGING IS CURRENTLY NOT SUPPORTED AND COMPLETELY DISABLED BY THIS MOD!!!
-
 ## Current features:
   - AE2 terminal (item list+sorting+filtering)
   - Start a new order
   - Check any CPU status
   - Cancel any CPU order
   - Order tracking
-  - Password protection on the website (via authoarization header, described here: https://en.wikipedia.org/wiki/Basic_access_authentication)
+  - Password protection on the website, disable on localhost connections by default (can change in config) (implemented using authoarization header, described here: https://en.wikipedia.org/wiki/Basic_access_authentication)
 
 ![image](https://github.com/user-attachments/assets/6a2a08a5-1938-4feb-97ea-6f787daedacd)
 ![image](https://github.com/user-attachments/assets/dc5e4f2f-ab6f-484f-9c13-dfff7a21cc11)
 
 ## Requirements:
   - An open port (configurable, terminal will be hosted at http://your-server-ip-or-domain:configured-port/ for example: http://server.kuba6000.pl:2324/)
-  - Have only one big AE2 system on the server (REQUIRED: more than 5 crafting CPUs)
+  - Have your main network be the only one big AE2 system on the server (REQUIRED: minimum 5* crafting CPUs, *CONFIGURABLE) (Network that is displayed on the website is detected by the amount of crafting CPUs)
 
 ## How to use:
   - Download the latest version from releases page
