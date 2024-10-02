@@ -2,6 +2,8 @@ package com.kuba6000.ae2webintegration.ae2request.sync;
 
 import static com.kuba6000.ae2webintegration.api.JSON_Item.create;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -17,9 +19,11 @@ public class GetCPUList extends ISyncedRequest {
 
     private static class JSON_CpuInfo {
 
-        public long size;
         public boolean isBusy;
         public JSON_Item finalOutput;
+        public long availableStorage;
+        public long usedStorage;
+        public long coProcessors;
         public boolean hasTrackingInfo = false;
         public long timeStarted = 0L;
     }
@@ -50,7 +54,9 @@ public class GetCPUList extends ISyncedRequest {
         for (Map.Entry<String, CraftingCPUCluster> entry : clusters.entrySet()) {
             JSON_CpuInfo cpuInfo = new JSON_CpuInfo();
             CraftingCPUCluster cluster = entry.getValue();
-            cpuInfo.size = cluster.getAvailableStorage();
+            cpuInfo.availableStorage = cluster.getAvailableStorage();
+            cpuInfo.usedStorage = getUsedStorage(cluster);
+            cpuInfo.coProcessors = cluster.getCoProcessors();
             if (cpuInfo.isBusy = cluster.isBusy()) {
                 cpuInfo.finalOutput = create(cluster.getFinalOutput());
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.trackingInfoMap.get(cluster);
@@ -62,6 +68,26 @@ public class GetCPUList extends ISyncedRequest {
         }
         setData(cpuList);
         done();
+    }
+
+    private static boolean isUsedStorageAvailable = true;
+    private static Method getUsedStorageMethod = null;
+
+    private static long getUsedStorage(CraftingCPUCluster cluster) {
+        if (!isUsedStorageAvailable) return -1L;
+        if (getUsedStorageMethod == null) {
+            try {
+                getUsedStorageMethod = CraftingCPUCluster.class.getDeclaredMethod("getUsedStorage");
+            } catch (NoSuchMethodException e) {
+                isUsedStorageAvailable = false;
+                return -1L;
+            }
+        }
+        try {
+            return (long) getUsedStorageMethod.invoke(cluster);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            return 0L;
+        }
     }
 
 }

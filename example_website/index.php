@@ -151,7 +151,15 @@
     const sortOrderDisplay = ['Ascending', 'Descending'];
     const storedCraftableDisplay = ['Stored', 'Craftable', 'Stored and craftable'];
     const itemsTypeDisplay = ['Items', 'Fluid drops', 'Items and fluid drops'];
-    currentJob = -1;
+
+    const BYTE_UNIT = [ "B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB", "BB" ];
+    const BYTE_LIMIT = [ 1.0, 1024.0, 1048576.0, 1.073741824E9, 1.099511627776E12, 1.125899906842624E15, 1.15292150460684698E18, 1.1805916207174113E21, 1.2089258196146292E24, 1.2379400392853803E27 ];
+
+    currentJob = {
+        id: -1,
+        itemHash: -1,
+        bytesTotal: -1,
+    }
     function searchStringChanged(el){
         let text = el.value;
         filteringOptions.searchString = text.toLowerCase();
@@ -313,6 +321,14 @@
         document.getElementById('showitemid').checked = settings.showItemID;
     }
     initSettings();
+    function formatBytes(bytes) {
+        for (let i = 1; i < 10; i++) {
+            if (bytes < BYTE_LIMIT[i]) {
+                return (bytes / BYTE_LIMIT[i - 1]) + " " + BYTE_UNIT[i - 1];
+            }
+        }
+        return (bytes / BYTE_LIMIT[0]) + " " + BYTE_UNIT[0];
+    }
     function formatNumber(num){
         switch (settings.numberFormat) {
             case 0:
@@ -485,6 +501,7 @@
             popLoadingScreen(message);
         });
     }
+    cpuForJob = "";
     function updateCPUList(){
         $.getJSON('list', function(data) {
             if(data.status !== "OK"){
@@ -494,10 +511,58 @@
             data = data.data;
             clusters = data;
             globalCPUList = clusters;
-            if(!globalCPUList[selectedCPU])
+            if (!globalCPUList[selectedCPU])
                 selectedCPU = Object.keys(globalCPUList)[0];
             displayCPUList();
         });
+    }
+    function isValidCPUForOrder(cluster) {
+        if (!cluster['finalOutput']) return true;
+        if (currentJob.itemHash != cluster['finalOutput']['hashcode']) return false;
+        if (cluster['usedStorage'] == -1) return false;
+        return cluster['availableStorage'] >= cluster['usedStorage'] + currentJob.bytesTotal;
+    }
+    function updateCPUListForJob() {
+        let html = "";
+        for (let key in globalCPUList){
+            let cluster = globalCPUList[key];
+            html += "<button onclick='selectCPUForJob(this);' name='" + key + "' class='";
+            if (cluster['finalOutput'])
+            {
+                if (cluster['usedStorage'] != -1 && currentJob.itemHash == cluster['finalOutput']['hashcode'] && cluster['availableStorage'] >= cluster['usedStorage'] + currentJob.bytesTotal){
+                    html += "mergable";
+                    if (!globalCPUList[cpuForJob])
+                        cpuForJob = key;
+                }
+                else
+                    html += "invalid";
+            }
+            else {
+                if (!globalCPUList[cpuForJob])
+                    cpuForJob = key;
+            }
+            if (cpuForJob == key)
+                html += " selected";
+            html += "'>" + key;
+            if (cluster['finalOutput'])
+                html += " - " + formatItemName(cluster['finalOutput'], false) + " x" + cluster['finalOutput']['quantity'];
+            if (cluster['usedStorage'] && cluster['usedStorage'] != -1){
+                html += "<br> " + formatBytes(cluster['usedStorage']) + " / " + formatBytes(cluster['availableStorage']);
+            }
+            else {
+                html += "<br>" + formatBytes(cluster['availableStorage']);
+            }
+            html += "<br>" + cluster['coProcessors'] + " Co-Procs";
+            html += "</button>";
+        }
+        document.getElementById('terminalCPUListForJob').innerHTML = html;
+    }
+    function selectCPUForJob(el) {
+        let cluster = globalCPUList[el.name];
+        if (!cluster) return;
+        if (!isValidCPUForOrder(cluster)) return;
+        cpuForJob = el.name;
+        updateCPUListForJob();
     }
     function selectCPU(el) {
         selectedCPU = el.name;
@@ -730,11 +795,15 @@
     }
     function beginOrderingItem(hashcode){
         console.log(hashcode);
-        let quantity = Number(window.prompt("How much to order?", "1"));
-        if (quantity == null || quantity == NaN || quantity < 0 || quantity > Math.pow(2,31)-1){
+        let answer = window.prompt("How much to order?", "1");
+        if (answer === null) // cancelled
+            return;
+        let quantity = Number(answer);
+        if (quantity == null || quantity == NaN || quantity <= 0 || quantity > Math.pow(2,31)-1){
             return;
         }
         else {
+            document.getElementById('terminalCPUListForJob').innerHTML = "...";
             let message = "Sending order...";
             pushLoadingScreen(message);
             $.getJSON('order?item=' + hashcode + "&quantity=" + quantity, function(data){
@@ -749,7 +818,9 @@
                     setCurrentScreen(2);
                     document.getElementById("terminalcontent").innerHTML = ";)";
                     document.getElementById("terminalJobHeaderText").innerHTML = "Calculating, please wait...";
-                    currentJob = data['jobID'];
+                    cpuForJob = "";
+                    currentJob.id = data['jobID'];
+                    currentJob.itemHash = hashcode;
                     setTimeout(updateCraftingPlan, 1000);
                 }
                 else{
@@ -763,7 +834,7 @@
         if(currentWindow != 2){
             return;
         }
-        $.getJSON('job?id=' + currentJob, function(data){
+        $.getJSON('job?id=' + currentJob.id, function(data){
             if(currentWindow != 2){
                 return;
             }
@@ -780,8 +851,10 @@
                     htmlHeader += "[Simulation :(] ";
                 }
                 htmlHeader += "Crafting Plan - " + data['bytesTotal'] + "bytes";
+                currentJob.bytesTotal = data['bytesTotal'];
                 if (!data['isSimulating']){
                     htmlHeader += "<button onclick='startCurrentJob();'>Start</button>";
+                    updateCPUListForJob();
                 }
                 document.getElementById("terminalJobHeaderText").innerHTML = htmlHeader;
                 if (data['plan']){
@@ -830,7 +903,7 @@
         }
         setCurrentScreen(0);
         refreshTerminal();
-        $.getJSON('job?id=' + currentJob + "&cancel", function(data){
+        $.getJSON('job?id=' + currentJob.id + "&cancel", function(data){
             if(data.status !== "OK"){
                 alert(data.status + ": " + data.data);
                 return;
@@ -844,13 +917,14 @@
         }
         let message = "Submitting job...";
         pushLoadingScreen(message);
-        $.getJSON('job?id=' + currentJob + "&submit", function(data){
+        $.getJSON('job?id=' + currentJob.id + "&submit" + "&cpu=" + encodeURIComponent(cpuForJob).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             if (data.status !== "OK"){
                 alert(data.status + ": " + data.data);
             }
             popLoadingScreen(message);
             setCurrentScreen(0);
             refreshTerminal();
+            updateCPUList();
         });
     }
     function cancelJobOnCPU(selectedCPU){

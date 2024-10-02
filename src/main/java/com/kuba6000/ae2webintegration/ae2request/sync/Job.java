@@ -11,6 +11,7 @@ import com.kuba6000.ae2webintegration.AE2Controller;
 
 import appeng.api.AEApi;
 import appeng.api.config.Actionable;
+import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
@@ -154,8 +155,17 @@ public class Job extends ISyncedRequest {
                 try {
                     lastFakePlayerChatMessage = null;
                     ICraftingJob craftingJob = job.get();
+                    ICraftingCPU target = null;
+                    if (cpuName != null) {
+                        target = GetCPUList.getCPUList(craftingGrid)
+                            .get(cpuName);
+                        if (target == null) {
+                            deny("CPU_NOT_FOUND");
+                            return;
+                        }
+                    }
                     ICraftingLink linked = craftingGrid
-                        .submitJob(craftingJob, null, null, true, Order.getPlayerSource());
+                        .submitJob(craftingJob, null, target, true, Order.getPlayerSource());
                     if (linked == null) {
                         if (lastFakePlayerChatMessage != null) {
                             deny("FAIL");
