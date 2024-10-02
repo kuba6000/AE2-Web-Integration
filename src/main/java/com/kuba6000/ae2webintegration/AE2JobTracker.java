@@ -51,12 +51,7 @@ public class AE2JobTracker {
     private static ICraftingProvider currentCraftingProvider = null;
 
     public static void updatingPatterns(CraftingGridCache craftingGrid, IGrid grid) {
-        if (!AE2Controller.isValid()) {
-            if (craftingGrid.getCpus()
-                .size() >= 5) {
-                AE2Controller.activeGrid = (Grid) grid;
-            } else return;
-        } else if (AE2Controller.activeGrid != grid) return;
+        if (!AE2Controller.tryValidateOrVerify((Grid) grid, craftingGrid)) return;
         mediumToViewable.clear();
         isUpdatingPatterns = true;
     }
@@ -125,11 +120,7 @@ public class AE2JobTracker {
     private static int nextFreeTrackingInfoID = 1;
 
     public static void addJob(CraftingCPUCluster cpuCluster, CraftingGridCache cache, IGrid grid, boolean isMerging) {
-        if (!AE2Controller.isValid()) {
-            if (cache.getCpus()
-                .size() >= 5) AE2Controller.activeGrid = (Grid) grid;
-            else return;
-        } else if (AE2Controller.activeGrid != grid) return;
+        if (!AE2Controller.tryValidateOrVerify((Grid) grid, cache)) return;
         JobTrackingInfo info;
         if (isMerging) {
             info = trackingInfoMap.get(cpuCluster);
