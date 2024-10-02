@@ -41,12 +41,15 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 import appeng.api.AEApi;
+import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.pathing.ControllerState;
 import appeng.api.networking.pathing.IPathingGrid;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
+import appeng.hooks.TickHandler;
 import appeng.me.Grid;
+import appeng.me.cache.CraftingGridCache;
 import appeng.me.cache.SecurityCache;
 
 public class AE2Controller {
@@ -321,6 +324,37 @@ public class AE2Controller {
             os.close();
         }
 
+    }
+
+    public static boolean tryValidateOrVerify(Grid testGrid, CraftingGridCache craftingGrid) {
+        if (isValid()) return testGrid == activeGrid;
+        else {
+            if (craftingGrid == null) craftingGrid = testGrid.getCache(ICraftingGrid.class);
+            if (craftingGrid.getCpus()
+                .size() >= Config.AE_CPUS_THRESHOLD) {
+                activeGrid = testGrid;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean tryValidate() {
+        for (Grid grid : TickHandler.INSTANCE.getGridList()) {
+            IPathingGrid pathingGrid = grid.getCache(IPathingGrid.class);
+            if (pathingGrid != null && !pathingGrid.isNetworkBooting()
+                && pathingGrid.getControllerState() == ControllerState.CONTROLLER_ONLINE) {
+                ICraftingGrid craftingGrid = grid.getCache(ICraftingGrid.class);
+                if (craftingGrid != null) {
+                    if ((long) craftingGrid.getCpus()
+                        .size() >= Config.AE_CPUS_THRESHOLD) {
+                        AE2Controller.activeGrid = grid;
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     public static boolean isValid() {

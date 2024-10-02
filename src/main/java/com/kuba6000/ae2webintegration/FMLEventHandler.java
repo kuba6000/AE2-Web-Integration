@@ -7,11 +7,6 @@ import net.minecraft.util.EnumChatFormatting;
 import com.kuba6000.ae2webintegration.ae2request.sync.ISyncedRequest;
 import com.kuba6000.ae2webintegration.utils.VersionChecker;
 
-import appeng.api.networking.crafting.ICraftingGrid;
-import appeng.api.networking.pathing.ControllerState;
-import appeng.api.networking.pathing.IPathingGrid;
-import appeng.hooks.TickHandler;
-import appeng.me.Grid;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.PlayerEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
@@ -35,19 +30,7 @@ public class FMLEventHandler {
 
         if (AE2Controller.timer % 100 != 0) return;
         if (!AE2Controller.isValid()) {
-            for (Grid grid : TickHandler.INSTANCE.getGridList()) {
-                IPathingGrid pathingGrid = grid.getCache(IPathingGrid.class);
-                if (pathingGrid != null && !pathingGrid.isNetworkBooting()
-                    && pathingGrid.getControllerState() == ControllerState.CONTROLLER_ONLINE) {
-                    ICraftingGrid craftingGrid = grid.getCache(ICraftingGrid.class);
-                    if (craftingGrid != null) {
-                        if ((long) craftingGrid.getCpus()
-                            .size() > 5) {
-                            AE2Controller.activeGrid = grid;
-                        }
-                    }
-                }
-            }
+            AE2Controller.tryValidate();
         }
     }
 

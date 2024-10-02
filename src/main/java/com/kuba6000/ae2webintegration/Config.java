@@ -16,6 +16,7 @@ public class Config {
         .toString();
     public static int AE_PORT = 2324;
     public static boolean ALLOW_NO_PASSWORD_ON_LOCALHOST = true;
+    public static int AE_CPUS_THRESHOLD = 5;
 
     // discord
     public static String DISCORD_WEBHOOK = "";
@@ -32,6 +33,13 @@ public class Config {
             Configuration.CATEGORY_GENERAL,
             ALLOW_NO_PASSWORD_ON_LOCALHOST,
             "Don't require password using loopback address (127.0.0.1/localhost)");
+        AE_CPUS_THRESHOLD = configuration.getInt(
+            "cpu_count_threshold",
+            Configuration.CATEGORY_GENERAL,
+            AE_CPUS_THRESHOLD,
+            1,
+            100,
+            "How many crafting units should be considered enough to detect main network?");
 
         DISCORD_WEBHOOK = configuration
             .getString("discord_webhook", "discord", "", "Discord webhook url (OPTIONAL, leave empty to ignore)");
