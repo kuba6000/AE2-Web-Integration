@@ -109,6 +109,11 @@ public class AE2Controller {
     public static HashMap<Integer, Future<ICraftingJob>> jobs = new HashMap<>();
 
     private static boolean checkAuth(HttpExchange t) {
+        if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST && t.getRemoteAddress()
+            .getAddress()
+            .isLoopbackAddress()) {
+            return true;
+        }
         List<String> auth = t.getRequestHeaders()
             .get("Authorization");
         if (auth == null || auth.isEmpty()) return false;
