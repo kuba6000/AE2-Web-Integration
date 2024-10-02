@@ -15,6 +15,7 @@ public class Config {
         .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
         .toString();
     public static int AE_PORT = 2324;
+    public static boolean ALLOW_NO_PASSWORD_ON_LOCALHOST = true;
 
     // discord
     public static String DISCORD_WEBHOOK = "";
@@ -26,6 +27,11 @@ public class Config {
             .getInt("port", Configuration.CATEGORY_GENERAL, AE_PORT, 1, 65535, "Port for the hosted website");
         AE_PASSWORD = configuration
             .getString("password", Configuration.CATEGORY_GENERAL, AE_PASSWORD, "Password for the hosted website");
+        ALLOW_NO_PASSWORD_ON_LOCALHOST = configuration.getBoolean(
+            "allow_no_password_on_localhost",
+            Configuration.CATEGORY_GENERAL,
+            ALLOW_NO_PASSWORD_ON_LOCALHOST,
+            "Don't require password using loopback address (127.0.0.1/localhost)");
 
         DISCORD_WEBHOOK = configuration
             .getString("discord_webhook", "discord", "", "Discord webhook url (OPTIONAL, leave empty to ignore)");
