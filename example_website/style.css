@@ -136,13 +136,22 @@ button:hover{
     margin-bottom: 10px;
 }
 
-#terminalCPUList button{
+#terminalCPUList button, #terminalCPUListForJob button{
     width: 100%;
     margin: 0;
     border-bottom: black dotted 1px;
 }
-#terminalCPUList button.selected{
+#terminalCPUList button.selected, #terminalCPUListForJob button.selected{
     background-color: rgb(0, 137, 155);
+}
+#terminalCPUListForJob button.invalid{
+    background-color: rgb(155, 23, 0);
+}
+#terminalCPUListForJob button.mergable{
+    background-color: rgb(170, 159, 0);
+}
+#terminalCPUListForJob button.mergable.selected{
+    background-color: rgb(0, 165, 194);
 }
 
 #terminalHistoryDetails{
