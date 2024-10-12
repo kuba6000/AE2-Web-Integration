@@ -41,16 +41,17 @@ public class CraftingCPUClusterMixin {
         AE2JobTracker.cancelCrafting((ICraftingCPU) this);
     }
 
-    @Inject(
-        method = "injectItems",
-        at = @At(
-            value = "INVOKE",
-            target = "Lappeng/api/storage/data/IAEItemStack;setStackSize(J)Lappeng/api/storage/data/IAEStack;",
-            shift = At.Shift.AFTER,
-            ordinal = 2))
-    void ae2webintegration$fixCpuCluster(CallbackInfoReturnable<IAEStack> cir, @Local(ordinal = 1) IAEItemStack is) {
-        postCraftingStatusChange(is);
-    }
+    // SEEMS TO BE FIXED IN 1.12.2
+//    @Inject(
+//        method = "injectItems",
+//        at = @At(
+//            value = "INVOKE",
+//            target = "Lappeng/api/storage/data/IAEItemStack;setStackSize(J)Lappeng/api/storage/data/IAEStack;",
+//            shift = At.Shift.AFTER,
+//            ordinal = 2))
+//    void ae2webintegration$fixCpuCluster(CallbackInfoReturnable<IAEStack> cir, @Local(ordinal = 1) IAEItemStack is) {
+//        postCraftingStatusChange(is);
+//    }
 
     @Redirect(
         method = "executeCrafting",

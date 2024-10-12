@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import appeng.util.item.ItemList;
 import com.kuba6000.ae2webintegration.AE2JobTracker;
 import com.kuba6000.ae2webintegration.api.JSON_CompactedItem;
 import com.kuba6000.ae2webintegration.api.JSON_Item;
@@ -15,7 +16,6 @@ import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.me.Grid;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
-import appeng.util.item.HashBasedItemList;
 
 public class GetCPU extends ISyncedRequest {
 
@@ -62,19 +62,19 @@ public class GetCPU extends ISyncedRequest {
             clusterData.hasTrackingInfo = trackingInfo != null;
 
             HashMap<JSON_CompactedItem, JSON_CompactedItem> prep = new HashMap<>();
-            HashBasedItemList items = new HashBasedItemList();
+            ItemList items = new ItemList();
             cpu.getListOfItem(items, CraftingItemList.ACTIVE);
             for (IAEItemStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
                 prep.computeIfAbsent(compactedItem, k -> compactedItem).active += itemStack.getStackSize();
             }
-            items = new HashBasedItemList();
+            items = new ItemList();
             cpu.getListOfItem(items, CraftingItemList.PENDING);
             for (IAEItemStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
                 prep.computeIfAbsent(compactedItem, k -> compactedItem).pending += itemStack.getStackSize();
             }
-            items = new HashBasedItemList();
+            items = new ItemList();
             cpu.getListOfItem(items, CraftingItemList.STORAGE);
             for (IAEItemStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);

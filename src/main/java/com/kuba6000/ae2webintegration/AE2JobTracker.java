@@ -7,19 +7,18 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import appeng.api.networking.crafting.*;
+import appeng.crafting.CraftingLink;
+import appeng.helpers.IInterfaceHost;
+import com.kuba6000.ae2webintegration.mixins.AE2.CraftingLinkAccessor;
 import org.apache.commons.lang3.tuple.Pair;
 
 import com.kuba6000.ae2webintegration.discord.DiscordManager;
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingCPUClusterAccessor;
 
 import appeng.api.networking.IGrid;
-import appeng.api.networking.crafting.ICraftingCPU;
-import appeng.api.networking.crafting.ICraftingMedium;
-import appeng.api.networking.crafting.ICraftingPatternDetails;
-import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
-import appeng.api.util.IInterfaceViewable;
 import appeng.me.Grid;
 import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
@@ -46,7 +45,8 @@ public class AE2JobTracker {
         }
     }
 
-    private static final IdentityHashMap<ICraftingMedium, IInterfaceViewable> mediumToViewable = new IdentityHashMap<>();
+    // TODO find something better?
+    private static final IdentityHashMap<ICraftingMedium, IInterfaceHost> mediumToViewable = new IdentityHashMap<>();
     private static boolean isUpdatingPatterns = false;
     private static ICraftingProvider currentCraftingProvider = null;
 
@@ -64,7 +64,7 @@ public class AE2JobTracker {
     public static void addCraftingOption(CraftingGridCache craftingGrid, IGrid grid, ICraftingMedium medium) {
         if (!isUpdatingPatterns) return;
         if (currentCraftingProvider == null) return;
-        if (currentCraftingProvider instanceof IInterfaceViewable viewable && !mediumToViewable.containsKey(medium))
+        if (currentCraftingProvider instanceof IInterfaceHost viewable && !mediumToViewable.containsKey(medium))
             mediumToViewable.put(medium, viewable);
     }
 
@@ -119,25 +119,18 @@ public class AE2JobTracker {
 
     private static int nextFreeTrackingInfoID = 1;
 
-    public static void addJob(CraftingCPUCluster cpuCluster, CraftingGridCache cache, IGrid grid, boolean isMerging) {
+    public static void addJob(ICraftingLink link, CraftingGridCache cache, IGrid grid) {
         if (!AE2Controller.tryValidateOrVerify((Grid) grid, cache)) return;
-        JobTrackingInfo info;
-        if (isMerging) {
-            info = trackingInfoMap.get(cpuCluster);
-            if (info == null) return; // We can't start tracking mid crafting :P
-        } else {
-            trackingInfoMap.put(cpuCluster, info = new JobTrackingInfo());
-            info.timeStarted = System.currentTimeMillis();
+        if (link instanceof CraftingLink craftingLink) {
+            ICraftingCPU cpu = ((CraftingLinkAccessor) craftingLink).callGetCpu();
+            if (cpu instanceof CraftingCPUCluster cpuCluster) {
+                JobTrackingInfo info;
+                trackingInfoMap.put(cpuCluster, info = new JobTrackingInfo());
+                info.timeStarted = System.currentTimeMillis();
+                info.finalOutput = cpuCluster.getFinalOutput()
+                    .copy();
+            }
         }
-        info.finalOutput = cpuCluster.getFinalOutput()
-            .copy();
-        // is this needed?
-        // for (IAEItemStack iaeItemStack : ((CraftingCPUClusterAccessor) (Object) cpuCluster).getWaitingFor()) {
-        // info.startedWaitingFor.put(iaeItemStack, System.currentTimeMillis());
-        // info.timeSpentOn.put(iaeItemStack, 0L);
-        // info.craftedTotal.put(iaeItemStack, 0L);
-        // info.waitingFor.put(iaeItemStack, iaeItemStack.getStackSize());
-        // }
     }
 
     public static void updateCraftingStatus(ICraftingCPU cpu, IAEItemStack diff) {
@@ -189,9 +182,9 @@ public class AE2JobTracker {
     public static void pushedPattern(CraftingCPUCluster cpu, ICraftingMedium medium, ICraftingPatternDetails details) {
         JobTrackingInfo info = trackingInfoMap.get(cpu);
         if (info == null) return;
-        IInterfaceViewable viewable = mediumToViewable.get(medium);
+        IInterfaceHost viewable = mediumToViewable.get(medium);
         if (viewable != null) {
-            String name = viewable.getName();
+            String name = viewable.getInterfaceDuality().getTermName();
             if (name == null) name = "[NULL]";
             final AEInterface aeInterfaceToLookup = new AEInterface(name);
             final AEInterface aeInterface = info.interfaceLookup
@@ -236,7 +229,7 @@ public class AE2JobTracker {
         DiscordManager.postMessageNonBlocking(
             new DiscordManager.DiscordEmbed(
                 "AE2 Job Tracker",
-                "Crafting for `" + info.finalOutput.getItemStack()
+                "Crafting for `" + info.finalOutput.asItemStackRepresentation()
                     .getDisplayName()
                     + " x"
                     + info.finalOutput.getStackSize()

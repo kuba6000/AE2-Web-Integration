@@ -3,7 +3,6 @@ package com.kuba6000.ae2webintegration.api;
 import com.kuba6000.ae2webintegration.utils.GSONUtils;
 
 import appeng.api.storage.data.IAEItemStack;
-import cpw.mods.fml.common.registry.GameRegistry;
 
 public class JSON_CompactedItem {
 
@@ -26,10 +25,10 @@ public class JSON_CompactedItem {
     public JSON_CompactedItem(IAEItemStack itemStack) {
         this.internalItem = itemStack;
         this.hashcode = this.internalItem.hashCode();
-        this.itemid = GameRegistry.findUniqueIdentifierFor(itemStack.getItem())
-            .toString() + ":"
+        this.itemid = itemStack.getItem()
+            .getRegistryName() + ":"
             + itemStack.getItemDamage();
-        this.itemname = itemStack.getItemStack()
+        this.itemname = itemStack.asItemStackRepresentation()
             .getDisplayName();
     }
 

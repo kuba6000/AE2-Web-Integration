@@ -21,6 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
+import appeng.api.storage.channels.IItemStorageChannel;
 import org.apache.commons.io.IOUtils;
 
 import com.kuba6000.ae2webintegration.ae2request.async.GetTracking;
@@ -98,8 +99,7 @@ public class AE2Controller {
     private static final ExecutorService serverThread = Executors.newCachedThreadPool();
 
     public static IItemList<IAEItemStack> globalItemList = AEApi.instance()
-        .storage()
-        .createItemList();
+        .storage().getStorageChannel(IItemStorageChannel.class).createList();
 
     public static ConcurrentHashMap<Integer, IAEItemStack> hashcodeToAEItemStack = new ConcurrentHashMap<>();
 
@@ -375,7 +375,8 @@ public class AE2Controller {
     public static void init() {
         try {
             startHTTPServer();
-            SecurityCache.registerOpPlayer(AEControllerProfile);
+            // TODO check if mixin needed to bypass protection in 1.12 ?
+            //SecurityCache.registerOpPlayer(AEControllerProfile);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

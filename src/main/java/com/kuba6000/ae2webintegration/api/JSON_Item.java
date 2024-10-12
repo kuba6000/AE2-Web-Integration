@@ -1,7 +1,6 @@
 package com.kuba6000.ae2webintegration.api;
 
 import appeng.api.storage.data.IAEItemStack;
-import cpw.mods.fml.common.registry.GameRegistry;
 
 public class JSON_Item {
 
@@ -19,10 +18,9 @@ public class JSON_Item {
 
     public static JSON_Item create(IAEItemStack src) {
         return new JSON_Item(
-            GameRegistry.findUniqueIdentifierFor(src.getItem())
-                .toString() + ":"
+            src.getItem().getRegistryName() + ":"
                 + src.getItemDamage(),
-            src.getItemStack()
+            src.asItemStackRepresentation()
                 .getDisplayName(),
             src.getStackSize(),
             src.hashCode());

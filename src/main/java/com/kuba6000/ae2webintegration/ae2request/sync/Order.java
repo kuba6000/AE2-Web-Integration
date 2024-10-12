@@ -5,7 +5,10 @@ import static com.kuba6000.ae2webintegration.AE2Controller.hashcodeToAEItemStack
 import java.util.Map;
 import java.util.concurrent.Future;
 
-import net.minecraft.util.IChatComponent;
+import appeng.api.AEApi;
+import appeng.api.storage.channels.IItemStorageChannel;
+import appeng.me.helpers.PlayerSource;
+import net.minecraft.util.text.ITextComponent;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
 import net.minecraftforge.common.util.FakePlayer;
@@ -20,7 +23,6 @@ import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.security.IActionHost;
-import appeng.api.networking.security.PlayerSource;
 import appeng.api.networking.storage.IStorageGrid;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
@@ -56,8 +58,13 @@ public class Order extends ISyncedRequest {
         return new PlayerSource(new FakePlayer((WorldServer) world, AE2Controller.AEControllerProfile) {
 
             @Override
-            public void addChatMessage(IChatComponent message) {
-                Job.lastFakePlayerChatMessage = message;
+            public void sendStatusMessage(ITextComponent chatComponent, boolean actionBar) {
+                // no implementation
+            }
+
+            @Override
+            public void sendMessage(ITextComponent component) {
+                Job.lastFakePlayerChatMessage = component;
             }
         }, actionHost);
     }
@@ -94,13 +101,14 @@ public class Order extends ISyncedRequest {
         }
         if (!allBusy) {
             IStorageGrid storageGrid = grid.getCache(IStorageGrid.class);
-            final IItemList<IAEItemStack> itemList = storageGrid.getItemInventory()
+            final IItemList<IAEItemStack> itemList = storageGrid.getInventory(AEApi.instance().storage().getStorageChannel(
+                    IItemStorageChannel.class))
                 .getStorageList();
             IAEItemStack realItem = itemList.findPrecise(this.item);
             if (realItem != null && realItem.isCraftable()) {
                 PlayerSource source = getPlayerSource();
                 Future<ICraftingJob> job = craftingGrid
-                    .beginCraftingJob(source.player.worldObj, AE2Controller.activeGrid, source, this.item, null);
+                    .beginCraftingJob(source.player().get().world, AE2Controller.activeGrid, source, this.item, null);
 
                 int jobID = AE2Controller.getNextJobID();
                 AE2Controller.jobs.put(jobID, job);
