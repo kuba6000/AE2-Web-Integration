@@ -376,8 +376,6 @@ public class AE2Controller {
     public static void init() {
         try {
             startHTTPServer();
-            // TODO check if mixin needed to bypass protection in 1.12 ?
-            // SecurityCache.registerOpPlayer(AEControllerProfile);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
