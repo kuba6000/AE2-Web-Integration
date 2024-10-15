@@ -7,18 +7,18 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import appeng.api.networking.crafting.*;
-import appeng.crafting.CraftingLink;
-import appeng.helpers.IInterfaceHost;
-import com.kuba6000.ae2webintegration.mixins.AE2.CraftingLinkAccessor;
 import org.apache.commons.lang3.tuple.Pair;
 
 import com.kuba6000.ae2webintegration.discord.DiscordManager;
 import com.kuba6000.ae2webintegration.mixins.AE2.CraftingCPUClusterAccessor;
+import com.kuba6000.ae2webintegration.mixins.AE2.CraftingLinkAccessor;
 
 import appeng.api.networking.IGrid;
+import appeng.api.networking.crafting.*;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
+import appeng.crafting.CraftingLink;
+import appeng.helpers.IInterfaceHost;
 import appeng.me.Grid;
 import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
@@ -184,7 +184,8 @@ public class AE2JobTracker {
         if (info == null) return;
         IInterfaceHost viewable = mediumToViewable.get(medium);
         if (viewable != null) {
-            String name = viewable.getInterfaceDuality().getTermName();
+            String name = viewable.getInterfaceDuality()
+                .getTermName();
             if (name == null) name = "[NULL]";
             final AEInterface aeInterfaceToLookup = new AEInterface(name);
             final AEInterface aeInterface = info.interfaceLookup

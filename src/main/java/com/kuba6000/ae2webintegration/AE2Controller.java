@@ -21,7 +21,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
-import appeng.api.storage.channels.IItemStorageChannel;
 import org.apache.commons.io.IOUtils;
 
 import com.kuba6000.ae2webintegration.ae2request.async.GetTracking;
@@ -46,12 +45,12 @@ import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.pathing.ControllerState;
 import appeng.api.networking.pathing.IPathingGrid;
+import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.hooks.TickHandler;
 import appeng.me.Grid;
 import appeng.me.cache.CraftingGridCache;
-import appeng.me.cache.SecurityCache;
 
 public class AE2Controller {
 
@@ -99,7 +98,9 @@ public class AE2Controller {
     private static final ExecutorService serverThread = Executors.newCachedThreadPool();
 
     public static IItemList<IAEItemStack> globalItemList = AEApi.instance()
-        .storage().getStorageChannel(IItemStorageChannel.class).createList();
+        .storage()
+        .getStorageChannel(IItemStorageChannel.class)
+        .createList();
 
     public static ConcurrentHashMap<Integer, IAEItemStack> hashcodeToAEItemStack = new ConcurrentHashMap<>();
 
@@ -376,7 +377,7 @@ public class AE2Controller {
         try {
             startHTTPServer();
             // TODO check if mixin needed to bypass protection in 1.12 ?
-            //SecurityCache.registerOpPlayer(AEControllerProfile);
+            // SecurityCache.registerOpPlayer(AEControllerProfile);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

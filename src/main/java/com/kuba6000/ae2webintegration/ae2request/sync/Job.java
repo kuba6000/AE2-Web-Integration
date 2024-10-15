@@ -5,9 +5,8 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import appeng.api.storage.IStorageChannel;
-import appeng.api.storage.channels.IItemStorageChannel;
-import appeng.me.helpers.PlayerSource;
+import net.minecraft.util.text.ITextComponent;
+
 import com.kuba6000.ae2webintegration.AE2Controller;
 
 import appeng.api.AEApi;
@@ -18,10 +17,12 @@ import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.storage.IStorageGrid;
 import appeng.api.storage.IMEInventory;
+import appeng.api.storage.IStorageChannel;
+import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.me.Grid;
-import net.minecraft.util.text.ITextComponent;
+import appeng.me.helpers.PlayerSource;
 
 public class Job extends ISyncedRequest {
 
@@ -84,21 +85,21 @@ public class Job extends ISyncedRequest {
                 try {
                     ICraftingJob craftingJob = job.get();
                     IStorageGrid storageGrid = grid.getCache(IStorageGrid.class);
-                    IStorageChannel<IAEItemStack> itemChannel = AEApi.instance().storage().getStorageChannel(
-                        IItemStorageChannel.class);
+                    IStorageChannel<IAEItemStack> itemChannel = AEApi.instance()
+                        .storage()
+                        .getStorageChannel(IItemStorageChannel.class);
                     IMEInventory<IAEItemStack> items = storageGrid.getInventory(itemChannel);
                     final PlayerSource host = Order.getPlayerSource();
                     jobData.isSimulating = craftingJob.isSimulation();
                     jobData.bytesTotal = craftingJob.getByteTotal();
                     IItemList<IAEItemStack> plan;
-                    craftingJob.populatePlan(
-                        plan = itemChannel
-                            .createList());
+                    craftingJob.populatePlan(plan = itemChannel.createList());
                     jobData.plan = new ArrayList<>();
                     IItemList<IAEItemStack> realItemList = items.getAvailableItems(itemChannel.createList());
                     for (IAEItemStack iaeItemStack : plan) {
                         JSON_JobData.JobItem jobItem = new JSON_JobData.JobItem();
-                        jobItem.itemid = iaeItemStack.getItem().getRegistryName() + ":"
+                        jobItem.itemid = iaeItemStack.getItem()
+                            .getRegistryName() + ":"
                             + iaeItemStack.getItemDamage();
                         jobItem.itemname = iaeItemStack.asItemStackRepresentation()
                             .getDisplayName();

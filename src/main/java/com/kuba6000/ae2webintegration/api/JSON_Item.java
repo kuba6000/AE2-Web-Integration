@@ -18,7 +18,8 @@ public class JSON_Item {
 
     public static JSON_Item create(IAEItemStack src) {
         return new JSON_Item(
-            src.getItem().getRegistryName() + ":"
+            src.getItem()
+                .getRegistryName() + ":"
                 + src.getItemDamage(),
             src.asItemStackRepresentation()
                 .getDisplayName(),

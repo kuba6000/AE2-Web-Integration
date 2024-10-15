@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
-import appeng.util.item.ItemList;
 import com.kuba6000.ae2webintegration.AE2JobTracker;
 import com.kuba6000.ae2webintegration.api.JSON_CompactedItem;
 import com.kuba6000.ae2webintegration.api.JSON_Item;
@@ -16,6 +15,7 @@ import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.me.Grid;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
+import appeng.util.item.ItemList;
 
 public class GetCPU extends ISyncedRequest {
 

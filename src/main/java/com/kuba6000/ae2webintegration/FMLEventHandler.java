@@ -1,15 +1,14 @@
 package com.kuba6000.ae2webintegration;
 
 import net.minecraft.entity.player.EntityPlayerMP;
-
-import com.kuba6000.ae2webintegration.ae2request.sync.ISyncedRequest;
-import com.kuba6000.ae2webintegration.utils.VersionChecker;
-
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextFormatting;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
+
+import com.kuba6000.ae2webintegration.ae2request.sync.ISyncedRequest;
+import com.kuba6000.ae2webintegration.utils.VersionChecker;
 
 public class FMLEventHandler {
 

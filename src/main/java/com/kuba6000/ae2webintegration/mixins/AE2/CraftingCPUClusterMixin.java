@@ -8,16 +8,13 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.kuba6000.ae2webintegration.AE2JobTracker;
-import com.llamalad7.mixinextras.sugar.Local;
 
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingMedium;
 import appeng.api.networking.crafting.ICraftingPatternDetails;
 import appeng.api.storage.data.IAEItemStack;
-import appeng.api.storage.data.IAEStack;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
@@ -42,16 +39,16 @@ public class CraftingCPUClusterMixin {
     }
 
     // SEEMS TO BE FIXED IN 1.12.2
-//    @Inject(
-//        method = "injectItems",
-//        at = @At(
-//            value = "INVOKE",
-//            target = "Lappeng/api/storage/data/IAEItemStack;setStackSize(J)Lappeng/api/storage/data/IAEStack;",
-//            shift = At.Shift.AFTER,
-//            ordinal = 2))
-//    void ae2webintegration$fixCpuCluster(CallbackInfoReturnable<IAEStack> cir, @Local(ordinal = 1) IAEItemStack is) {
-//        postCraftingStatusChange(is);
-//    }
+    // @Inject(
+    // method = "injectItems",
+    // at = @At(
+    // value = "INVOKE",
+    // target = "Lappeng/api/storage/data/IAEItemStack;setStackSize(J)Lappeng/api/storage/data/IAEStack;",
+    // shift = At.Shift.AFTER,
+    // ordinal = 2))
+    // void ae2webintegration$fixCpuCluster(CallbackInfoReturnable<IAEStack> cir, @Local(ordinal = 1) IAEItemStack is) {
+    // postCraftingStatusChange(is);
+    // }
 
     @Redirect(
         method = "executeCrafting",
