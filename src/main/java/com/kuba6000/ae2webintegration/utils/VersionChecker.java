@@ -11,7 +11,10 @@ import com.kuba6000.ae2webintegration.Tags;
 
 public class VersionChecker {
 
-    private static final String versionCheckURL = "https://api.github.com/repos/kuba6000/AE2-Web-Integration/releases/latest";
+    // example version: 0.0.9-alpha-forge-1.12.2
+    private static final String VERSION_IDENTIFIER = "-forge-1.12.2";
+
+    private static final String versionCheckURL = "https://api.github.com/repos/kuba6000/AE2-Web-Integration/tags";
     private static String latestTag = null;
 
     private static long lastChecked = 0L;
@@ -33,9 +36,18 @@ public class VersionChecker {
             if (conn.getResponseCode() == 200) {
                 try (BufferedReader buf = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     JsonElement element = new JsonParser().parse(buf);
-                    latestTag = element.getAsJsonObject()
-                        .get("tag_name")
-                        .getAsString();
+                    // this should be sorted right?
+                    for (JsonElement tag : element.getAsJsonArray()) {
+                        String name = tag.getAsJsonObject()
+                            .get("name")
+                            .getAsString();
+                        if (name.contains(VERSION_IDENTIFIER)) {
+                            latestTag = name;
+                            return;
+                        }
+                    }
+                    // not found???
+                    latestTag = Tags.VERSION;
                 }
             }
 
