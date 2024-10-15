@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import net.minecraft.util.IChatComponent;
+import net.minecraft.util.text.ITextComponent;
 
 import com.kuba6000.ae2webintegration.AE2Controller;
 
@@ -15,17 +15,18 @@ import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
-import appeng.api.networking.security.BaseActionSource;
 import appeng.api.networking.storage.IStorageGrid;
 import appeng.api.storage.IMEInventory;
+import appeng.api.storage.IStorageChannel;
+import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.me.Grid;
-import cpw.mods.fml.common.registry.GameRegistry;
+import appeng.me.helpers.PlayerSource;
 
 public class Job extends ISyncedRequest {
 
-    static IChatComponent lastFakePlayerChatMessage = null;
+    static ITextComponent lastFakePlayerChatMessage = null;
 
     private static class JSON_JobData {
 
@@ -84,25 +85,26 @@ public class Job extends ISyncedRequest {
                 try {
                     ICraftingJob craftingJob = job.get();
                     IStorageGrid storageGrid = grid.getCache(IStorageGrid.class);
-                    IMEInventory<IAEItemStack> items = storageGrid.getItemInventory();
-                    final BaseActionSource host = Order.getPlayerSource();
+                    IStorageChannel<IAEItemStack> itemChannel = AEApi.instance()
+                        .storage()
+                        .getStorageChannel(IItemStorageChannel.class);
+                    IMEInventory<IAEItemStack> items = storageGrid.getInventory(itemChannel);
+                    final PlayerSource host = Order.getPlayerSource();
                     jobData.isSimulating = craftingJob.isSimulation();
                     jobData.bytesTotal = craftingJob.getByteTotal();
                     IItemList<IAEItemStack> plan;
-                    craftingJob.populatePlan(
-                        plan = AEApi.instance()
-                            .storage()
-                            .createPrimitiveItemList());
+                    craftingJob.populatePlan(plan = itemChannel.createList());
                     jobData.plan = new ArrayList<>();
+                    IItemList<IAEItemStack> realItemList = items.getAvailableItems(itemChannel.createList());
                     for (IAEItemStack iaeItemStack : plan) {
                         JSON_JobData.JobItem jobItem = new JSON_JobData.JobItem();
-                        jobItem.itemid = GameRegistry.findUniqueIdentifierFor(iaeItemStack.getItem())
-                            .toString() + ":"
+                        jobItem.itemid = iaeItemStack.getItem()
+                            .getRegistryName() + ":"
                             + iaeItemStack.getItemDamage();
-                        jobItem.itemname = iaeItemStack.getItemStack()
+                        jobItem.itemname = iaeItemStack.asItemStackRepresentation()
                             .getDisplayName();
                         jobItem.requested = iaeItemStack.getCountRequestable();
-                        jobItem.steps = iaeItemStack.getCountRequestableCrafts();
+                        jobItem.steps = 0; // not implemented
                         if (jobData.isSimulating) {
                             IAEItemStack toExtract = iaeItemStack.copy();
                             toExtract.reset();
@@ -120,7 +122,7 @@ public class Job extends ISyncedRequest {
                             jobItem.missing = 0;
                         }
                         if (jobItem.missing == 0 && jobItem.requested == 0 && jobItem.stored > 0) {
-                            IAEItemStack realStack = items.getAvailableItem(iaeItemStack);
+                            IAEItemStack realStack = realItemList.findPrecise(iaeItemStack);
                             long available = 0L;
                             if (realStack != null) available = realStack.getStackSize();
                             if (available > 0L) jobItem.usedPercent = (double) jobItem.stored / (double) available;
@@ -169,7 +171,7 @@ public class Job extends ISyncedRequest {
                     if (linked == null) {
                         if (lastFakePlayerChatMessage != null) {
                             deny("FAIL");
-                            setData(lastFakePlayerChatMessage.getUnformattedTextForChat());
+                            setData(lastFakePlayerChatMessage.getUnformattedText());
                         } else {
                             deny("FAIL");
                             setData("UNKNOWN");

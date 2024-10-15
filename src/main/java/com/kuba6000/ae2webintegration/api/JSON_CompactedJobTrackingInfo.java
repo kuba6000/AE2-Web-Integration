@@ -8,7 +8,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import com.kuba6000.ae2webintegration.AE2JobTracker;
 
 import appeng.api.storage.data.IAEItemStack;
-import cpw.mods.fml.common.registry.GameRegistry;
 
 public class JSON_CompactedJobTrackingInfo {
 
@@ -60,10 +59,10 @@ public class JSON_CompactedJobTrackingInfo {
             IAEItemStack stack = iaeItemStackLongEntry.getKey();
             long spent = iaeItemStackLongEntry.getValue();
             CompactedTrackingGSONItem item = new CompactedTrackingGSONItem();
-            item.itemid = GameRegistry.findUniqueIdentifierFor(stack.getItem())
-                .toString() + ":"
+            item.itemid = stack.getItem()
+                .getRegistryName() + ":"
                 + stack.getItemDamage();
-            item.itemname = stack.getItemStack()
+            item.itemname = stack.asItemStackRepresentation()
                 .getDisplayName();
             item.timeSpentOn = spent;
             item.craftedTotal = info.craftedTotal.get(stack);

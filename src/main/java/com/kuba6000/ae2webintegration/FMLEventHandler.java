@@ -1,15 +1,14 @@
 package com.kuba6000.ae2webintegration;
 
 import net.minecraft.entity.player.EntityPlayerMP;
-import net.minecraft.util.ChatComponentText;
-import net.minecraft.util.EnumChatFormatting;
+import net.minecraft.util.text.TextComponentString;
+import net.minecraft.util.text.TextFormatting;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.gameevent.PlayerEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
 
 import com.kuba6000.ae2webintegration.ae2request.sync.ISyncedRequest;
 import com.kuba6000.ae2webintegration.utils.VersionChecker;
-
-import cpw.mods.fml.common.eventhandler.SubscribeEvent;
-import cpw.mods.fml.common.gameevent.PlayerEvent;
-import cpw.mods.fml.common.gameevent.TickEvent;
 
 public class FMLEventHandler {
 
@@ -37,9 +36,9 @@ public class FMLEventHandler {
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.player instanceof EntityPlayerMP)) return;
-        if (VersionChecker.isOutdated()) event.player.addChatMessage(
-            new ChatComponentText(
-                EnumChatFormatting.GREEN.toString() + EnumChatFormatting.BOLD
+        if (VersionChecker.isOutdated()) event.player.sendMessage(
+            new TextComponentString(
+                TextFormatting.GREEN.toString() + TextFormatting.BOLD
                     + "----> AE2WebIntegration -> New version detected! Consider updating at https://github.com/kuba6000/AE2-Web-Integration/releases/latest"));
     }
 

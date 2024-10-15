@@ -2,9 +2,9 @@ name: Test Scala Presence
 
 on:
   pull_request:
-    branches: [ master, main ]
+    branches: [ 1.12.2 ]
   push:
-    branches: [ master, main ]
+    branches: [ 1.12.2 ]
 
 jobs:
   test-scala-presence:

@@ -45,12 +45,12 @@ import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.pathing.ControllerState;
 import appeng.api.networking.pathing.IPathingGrid;
+import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.hooks.TickHandler;
 import appeng.me.Grid;
 import appeng.me.cache.CraftingGridCache;
-import appeng.me.cache.SecurityCache;
 
 public class AE2Controller {
 
@@ -99,7 +99,8 @@ public class AE2Controller {
 
     public static IItemList<IAEItemStack> globalItemList = AEApi.instance()
         .storage()
-        .createItemList();
+        .getStorageChannel(IItemStorageChannel.class)
+        .createList();
 
     public static ConcurrentHashMap<Integer, IAEItemStack> hashcodeToAEItemStack = new ConcurrentHashMap<>();
 
@@ -375,7 +376,6 @@ public class AE2Controller {
     public static void init() {
         try {
             startHTTPServer();
-            SecurityCache.registerOpPlayer(AEControllerProfile);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

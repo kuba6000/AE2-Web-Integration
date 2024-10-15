@@ -7,7 +7,7 @@ import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.spongepowered.asm.lib.tree.ClassNode;
+import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
@@ -44,7 +44,8 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.CraftingGridCacheMixin",
                 "AE2.CraftingLinkAccessor",
                 "AE2.CraftingCPUClusterMixin",
-                "AE2.CraftingCPUClusterAccessor"));
+                "AE2.CraftingCPUClusterAccessor",
+                "AE2.SecurityCacheMixin"));
 
         LOG.info("MIXING INTO AE2 LETS GOOOOOOOOOOOOOOOOOOOOOOOOO");
 

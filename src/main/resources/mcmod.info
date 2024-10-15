@@ -1,11 +1,11 @@
 {
 	"modListVersion": 2,
 	"modList": [{
-		"modid": "${modId}",
-		"name": "${modName}",
+		"modid": "${modid}",
+		"name": "${modname}",
 		"description": "AE2 Web Integration mod",
-		"version": "${modVersion}",
-		"mcversion": "${minecraftVersion}",
+		"version": "${version}",
+		"mcversion": "${mcversion}",
 		"url": "https://github.com/kuba6000/AE2-Web-Integration",
 		"updateUrl": "",
 		"authorList": ["kuba6000"],

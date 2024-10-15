@@ -1,16 +1,16 @@
 package com.kuba6000.ae2webintegration;
 
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.fml.common.event.FMLInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLServerStartedEvent;
+import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
+import net.minecraftforge.fml.common.event.FMLServerStoppingEvent;
+
 import com.kuba6000.ae2webintegration.commands.ReloadCommandHandler;
 import com.kuba6000.ae2webintegration.discord.DiscordManager;
 import com.kuba6000.ae2webintegration.utils.VersionChecker;
-
-import cpw.mods.fml.common.FMLCommonHandler;
-import cpw.mods.fml.common.event.FMLInitializationEvent;
-import cpw.mods.fml.common.event.FMLPostInitializationEvent;
-import cpw.mods.fml.common.event.FMLPreInitializationEvent;
-import cpw.mods.fml.common.event.FMLServerStartedEvent;
-import cpw.mods.fml.common.event.FMLServerStartingEvent;
-import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 
 public class CommonProxy {
 
@@ -25,9 +25,7 @@ public class CommonProxy {
             "You are not on latest version ! Consider updating to {} at https://github.com/kuba6000/AE2-Web-Integration/releases/latest",
             VersionChecker.getLatestTag());
 
-        FMLCommonHandler.instance()
-            .bus()
-            .register(new FMLEventHandler());
+        MinecraftForge.EVENT_BUS.register(new FMLEventHandler());
     }
 
     // load "Do your mod setup. Build whatever data structures you care about. Register recipes." (Remove if not needed)

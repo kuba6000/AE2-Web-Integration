@@ -6,11 +6,12 @@ import java.util.Map;
 import com.kuba6000.ae2webintegration.AE2Controller;
 import com.kuba6000.ae2webintegration.api.JSON_DetailedItem;
 
+import appeng.api.AEApi;
 import appeng.api.networking.storage.IStorageGrid;
 import appeng.api.storage.IMEMonitor;
+import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.me.Grid;
-import cpw.mods.fml.common.registry.GameRegistry;
 
 public class GetItems extends ISyncedRequest {
 
@@ -22,7 +23,10 @@ public class GetItems extends ISyncedRequest {
     @Override
     public void handle(Grid grid) {
         IStorageGrid storageGrid = grid.getCache(IStorageGrid.class);
-        IMEMonitor<IAEItemStack> monitor = storageGrid.getItemInventory();
+        IMEMonitor<IAEItemStack> monitor = storageGrid.getInventory(
+            AEApi.instance()
+                .storage()
+                .getStorageChannel(IItemStorageChannel.class));
         AE2Controller.globalItemList = monitor.getStorageList();
         AE2Controller.hashcodeToAEItemStack.clear();
         ArrayList<JSON_DetailedItem> items = new ArrayList<>();
@@ -30,10 +34,10 @@ public class GetItems extends ISyncedRequest {
             int hash;
             AE2Controller.hashcodeToAEItemStack.put(hash = iaeItemStack.hashCode(), iaeItemStack);
             JSON_DetailedItem detailedItem = new JSON_DetailedItem();
-            detailedItem.itemid = GameRegistry.findUniqueIdentifierFor(iaeItemStack.getItem())
-                .toString() + ":"
+            detailedItem.itemid = iaeItemStack.getItem()
+                .getRegistryName() + ":"
                 + iaeItemStack.getItemDamage();
-            detailedItem.itemname = iaeItemStack.getItemStack()
+            detailedItem.itemname = iaeItemStack.asItemStackRepresentation()
                 .getDisplayName();
             detailedItem.quantity = iaeItemStack.getStackSize();
             detailedItem.craftable = iaeItemStack.isCraftable();
