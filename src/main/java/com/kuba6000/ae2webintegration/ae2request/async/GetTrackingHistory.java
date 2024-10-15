@@ -4,8 +4,7 @@ import java.util.ArrayList;
 import java.util.Map;
 
 import com.kuba6000.ae2webintegration.AE2JobTracker;
-
-import appeng.api.storage.data.IAEItemStack;
+import com.kuba6000.ae2webintegration.api.JSON_Item;
 
 public class GetTrackingHistory extends IAsyncRequest {
 
@@ -14,7 +13,7 @@ public class GetTrackingHistory extends IAsyncRequest {
         public long timeStarted;
         public long timeDone;
         public boolean wasCancelled;
-        public IAEItemStack finalOutput;
+        public JSON_Item finalOutput;
         public int id;
     }
 
@@ -29,7 +28,7 @@ public class GetTrackingHistory extends IAsyncRequest {
             element.timeStarted = integerJobTrackingInfoEntry.getValue().timeStarted;
             element.timeDone = integerJobTrackingInfoEntry.getValue().timeDone;
             element.wasCancelled = integerJobTrackingInfoEntry.getValue().wasCancelled;
-            element.finalOutput = integerJobTrackingInfoEntry.getValue().finalOutput;
+            element.finalOutput = JSON_Item.create(integerJobTrackingInfoEntry.getValue().finalOutput);
             jobs.add(element);
         }
 

@@ -13,8 +13,8 @@ import com.kuba6000.ae2webintegration.AE2JobTracker;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.*;
+import appeng.api.networking.security.IActionSource;
 import appeng.me.cache.CraftingGridCache;
-import appeng.me.helpers.BaseActionSource;
 
 @Mixin(value = CraftingGridCache.class, remap = false)
 public class CraftingGridCacheMixin {
@@ -24,8 +24,9 @@ public class CraftingGridCacheMixin {
     private IGrid grid;
 
     @Inject(method = "submitJob", at = @At("RETURN"))
-    void ae2webintegration$submitJob(ICraftingJob job, ICraftingRequester requestingMachine, ICraftingCPU target,
-        boolean prioritizePower, BaseActionSource src, CallbackInfoReturnable<ICraftingLink> cir) {
+    void ae2webintegration$submitJob(final ICraftingJob job, final ICraftingRequester requestingMachine,
+        final ICraftingCPU target, final boolean prioritizePower, final IActionSource src,
+        CallbackInfoReturnable<ICraftingLink> cir) {
         ICraftingLink link = cir.getReturnValue();
         if (link != null) { // job started successfully
             AE2JobTracker.addJob(link, (CraftingGridCache) (Object) this, grid);
@@ -34,7 +35,7 @@ public class CraftingGridCacheMixin {
 
     @Inject(
         method = "recalculateCraftingPatterns",
-        at = @At(value = "INVOKE", target = "Ljava/util/Map;clear()V", ordinal = 0, shift = At.Shift.AFTER))
+        at = @At(value = "INVOKE", target = "Ljava/util/Set;clear()V", ordinal = 0, shift = At.Shift.AFTER))
     void ae2webintegration$updatePatternsStart(CallbackInfo ci) {
         AE2JobTracker.updatingPatterns((CraftingGridCache) (Object) this, grid);
     }
