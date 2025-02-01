@@ -1,5 +1,7 @@
 package com.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
+import java.util.Map;
+
 import net.minecraft.inventory.InventoryCrafting;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,6 +25,7 @@ import appeng.api.networking.crafting.ICraftingMedium;
 import appeng.api.networking.crafting.ICraftingPatternDetails;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
+import appeng.api.util.IInterfaceViewable;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
@@ -77,12 +80,16 @@ public class CraftingCPUClusterMixin {
     private boolean ae2webintegration$pushPattern(ICraftingMedium medium, ICraftingPatternDetails details,
         InventoryCrafting ic) {
         if (medium.pushPattern(details, ic)) {
+            IInterfaceViewable viewable = null;
+            Map<ICraftingMedium, IInterfaceViewable> mediumToViewable = CraftingMediumTracker.mediumToViewable
+                .get(getGrid());
+            if (mediumToViewable != null) {
+                viewable = mediumToViewable.get(medium);
+            }
             IAEMixinCallbacks.getInstance()
                 .pushedPattern(
                     new AECraftingCPUCluster((CraftingCPUCluster) (Object) this),
-                    new PatternProviderViewable(
-                        CraftingMediumTracker.mediumToViewable.get(getGrid())
-                            .get(medium)),
+                    viewable != null ? new PatternProviderViewable(viewable) : null,
                     new AECraftingPatternDetails(details));
             return true;
         }
