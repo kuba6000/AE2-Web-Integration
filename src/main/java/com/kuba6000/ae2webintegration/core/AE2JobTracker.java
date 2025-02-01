@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.lang3.tuple.Pair;
 
+import com.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import com.kuba6000.ae2webintegration.core.discord.DiscordManager;
 import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -22,6 +23,7 @@ public class AE2JobTracker {
     public static class AEInterface {
 
         public String name;
+        public HashSet<DimensionalCoords> location = new HashSet<>();
 
         AEInterface(String name) {
             this.name = name;
@@ -155,6 +157,7 @@ public class AE2JobTracker {
             final AEInterface aeInterfaceToLookup = new AEInterface(name);
             final AEInterface aeInterface = info.interfaceLookup
                 .computeIfAbsent(aeInterfaceToLookup, k -> aeInterfaceToLookup);
+            aeInterface.location.add(provider.getLocation());
             info.interfaceStarted.computeIfAbsent(aeInterface, k -> System.currentTimeMillis());
             final HashSet<IItemStack> itemList = info.interfaceWaitingFor
                 .computeIfAbsent(aeInterface, k -> new HashSet<>());
