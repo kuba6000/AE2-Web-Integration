@@ -23,7 +23,6 @@ import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
 
-import com.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import com.kuba6000.ae2webintegration.core.ae2request.async.GetTracking;
 import com.kuba6000.ae2webintegration.core.ae2request.async.GetTrackingHistory;
 import com.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
@@ -63,7 +62,6 @@ public class AE2Controller {
             AEControllerProfile = new GameProfile(
                 UUID.nameUUIDFromBytes("AE2-WEB-INTEGRATION-AE2CONTROLLER".getBytes("UTF-8")),
                 "AE2CONTROLLER");
-            AE2Interface = AE.instance;
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
         }
