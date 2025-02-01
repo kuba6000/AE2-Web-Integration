@@ -1,5 +1,7 @@
 package com.kuba6000.ae2webintegration.core;
 
+import java.io.File;
+
 import com.kuba6000.ae2webintegration.Tags;
 import com.kuba6000.ae2webintegration.core.commands.ReloadCommandHandler;
 import com.kuba6000.ae2webintegration.core.discord.DiscordManager;
@@ -18,7 +20,7 @@ public class CommonProxy {
     // preInit "Run before anything else. Read your config, create blocks, items, etc, and register them with the
     // GameRegistry." (Remove if not needed)
     public void preInit(FMLPreInitializationEvent event) {
-        Config.init(event.getSuggestedConfigurationFile());
+        Config.init(new File(event.getModConfigurationDirectory(), "ae2webintegration.cfg"));
         Config.synchronizeConfiguration();
 
         com.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration.LOG
