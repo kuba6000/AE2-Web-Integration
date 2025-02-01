@@ -4,6 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.kuba6000.ae2webintegration.Tags;
+import com.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import com.kuba6000.ae2webintegration.core.api.IAEWebInterface;
 
 import appeng.me.cache.SecurityCache;
@@ -28,7 +29,10 @@ public class AE2WebIntegration {
     public void preInit(FMLPreInitializationEvent event) {}
 
     @Mod.EventHandler
-    public void init(FMLInitializationEvent event) {}
+    public void init(FMLInitializationEvent event) {
+        IAEWebInterface.getInstance()
+            .initAEInterface(AE.instance);
+    }
 
     @Mod.EventHandler
     public void postInit(FMLPostInitializationEvent event) {
