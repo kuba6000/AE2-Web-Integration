@@ -1,6 +1,7 @@
 package com.kuba6000.ae2webintegration.core.api;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Map;
 
 import org.apache.commons.lang3.tuple.Pair;
@@ -44,6 +45,8 @@ public class JSON_CompactedJobTrackingInfo {
 
         public ArrayList<AEInterfaceGSON.timingClass> timings = new ArrayList<>();
         public long timingsCombined;
+
+        public HashSet<DimensionalCoords> location = new HashSet<>();
     }
 
     public ArrayList<AEInterfaceGSON> interfaceShare = new ArrayList<>();
@@ -71,6 +74,7 @@ public class JSON_CompactedJobTrackingInfo {
         for (Map.Entry<AE2JobTracker.AEInterface, ArrayList<Pair<Long, Long>>> entry : info.interfaceShare.entrySet()) {
             AEInterfaceGSON interfaceGSON = new AEInterfaceGSON();
             interfaceGSON.name = entry.getKey().name;
+            interfaceGSON.location = entry.getKey().location;
             for (Pair<Long, Long> longLongPair : entry.getValue()) {
                 interfaceGSON.timings
                     .add(new AEInterfaceGSON.timingClass(longLongPair.getKey(), longLongPair.getValue()));
