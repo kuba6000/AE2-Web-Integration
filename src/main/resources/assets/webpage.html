@@ -981,11 +981,9 @@
                     if (dataSet.length <= j) {
                         dataSet.push({backgroundColor: "gainsboro", data: {}});
                     }
-                    dataSet[j].data[AEInterface['name']] = [timing['started'], timing['ended']];
+                    dataSet[j].data[AEInterface['name']] = [timing['started'], timing['ended'], AEInterface['location']];
                 }
             }
-
-            console.log(dataSet);
 
             Chart.defaults.backgroundColor = '#9BD0F5';
             Chart.defaults.borderColor = '#000';
@@ -1009,6 +1007,12 @@
                                     if (context.parsed._custom !== null) {
                                         label.push('From ' + new Date(context.parsed._custom.start).toLocaleString());
                                         label.push('To ' + new Date(context.parsed._custom.end).toLocaleString());
+                                        label.push('Locations: ');
+                                        let locations = context.dataset.data[context.label][2];
+                                        for(let i = 0; i < locations.length; i++){
+                                            let location = locations[i];
+                                            label.push(i + ': ' + location.dimid + ', ' + location.x + ', ' + location.y + ', ' + location.z);
+                                        }
                                     }
                                     return label;
                                 }
