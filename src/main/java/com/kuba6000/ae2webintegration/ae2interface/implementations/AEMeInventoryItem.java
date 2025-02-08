@@ -26,7 +26,8 @@ public class AEMeInventoryItem extends IAEObject<IMEInventory<IAEItemStack>> imp
 
     @Override
     public IItemStack getAvailableItem(IItemStack stack, IAEGrid grid) {
-        IAEItemStack istack = get().extractItems(((ItemStack) stack).stack, Actionable.SIMULATE, ((AEGrid) grid).getPlayerSource());
+        IAEItemStack istack = get()
+            .extractItems(((ItemStack) stack).stack, Actionable.SIMULATE, ((AEGrid) grid).getPlayerSource());
         return istack == null ? null : new ItemStack(istack);
     }
 }
