@@ -1,6 +1,6 @@
 {
-  "package": "com.kuba6000.ae2webintegration.mixins",
-  "plugin": "com.kuba6000.ae2webintegration.mixins.MixinPlugin",
+  "package": "com.kuba6000.ae2webintegration.ae2interface.mixins",
+  "plugin": "com.kuba6000.ae2webintegration.ae2interface.mixins.MixinPlugin",
   "refmap": "mixins.ae2webintegration.refmap.json",
   "target": "@env(DEFAULT)",
   "minVersion": "0.8",
