@@ -11,6 +11,17 @@ import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 
 public class JSON_CompactedJobTrackingInfo {
 
+    public static class timingClass {
+
+        long started;
+        long ended;
+
+        public timingClass(long started, long ended) {
+            this.started = started;
+            this.ended = ended;
+        }
+    }
+
     public static class CompactedTrackingGSONItem {
 
         public String itemid;
@@ -20,6 +31,8 @@ public class JSON_CompactedJobTrackingInfo {
         public double shareInCraftingTime = 0d;
         public double shareInCraftingTimeCombined = 0d;
         public double craftsPerSec = 0d;
+
+        public ArrayList<timingClass> timings = new ArrayList<>();
     }
 
     public IItemStack finalOutput;
@@ -32,18 +45,7 @@ public class JSON_CompactedJobTrackingInfo {
 
         String name;
 
-        public static class timingClass {
-
-            long started;
-            long ended;
-
-            public timingClass(long started, long ended) {
-                this.started = started;
-                this.ended = ended;
-            }
-        }
-
-        public ArrayList<AEInterfaceGSON.timingClass> timings = new ArrayList<>();
+        public ArrayList<timingClass> timings = new ArrayList<>();
         public long timingsCombined;
 
         public HashSet<DimensionalCoords> location = new HashSet<>();
@@ -68,6 +70,9 @@ public class JSON_CompactedJobTrackingInfo {
             item.shareInCraftingTime = info.getShareInCraftingTime(stack);
             item.shareInCraftingTimeCombined = Math.min(((double) item.timeSpentOn) / (double) elapsed, 1d);
             item.craftsPerSec = (double) item.craftedTotal / (item.timeSpentOn / 1000d);
+            for (Pair<Long, Long> longLongPair : info.itemShare.get(stack)) {
+                item.timings.add(new timingClass(longLongPair.getKey(), longLongPair.getValue()));
+            }
             items.add(item);
         }
         items.sort((i1, i2) -> Double.compare(i2.shareInCraftingTime, i1.shareInCraftingTime));
@@ -77,7 +82,7 @@ public class JSON_CompactedJobTrackingInfo {
             interfaceGSON.location = entry.getKey().location;
             for (Pair<Long, Long> longLongPair : entry.getValue()) {
                 interfaceGSON.timings
-                    .add(new AEInterfaceGSON.timingClass(longLongPair.getKey(), longLongPair.getValue()));
+                    .add(new timingClass(longLongPair.getKey(), longLongPair.getValue()));
             }
             long interfaceElapsed = 0L;
             for (Pair<Long, Long> pair : entry.getValue()) {
