@@ -19,8 +19,10 @@
             height: 100%;
             width: 100%;
         }
+
         td{
             padding: 10px;
+            word-wrap: break-word;
         }
         td.active{
             background-color: greenyellow;
@@ -79,12 +81,16 @@
             width: 80%;
             float: left;
         }
+
         #terminalheader{
             width: calc(100% - 20px);
-            height: 40px;
+            min-height: 40px;
+            height: fit-content;
             border-bottom: black solid 1px;
             font-size: 150%;
             padding: 10px;
+            display: flex;
+            flex-direction: column;
         }
         #terminalheader input{
             font-size: 100%;
@@ -128,7 +134,6 @@
             width: 10%;
             float: left;
             border-left: solid black 1px;
-            padding: 10px;
             font-size: 110%;
         }
 
@@ -140,6 +145,12 @@
             font-size: 130%;
             font-weight: 500;
             margin-bottom: 10px;
+        }
+        #terminalsubcontainer section{
+            text-align: center;
+        }
+        #terminalsubcontainer > * > section > *{
+            margin: auto;
         }
 
         #terminalCPUList button, #terminalCPUListForJob button{
@@ -287,6 +298,105 @@
         .minecraftSpecialFormat_r{
             color: black;
         }
+
+        .collapsible:after {
+            content: '\02795';
+            font-size: 13px;
+            color: white;
+            margin-left: 5px;
+        }
+
+        .collapsible.active:after {
+            content: "\2796";
+        }
+
+        .mobile-only{
+            display: none;
+        }
+
+        @media screen and (max-width: 1300px){
+            body{
+                font-size: 12px;
+            }
+        }
+
+        @media screen and (max-width: 1000px){
+            #terminalheader{
+                border-top: black solid 1px;
+            }
+            #terminalheader > * > *{
+                width: 100%;
+                float: right;
+                margin-top: 5px;
+                margin-left: 10px;
+            }
+            #terminalheader:first-child{
+                text-align: center;
+                font-size: 200% !important;
+                font-weight: bold !important;
+            }
+            #terminalheader > * > input{
+                width: calc(100% - 10px);
+                float: right;
+                margin-top: 5px;
+                margin-left: 10px;
+            }
+            #terminalsubcontainer{
+                width: 100%;
+                float: none;
+                order: 2;
+                border-left: none;
+                border-top: black solid 1px;
+            }
+            #terminalsubcontainer header{
+                border-bottom: none;
+                display: block;
+                width: 100%;
+                text-align: center;
+                font-size: 130%;
+                font-weight: 500;
+                margin-bottom: 10px;
+            }
+            #terminaltypes{
+                width: 100%;
+                float: none;
+                order: 1;
+            }
+            #terminalwindow{
+                width: 100%;
+                float: none;
+                order: 3;
+            }
+            #terminalcontainer{
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+            }
+            #terminaltypes button{
+                width: calc(50% - 10px);
+                margin: 5px 5px;
+                float: left;
+            }
+            .mobile-only{
+                display: block;
+                width: calc(100% - 10px) !important;
+                margin: 5px 5px;
+                text-align: center;
+                margin-top: 10px !important;
+                font-size: 150% !important;
+            }
+            .mobile-hidden{
+                display: none !important;
+            }
+            #terminalOptions > section{
+                display: none;
+            }
+            #terminalsubcontainersettings > section{
+                display: none;
+                font-size: 150%;
+            }
+        }
+
     </style>
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
@@ -305,18 +415,21 @@
 <section id="terminalcontainer">
     <section id="terminaltypes">
         <section id='terminalOptions'>
-            <button onclick='changeSortingBy(this);' id='sortByButton'>initializing</button>
-            <button onclick='changeStoredCraftable(this);' id='storedCraftableButton'>initializing</button>
-            <button onclick='changeItemsFluids(this);' id='itemsFluidsButton'>initializing</button>
-            <button onclick='changeSortOrder(this);' id='sortOrderButton'>initializing</button>
-            <!-- <button>NEI Search?</button> -->
-            <!-- <button>Terminal style?</button> -->
-            <button onclick='alert("Coming soon");'>Crafting terminal</button>
-            <button onclick='alert("Coming soon");'>Pattern terminal</button>
-            <button onclick='alert("Coming soon");'>Fluid terminal</button>
-            <button onclick='alert("Coming soon");'>Interface terminal</button>
-            <button onclick='alert("Coming soon");'>Level terminal</button>
-            <button onclick='alert("Coming soon");'>Essentia terminal</button>
+            <button class='collapsible mobile-only'>Terminal options</button>
+            <section>
+                <button onclick='changeSortingBy(this);' id='sortByButton'>initializing</button>
+                <button onclick='changeStoredCraftable(this);' id='storedCraftableButton'>initializing</button>
+                <button onclick='changeItemsFluids(this);' id='itemsFluidsButton'>initializing</button>
+                <button onclick='changeSortOrder(this);' id='sortOrderButton'>initializing</button>
+                <!-- <button>NEI Search?</button> -->
+                <!-- <button>Terminal style?</button> -->
+                <button onclick='alert("Coming soon");'>Crafting terminal</button>
+                <button onclick='alert("Coming soon");'>Pattern terminal</button>
+                <button onclick='alert("Coming soon");'>Fluid terminal</button>
+                <button onclick='alert("Coming soon");'>Interface terminal</button>
+                <button onclick='alert("Coming soon");'>Level terminal</button>
+                <button onclick='alert("Coming soon");'>Essentia terminal</button>
+            </section>
         </section>
         <section id='terminalCPUList' style='display: none;'>...</section>
         <section id='terminalCPUListForJob' style='display: none;'>...</section>
@@ -350,21 +463,24 @@
     </section>
     <section id="terminalsubcontainer">
         <section id="terminalsubcontainersettings">
-            <header>Settings</header>
-            <input type="checkbox" name="autorefresh" id="autorefresh" onchange="changeAutoRefresh(this);"> <label for='autorefresh'>Automatically refresh current screen</label>
-            <br>
-            <input type="number" name="itemsperrow" id="itemsperrow" min=1 max=8 value=5 onchange="changeItemsPerRow(this);"> <label for='itemsperrow'>Items per row</label>
-            <br>
-            <select name="numberformat" id="numberformat" onchange="changeNumberFormat(this);">
-                <option value=0>Local</option>
-                <option value=1 selected>EN-US</option>
-                <option value=2>Compact</option>
-                <option value=3>Scientific</option>
-                <option value=4>No format</option>
-            </select>
-            <label for="numberformat"> Number format</label>
-            <br>
-            <input type="checkbox" name="showitemid" id="showitemid" onchange="changeShowItemID(this);"> <label for="showitemid">Show item id</label>
+            <header class='mobile-hidden'>Settings</header>
+            <button class='collapsible mobile-only'>Settings</button>
+            <section>
+                <input type="checkbox" name="autorefresh" id="autorefresh" onchange="changeAutoRefresh(this);"> <label for='autorefresh'>Automatically refresh current screen</label>
+                <br>
+                <input type="number" name="itemsperrow" id="itemsperrow" min=1 max=8 value=5 onchange="changeItemsPerRow(this);"> <label for='itemsperrow'>Items per row</label>
+                <br>
+                <select name="numberformat" id="numberformat" onchange="changeNumberFormat(this);">
+                    <option value=0>Local</option>
+                    <option value=1 selected>EN-US</option>
+                    <option value=2>Compact</option>
+                    <option value=3>Scientific</option>
+                    <option value=4>No format</option>
+                </select>
+                <label for="numberformat"> Number format</label>
+                <br>
+                <input type="checkbox" name="showitemid" id="showitemid" onchange="changeShowItemID(this);"> <label for="showitemid">Show item id</label>
+            </section>
         </section>
     </section>
 </section>
@@ -1238,6 +1354,21 @@
         if (isOutdated) alert("New version detected! Consider updating at https://github.com/kuba6000/AE2-Web-Integration/releases/latest");
     }
     setTimeout(showAlertIfOutdated, 1000);
+
+    // make collapsible work
+    let coll = document.getElementsByClassName("collapsible");
+
+    for (let i = 0; i < coll.length; i++) {
+        coll[i].addEventListener("click", function() {
+            this.classList.toggle("active");
+            var content = this.nextElementSibling;
+            if (content.style.display === "block") {
+                content.style.display = "none";
+            } else {
+                content.style.display = "block";
+            }
+        });
+    }
 
 </script>
 <br><br>
