@@ -157,6 +157,7 @@
             width: 100%;
             margin: 0;
             border-bottom: black dotted 1px;
+            word-wrap: break-word;
         }
         #terminalCPUList button.selected, #terminalCPUListForJob button.selected{
             background-color: rgb(0, 137, 155);
@@ -396,7 +397,6 @@
                 font-size: 150%;
             }
         }
-
     </style>
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
@@ -1025,67 +1025,15 @@
             popLoadingScreen(message);
         });
     }
+    let isInterfaceChartInitialized = false;
+    let isItemChartInitialized = false;
+    let interfaceShareData = {};
+    let itemShareData = {};
     function showInterfaceShare(){
-        document.getElementById('toggleInterfaceShare').innerHTML = "Hide interface usage chart";
-        document.getElementById('toggleInterfaceShare').onclick = hideInterfaceShare;
-        document.getElementById("myChart").style.display = 'block';
-    }
-    function hideInterfaceShare(){
-        document.getElementById('toggleInterfaceShare').innerHTML = "Show interface usage chart";
-        document.getElementById('toggleInterfaceShare').onclick = showInterfaceShare;
-        document.getElementById("myChart").style.display = 'none';
-    }
-    function openTrackingData(id){
-        let message = "Asking for tracking data...";
-        pushLoadingScreen(message);
-        $.getJSON('gettracking?id=' + id, function(data){
-            console.log(data);
-            if(data.status !== "OK"){
-                alert(data.status + ": " + data.data);
-                popLoadingScreen(message);
-                return;
-            }
-            data = data.data;
-
-            let html = "<button onclick='showInterfaceShare();' id='toggleInterfaceShare' style='width: 90%; font-size: 110%; margin: 10px 5%;'>Show interface usage chart</button><canvas id='myChart' style='width:100%;max-width:100%'></canvas>";
-
-            html += "<table>";
-            let grid_i_max = settings.itemsPerRow;
-            let grid_i = 0;
-            html += "<tr>";
-            let items = data['items'];
-            for(let i = 0; i < items.length; i++){
-                let item = items[i];
-                html += "<td class='storage'>" + formatItemName(item, false) + " x" + formatNumber(item['craftedTotal']);
-                html += "<br>Time: " + formatTime(item['timeSpentOn']) + " (" + formatPercent(item['shareInCraftingTimeCombined']) + ")";
-                html += "<br>Efficiency: " + formatNumber(item['craftsPerSec']) + "/s";
-                html += "</td>";
-                grid_i++;
-                if(grid_i == grid_i_max){
-                    html += "</tr><tr>";
-                    grid_i = 0;
-                }
-            }
-            for(; grid_i < grid_i_max; grid_i ++){
-                html += "<td></td>";
-            }
-            html += "</tr></table>";
-            document.getElementById("terminalcontent").innerHTML = html;
-
-            document.getElementById("terminalHistoryHeaderText").innerHTML = "Tracking history - " + formatItemName(data['finalOutput'], false) + " x" + formatNumber(data['finalOutput']['quantity']);
-            document.getElementById("terminalHistoryHeaderRefresh").innerHTML = "Close";
-            html = "";
-            if(data['wasCancelled'])
-            {
-                html += "Was cancelled!<br>";
-            }
-            html += "Started:<br>- " + new Date(Number(data['timeStarted'])).toLocaleString();
-            html += "<br>Completed:<br>- " + new Date(Number(data['timeDone'])).toLocaleString();
-            html += "<br>Completed in " + formatTime(Number(data['timeDone']) - Number(data['timeStarted']));
-            document.getElementById("terminalHistoryDetails").innerHTML = html;
-
+        if(!isInterfaceChartInitialized){
+            isInterfaceChartInitialized = true;
             let xValues = [];
-            let interfaceShare = data['interfaceShare'];
+            let interfaceShare = interfaceShareData;
             let dataSet = [];
             for (let i = 0; i < interfaceShare.length; i++){
                 let AEInterface = interfaceShare[i];
@@ -1105,7 +1053,7 @@
             Chart.defaults.borderColor = '#000';
             Chart.defaults.color = '#000';
 
-            new Chart("myChart", {
+            new Chart("interfaceShareChart", {
                 type: "bar",
                 data: {
                     labels: xValues,
@@ -1147,7 +1095,6 @@
                         y: {
                             beginAtZero: false,
                             ticks: {
-                                // Include a dollar sign in the ticks
                                 callback: function(value, index, ticks) {
                                     return new Date(value).toLocaleString();
                                 }
@@ -1156,8 +1103,153 @@
                     }
                 }
             });
+        }
+        document.getElementById('toggleInterfaceShare').innerHTML = "Hide interface usage chart";
+        document.getElementById('toggleInterfaceShare').onclick = hideInterfaceShare;
+        document.getElementById("interfaceShareChart").style.display = 'block';
+    }
+    function hideInterfaceShare(){
+        document.getElementById('toggleInterfaceShare').innerHTML = "Show interface usage chart";
+        document.getElementById('toggleInterfaceShare').onclick = showInterfaceShare;
+        document.getElementById("interfaceShareChart").style.display = 'none';
+    }
+    function showItemShare(){
+        if (!isItemChartInitialized){
+            isItemChartInitialized = true;
+            let xValues = [];
+            let itemShare = itemShareData;
+            let dataSet = [];
+            for (let i = 0; i < itemShare.length; i++){
+                let item = itemShare[i];
+                xValues.push(item['name']);
+                let timings = item['timings'];
+                for (let j = 0; j < timings.length; j++)
+                {
+                    let timing = timings[j];
+                    if (dataSet.length <= j) {
+                        dataSet.push({backgroundColor: "gainsboro", data: []});
+                    }
+                    dataSet[j].data.push([timing['started'], timing['ended']]);
+                }
+            }
 
-            document.getElementById("myChart").style.display = 'none';
+            Chart.defaults.backgroundColor = '#9BD0F5';
+            Chart.defaults.borderColor = '#000';
+            Chart.defaults.color = '#000';
+
+            new Chart("itemShareChart", {
+                type: "bar",
+                data: {
+                    labels: xValues,
+                    datasets: dataSet
+                },
+                options: {
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = [];
+                                    if (context.parsed._custom !== null) {
+                                        label.push('From ' + new Date(context.parsed._custom.start).toLocaleString());
+                                        label.push('To ' + new Date(context.parsed._custom.end).toLocaleString());
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: "Item share"
+                    },
+                    responsive: true,
+                    scales: {
+                        x: {
+                            stacked: true,
+                        },
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: function(value, index, ticks) {
+                                    return new Date(value).toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        document.getElementById('toggleItemShare').innerHTML = "Hide item crafting chart";
+        document.getElementById('toggleItemShare').onclick = hideItemShare;
+        document.getElementById("itemShareChart").style.display = 'block';
+    }
+    function hideItemShare(){
+        document.getElementById('toggleItemShare').innerHTML = "Show item crafting chart";
+        document.getElementById('toggleItemShare').onclick = showItemShare;
+        document.getElementById("itemShareChart").style.display = 'none';
+    }
+    function openTrackingData(id){
+        let message = "Asking for tracking data...";
+        isInterfaceChartInitialized = false;
+        isItemChartInitialized = false;
+        pushLoadingScreen(message);
+        $.getJSON('gettracking?id=' + id, function(data){
+            console.log(data);
+            if(data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                popLoadingScreen(message);
+                return;
+            }
+            data = data.data;
+
+            let html = "<button onclick='showInterfaceShare();' id='toggleInterfaceShare' style='width: 90%; font-size: 110%; margin: 10px 5%;'>Show interface usage chart</button><canvas id='interfaceShareChart' style='width:100%;max-width:100%;display:none;'></canvas>";
+            html += "<button onclick='showItemShare();' id='toggleItemShare' style='width: 90%; font-size: 110%; margin: 10px 5%;'>Show item crafting chart</button><canvas id='itemShareChart' style='width:100%;max-width:100%;display:none;'></canvas>";
+
+            html += "<table>";
+            let grid_i_max = settings.itemsPerRow;
+            let grid_i = 0;
+            html += "<tr>";
+            let items = data['items'];
+            itemShareData = [];
+            for(let i = 0; i < items.length; i++){
+                let item = items[i];
+                let name = skipSpecialFormat(item['itemname']);
+                if (settings.showItemID)
+                    name += " " + item['itemid'];
+                itemShareData.push({'name': name, 'timings': item['timings']});
+
+                html += "<td class='storage'>" + formatItemName(item, false) + " x" + formatNumber(item['craftedTotal']);
+                html += "<br>Time: " + formatTime(item['timeSpentOn']) + " (" + formatPercent(item['shareInCraftingTimeCombined']) + ")";
+                html += "<br>Efficiency: " + formatNumber(item['craftsPerSec']) + "/s";
+                html += "</td>";
+                grid_i++;
+                if (grid_i == grid_i_max){
+                    html += "</tr><tr>";
+                    grid_i = 0;
+                }
+            }
+            for(; grid_i < grid_i_max; grid_i ++){
+                html += "<td></td>";
+            }
+            html += "</tr></table>";
+            document.getElementById("terminalcontent").innerHTML = html;
+
+            document.getElementById("terminalHistoryHeaderText").innerHTML = "Tracking history - " + formatItemName(data['finalOutput'], false) + " x" + formatNumber(data['finalOutput']['quantity']);
+            document.getElementById("terminalHistoryHeaderRefresh").innerHTML = "Close";
+            html = "";
+            if(data['wasCancelled'])
+            {
+                html += "Was cancelled!<br>";
+            }
+            html += "Started:<br>- " + new Date(Number(data['timeStarted'])).toLocaleString();
+            html += "<br>Completed:<br>- " + new Date(Number(data['timeDone'])).toLocaleString();
+            html += "<br>Completed in " + formatTime(Number(data['timeDone']) - Number(data['timeStarted']));
+            document.getElementById("terminalHistoryDetails").innerHTML = html;
+
+            interfaceShareData = data['interfaceShare'];
 
             popLoadingScreen(message);
         });

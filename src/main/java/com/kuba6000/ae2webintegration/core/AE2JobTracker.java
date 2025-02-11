@@ -50,6 +50,7 @@ public class AE2JobTracker {
         public HashMap<IItemStack, Long> startedWaitingFor = new HashMap<>();
         public HashMap<IItemStack, Long> craftedTotal = new HashMap<>();
         public HashMap<IItemStack, Long> waitingFor = new HashMap<>();
+        public HashMap<IItemStack, ArrayList<Pair<Long, Long>>> itemShare = new HashMap<>();
         public HashMap<AEInterface, ArrayList<Pair<Long, Long>>> interfaceShare = new HashMap<>();
         public HashMap<AEInterface, Long> interfaceStarted = new HashMap<>();
         public HashMap<AEInterface, AEInterface> interfaceLookup = new HashMap<>();
@@ -128,6 +129,8 @@ public class AE2JobTracker {
                 long endedReal = System.currentTimeMillis();
                 info.timeSpentOn.merge(diff, elapsed, Long::sum);
                 info.craftedTotal.merge(diff, info.waitingFor.remove(diff), Long::sum);
+                info.itemShare.computeIfAbsent(diff, k -> new ArrayList<>())
+                    .add(Pair.of(started, endedReal));
                 if (info.interfaceWaitingForLookup.containsKey(diff)) {
                     for (Map.Entry<AEInterface, HashSet<IItemStack>> entry : info.interfaceWaitingForLookup.get(diff)
                         .entrySet()) {
@@ -180,6 +183,8 @@ public class AE2JobTracker {
         final long now = System.currentTimeMillis();
         for (Map.Entry<IItemStack, Long> entry : info.startedWaitingFor.entrySet()) {
             info.timeSpentOn.merge(entry.getKey(), now - entry.getValue(), Long::sum);
+            info.itemShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
+                .add(Pair.of(entry.getValue(), now));
         }
         for (Map.Entry<AEInterface, Long> entry : info.interfaceStarted.entrySet()) {
             info.interfaceShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
