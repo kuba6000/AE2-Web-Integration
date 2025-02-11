@@ -81,8 +81,7 @@ public class JSON_CompactedJobTrackingInfo {
             interfaceGSON.name = entry.getKey().name;
             interfaceGSON.location = entry.getKey().location;
             for (Pair<Long, Long> longLongPair : entry.getValue()) {
-                interfaceGSON.timings
-                    .add(new timingClass(longLongPair.getKey(), longLongPair.getValue()));
+                interfaceGSON.timings.add(new timingClass(longLongPair.getKey(), longLongPair.getValue()));
             }
             long interfaceElapsed = 0L;
             for (Pair<Long, Long> pair : entry.getValue()) {
