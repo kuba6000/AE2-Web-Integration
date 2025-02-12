@@ -46,12 +46,14 @@ public class CraftingGridCacheMixin {
         }
         ICraftingLink link = instance.submitJob(craftID, whatLink, list, e);
         if (link != null) { // job started successfully
+            boolean isMachine = e != null || list.isMachine();
             IAEMixinCallbacks.getInstance()
                 .jobStarted(
                     new AECraftingCPUCluster(instance),
                     new AECraftingGrid((CraftingGridCache) (Object) this),
                     new AEGrid(grid),
-                    isMerging);
+                    isMerging,
+                    !isMachine);
         }
         return link;
     }

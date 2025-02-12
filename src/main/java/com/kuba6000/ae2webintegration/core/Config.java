@@ -23,6 +23,7 @@ public class Config {
     public static String DISCORD_ROLE_ID = "";
 
     // tracking
+    // TODO: Add more customization options (order time, size, item type ? etc.)
     public static boolean TRACKING_TRACK_MACHINE_CRAFTING = false;
 
     public static void synchronizeConfiguration() {
