@@ -14,7 +14,8 @@ public interface IAEMixinCallbacks {
         return AEMixinCallbacks.INSTANCE;
     }
 
-    void jobStarted(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging);
+    void jobStarted(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging,
+        boolean isAuthorPlayer);
 
     void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, IItemStack diff);
 
