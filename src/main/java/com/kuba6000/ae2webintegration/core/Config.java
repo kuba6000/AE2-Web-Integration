@@ -22,6 +22,9 @@ public class Config {
     public static String DISCORD_WEBHOOK = "";
     public static String DISCORD_ROLE_ID = "";
 
+    // tracking
+    public static boolean TRACKING_TRACK_MACHINE_CRAFTING = false;
+
     public static void synchronizeConfiguration() {
         Configuration configuration = new Configuration(configFile);
         AE_PORT = configuration
@@ -45,6 +48,12 @@ public class Config {
             .getString("discord_webhook", "discord", "", "Discord webhook url (OPTIONAL, leave empty to ignore)");
         DISCORD_ROLE_ID = configuration
             .getString("discord_role_id", "discord", "", "Role to ping on message (OPTIONAL, leave empty to ignore)");
+
+        TRACKING_TRACK_MACHINE_CRAFTING = configuration.getBoolean(
+            "track_machine_crafting",
+            "tracking",
+            TRACKING_TRACK_MACHINE_CRAFTING,
+            "Track automated crafting jobs (not ordered by player)");
 
         if (configuration.hasChanged()) {
             configuration.save();
