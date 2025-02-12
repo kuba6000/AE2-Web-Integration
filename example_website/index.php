@@ -45,29 +45,35 @@
     <title>AE2</title>
 </head>
 <body>
-<h1>UNIVERSAL WEB TERMINAL</h1>
+<section id="topMessagesContainer">
+    <section id="topMessages">
 
+    </section>
+</section>
+<h1>UNIVERSAL WEB TERMINAL</h1>
 <section id="overlay">
     <section id="overlaytext">
         LOADING...
     </section>
 </section>
-
 <section id="terminalcontainer">
     <section id="terminaltypes">
         <section id='terminalOptions'>
-            <button onclick='changeSortingBy(this);' id='sortByButton'>initializing</button>
-            <button onclick='changeStoredCraftable(this);' id='storedCraftableButton'>initializing</button>
-            <button onclick='changeItemsFluids(this);' id='itemsFluidsButton'>initializing</button>
-            <button onclick='changeSortOrder(this);' id='sortOrderButton'>initializing</button>
-            <!-- <button>NEI Search?</button> -->
-            <!-- <button>Terminal style?</button> -->
-            <button onclick='alert("Coming soon");'>Crafting terminal</button>
-            <button onclick='alert("Coming soon");'>Pattern terminal</button>
-            <button onclick='alert("Coming soon");'>Fluid terminal</button>
-            <button onclick='alert("Coming soon");'>Interface terminal</button>
-            <button onclick='alert("Coming soon");'>Level terminal</button>
-            <button onclick='alert("Coming soon");'>Essentia terminal</button>
+            <button class='collapsible mobile-only'>Terminal options</button>
+            <section>
+                <button onclick='changeSortingBy(this);' id='sortByButton'>initializing</button>
+                <button onclick='changeStoredCraftable(this);' id='storedCraftableButton'>initializing</button>
+                <button onclick='changeItemsFluids(this);' id='itemsFluidsButton'>initializing</button>
+                <button onclick='changeSortOrder(this);' id='sortOrderButton'>initializing</button>
+                <!-- <button>NEI Search?</button> -->
+                <!-- <button>Terminal style?</button> -->
+                <button onclick='alert("Coming soon");'>Crafting terminal</button>
+                <button onclick='alert("Coming soon");'>Pattern terminal</button>
+                <button onclick='alert("Coming soon");'>Fluid terminal</button>
+                <button onclick='alert("Coming soon");'>Interface terminal</button>
+                <button onclick='alert("Coming soon");'>Level terminal</button>
+                <button onclick='alert("Coming soon");'>Essentia terminal</button>
+            </section>
         </section>
         <section id='terminalCPUList' style='display: none;'>...</section>
         <section id='terminalCPUListForJob' style='display: none;'>...</section>
@@ -101,27 +107,30 @@
     </section>
     <section id="terminalsubcontainer">
         <section id="terminalsubcontainersettings">
-            <header>Settings</header>
-            <input type="checkbox" name="autorefresh" id="autorefresh" onchange="changeAutoRefresh(this);"> <label for='autorefresh'>Automatically refresh current screen</label>
-            <br>
-            <input type="number" name="itemsperrow" id="itemsperrow" min=1 max=8 value=5 onchange="changeItemsPerRow(this);"> <label for='itemsperrow'>Items per row</label>
-            <br>
-            <select name="numberformat" id="numberformat" onchange="changeNumberFormat(this);">
-                <option value=0>Local</option>
-                <option value=1 selected>EN-US</option>
-                <option value=2>Compact</option>
-                <option value=3>Scientific</option>
-                <option value=4>No format</option>
-            </select>
-            <label for="numberformat"> Number format</label>
-            <br>
-            <input type="checkbox" name="showitemid" id="showitemid" onchange="changeShowItemID(this);"> <label for="showitemid">Show item id</label>
+            <header class='mobile-hidden'>Settings</header>
+            <button class='collapsible mobile-only'>Settings</button>
+            <section>
+                <input type="checkbox" name="autorefresh" id="autorefresh" onchange="changeAutoRefresh(this);"> <label for='autorefresh'>Automatically refresh current screen</label>
+                <br>
+                <input type="number" name="itemsperrow" id="itemsperrow" min=1 max=8 value=5 onchange="changeItemsPerRow(this);"> <label for='itemsperrow'>Items per row</label>
+                <br>
+                <select name="numberformat" id="numberformat" onchange="changeNumberFormat(this);">
+                    <option value=0>Local</option>
+                    <option value=1 selected>EN-US</option>
+                    <option value=2>Compact</option>
+                    <option value=3>Scientific</option>
+                    <option value=4>No format</option>
+                </select>
+                <label for="numberformat"> Number format</label>
+                <br>
+                <input type="checkbox" name="showitemid" id="showitemid" onchange="changeShowItemID(this);"> <label for="showitemid">Show item id</label>
+            </section>
         </section>
     </section>
 </section>
 
 <script>
-    const isOutdated = false;//_REPLACE_ME_VERSION_OUTDATED; <?php // TODO: NO IMPLEMENTATION ?>
+    const isOutdated = _REPLACE_ME_VERSION_OUTDATED;
     globalItemList = {};
     globalCPUList = {};
     currentWindow = 0; // 0 - main, 1 - CPU, 2 - Order screen, 3 - History window
@@ -660,67 +669,15 @@
             popLoadingScreen(message);
         });
     }
+    let isInterfaceChartInitialized = false;
+    let isItemChartInitialized = false;
+    let interfaceShareData = {};
+    let itemShareData = {};
     function showInterfaceShare(){
-        document.getElementById('toggleInterfaceShare').innerHTML = "Hide interface usage chart";
-        document.getElementById('toggleInterfaceShare').onclick = hideInterfaceShare;
-        document.getElementById("myChart").style.display = 'block';
-    }
-    function hideInterfaceShare(){
-        document.getElementById('toggleInterfaceShare').innerHTML = "Show interface usage chart";
-        document.getElementById('toggleInterfaceShare').onclick = showInterfaceShare;
-        document.getElementById("myChart").style.display = 'none';
-    }
-    function openTrackingData(id){
-        let message = "Asking for tracking data...";
-        pushLoadingScreen(message);
-        $.getJSON('gettracking?id=' + id, function(data){
-            console.log(data);
-            if(data.status !== "OK"){
-                alert(data.status + ": " + data.data);
-                popLoadingScreen(message);
-                return;
-            }
-            data = data.data;
-
-            let html = "<button onclick='showInterfaceShare();' id='toggleInterfaceShare' style='width: 90%; font-size: 110%; margin: 10px 5%;'>Show interface usage chart</button><canvas id='myChart' style='width:100%;max-width:100%'></canvas>";
-
-            html += "<table>";
-            let grid_i_max = settings.itemsPerRow;
-            let grid_i = 0;
-            html += "<tr>";
-            let items = data['items'];
-            for(let i = 0; i < items.length; i++){
-                let item = items[i];
-                html += "<td class='storage'>" + formatItemName(item, false) + " x" + formatNumber(item['craftedTotal']);
-                html += "<br>Time: " + formatTime(item['timeSpentOn']) + " (" + formatPercent(item['shareInCraftingTimeCombined']) + ")";
-                html += "<br>Efficiency: " + formatNumber(item['craftsPerSec']) + "/s";
-                html += "</td>";
-                grid_i++;
-                if(grid_i == grid_i_max){
-                    html += "</tr><tr>";
-                    grid_i = 0;
-                }
-            }
-            for(; grid_i < grid_i_max; grid_i ++){
-                html += "<td></td>";
-            }
-            html += "</tr></table>";
-            document.getElementById("terminalcontent").innerHTML = html;
-
-            document.getElementById("terminalHistoryHeaderText").innerHTML = "Tracking history - " + formatItemName(data['finalOutput'], false) + " x" + formatNumber(data['finalOutput']['quantity']);
-            document.getElementById("terminalHistoryHeaderRefresh").innerHTML = "Close";
-            html = "";
-            if(data['wasCancelled'])
-            {
-                html += "Was cancelled!<br>";
-            }
-            html += "Started:<br>- " + new Date(Number(data['timeStarted'])).toLocaleString();
-            html += "<br>Completed:<br>- " + new Date(Number(data['timeDone'])).toLocaleString();
-            html += "<br>Completed in " + formatTime(Number(data['timeDone']) - Number(data['timeStarted']));
-            document.getElementById("terminalHistoryDetails").innerHTML = html;
-
+        if(!isInterfaceChartInitialized){
+            isInterfaceChartInitialized = true;
             let xValues = [];
-            let interfaceShare = data['interfaceShare'];
+            let interfaceShare = interfaceShareData;
             let dataSet = [];
             for (let i = 0; i < interfaceShare.length; i++){
                 let AEInterface = interfaceShare[i];
@@ -740,7 +697,7 @@
             Chart.defaults.borderColor = '#000';
             Chart.defaults.color = '#000';
 
-            new Chart("myChart", {
+            new Chart("interfaceShareChart", {
                 type: "bar",
                 data: {
                     labels: xValues,
@@ -782,7 +739,6 @@
                         y: {
                             beginAtZero: false,
                             ticks: {
-                                // Include a dollar sign in the ticks
                                 callback: function(value, index, ticks) {
                                     return new Date(value).toLocaleString();
                                 }
@@ -791,8 +747,153 @@
                     }
                 }
             });
+        }
+        document.getElementById('toggleInterfaceShare').innerHTML = "Hide interface usage chart";
+        document.getElementById('toggleInterfaceShare').onclick = hideInterfaceShare;
+        document.getElementById("interfaceShareChart").style.display = 'block';
+    }
+    function hideInterfaceShare(){
+        document.getElementById('toggleInterfaceShare').innerHTML = "Show interface usage chart";
+        document.getElementById('toggleInterfaceShare').onclick = showInterfaceShare;
+        document.getElementById("interfaceShareChart").style.display = 'none';
+    }
+    function showItemShare(){
+        if (!isItemChartInitialized){
+            isItemChartInitialized = true;
+            let xValues = [];
+            let itemShare = itemShareData;
+            let dataSet = [];
+            for (let i = 0; i < itemShare.length; i++){
+                let item = itemShare[i];
+                xValues.push(item['name']);
+                let timings = item['timings'];
+                for (let j = 0; j < timings.length; j++)
+                {
+                    let timing = timings[j];
+                    if (dataSet.length <= j) {
+                        dataSet.push({backgroundColor: "gainsboro", data: []});
+                    }
+                    dataSet[j].data.push([timing['started'], timing['ended']]);
+                }
+            }
 
-            document.getElementById("myChart").style.display = 'none';
+            Chart.defaults.backgroundColor = '#9BD0F5';
+            Chart.defaults.borderColor = '#000';
+            Chart.defaults.color = '#000';
+
+            new Chart("itemShareChart", {
+                type: "bar",
+                data: {
+                    labels: xValues,
+                    datasets: dataSet
+                },
+                options: {
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = [];
+                                    if (context.parsed._custom !== null) {
+                                        label.push('From ' + new Date(context.parsed._custom.start).toLocaleString());
+                                        label.push('To ' + new Date(context.parsed._custom.end).toLocaleString());
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: "Item share"
+                    },
+                    responsive: true,
+                    scales: {
+                        x: {
+                            stacked: true,
+                        },
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: function(value, index, ticks) {
+                                    return new Date(value).toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        document.getElementById('toggleItemShare').innerHTML = "Hide item crafting chart";
+        document.getElementById('toggleItemShare').onclick = hideItemShare;
+        document.getElementById("itemShareChart").style.display = 'block';
+    }
+    function hideItemShare(){
+        document.getElementById('toggleItemShare').innerHTML = "Show item crafting chart";
+        document.getElementById('toggleItemShare').onclick = showItemShare;
+        document.getElementById("itemShareChart").style.display = 'none';
+    }
+    function openTrackingData(id){
+        let message = "Asking for tracking data...";
+        isInterfaceChartInitialized = false;
+        isItemChartInitialized = false;
+        pushLoadingScreen(message);
+        $.getJSON('gettracking?id=' + id, function(data){
+            console.log(data);
+            if(data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                popLoadingScreen(message);
+                return;
+            }
+            data = data.data;
+
+            let html = "<button onclick='showInterfaceShare();' id='toggleInterfaceShare' style='width: 90%; font-size: 110%; margin: 10px 5%;'>Show interface usage chart</button><canvas id='interfaceShareChart' style='width:100%;max-width:100%;display:none;'></canvas>";
+            html += "<button onclick='showItemShare();' id='toggleItemShare' style='width: 90%; font-size: 110%; margin: 10px 5%;'>Show item crafting chart</button><canvas id='itemShareChart' style='width:100%;max-width:100%;display:none;'></canvas>";
+
+            html += "<table>";
+            let grid_i_max = settings.itemsPerRow;
+            let grid_i = 0;
+            html += "<tr>";
+            let items = data['items'];
+            itemShareData = [];
+            for(let i = 0; i < items.length; i++){
+                let item = items[i];
+                let name = skipSpecialFormat(item['itemname']);
+                if (settings.showItemID)
+                    name += " " + item['itemid'];
+                itemShareData.push({'name': name, 'timings': item['timings']});
+
+                html += "<td class='storage'>" + formatItemName(item, false) + " x" + formatNumber(item['craftedTotal']);
+                html += "<br>Time: " + formatTime(item['timeSpentOn']) + " (" + formatPercent(item['shareInCraftingTimeCombined']) + ")";
+                html += "<br>Efficiency: " + formatNumber(item['craftsPerSec']) + "/s";
+                html += "</td>";
+                grid_i++;
+                if (grid_i == grid_i_max){
+                    html += "</tr><tr>";
+                    grid_i = 0;
+                }
+            }
+            for(; grid_i < grid_i_max; grid_i ++){
+                html += "<td></td>";
+            }
+            html += "</tr></table>";
+            document.getElementById("terminalcontent").innerHTML = html;
+
+            document.getElementById("terminalHistoryHeaderText").innerHTML = "Tracking history - " + formatItemName(data['finalOutput'], false) + " x" + formatNumber(data['finalOutput']['quantity']);
+            document.getElementById("terminalHistoryHeaderRefresh").innerHTML = "Close";
+            html = "";
+            if(data['wasCancelled'])
+            {
+                html += "Was cancelled!<br>";
+            }
+            html += "Started:<br>- " + new Date(Number(data['timeStarted'])).toLocaleString();
+            html += "<br>Completed:<br>- " + new Date(Number(data['timeDone'])).toLocaleString();
+            html += "<br>Completed in " + formatTime(Number(data['timeDone']) - Number(data['timeStarted']));
+            document.getElementById("terminalHistoryDetails").innerHTML = html;
+
+            interfaceShareData = data['interfaceShare'];
 
             popLoadingScreen(message);
         });
@@ -986,14 +1087,70 @@
     getItemList();
 
     function showAlertIfOutdated() {
-        if (isOutdated) alert("New version detected! Consider updating at https://github.com/kuba6000/AE2-Web-Integration/releases/latest");
+        if (isOutdated){
+            if (getCookie("DoNotShowUpdateMessage") == 1) return;
+            pushTopMessage("<span>New version detected! Consider updating from <a href='https://github.com/kuba6000/AE2-Web-Integration/releases/'>github</a></span> <button onclick='closeTopMessage(this.parentElement);'>Close</button><button onclick='updateDoNotShowAgain(this.parentElement);'>Hide for 7 days</button><br style='clear: both;'/>");
+        }
+        else
+        {
+            setCookie("DoNotShowUpdateMessage", 0, 0);
+        }
     }
-    setTimeout(showAlertIfOutdated, 1000);
+    setTimeout(showAlertIfOutdated, 100);
+
+    function updateDoNotShowAgain(el){
+        setCookie("DoNotShowUpdateMessage", 1, 7);
+        closeTopMessage(el);
+    }
+
+    topMessages = [];
+    function pushTopMessage(message){
+        topMessages.push(message);
+        updateTopMessages();
+    }
+
+    function popTopMessage(i){
+        topMessages.splice(i, 1);
+        updateTopMessages();
+    }
+
+    function closeTopMessage(el){
+        let message = el.getAttribute('topMessageID');
+        popTopMessage(message);
+    }
+
+    function updateTopMessages(){
+        let html = "";
+        let i = 0;
+        for(let message of topMessages){
+            html += '<section topMessageID=' + i + '>' + message + '</section>';
+            i++;
+        }
+        document.getElementById('topMessages').innerHTML = html;
+
+        $("#topMessagesContainer").height($("#topMessages").height());
+    }
+
+
+    // make collapsible work
+    let coll = document.getElementsByClassName("collapsible");
+
+    for (let i = 0; i < coll.length; i++) {
+        coll[i].addEventListener("click", function() {
+            this.classList.toggle("active");
+            var content = this.nextElementSibling;
+            if (content.style.display === "block") {
+                content.style.display = "none";
+            } else {
+                content.style.display = "block";
+            }
+        });
+    }
 
 </script>
 <br><br>
 <footer>
-This service is hosted by <a href="https://github.com/kuba6000/AE2-Web-Integration">AE2 Web Integration</a> Made by <a href="https://github.com/kuba6000">@kuba6000</a>
+    This service is hosted using <a href="https://github.com/kuba6000/AE2-Web-Integration">AE2 Web Integration</a> Made by <a href="https://github.com/kuba6000">@kuba6000</a>
 </footer>
 </body>
 </html>
