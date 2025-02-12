@@ -13,8 +13,10 @@ html,body{
     height: 100%;
     width: 100%;
 }
+
 td{
     padding: 10px;
+    word-wrap: break-word;
 }
 td.active{
     background-color: greenyellow;
@@ -73,12 +75,16 @@ button:hover{
     width: 80%;
     float: left;
 }
+
 #terminalheader{
     width: calc(100% - 20px);
-    height: 40px;
+    min-height: 40px;
+    height: fit-content;
     border-bottom: black solid 1px;
     font-size: 150%;
     padding: 10px;
+    display: flex;
+    flex-direction: column;
 }
 #terminalheader input{
     font-size: 100%;
@@ -122,7 +128,6 @@ button:hover{
     width: 10%;
     float: left;
     border-left: solid black 1px;
-    padding: 10px;
     font-size: 110%;
 }
 
@@ -135,11 +140,18 @@ button:hover{
     font-weight: 500;
     margin-bottom: 10px;
 }
+#terminalsubcontainer section{
+    text-align: center;
+}
+#terminalsubcontainer > * > section > *{
+    margin: auto;
+}
 
 #terminalCPUList button, #terminalCPUListForJob button{
     width: 100%;
     margin: 0;
     border-bottom: black dotted 1px;
+    word-wrap: break-word;
 }
 #terminalCPUList button.selected, #terminalCPUListForJob button.selected{
     background-color: rgb(0, 137, 155);
@@ -180,6 +192,27 @@ button:hover{
     transform: translate(-50%,-50%);
     -ms-transform: translate(-50%,-50%);
 }
+
+#topMessages{
+    position: fixed;
+    width: 100%;
+    text-align: center;
+    background-color: #929292;
+    transition: 0.2s;
+}
+
+#topMessages > *{
+    display: block;
+    text-align: center;
+    margin: 10px 0;
+    font-size: 130%;
+}
+
+#topMessages > * > button{
+    float: right;
+    margin-right: 10px;
+}
+
 
 footer {
     position: fixed;
@@ -280,4 +313,102 @@ footer:hover{
 
 .minecraftSpecialFormat_r{
     color: black;
+}
+
+.collapsible:after {
+    content: '\02795';
+    font-size: 13px;
+    color: white;
+    margin-left: 5px;
+}
+
+.collapsible.active:after {
+    content: "\2796";
+}
+
+.mobile-only{
+    display: none;
+}
+
+@media screen and (max-width: 1300px){
+    body{
+        font-size: 12px;
+    }
+}
+
+@media screen and (max-width: 1000px){
+    #terminalheader{
+        border-top: black solid 1px;
+    }
+    #terminalheader > * > *{
+        width: 100%;
+        float: right;
+        margin-top: 5px;
+        margin-left: 10px;
+    }
+    #terminalheader:first-child{
+        text-align: center;
+        font-size: 200% !important;
+        font-weight: bold !important;
+    }
+    #terminalheader > * > input{
+        width: calc(100% - 10px);
+        float: right;
+        margin-top: 5px;
+        margin-left: 10px;
+    }
+    #terminalsubcontainer{
+        width: 100%;
+        float: none;
+        order: 2;
+        border-left: none;
+        border-top: black solid 1px;
+    }
+    #terminalsubcontainer header{
+        border-bottom: none;
+        display: block;
+        width: 100%;
+        text-align: center;
+        font-size: 130%;
+        font-weight: 500;
+        margin-bottom: 10px;
+    }
+    #terminaltypes{
+        width: 100%;
+        float: none;
+        order: 1;
+    }
+    #terminalwindow{
+        width: 100%;
+        float: none;
+        order: 3;
+    }
+    #terminalcontainer{
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    #terminaltypes button{
+        width: calc(50% - 10px);
+        margin: 5px 5px;
+        float: left;
+    }
+    .mobile-only{
+        display: block;
+        width: calc(100% - 10px) !important;
+        margin: 5px 5px;
+        text-align: center;
+        margin-top: 10px !important;
+        font-size: 150% !important;
+    }
+    .mobile-hidden{
+        display: none !important;
+    }
+    #terminalOptions > section{
+        display: none;
+    }
+    #terminalsubcontainersettings > section{
+        display: none;
+        font-size: 150%;
+    }
 }
