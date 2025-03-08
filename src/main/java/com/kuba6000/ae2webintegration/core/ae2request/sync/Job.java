@@ -123,13 +123,13 @@ public class Job extends ISyncedRequest {
                         else if (i1.requested == 0 && i2.requested > 0) return 1;
                         return Long.compare(i2.stored, i1.stored);
                     });
-                    setData(jobData);
                 } catch (InterruptedException | ExecutionException e) {
                     e.printStackTrace();
                     deny("INTERNAL_ERROR");
                     return;
                 }
             }
+            setData(jobData);
             done();
         } else if (type == ERequestType.CANCEL) {
             job.cancel(true);
