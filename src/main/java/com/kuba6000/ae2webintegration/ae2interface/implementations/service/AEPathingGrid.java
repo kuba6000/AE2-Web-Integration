@@ -1,12 +1,12 @@
 package com.kuba6000.ae2webintegration.ae2interface.implementations.service;
 
-import com.kuba6000.ae2webintegration.ae2interface.implementations.IAEObject;
+import com.kuba6000.ae2webintegration.ae2interface.implementations.IAEWeakObject;
 import com.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 
 import appeng.api.networking.pathing.IPathingGrid;
 
-public class AEPathingGrid extends IAEObject<IPathingGrid> implements IAEPathingGrid {
+public class AEPathingGrid extends IAEWeakObject<IPathingGrid> implements IAEPathingGrid {
 
     public AEPathingGrid(IPathingGrid object) {
         super(object);

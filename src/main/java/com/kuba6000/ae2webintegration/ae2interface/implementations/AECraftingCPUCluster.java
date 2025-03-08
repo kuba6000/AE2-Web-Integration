@@ -9,9 +9,9 @@ import com.kuba6000.ae2webintegration.core.interfaces.IItemList;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 
 import appeng.api.networking.crafting.CraftingItemList;
+import appeng.me.cluster.implementations.CraftingCPUCluster;
 
-public class AECraftingCPUCluster extends IAEObject<appeng.me.cluster.implementations.CraftingCPUCluster>
-    implements ICraftingCPUCluster {
+public class AECraftingCPUCluster extends IAEWeakObject<CraftingCPUCluster> implements ICraftingCPUCluster {
 
     int id;
 
@@ -19,9 +19,18 @@ public class AECraftingCPUCluster extends IAEObject<appeng.me.cluster.implementa
         super(object);
     }
 
-    public AECraftingCPUCluster(appeng.me.cluster.implementations.CraftingCPUCluster object, int id) {
+    public AECraftingCPUCluster(appeng.me.cluster.implementations.CraftingCPUCluster object, Integer id) {
         super(object);
         this.id = id;
+    }
+
+    @Override
+    public void reUse(CraftingCPUCluster object, Object... args) {
+        super.reUse(object, args);
+        if (args.length > 0)
+            id = (int) args[0];
+        else
+            id = -1;
     }
 
     @Override
@@ -62,7 +71,7 @@ public class AECraftingCPUCluster extends IAEObject<appeng.me.cluster.implementa
 
     @Override
     public IItemStack getFinalOutput() {
-        return new ItemStack(get().getFinalOutput());
+        return (IItemStack) get().getFinalOutput();
     }
 
     @Override
@@ -82,7 +91,12 @@ public class AECraftingCPUCluster extends IAEObject<appeng.me.cluster.implementa
 
     @Override
     public IItemList getWaitingFor() {
-        return new ItemList(((CraftingCPUClusterAccessor) (Object) get()).getWaitingFor());
+        return ItemList.create(ItemList.class, ((CraftingCPUClusterAccessor) (Object) get()).getWaitingFor());
+    }
+
+    @Override
+    public AECraftingCPUCluster createUnpooledCopy() {
+        return new AECraftingCPUCluster(get(), id);
     }
 
     private static boolean isUsedStorageAvailable = true;

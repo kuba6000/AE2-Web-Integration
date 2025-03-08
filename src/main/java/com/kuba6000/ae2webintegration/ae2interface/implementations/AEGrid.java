@@ -26,25 +26,25 @@ import appeng.api.networking.storage.IStorageGrid;
 import appeng.me.Grid;
 import appeng.parts.reporting.AbstractPartTerminal;
 
-public class AEGrid extends IAEObject<IGrid> implements IAEGrid {
+public class AEGrid extends IAEWeakObject<Grid> implements IAEGrid {
 
-    public AEGrid(IGrid grid) {
+    public AEGrid(Grid grid) {
         super(grid);
     }
 
     @Override
     public IAECraftingGrid getCraftingGrid() {
-        return new AECraftingGrid(get().getCache(ICraftingGrid.class));
+        return AECraftingGrid.create(AECraftingGrid.class, get().getCache(ICraftingGrid.class));
     }
 
     @Override
     public IAEPathingGrid getPathingGrid() {
-        return new AEPathingGrid(get().getCache(IPathingGrid.class));
+        return AEPathingGrid.create(AEPathingGrid.class, get().getCache(IPathingGrid.class));
     }
 
     @Override
     public IAEStorageGrid getStorageGrid() {
-        return new AEStorageGrid(get().getCache(IStorageGrid.class));
+        return AEStorageGrid.create(AEStorageGrid.class, get().getCache(IStorageGrid.class));
     }
 
     @Override
@@ -55,6 +55,16 @@ public class AEGrid extends IAEObject<IGrid> implements IAEGrid {
     @Override
     public boolean internalObjectEquals(IAEGrid obj) {
         return get() == ((AEGrid) obj).get();
+    }
+
+    @Override
+    public IAEGrid createUnpooledCopy() {
+        return new AEGrid(this.get());
+    }
+
+    @Override
+    public void reUse(IAEGrid object) {
+        this.reUse(((AEGrid) object).get());
     }
 
     private Class<? extends IGridHost> lastUsedMachineClass = null;

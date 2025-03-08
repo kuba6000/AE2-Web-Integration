@@ -1,7 +1,5 @@
 package com.kuba6000.ae2webintegration.ae2interface.implementations;
 
-import java.util.Arrays;
-
 import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 
@@ -16,8 +14,6 @@ public class AECraftingPatternDetails extends IAEStrongObject<ICraftingPatternDe
 
     @Override
     public IItemStack[] getCondensedOutputs() {
-        return Arrays.stream(get().getCondensedOutputs())
-            .map(ItemStack::new)
-            .toArray(IItemStack[]::new);
+        return (IItemStack[]) get().getCondensedOutputs();
     }
 }

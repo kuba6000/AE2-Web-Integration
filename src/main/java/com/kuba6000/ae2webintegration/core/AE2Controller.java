@@ -319,12 +319,21 @@ public class AE2Controller {
 
     }
 
+    private static void setActiveGrid(IAEGrid grid) {
+        if (grid == null) {
+            activeGrid = null;
+            return;
+        }
+        if (activeGrid != null) activeGrid.reUse(grid);
+        else activeGrid = grid.createUnpooledCopy();
+    }
+
     public static boolean tryValidateOrVerify(IAEGrid testGrid, IAECraftingGrid craftingGrid) {
         if (isValid()) return activeGrid.internalObjectEquals(testGrid);
         else {
             if (craftingGrid == null) craftingGrid = testGrid.getCraftingGrid();
             if (craftingGrid.getCPUCount() >= Config.AE_CPUS_THRESHOLD) {
-                activeGrid = testGrid;
+                setActiveGrid(testGrid);
                 return true;
             }
         }
@@ -339,7 +348,7 @@ public class AE2Controller {
                 IAECraftingGrid craftingGrid = grid.getCraftingGrid();
                 if (craftingGrid != null) {
                     if ((long) craftingGrid.getCPUCount() >= Config.AE_CPUS_THRESHOLD) {
-                        AE2Controller.activeGrid = grid;
+                        setActiveGrid(grid);
                         return true;
                     }
                 }
@@ -352,13 +361,13 @@ public class AE2Controller {
         if (activeGrid == null) return false;
         if (!activeGrid.isValid()) return false;
         if (activeGrid.isEmpty()) {
-            activeGrid = null;
+            setActiveGrid(null);
             return false;
         }
         IAEPathingGrid pathingGrid = activeGrid.getPathingGrid();
         if (pathingGrid == null || pathingGrid.isNetworkBooting()
             || pathingGrid.getControllerState() != AEControllerState.CONTROLLER_ONLINE) {
-            activeGrid = null;
+            setActiveGrid(null);
             return false;
         }
         return true;

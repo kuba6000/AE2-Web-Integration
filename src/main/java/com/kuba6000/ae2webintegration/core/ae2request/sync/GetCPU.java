@@ -62,19 +62,19 @@ public class GetCPU extends ISyncedRequest {
             cpu.getActiveItems(items);
             for (IItemStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).active += itemStack.getStackSize();
+                prep.computeIfAbsent(compactedItem, k -> compactedItem).active += itemStack.web$getStackSize();
             }
             items = AE2Controller.AE2Interface.createItemList();
             cpu.getPendingItems(items);
             for (IItemStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).pending += itemStack.getStackSize();
+                prep.computeIfAbsent(compactedItem, k -> compactedItem).pending += itemStack.web$getStackSize();
             }
             items = AE2Controller.AE2Interface.createItemList();
             cpu.getStorageItems(items);
             for (IItemStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).stored += itemStack.getStackSize();
+                prep.computeIfAbsent(compactedItem, k -> compactedItem).stored += itemStack.web$getStackSize();
             }
 
             if (clusterData.hasTrackingInfo) {

@@ -28,12 +28,12 @@ public class Order extends ISyncedRequest {
         int hash = Integer.parseInt(getParams.get("item"));
         int quantity = Integer.parseInt(getParams.get("quantity"));
         this.item = hashcodeToAEItemStack.get(hash);
-        if (this.item == null || !this.item.isCraftable()) {
+        if (this.item == null || !this.item.web$isCraftable()) {
             deny("ITEM_NOT_FOUND");
             return false;
         }
-        this.item = this.item.copy();
-        this.item.setStackSize(quantity);
+        this.item = this.item.web$copy();
+        this.item.web$setStackSize(quantity);
         return true;
     }
 
@@ -51,7 +51,7 @@ public class Order extends ISyncedRequest {
             IAEStorageGrid storageGrid = grid.getStorageGrid();
             final IItemList itemList = storageGrid.getItemStorageList();
             IItemStack realItem = itemList.findPrecise(this.item);
-            if (realItem != null && realItem.isCraftable()) {
+            if (realItem != null && realItem.web$isCraftable()) {
                 Future<IAECraftingJob> job = craftingGrid.beginCraftingJob(grid, this.item);
 
                 int jobID = AE2Controller.getNextJobID();

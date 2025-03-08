@@ -6,4 +6,6 @@ public interface IAE {
 
     IItemList createItemList();
 
+    void releaseAEObjects();
+
 }

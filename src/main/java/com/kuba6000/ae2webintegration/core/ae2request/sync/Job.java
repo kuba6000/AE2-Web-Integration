@@ -85,30 +85,30 @@ public class Job extends ISyncedRequest {
                     jobData.plan = new ArrayList<>();
                     for (IItemStack stack : plan) {
                         JSON_JobData.JobItem jobItem = new JSON_JobData.JobItem();
-                        jobItem.itemid = stack.getItemID();
-                        jobItem.itemname = stack.getDisplayName();
-                        jobItem.requested = stack.getCountRequestable();
-                        jobItem.steps = stack.getCountRequestableCrafts();
+                        jobItem.itemid = stack.web$getItemID();
+                        jobItem.itemname = stack.web$getDisplayName();
+                        jobItem.requested = stack.web$getCountRequestable();
+                        jobItem.steps = stack.web$getCountRequestableCrafts();
                         if (jobData.isSimulating) {
-                            IItemStack toExtract = stack.copy();
-                            toExtract.reset();
-                            toExtract.setStackSize(stack.getStackSize());
-                            IItemStack missing = toExtract.copy();
+                            IItemStack toExtract = stack.web$copy();
+                            toExtract.web$reset();
+                            toExtract.web$setStackSize(stack.web$getStackSize());
+                            IItemStack missing = toExtract.web$copy();
                             toExtract = items.extractItems(toExtract, AEActionable.SIMULATE, grid);
                             if (toExtract == null) {
-                                toExtract = missing.copy();
-                                toExtract.setStackSize(0);
+                                toExtract = missing.web$copy();
+                                toExtract.web$setStackSize(0);
                             }
-                            jobItem.stored = toExtract.getStackSize();
-                            jobItem.missing = missing.getStackSize() - toExtract.getStackSize();
+                            jobItem.stored = toExtract.web$getStackSize();
+                            jobItem.missing = missing.web$getStackSize() - toExtract.web$getStackSize();
                         } else {
-                            jobItem.stored = stack.getStackSize();
+                            jobItem.stored = stack.web$getStackSize();
                             jobItem.missing = 0;
                         }
                         if (jobItem.missing == 0 && jobItem.requested == 0 && jobItem.stored > 0) {
                             IItemStack realStack = items.getAvailableItem(stack);
                             long available = 0L;
-                            if (realStack != null) available = realStack.getStackSize();
+                            if (realStack != null) available = realStack.web$getStackSize();
                             if (available > 0L) jobItem.usedPercent = (double) jobItem.stored / (double) available;
                         }
                         jobData.plan.add(jobItem);

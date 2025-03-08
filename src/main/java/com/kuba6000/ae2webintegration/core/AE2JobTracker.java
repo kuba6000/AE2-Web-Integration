@@ -75,7 +75,7 @@ public class AE2JobTracker {
             for (IItemStack itemStack : timeSpentOn.keySet()) {
                 long timeSpent = getTimeSpentOn(itemStack);
                 total += timeSpent;
-                if (stack.isSameType(itemStack)) {
+                if (stack.web$isSameType(itemStack)) {
                     stackTime = timeSpent;
                 }
             }
@@ -96,11 +96,11 @@ public class AE2JobTracker {
             info = trackingInfoMap.get(cpuCluster);
             if (info == null) return; // We can't start tracking mid crafting :P
         } else {
-            trackingInfoMap.put(cpuCluster, info = new JobTrackingInfo());
+            trackingInfoMap.put(cpuCluster.createUnpooledCopy(), info = new JobTrackingInfo());
             info.timeStarted = System.currentTimeMillis();
         }
         info.finalOutput = cpuCluster.getFinalOutput()
-            .copy();
+            .web$copy();
     }
 
     public static void updateCraftingStatus(ICraftingCPUCluster cpu, IItemStack diff) {
@@ -108,14 +108,14 @@ public class AE2JobTracker {
         if (info == null) return;
         IItemList waitingFor = cpu.getWaitingFor();
         IItemStack found = waitingFor.findPrecise(diff);
-        if (found != null && found.getStackSize() > 0L) {
+        if (found != null && found.web$getStackSize() > 0L) {
             if (!info.startedWaitingFor.containsKey(found)) {
                 info.startedWaitingFor.put(found, System.currentTimeMillis());
                 info.timeSpentOn.putIfAbsent(found, 0L);
-                info.waitingFor.put(found, found.getStackSize());
+                info.waitingFor.put(found, found.web$getStackSize());
             } else {
                 long i = info.waitingFor.get(found);
-                long newi = found.getStackSize();
+                long newi = found.web$getStackSize();
                 if (i > newi) {
                     info.craftedTotal.merge(found, i - newi, Long::sum);
                 }
@@ -203,9 +203,9 @@ public class AE2JobTracker {
         DiscordManager.postMessageNonBlocking(
             new DiscordManager.DiscordEmbed(
                 "AE2 Job Tracker",
-                "Crafting for `" + info.finalOutput.getDisplayName()
+                "Crafting for `" + info.finalOutput.web$getDisplayName()
                     + " x"
-                    + info.finalOutput.getStackSize()
+                    + info.finalOutput.web$getStackSize()
                     + "` "
                     + (info.wasCancelled ? "cancelled" : "completed")
                     + "!\nIt took "

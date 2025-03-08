@@ -15,9 +15,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import com.kuba6000.ae2webintegration.ae2interface.CraftingMediumTracker;
 import com.kuba6000.ae2webintegration.ae2interface.implementations.AECraftingCPUCluster;
 import com.kuba6000.ae2webintegration.ae2interface.implementations.AECraftingPatternDetails;
-import com.kuba6000.ae2webintegration.ae2interface.implementations.ItemStack;
 import com.kuba6000.ae2webintegration.ae2interface.implementations.PatternProviderViewable;
 import com.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
+import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import com.llamalad7.mixinextras.sugar.Local;
 
 import appeng.api.networking.IGrid;
@@ -45,20 +45,20 @@ public class CraftingCPUClusterMixin {
     void ae2webintegration$postCraftingStatusChange(IAEItemStack diff, CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
             .craftingStatusPostedUpdate(
-                new AECraftingCPUCluster((CraftingCPUCluster) (Object) this),
-                new ItemStack(diff));
+                AECraftingCPUCluster.create(AECraftingCPUCluster.class, (CraftingCPUCluster) (Object) this),
+                (IItemStack) diff);
     }
 
     @Inject(method = "completeJob", at = @At("HEAD"))
     void ae2webintegration$completeJob(CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
-            .jobCompleted(new AECraftingCPUCluster((CraftingCPUCluster) (Object) this));
+            .jobCompleted(AECraftingCPUCluster.create(AECraftingCPUCluster.class, (CraftingCPUCluster) (Object) this));
     }
 
     @Inject(method = "cancel", at = @At("HEAD"))
     void ae2webintegration$cancel(CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
-            .jobCancelled(new AECraftingCPUCluster((CraftingCPUCluster) (Object) this));
+            .jobCancelled(AECraftingCPUCluster.create(AECraftingCPUCluster.class, (CraftingCPUCluster) (Object) this));
     }
 
     @Inject(
@@ -88,9 +88,9 @@ public class CraftingCPUClusterMixin {
             }
             IAEMixinCallbacks.getInstance()
                 .pushedPattern(
-                    new AECraftingCPUCluster((CraftingCPUCluster) (Object) this),
-                    viewable != null ? new PatternProviderViewable(viewable) : null,
-                    new AECraftingPatternDetails(details));
+                    AECraftingCPUCluster.create(AECraftingCPUCluster.class, (CraftingCPUCluster) (Object) this),
+                    viewable != null ? PatternProviderViewable.create(PatternProviderViewable.class, viewable) : null,
+                    AECraftingPatternDetails.create(AECraftingPatternDetails.class, details));
             return true;
         }
         return false;

@@ -26,13 +26,13 @@ public class ItemList extends IAEStrongObject<IItemList<IAEItemStack>>
 
             @Override
             public IItemStack next() {
-                return new ItemStack(iterator.next());
+                return (IItemStack) iterator.next();
             }
         };
     }
 
     @Override
     public IItemStack findPrecise(IItemStack stack) {
-        return new ItemStack(get().findPrecise(((ItemStack) stack).stack));
+        return (IItemStack) get().findPrecise((IAEItemStack) stack);
     }
 }

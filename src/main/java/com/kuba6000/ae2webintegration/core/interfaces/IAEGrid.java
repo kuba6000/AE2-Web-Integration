@@ -17,4 +17,8 @@ public interface IAEGrid {
     boolean isEmpty();
 
     boolean internalObjectEquals(IAEGrid obj);
+
+    IAEGrid createUnpooledCopy();
+
+    void reUse(IAEGrid object);
 }

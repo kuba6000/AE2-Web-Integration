@@ -1,5 +1,7 @@
 package com.kuba6000.ae2webintegration.core.interfaces;
 
+import com.kuba6000.ae2webintegration.ae2interface.implementations.AECraftingCPUCluster;
+
 public interface ICraftingCPUCluster {
 
     boolean hasCustomName();
@@ -25,5 +27,7 @@ public interface ICraftingCPUCluster {
     void getStorageItems(IItemList list);
 
     IItemList getWaitingFor();
+
+    AECraftingCPUCluster createUnpooledCopy();
 
 }

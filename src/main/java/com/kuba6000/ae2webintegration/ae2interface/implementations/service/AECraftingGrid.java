@@ -14,7 +14,7 @@ import com.kuba6000.ae2webintegration.ae2interface.implementations.AECraftingCPU
 import com.kuba6000.ae2webintegration.ae2interface.implementations.AECraftingJob;
 import com.kuba6000.ae2webintegration.ae2interface.implementations.AEGrid;
 import com.kuba6000.ae2webintegration.ae2interface.implementations.IAEObject;
-import com.kuba6000.ae2webintegration.ae2interface.implementations.ItemStack;
+import com.kuba6000.ae2webintegration.ae2interface.implementations.IAEWeakObject;
 import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -26,8 +26,9 @@ import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.security.PlayerSource;
+import appeng.api.storage.data.IAEItemStack;
 
-public class AECraftingGrid extends IAEObject<ICraftingGrid> implements IAECraftingGrid {
+public class AECraftingGrid extends IAEWeakObject<ICraftingGrid> implements IAECraftingGrid {
 
     public AECraftingGrid(ICraftingGrid object) {
         super(object);
@@ -45,7 +46,11 @@ public class AECraftingGrid extends IAEObject<ICraftingGrid> implements IAECraft
         final Set<ICraftingCPUCluster> cpus = new LinkedHashSet<>(aecpus.size());
         int i = 1;
         for (ICraftingCPU cpu : aecpus) {
-            cpus.add(new AECraftingCPUCluster((appeng.me.cluster.implementations.CraftingCPUCluster) cpu, i++));
+            cpus.add(
+                IAEObject.create(
+                    AECraftingCPUCluster.class,
+                    (appeng.me.cluster.implementations.CraftingCPUCluster) cpu,
+                    i++));
         }
         return cpus;
     }
@@ -56,7 +61,7 @@ public class AECraftingGrid extends IAEObject<ICraftingGrid> implements IAECraft
             actionSrc.player.worldObj,
             ((AEGrid) grid).get(),
             actionSrc,
-            ((ItemStack) craftWhat).stack,
+            (IAEItemStack) craftWhat,
             null);
         return new Future<>() {
 
@@ -79,7 +84,7 @@ public class AECraftingGrid extends IAEObject<ICraftingGrid> implements IAECraft
             public IAECraftingJob get() throws InterruptedException, ExecutionException {
                 ICraftingJob got = job.get();
                 if (got == null) return null;
-                return new AECraftingJob(got);
+                return AECraftingJob.create(AECraftingJob.class, got);
             }
 
             @Override
@@ -87,7 +92,7 @@ public class AECraftingGrid extends IAEObject<ICraftingGrid> implements IAECraft
                 throws InterruptedException, ExecutionException, TimeoutException {
                 ICraftingJob got = job.get(timeout, unit);
                 if (got == null) return null;
-                return new AECraftingJob(got);
+                return AECraftingJob.create(AECraftingJob.class, got);
             }
         };
     }

@@ -34,7 +34,7 @@ public class AE implements IAE {
 
                 @Override
                 public IAEGrid next() {
-                    return new AEGrid(iterator.next());
+                    return AEGrid.create(AEGrid.class, iterator.next());
                 }
             };
         }
@@ -47,10 +47,16 @@ public class AE implements IAE {
 
     @Override
     public IItemList createItemList() {
-        return new ItemList(
+        return ItemList.create(
+            ItemList.class,
             AEApi.instance()
                 .storage()
                 .createItemList());
+    }
+
+    @Override
+    public void releaseAEObjects() {
+        IAEObject.invalidateAll();
     }
 
 }

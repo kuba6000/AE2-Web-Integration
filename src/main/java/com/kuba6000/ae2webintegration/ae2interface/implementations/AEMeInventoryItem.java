@@ -9,7 +9,7 @@ import appeng.api.config.Actionable;
 import appeng.api.storage.IMEInventory;
 import appeng.api.storage.data.IAEItemStack;
 
-public class AEMeInventoryItem extends IAEObject<IMEInventory<IAEItemStack>> implements IAEMeInventoryItem {
+public class AEMeInventoryItem extends IAEWeakObject<IMEInventory<IAEItemStack>> implements IAEMeInventoryItem {
 
     public AEMeInventoryItem(IMEInventory<IAEItemStack> object) {
         super(object);
@@ -18,15 +18,15 @@ public class AEMeInventoryItem extends IAEObject<IMEInventory<IAEItemStack>> imp
     @Override
     public IItemStack extractItems(IItemStack stack, AEActionable mode, IAEGrid grid) {
         IAEItemStack istack = get().extractItems(
-            ((ItemStack) stack).stack,
+            (IAEItemStack) stack,
             mode == AEActionable.MODULATE ? Actionable.MODULATE : Actionable.SIMULATE,
             ((AEGrid) grid).getPlayerSource());
-        return istack == null ? null : new ItemStack(istack);
+        return istack == null ? null : (IItemStack) istack;
     }
 
     @Override
     public IItemStack getAvailableItem(IItemStack stack) {
-        IAEItemStack istack = get().getAvailableItem(((ItemStack) stack).stack);
-        return istack == null ? null : new ItemStack(istack);
+        IAEItemStack istack = get().getAvailableItem((IAEItemStack) stack);
+        return (IItemStack) istack;
     }
 }
