@@ -60,6 +60,8 @@ public class AEGrid extends IAEObject<IGrid> implements IAEGrid {
     private Class<? extends IGridHost> lastUsedMachineClass = null;
     public ITextComponent lastFakePlayerChatMessage;
 
+    private PlayerSource cachedPlayerSource = null;
+
     public PlayerSource getPlayerSource() {
         Grid internalGrid = (Grid) get();
         IMachineSet terminals = null;
@@ -83,7 +85,12 @@ public class AEGrid extends IAEObject<IGrid> implements IAEGrid {
         IActionHost actionHost = (IActionHost) node.getMachine();
         World world = node.getWorld();
 
-        return new PlayerSource(
+        if (cachedPlayerSource != null) {
+            if (cachedPlayerSource.via != actionHost) cachedPlayerSource = null;
+            else return cachedPlayerSource;
+        }
+
+        cachedPlayerSource = new PlayerSource(
             new FakePlayer(
                 (WorldServer) world,
                 IAEWebInterface.getInstance()
@@ -101,5 +108,7 @@ public class AEGrid extends IAEObject<IGrid> implements IAEGrid {
 
             },
             actionHost);
+
+        return cachedPlayerSource;
     }
 }
