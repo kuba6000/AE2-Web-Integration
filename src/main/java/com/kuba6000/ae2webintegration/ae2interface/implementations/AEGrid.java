@@ -70,6 +70,8 @@ public class AEGrid extends IAEWeakObject<Grid> implements IAEGrid {
     private Class<? extends IGridHost> lastUsedMachineClass = null;
     public IChatComponent lastFakePlayerChatMessage;
 
+    private PlayerSource cachedPlayerSource = null;
+
     public PlayerSource getPlayerSource() {
         Grid internalGrid = (Grid) get();
         IMachineSet terminals = null;
@@ -93,12 +95,19 @@ public class AEGrid extends IAEWeakObject<Grid> implements IAEGrid {
         IActionHost actionHost = (IActionHost) node.getMachine();
         World world = node.getWorld();
 
-        return new PlayerSource(new FakePlayer((WorldServer) world, AE2Controller.AEControllerProfile) {
+        if (cachedPlayerSource != null) {
+            if (cachedPlayerSource.via != actionHost) cachedPlayerSource = null;
+            else return cachedPlayerSource;
+        }
+
+        cachedPlayerSource = new PlayerSource(new FakePlayer((WorldServer) world, AE2Controller.AEControllerProfile) {
 
             @Override
             public void addChatMessage(IChatComponent message) {
                 lastFakePlayerChatMessage = message;
             }
         }, actionHost);
+
+        return cachedPlayerSource;
     }
 }
