@@ -2,24 +2,24 @@ package com.kuba6000.ae2webintegration.core.interfaces;
 
 public interface IItemStack {
 
-    String getItemID();
+    String web$getItemID();
 
-    String getDisplayName();
+    String web$getDisplayName();
 
-    long getStackSize();
+    long web$getStackSize();
 
-    boolean isCraftable();
+    boolean web$isCraftable();
 
-    long getCountRequestable();
+    long web$getCountRequestable();
 
-    long getCountRequestableCrafts();
+    long web$getCountRequestableCrafts();
 
-    void reset();
+    void web$reset();
 
-    boolean isSameType(IItemStack other);
+    boolean web$isSameType(IItemStack other);
 
-    IItemStack copy();
+    IItemStack web$copy();
 
-    void setStackSize(long size);
+    void web$setStackSize(long size);
 
 }

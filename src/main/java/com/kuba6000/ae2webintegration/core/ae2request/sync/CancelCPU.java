@@ -21,14 +21,14 @@ public class CancelCPU extends ISyncedRequest {
 
     @Override
     public void handle(IAEGrid grid) {
-        ICraftingCPUCluster cluster = GetCPUList.getCPUList(grid.getCraftingGrid())
+        ICraftingCPUCluster cluster = GetCPUList.getCPUList(grid.web$getCraftingGrid())
             .get(cpuName);
         if (cluster == null) {
             deny("CPU_NOT_FOUND");
             return;
         }
-        if (cluster.isBusy()) {
-            cluster.cancel();
+        if (cluster.web$isBusy()) {
+            cluster.web$cancel();
             done();
             return;
         }

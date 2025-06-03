@@ -24,8 +24,8 @@ public class JSON_CompactedItem {
     public JSON_CompactedItem(IItemStack itemStack) {
         this.internalItem = itemStack;
         this.hashcode = this.internalItem.hashCode();
-        this.itemid = itemStack.getItemID();
-        this.itemname = itemStack.getDisplayName();
+        this.itemid = itemStack.web$getItemID();
+        this.itemname = itemStack.web$getDisplayName();
     }
 
     public static JSON_CompactedItem create(IItemStack stack) {

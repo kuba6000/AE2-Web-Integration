@@ -4,8 +4,8 @@ import com.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 
 public interface IPatternProviderViewable {
 
-    String getName();
+    String web$getName();
 
-    DimensionalCoords getLocation();
+    DimensionalCoords web$getLocation();
 
 }

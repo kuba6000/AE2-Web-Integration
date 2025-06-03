@@ -40,7 +40,7 @@ public class GetCPU extends ISyncedRequest {
 
     @Override
     public void handle(IAEGrid grid) {
-        IAECraftingGrid craftingGrid = grid.getCraftingGrid();
+        IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
 
         ICraftingCPUCluster cpu = GetCPUList.getCPUList(craftingGrid)
             .get(cpuName);
@@ -50,31 +50,31 @@ public class GetCPU extends ISyncedRequest {
         }
 
         JSON_ClusterData clusterData = new JSON_ClusterData();
-        clusterData.size = cpu.getAvailableStorage();
-        clusterData.isBusy = cpu.isBusy();
+        clusterData.size = cpu.web$getAvailableStorage();
+        clusterData.isBusy = cpu.web$isBusy();
         if (clusterData.isBusy) {
-            clusterData.finalOutput = cpu.getFinalOutput();
+            clusterData.finalOutput = cpu.web$getFinalOutput();
             AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.trackingInfoMap.get(cpu);
             clusterData.hasTrackingInfo = trackingInfo != null;
 
             HashMap<JSON_CompactedItem, JSON_CompactedItem> prep = new HashMap<>();
-            IItemList items = AE2Controller.AE2Interface.createItemList();
-            cpu.getActiveItems(items);
+            IItemList items = AE2Controller.AE2Interface.web$createItemList();
+            cpu.web$getActiveItems(items);
             for (IItemStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).active += itemStack.getStackSize();
+                prep.computeIfAbsent(compactedItem, k -> compactedItem).active += itemStack.web$getStackSize();
             }
-            items = AE2Controller.AE2Interface.createItemList();
-            cpu.getPendingItems(items);
+            items = AE2Controller.AE2Interface.web$createItemList();
+            cpu.web$getPendingItems(items);
             for (IItemStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).pending += itemStack.getStackSize();
+                prep.computeIfAbsent(compactedItem, k -> compactedItem).pending += itemStack.web$getStackSize();
             }
-            items = AE2Controller.AE2Interface.createItemList();
-            cpu.getStorageItems(items);
+            items = AE2Controller.AE2Interface.web$createItemList();
+            cpu.web$getStorageItems(items);
             for (IItemStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).stored += itemStack.getStackSize();
+                prep.computeIfAbsent(compactedItem, k -> compactedItem).stored += itemStack.web$getStackSize();
             }
 
             if (clusterData.hasTrackingInfo) {
