@@ -35,24 +35,24 @@ public class AE implements IAE {
 
                 @Override
                 public IAEGrid next() {
-                    return new AEGrid(iterator.next());
+                    return (IAEGrid) iterator.next();
                 }
             };
         }
     }
 
     @Override
-    public Iterable<IAEGrid> getGrids() {
+    public Iterable<IAEGrid> web$getGrids() {
         return new AEGridIterable();
     }
 
     @Override
-    public IItemList createItemList() {
-        return new ItemList(
+    public IItemList web$createItemList() {
+        return (IItemList) (Object)
             AEApi.instance()
                 .storage()
                 .getStorageChannel(IItemStorageChannel.class)
-                .createList());
+                .createList();
     }
 
 }

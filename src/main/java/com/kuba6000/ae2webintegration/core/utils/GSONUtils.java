@@ -33,10 +33,10 @@ public class GSONUtils {
 
     private static final JsonSerializer<IItemStack> IItemStackSerializer = (src, typeOfSrc, context) -> {
         JsonObject json = new JsonObject();
-        json.addProperty("itemid", src.getItemID());
-        json.addProperty("itemname", src.getDisplayName());
+        json.addProperty("itemid", src.web$getItemID());
+        json.addProperty("itemname", src.web$getDisplayName());
         json.addProperty("hashcode", src.hashCode());
-        json.addProperty("quantity", src.getStackSize());
+        json.addProperty("quantity", src.web$getStackSize());
         return json;
     };
 

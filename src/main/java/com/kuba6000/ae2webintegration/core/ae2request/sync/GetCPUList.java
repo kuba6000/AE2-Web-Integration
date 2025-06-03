@@ -24,8 +24,8 @@ public class GetCPUList extends ISyncedRequest {
 
     public static Map<String, ICraftingCPUCluster> getCPUList(IAECraftingGrid craftingGrid) {
         LinkedHashMap<String, ICraftingCPUCluster> orderedMap = new LinkedHashMap<>();
-        for (ICraftingCPUCluster cpu : craftingGrid.getCPUs()) {
-            String name = cpu.getName();
+        for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
+            String name = cpu.web$getName();
             orderedMap.put(name, cpu);
         }
         return orderedMap;
@@ -38,16 +38,16 @@ public class GetCPUList extends ISyncedRequest {
 
     @Override
     public void handle(IAEGrid grid) {
-        Map<String, ICraftingCPUCluster> clusters = getCPUList(grid.getCraftingGrid());
+        Map<String, ICraftingCPUCluster> clusters = getCPUList(grid.web$getCraftingGrid());
         LinkedHashMap<String, JSON_CpuInfo> cpuList = new LinkedHashMap<>(clusters.size());
         for (Map.Entry<String, ICraftingCPUCluster> entry : clusters.entrySet()) {
             JSON_CpuInfo cpuInfo = new JSON_CpuInfo();
             ICraftingCPUCluster cluster = entry.getValue();
-            cpuInfo.availableStorage = cluster.getAvailableStorage();
-            cpuInfo.usedStorage = cluster.getUsedStorage();
-            cpuInfo.coProcessors = cluster.getCoProcessors();
-            if (cpuInfo.isBusy = cluster.isBusy()) {
-                cpuInfo.finalOutput = cluster.getFinalOutput();
+            cpuInfo.availableStorage = cluster.web$getAvailableStorage();
+            cpuInfo.usedStorage = cluster.web$getUsedStorage();
+            cpuInfo.coProcessors = cluster.web$getCoProcessors();
+            if (cpuInfo.isBusy = cluster.web$isBusy()) {
+                cpuInfo.finalOutput = cluster.web$getFinalOutput();
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.trackingInfoMap.get(cluster);
                 if (cpuInfo.hasTrackingInfo = trackingInfo != null) {
                     cpuInfo.timeStarted = trackingInfo.timeStarted;

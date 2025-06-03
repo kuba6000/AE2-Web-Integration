@@ -10,10 +10,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.kuba6000.ae2webintegration.ae2interface.CraftingMediumTracker;
-import com.kuba6000.ae2webintegration.ae2interface.implementations.AECraftingCPUCluster;
-import com.kuba6000.ae2webintegration.ae2interface.implementations.AEGrid;
-import com.kuba6000.ae2webintegration.ae2interface.implementations.service.AECraftingGrid;
 import com.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingCPU;
@@ -45,9 +45,9 @@ public class CraftingGridCacheMixin {
                 .isPresent();
             IAEMixinCallbacks.getInstance()
                 .jobStarted(
-                    new AECraftingCPUCluster((CraftingCPUCluster) ((CraftingLinkAccessor) link).callGetCpu()),
-                    new AECraftingGrid((CraftingGridCache) (Object) this),
-                    new AEGrid(grid),
+                    (ICraftingCPUCluster) (Object) instance,
+                    (IAECraftingGrid) this,
+                    (IAEGrid) grid,
                     false,
                     !isMachine);
         }
