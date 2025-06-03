@@ -86,7 +86,8 @@ public class AEGrid extends IAEObject<IGrid> implements IAEGrid {
         World world = node.getWorld();
 
         if (cachedPlayerSource != null) {
-            if (cachedPlayerSource.via != actionHost) cachedPlayerSource = null;
+            if (cachedPlayerSource.machine()
+                .get() != actionHost) cachedPlayerSource = null;
             else return cachedPlayerSource;
         }
 
