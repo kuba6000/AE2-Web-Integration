@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&family=Roboto:wght@300;400&display=swap');
+*,html,body{
+    margin: 0;
+    padding: 0;
+    font-family: "Montserrat", sans-serif;
+    font-optical-sizing: auto;
+    font-style: normal;
+    color: #e0e0e0;
+    font-weight: 400;
+}
+b{
+    font-weight: 500;
+}
+body{
+    background-color: #101219;
+    color: #e0e0e0;
+}
+html,body{
+    height: 100%;
+    width: 100%;
+}
+body>h1{
+    text-align: center;
+    letter-spacing: 10px;
+    font-weight: 800;
+    color: #fff;
+    font-size: 2.5em;
+}
+footer {
+    position: fixed;
+    Width: 100%;
+    bottom: 0;
+    background-color: #9292926b;
+    padding: 10px;
+    transition: 0.2s;
+}
+
+footer:hover{
+    background-color: #929292;
+}
+
+a{
+    color: #80cbc4;
+    transition: 0.2s;
+}
+
+a:hover{
+    color: #a7ffeb;
+    text-decoration: underline;
+}
+
+#maincontent{
+    width: 90%;
+    height: 90%;
+    margin: 0 auto;
+    display: flex;
+}
+
+#main{
+    padding: 20px;
+    margin: auto;
+    background-color: #222736;
+    border: black solid 1px;
+    border-radius: 5px;
+}
+
+input, select {
+    background-color: #2b3555;
+    accent-color: #9b59b6;
+    border: 0;
+    padding: 5px;
+    border-radius: 5px;
+    margin-bottom: 5px;
+}
+
+input[type='submit']{
+    background-color: #292f47;
+    border: 0;
+    border-radius: 5px;
+    padding: 5px;
+    transition: 0.2s;
+}
+
+input[type='submit']:hover{
+    background-color: #363e5e;
+    cursor: pointer;
+}
+
+form {
+    text-align: center;
+}

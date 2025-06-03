@@ -544,6 +544,8 @@
                 <input type="checkbox" name="showitemicon" id="showitemicon" onchange="changeShowItemIcon(this);" disabled title="Work in progress"> <label for="showitemicon" title="Work in progress">Show item icons [work in progress]</label>
                 <br>
                 <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
+                <br>
+                <button onclick="document.location.href='?logout'">LogOut</button>
             </section>
         </section>
     </section>

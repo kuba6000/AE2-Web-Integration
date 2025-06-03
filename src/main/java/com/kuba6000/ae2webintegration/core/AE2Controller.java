@@ -9,10 +9,11 @@ import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
-import java.util.Base64;
+import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -83,6 +84,7 @@ public class AE2Controller {
         server.createContext("/job", new SyncedRequestHandler(Job.class));
         server.createContext("/trackinghistory", new ASyncRequestHandler(GetTrackingHistory.class));
         server.createContext("/gettracking", new ASyncRequestHandler(GetTracking.class));
+        server.createContext("/auth", new AuthHandler());
         server.createContext("/", new WebHandler());
         server.setExecutor(serverThread);
         server.start();
@@ -104,29 +106,99 @@ public class AE2Controller {
 
     public static HashMap<Integer, Future<IAECraftingJob>> jobs = new HashMap<>();
 
-    private static boolean checkAuth(HttpExchange t) {
+    private static final HashMap<String, Long> validTokens = new HashMap<>();
+
+    private static String generateToken() {
+        return new SecureRandom().ints(48, 122 + 1)
+            .filter(i -> (i <= 57 || i >= 65) && (i <= 90 || i >= 97))
+            .limit(200)
+            .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+            .toString();
+    }
+
+    private static boolean checkAuth(HttpExchange t) throws IOException {
         if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST && t.getRemoteAddress()
             .getAddress()
             .isLoopbackAddress()) {
             return true;
         }
+
+        // Alternative authentication method
         List<String> auth = t.getRequestHeaders()
             .get("Authorization");
-        if (auth == null || auth.isEmpty()) return false;
-        String token = auth.get(0);
-        token = token.replace("Basic ", "");
-        try {
-            String[] user_pass = new String(
-                Base64.getDecoder()
-                    .decode(token),
-                "UTF-8").split(":");
-            if (user_pass.length < 2) return false;
-            String user = user_pass[0];
-            String password = user_pass[1];
-            // we dont really care about the user :P
-            if (password.equals(Config.AE_PASSWORD)) return true;
-        } catch (IllegalArgumentException | UnsupportedEncodingException e) {
-            return false;
+        if (auth != null && !auth.isEmpty()) {
+            String token = auth.get(0);
+            token = token.replace("Bearer ", "");
+            if (validTokens.containsKey(token)) {
+                long validity = validTokens.get(token);
+                if (System.currentTimeMillis() < validity) {
+                    return true; // Token is valid
+                } else {
+                    validTokens.remove(token); // Remove expired token
+                    return false; // Token expired
+                }
+            } else {
+                return false; // Invalid token
+            }
+        }
+
+        List<String> cookies = t.getRequestHeaders()
+            .get("Cookie");
+        if (cookies != null && !cookies.isEmpty()) {
+            String cookiesString = cookies.get(0);
+            for (String cookie : cookiesString.split("; ")) {
+                if (cookie.startsWith("authenticationToken=")) {
+                    String token = cookie.substring("authenticationToken=".length());
+                    if (validTokens.containsKey(token)) {
+                        long validity = validTokens.get(token);
+                        if (System.currentTimeMillis() < validity) {
+                            Map<String, String> GET_PARAMS = HTTPUtils.parseQueryString(
+                                t.getRequestURI()
+                                    .getQuery());
+                            if (GET_PARAMS.containsKey("logout")) {
+                                validTokens.remove(token); // Invalidate token on logout
+                                t.getResponseHeaders()
+                                    .add("Set-Cookie", "authenticationToken=" + token + "; Max-Age=-1; HttpOnly");
+                                t.getResponseHeaders()
+                                    .add("Location", ".");
+                                t.sendResponseHeaders(302, -1);
+                                return false; // Logout successful
+                            }
+                            return true; // Token is valid
+                        } else {
+                            validTokens.remove(token); // Remove expired token
+                            t.getResponseHeaders()
+                                .add("Set-Cookie", "authenticationToken=" + token + "; Max-Age=-1; HttpOnly");
+                            return false; // Token expired
+                        }
+                    } else {
+                        t.getResponseHeaders()
+                            .add("Set-Cookie", "authenticationToken=" + token + "; Max-Age=-1; HttpOnly");
+                        return false; // Invalid token
+                    }
+                }
+            }
+        }
+        if (t.getRequestMethod()
+            .equals("POST")) {
+            String postRaw = new Scanner(t.getRequestBody()).nextLine();
+            Map<String, String> postData = HTTPUtils.parseQueryString(postRaw);
+
+            if (postData.containsKey("password")) {
+                String password = postData.get("password");
+                boolean rememberMe = postData.containsKey("remember");
+                if (password.equals(Config.AE_PASSWORD)) {
+                    String token = generateToken();
+                    long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
+                    validTokens.put(token, System.currentTimeMillis() + validFor * 1000L); // 1 hour validity
+                    t.getResponseHeaders()
+                        .add("Set-Cookie", "authenticationToken=" + token + "; Max-Age=" + validFor + "; HttpOnly");
+                    t.getResponseHeaders()
+                        .add("Location", ".");
+                    t.sendResponseHeaders(302, -1);
+                    return true;
+                }
+            }
         }
         return false;
     }
@@ -144,8 +216,6 @@ public class AE2Controller {
             return true;
         }
         if (!checkAuth(t)) {
-            t.getResponseHeaders()
-                .add("WWW-Authenticate", "Basic realm=\"AE2 Panel, please login\"");
             t.sendResponseHeaders(401, -1);
             return true;
         }
@@ -252,21 +322,78 @@ public class AE2Controller {
 
     }
 
+    static class AuthHandler implements HttpHandler {
+
+        @Override
+        public void handle(HttpExchange t) throws IOException {
+            if (t.getRequestMethod()
+                .equals("POST")) {
+                String postRaw = new Scanner(t.getRequestBody()).nextLine();
+                Map<String, String> postData = HTTPUtils.parseQueryString(postRaw);
+
+                if (postData.containsKey("password")) {
+                    String password = postData.get("password");
+                    boolean rememberMe = postData.containsKey("remember");
+                    if (password.equals(Config.AE_PASSWORD)) {
+                        String token = generateToken();
+                        long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
+                        validTokens.put(token, System.currentTimeMillis() + validFor * 1000L); // 1 hour validity
+                        byte[] raw_response = token.getBytes();
+                        t.sendResponseHeaders(200, raw_response.length);
+                        OutputStream os = t.getResponseBody();
+                        os.write(raw_response);
+                        os.close();
+                        return;
+                    }
+                }
+            }
+
+            Map<String, String> GET_PARAMS = HTTPUtils.parseQueryString(
+                t.getRequestURI()
+                    .getQuery());
+
+            if (GET_PARAMS.containsKey("revoke")) {
+                List<String> auth = t.getRequestHeaders()
+                    .get("Authorization");
+                if (auth != null && !auth.isEmpty()) {
+                    String token = auth.get(0);
+                    token = token.replace("Bearer ", "");
+                    validTokens.remove(token);
+                    t.sendResponseHeaders(200, -1);
+                    return;
+                }
+            }
+
+            t.sendResponseHeaders(400, -1);
+        }
+
+    }
+
     static class WebHandler implements HttpHandler {
 
         @Override
         public void handle(HttpExchange t) throws IOException {
 
-            if (!checkAuth(t)) {
+            String path = t.getRequestURI()
+                .getPath();
+
+            if (path.equals("/favicon.ico")) {
                 t.getResponseHeaders()
-                    .add("WWW-Authenticate", "Basic realm=\"AE2 Panel, please login\"");
-                t.sendResponseHeaders(401, -1);
+                    .set("Content-Type", "image/x-icon");
+                try (InputStream is = AE2Controller.class.getResourceAsStream("/assets/favicon.ico")) {
+                    if (is == null) return;
+
+                    byte[] raw_response = IOUtils.toByteArray(is);
+                    is.read(raw_response);
+                    t.sendResponseHeaders(200, raw_response.length);
+                    OutputStream os = t.getResponseBody();
+                    os.write(raw_response);
+                    os.close();
+                }
                 return;
             }
 
             // only accept index file
-            String path = t.getRequestURI()
-                .getPath();
             if (!path.equals("/") && !path.isEmpty()
                 && !path.equals("/index.php")
                 && !path.equals("/index.html")
@@ -274,22 +401,6 @@ public class AE2Controller {
                 && !path.equals("/index.asp")
                 && !path.equals("/index.aspx")
                 && !path.equals("/index.jsp")) {
-
-                if (path.equals("/favicon.ico")) {
-                    t.getResponseHeaders()
-                        .set("Content-Type", "image/x-icon");
-                    try (InputStream is = AE2Controller.class.getResourceAsStream("/assets/favicon.ico")) {
-                        if (is == null) return;
-
-                        byte[] raw_response = IOUtils.toByteArray(is);
-                        is.read(raw_response);
-                        t.sendResponseHeaders(200, raw_response.length);
-                        OutputStream os = t.getResponseBody();
-                        os.write(raw_response);
-                        os.close();
-                    }
-                    return;
-                }
 
                 String response = "<h1>Invalid url! (ERROR 404)</h1>";
                 byte[] raw_response = response.getBytes();
@@ -300,8 +411,14 @@ public class AE2Controller {
                 return;
             }
 
+            String site = "/assets/webpage.html";
+
+            if (!checkAuth(t)) {
+                site = "/assets/login.html";
+            }
+
             String response;
-            try (InputStream is = AE2Controller.class.getResourceAsStream("/assets/webpage.html")) {
+            try (InputStream is = AE2Controller.class.getResourceAsStream(site)) {
                 if (is == null) return;
                 try (InputStreamReader isr = new InputStreamReader(is);
                     BufferedReader reader = new BufferedReader(isr)) {
