@@ -5,8 +5,8 @@ import com.kuba6000.ae2webintegration.core.interfaces.IItemList;
 
 public interface IAEStorageGrid {
 
-    IItemList getItemStorageList();
+    IItemList web$getItemStorageList();
 
-    IAEMeInventoryItem getItemInventory();
+    IAEMeInventoryItem web$getItemInventory();
 
 }

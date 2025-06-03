@@ -28,31 +28,31 @@ public class Order extends ISyncedRequest {
         int hash = Integer.parseInt(getParams.get("item"));
         int quantity = Integer.parseInt(getParams.get("quantity"));
         this.item = hashcodeToAEItemStack.get(hash);
-        if (this.item == null || !this.item.isCraftable()) {
+        if (this.item == null || !this.item.web$isCraftable()) {
             deny("ITEM_NOT_FOUND");
             return false;
         }
-        this.item = this.item.copy();
-        this.item.setStackSize(quantity);
+        this.item = this.item.web$copy();
+        this.item.web$setStackSize(quantity);
         return true;
     }
 
     @Override
     public void handle(IAEGrid grid) {
-        IAECraftingGrid craftingGrid = grid.getCraftingGrid();
+        IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
         boolean allBusy = true;
-        for (ICraftingCPUCluster cpu : craftingGrid.getCPUs()) {
-            if (!cpu.isBusy()) {
+        for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
+            if (!cpu.web$isBusy()) {
                 allBusy = false;
                 break;
             }
         }
         if (!allBusy) {
-            IAEStorageGrid storageGrid = grid.getStorageGrid();
-            final IItemList itemList = storageGrid.getItemStorageList();
-            IItemStack realItem = itemList.findPrecise(this.item);
-            if (realItem != null && realItem.isCraftable()) {
-                Future<IAECraftingJob> job = craftingGrid.beginCraftingJob(grid, this.item);
+            IAEStorageGrid storageGrid = grid.web$getStorageGrid();
+            final IItemList itemList = storageGrid.web$getItemStorageList();
+            IItemStack realItem = itemList.web$findPrecise(this.item);
+            if (realItem != null && realItem.web$isCraftable()) {
+                Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, this.item);
 
                 int jobID = AE2Controller.getNextJobID();
                 AE2Controller.jobs.put(jobID, job);

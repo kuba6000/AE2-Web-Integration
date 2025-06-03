@@ -2,10 +2,10 @@ package com.kuba6000.ae2webintegration.core.interfaces;
 
 public interface IAECraftingJob {
 
-    boolean isSimulation();
+    boolean web$isSimulation();
 
-    long getByteTotal();
+    long web$getByteTotal();
 
-    void populatePlan(IItemList plan);
+    void web$populatePlan(IItemList plan);
 
 }

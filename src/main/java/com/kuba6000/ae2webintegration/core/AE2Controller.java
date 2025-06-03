@@ -319,12 +319,16 @@ public class AE2Controller {
 
     }
 
+    private static void setActiveGrid(IAEGrid grid) {
+        activeGrid = grid;
+    }
+
     public static boolean tryValidateOrVerify(IAEGrid testGrid, IAECraftingGrid craftingGrid) {
-        if (isValid()) return activeGrid.internalObjectEquals(testGrid);
+        if (isValid()) return activeGrid == testGrid;
         else {
-            if (craftingGrid == null) craftingGrid = testGrid.getCraftingGrid();
-            if (craftingGrid.getCPUCount() >= Config.AE_CPUS_THRESHOLD) {
-                activeGrid = testGrid;
+            if (craftingGrid == null) craftingGrid = testGrid.web$getCraftingGrid();
+            if (craftingGrid.web$getCPUCount() >= Config.AE_CPUS_THRESHOLD) {
+                setActiveGrid(testGrid);
                 return true;
             }
         }
@@ -332,14 +336,14 @@ public class AE2Controller {
     }
 
     public static boolean tryValidate() {
-        for (IAEGrid grid : AE2Interface.getGrids()) {
-            IAEPathingGrid pathingGrid = grid.getPathingGrid();
-            if (pathingGrid != null && !pathingGrid.isNetworkBooting()
-                && pathingGrid.getControllerState() == AEControllerState.CONTROLLER_ONLINE) {
-                IAECraftingGrid craftingGrid = grid.getCraftingGrid();
+        for (IAEGrid grid : AE2Interface.web$getGrids()) {
+            IAEPathingGrid pathingGrid = grid.web$getPathingGrid();
+            if (pathingGrid != null && !pathingGrid.web$isNetworkBooting()
+                && pathingGrid.web$getControllerState() == AEControllerState.CONTROLLER_ONLINE) {
+                IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
                 if (craftingGrid != null) {
-                    if ((long) craftingGrid.getCPUCount() >= Config.AE_CPUS_THRESHOLD) {
-                        AE2Controller.activeGrid = grid;
+                    if ((long) craftingGrid.web$getCPUCount() >= Config.AE_CPUS_THRESHOLD) {
+                        setActiveGrid(grid);
                         return true;
                     }
                 }
@@ -350,15 +354,14 @@ public class AE2Controller {
 
     public static boolean isValid() {
         if (activeGrid == null) return false;
-        if (!activeGrid.isValid()) return false;
-        if (activeGrid.isEmpty()) {
-            activeGrid = null;
+        if (activeGrid.web$isEmpty()) {
+            setActiveGrid(null);
             return false;
         }
-        IAEPathingGrid pathingGrid = activeGrid.getPathingGrid();
-        if (pathingGrid == null || pathingGrid.isNetworkBooting()
-            || pathingGrid.getControllerState() != AEControllerState.CONTROLLER_ONLINE) {
-            activeGrid = null;
+        IAEPathingGrid pathingGrid = activeGrid.web$getPathingGrid();
+        if (pathingGrid == null || pathingGrid.web$isNetworkBooting()
+            || pathingGrid.web$getControllerState() != AEControllerState.CONTROLLER_ONLINE) {
+            setActiveGrid(null);
             return false;
         }
         return true;

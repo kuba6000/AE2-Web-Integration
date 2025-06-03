@@ -42,9 +42,18 @@ public class MixinPlugin implements IMixinConfigPlugin {
         List<String> mixins = new ArrayList<>(
             Arrays.asList(
                 "AE2.CraftingGridCacheMixin",
-                "AE2.CraftingLinkAccessor",
                 "AE2.CraftingCPUClusterMixin",
-                "AE2.CraftingCPUClusterAccessor"));
+                "AE2.implementations.AEItemStackMixin",
+                "AE2.implementations.AEItemListMixin",
+                "AE2.implementations.AECraftingCPUClusterMixin",
+                "AE2.implementations.AECraftingJobMixin",
+                "AE2.implementations.AECraftingPatternDetailsMixin",
+                "AE2.implementations.AEGridMixin",
+                "AE2.implementations.AEMeInventoryItemMixin",
+                "AE2.implementations.PatternProviderViewableMixin",
+                "AE2.implementations.service.AECraftingGridMixin",
+                "AE2.implementations.service.AEPathingGridMixin",
+                "AE2.implementations.service.AEStorageGridMixin"));
 
         LOG.info("MIXING INTO AE2 LETS GOOOOOOOOOOOOOOOOOOOOOOOOO");
 

@@ -63,8 +63,8 @@ public class JSON_CompactedJobTrackingInfo {
             IItemStack stack = entry.getKey();
             long spent = entry.getValue();
             CompactedTrackingGSONItem item = new CompactedTrackingGSONItem();
-            item.itemid = stack.getItemID();
-            item.itemname = stack.getDisplayName();
+            item.itemid = stack.web$getItemID();
+            item.itemname = stack.web$getDisplayName();
             item.timeSpentOn = spent;
             item.craftedTotal = info.craftedTotal.get(stack);
             item.shareInCraftingTime = info.getShareInCraftingTime(stack);

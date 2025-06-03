@@ -12,11 +12,11 @@ import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 
 public interface IAECraftingGrid {
 
-    int getCPUCount();
+    int web$getCPUCount();
 
-    Set<ICraftingCPUCluster> getCPUs();
+    Set<ICraftingCPUCluster> web$getCPUs();
 
-    Future<IAECraftingJob> beginCraftingJob(IAEGrid grid, IItemStack stack);
+    Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IItemStack stack);
 
-    IChatComponent submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower, IAEGrid grid);
+    IChatComponent web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower, IAEGrid grid);
 }
