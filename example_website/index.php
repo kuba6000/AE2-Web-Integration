@@ -1,13 +1,45 @@
 <?php
     // AE2 Server endpoint (http://host:port/)
     $AE2_SERVER_HOST = "http://my.minecraftserver.com:2324/"; // slash at the end is important
-    // AE2 Server password (MUST BE THE SAME AS ON THE SERVER)
-    $AE2_SERVER_PASSWORD = "";
 
-    // basic authoarization (the same authoarization as on the ae server)
-    if (!isset($_SERVER['PHP_AUTH_USER']) || $_SERVER['PHP_AUTH_PW'] != $AE2_SERVER_PASSWORD) {
-        header('WWW-Authenticate: Basic realm="AE2 Panel, please login"');
-        header('HTTP/1.0 401 Unauthorized');
+    // Authentication
+    if (!isset($_COOKIE['authenticationToken'])) {
+
+        if (isset($_POST['password'])){
+            $password = $_POST['password'];
+            $remember = isset($_POST['remember']) && $_POST['remember'] == 'on';
+            $ch = curl_init($AE2_SERVER_HOST . 'auth');
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml'));
+            curl_setopt($ch, CURLOPT_HEADER, FALSE);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($_POST));
+            $return = curl_exec($ch);
+            $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpcode == 200){
+                setcookie("authenticationToken", $return, $remember ? (time() + (604800)) : (time() + (3600)), "", "", false, true);
+                header("Location: .");
+                exit;
+            }
+        }
+
+
+        readfile('login.html');
+        exit;
+    }
+    if (isset($_GET['logout'])) {
+        $ch = curl_init($AE2_SERVER_HOST . 'auth?revoke');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml', 'Authorization: Bearer ' . $_COOKIE['authenticationToken']));
+        curl_setopt($ch, CURLOPT_HEADER, FALSE);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+        $return = curl_exec($ch);
+        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        setcookie("authenticationToken", "", time() - 3600, "", "", false, true);
+        header("Location: .");
         exit;
     }
 
@@ -18,13 +50,19 @@
         $params = $_GET;
 
         $ch = curl_init($AE2_SERVER_HOST . $api_path . '?' . http_build_query($params));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml'));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml', 'Authorization: Bearer ' . $_COOKIE['authenticationToken']));
         curl_setopt($ch, CURLOPT_HEADER, FALSE);
-        curl_setopt($ch, CURLOPT_USERPWD, 'a:' . $AE2_SERVER_PASSWORD); // authoarization is required on every request
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
         $return = curl_exec($ch);
+        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        if ($httpcode == 401) {
+            setcookie("authenticationToken", "", time() - 3600, "", "", false, true);
+            header("Location: .");
+            exit;
+        }
 
         print($return);
 
@@ -128,6 +166,8 @@
                 <input type="checkbox" name="showitemicon" id="showitemicon" onchange="changeShowItemIcon(this);" disabled title="Work in progress"> <label for="showitemicon" title="Work in progress">Show item icons [work in progress]</label>
                 <br>
                 <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
+                <br>
+                <button onclick="document.location.href='?logout'">LogOut</button>
             </section>
         </section>
     </section>
