@@ -507,7 +507,7 @@
                 <span id="terminalCPUHeaderText"></span>
                 <button onclick='closeCraftingStatus();'>Terminal</button>
                 <button onclick='refreshTerminal();'>Refresh</button>
-                <button onclick='cancelJobOnCPU(selectedCPU);' class='redtext'>Cancel</button>
+                <button onclick='cancelJobOnCPU(selectedCPU);' class='redtext' id='cancelJobOnCPUButton'>Cancel</button>
             </section>
             <section id='terminalJobHeader' style='display: none;'>
                 <span id="terminalJobHeaderText"></span>
@@ -541,7 +541,7 @@
                 <br>
                 <input type="checkbox" name="showitemid" id="showitemid" onchange="changeShowItemID(this);"> <label for="showitemid">Show item id</label>
                 <br>
-                <input type="checkbox" name="showitemicon" id="showitemicon" onchange="changeShowItemIcon(this);"  disabled title="Work in progress"> <label for="showitemicon" title="Work in progress">Show item icons [work in progress]</label>
+                <input type="checkbox" name="showitemicon" id="showitemicon" onchange="changeShowItemIcon(this);" disabled title="Work in progress"> <label for="showitemicon" title="Work in progress">Show item icons [work in progress]</label>
                 <br>
                 <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
             </section>
@@ -550,7 +550,7 @@
 </section>
 
 <script>
-    const isOutdated = _REPLACE_ME_VERSION_OUTDATED;
+    const isOutdated = false;//_REPLACE_ME_VERSION_OUTDATED; <?php // TODO: NO IMPLEMENTATION ?>
     globalItemList = {};
     globalCPUList = {};
     currentWindow = 0; // 0 - main, 1 - CPU, 2 - Order screen, 3 - History window
@@ -905,37 +905,40 @@
             else
                 document.getElementById("terminalCPUHeaderText").innerHTML = selectedCPU + ": Idle";
             let hasTrackingInfo = data['hasTrackingInfo'];
-            html += "<table><tr>";
-            let grid_i_max = settings.itemsPerRow;
-            let grid_i = 0;
-            if (data['items']){
-                let items = data['items'];
-                for(let i = 0; i < items.length; i++){
-                    let item = items[i];
-                    let el = '';
-                    if(item['active'] > 0)
-                        el = 'active';
-                    else if(item['pending'] > 0)
-                        el = 'pending';
-                    else
-                        el = 'storage';
-                    html += "<td class='" + el + "'>" + formatItemName(item) + "<br>Crafting: " + formatNumber(item['active']) + "<br>Scheduled: " + formatNumber(item['pending']) + "<br>Stored: " + formatNumber(item['stored']);
-                    if (hasTrackingInfo && item['timeSpentCrafting']){
-                        html += "<br>Time: " + formatTime(item['timeSpentCrafting']) + " (" + formatPercent(item['shareInCraftingTimeCombined']) + ")";
-                        html += "<br>Crafted total: " + formatNumber(item['craftedTotal']) + " (" + formatNumber(item['craftsPerSec']) + "/s)";
-                    }
-                    html += "</td>";
-                    grid_i++;
-                    if(grid_i == grid_i_max){
-                        html += "</tr><tr>";
-                        grid_i = 0;
+            if (data['items'] && data['items'].length > 0) {
+                document.getElementById("cancelJobOnCPUButton").style.display = 'block';
+                html += "<table><tr>";
+                let grid_i_max = settings.itemsPerRow;
+                let grid_i = 0;
+                if (data['items']){
+                    let items = data['items'];
+                    for(let i = 0; i < items.length; i++){
+                        let item = items[i];
+                        let el = '';
+                        if(item['active'] > 0)
+                            el = 'active';
+                        else if(item['pending'] > 0)
+                            el = 'pending';
+                        else
+                            el = 'storage';
+                        html += "<td class='" + el + "'>" + formatItemName(item) + "<br>Crafting: " + formatNumber(item['active']) + "<br>Scheduled: " + formatNumber(item['pending']) + "<br>Stored: " + formatNumber(item['stored']);
+                        if (hasTrackingInfo && item['timeSpentCrafting']){
+                            html += "<br>Time: " + formatTime(item['timeSpentCrafting']) + " (" + formatPercent(item['shareInCraftingTimeCombined']) + ")";
+                            html += "<br>Crafted total: " + formatNumber(item['craftedTotal']) + " (" + formatNumber(item['craftsPerSec']) + "/s)";
+                        }
+                        html += "</td>";
+                        grid_i++;
+                        if(grid_i == grid_i_max){
+                            html += "</tr><tr>";
+                            grid_i = 0;
+                        }
                     }
                 }
+                html += "</tr></table>";
             }
-            for(; grid_i < grid_i_max; grid_i ++){
-                html += "<td></td>";
+            else {
+                document.getElementById("cancelJobOnCPUButton").style.display = 'none';
             }
-            html += "</tr></table>";
             document.getElementById("terminalcontent").innerHTML = html;
             popLoadingScreen(message);
         });
@@ -1057,9 +1060,6 @@
                 html += "</tr><tr>";
                 grid_i = 0;
             }
-        }
-        for(; grid_i < grid_i_max; grid_i ++){
-            html += "<td></td>";
         }
         html += "</tr></table>";
         document.getElementById("terminalcontent").innerHTML = html;
@@ -1321,9 +1321,6 @@
                     grid_i = 0;
                 }
             }
-            for(; grid_i < grid_i_max; grid_i ++){
-                html += "<td></td>";
-            }
             html += "</tr></table>";
             document.getElementById("terminalcontent").innerHTML = html;
 
@@ -1434,9 +1431,6 @@
                             html += "</tr><tr>";
                             grid_i = 0;
                         }
-                    }
-                    for(; grid_i < grid_i_max; grid_i ++){
-                        html += "<td></td>";
                     }
                     html += "</tr></table>";
                 }
