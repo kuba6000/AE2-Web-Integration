@@ -124,13 +124,17 @@
                 <label for="numberformat"> Number format</label>
                 <br>
                 <input type="checkbox" name="showitemid" id="showitemid" onchange="changeShowItemID(this);"> <label for="showitemid">Show item id</label>
+                <br>
+                <input type="checkbox" name="showitemicon" id="showitemicon" onchange="changeShowItemIcon(this);" disabled title="Work in progress"> <label for="showitemicon" title="Work in progress">Show item icons [work in progress]</label>
+                <br>
+                <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
             </section>
         </section>
     </section>
 </section>
 
 <script>
-    const isOutdated = _REPLACE_ME_VERSION_OUTDATED;
+    const isOutdated = false;//_REPLACE_ME_VERSION_OUTDATED; <?php // TODO: NO IMPLEMENTATION ?>
     globalItemList = {};
     globalCPUList = {};
     currentWindow = 0; // 0 - main, 1 - CPU, 2 - Order screen, 3 - History window
@@ -149,6 +153,7 @@
         itemsPerRow: 5,
         numberFormat: 0,
         showItemID: false,
+        showItemIcon: false
     }
     const screens = [
         ["terminalOptions", "terminalTerminalHeader"],
@@ -261,6 +266,11 @@
         setCookie("showItemID", settings.showItemID ? 1 : 0, 7);
         refreshDisplay();
     }
+    function changeShowItemIcon(el){
+        settings.showItemIcon = el.checked;
+        setCookie("showItemIcon", settings.showItemIcon ? 1 : 0, 7);
+        refreshDisplay();
+    }
     function refreshTerminal() {
         if (currentWindow == 0)
             getItemList();
@@ -320,6 +330,9 @@
         cookie = getCookie("showItemID");
         if (cookie != "")
             settings.showItemID = Number(cookie) == 1;
+            cookie = getCookie("showItemIcon");
+        if (cookie != "")
+            settings.showItemIcon = Number(cookie) == 1;
         document.getElementById('sortByButton').innerHTML = sortByDisplay[sortingOptions.sortBy];
         document.getElementById('storedCraftableButton').innerHTML = storedCraftableDisplay[filteringOptions.storedCraftable];
         document.getElementById('itemsFluidsButton').innerHTML = itemsTypeDisplay[filteringOptions.itemsType];
@@ -328,6 +341,7 @@
         document.getElementById('itemsperrow').value = settings.itemsPerRow;
         document.getElementById('numberformat').value = settings.numberFormat;
         document.getElementById('showitemid').checked = settings.showItemID;
+        document.getElementById('showitemicon').checked = settings.showItemIcon;
     }
     initSettings();
     function formatBytes(bytes) {
@@ -434,7 +448,7 @@
         return skippedItemName;
     }
     function formatItemName(itemObject, allowNewLines=true) {
-        let itemName = itemObject['itemname'];
+        let itemName = '<b>' + itemObject['itemname'] + '</b>';
         if (itemName.indexOf('§') != -1){
             itemName = parseSpecialFormat(itemName);
         }
@@ -462,7 +476,7 @@
         pushLoadingScreen(message);
         $.getJSON('get?cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             console.log(data);
-            if(data.status !== "OK"){
+            if (data.status !== "OK"){
                 alert(data.status + ": " + data.data);
                 popLoadingScreen(message);
                 return;
@@ -597,17 +611,31 @@
         setCurrentScreen(3);
         getCraftingHistory();
     }
-    function displayItemList(){
+    function displayItemList(shouldFetchIcons = false){
         let html = "<table>";
         let grid_i_max = settings.itemsPerRow;
         let grid_i = 0;
         html += "<tr>";
         let items = globalItemList;
+        let itemsNoIcon = [];
         for(let i = 0; i < items.length; i++){
             let item = items[i];
             if (!shouldDisplay(item))
                 continue;
-            html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+            let imgSrc = getIcon(item);
+            if (imgSrc === null){
+                itemsNoIcon.push(item);
+                imgSrc = '';
+            }
+            else {
+                imgSrc = "data:image/png;base64," + imgSrc;
+            }
+            if (settings.showItemIcon){
+                html += "<td class='storage'>" + formatItemName(item) + "<img src='" + imgSrc + "' /><br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+            }
+            else {
+                html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+            }
             grid_i++;
             if(grid_i == grid_i_max){
                 html += "</tr><tr>";
@@ -619,6 +647,8 @@
         }
         html += "</tr></table>";
         document.getElementById("terminalcontent").innerHTML = html;
+        if (settings.showItemIcon && shouldFetchIcons && itemsNoIcon.length > 0)
+            fetchIcons(itemsNoIcon);
     }
     function getItemList(){
         let message = "Asking for item list...";
@@ -633,7 +663,7 @@
             data = data.data;
             globalItemList = data;
             sortItemList();
-            displayItemList();
+            displayItemList(true);
             popLoadingScreen(message);
         });
     }
@@ -687,15 +717,15 @@
                 {
                     let timing = timings[j];
                     if (dataSet.length <= j) {
-                        dataSet.push({backgroundColor: "gainsboro", data: {}});
+                        dataSet.push({backgroundColor: "#3b4874", data: {}});
                     }
                     dataSet[j].data[AEInterface['name']] = [timing['started'], timing['ended'], AEInterface['location']];
                 }
             }
 
             Chart.defaults.backgroundColor = '#9BD0F5';
-            Chart.defaults.borderColor = '#000';
-            Chart.defaults.color = '#000';
+            Chart.defaults.borderColor = '#EEE';
+            Chart.defaults.color = '#EEE';
 
             new Chart("interfaceShareChart", {
                 type: "bar",
@@ -771,15 +801,15 @@
                 {
                     let timing = timings[j];
                     if (dataSet.length <= j) {
-                        dataSet.push({backgroundColor: "gainsboro", data: []});
+                        dataSet.push({backgroundColor: "#3b4874", data: []});
                     }
                     dataSet[j].data.push([timing['started'], timing['ended']]);
                 }
             }
 
             Chart.defaults.backgroundColor = '#9BD0F5';
-            Chart.defaults.borderColor = '#000';
-            Chart.defaults.color = '#000';
+            Chart.defaults.borderColor = '#EEE';
+            Chart.defaults.color = '#EEE';
 
             new Chart("itemShareChart", {
                 type: "bar",
@@ -1042,6 +1072,33 @@
             updateCPUList();
             refreshTerminal();
             popLoadingScreen(message);
+        });
+    }
+
+    function getIcon(item) {
+        let data = localStorage.getItem("itemIcon" + item['hashcode']);
+        if (data === null)
+            return null;
+        return data;
+    }
+
+    function fetchIcons(items) {
+        let par = '';
+        for(let i = 0; i < items.length; i++){
+            par += items[i]['hashcode'] + ',';
+        }
+        $.getJSON('icon?items=' + par, function(data){
+            if (data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                return;
+            }
+            data = data.data;
+            console.log(data);
+            let items = data;
+            for(let i = 0; i < items.length; i++){
+                localStorage.setItem("itemIcon" + items[i]['hashcode'], items[i]['pngData']);
+            }
+            refreshDisplay();
         });
     }
 

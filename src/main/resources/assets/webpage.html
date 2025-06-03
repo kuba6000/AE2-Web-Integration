@@ -11,33 +11,52 @@
             font-family: "Montserrat", sans-serif;
             font-optical-sizing: auto;
             font-style: normal;
+            color: #e0e0e0;
+            font-weight: 400;
+        }
+        b{
+            font-weight: 500;
         }
         body{
-            background-color: #727272;
+            background-color: #101219;
+            color: #e0e0e0;
         }
         html,body{
             height: 100%;
             width: 100%;
         }
-
         td{
             padding: 10px;
             word-wrap: break-word;
+            border: 3px #232e53 solid;
+            border-radius: 1px;
         }
         td.active{
-            background-color: greenyellow;
+            background-color: rgb(73, 105, 20);
+            border-color: rgb(53, 77, 14);
         }
         td.pending{
-            background-color: yellow;
+            background-color: rgb(92, 92, 15);
+            border-color: rgb(71, 71, 11);
         }
         td.storage{
-            background-color: gainsboro;
+            background-color: #2b3555;
         }
         td.missing{
-            background-color: darkred;
+            background-color: rgb(112, 0, 0);
+            border-color: rgb(85, 0, 0);
+        }
+        td img{
+            float: right;
+            width: 32px;
+            height: 32px;
         }
         body>h1{
             text-align: center;
+            letter-spacing: 10px;
+            font-weight: 800;
+            color: #fff;
+            font-size: 2.5em;
         }
 
         #terminalcontainer{
@@ -50,14 +69,14 @@
         }
 
         button{
-            background-color: #9e9e9e;
+            background-color: #292f47;
             border: 0;
-            border-radius: 2px;
+            border-radius: 5px;
             padding: 5px;
             transition: 0.2s;
         }
         button:hover{
-            background-color: #858585;
+            background-color: #363e5e;
             cursor: pointer;
         }
 
@@ -92,16 +111,23 @@
             display: flex;
             flex-direction: column;
         }
+        input, select {
+            background-color: #2b3555;
+            accent-color: #9b59b6;
+            border: 0;
+            padding: 5px;
+            border-radius: 5px;
+        }
         #terminalheader input{
             font-size: 100%;
-            background-color: #9e9e9e;
+            background-color: #2b3555;
             border: 0;
-            border-radius: 2px;
+            border-radius: 5px;
             transition: 0.2s;
             padding: 5px;
         }
         #terminalheader input:hover{
-            background-color: #858585;
+            background-color: #384572;
         }
         #terminalheader button{
             font-size: 110%;
@@ -120,14 +146,14 @@
             height: auto;
         }
         #terminalcontent td.button{
-            background-color: #9e9e9e;
+            background-color: #2b3555;
             border: 0;
             border-radius: 2px;
             padding: 5px;
             transition: 0.2s;
         }
         #terminalcontent td.button:hover{
-            background-color: #858585;
+            background-color: #3b4874;
             cursor: pointer;
         }
         #terminalsubcontainer{
@@ -194,7 +220,7 @@
             left: 50%;
             font-size: 50px;
             font-weight: 900;
-            color: white;
+            color: #e0e0e0;
             transform: translate(-50%,-50%);
             -ms-transform: translate(-50%,-50%);
         }
@@ -231,6 +257,16 @@
 
         footer:hover{
             background-color: #929292;
+        }
+
+        a{
+            color: #80cbc4;
+            transition: 0.2s;
+        }
+
+        a:hover{
+            color: #a7ffeb;
+            text-decoration: underline;
         }
 
         .minecraftSpecialFormat_0{
@@ -324,7 +360,7 @@
         .collapsible:after {
             content: '\02795';
             font-size: 13px;
-            color: white;
+            color: #e0e0e0;
             margin-left: 5px;
         }
 
@@ -504,6 +540,10 @@
                 <label for="numberformat"> Number format</label>
                 <br>
                 <input type="checkbox" name="showitemid" id="showitemid" onchange="changeShowItemID(this);"> <label for="showitemid">Show item id</label>
+                <br>
+                <input type="checkbox" name="showitemicon" id="showitemicon" onchange="changeShowItemIcon(this);"  disabled title="Work in progress"> <label for="showitemicon" title="Work in progress">Show item icons [work in progress]</label>
+                <br>
+                <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
             </section>
         </section>
     </section>
@@ -529,6 +569,7 @@
         itemsPerRow: 5,
         numberFormat: 0,
         showItemID: false,
+        showItemIcon: false
     }
     const screens = [
         ["terminalOptions", "terminalTerminalHeader"],
@@ -641,6 +682,11 @@
         setCookie("showItemID", settings.showItemID ? 1 : 0, 7);
         refreshDisplay();
     }
+    function changeShowItemIcon(el){
+        settings.showItemIcon = el.checked;
+        setCookie("showItemIcon", settings.showItemIcon ? 1 : 0, 7);
+        refreshDisplay();
+    }
     function refreshTerminal() {
         if (currentWindow == 0)
             getItemList();
@@ -700,6 +746,9 @@
         cookie = getCookie("showItemID");
         if (cookie != "")
             settings.showItemID = Number(cookie) == 1;
+            cookie = getCookie("showItemIcon");
+        if (cookie != "")
+            settings.showItemIcon = Number(cookie) == 1;
         document.getElementById('sortByButton').innerHTML = sortByDisplay[sortingOptions.sortBy];
         document.getElementById('storedCraftableButton').innerHTML = storedCraftableDisplay[filteringOptions.storedCraftable];
         document.getElementById('itemsFluidsButton').innerHTML = itemsTypeDisplay[filteringOptions.itemsType];
@@ -708,6 +757,7 @@
         document.getElementById('itemsperrow').value = settings.itemsPerRow;
         document.getElementById('numberformat').value = settings.numberFormat;
         document.getElementById('showitemid').checked = settings.showItemID;
+        document.getElementById('showitemicon').checked = settings.showItemIcon;
     }
     initSettings();
     function formatBytes(bytes) {
@@ -814,7 +864,7 @@
         return skippedItemName;
     }
     function formatItemName(itemObject, allowNewLines=true) {
-        let itemName = itemObject['itemname'];
+        let itemName = '<b>' + itemObject['itemname'] + '</b>';
         if (itemName.indexOf('§') != -1){
             itemName = parseSpecialFormat(itemName);
         }
@@ -842,7 +892,7 @@
         pushLoadingScreen(message);
         $.getJSON('get?cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             console.log(data);
-            if(data.status !== "OK"){
+            if (data.status !== "OK"){
                 alert(data.status + ": " + data.data);
                 popLoadingScreen(message);
                 return;
@@ -977,17 +1027,31 @@
         setCurrentScreen(3);
         getCraftingHistory();
     }
-    function displayItemList(){
+    function displayItemList(shouldFetchIcons = false){
         let html = "<table>";
         let grid_i_max = settings.itemsPerRow;
         let grid_i = 0;
         html += "<tr>";
         let items = globalItemList;
+        let itemsNoIcon = [];
         for(let i = 0; i < items.length; i++){
             let item = items[i];
             if (!shouldDisplay(item))
                 continue;
-            html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+            let imgSrc = getIcon(item);
+            if (imgSrc === null){
+                itemsNoIcon.push(item);
+                imgSrc = '';
+            }
+            else {
+                imgSrc = "data:image/png;base64," + imgSrc;
+            }
+            if (settings.showItemIcon){
+                html += "<td class='storage'>" + formatItemName(item) + "<img src='" + imgSrc + "' /><br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+            }
+            else {
+                html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+            }
             grid_i++;
             if(grid_i == grid_i_max){
                 html += "</tr><tr>";
@@ -999,6 +1063,8 @@
         }
         html += "</tr></table>";
         document.getElementById("terminalcontent").innerHTML = html;
+        if (settings.showItemIcon && shouldFetchIcons && itemsNoIcon.length > 0)
+            fetchIcons(itemsNoIcon);
     }
     function getItemList(){
         let message = "Asking for item list...";
@@ -1013,7 +1079,7 @@
             data = data.data;
             globalItemList = data;
             sortItemList();
-            displayItemList();
+            displayItemList(true);
             popLoadingScreen(message);
         });
     }
@@ -1067,15 +1133,15 @@
                 {
                     let timing = timings[j];
                     if (dataSet.length <= j) {
-                        dataSet.push({backgroundColor: "gainsboro", data: {}});
+                        dataSet.push({backgroundColor: "#3b4874", data: {}});
                     }
                     dataSet[j].data[AEInterface['name']] = [timing['started'], timing['ended'], AEInterface['location']];
                 }
             }
 
             Chart.defaults.backgroundColor = '#9BD0F5';
-            Chart.defaults.borderColor = '#000';
-            Chart.defaults.color = '#000';
+            Chart.defaults.borderColor = '#EEE';
+            Chart.defaults.color = '#EEE';
 
             new Chart("interfaceShareChart", {
                 type: "bar",
@@ -1151,15 +1217,15 @@
                 {
                     let timing = timings[j];
                     if (dataSet.length <= j) {
-                        dataSet.push({backgroundColor: "gainsboro", data: []});
+                        dataSet.push({backgroundColor: "#3b4874", data: []});
                     }
                     dataSet[j].data.push([timing['started'], timing['ended']]);
                 }
             }
 
             Chart.defaults.backgroundColor = '#9BD0F5';
-            Chart.defaults.borderColor = '#000';
-            Chart.defaults.color = '#000';
+            Chart.defaults.borderColor = '#EEE';
+            Chart.defaults.color = '#EEE';
 
             new Chart("itemShareChart", {
                 type: "bar",
@@ -1422,6 +1488,33 @@
             updateCPUList();
             refreshTerminal();
             popLoadingScreen(message);
+        });
+    }
+
+    function getIcon(item) {
+        let data = localStorage.getItem("itemIcon" + item['hashcode']);
+        if (data === null)
+            return null;
+        return data;
+    }
+
+    function fetchIcons(items) {
+        let par = '';
+        for(let i = 0; i < items.length; i++){
+            par += items[i]['hashcode'] + ',';
+        }
+        $.getJSON('icon?items=' + par, function(data){
+            if (data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                return;
+            }
+            data = data.data;
+            console.log(data);
+            let items = data;
+            for(let i = 0; i < items.length; i++){
+                localStorage.setItem("itemIcon" + items[i]['hashcode'], items[i]['pngData']);
+            }
+            refreshDisplay();
         });
     }
 
