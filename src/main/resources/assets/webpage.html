@@ -528,7 +528,7 @@
                 <br>
                 <input type="checkbox" name="showitemid" id="showitemid" onchange="changeShowItemID(this);"> <label for="showitemid">Show item id</label>
                 <br>
-                <input type="checkbox" name="showitemicon" id="showitemicon" onchange="changeShowItemIcon(this);"> <label for="showitemicon">Show item icons</label>
+                <input type="checkbox" name="showitemicon" id="showitemicon" onchange="changeShowItemIcon(this);"  disabled title="Work in progress"> <label for="showitemicon" title="Work in progress">Show item icons [work in progress]</label>
                 <br>
                 <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
             </section>
@@ -1120,15 +1120,15 @@
                 {
                     let timing = timings[j];
                     if (dataSet.length <= j) {
-                        dataSet.push({backgroundColor: "gainsboro", data: {}});
+                        dataSet.push({backgroundColor: "#3b4874", data: {}});
                     }
                     dataSet[j].data[AEInterface['name']] = [timing['started'], timing['ended'], AEInterface['location']];
                 }
             }
 
             Chart.defaults.backgroundColor = '#9BD0F5';
-            Chart.defaults.borderColor = '#000';
-            Chart.defaults.color = '#000';
+            Chart.defaults.borderColor = '#EEE';
+            Chart.defaults.color = '#EEE';
 
             new Chart("interfaceShareChart", {
                 type: "bar",
@@ -1204,15 +1204,15 @@
                 {
                     let timing = timings[j];
                     if (dataSet.length <= j) {
-                        dataSet.push({backgroundColor: "gainsboro", data: []});
+                        dataSet.push({backgroundColor: "#3b4874", data: []});
                     }
                     dataSet[j].data.push([timing['started'], timing['ended']]);
                 }
             }
 
             Chart.defaults.backgroundColor = '#9BD0F5';
-            Chart.defaults.borderColor = '#000';
-            Chart.defaults.color = '#000';
+            Chart.defaults.borderColor = '#EEE';
+            Chart.defaults.color = '#EEE';
 
             new Chart("itemShareChart", {
                 type: "bar",
