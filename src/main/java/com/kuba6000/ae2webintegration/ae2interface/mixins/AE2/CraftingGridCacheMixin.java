@@ -16,7 +16,14 @@ import com.kuba6000.ae2webintegration.ae2interface.implementations.service.AECra
 import com.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 
 import appeng.api.networking.IGrid;
-import appeng.api.networking.crafting.*;
+import appeng.api.networking.crafting.ICraftingCPU;
+import appeng.api.networking.crafting.ICraftingJob;
+import appeng.api.networking.crafting.ICraftingLink;
+import appeng.api.networking.crafting.ICraftingMedium;
+import appeng.api.networking.crafting.ICraftingPatternDetails;
+import appeng.api.networking.crafting.ICraftingProvider;
+import appeng.api.networking.crafting.ICraftingProviderHelper;
+import appeng.api.networking.crafting.ICraftingRequester;
 import appeng.api.networking.security.IActionSource;
 import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
