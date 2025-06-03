@@ -91,7 +91,7 @@
                 <span id="terminalCPUHeaderText"></span>
                 <button onclick='closeCraftingStatus();'>Terminal</button>
                 <button onclick='refreshTerminal();'>Refresh</button>
-                <button onclick='cancelJobOnCPU(selectedCPU);' class='redtext'>Cancel</button>
+                <button onclick='cancelJobOnCPU(selectedCPU);' class='redtext' id='cancelJobOnCPUButton'>Cancel</button>
             </section>
             <section id='terminalJobHeader' style='display: none;'>
                 <span id="terminalJobHeaderText"></span>
@@ -489,37 +489,40 @@
             else
                 document.getElementById("terminalCPUHeaderText").innerHTML = selectedCPU + ": Idle";
             let hasTrackingInfo = data['hasTrackingInfo'];
-            html += "<table><tr>";
-            let grid_i_max = settings.itemsPerRow;
-            let grid_i = 0;
-            if (data['items']){
-                let items = data['items'];
-                for(let i = 0; i < items.length; i++){
-                    let item = items[i];
-                    let el = '';
-                    if(item['active'] > 0)
-                        el = 'active';
-                    else if(item['pending'] > 0)
-                        el = 'pending';
-                    else
-                        el = 'storage';
-                    html += "<td class='" + el + "'>" + formatItemName(item) + "<br>Crafting: " + formatNumber(item['active']) + "<br>Scheduled: " + formatNumber(item['pending']) + "<br>Stored: " + formatNumber(item['stored']);
-                    if (hasTrackingInfo && item['timeSpentCrafting']){
-                        html += "<br>Time: " + formatTime(item['timeSpentCrafting']) + " (" + formatPercent(item['shareInCraftingTimeCombined']) + ")";
-                        html += "<br>Crafted total: " + formatNumber(item['craftedTotal']) + " (" + formatNumber(item['craftsPerSec']) + "/s)";
-                    }
-                    html += "</td>";
-                    grid_i++;
-                    if(grid_i == grid_i_max){
-                        html += "</tr><tr>";
-                        grid_i = 0;
+            if (data['items'] && data['items'].length > 0) {
+                document.getElementById("cancelJobOnCPUButton").style.display = 'block';
+                html += "<table><tr>";
+                let grid_i_max = settings.itemsPerRow;
+                let grid_i = 0;
+                if (data['items']){
+                    let items = data['items'];
+                    for(let i = 0; i < items.length; i++){
+                        let item = items[i];
+                        let el = '';
+                        if(item['active'] > 0)
+                            el = 'active';
+                        else if(item['pending'] > 0)
+                            el = 'pending';
+                        else
+                            el = 'storage';
+                        html += "<td class='" + el + "'>" + formatItemName(item) + "<br>Crafting: " + formatNumber(item['active']) + "<br>Scheduled: " + formatNumber(item['pending']) + "<br>Stored: " + formatNumber(item['stored']);
+                        if (hasTrackingInfo && item['timeSpentCrafting']){
+                            html += "<br>Time: " + formatTime(item['timeSpentCrafting']) + " (" + formatPercent(item['shareInCraftingTimeCombined']) + ")";
+                            html += "<br>Crafted total: " + formatNumber(item['craftedTotal']) + " (" + formatNumber(item['craftsPerSec']) + "/s)";
+                        }
+                        html += "</td>";
+                        grid_i++;
+                        if(grid_i == grid_i_max){
+                            html += "</tr><tr>";
+                            grid_i = 0;
+                        }
                     }
                 }
+                html += "</tr></table>";
             }
-            for(; grid_i < grid_i_max; grid_i ++){
-                html += "<td></td>";
+            else {
+                document.getElementById("cancelJobOnCPUButton").style.display = 'none';
             }
-            html += "</tr></table>";
             document.getElementById("terminalcontent").innerHTML = html;
             popLoadingScreen(message);
         });
@@ -641,9 +644,6 @@
                 html += "</tr><tr>";
                 grid_i = 0;
             }
-        }
-        for(; grid_i < grid_i_max; grid_i ++){
-            html += "<td></td>";
         }
         html += "</tr></table>";
         document.getElementById("terminalcontent").innerHTML = html;
@@ -901,9 +901,6 @@
                     grid_i = 0;
                 }
             }
-            for(; grid_i < grid_i_max; grid_i ++){
-                html += "<td></td>";
-            }
             html += "</tr></table>";
             document.getElementById("terminalcontent").innerHTML = html;
 
@@ -1014,9 +1011,6 @@
                             html += "</tr><tr>";
                             grid_i = 0;
                         }
-                    }
-                    for(; grid_i < grid_i_max; grid_i ++){
-                        html += "<td></td>";
                     }
                     html += "</tr></table>";
                 }
