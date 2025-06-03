@@ -76,12 +76,12 @@ public class Job extends ISyncedRequest {
             if (jobData.isDone = job.isDone()) {
                 try {
                     IAECraftingJob craftingJob = job.get();
-                    IAEStorageGrid storageGrid = grid.getStorageGrid();
-                    IAEMeInventoryItem items = storageGrid.getItemInventory();
-                    jobData.isSimulating = craftingJob.isSimulation();
-                    jobData.bytesTotal = craftingJob.getByteTotal();
+                    IAEStorageGrid storageGrid = grid.web$getStorageGrid();
+                    IAEMeInventoryItem items = storageGrid.web$getItemInventory();
+                    jobData.isSimulating = craftingJob.web$isSimulation();
+                    jobData.bytesTotal = craftingJob.web$getByteTotal();
                     IItemList plan;
-                    craftingJob.populatePlan(plan = AE2Controller.AE2Interface.createItemList());
+                    craftingJob.web$populatePlan(plan = AE2Controller.AE2Interface.web$createItemList());
                     jobData.plan = new ArrayList<>();
                     for (IItemStack stack : plan) {
                         JSON_JobData.JobItem jobItem = new JSON_JobData.JobItem();
@@ -94,7 +94,7 @@ public class Job extends ISyncedRequest {
                             toExtract.web$reset();
                             toExtract.web$setStackSize(stack.web$getStackSize());
                             IItemStack missing = toExtract.web$copy();
-                            toExtract = items.extractItems(toExtract, AEActionable.SIMULATE, grid);
+                            toExtract = items.web$extractItems(toExtract, AEActionable.SIMULATE, grid);
                             if (toExtract == null) {
                                 toExtract = missing.web$copy();
                                 toExtract.web$setStackSize(0);
@@ -106,7 +106,7 @@ public class Job extends ISyncedRequest {
                             jobItem.missing = 0;
                         }
                         if (jobItem.missing == 0 && jobItem.requested == 0 && jobItem.stored > 0) {
-                            IItemStack realStack = items.getAvailableItem(stack);
+                            IItemStack realStack = items.web$getAvailableItem(stack);
                             long available = 0L;
                             if (realStack != null) available = realStack.web$getStackSize();
                             if (available > 0L) jobItem.usedPercent = (double) jobItem.stored / (double) available;
@@ -136,7 +136,7 @@ public class Job extends ISyncedRequest {
             AE2Controller.jobs.remove(this.jobID);
             done();
         } else if (type == ERequestType.SUBMIT) {
-            IAECraftingGrid craftingGrid = grid.getCraftingGrid();
+            IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
             if (job.isDone()) {
                 try {
                     IAECraftingJob craftingJob = job.get();
@@ -149,7 +149,7 @@ public class Job extends ISyncedRequest {
                             return;
                         }
                     }
-                    IChatComponent error = craftingGrid.submitJob(craftingJob, target, true, grid);
+                    IChatComponent error = craftingGrid.web$submitJob(craftingJob, target, true, grid);
                     if (error != null) {
                         deny("FAIL");
                         setData(error.getUnformattedTextForChat());

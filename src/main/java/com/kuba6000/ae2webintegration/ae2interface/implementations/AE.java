@@ -34,29 +34,22 @@ public class AE implements IAE {
 
                 @Override
                 public IAEGrid next() {
-                    return AEGrid.create(AEGrid.class, iterator.next());
+                    return (IAEGrid) iterator.next();
                 }
             };
         }
     }
 
     @Override
-    public Iterable<IAEGrid> getGrids() {
+    public Iterable<IAEGrid> web$getGrids() {
         return new AEGridIterable();
     }
 
     @Override
-    public IItemList createItemList() {
-        return ItemList.create(
-            ItemList.class,
-            AEApi.instance()
-                .storage()
-                .createItemList());
-    }
-
-    @Override
-    public void releaseAEObjects() {
-        IAEObject.invalidateAll();
+    public IItemList web$createItemList() {
+        return (IItemList) (Object) AEApi.instance()
+            .storage()
+            .createItemList();
     }
 
 }

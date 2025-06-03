@@ -26,7 +26,6 @@ public class FMLEventHandler {
                     request.handle(AE2Controller.activeGrid);
                 }
             }
-            AE2Controller.AE2Interface.releaseAEObjects();
         }
 
         if (AE2Controller.timer % 100 != 0) return;

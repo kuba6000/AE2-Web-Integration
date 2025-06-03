@@ -96,18 +96,18 @@ public class AE2JobTracker {
             info = trackingInfoMap.get(cpuCluster);
             if (info == null) return; // We can't start tracking mid crafting :P
         } else {
-            trackingInfoMap.put(cpuCluster.createUnpooledCopy(), info = new JobTrackingInfo());
+            trackingInfoMap.put(cpuCluster, info = new JobTrackingInfo());
             info.timeStarted = System.currentTimeMillis();
         }
-        info.finalOutput = cpuCluster.getFinalOutput()
+        info.finalOutput = cpuCluster.web$getFinalOutput()
             .web$copy();
     }
 
     public static void updateCraftingStatus(ICraftingCPUCluster cpu, IItemStack diff) {
         JobTrackingInfo info = trackingInfoMap.get(cpu);
         if (info == null) return;
-        IItemList waitingFor = cpu.getWaitingFor();
-        IItemStack found = waitingFor.findPrecise(diff);
+        IItemList waitingFor = cpu.web$getWaitingFor();
+        IItemStack found = waitingFor.web$findPrecise(diff);
         if (found != null && found.web$getStackSize() > 0L) {
             if (!info.startedWaitingFor.containsKey(found)) {
                 info.startedWaitingFor.put(found, System.currentTimeMillis());
@@ -155,17 +155,17 @@ public class AE2JobTracker {
         JobTrackingInfo info = trackingInfoMap.get(cpu);
         if (info == null) return;
         if (provider != null) {
-            String name = provider.getName();
+            String name = provider.web$getName();
             if (name == null) name = "[NULL]";
             final AEInterface aeInterfaceToLookup = new AEInterface(name);
             final AEInterface aeInterface = info.interfaceLookup
                 .computeIfAbsent(aeInterfaceToLookup, k -> aeInterfaceToLookup);
-            aeInterface.location.add(provider.getLocation());
+            aeInterface.location.add(provider.web$getLocation());
             info.interfaceStarted.computeIfAbsent(aeInterface, k -> System.currentTimeMillis());
             final HashSet<IItemStack> itemList = info.interfaceWaitingFor
                 .computeIfAbsent(aeInterface, k -> new HashSet<>());
 
-            for (IItemStack out : details.getCondensedOutputs()) {
+            for (IItemStack out : details.web$getCondensedOutputs()) {
                 info.interfaceWaitingForLookup.computeIfAbsent(out, k -> new HashMap<>())
                     .putIfAbsent(aeInterface, itemList);
                 itemList.add(out);

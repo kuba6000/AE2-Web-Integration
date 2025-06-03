@@ -4,8 +4,8 @@ import com.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 
 public interface IAEPathingGrid {
 
-    boolean isNetworkBooting();
+    boolean web$isNetworkBooting();
 
-    AEControllerState getControllerState();
+    AEControllerState web$getControllerState();
 
 }

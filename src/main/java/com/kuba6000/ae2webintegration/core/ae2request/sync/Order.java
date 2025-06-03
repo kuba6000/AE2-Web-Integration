@@ -39,20 +39,20 @@ public class Order extends ISyncedRequest {
 
     @Override
     public void handle(IAEGrid grid) {
-        IAECraftingGrid craftingGrid = grid.getCraftingGrid();
+        IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
         boolean allBusy = true;
-        for (ICraftingCPUCluster cpu : craftingGrid.getCPUs()) {
-            if (!cpu.isBusy()) {
+        for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
+            if (!cpu.web$isBusy()) {
                 allBusy = false;
                 break;
             }
         }
         if (!allBusy) {
-            IAEStorageGrid storageGrid = grid.getStorageGrid();
-            final IItemList itemList = storageGrid.getItemStorageList();
-            IItemStack realItem = itemList.findPrecise(this.item);
+            IAEStorageGrid storageGrid = grid.web$getStorageGrid();
+            final IItemList itemList = storageGrid.web$getItemStorageList();
+            IItemStack realItem = itemList.web$findPrecise(this.item);
             if (realItem != null && realItem.web$isCraftable()) {
-                Future<IAECraftingJob> job = craftingGrid.beginCraftingJob(grid, this.item);
+                Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, this.item);
 
                 int jobID = AE2Controller.getNextJobID();
                 AE2Controller.jobs.put(jobID, job);

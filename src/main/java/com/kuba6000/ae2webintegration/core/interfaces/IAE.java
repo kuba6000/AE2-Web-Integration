@@ -2,10 +2,8 @@ package com.kuba6000.ae2webintegration.core.interfaces;
 
 public interface IAE {
 
-    Iterable<IAEGrid> getGrids();
+    Iterable<IAEGrid> web$getGrids();
 
-    IItemList createItemList();
-
-    void releaseAEObjects();
+    IItemList web$createItemList();
 
 }

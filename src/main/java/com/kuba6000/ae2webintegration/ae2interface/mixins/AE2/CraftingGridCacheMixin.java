@@ -1,6 +1,5 @@
 package com.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
-import appeng.me.Grid;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -10,10 +9,10 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.kuba6000.ae2webintegration.ae2interface.CraftingMediumTracker;
-import com.kuba6000.ae2webintegration.ae2interface.implementations.AECraftingCPUCluster;
-import com.kuba6000.ae2webintegration.ae2interface.implementations.AEGrid;
-import com.kuba6000.ae2webintegration.ae2interface.implementations.service.AECraftingGrid;
 import com.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingJob;
@@ -50,9 +49,9 @@ public class CraftingGridCacheMixin {
             boolean isMachine = e != null || list.isMachine();
             IAEMixinCallbacks.getInstance()
                 .jobStarted(
-                    AECraftingCPUCluster.create(AECraftingCPUCluster.class, instance),
-                    AECraftingGrid.create(AECraftingGrid.class, (CraftingGridCache) (Object) this),
-                    AEGrid.create(AEGrid.class, (Grid) grid),
+                    (ICraftingCPUCluster) (Object) instance,
+                    (IAECraftingGrid) this,
+                    (IAEGrid) grid,
                     isMerging,
                     !isMachine);
         }

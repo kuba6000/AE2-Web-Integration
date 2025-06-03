@@ -19,8 +19,8 @@ public class GetItems extends ISyncedRequest {
 
     @Override
     public void handle(IAEGrid grid) {
-        IAEStorageGrid storageGrid = grid.getStorageGrid();
-        IItemList storageList = storageGrid.getItemStorageList();
+        IAEStorageGrid storageGrid = grid.web$getStorageGrid();
+        IItemList storageList = storageGrid.web$getItemStorageList();
         AE2Controller.hashcodeToAEItemStack.clear();
         ArrayList<JSON_DetailedItem> items = new ArrayList<>();
         for (IItemStack stack : storageList) {

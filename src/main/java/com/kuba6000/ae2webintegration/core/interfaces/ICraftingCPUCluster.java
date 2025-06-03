@@ -1,33 +1,31 @@
 package com.kuba6000.ae2webintegration.core.interfaces;
 
-import com.kuba6000.ae2webintegration.ae2interface.implementations.AECraftingCPUCluster;
-
 public interface ICraftingCPUCluster {
 
-    boolean hasCustomName();
+    void web$setInternalID(int id);
 
-    String getName();
+    boolean web$hasCustomName();
 
-    long getAvailableStorage();
+    String web$getName();
 
-    long getUsedStorage();
+    long web$getAvailableStorage();
 
-    long getCoProcessors();
+    long web$getUsedStorage();
 
-    boolean isBusy();
+    long web$getCoProcessors();
 
-    void cancel();
+    boolean web$isBusy();
 
-    IItemStack getFinalOutput();
+    void web$cancel();
 
-    void getActiveItems(IItemList list);
+    IItemStack web$getFinalOutput();
 
-    void getPendingItems(IItemList list);
+    void web$getActiveItems(IItemList list);
 
-    void getStorageItems(IItemList list);
+    void web$getPendingItems(IItemList list);
 
-    IItemList getWaitingFor();
+    void web$getStorageItems(IItemList list);
 
-    AECraftingCPUCluster createUnpooledCopy();
+    IItemList web$getWaitingFor();
 
 }
