@@ -42,7 +42,7 @@ public class GSONUtils {
 
     public static final GsonBuilder GSON_BUILDER = new GsonBuilder().addSerializationExclusionStrategy(GSONStrategy)
         .addDeserializationExclusionStrategy(GSONStrategy)
-        .registerTypeAdapter(IItemStack.class, IItemStackSerializer)
+        .registerTypeHierarchyAdapter(IItemStack.class, IItemStackSerializer)
         .serializeNulls();
 
 }
