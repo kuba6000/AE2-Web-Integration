@@ -1,5 +1,6 @@
 package com.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.IChatComponent;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
@@ -73,13 +74,19 @@ public abstract class AEGridMixin implements IAEGrid {
                 }
             }
         }
+        IActionHost actionHost;
+        World world;
         if (web$lastUsedMachineClass == null || terminals.isEmpty()) {
-            throw new RuntimeException("There is no terminal in the AE system");
+            // throw new RuntimeException("There is no terminal in the AE system");
+            actionHost = null;
+            world = MinecraftServer.getServer()
+                .worldServerForDimension(0);
+        } else {
+            IGridNode node = terminals.iterator()
+                .next();
+            actionHost = (IActionHost) node.getMachine();
+            world = node.getWorld();
         }
-        IGridNode node = terminals.iterator()
-            .next();
-        IActionHost actionHost = (IActionHost) node.getMachine();
-        World world = node.getWorld();
 
         if (web$cachedPlayerSource != null) {
             if (web$cachedPlayerSource.via != actionHost) web$cachedPlayerSource = null;
