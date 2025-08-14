@@ -10,7 +10,7 @@ public class CancelCPU extends ISyncedRequest {
     private String cpuName;
 
     @Override
-    public boolean init(Map<String, String> getParams) {
+    boolean init(Map<String, String> getParams) {
         if (!getParams.containsKey("cpu")) {
             noParam("cpu");
             return false;
@@ -20,7 +20,11 @@ public class CancelCPU extends ISyncedRequest {
     }
 
     @Override
-    public void handle(IAEGrid grid) {
+    void handle(IAEGrid grid) {
+        if (grid == null) {
+            deny("GRID_NOT_FOUND");
+            return;
+        }
         ICraftingCPUCluster cluster = GetCPUList.getCPUList(grid.web$getCraftingGrid())
             .get(cpuName);
         if (cluster == null) {

@@ -4,9 +4,11 @@ import java.util.Iterator;
 
 import com.kuba6000.ae2webintegration.core.interfaces.IAE;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemList;
 
 import appeng.api.AEApi;
+import appeng.core.worlddata.WorldData;
 import appeng.hooks.TickHandler;
 import appeng.me.Grid;
 
@@ -52,4 +54,9 @@ public class AE implements IAE {
             .createItemList();
     }
 
+    @Override
+    public IAEPlayerData web$getPlayerData() {
+        return (IAEPlayerData) WorldData.instance()
+            .playerData();
+    }
 }

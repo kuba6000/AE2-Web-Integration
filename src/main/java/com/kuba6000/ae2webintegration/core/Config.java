@@ -7,6 +7,7 @@ import net.minecraftforge.common.config.Configuration;
 
 public class Config {
 
+    private static File configDirectory;
     private static File configFile;
 
     public static String AE_PASSWORD = new Random().ints(48, 122 + 1)
@@ -61,7 +62,20 @@ public class Config {
         }
     }
 
-    public static void init(File configFile) {
-        Config.configFile = configFile;
+    public static void init(File configDirectory) {
+        Config.configDirectory = new File(configDirectory, "ae2webintegration");
+        Config.configFile = new File(Config.configDirectory, "ae2webintegration.cfg");
+        if (!Config.configDirectory.exists()) {
+            Config.configDirectory.mkdirs();
+            File oldConfigFile = new File(configDirectory, "ae2webintegration.cfg");
+            if (oldConfigFile.exists()) {
+                oldConfigFile.renameTo(Config.configFile);
+            }
+        }
+
+    }
+
+    public static File getConfigFile(String fileName) {
+        return new File(configDirectory, fileName);
     }
 }

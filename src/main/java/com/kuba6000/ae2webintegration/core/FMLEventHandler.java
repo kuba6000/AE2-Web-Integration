@@ -23,7 +23,7 @@ public class FMLEventHandler {
                 if (!AE2Controller.isValid()) {
                     request.deny("NO_SYSTEM");
                 } else {
-                    request.handle(AE2Controller.activeGrid);
+                    request.handle(AE2Controller.AE2Interface);
                 }
             }
         }

@@ -50,7 +50,7 @@ public class Job extends ISyncedRequest {
     private String cpuName;
 
     @Override
-    public boolean init(Map<String, String> getParams) {
+    boolean init(Map<String, String> getParams) {
         if (!getParams.containsKey("id")) {
             noParam("id");
             return false;
@@ -65,8 +65,12 @@ public class Job extends ISyncedRequest {
     }
 
     @Override
-    public void handle(IAEGrid grid) {
-        Future<IAECraftingJob> job = AE2Controller.jobs.get(jobID);
+    void handle(IAEGrid grid) {
+        if (grid == null) {
+            deny("GRID_NOT_FOUND");
+            return;
+        }
+        Future<IAECraftingJob> job = gridData.jobs.get(jobID);
         if (job == null) {
             deny("INVALID_ID");
             return;
@@ -133,7 +137,7 @@ public class Job extends ISyncedRequest {
             done();
         } else if (type == ERequestType.CANCEL) {
             job.cancel(true);
-            AE2Controller.jobs.remove(this.jobID);
+            gridData.jobs.remove(this.jobID);
             done();
         } else if (type == ERequestType.SUBMIT) {
             IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();

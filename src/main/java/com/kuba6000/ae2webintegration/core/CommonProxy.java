@@ -1,9 +1,7 @@
 package com.kuba6000.ae2webintegration.core;
 
-import java.io.File;
-
 import com.kuba6000.ae2webintegration.Tags;
-import com.kuba6000.ae2webintegration.core.commands.ReloadCommandHandler;
+import com.kuba6000.ae2webintegration.core.commands.BaseCommandHandler;
 import com.kuba6000.ae2webintegration.core.discord.DiscordManager;
 import com.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
@@ -20,8 +18,9 @@ public class CommonProxy {
     // preInit "Run before anything else. Read your config, create blocks, items, etc, and register them with the
     // GameRegistry." (Remove if not needed)
     public void preInit(FMLPreInitializationEvent event) {
-        Config.init(new File(event.getModConfigurationDirectory(), "ae2webintegration.cfg"));
+        Config.init(event.getModConfigurationDirectory());
         Config.synchronizeConfiguration();
+        WebData.loadData();
 
         com.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration.LOG
             .info("AE2WebIntegration loading at version " + Tags.VERSION);
@@ -44,7 +43,7 @@ public class CommonProxy {
 
     // register server commands in this event handler (Remove if not needed)
     public void serverStarting(FMLServerStartingEvent event) {
-        event.registerServerCommand(new ReloadCommandHandler());
+        event.registerServerCommand(new BaseCommandHandler());
     }
 
     public void serverStarted(FMLServerStartedEvent event) {
