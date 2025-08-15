@@ -18,8 +18,7 @@ public class Config {
     public static int AE_PORT = 2324;
     public static boolean ALLOW_NO_PASSWORD_ON_LOCALHOST = true;
     public static boolean AE_PUBLIC_MODE = true;
-    public static int AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE = 20; // how many requests can be made before user is
-                                                                        // required to login, if public mode is enabled
+    public static int AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE = 20;
 
     // discord
     public static String DISCORD_WEBHOOK = "";
