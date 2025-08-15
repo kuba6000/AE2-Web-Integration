@@ -1,9 +1,9 @@
 package com.kuba6000.ae2webintegration.core.ae2request;
 
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.gson.GsonBuilder;
+import com.kuba6000.ae2webintegration.core.AE2Controller;
 import com.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 public abstract class IRequest {
@@ -20,7 +20,7 @@ public abstract class IRequest {
     protected String status = "TIMEOUT";
     protected Object data = null;
 
-    abstract public void handle(Map<String, String> getParams);
+    abstract public void handle(AE2Controller.RequestContext context);
 
     Object getData() {
         return data;

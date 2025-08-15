@@ -1,9 +1,34 @@
 <?php
-    // AE2 Server endpoint (http://host:port/)
-    $AE2_SERVER_HOST = "http://my.minecraftserver.com:2324/"; // slash at the end is important
 
-    // Authentication
+    // AE2 Web Terminal url
+    $AE2_SERVER_HOST = "http://localhost:2324/";
+    // Is the public mode enabled on the server
+    $AE2_IS_PUBLIC_MODE = true;
+
     if (!isset($_COOKIE['authenticationToken'])) {
+
+        if (isset($_POST['register'])){
+            $username = $_POST['register'];
+            $password = $_POST['password'];
+            $ch = curl_init($AE2_SERVER_HOST . 'auth');
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml'));
+            curl_setopt($ch, CURLOPT_HEADER, FALSE);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($_POST));
+            $return = curl_exec($ch);
+            $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpcode == 400){
+                header("Location: ?" . $return);
+                exit;
+            }
+            elseif ($httpcode == 200){
+                header("Location: ?confirmregistration&token=" . $return);
+                exit;
+            }
+        }
 
         if (isset($_POST['password'])){
             $password = $_POST['password'];
@@ -18,15 +43,26 @@
             $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
 
-            if ($httpcode == 200){
-                setcookie("authenticationToken", $return, $remember ? (time() + (604800)) : (time() + (3600)), "", "", false, true);
+            if ($httpcode == 400){
+                header("Location: ?" . $return);
+                exit;
+            }
+            elseif ($httpcode == 200){
+                $json = json_decode($return, true);
+                $validity = $remember ? (time() + (604_800)) : (time() + (3600));
+                setcookie("authenticationToken", $json['token'], $validity, "", "", false, true);
+                setcookie("username", $json['username'], $validity);
+                setcookie("isAdmin", $json['isAdmin'] ? '1' : '0', $validity);
+                setcookie("isOutdated", $json['isOutdated'] ? '1' : '0', $validity);
                 header("Location: .");
                 exit;
             }
         }
 
 
-        readfile('login.html');
+        $loginfile = file_get_contents("login.html");
+        $loginfile = str_replace("_REPLACE_ME_IS_PUBLIC_MODE", $AE2_IS_PUBLIC_MODE ? "true" : "false", $loginfile);
+        echo $loginfile;
         exit;
     }
     if (isset($_GET['logout'])) {
@@ -38,15 +74,21 @@
         $return = curl_exec($ch);
         $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-        setcookie("authenticationToken", "", time() - 3600, "", "", false, true);
+        $validity = (time() - 3600);
+        setcookie("authenticationToken", "", $validity, "", "", false, true);
+        setcookie("username", "", $validity);
+        setcookie("isAdmin", '', $validity);
+        setcookie("isOutdated", '', $validity);
         header("Location: .");
         exit;
     }
 
-    // API proxy
     if (isset($_GET['API'])){
+
         $api_path = $_GET['API'];
         unset($_GET['API']);
+
+
         $params = $_GET;
 
         $ch = curl_init($AE2_SERVER_HOST . $api_path . '?' . http_build_query($params));
@@ -59,7 +101,11 @@
         curl_close($ch);
 
         if ($httpcode == 401) {
-            setcookie("authenticationToken", "", time() - 3600, "", "", false, true);
+            $validity = (time() - 3600);
+            setcookie("authenticationToken", $validity, time() - 3600, "", "", false, true);
+            setcookie("username", "", $validity);
+            setcookie("isAdmin", '', $validity);
+            setcookie("isOutdated", '', $validity);
             header("Location: .");
             exit;
         }
@@ -68,8 +114,6 @@
 
         exit;
     }
-
-    // website
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -94,6 +138,24 @@
         LOADING...
     </section>
 </section>
+<section id="terminalgrid">
+    <button class='collapsible' id='currentgrid'>No grid selected</button>
+    <section style='display: none;'>
+        <section style='display: flex; flex-direction: row; flex-wrap: wrap;'>
+            <select id="gridselection" size="5" style="margin-right: 10px; overflow-y: auto;" onchange="selectedGridChanged(this);">
+                <option value="1">Grid 1 owned</option>
+                <option value="2">Grid 2 owned</option>
+                <option value="3">Grid 3 owned</option>
+                <option value="4">Grid 4 owned</option>
+            </select>
+            <section>
+                <input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">  <label for="thisgridbydefault">Select this grid by default</label> <br>
+                <input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);"> <label for="trackthisgrid">Enable tracking for this grid (track jobs)</label> <br>
+            </section>
+            <span class='note' style="flex: 0 0 100%; margin-top: 10px;">To be able to select a grid, there must be security terminal available and you have to be owner or have every permission enabled in the bio card</span>
+        </section>
+    </section>
+</section>
 <section id="terminalcontainer">
     <section id="terminaltypes">
         <section id='terminalOptions'>
@@ -105,12 +167,12 @@
                 <button onclick='changeSortOrder(this);' id='sortOrderButton'>initializing</button>
                 <!-- <button>NEI Search?</button> -->
                 <!-- <button>Terminal style?</button> -->
-                <button onclick='alert("Coming soon");'>Crafting terminal</button>
+                <!-- <button onclick='alert("Coming soon");'>Crafting terminal</button>
                 <button onclick='alert("Coming soon");'>Pattern terminal</button>
                 <button onclick='alert("Coming soon");'>Fluid terminal</button>
                 <button onclick='alert("Coming soon");'>Interface terminal</button>
                 <button onclick='alert("Coming soon");'>Level terminal</button>
-                <button onclick='alert("Coming soon");'>Essentia terminal</button>
+                <button onclick='alert("Coming soon");'>Essentia terminal</button> -->
             </section>
         </section>
         <section id='terminalCPUList' style='display: none;'>...</section>
@@ -167,6 +229,7 @@
                 <br>
                 <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
                 <br>
+                You are logged in as <span id="username" style="font-weight: bold;"></span> <br>
                 <button onclick="document.location.href='?logout'">LogOut</button>
             </section>
         </section>
@@ -174,7 +237,12 @@
 </section>
 
 <script>
-    const isOutdated = false;//_REPLACE_ME_VERSION_OUTDATED; <?php // TODO: NO IMPLEMENTATION ?>
+    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7 + "; path=/";
+    const username = "<?php echo isset($_COOKIE['username']) ? $_COOKIE['username'] : ''; ?>";
+    const isAdmin = <?php echo isset($_COOKIE['isAdmin']) ? ($_COOKIE['isAdmin'] == '1' ? 'true' : 'false') : 'false'; ?>;
+    const isOutdated = <?php echo isset($_COOKIE['isOutdated']) ? ($_COOKIE['isOutdated'] == '1' ? 'true' : 'false') : 'false'; ?>;
+    document.getElementById('username').innerText = username;
+    selectedGrid = -1;
     globalItemList = {};
     globalCPUList = {};
     currentWindow = 0; // 0 - main, 1 - CPU, 2 - Order screen, 3 - History window
@@ -189,6 +257,7 @@
         sortOrder: 0,       // 0 - ascending, 1 - descending
     };
     settings = {
+        defaultGrid: -1, // -1 means no default grid
         autoRefresh: false,
         itemsPerRow: 5,
         numberFormat: 0,
@@ -311,6 +380,23 @@
         setCookie("showItemIcon", settings.showItemIcon ? 1 : 0, 7);
         refreshDisplay();
     }
+    function onThisGridByDefaultChange(el) {
+        settings.defaultGrid = el.checked ? selectedGrid : -1;
+        setCookie("defaultGrid", settings.defaultGrid, 7);
+    }
+    function onTrackThisGridChange(el) {
+        if (selectedGrid == -1) return;
+        let trackThisGrid = el.checked;
+        $.getJSON('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
+            if(data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                return;
+            }
+            data = data.data;
+            el.checked = data['isTracked'];
+            updateGridList();
+        });
+    }
     function refreshTerminal() {
         if (currentWindow == 0)
             getItemList();
@@ -346,7 +432,10 @@
         return "";
     }
     function initSettings(){
-        let cookie = getCookie("sortBy");
+        let cookie = getCookie("defaultGrid");
+        if (cookie != "")
+            settings.defaultGrid = Number(cookie);
+        cookie = getCookie("sortBy");
         if (cookie != "")
             sortingOptions.sortBy = Number(cookie);
         cookie = getCookie("storedCraftable");
@@ -382,6 +471,7 @@
         document.getElementById('numberformat').value = settings.numberFormat;
         document.getElementById('showitemid').checked = settings.showItemID;
         document.getElementById('showitemicon').checked = settings.showItemIcon;
+        selectedGrid = settings.defaultGrid;
     }
     initSettings();
     function formatBytes(bytes) {
@@ -512,9 +602,12 @@
         document.getElementById('terminalCPUList').innerHTML = html;
     }
     function displayCPUDetails(){
+        if (selectedGrid == -1)
+            return;
+        if (Object.keys(globalCPUList).length == 0) return;
         let message = "Asking for " + selectedCPU + "...";
         pushLoadingScreen(message);
-        $.getJSON('get?cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        $.getJSON('get?grid=' + selectedGrid + '&cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             console.log(data);
             if (data.status !== "OK"){
                 alert(data.status + ": " + data.data);
@@ -569,7 +662,10 @@
     }
     cpuForJob = "";
     function updateCPUList(){
-        $.getJSON('list', function(data) {
+        if (selectedGrid == -1){
+            return;
+        }
+        $.getJSON('list?grid=' + selectedGrid, function(data) {
             if(data.status !== "OK"){
                 alert(data.status + ": " + data.data);
                 return;
@@ -581,6 +677,49 @@
                 selectedCPU = Object.keys(globalCPUList)[0];
             displayCPUList();
         });
+    }
+    function updateGridList(){
+        $.getJSON('grids', function(data) {
+            if(data.status !== "OK"){
+                alert(data.status + ": " + data.data);
+                return;
+            }
+            data = data.data;
+            console.log(data);
+            let gridFound = false;
+            let html = "";
+            for (let i = 0; i < data.length; i++){
+                let grid = data[i];
+                let str = grid['key'] + " [ Owned by " + grid['owner'] + " ][ CPU count: " + grid['cpuCount'] + " ]" + (settings.defaultGrid != -1 && grid['key'] == settings.defaultGrid ? "[ Default ]" : "") + (grid['isTrackingEnabled'] ? "[ Tracked ]" : "");
+                html += "<option value='" + grid['key'] + "' " + (grid['key'] == -1 ? "disabled" : "") + (selectedGrid != -1 && grid['key'] == selectedGrid ? "selected" : "") + ">Grid " + str + "</option>";
+                if (selectedGrid != -1 && grid['key'] == selectedGrid) {
+                    document.getElementById('thisgridbydefault').checked = settings.defaultGrid == selectedGrid;
+                    document.getElementById('thisgridbydefault').disabled = false;
+                    document.getElementById('trackthisgrid').disabled = false;
+                    document.getElementById('trackthisgrid').checked = grid['isTrackingEnabled'];
+                    document.getElementById('currentgrid').innerHTML = "Current grid: " + str;
+                    gridFound = true;
+                }
+            }
+            document.getElementById('gridselection').innerHTML = html;
+            document.getElementById('gridselection').size = data.length;
+        });
+    }
+    updateGridList();
+    function selectedGridChanged(el){
+        selectedGrid = Number(el.value);
+        document.getElementById('thisgridbydefault').disabled = false;
+        document.getElementById('trackthisgrid').disabled = false;
+        if (settings.defaultGrid != -1 && settings.defaultGrid == selectedGrid) {
+            document.getElementById('thisgridbydefault').checked = true;
+        }
+        else {
+            document.getElementById('thisgridbydefault').checked = false;
+        }
+        setCurrentScreen(0);
+        updateCPUList();
+        getItemList();
+        updateGridList();
     }
     function isValidCPUForOrder(cluster) {
         if (!cluster['finalOutput']) return true;
@@ -691,9 +830,11 @@
             fetchIcons(itemsNoIcon);
     }
     function getItemList(){
+        if (selectedGrid == -1)
+            return;
         let message = "Asking for item list...";
         pushLoadingScreen(message);
-        $.getJSON('items', function(data){
+        $.getJSON('items?grid=' + selectedGrid, function(data){
             console.log(data);
             if(data.status !== "OK"){
                 alert(data.status + ": " + data.data);
@@ -708,9 +849,11 @@
         });
     }
     function getCraftingHistory(){
+        if (selectedGrid == -1)
+            return;
         let message = "Asking for tracking history list...";
         pushLoadingScreen(message);
-        $.getJSON('trackinghistory', function(data){
+        $.getJSON('trackinghistory?grid=' + selectedGrid, function(data){
             console.log(data);
             if(data.status !== "OK"){
                 alert(data.status + ": " + data.data);
@@ -906,11 +1049,13 @@
         document.getElementById("itemShareChart").style.display = 'none';
     }
     function openTrackingData(id){
+        if (selectedGrid == -1)
+            return;
         let message = "Asking for tracking data...";
         isInterfaceChartInitialized = false;
         isItemChartInitialized = false;
         pushLoadingScreen(message);
-        $.getJSON('gettracking?id=' + id, function(data){
+        $.getJSON('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
             console.log(data);
             if(data.status !== "OK"){
                 alert(data.status + ": " + data.data);
@@ -966,6 +1111,8 @@
         });
     }
     function beginOrderingItem(hashcode){
+        if (selectedGrid == -1)
+            return;
         console.log(hashcode);
         let answer = window.prompt("How much to order?", "1");
         if (answer === null) // cancelled
@@ -978,7 +1125,7 @@
             document.getElementById('terminalCPUListForJob').innerHTML = "...";
             let message = "Sending order...";
             pushLoadingScreen(message);
-            $.getJSON('order?item=' + hashcode + "&quantity=" + quantity, function(data){
+            $.getJSON('order?grid=' + selectedGrid + '&item=' + hashcode + "&quantity=" + quantity, function(data){
                 console.log(data);
                 if(data.status !== "OK"){
                     alert(data.status + ": " + data.data);
@@ -1003,10 +1150,12 @@
         }
     }
     function updateCraftingPlan(){
+        if (selectedGrid == -1)
+            return;
         if(currentWindow != 2){
             return;
         }
-        $.getJSON('job?id=' + currentJob.id, function(data){
+        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id, function(data){
             if(currentWindow != 2){
                 return;
             }
@@ -1067,12 +1216,14 @@
         });
     }
     function cancelCurrentJob(){
+        if (selectedGrid == -1)
+            return;
         if(currentWindow != 2){
             return;
         }
         setCurrentScreen(0);
         refreshTerminal();
-        $.getJSON('job?id=' + currentJob.id + "&cancel", function(data){
+        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&cancel", function(data){
             if(data.status !== "OK"){
                 alert(data.status + ": " + data.data);
                 return;
@@ -1081,12 +1232,14 @@
         });
     }
     function startCurrentJob(){
+        if (selectedGrid == -1)
+            return;
         if (currentWindow != 2){
             return;
         }
         let message = "Submitting job...";
         pushLoadingScreen(message);
-        $.getJSON('job?id=' + currentJob.id + "&submit" + "&cpu=" + encodeURIComponent(cpuForJob).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&submit" + "&cpu=" + encodeURIComponent(cpuForJob).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             if (data.status !== "OK"){
                 alert(data.status + ": " + data.data);
             }
@@ -1097,12 +1250,14 @@
         });
     }
     function cancelJobOnCPU(selectedCPU){
+        if (selectedGrid == -1)
+            return;
         if (selectedCPU == ""){
             return;
         }
         let message = "Cancelling job...";
         pushLoadingScreen(message);
-        $.getJSON('cancelcpu?cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        $.getJSON('cancelcpu?grid=' + selectedGrid + '&cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             updateCPUList();
             refreshTerminal();
             popLoadingScreen(message);
@@ -1178,7 +1333,7 @@
     getItemList();
 
     function showAlertIfOutdated() {
-        if (isOutdated){
+        if (isOutdated && isAdmin){
             if (getCookie("DoNotShowUpdateMessage") == 1) return;
             pushTopMessage("<span>New version detected! Consider updating from <a href='https://github.com/kuba6000/AE2-Web-Integration/releases/'>github</a></span> <button onclick='closeTopMessage(this.parentElement);'>Close</button><button onclick='updateDoNotShowAgain(this.parentElement);'>Hide for 7 days</button><br style='clear: both;'/>");
         }

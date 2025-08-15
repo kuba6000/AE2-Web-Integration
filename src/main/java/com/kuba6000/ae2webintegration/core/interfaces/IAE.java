@@ -6,4 +6,6 @@ public interface IAE {
 
     IItemList web$createItemList();
 
+    IAEPlayerData web$getPlayerData();
+
 }

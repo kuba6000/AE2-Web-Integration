@@ -21,8 +21,8 @@ public interface IAEMixinCallbacks {
 
     void pushedPattern(ICraftingCPUCluster cpu, IPatternProviderViewable provider, IAECraftingPatternDetails details);
 
-    void jobCompleted(ICraftingCPUCluster cpu);
+    void jobCompleted(IAEGrid grid, ICraftingCPUCluster cpu);
 
-    void jobCancelled(ICraftingCPUCluster cpu);
+    void jobCancelled(IAEGrid grid, ICraftingCPUCluster cpu);
 
 }

@@ -7,6 +7,7 @@
     font-style: normal;
     color: #e0e0e0;
     font-weight: 400;
+    list-style-position: inside;
 }
 b{
     font-weight: 500;
@@ -62,6 +63,17 @@ a:hover{
     background-color: #222736;
     border: black solid 1px;
     border-radius: 5px;
+    
+}
+
+#mainrow
+{
+    display: flex;
+    flex-direction: row;
+}
+
+#maininfo{
+    text-align: center;
 }
 
 input, select {
@@ -70,10 +82,11 @@ input, select {
     border: 0;
     padding: 5px;
     border-radius: 5px;
-    margin-bottom: 5px;
+    margin-bottom: 10px;
+    margin-top: 3px;
 }
 
-input[type='submit']{
+input[type='submit'], button{
     background-color: #292f47;
     border: 0;
     border-radius: 5px;
@@ -81,11 +94,49 @@ input[type='submit']{
     transition: 0.2s;
 }
 
-input[type='submit']:hover{
+input[type='submit']:hover, button:hover{
     background-color: #363e5e;
     cursor: pointer;
 }
 
+input[type='checkbox']{
+    transform: translateY(1px);
+}
+
 form {
+    width: 25vw;
     text-align: center;
+    padding: 20px;
+    border-right: rgb(216, 216, 216) dashed 1px;
+    border-left: rgb(216, 216, 216) dashed 1px;
+    border-collapse: collapse;
+}
+
+#cookiemonster{
+    z-index: 1000;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    backdrop-filter: blur(5px);
+}
+#cookiemonster > section{
+    margin: auto auto;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    background-color: #222736;
+    border: black solid 1px;
+    border-radius: 5px;
+    padding: 20px;
+}
+#cookiemonster > section > *{
+    margin: 3px;
+}
+
+h2{
+    font-weight: bold;
 }

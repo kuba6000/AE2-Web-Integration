@@ -3,6 +3,7 @@ package com.kuba6000.ae2webintegration.core;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -17,6 +18,7 @@ import com.kuba6000.ae2webintegration.core.interfaces.IItemList;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import com.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 
 public class AE2JobTracker {
 
@@ -84,13 +86,14 @@ public class AE2JobTracker {
         }
     }
 
-    public static HashMap<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = new HashMap<>();
-    public static ConcurrentHashMap<Integer, JobTrackingInfo> trackingInfos = new ConcurrentHashMap<>();
+    public static IdentityHashMap<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = new IdentityHashMap<>();
+    public ConcurrentHashMap<Integer, JobTrackingInfo> trackingInfos = new ConcurrentHashMap<>();
 
-    private static int nextFreeTrackingInfoID = 1;
+    private int nextFreeTrackingInfoID = 1;
 
     public static void addJob(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging) {
-        if (!AE2Controller.tryValidateOrVerify(grid, cache)) return;
+        GridData gridData = GridData.get(grid);
+        if (gridData == null || !gridData.isTracked) return; // We don't track this grid, so we don't track jobs on it
         JobTrackingInfo info;
         if (isMerging) {
             info = trackingInfoMap.get(cpuCluster);
@@ -173,9 +176,11 @@ public class AE2JobTracker {
         }
     }
 
-    public static void completeCrafting(ICraftingCPUCluster cpu) {
+    public static void completeCrafting(IAEGrid grid, ICraftingCPUCluster cpu) {
         JobTrackingInfo info = trackingInfoMap.remove(cpu);
         if (info == null) return;
+        GridData gridData = GridData.get(grid);
+        if (gridData == null || !gridData.isTracked) return; // We don't track this grid, so we don't track jobs on it
         for (Map.Entry<IItemStack, Long> entry : info.waitingFor.entrySet()) {
             info.craftedTotal.merge(entry.getKey(), entry.getValue(), Long::sum);
         }
@@ -197,28 +202,36 @@ public class AE2JobTracker {
         info.startedWaitingFor.clear();
         info.isDone = true;
         info.timeDone = System.currentTimeMillis();
-        trackingInfos.put(nextFreeTrackingInfoID++, info);
+        gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         double took = info.timeDone - info.timeStarted;
         took /= 1000d;
-        DiscordManager.postMessageNonBlocking(
-            new DiscordManager.DiscordEmbed(
-                "AE2 Job Tracker",
-                "Crafting for `" + info.finalOutput.web$getDisplayName()
-                    + " x"
-                    + info.finalOutput.web$getStackSize()
-                    + "` "
-                    + (info.wasCancelled ? "cancelled" : "completed")
-                    + "!\nIt took "
-                    + took
-                    + "s",
-                info.wasCancelled ? 15548997 : 5763719));
+        if (!Config.AE_PUBLIC_MODE && !Config.DISCORD_WEBHOOK.isEmpty()) {
+            IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
+            if (securityGrid != null && securityGrid.web$isAvailable()) {
+                DiscordManager.postMessageNonBlocking(
+                    new DiscordManager.DiscordEmbed(
+                        "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()
+                            + " ][ "
+                            + cpu.web$getName()
+                            + " ]",
+                        "Crafting for `" + info.finalOutput.web$getDisplayName()
+                            + " x"
+                            + info.finalOutput.web$getStackSize()
+                            + "` "
+                            + (info.wasCancelled ? "cancelled" : "completed")
+                            + "!\nIt took "
+                            + took
+                            + "s",
+                        info.wasCancelled ? 15548997 : 5763719));
+            }
+        }
     }
 
-    public static void cancelCrafting(ICraftingCPUCluster cpu) {
+    public static void cancelCrafting(IAEGrid grid, ICraftingCPUCluster cpu) {
         JobTrackingInfo info = trackingInfoMap.get(cpu);
         if (info == null) return;
         info.wasCancelled = true;
-        completeCrafting(cpu);
+        completeCrafting(grid, cpu);
     }
 
 }

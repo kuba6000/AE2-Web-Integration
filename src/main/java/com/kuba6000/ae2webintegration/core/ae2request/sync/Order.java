@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.concurrent.Future;
 
 import com.google.gson.JsonObject;
-import com.kuba6000.ae2webintegration.core.AE2Controller;
 import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -20,7 +19,7 @@ public class Order extends ISyncedRequest {
     private IItemStack item;
 
     @Override
-    public boolean init(Map<String, String> getParams) {
+    boolean init(Map<String, String> getParams) {
         if (!getParams.containsKey("item") || !getParams.containsKey("quantity")) {
             noParam("item", "quantity");
             return false;
@@ -38,7 +37,11 @@ public class Order extends ISyncedRequest {
     }
 
     @Override
-    public void handle(IAEGrid grid) {
+    void handle(IAEGrid grid) {
+        if (grid == null) {
+            deny("GRID_NOT_FOUND");
+            return;
+        }
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
         boolean allBusy = true;
         for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
@@ -54,13 +57,12 @@ public class Order extends ISyncedRequest {
             if (realItem != null && realItem.web$isCraftable()) {
                 Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, this.item);
 
-                int jobID = AE2Controller.getNextJobID();
-                AE2Controller.jobs.put(jobID, job);
+                int jobID = gridData.addJob(job);
                 JsonObject jobData = new JsonObject();
                 jobData.addProperty("jobID", jobID);
-                if (AE2Controller.jobs.size() > 3) {
+                if (gridData.jobs.size() > 3) {
                     int toDeleteBelowAndEqual = jobID - 3;
-                    AE2Controller.jobs.entrySet()
+                    gridData.jobs.entrySet()
                         .removeIf(integerFutureEntry -> integerFutureEntry.getKey() <= toDeleteBelowAndEqual);
                 }
                 setData(jobData);

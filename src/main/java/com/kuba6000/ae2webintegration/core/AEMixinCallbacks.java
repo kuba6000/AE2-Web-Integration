@@ -33,12 +33,12 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
     }
 
     @Override
-    public void jobCompleted(ICraftingCPUCluster cpu) {
-        AE2JobTracker.completeCrafting(cpu);
+    public void jobCompleted(IAEGrid grid, ICraftingCPUCluster cpu) {
+        AE2JobTracker.completeCrafting(grid, cpu);
     }
 
     @Override
-    public void jobCancelled(ICraftingCPUCluster cpu) {
-        AE2JobTracker.cancelCrafting(cpu);
+    public void jobCancelled(IAEGrid grid, ICraftingCPUCluster cpu) {
+        AE2JobTracker.cancelCrafting(grid, cpu);
     }
 }
