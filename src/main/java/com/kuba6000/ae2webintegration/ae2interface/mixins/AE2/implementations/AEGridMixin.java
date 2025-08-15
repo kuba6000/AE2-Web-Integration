@@ -1,10 +1,10 @@
 package com.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import net.minecraft.util.text.ITextComponent;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
 import net.minecraftforge.common.util.FakePlayer;
+import net.minecraftforge.fml.common.FMLCommonHandler;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -79,8 +79,9 @@ public abstract class AEGridMixin implements IAEGrid {
         if (web$lastUsedMachineClass == null || terminals.isEmpty()) {
             // throw new RuntimeException("There is no terminal in the AE system");
             actionHost = null;
-            world = MinecraftServer.getServer()
-                .worldServerForDimension(0);
+            world = FMLCommonHandler.instance()
+                .getMinecraftServerInstance()
+                .getWorld(0);
         } else {
             IGridNode node = terminals.iterator()
                 .next();
