@@ -20,8 +20,8 @@ import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
+import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.data.IAEItemStack;
-import appeng.me.helpers.BaseActionSource;
 import appeng.me.helpers.PlayerSource;
 
 @Mixin(value = ICraftingGrid.class)
@@ -66,7 +66,7 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
             null,
             (ICraftingCPU) target,
             prioritizePower,
-            (BaseActionSource) grid.web$getPlayerSource());
+            (IActionSource) grid.web$getPlayerSource());
         if (link != null) return null;
         return grid.web$getLastFakePlayerChatMessage();
     }

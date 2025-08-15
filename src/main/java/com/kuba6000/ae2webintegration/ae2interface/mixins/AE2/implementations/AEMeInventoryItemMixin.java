@@ -8,9 +8,9 @@ import com.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 
 import appeng.api.config.Actionable;
+import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.IMEInventory;
 import appeng.api.storage.data.IAEStack;
-import appeng.me.helpers.BaseActionSource;
 
 @Mixin(value = IMEInventory.class)
 public interface AEMeInventoryItemMixin extends IAEMeInventoryItem {
@@ -20,7 +20,7 @@ public interface AEMeInventoryItemMixin extends IAEMeInventoryItem {
         return (IItemStack) ((IMEInventory) (Object) this).extractItems(
             (IAEStack) stack,
             mode == AEActionable.MODULATE ? Actionable.MODULATE : Actionable.SIMULATE,
-            (BaseActionSource) grid.web$getPlayerSource());
+            (IActionSource) grid.web$getPlayerSource());
     }
 
     @Override

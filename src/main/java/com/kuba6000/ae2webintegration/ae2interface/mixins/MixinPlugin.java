@@ -44,6 +44,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.CraftingGridCacheMixin",
                 "AE2.CraftingCPUClusterMixin",
                 "AE2.SecurityCacheMixin",
+                "AE2.CraftingLinkAccessor",
                 "AE2.implementations.AEItemStackMixin",
                 "AE2.implementations.AEItemListMixin",
                 "AE2.implementations.AECraftingCPUClusterMixin",

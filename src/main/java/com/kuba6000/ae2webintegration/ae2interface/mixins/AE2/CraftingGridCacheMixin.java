@@ -40,8 +40,9 @@ public class CraftingGridCacheMixin {
         CallbackInfoReturnable<ICraftingLink> cir) {
         ICraftingLink link = cir.getReturnValue();
         if (link != null) { // job started successfully
-            boolean isMachine = requestingMachine != null || src.machine()
-                .isPresent();
+            boolean isMachine = (requestingMachine != null || src.machine()
+                .isPresent()) && !src.player()
+                    .isPresent();
             IAEMixinCallbacks.getInstance()
                 .jobStarted(
                     (ICraftingCPUCluster) (Object) ((CraftingLinkAccessor) (Object) link).callGetCpu(),
