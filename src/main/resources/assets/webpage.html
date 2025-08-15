@@ -1077,7 +1077,10 @@
                 }
             }
             document.getElementById('gridselection').innerHTML = html;
-            document.getElementById('gridselection').size = data.length;
+            if (data.length > 1)
+                document.getElementById('gridselection').size = data.length;
+            else
+                document.getElementById('gridselection').size = 2;
         });
     }
     updateGridList();
