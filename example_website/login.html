@@ -11,20 +11,104 @@
 </head>
 <body>
 <h1>UNIVERSAL WEB TERMINAL</h1>
-<section id="maincontent">
-    <section id="main">
-        <form action="" method="POST">
-            <b>This service requires authentication</b><br><br>
-            <label for="password">Password</label><br>
-            <input type="password" id="password" name="password" placeholder="Enter password" required><br>
-            <input type="checkbox" id="remember" name="remember"> <label for="remember">Remember me for 7 days</label><br>
-            <input type="submit" value="Enter">
-        </form>
+<section id="cookiemonster" style="display: none;">
+    <section>
+        <h2>Cookie Notice 🍪</h2>
+        <p>Before you continue, please note that this website uses cookies to:</p>
+        <ul>
+            <li>Save your terminal preferences</li>
+            <li>Enable login functionality</li>
+            <li>Improve your overall experience</li>
+        </ul>
+        <p>By clicking "Accept", you consent to our use of cookies.</p>
+        <button onclick="acceptCookies();">Accept Cookies</button>
     </section>
 </section>
+<section id="maincontent">
+    <section id="main">
+        <section id="maininfo">
+
+        </section>
+        <section id="mainrow">
+            <form action="" method="POST" id="formlogin">
+                <b>This service requires authentication</b><br><br>
+                <label for="username">Username</label><br>
+                <input type="text" id="username" name="username" placeholder="Enter username" required><br>
+                <label for="password">Password</label><br>
+                <input type="password" id="password" name="password" placeholder="Enter password" required><br>
+                <input type="checkbox" id="remember" name="remember"> <label for="remember">Remember me for 7 days</label><br><br><br>
+                <input type="submit" value="Enter">
+            </form>
+            <form action="" method="POST" id="formregister">
+                <b>Or register</b><br><br>
+                <label for="rusername">Username (in-game)</label><br>
+                <input type="text" id="rusername" name="register" placeholder="Enter username" required autocomplete="off"><br>
+                <label for="rpassword">Password</label><br>
+                <input type="password" id="rpassword" name="password" placeholder="Enter password" required autocomplete="off"><br>
+                <input type="checkbox" id="remainder" name="remainder" required autocomplete="off"> <label for="remainder">I understand that the password entered above<br> will be visible to the server owner once continued!</label><br><br>
+                <input type="submit" value="Continue">
+            </form>
+        </section>
+    </section>
+</section>
+
+<script>
+
+const IS_PUBLIC_MODE = _REPLACE_ME_IS_PUBLIC_MODE; // Replace with your actual public mode variable
+
+if (!IS_PUBLIC_MODE){
+    document.getElementById("formregister").style.display = "none"; // Hide the registration form in public mode
+    document.getElementById("username").value = "Admin";
+    document.getElementById("username").readOnly = true;
+}
+
+var url = new URL(window.location.href);
+if (url.searchParams.get("notonline") !== null){
+    document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>You have to be on the server (online) to perform this action!</b><br><br>";
+    window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
+} else if (url.searchParams.get("invalidpassword") !== null) {
+    document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>Invalid password!</b><br><br>";
+    window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
+} else if (url.searchParams.get("invaliduser") !== null) {
+    document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>Invalid username!</b><br><br>";
+    window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
+} else if (url.searchParams.get("confirmregistration") !== null) {
+    document.getElementById("maininfo").innerHTML = "<b style='color: #78b83d;'>Please enter this command in the game to finish registration:<br>/ae2webintegration auth " + url.searchParams.get("token") + "</b><br><br>";
+    window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
+}
+
+function acceptCookies(){
+    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7 + "; path=/"; // Set cookie for 7 days
+    document.getElementById("cookiemonster").style.display = "none"; // Hide the cookie monster section
+}
+
+function getCookie(cname) {
+    let name = cname + "=";
+    let ca = document.cookie.split(';');
+    for(let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) == ' ') {
+            c = c.substring(1);
+        }
+        if (c.indexOf(name) == 0) {
+            return c.substring(name.length, c.length);
+        }
+    }
+    return "";
+}
+
+if (getCookie("cookiesAccepted") !== "true"){
+    document.getElementById("cookiemonster").style.display = "flex"; // Show the cookie monster section
+}
+else {
+    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7 + "; path=/";
+}
+
+</script>
+
 <br><br>
 <footer>
-    This service is hosted using <a href="https://github.com/kuba6000/AE2-Web-Integration">AE2 Web Integration</a> Made by <a href="https://github.com/kuba6000">@kuba6000</a>
+This service is hosted using <a href="https://github.com/kuba6000/AE2-Web-Integration">AE2 Web Integration</a> Made by <a href="https://github.com/kuba6000">@kuba6000</a>
 </footer>
 </body>
 </html>

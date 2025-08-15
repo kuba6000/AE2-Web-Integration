@@ -62,6 +62,20 @@ body>h1{
     display: flex;
 }
 
+#terminalgrid{
+    width: 90%;
+    margin: 0 auto;
+    border: black solid 1px;
+    border-collapse: collapse;
+    display: flex;
+    flex-direction: column;
+}
+#terminalgrid>*{
+    display: flex;
+    flex-direction: column;
+    margin: 10px;
+}
+
 button{
     background-color: #292f47;
     border: 0;
@@ -170,7 +184,7 @@ input, select {
     text-align: center;
 }
 #terminalsubcontainer > * > section > *{
-    margin: auto;
+    margin: 5px auto;
 }
 
 #terminalCPUList button, #terminalCPUListForJob button{
@@ -253,6 +267,15 @@ footer:hover{
     background-color: #929292;
 }
 
+.note{
+    color: rgb(80, 80, 80);
+    font-style: italic;
+    font-size: 90%;
+}
+.note::before{
+    content: "ⓘ ";
+}
+
 a{
     color: #80cbc4;
     transition: 0.2s;
@@ -261,6 +284,13 @@ a{
 a:hover{
     color: #a7ffeb;
     text-decoration: underline;
+}
+
+option:disabled{
+    color: rgb(170, 170, 170);
+}
+option:checked{
+    color: light-dark(rgb(16, 16, 16), rgb(255, 255, 255));
 }
 
 .minecraftSpecialFormat_0{
@@ -423,6 +453,17 @@ a:hover{
         width: 100%;
         display: flex;
         flex-direction: column;
+    }
+    #terminalgrid {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    #terminalgrid > *{
+        width: calc(100% - 10px) !important;
+        margin: 5px 5px;
+        margin-top: 10px !important;
+        font-size: 150% !important;
     }
     #terminaltypes button{
         width: calc(50% - 10px);
