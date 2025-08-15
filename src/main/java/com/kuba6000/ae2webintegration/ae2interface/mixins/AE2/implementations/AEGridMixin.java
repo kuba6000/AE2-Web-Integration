@@ -22,12 +22,11 @@ import appeng.api.networking.IMachineSet;
 import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.pathing.IPathingGrid;
 import appeng.api.networking.security.IActionHost;
-import appeng.api.networking.storage.IStorageGrid;
 import appeng.api.networking.security.ISecurityGrid;
+import appeng.api.networking.storage.IStorageGrid;
 import appeng.me.Grid;
 import appeng.me.helpers.PlayerSource;
 import appeng.parts.reporting.AbstractPartTerminal;
-import cpw.mods.fml.common.FMLCommonHandler;
 
 @Mixin(value = Grid.class, remap = false)
 public abstract class AEGridMixin implements IAEGrid {

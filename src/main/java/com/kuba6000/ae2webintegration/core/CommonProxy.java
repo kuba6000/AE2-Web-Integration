@@ -1,7 +1,5 @@
 package com.kuba6000.ae2webintegration.core;
 
-import java.io.File;
-
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;

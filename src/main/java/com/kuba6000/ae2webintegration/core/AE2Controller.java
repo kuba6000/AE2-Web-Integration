@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraftforge.fml.common.FMLCommonHandler;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -51,8 +52,6 @@ import com.mojang.authlib.GameProfile;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-
-import cpw.mods.fml.common.FMLCommonHandler;
 
 public class AE2Controller {
 
@@ -264,10 +263,11 @@ public class AE2Controller {
                 UUID uuid = null;
                 for (EntityPlayerMP entityPlayerMP : FMLCommonHandler.instance()
                     .getMinecraftServerInstance()
-                    .getConfigurationManager().playerEntityList) {
-                    if (entityPlayerMP.getCommandSenderName()
+                    .getPlayerList()
+                    .getPlayers()) {
+                    if (entityPlayerMP.getName()
                         .equalsIgnoreCase(username)) {
-                        username = entityPlayerMP.getCommandSenderName();
+                        username = entityPlayerMP.getName();
                         uuid = entityPlayerMP.getUniqueID();
                         break;
                     }
@@ -491,10 +491,11 @@ public class AE2Controller {
                     UUID uuid = null;
                     for (EntityPlayerMP entityPlayerMP : FMLCommonHandler.instance()
                         .getMinecraftServerInstance()
-                        .getConfigurationManager().playerEntityList) {
-                        if (entityPlayerMP.getCommandSenderName()
+                        .getPlayerList()
+                        .getPlayers()) {
+                        if (entityPlayerMP.getName()
                             .equalsIgnoreCase(username)) {
-                            username = entityPlayerMP.getCommandSenderName();
+                            username = entityPlayerMP.getName();
                             uuid = entityPlayerMP.getUniqueID();
                             break;
                         }

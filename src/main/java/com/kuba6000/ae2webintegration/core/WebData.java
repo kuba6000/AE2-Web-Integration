@@ -9,12 +9,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.UUID;
 
+import net.minecraftforge.fml.common.FMLCommonHandler;
+
 import com.google.common.io.Files;
 import com.google.gson.Gson;
 import com.kuba6000.ae2webintegration.core.utils.GSONUtils;
 import com.mojang.authlib.GameProfile;
-
-import cpw.mods.fml.common.FMLCommonHandler;
 
 public class WebData {
 
@@ -32,8 +32,8 @@ public class WebData {
         }
         GameProfile profile = FMLCommonHandler.instance()
             .getMinecraftServerInstance()
-            .func_152358_ax()
-            .func_152655_a(name);
+            .getPlayerProfileCache()
+            .getGameProfileForUsername(name);
         if (profile == null) {
             return -1;
         }
