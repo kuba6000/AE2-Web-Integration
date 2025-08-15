@@ -19,9 +19,13 @@ public class GetTrackingHistory extends IAsyncRequest {
 
     @Override
     public void handle(Map<String, String> getParams) {
-        ArrayList<JSON_TrackingHistoryElement> jobs = new ArrayList<>(AE2JobTracker.trackingInfos.size());
+        if (grid == null) {
+            deny("GRID_NOT_FOUND");
+            return;
+        }
+        ArrayList<JSON_TrackingHistoryElement> jobs = new ArrayList<>(grid.trackingInfo.trackingInfos.size());
 
-        for (Map.Entry<Integer, AE2JobTracker.JobTrackingInfo> integerJobTrackingInfoEntry : AE2JobTracker.trackingInfos
+        for (Map.Entry<Integer, AE2JobTracker.JobTrackingInfo> integerJobTrackingInfoEntry : grid.trackingInfo.trackingInfos
             .entrySet()) {
             JSON_TrackingHistoryElement element = new JSON_TrackingHistoryElement();
             element.id = integerJobTrackingInfoEntry.getKey();

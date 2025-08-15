@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.kuba6000.ae2webintegration.ae2interface.CraftingMediumTracker;
 import com.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import com.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
@@ -45,13 +46,13 @@ public class CraftingCPUClusterMixin {
     @Inject(method = "completeJob", at = @At("HEAD"))
     void ae2webintegration$completeJob(CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
-            .jobCompleted((ICraftingCPUCluster) this);
+            .jobCompleted((IAEGrid) getGrid(), (ICraftingCPUCluster) this);
     }
 
     @Inject(method = "cancel", at = @At("HEAD"))
     void ae2webintegration$cancel(CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
-            .jobCancelled((ICraftingCPUCluster) this);
+            .jobCancelled((IAEGrid) getGrid(), (ICraftingCPUCluster) this);
     }
 
     // SEEMS TO BE FIXED IN 1.12.2

@@ -4,6 +4,7 @@ import net.minecraft.util.text.ITextComponent;
 
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 public interface IAEGrid {
@@ -13,6 +14,8 @@ public interface IAEGrid {
     IAEPathingGrid web$getPathingGrid();
 
     IAEStorageGrid web$getStorageGrid();
+
+    IAESecurityGrid web$getSecurityGrid();
 
     boolean web$isEmpty();
 

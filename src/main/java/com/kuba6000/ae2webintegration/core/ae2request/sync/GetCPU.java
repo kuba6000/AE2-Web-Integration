@@ -29,7 +29,7 @@ public class GetCPU extends ISyncedRequest {
     String cpuName = null;
 
     @Override
-    public boolean init(Map<String, String> getParams) {
+    boolean init(Map<String, String> getParams) {
         if (!getParams.containsKey("cpu")) {
             noParam("cpu");
             return false;
@@ -39,7 +39,11 @@ public class GetCPU extends ISyncedRequest {
     }
 
     @Override
-    public void handle(IAEGrid grid) {
+    void handle(IAEGrid grid) {
+        if (grid == null) {
+            deny("GRID_NOT_FOUND");
+            return;
+        }
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
 
         ICraftingCPUCluster cpu = GetCPUList.getCPUList(craftingGrid)

@@ -13,12 +13,16 @@ import com.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 public class GetItems extends ISyncedRequest {
 
     @Override
-    public boolean init(Map<String, String> getParams) {
+    boolean init(Map<String, String> getParams) {
         return true;
     }
 
     @Override
-    public void handle(IAEGrid grid) {
+    void handle(IAEGrid grid) {
+        if (grid == null) {
+            deny("GRID_NOT_FOUND");
+            return;
+        }
         IAEStorageGrid storageGrid = grid.web$getStorageGrid();
         IItemList storageList = storageGrid.web$getItemStorageList();
         AE2Controller.hashcodeToAEItemStack.clear();

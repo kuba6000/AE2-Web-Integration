@@ -13,6 +13,7 @@ import com.kuba6000.ae2webintegration.core.AE2Controller;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 import appeng.api.networking.IGridHost;
@@ -22,9 +23,11 @@ import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.pathing.IPathingGrid;
 import appeng.api.networking.security.IActionHost;
 import appeng.api.networking.storage.IStorageGrid;
+import appeng.api.networking.security.ISecurityGrid;
 import appeng.me.Grid;
 import appeng.me.helpers.PlayerSource;
 import appeng.parts.reporting.AbstractPartTerminal;
+import cpw.mods.fml.common.FMLCommonHandler;
 
 @Mixin(value = Grid.class, remap = false)
 public abstract class AEGridMixin implements IAEGrid {
@@ -42,6 +45,11 @@ public abstract class AEGridMixin implements IAEGrid {
     @Override
     public IAEStorageGrid web$getStorageGrid() {
         return ((Grid) (Object) this).getCache(IStorageGrid.class);
+    }
+
+    @Override
+    public IAESecurityGrid web$getSecurityGrid() {
+        return ((Grid) (Object) this).getCache(ISecurityGrid.class);
     }
 
     @Override

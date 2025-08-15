@@ -51,10 +51,12 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.implementations.AECraftingPatternDetailsMixin",
                 "AE2.implementations.AEGridMixin",
                 "AE2.implementations.AEMeInventoryItemMixin",
+                "AE2.implementations.AEPlayerDataMixin",
                 "AE2.implementations.PatternProviderViewableMixin",
                 "AE2.implementations.service.AECraftingGridMixin",
                 "AE2.implementations.service.AEPathingGridMixin",
-                "AE2.implementations.service.AEStorageGridMixin"));
+                "AE2.implementations.service.AEStorageGridMixin",
+                "AE2.implementations.service.AESecurityGridMixin"));
 
         LOG.info("MIXING INTO AE2 LETS GOOOOOOOOOOOOOOOOOOOOOOOOO");
 

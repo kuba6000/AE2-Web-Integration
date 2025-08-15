@@ -32,12 +32,16 @@ public class GetCPUList extends ISyncedRequest {
     }
 
     @Override
-    public boolean init(Map<String, String> getParams) {
+    boolean init(Map<String, String> getParams) {
         return true;
     }
 
     @Override
-    public void handle(IAEGrid grid) {
+    void handle(IAEGrid grid) {
+        if (grid == null) {
+            deny("GRID_NOT_FOUND");
+            return;
+        }
         Map<String, ICraftingCPUCluster> clusters = getCPUList(grid.web$getCraftingGrid());
         LinkedHashMap<String, JSON_CpuInfo> cpuList = new LinkedHashMap<>(clusters.size());
         for (Map.Entry<String, ICraftingCPUCluster> entry : clusters.entrySet()) {
