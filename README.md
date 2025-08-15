@@ -1,4 +1,11 @@
+<div align=center>
+
 # AE2 Web Integration
+
+[![CF Downloads](https://cf.way2muchnoise.eu/full_1122761_downloads.svg)](https://www.curseforge.com/minecraft/mc-mods/ae2-web-integration) [![Modrinth Downloads](https://img.shields.io/modrinth/dt/8MGTfmHF?logo=modrinth)
+](https://modrinth.com/mod/mobsinfo)
+
+</div>
 
 An add-on for AE2 that lets you view your terminal in your web browser wherever you are! This also includes viewing orders, cancelling them and even making a new ones!   
 
