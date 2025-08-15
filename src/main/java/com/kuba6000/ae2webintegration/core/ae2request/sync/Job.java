@@ -106,7 +106,7 @@ public class Job extends ISyncedRequest {
                             jobItem.missing = 0;
                         }
                         if (jobItem.missing == 0 && jobItem.requested == 0 && jobItem.stored > 0) {
-                            IItemStack realStack = items.web$getAvailableItem(stack);
+                            IItemStack realStack = items.web$getAvailableItem(stack, grid);
                             long available = 0L;
                             if (realStack != null) available = realStack.web$getStackSize();
                             if (available > 0L) jobItem.usedPercent = (double) jobItem.stored / (double) available;

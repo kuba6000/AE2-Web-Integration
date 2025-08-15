@@ -1,5 +1,8 @@
 package com.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -48,19 +51,26 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     @Unique
     private boolean web$usedStorageInitialized = false;
 
+    @Unique
+    private Method web$getUsedStorageMethod = null;
+
     @Override
     public long web$getUsedStorage() {
         if (!web$usedStorageInitialized) {
             web$usedStorageInitialized = true;
             try {
-                appeng.me.cluster.implementations.CraftingCPUCluster.class.getDeclaredMethod("getUsedStorage");
+                web$getUsedStorageMethod = CraftingCPUCluster.class.getDeclaredMethod("getUsedStorage");
             } catch (NoSuchMethodException e) {
                 web$isUsedStorageAvailable = false;
                 return -1L;
             }
         }
         if (!web$isUsedStorageAvailable) return -1L;
-        return ((CraftingCPUCluster) (Object) this).getUsedStorage();
+        try {
+            return (long) web$getUsedStorageMethod.invoke(this);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            return -1L;
+        }
     }
 
     @Override

@@ -4,7 +4,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Future;
 
-import net.minecraft.util.IChatComponent;
+import net.minecraft.util.text.ITextComponent;
 
 import org.spongepowered.asm.mixin.Mixin;
 
@@ -20,9 +20,9 @@ import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
-import appeng.api.networking.security.BaseActionSource;
-import appeng.api.networking.security.PlayerSource;
 import appeng.api.storage.data.IAEItemStack;
+import appeng.me.helpers.BaseActionSource;
+import appeng.me.helpers.PlayerSource;
 
 @Mixin(value = ICraftingGrid.class)
 public interface AECraftingGridMixin extends IAECraftingGrid {
@@ -48,13 +48,18 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     @Override
     public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IItemStack stack) {
         PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
-        final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
-            .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, (IAEItemStack) stack, null);
+        final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this).beginCraftingJob(
+            actionSrc.player()
+                .get().world,
+            (IGrid) grid,
+            actionSrc,
+            (IAEItemStack) stack,
+            null);
         return (Future<IAECraftingJob>) (Object) job;
     }
 
     @Override
-    public default IChatComponent web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
+    public default ITextComponent web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
         IAEGrid grid) {
         ICraftingLink link = ((ICraftingGrid) (Object) this).submitJob(
             (ICraftingJob) job,

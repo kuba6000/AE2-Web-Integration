@@ -1,25 +1,31 @@
 package com.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import net.minecraft.item.Item;
+
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 
 import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 
 import appeng.api.storage.data.IAEItemStack;
-import cpw.mods.fml.common.registry.GameRegistry;
 
-@Mixin(IAEItemStack.class)
+@Mixin(value = IAEItemStack.class, remap = false)
 public interface AEItemStackMixin extends IAEItemStack, IItemStack {
+
+    @Shadow
+    Item getItem();
+
+    @Shadow
+    int getItemDamage();
 
     @Override
     public default String web$getItemID() {
-        return GameRegistry.findUniqueIdentifierFor(getItem())
-            .toString() + ":"
-            + getItemDamage();
+        return getItem().getRegistryName() + ":" + getItemDamage();
     }
 
     @Override
     public default String web$getDisplayName() {
-        return getItemStack().getDisplayName();
+        return asItemStackRepresentation().getDisplayName();
     }
 
     @Override
@@ -39,7 +45,7 @@ public interface AEItemStackMixin extends IAEItemStack, IItemStack {
 
     @Override
     public default long web$getCountRequestableCrafts() {
-        return getCountRequestableCrafts();
+        return 0L;
     }
 
     @Override

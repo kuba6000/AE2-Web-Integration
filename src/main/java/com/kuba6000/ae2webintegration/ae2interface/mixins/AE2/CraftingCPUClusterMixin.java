@@ -17,7 +17,6 @@ import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import com.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import com.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
-import com.llamalad7.mixinextras.sugar.Local;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingMedium;

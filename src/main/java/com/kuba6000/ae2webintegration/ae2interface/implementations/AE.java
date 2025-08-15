@@ -48,11 +48,10 @@ public class AE implements IAE {
 
     @Override
     public IItemList web$createItemList() {
-        return (IItemList) (Object)
-            AEApi.instance()
-                .storage()
-                .getStorageChannel(IItemStorageChannel.class)
-                .createList();
+        return (IItemList) (Object) AEApi.instance()
+            .storage()
+            .getStorageChannel(IItemStorageChannel.class)
+            .createList();
     }
 
 }

@@ -8,9 +8,9 @@ import com.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 
 import appeng.api.config.Actionable;
-import appeng.api.networking.security.BaseActionSource;
 import appeng.api.storage.IMEInventory;
 import appeng.api.storage.data.IAEStack;
+import appeng.me.helpers.BaseActionSource;
 
 @Mixin(value = IMEInventory.class)
 public interface AEMeInventoryItemMixin extends IAEMeInventoryItem {
@@ -24,7 +24,7 @@ public interface AEMeInventoryItemMixin extends IAEMeInventoryItem {
     }
 
     @Override
-    public default IItemStack web$getAvailableItem(IItemStack stack) {
-        return (IItemStack) ((IMEInventory) (Object) this).getAvailableItem((IAEStack) stack);
+    public default IItemStack web$getAvailableItem(IItemStack stack, IAEGrid grid) {
+        return web$extractItems(stack, AEActionable.SIMULATE, grid);
     }
 }

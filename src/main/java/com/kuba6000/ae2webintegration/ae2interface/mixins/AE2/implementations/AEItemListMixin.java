@@ -9,12 +9,12 @@ import appeng.api.storage.data.IItemContainer;
 import appeng.api.storage.data.IItemList;
 
 @Mixin(value = IItemList.class, remap = false)
-public interface AEItemListMixin<StackType extends IAEStack>
-    extends IItemContainer<StackType>, com.kuba6000.ae2webintegration.core.interfaces.IItemList {
+public interface AEItemListMixin<T extends IAEStack<T>>
+    extends IItemContainer<T>, com.kuba6000.ae2webintegration.core.interfaces.IItemList {
 
     @Override
     default IItemStack web$findPrecise(IItemStack stack) {
-        return (IItemStack) findPrecise((StackType) stack);
+        return (IItemStack) findPrecise((T) stack);
     }
 
 }

@@ -26,7 +26,6 @@ import appeng.api.networking.crafting.ICraftingProviderHelper;
 import appeng.api.networking.crafting.ICraftingRequester;
 import appeng.api.networking.security.IActionSource;
 import appeng.me.cache.CraftingGridCache;
-import appeng.me.cluster.implementations.CraftingCPUCluster;
 
 @Mixin(value = CraftingGridCache.class, remap = false)
 public class CraftingGridCacheMixin {
@@ -45,7 +44,7 @@ public class CraftingGridCacheMixin {
                 .isPresent();
             IAEMixinCallbacks.getInstance()
                 .jobStarted(
-                    (ICraftingCPUCluster) (Object) instance,
+                    (ICraftingCPUCluster) (Object) ((CraftingLinkAccessor) (Object) link).callGetCpu(),
                     (IAECraftingGrid) this,
                     (IAEGrid) grid,
                     false,

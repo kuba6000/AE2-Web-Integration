@@ -1,6 +1,6 @@
 package com.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
-import net.minecraft.util.IChatComponent;
+import net.minecraft.util.text.ITextComponent;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
 import net.minecraftforge.common.util.FakePlayer;
@@ -20,9 +20,9 @@ import appeng.api.networking.IMachineSet;
 import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.pathing.IPathingGrid;
 import appeng.api.networking.security.IActionHost;
-import appeng.api.networking.security.PlayerSource;
 import appeng.api.networking.storage.IStorageGrid;
 import appeng.me.Grid;
+import appeng.me.helpers.PlayerSource;
 import appeng.parts.reporting.AbstractPartTerminal;
 
 @Mixin(value = Grid.class, remap = false)
@@ -52,7 +52,7 @@ public abstract class AEGridMixin implements IAEGrid {
     private Class<? extends IGridHost> web$lastUsedMachineClass = null;
 
     @Unique
-    public IChatComponent web$lastFakePlayerChatMessage;
+    public ITextComponent web$lastFakePlayerChatMessage;
 
     @Unique
     private PlayerSource web$cachedPlayerSource = null;
@@ -82,7 +82,8 @@ public abstract class AEGridMixin implements IAEGrid {
         World world = node.getWorld();
 
         if (web$cachedPlayerSource != null) {
-            if (web$cachedPlayerSource.via != actionHost) web$cachedPlayerSource = null;
+            if (web$cachedPlayerSource.machine()
+                .get() != actionHost) web$cachedPlayerSource = null;
             else return web$cachedPlayerSource;
         }
 
@@ -90,7 +91,12 @@ public abstract class AEGridMixin implements IAEGrid {
             new FakePlayer((WorldServer) world, AE2Controller.AEControllerProfile) {
 
                 @Override
-                public void addChatMessage(IChatComponent message) {
+                public void sendMessage(ITextComponent message) {
+                    web$lastFakePlayerChatMessage = message;
+                }
+
+                @Override
+                public void sendStatusMessage(ITextComponent message, boolean actionBar) {
                     web$lastFakePlayerChatMessage = message;
                 }
             },
@@ -100,7 +106,7 @@ public abstract class AEGridMixin implements IAEGrid {
     }
 
     @Override
-    public IChatComponent web$getLastFakePlayerChatMessage() {
+    public ITextComponent web$getLastFakePlayerChatMessage() {
         return web$lastFakePlayerChatMessage;
     }
 }

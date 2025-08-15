@@ -6,6 +6,6 @@ public interface IAEMeInventoryItem {
 
     IItemStack web$extractItems(IItemStack stack, AEActionable mode, IAEGrid grid);
 
-    IItemStack web$getAvailableItem(IItemStack stack);
+    IItemStack web$getAvailableItem(IItemStack stack, IAEGrid grid);
 
 }
