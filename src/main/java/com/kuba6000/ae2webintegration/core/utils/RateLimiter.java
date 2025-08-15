@@ -26,8 +26,7 @@ public class RateLimiter {
             return true; // User is whitelisted
         }
 
-        // Rate limit exceeded
-        return requestCounter.merge(userId, 1, Integer::sum) < MAX_REQUESTS_PER_INTERVAL; // Request allowed
+        return requestCounter.merge(userId, 1, Integer::sum) < MAX_REQUESTS_PER_INTERVAL;
     }
 
     public void ensureWhitelisted(InetAddress userId) {

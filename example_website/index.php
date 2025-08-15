@@ -19,7 +19,7 @@
             $return = curl_exec($ch);
             $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            
+
             if ($httpcode == 400){
                 header("Location: ?" . $return);
                 exit;
@@ -42,7 +42,7 @@
             $return = curl_exec($ch);
             $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            
+
             if ($httpcode == 400){
                 header("Location: ?" . $return);
                 exit;
@@ -60,7 +60,6 @@
         }
 
 
-        //readfile('login.html');
         $loginfile = file_get_contents("login.html");
         $loginfile = str_replace("_REPLACE_ME_IS_PUBLIC_MODE", $AE2_IS_PUBLIC_MODE ? "true" : "false", $loginfile);
         echo $loginfile;
@@ -88,7 +87,7 @@
 
         $api_path = $_GET['API'];
         unset($_GET['API']);
-        
+
 
         $params = $_GET;
 
@@ -130,7 +129,7 @@
 <body>
 <section id="topMessagesContainer">
     <section id="topMessages">
-        
+
     </section>
 </section>
 <h1>UNIVERSAL WEB TERMINAL</h1>
@@ -1374,7 +1373,7 @@
             i++;
         }
         document.getElementById('topMessages').innerHTML = html;
-        
+
         $("#topMessagesContainer").height($("#topMessages").height());
     }
 
@@ -1386,7 +1385,7 @@
         coll[i].addEventListener("click", function() {
             this.classList.toggle("active");
             var content = this.nextElementSibling;
-            if (content.style.display == "block") {
+            if (content.style.display === "block") {
                 content.style.display = "none";
             } else {
                 content.style.display = "block";

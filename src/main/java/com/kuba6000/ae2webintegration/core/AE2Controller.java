@@ -326,7 +326,6 @@ public class AE2Controller {
                     }
                 }
                 boolean rememberMe = postData.containsKey("remember");
-                // if (password.equals(Config.AE_PASSWORD)) {
                 String token = generateToken();
                 long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
                 validTokens.put(token, Pair.of(System.currentTimeMillis() + validFor * 1000L, playerID)); // 1 hour
@@ -338,7 +337,6 @@ public class AE2Controller {
                 t.sendResponseHeaders(302, -1);
                 rateLimiter.ensureWhitelisted(remoteAddress);
                 return true;
-                // }
             }
         }
         return false;
@@ -567,7 +565,6 @@ public class AE2Controller {
                         }
                     }
                     boolean rememberMe = postData.containsKey("remember");
-                    // if (password.equals(Config.AE_PASSWORD)) {
                     String token = generateToken();
                     long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
                     validTokens.put(token, Pair.of(System.currentTimeMillis() + validFor * 1000L, playerID)); // 1 hour
@@ -587,7 +584,6 @@ public class AE2Controller {
                         t.getRemoteAddress()
                             .getAddress());
                     return;
-                    // }
                 }
             }
 
