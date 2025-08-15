@@ -8,6 +8,7 @@ import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.security.SecureRandom;
 import java.util.HashMap;
@@ -28,6 +29,7 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
+import com.google.gson.JsonObject;
 import com.kuba6000.ae2webintegration.core.ae2request.async.GetTracking;
 import com.kuba6000.ae2webintegration.core.ae2request.async.GetTrackingHistory;
 import com.kuba6000.ae2webintegration.core.ae2request.async.GridSettings;
@@ -40,13 +42,10 @@ import com.kuba6000.ae2webintegration.core.ae2request.sync.GetItems;
 import com.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import com.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import com.kuba6000.ae2webintegration.core.ae2request.sync.Order;
-import com.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import com.kuba6000.ae2webintegration.core.interfaces.IAE;
-import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
-import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
-import com.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import com.kuba6000.ae2webintegration.core.utils.HTTPUtils;
+import com.kuba6000.ae2webintegration.core.utils.RateLimiter;
 import com.kuba6000.ae2webintegration.core.utils.VersionChecker;
 import com.mojang.authlib.GameProfile;
 import com.sun.net.httpserver.HttpExchange;
@@ -59,7 +58,6 @@ public class AE2Controller {
 
     public static IAE AE2Interface;
 
-    public static IAEGrid activeGrid;
     public static long timer;
     private static HttpServer server;
 
@@ -79,8 +77,9 @@ public class AE2Controller {
 
         private final HttpExchange exchange;
         private final Map<String, String> getParams;
-        // -1 id is admin permissions
+        // -1 id is admin permissions -2 is localhost access
         private final int userID;
+        private final String username;
 
         public RequestContext(HttpExchange exchange, int userID) {
             this.exchange = exchange;
@@ -88,6 +87,15 @@ public class AE2Controller {
                 exchange.getRequestURI()
                     .getQuery());
             this.userID = userID;
+            if (userID == -1) {
+                this.username = "admin";
+            } else if (userID == -2) {
+                this.username = "localhost";
+            } else {
+                GameProfile profile = AE2Controller.AE2Interface.web$getPlayerData()
+                    .web$getPlayerProfile(userID);
+                this.username = profile != null ? profile.getName() : "unknown";
+            }
         }
 
         public HttpExchange getExchange() {
@@ -103,7 +111,7 @@ public class AE2Controller {
         }
 
         public boolean isAdmin() {
-            return userID == -1;
+            return userID == -1 || userID == -2;
         }
     }
 
@@ -112,6 +120,11 @@ public class AE2Controller {
     public static HashMap<UUID, Pair<String, String>> awaitingRegistration = new HashMap<>();
 
     public static ConcurrentLinkedQueue<ISyncedRequest> requests = new ConcurrentLinkedQueue<>();
+
+    private static final RateLimiter rateLimiter = new RateLimiter(
+        Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE,
+        60 * 1000,
+        60 * 60 * 1000); // 60 requests per minute, whitelisted for 1 hour
 
     public static void startHTTPServer() {
         try {
@@ -170,10 +183,12 @@ public class AE2Controller {
     }
 
     private static boolean checkAuth(HttpExchange t) throws IOException {
-        if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST && t.getRemoteAddress()
-            .getAddress()
-            .isLoopbackAddress()) {
-            requestContext.set(new RequestContext(t, -1)); // Localhost access
+        InetAddress remoteAddress = t.getRemoteAddress()
+            .getAddress();
+
+        if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST && remoteAddress.isLoopbackAddress()) {
+            requestContext.set(new RequestContext(t, -2)); // Localhost access
+            rateLimiter.ensureWhitelisted(remoteAddress);
             return true;
         }
 
@@ -188,6 +203,7 @@ public class AE2Controller {
                 long validity = tokenData.getLeft();
                 if (System.currentTimeMillis() < validity) {
                     requestContext.set(new RequestContext(t, tokenData.getRight()));
+                    rateLimiter.ensureWhitelisted(remoteAddress);
                     return true; // Token is valid
                 } else {
                     validTokens.remove(token); // Remove expired token
@@ -222,6 +238,7 @@ public class AE2Controller {
                                 return false; // Logout successful
                             }
                             requestContext.set(new RequestContext(t, tokenData.getRight()));
+                            rateLimiter.ensureWhitelisted(remoteAddress);
                             return true; // Token is valid
                         } else {
                             validTokens.remove(token); // Remove expired token
@@ -281,19 +298,32 @@ public class AE2Controller {
 
             if (postData.containsKey("password") && postData.containsKey("username")) {
                 String username = postData.get("username");
-                int playerID = WebData.getPlayerId(username);
-                if (playerID == -1) {
-                    t.getResponseHeaders()
-                        .add("Location", "?invaliduser");
-                    t.sendResponseHeaders(302, -1);
-                    return false;
-                }
-                String password = postData.get("password");
-                if (!WebData.verifyPassword(playerID, password)) {
-                    t.getResponseHeaders()
-                        .add("Location", "?invalidpassword");
-                    t.sendResponseHeaders(302, -1);
-                    return false;
+                int playerID;
+                if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE) {
+                    username = "Admin";
+                    playerID = -1;
+                    String password = postData.get("password");
+                    if (!password.equals(Config.AE_PASSWORD) && !Config.AE_PASSWORD.isEmpty()) {
+                        t.getResponseHeaders()
+                            .add("Location", "?invalidpassword");
+                        t.sendResponseHeaders(302, -1);
+                        return false;
+                    }
+                } else {
+                    playerID = WebData.getPlayerId(username);
+                    if (playerID == -1) {
+                        t.getResponseHeaders()
+                            .add("Location", "?invaliduser");
+                        t.sendResponseHeaders(302, -1);
+                        return false;
+                    }
+                    String password = postData.get("password");
+                    if (!WebData.verifyPassword(playerID, password)) {
+                        t.getResponseHeaders()
+                            .add("Location", "?invalidpassword");
+                        t.sendResponseHeaders(302, -1);
+                        return false;
+                    }
                 }
                 boolean rememberMe = postData.containsKey("remember");
                 // if (password.equals(Config.AE_PASSWORD)) {
@@ -306,6 +336,7 @@ public class AE2Controller {
                 t.getResponseHeaders()
                     .add("Location", ".");
                 t.sendResponseHeaders(302, -1);
+                rateLimiter.ensureWhitelisted(remoteAddress);
                 return true;
                 // }
             }
@@ -314,6 +345,18 @@ public class AE2Controller {
     }
 
     private static boolean preHTTPHandler(HttpExchange t) throws IOException {
+        if (!rateLimiter.isAllowed(
+            t.getRemoteAddress()
+                .getAddress())) {
+            byte[] raw_response = "Too Many Requests".getBytes();
+            t.getResponseHeaders()
+                .add("Content-Type", "text/plain");
+            t.sendResponseHeaders(429, raw_response.length); // Too Many Requests
+            OutputStream os = t.getResponseBody();
+            os.write(raw_response);
+            os.close();
+            return true;
+        }
         t.getResponseHeaders()
             .add("Access-Control-Allow-Origin", "*");
         if (t.getRequestMethod()
@@ -428,6 +471,18 @@ public class AE2Controller {
 
         @Override
         public void handle(HttpExchange t) throws IOException {
+            if (!rateLimiter.isAllowed(
+                t.getRemoteAddress()
+                    .getAddress())) {
+                byte[] raw_response = "Too Many Requests".getBytes();
+                t.getResponseHeaders()
+                    .add("Content-Type", "text/plain");
+                t.sendResponseHeaders(429, raw_response.length); // Too Many Requests
+                OutputStream os = t.getResponseBody();
+                os.write(raw_response);
+                os.close();
+                return;
+            }
             if (t.getRequestMethod()
                 .equals("POST")) {
                 String postRaw = new Scanner(t.getRequestBody()).nextLine();
@@ -478,23 +533,38 @@ public class AE2Controller {
 
                 if (postData.containsKey("password") && postData.containsKey("username")) {
                     String username = postData.get("username");
-                    int playerID = WebData.getPlayerId(username);
-                    if (playerID == -1) {
-                        byte[] raw_response = "invaliduser".getBytes();
-                        t.sendResponseHeaders(400, raw_response.length);
-                        OutputStream os = t.getResponseBody();
-                        os.write(raw_response);
-                        os.close();
-                        return;
-                    }
-                    String password = postData.get("password");
-                    if (!WebData.verifyPassword(playerID, password)) {
-                        byte[] raw_response = "invalidpassword".getBytes();
-                        t.sendResponseHeaders(400, raw_response.length);
-                        OutputStream os = t.getResponseBody();
-                        os.write(raw_response);
-                        os.close();
-                        return;
+                    int playerID;
+                    if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE) {
+                        username = "Admin";
+                        playerID = -1;
+                        String password = postData.get("password");
+                        if (!password.equals(Config.AE_PASSWORD) && !Config.AE_PASSWORD.isEmpty()) {
+                            byte[] raw_response = "invalidpassword".getBytes();
+                            t.sendResponseHeaders(400, raw_response.length);
+                            OutputStream os = t.getResponseBody();
+                            os.write(raw_response);
+                            os.close();
+                            return;
+                        }
+                    } else {
+                        playerID = WebData.getPlayerId(username);
+                        if (playerID == -1) {
+                            byte[] raw_response = "invaliduser".getBytes();
+                            t.sendResponseHeaders(400, raw_response.length);
+                            OutputStream os = t.getResponseBody();
+                            os.write(raw_response);
+                            os.close();
+                            return;
+                        }
+                        String password = postData.get("password");
+                        if (!WebData.verifyPassword(playerID, password)) {
+                            byte[] raw_response = "invalidpassword".getBytes();
+                            t.sendResponseHeaders(400, raw_response.length);
+                            OutputStream os = t.getResponseBody();
+                            os.write(raw_response);
+                            os.close();
+                            return;
+                        }
                     }
                     boolean rememberMe = postData.containsKey("remember");
                     // if (password.equals(Config.AE_PASSWORD)) {
@@ -502,11 +572,20 @@ public class AE2Controller {
                     long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
                     validTokens.put(token, Pair.of(System.currentTimeMillis() + validFor * 1000L, playerID)); // 1 hour
                                                                                                               // validity
-                    byte[] raw_response = token.getBytes();
+                    JsonObject json = new JsonObject();
+                    json.addProperty("token", token);
+                    json.addProperty("username", username);
+                    json.addProperty("isAdmin", playerID == -1);
+                    json.addProperty("isOutdated", VersionChecker.isOutdated());
+                    byte[] raw_response = json.toString()
+                        .getBytes();
                     t.sendResponseHeaders(200, raw_response.length);
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
                     os.close();
+                    rateLimiter.ensureWhitelisted(
+                        t.getRemoteAddress()
+                            .getAddress());
                     return;
                     // }
                 }
@@ -537,6 +616,19 @@ public class AE2Controller {
 
         @Override
         public void handle(HttpExchange t) throws IOException {
+
+            if (!rateLimiter.isAllowed(
+                t.getRemoteAddress()
+                    .getAddress())) {
+                byte[] raw_response = "Too Many Requests".getBytes();
+                t.getResponseHeaders()
+                    .add("Content-Type", "text/plain");
+                t.sendResponseHeaders(429, raw_response.length); // Too Many Requests
+                OutputStream os = t.getResponseBody();
+                os.write(raw_response);
+                os.close();
+                return;
+            }
 
             String path = t.getRequestURI()
                 .getPath();
@@ -590,7 +682,13 @@ public class AE2Controller {
                         .collect(Collectors.joining(System.lineSeparator()));
                 }
             }
+            response = response.replace("_REPLACE_ME_IS_PUBLIC_MODE", Config.AE_PUBLIC_MODE ? "true" : "false");
             response = response.replace("_REPLACE_ME_VERSION_OUTDATED", VersionChecker.isOutdated() ? "true" : "false");
+            RequestContext context = requestContext.get();
+            if (context != null) {
+                response = response.replace("_REPLACE_ME_USERNAME", context.username);
+                response = response.replace("_REPLACE_ME_IS_ADMIN", context.isAdmin() ? "true" : "false");
+            }
             byte[] raw_response = response.getBytes();
             t.sendResponseHeaders(200, raw_response.length);
             OutputStream os = t.getResponseBody();
@@ -598,58 +696,6 @@ public class AE2Controller {
             os.close();
         }
 
-    }
-
-    @Deprecated
-    private static void setActiveGrid(IAEGrid grid) {
-        activeGrid = grid;
-    }
-
-    @Deprecated
-    public static boolean tryValidateOrVerify(IAEGrid testGrid, IAECraftingGrid craftingGrid) {
-        if (isValid()) return activeGrid == testGrid;
-        else {
-            if (craftingGrid == null) craftingGrid = testGrid.web$getCraftingGrid();
-            if (craftingGrid.web$getCPUCount() >= Config.AE_CPUS_THRESHOLD) {
-                setActiveGrid(testGrid);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Deprecated
-    public static boolean tryValidate() {
-        for (IAEGrid grid : AE2Interface.web$getGrids()) {
-            IAEPathingGrid pathingGrid = grid.web$getPathingGrid();
-            if (pathingGrid != null && !pathingGrid.web$isNetworkBooting()
-                && pathingGrid.web$getControllerState() == AEControllerState.CONTROLLER_ONLINE) {
-                IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
-                if (craftingGrid != null) {
-                    if ((long) craftingGrid.web$getCPUCount() >= Config.AE_CPUS_THRESHOLD) {
-                        setActiveGrid(grid);
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    @Deprecated
-    public static boolean isValid() {
-        if (activeGrid == null) return false;
-        if (activeGrid.web$isEmpty()) {
-            setActiveGrid(null);
-            return false;
-        }
-        IAEPathingGrid pathingGrid = activeGrid.web$getPathingGrid();
-        if (pathingGrid == null || pathingGrid.web$isNetworkBooting()
-            || pathingGrid.web$getControllerState() != AEControllerState.CONTROLLER_ONLINE) {
-            setActiveGrid(null);
-            return false;
-        }
-        return true;
     }
 
     public static void init() {

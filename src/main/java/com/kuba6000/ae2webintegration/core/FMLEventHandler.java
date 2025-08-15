@@ -20,27 +20,19 @@ public class FMLEventHandler {
         if (AE2Controller.timer % 5 == 0) {
             while (AE2Controller.requests.peek() != null) {
                 ISyncedRequest request = AE2Controller.requests.poll();
-                if (!AE2Controller.isValid()) {
-                    request.deny("NO_SYSTEM");
-                } else {
-                    request.handle(AE2Controller.AE2Interface);
-                }
+                request.handle(AE2Controller.AE2Interface);
             }
-        }
-
-        if (AE2Controller.timer % 100 != 0) return;
-        if (!AE2Controller.isValid()) {
-            AE2Controller.tryValidate();
         }
     }
 
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.player instanceof EntityPlayerMP)) return;
-        if (VersionChecker.isOutdated()) event.player.addChatMessage(
-            new ChatComponentText(
-                EnumChatFormatting.GREEN.toString() + EnumChatFormatting.BOLD
-                    + "----> AE2WebIntegration -> New version detected! Consider updating at https://github.com/kuba6000/AE2-Web-Integration/releases/latest"));
+        if (VersionChecker.isOutdated() && event.player.canCommandSenderUseCommand(4, "seed"))
+            event.player.addChatMessage(
+                new ChatComponentText(
+                    EnumChatFormatting.GREEN.toString() + EnumChatFormatting.BOLD
+                        + "----> AE2WebIntegration -> New version detected! Consider updating at https://github.com/kuba6000/AE2-Web-Integration/releases/latest"));
     }
 
 }

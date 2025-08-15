@@ -2,6 +2,8 @@ package com.kuba6000.ae2webintegration.core.ae2request.async;
 
 import java.util.Map;
 
+import com.kuba6000.ae2webintegration.core.GridData;
+
 public class GridSettings extends IAsyncRequest {
 
     @Override
@@ -14,6 +16,7 @@ public class GridSettings extends IAsyncRequest {
         if (getParams.containsKey("track")) {
             grid.isTracked = getParams.get("track")
                 .equals("1");
+            GridData.saveChanges();
         }
 
         setData(grid);

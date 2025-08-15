@@ -66,6 +66,23 @@ public class GetGridList extends ISyncedRequest {
                     security.web$hasPermissions(context.getUserID()),
                     gridData.isTracked));
         }
+        grids.sort((d1, d2) -> {
+            if (d1.isOwned && !d2.isOwned) {
+                return -1;
+            } else if (!d1.isOwned && d2.isOwned) {
+                return 1;
+            } else if (d1.isTrackingEnabled && !d2.isTrackingEnabled) {
+                return -1;
+            } else if (!d1.isTrackingEnabled && d2.isTrackingEnabled) {
+                return 1;
+            } else if (d1.key == -1 && d2.key != -1) {
+                return 1; // unattached grids go to the end
+            } else if (d1.key != -1 && d2.key == -1) {
+                return -1; // attached grids come first
+            } else {
+                return Integer.compare(d2.cpuCount, d1.cpuCount); // sort by cpu count if all else is equal
+            }
+        });
         setData(grids);
         done();
     }

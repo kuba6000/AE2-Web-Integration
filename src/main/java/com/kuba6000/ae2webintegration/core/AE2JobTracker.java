@@ -18,6 +18,7 @@ import com.kuba6000.ae2webintegration.core.interfaces.IItemList;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import com.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 
 public class AE2JobTracker {
 
@@ -204,18 +205,26 @@ public class AE2JobTracker {
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         double took = info.timeDone - info.timeStarted;
         took /= 1000d;
-        DiscordManager.postMessageNonBlocking(
-            new DiscordManager.DiscordEmbed(
-                "AE2 Job Tracker",
-                "Crafting for `" + info.finalOutput.web$getDisplayName()
-                    + " x"
-                    + info.finalOutput.web$getStackSize()
-                    + "` "
-                    + (info.wasCancelled ? "cancelled" : "completed")
-                    + "!\nIt took "
-                    + took
-                    + "s",
-                info.wasCancelled ? 15548997 : 5763719));
+        if (!Config.AE_PUBLIC_MODE && !Config.DISCORD_WEBHOOK.isEmpty()) {
+            IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
+            if (securityGrid != null && securityGrid.web$isAvailable()) {
+                DiscordManager.postMessageNonBlocking(
+                    new DiscordManager.DiscordEmbed(
+                        "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()
+                            + " ][ "
+                            + cpu.web$getName()
+                            + " ]",
+                        "Crafting for `" + info.finalOutput.web$getDisplayName()
+                            + " x"
+                            + info.finalOutput.web$getStackSize()
+                            + "` "
+                            + (info.wasCancelled ? "cancelled" : "completed")
+                            + "!\nIt took "
+                            + took
+                            + "s",
+                        info.wasCancelled ? 15548997 : 5763719));
+            }
+        }
     }
 
     public static void cancelCrafting(IAEGrid grid, ICraftingCPUCluster cpu) {

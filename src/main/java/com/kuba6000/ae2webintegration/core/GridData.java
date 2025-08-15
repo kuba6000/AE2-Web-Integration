@@ -1,9 +1,19 @@
 package com.kuba6000.ae2webintegration.core;
 
+import static com.kuba6000.ae2webintegration.core.AE2WebIntegration.LOG;
+
+import java.io.File;
+import java.io.Reader;
+import java.io.Writer;
+import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 
+import com.google.common.io.Files;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -14,7 +24,10 @@ import com.kuba6000.ae2webintegration.core.utils.GSONUtils;
 public class GridData {
 
     @GSONUtils.SkipGSON
-    private static final ConcurrentHashMap<Long, GridData> gridDataMap = new ConcurrentHashMap<>();
+    private static final File dataFile = Config.getConfigFile("griddata.json");
+
+    @GSONUtils.SkipGSON
+    private static ConcurrentHashMap<Long, GridData> gridDataMap = new ConcurrentHashMap<>();
 
     public boolean isTracked = false;
 
@@ -56,5 +69,46 @@ public class GridData {
             return null;
         }
         return gridDataMap.computeIfAbsent(gridKey, k -> new GridData());
+    }
+
+    public static void saveChanges() {
+        Gson gson = GSONUtils.GSON_BUILDER.create();
+        Writer writer = null;
+        try {
+            writer = Files.newWriter(dataFile, StandardCharsets.UTF_8);
+            gson.toJson(gridDataMap, writer);
+            writer.flush();
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (writer != null) try {
+                writer.close();
+            } catch (Exception ignored) {}
+        }
+    }
+
+    public static void loadData() {
+        Gson gson = GSONUtils.GSON_BUILDER.create();
+        if (!dataFile.exists()) {
+            LOG.info("Grid data file not found, creating a new one.");
+            saveChanges();
+            return;
+        }
+        Reader reader = null;
+        try {
+            reader = Files.newReader(dataFile, StandardCharsets.UTF_8);
+            Type type = new TypeToken<ConcurrentHashMap<Long, GridData>>() {}.getType();
+            gridDataMap = gson.fromJson(reader, type);
+        } catch (Exception e) {
+            LOG.error("Failed to load web data from file: {}", dataFile.getAbsolutePath(), e);
+            gridDataMap.clear();
+            saveChanges();
+        } finally {
+            if (reader != null) try {
+                reader.close();
+            } catch (Exception ignored) {}
+        }
+
     }
 }

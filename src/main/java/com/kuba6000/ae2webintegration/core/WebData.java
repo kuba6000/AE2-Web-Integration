@@ -20,7 +20,7 @@ public class WebData {
 
     static WebData instance = new WebData();
 
-    private static File dataFile = Config.getConfigFile("webdata.json");
+    private static final File dataFile = Config.getConfigFile("webdata.json");
 
     private HashMap<UUID, Integer> UUIDToId = new HashMap<>();
     private HashMap<Integer, UUID> IdToUUID = new HashMap<>();
