@@ -1,6 +1,10 @@
 # AE2 Web Integration
 
-An add-on for AE2 that lets you view your terminal in your web browser wherever you are! This also includes viewing orders, cancelling them and even making a new ones!
+An add-on for AE2 that lets you view your terminal in your web browser wherever you are! This also includes viewing orders, cancelling them and even making a new ones!   
+
+**Now also works on multiple networks and on public server = all players can have their own account!**   
+
+**THE MOD SHOULD ONLY BE INSTALLED ON SERVER SIDE, THERE IS NO ITEMS ADDED IN THE GAME!**
 
 # How?
 
@@ -9,36 +13,61 @@ This mod starts a web server on server boot that hosts a simple website that you
 # Current features
 
 - AE2 terminal (item list+sorting+filtering)
+- **Monitor as many networks as you want!**
+- **Public mode, that allows the mod to works on servers with many independent players!**
 - Start a new order
 - Check any CPU status
 - Cancel any CPU order
 - Order tracking
 
-![image](https://github.com/user-attachments/assets/6a2a08a5-1938-4feb-97ea-6f787daedacd)
-![image](https://github.com/user-attachments/assets/dc5e4f2f-ab6f-484f-9c13-dfff7a21cc11)
+# Gallery
+
+<details>
+<summary>Gallery</summary>
+
+<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/9363c6c4-26dd-46fe-a6c2-84111338e6b0" />
+<img width="737" height="70" alt="image" src="https://github.com/user-attachments/assets/2d95024e-25ca-415f-a63d-945f2c906302" />
+<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/c880a117-75d3-4d53-9ebf-db67135a3275" />
+<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/2aeb72af-7abf-4cad-9a7a-1f66bd243594" />
+
+</details>
 
 # Security
 
-Currently a simple password protection is implemented (implemented based on [Basic access authentication](https://en.wikipedia.org/wiki/Basic_access_authentication))   
+## In public mode,
+
+all users on your server can create an account on the website and access their AE2 networks,  
+passwords are saved on the server as a PBKDF2WithHmacSHA1 hash  
+Once a user is authenticated, server generates a token valid for 1 hour/7 days and uses it to verify all requests after  
+
+## In public mode disabled,
+ there is only an admin account which password is set in the config.
+token mechanism is the same as in public mode.
+
 **Note: localhost connections are automatically authenticated by default, you can change that in config!**
 
 # Requirements
 
 - An open port if you want to access the service outside your local network (configurable, terminal will be hosted at http://your-server-ip-or-domain:configured-port/ for example: http://server.kuba6000.pl:2324/)
-- Have your main network be the only one big AE2 system on the server (REQUIRED: minimum 5* crafting CPUs, *CONFIGURABLE) (Network that is displayed on the website is detected by the amount of crafting CPUs)
-  
-### **NOTE: At the moment there is no way to monitor more than 1 AE system at the time (it is only recommended to use the mod on your private dedicated server or single player!), MAYBE this will change in the future!**
 
 # How to use
 
 - Download the latest version for your game version from the releases page
 - Drop the mod in your server mods folder (only on the server!) (This also works on single player, but is not recommended)
 - Start the server
-- You can now find the config in /configs/ae2webintegration.cfg. Edit the port number and password protection for your needs
+- You can now find the config in /configs/ae2webintegration/ae2webintegration.cfg. Edit the port number and password protection for your needs
+- **Disable public mode if you play by yourself**
 - Reload the config (/ae2webintegration reload) or restart the server
 - Make sure you have opened the configured port (firewall, redirections) if you want to use it on public internet
-- Now you can visit http://your-server-ip-or-domain:configured-port/ and login popup should appear on your browser!
-- Only password is verified, you can put anything in the username ;)
+- Now you can visit http://your-server-ip-or-domain:configured-port/ and login should appear on your browser!
+- **There is a default user Admin which password is set in the config**
+
+# Discord integration
+
+**Note: Discord integration is working only in public mode disabled!**
+- Create a webhook on your discord server and set it in the ae2webintegration config
+- <img width="467" height="224" alt="image" src="https://github.com/user-attachments/assets/f9f7635d-676c-40a3-8334-f7fa35e5867a" />
+
 
 # Custom website
 
