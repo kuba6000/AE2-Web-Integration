@@ -19,7 +19,6 @@ spotless {
 
         toggleOffOn()
         importOrderFile(Blowdryer.file('spotless.importorder'))
-        palantirJavaFormat("2.38.0")
         removeUnusedImports()
         eclipse('4.19.0').configFile(Blowdryer.file('spotless.eclipseformat.xml'))
     }
