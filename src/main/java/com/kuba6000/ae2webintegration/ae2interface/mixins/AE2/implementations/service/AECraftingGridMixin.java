@@ -4,38 +4,50 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Future;
 
-import net.minecraft.util.IChatComponent;
-
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.gen.Accessor;
 
 import com.google.common.collect.ImmutableSet;
 import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import com.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import com.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
-import appeng.api.networking.IGrid;
+import appeng.api.networking.crafting.CalculationStrategy;
 import appeng.api.networking.crafting.ICraftingCPU;
-import appeng.api.networking.crafting.ICraftingGrid;
-import appeng.api.networking.crafting.ICraftingJob;
-import appeng.api.networking.crafting.ICraftingLink;
-import appeng.api.networking.security.BaseActionSource;
-import appeng.api.networking.security.PlayerSource;
-import appeng.api.storage.data.IAEItemStack;
+import appeng.api.networking.crafting.ICraftingPlan;
+import appeng.api.networking.crafting.ICraftingSubmitResult;
+import appeng.api.networking.security.IActionSource;
+import appeng.api.stacks.AEKey;
+import appeng.api.stacks.GenericStack;
+import appeng.me.helpers.PlayerSource;
+import appeng.me.service.CraftingService;
+import appeng.me.service.helpers.NetworkCraftingProviders;
 
-@Mixin(value = ICraftingGrid.class)
-public interface AECraftingGridMixin extends IAECraftingGrid {
+@Mixin(value = CraftingService.class, remap = false)
+public class AECraftingGridMixin implements IAECraftingGrid {
+
+    @Accessor
+    public NetworkCraftingProviders getCraftingProviders() {
+        throw new UnsupportedOperationException("Mixin failed to apply.");
+    }
 
     @Override
-    public default int web$getCPUCount() {
-        return ((ICraftingGrid) (Object) this).getCpus()
+    public ICraftingMediumTracker web$getCraftingProviders() {
+        return (ICraftingMediumTracker) getCraftingProviders();
+    }
+
+    @Override
+    public int web$getCPUCount() {
+        return ((CraftingService) (Object) this).getCpus()
             .size();
     }
 
     @Override
-    public default Set<ICraftingCPUCluster> web$getCPUs() {
-        final ImmutableSet<ICraftingCPU> aecpus = ((ICraftingGrid) (Object) this).getCpus();
+    public Set<ICraftingCPUCluster> web$getCPUs() {
+        final ImmutableSet<ICraftingCPU> aecpus = ((CraftingService) (Object) this).getCpus();
         final Set<ICraftingCPUCluster> cpus = new LinkedHashSet<>(aecpus.size());
         int i = 1;
         for (ICraftingCPU cpu : aecpus) {
@@ -46,23 +58,49 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     }
 
     @Override
-    public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IItemStack stack) {
+    public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
         PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
-        final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
-            .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, (IAEItemStack) stack, null);
+        final Future<ICraftingPlan> job = ((CraftingService) (Object) this).beginCraftingCalculation(
+            actionSrc.player()
+                .get()
+                .level(),
+            () -> actionSrc,
+            (AEKey) stack,
+            amount,
+            CalculationStrategy.REPORT_MISSING_ITEMS);
         return (Future<IAECraftingJob>) (Object) job;
     }
 
     @Override
-    public default IChatComponent web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
-        IAEGrid grid) {
-        ICraftingLink link = ((ICraftingGrid) (Object) this).submitJob(
-            (ICraftingJob) job,
+    public String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower, IAEGrid grid) {
+        if (target == null) throw new UnsupportedOperationException();
+        ICraftingSubmitResult result = ((CraftingService) (Object) this).submitJob(
+            (ICraftingPlan) job,
             null,
             (ICraftingCPU) target,
             prioritizePower,
-            (BaseActionSource) grid.web$getPlayerSource());
-        if (link != null) return null;
-        return grid.web$getLastFakePlayerChatMessage();
+            (IActionSource) grid.web$getPlayerSource());
+        if (result.successful()) return null;
+        String errorMessage = "";
+        switch (result.errorCode()) {
+            case INCOMPLETE_PLAN -> errorMessage += "Crafting plan is incomplete.";
+            case NO_CPU_FOUND -> errorMessage += "No CPU found for the crafting job.";
+            case NO_SUITABLE_CPU_FOUND -> errorMessage += "No suitable CPU found for the crafting job.";
+            case CPU_BUSY -> errorMessage += "CPU is busy with another job.";
+            case CPU_OFFLINE -> errorMessage += "CPU is offline.";
+            case CPU_TOO_SMALL -> errorMessage += "CPU is too small for the crafting job.";
+            case MISSING_INGREDIENT -> {
+                Object detail = result.errorDetail();
+                String detailString = "";
+                if (detail instanceof GenericStack) {
+                    detailString += ((GenericStack) detail).what()
+                        .getId()
+                        .toString();
+                } else detailString = "UNKNOWN";
+                errorMessage += "Ingredient went missing: " + detailString;
+            }
+            default -> errorMessage += "Unknown error occurred during crafting job submission.";
+        }
+        return errorMessage;
     }
 }

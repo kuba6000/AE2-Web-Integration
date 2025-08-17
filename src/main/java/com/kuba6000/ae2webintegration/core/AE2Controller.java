@@ -24,7 +24,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.server.ServerLifecycleHooks;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -43,7 +44,7 @@ import com.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import com.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import com.kuba6000.ae2webintegration.core.ae2request.sync.Order;
 import com.kuba6000.ae2webintegration.core.interfaces.IAE;
-import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import com.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 import com.kuba6000.ae2webintegration.core.utils.RateLimiter;
 import com.kuba6000.ae2webintegration.core.utils.VersionChecker;
@@ -51,8 +52,6 @@ import com.mojang.authlib.GameProfile;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-
-import cpw.mods.fml.common.FMLCommonHandler;
 
 public class AE2Controller {
 
@@ -122,13 +121,13 @@ public class AE2Controller {
     public static ConcurrentLinkedQueue<ISyncedRequest> requests = new ConcurrentLinkedQueue<>();
 
     private static final RateLimiter rateLimiter = new RateLimiter(
-        Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE,
+        Config.INSTANCE.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE.get(),
         60 * 1000,
         60 * 60 * 1000); // 60 requests per minute, whitelisted for 1 hour
 
     public static void startHTTPServer() {
         try {
-            server = HttpServer.create(new InetSocketAddress(Config.AE_PORT), 0);
+            server = HttpServer.create(new InetSocketAddress(Config.INSTANCE.AE_PORT.get()), 0);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -166,7 +165,7 @@ public class AE2Controller {
         }
     };
 
-    public static ConcurrentHashMap<Integer, IItemStack> hashcodeToAEItemStack = new ConcurrentHashMap<>();
+    public static ConcurrentHashMap<Integer, IAEKey> hashcodeToAEKey = new ConcurrentHashMap<>();
 
     private static final HashMap<String, Pair<Long, Integer>> validTokens = new HashMap<>();
 
@@ -186,7 +185,7 @@ public class AE2Controller {
         InetAddress remoteAddress = t.getRemoteAddress()
             .getAddress();
 
-        if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST && remoteAddress.isLoopbackAddress()) {
+        if (Config.INSTANCE.ALLOW_NO_PASSWORD_ON_LOCALHOST.get() && remoteAddress.isLoopbackAddress()) {
             requestContext.set(new RequestContext(t, -2)); // Localhost access
             rateLimiter.ensureWhitelisted(remoteAddress);
             return true;
@@ -262,13 +261,15 @@ public class AE2Controller {
             if (postData.containsKey("register") && postData.containsKey("password")) {
                 String username = postData.get("register");
                 UUID uuid = null;
-                for (EntityPlayerMP entityPlayerMP : FMLCommonHandler.instance()
-                    .getMinecraftServerInstance()
-                    .getConfigurationManager().playerEntityList) {
-                    if (entityPlayerMP.getCommandSenderName()
+                for (ServerPlayer entityPlayerMP : ServerLifecycleHooks.getCurrentServer()
+                    .getPlayerList()
+                    .getPlayers()) {
+                    if (entityPlayerMP.getName()
+                        .getString()
                         .equalsIgnoreCase(username)) {
-                        username = entityPlayerMP.getCommandSenderName();
-                        uuid = entityPlayerMP.getUniqueID();
+                        username = entityPlayerMP.getName()
+                            .getString();
+                        uuid = entityPlayerMP.getUUID();
                         break;
                     }
                 }
@@ -299,11 +300,12 @@ public class AE2Controller {
             if (postData.containsKey("password") && postData.containsKey("username")) {
                 String username = postData.get("username");
                 int playerID;
-                if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE) {
+                if (username.equalsIgnoreCase("admin") || !Config.INSTANCE.AE_PUBLIC_MODE.get()) {
                     username = "Admin";
                     playerID = -1;
                     String password = postData.get("password");
-                    if (!password.equals(Config.AE_PASSWORD) && !Config.AE_PASSWORD.isEmpty()) {
+                    if (!password.equals(Config.INSTANCE.AE_PASSWORD.get()) && !Config.INSTANCE.AE_PASSWORD.get()
+                        .isEmpty()) {
                         t.getResponseHeaders()
                             .add("Location", "?invalidpassword");
                         t.sendResponseHeaders(302, -1);
@@ -489,13 +491,15 @@ public class AE2Controller {
                 if (postData.containsKey("register") && postData.containsKey("password")) {
                     String username = postData.get("register");
                     UUID uuid = null;
-                    for (EntityPlayerMP entityPlayerMP : FMLCommonHandler.instance()
-                        .getMinecraftServerInstance()
-                        .getConfigurationManager().playerEntityList) {
-                        if (entityPlayerMP.getCommandSenderName()
+                    for (ServerPlayer entityPlayerMP : ServerLifecycleHooks.getCurrentServer()
+                        .getPlayerList()
+                        .getPlayers()) {
+                        if (entityPlayerMP.getName()
+                            .getString()
                             .equalsIgnoreCase(username)) {
-                            username = entityPlayerMP.getCommandSenderName();
-                            uuid = entityPlayerMP.getUniqueID();
+                            username = entityPlayerMP.getName()
+                                .getString();
+                            uuid = entityPlayerMP.getUUID();
                             break;
                         }
                     }
@@ -532,11 +536,12 @@ public class AE2Controller {
                 if (postData.containsKey("password") && postData.containsKey("username")) {
                     String username = postData.get("username");
                     int playerID;
-                    if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE) {
+                    if (username.equalsIgnoreCase("admin") || !Config.INSTANCE.AE_PUBLIC_MODE.get()) {
                         username = "Admin";
                         playerID = -1;
                         String password = postData.get("password");
-                        if (!password.equals(Config.AE_PASSWORD) && !Config.AE_PASSWORD.isEmpty()) {
+                        if (!password.equals(Config.INSTANCE.AE_PASSWORD.get()) && !Config.INSTANCE.AE_PASSWORD.get()
+                            .isEmpty()) {
                             byte[] raw_response = "invalidpassword".getBytes();
                             t.sendResponseHeaders(400, raw_response.length);
                             OutputStream os = t.getResponseBody();
@@ -678,7 +683,8 @@ public class AE2Controller {
                         .collect(Collectors.joining(System.lineSeparator()));
                 }
             }
-            response = response.replace("_REPLACE_ME_IS_PUBLIC_MODE", Config.AE_PUBLIC_MODE ? "true" : "false");
+            response = response
+                .replace("_REPLACE_ME_IS_PUBLIC_MODE", Config.INSTANCE.AE_PUBLIC_MODE.get() ? "true" : "false");
             response = response.replace("_REPLACE_ME_VERSION_OUTDATED", VersionChecker.isOutdated() ? "true" : "false");
             RequestContext context = requestContext.get();
             if (context != null) {

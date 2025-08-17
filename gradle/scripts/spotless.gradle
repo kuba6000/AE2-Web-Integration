@@ -1,0 +1,34 @@
+// Spotless auto-formatter
+// See https://github.com/diffplug/spotless/tree/main/plugin-gradle
+// Can be locally toggled via spotless:off/spotless:on comments
+spotless {
+    encoding 'UTF-8'
+    ratchetFrom 'origin/1.20.1'
+
+    format 'misc', {
+        target '.gitignore'
+
+        trimTrailingWhitespace()
+        leadingTabsToSpaces()
+        endWithNewline()
+    }
+    java {
+        target 'src/main/java/**/*.java', 'src/test/java/**/*.java'
+
+        def orderFile = file("$rootDir/spotless/spotless.importorder")
+        def formatFile = file("$rootDir/spotless/spotless.eclipseformat.xml")
+
+        toggleOffOn()
+        importOrderFile(orderFile)
+        removeUnusedImports('cleanthat-javaparser-unnecessaryimport')
+        endWithNewline()
+        eclipse('4.31').configFile(formatFile)
+    }
+    kotlin {
+        target 'src/test/java/**/*.kt'
+        ktlint('1.4.1').setEditorConfigPath("$rootDir/spotless/spotless.ktlint")
+
+        toggleOffOn()
+        endWithNewline()
+    }
+}

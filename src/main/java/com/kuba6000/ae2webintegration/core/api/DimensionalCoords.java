@@ -2,24 +2,25 @@ package com.kuba6000.ae2webintegration.core.api;
 
 import java.util.Objects;
 
-import net.minecraft.world.World;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 public class DimensionalCoords {
 
-    int dimid;
+    ResourceKey<Level> dimid;
     int x;
     int y;
     int z;
 
-    public DimensionalCoords(int dimid, int x, int y, int z) {
+    public DimensionalCoords(ResourceKey<Level> dimid, int x, int y, int z) {
         this.dimid = dimid;
         this.x = x;
         this.y = y;
         this.z = z;
     }
 
-    public DimensionalCoords(World world, int x, int y, int z) {
-        this.dimid = world.provider.dimensionId;
+    public DimensionalCoords(Level world, int x, int y, int z) {
+        this.dimid = world.dimension();
         this.x = x;
         this.y = y;
         this.z = z;
@@ -27,12 +28,12 @@ public class DimensionalCoords {
 
     @Override
     public int hashCode() {
-        return Objects.hash(dimid, x, y, z);
+        return Objects.hash(dimid.registry(), dimid.location(), x, y, z);
     }
 
     @Override
     public boolean equals(Object obj) {
-        return obj instanceof DimensionalCoords coords && coords.dimid == dimid
+        return obj instanceof DimensionalCoords coords && coords.dimid.equals(dimid)
             && coords.x == x
             && coords.y == y
             && coords.z == z;

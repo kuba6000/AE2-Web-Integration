@@ -4,8 +4,8 @@ import com.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
 
 public interface IAEMeInventoryItem {
 
-    IItemStack web$extractItems(IItemStack stack, AEActionable mode, IAEGrid grid);
+    long web$extractItems(IAEKey stack, long amount, AEActionable mode, IAEGrid grid);
 
-    IItemStack web$getAvailableItem(IItemStack stack);
+    long web$getAvailableItem(IAEKey stack, IAEGrid grid);
 
 }

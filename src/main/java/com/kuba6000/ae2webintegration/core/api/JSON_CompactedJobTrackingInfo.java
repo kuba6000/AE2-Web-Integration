@@ -7,7 +7,8 @@ import java.util.Map;
 import org.apache.commons.lang3.tuple.Pair;
 
 import com.kuba6000.ae2webintegration.core.AE2JobTracker;
-import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 public class JSON_CompactedJobTrackingInfo {
 
@@ -35,7 +36,7 @@ public class JSON_CompactedJobTrackingInfo {
         public ArrayList<timingClass> timings = new ArrayList<>();
     }
 
-    public IItemStack finalOutput;
+    public IAEGenericStack finalOutput;
     public long timeStarted;
     public long timeDone;
     public boolean wasCancelled;
@@ -59,8 +60,8 @@ public class JSON_CompactedJobTrackingInfo {
         this.timeDone = info.timeDone;
         long elapsed = this.timeDone - this.timeStarted;
         this.wasCancelled = info.wasCancelled;
-        for (Map.Entry<IItemStack, Long> entry : info.timeSpentOn.entrySet()) {
-            IItemStack stack = entry.getKey();
+        for (Map.Entry<IAEKey, Long> entry : info.timeSpentOn.entrySet()) {
+            IAEKey stack = entry.getKey();
             long spent = entry.getValue();
             CompactedTrackingGSONItem item = new CompactedTrackingGSONItem();
             item.itemid = stack.web$getItemID();

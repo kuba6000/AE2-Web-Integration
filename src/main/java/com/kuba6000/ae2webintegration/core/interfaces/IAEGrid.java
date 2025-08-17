@@ -1,6 +1,6 @@
 package com.kuba6000.ae2webintegration.core.interfaces;
 
-import net.minecraft.util.IChatComponent;
+import net.minecraft.network.chat.Component;
 
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
@@ -21,6 +21,7 @@ public interface IAEGrid {
 
     Object web$getPlayerSource();
 
-    IChatComponent web$getLastFakePlayerChatMessage();
+    @Deprecated
+    Component web$getLastFakePlayerChatMessage();
 
 }

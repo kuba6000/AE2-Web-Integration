@@ -4,27 +4,28 @@ import org.spongepowered.asm.mixin.Mixin;
 
 import com.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
-import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 
 import appeng.api.config.Actionable;
-import appeng.api.networking.security.BaseActionSource;
-import appeng.api.storage.IMEInventory;
-import appeng.api.storage.data.IAEStack;
+import appeng.api.networking.security.IActionSource;
+import appeng.api.stacks.AEKey;
+import appeng.api.storage.MEStorage;
 
-@Mixin(value = IMEInventory.class)
+@Mixin(value = MEStorage.class)
 public interface AEMeInventoryItemMixin extends IAEMeInventoryItem {
 
     @Override
-    public default IItemStack web$extractItems(IItemStack stack, AEActionable mode, IAEGrid grid) {
-        return (IItemStack) ((IMEInventory) (Object) this).extractItems(
-            (IAEStack) stack,
+    public default long web$extractItems(IAEKey stack, long amount, AEActionable mode, IAEGrid grid) {
+        return ((MEStorage) (Object) this).extract(
+            (AEKey) stack,
+            amount,
             mode == AEActionable.MODULATE ? Actionable.MODULATE : Actionable.SIMULATE,
-            (BaseActionSource) grid.web$getPlayerSource());
+            (IActionSource) grid.web$getPlayerSource());
     }
 
     @Override
-    public default IItemStack web$getAvailableItem(IItemStack stack) {
-        return (IItemStack) ((IMEInventory) (Object) this).getAvailableItem((IAEStack) stack);
+    public default long web$getAvailableItem(IAEKey stack, IAEGrid grid) {
+        return this.web$extractItems(stack, Long.MAX_VALUE, AEActionable.SIMULATE, grid);
     }
 }

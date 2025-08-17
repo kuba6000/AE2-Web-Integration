@@ -6,9 +6,11 @@ import java.util.Map;
 import com.kuba6000.ae2webintegration.core.AE2Controller;
 import com.kuba6000.ae2webintegration.core.api.JSON_DetailedItem;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+
+import it.unimi.dsi.fastutil.objects.Object2LongMap;
 
 public class GetItems extends ISyncedRequest {
 
@@ -25,16 +27,17 @@ public class GetItems extends ISyncedRequest {
         }
         IAEStorageGrid storageGrid = grid.web$getStorageGrid();
         IItemList storageList = storageGrid.web$getItemStorageList();
-        AE2Controller.hashcodeToAEItemStack.clear();
+        AE2Controller.hashcodeToAEKey.clear();
         ArrayList<JSON_DetailedItem> items = new ArrayList<>();
-        for (IItemStack stack : storageList) {
+        for (Object2LongMap.Entry<IAEKey> entry : storageList) {
+            IAEKey stack = entry.getKey();
             int hash;
-            AE2Controller.hashcodeToAEItemStack.put(hash = stack.hashCode(), stack);
+            AE2Controller.hashcodeToAEKey.put(hash = stack.hashCode(), stack);
             JSON_DetailedItem detailedItem = new JSON_DetailedItem();
             detailedItem.itemid = stack.web$getItemID();
             detailedItem.itemname = stack.web$getDisplayName();
-            detailedItem.quantity = stack.web$getStackSize();
-            detailedItem.craftable = stack.web$isCraftable();
+            detailedItem.quantity = entry.getLongValue();
+            detailedItem.craftable = stack.web$isCraftable(grid);
             detailedItem.hashcode = hash;
             items.add(detailedItem);
         }

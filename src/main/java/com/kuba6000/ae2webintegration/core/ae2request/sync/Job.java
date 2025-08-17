@@ -5,16 +5,13 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import net.minecraft.util.IChatComponent;
-
-import com.kuba6000.ae2webintegration.core.AE2Controller;
-import com.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
 import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import com.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import com.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import com.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
+import com.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
@@ -84,35 +81,19 @@ public class Job extends ISyncedRequest {
                     IAEMeInventoryItem items = storageGrid.web$getItemInventory();
                     jobData.isSimulating = craftingJob.web$isSimulation();
                     jobData.bytesTotal = craftingJob.web$getByteTotal();
-                    IItemList plan;
-                    craftingJob.web$populatePlan(plan = AE2Controller.AE2Interface.web$createItemList());
+                    ICraftingPlanSummary summary = craftingJob.web$generateSummary(grid);
                     jobData.plan = new ArrayList<>();
-                    for (IItemStack stack : plan) {
+                    for (ICraftingPlanSummaryEntry entry : summary.web$getEntries()) {
                         JSON_JobData.JobItem jobItem = new JSON_JobData.JobItem();
+                        IAEKey stack = entry.web$getWhat();
                         jobItem.itemid = stack.web$getItemID();
                         jobItem.itemname = stack.web$getDisplayName();
-                        jobItem.requested = stack.web$getCountRequestable();
-                        jobItem.steps = stack.web$getCountRequestableCrafts();
-                        if (jobData.isSimulating) {
-                            IItemStack toExtract = stack.web$copy();
-                            toExtract.web$reset();
-                            toExtract.web$setStackSize(stack.web$getStackSize());
-                            IItemStack missing = toExtract.web$copy();
-                            toExtract = items.web$extractItems(toExtract, AEActionable.SIMULATE, grid);
-                            if (toExtract == null) {
-                                toExtract = missing.web$copy();
-                                toExtract.web$setStackSize(0);
-                            }
-                            jobItem.stored = toExtract.web$getStackSize();
-                            jobItem.missing = missing.web$getStackSize() - toExtract.web$getStackSize();
-                        } else {
-                            jobItem.stored = stack.web$getStackSize();
-                            jobItem.missing = 0;
-                        }
+                        jobItem.requested = entry.web$getCraftAmount();
+                        jobItem.steps = -1L; // steps not supported
+                        jobItem.stored = entry.web$getStoredAmount();
+                        jobItem.missing = entry.web$getMissingAmount();
                         if (jobItem.missing == 0 && jobItem.requested == 0 && jobItem.stored > 0) {
-                            IItemStack realStack = items.web$getAvailableItem(stack);
-                            long available = 0L;
-                            if (realStack != null) available = realStack.web$getStackSize();
+                            long available = items.web$getAvailableItem(stack, grid);
                             if (available > 0L) jobItem.usedPercent = (double) jobItem.stored / (double) available;
                         }
                         jobData.plan.add(jobItem);
@@ -153,10 +134,10 @@ public class Job extends ISyncedRequest {
                             return;
                         }
                     }
-                    IChatComponent error = craftingGrid.web$submitJob(craftingJob, target, true, grid);
+                    String error = craftingGrid.web$submitJob(craftingJob, target, true, grid);
                     if (error != null) {
                         deny("FAIL");
-                        setData(error.getUnformattedTextForChat());
+                        setData(error);
                     } else {
                         done();
                     }

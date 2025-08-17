@@ -6,19 +6,19 @@ import com.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemList;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
-import appeng.api.networking.storage.IStorageGrid;
+import appeng.me.service.StorageService;
 
-@Mixin(value = IStorageGrid.class)
-public interface AEStorageGridMixin extends IAEStorageGrid {
+@Mixin(value = StorageService.class)
+public class AEStorageGridMixin implements IAEStorageGrid {
 
     @Override
-    public default IItemList web$getItemStorageList() {
-        return (IItemList) (Object) ((IStorageGrid) (Object) this).getItemInventory()
-            .getStorageList();
+    public IItemList web$getItemStorageList() {
+        return (IItemList) (Object) ((StorageService) (Object) this).getInventory()
+            .getAvailableStacks();
     }
 
     @Override
-    public default IAEMeInventoryItem web$getItemInventory() {
-        return (IAEMeInventoryItem) ((IStorageGrid) (Object) this).getItemInventory();
+    public IAEMeInventoryItem web$getItemInventory() {
+        return (IAEMeInventoryItem) ((StorageService) (Object) this).getInventory();
     }
 }

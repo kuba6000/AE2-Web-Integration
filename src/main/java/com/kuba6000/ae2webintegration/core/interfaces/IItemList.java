@@ -1,7 +1,9 @@
 package com.kuba6000.ae2webintegration.core.interfaces;
 
-public interface IItemList extends Iterable<IItemStack> {
+import it.unimi.dsi.fastutil.objects.Object2LongMap;
 
-    IItemStack web$findPrecise(IItemStack stack);
+public interface IItemList extends Iterable<Object2LongMap.Entry<IAEKey>> {
+
+    long web$findPrecise(IAEKey stack);
 
 }

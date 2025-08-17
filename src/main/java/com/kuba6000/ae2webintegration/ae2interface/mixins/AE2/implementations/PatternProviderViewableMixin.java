@@ -1,24 +1,34 @@
 package com.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.Nameable;
+
 import org.spongepowered.asm.mixin.Mixin;
 
 import com.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import com.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 
-import appeng.api.util.DimensionalCoord;
-import appeng.api.util.IInterfaceViewable;
+import appeng.api.networking.IGridNode;
+import appeng.me.InWorldGridNode;
 
-@Mixin(value = IInterfaceViewable.class)
+@Mixin(value = IGridNode.class)
 public interface PatternProviderViewableMixin extends IPatternProviderViewable {
 
     @Override
     public default String web$getName() {
-        return ((IInterfaceViewable) (Object) this).getName();
+        Object o = ((IGridNode) (Object) this).getOwner();
+        if (o instanceof Nameable) return ((Nameable) o).getName()
+            .getString();
+        return null;
     }
 
     @Override
     public default DimensionalCoords web$getLocation() {
-        DimensionalCoord coord = ((IInterfaceViewable) (Object) this).getLocation();
-        return new DimensionalCoords(coord.getDimension(), coord.x, coord.y, coord.z);
+        if (this instanceof InWorldGridNode) {
+            BlockPos pos = ((InWorldGridNode) this).getLocation();
+            return new DimensionalCoords(((InWorldGridNode) this).getLevel(), pos.getX(), pos.getY(), pos.getZ());
+        }
+        return null;
+
     }
 }

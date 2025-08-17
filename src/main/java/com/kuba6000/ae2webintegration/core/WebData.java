@@ -7,14 +7,15 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.Optional;
 import java.util.UUID;
+
+import net.minecraftforge.server.ServerLifecycleHooks;
 
 import com.google.common.io.Files;
 import com.google.gson.Gson;
 import com.kuba6000.ae2webintegration.core.utils.GSONUtils;
 import com.mojang.authlib.GameProfile;
-
-import cpw.mods.fml.common.FMLCommonHandler;
 
 public class WebData {
 
@@ -30,14 +31,15 @@ public class WebData {
         if (name == null || name.isEmpty()) {
             return -1;
         }
-        GameProfile profile = FMLCommonHandler.instance()
-            .getMinecraftServerInstance()
-            .func_152358_ax()
-            .func_152655_a(name);
-        if (profile == null) {
+        Optional<GameProfile> profile = ServerLifecycleHooks.getCurrentServer()
+            .getProfileCache()
+            .get(name);
+        if (!profile.isPresent()) {
             return -1;
         }
-        Integer id = instance.UUIDToId.get(profile.getId());
+        Integer id = instance.UUIDToId.get(
+            profile.get()
+                .getId());
         if (id != null) {
             return id;
         }

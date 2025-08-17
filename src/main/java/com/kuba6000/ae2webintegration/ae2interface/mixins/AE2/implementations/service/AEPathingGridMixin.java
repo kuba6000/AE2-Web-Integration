@@ -5,19 +5,19 @@ import org.spongepowered.asm.mixin.Mixin;
 import com.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 
-import appeng.api.networking.pathing.IPathingGrid;
+import appeng.me.service.PathingService;
 
-@Mixin(value = IPathingGrid.class, remap = false)
-public interface AEPathingGridMixin extends IAEPathingGrid {
+@Mixin(value = PathingService.class, remap = false)
+public class AEPathingGridMixin implements IAEPathingGrid {
 
     @Override
-    public default boolean web$isNetworkBooting() {
-        return ((IPathingGrid) (Object) this).isNetworkBooting();
+    public boolean web$isNetworkBooting() {
+        return ((PathingService) (Object) this).isNetworkBooting();
     }
 
     @Override
-    public default AEControllerState web$getControllerState() {
-        return switch (((IPathingGrid) (Object) this).getControllerState()) {
+    public AEControllerState web$getControllerState() {
+        return switch (((PathingService) (Object) this).getControllerState()) {
             case CONTROLLER_CONFLICT -> AEControllerState.CONTROLLER_CONFLICT;
             case CONTROLLER_ONLINE -> AEControllerState.CONTROLLER_ONLINE;
             case NO_CONTROLLER -> AEControllerState.NO_CONTROLLER;
