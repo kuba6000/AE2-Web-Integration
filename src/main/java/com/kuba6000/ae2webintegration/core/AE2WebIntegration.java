@@ -6,10 +6,11 @@ import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.IExtensionPoint;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.minecraftforge.network.NetworkConstants;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -23,14 +24,16 @@ import com.kuba6000.ae2webintegration.core.utils.VersionChecker;
 @Mod.EventBusSubscriber(modid = MODID)
 public class AE2WebIntegration {
 
-    public static final String MODID = "ae2webintegration-core";
+    public static final String MODID = "ae2webintegration_core";
     public static final Logger LOG = LogManager.getLogger(MODID);
 
-    @SubscribeEvent
-    public void preInit(FMLCommonSetupEvent event) {
+    public AE2WebIntegration() {
         ModLoadingContext.get()
-            .registerConfig(ModConfig.Type.SERVER, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
-
+            .registerExtensionPoint(
+                IExtensionPoint.DisplayTest.class,
+                () -> new IExtensionPoint.DisplayTest(() -> NetworkConstants.IGNORESERVERONLY, (a, b) -> true));
+        ModLoadingContext.get()
+            .registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
         WebData.loadData();
         GridData.loadData();
 
@@ -41,12 +44,12 @@ public class AE2WebIntegration {
     }
 
     @SubscribeEvent
-    public void commandsRegister(RegisterCommandsEvent event) {
+    public static void commandsRegister(RegisterCommandsEvent event) {
         BaseCommandHandler.register(event.getDispatcher());
     }
 
     @SubscribeEvent
-    public void serverStarted(ServerStartedEvent event) {
+    public static void serverStarted(ServerStartedEvent event) {
         AE2Controller.init();
         DiscordManager.init();
         if (!Config.INSTANCE.AE_PUBLIC_MODE.get() && !Config.INSTANCE.DISCORD_WEBHOOK.get()
@@ -64,7 +67,7 @@ public class AE2WebIntegration {
     }
 
     @SubscribeEvent
-    public void serverStopping(ServerStoppingEvent event) {
+    public static void serverStopping(ServerStoppingEvent event) {
         AE2Controller.stopHTTPServer();
     }
 

@@ -27,7 +27,7 @@ afterEvaluate {
     tasks.withType(org.gradle.jvm.tasks.Jar).configureEach {
         destinationDirectory = file('build/libs/')
         manifest.attributes([
-                'MixinConfigs': 'gtceu.mixins.json',
+                'MixinConfigs': 'mixins.ae2webintegration.json',
                 'Specification-Title': project.name,
                 'Specification-Version': mod_version,
                 'Specification-Vendor': 'GregTechCEu Team',

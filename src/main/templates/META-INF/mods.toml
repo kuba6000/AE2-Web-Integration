@@ -1,0 +1,24 @@
+modLoader = "javafml"
+loaderVersion = "[${forge_version},)"
+issueTrackerURL = "${mod_issue_tracker}"
+license = "${mod_license}"
+
+[[mods]]
+modId = "ae2webintegration_core"
+version = "${version}"
+displayName = "AE2WebIntegration-Core"
+authors = "kuba6000"
+description = "${mod_description}"
+logoFile = ""
+displayURL = "${mod_url}"
+credits = ""
+
+[[mods]]
+modId = "ae2webintegration_interface"
+version = "${version}"
+displayName = "AE2WebIntegration-Interface"
+authors = "kuba6000"
+description = "${mod_description}"
+logoFile = ""
+displayURL = "${mod_url}"
+credits = ""

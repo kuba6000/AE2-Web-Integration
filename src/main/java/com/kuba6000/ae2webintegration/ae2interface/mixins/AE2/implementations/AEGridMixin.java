@@ -98,10 +98,10 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
             world = ServerLifecycleHooks.getCurrentServer()
                 .getLevel(Level.OVERWORLD);
         } else {
-            IGridNode node = (IGridNode) terminals.iterator()
+            actionHost = (IActionHost) terminals.iterator()
                 .next();
-            actionHost = (IActionHost) node.getOwner();
-            world = node.getLevel();
+            world = actionHost.getActionableNode()
+                .getLevel();
         }
 
         if (web$cachedPlayerSource != null) {
@@ -178,7 +178,7 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
                     pos.dimension()
                         .location(),
                     pos.pos());
-                if (web$hashKey > hash) {
+                if (web$hashKey > hash || web$hashKey == -1) {
                     web$hashKey = hash;
                 }
             }

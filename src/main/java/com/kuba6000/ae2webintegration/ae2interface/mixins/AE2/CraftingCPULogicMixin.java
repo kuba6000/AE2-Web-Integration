@@ -72,15 +72,15 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
     @Inject(method = "postChange", at = @At("HEAD"))
     void ae2webintegration$postCraftingStatusChange(AEKey diff, CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
-            .craftingStatusPostedUpdate((ICraftingCPUCluster) this, (IAEKey) diff);
+            .craftingStatusPostedUpdate((ICraftingCPUCluster) (Object) cluster, (IAEKey) diff);
     }
 
     @Inject(method = "finishJob", at = @At("HEAD"))
     void ae2webintegration$finishJob(boolean success, CallbackInfo ci) {
         if (success) IAEMixinCallbacks.getInstance()
-            .jobCompleted((IAEGrid) cluster.getGrid(), (ICraftingCPUCluster) this);
+            .jobCompleted((IAEGrid) cluster.getGrid(), (ICraftingCPUCluster) (Object) cluster);
         else IAEMixinCallbacks.getInstance()
-            .jobCancelled((IAEGrid) cluster.getGrid(), (ICraftingCPUCluster) this);
+            .jobCancelled((IAEGrid) cluster.getGrid(), (ICraftingCPUCluster) (Object) cluster);
     }
 
     // @Inject(method = "cancel", at = @At("HEAD"))
@@ -116,7 +116,7 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
             }
             IAEMixinCallbacks.getInstance()
                 .pushedPattern(
-                    (ICraftingCPUCluster) this,
+                    (ICraftingCPUCluster) (Object) cluster,
                     (IPatternProviderViewable) viewable,
                     (IAECraftingPatternDetails) details);
             return true;

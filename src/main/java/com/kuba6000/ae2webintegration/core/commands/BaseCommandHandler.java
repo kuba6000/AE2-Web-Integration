@@ -16,6 +16,7 @@ import com.kuba6000.ae2webintegration.core.AE2Controller;
 import com.kuba6000.ae2webintegration.core.WebData;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 
 public class BaseCommandHandler {
@@ -29,8 +30,10 @@ public class BaseCommandHandler {
                         .executes(BaseCommandHandler::reload))
                 .then(
                     Commands.literal("auth")
-                        .then(argument("token", StringArgumentType.string()))
-                        .executes(BaseCommandHandler::auth)));
+                        .then(
+                            RequiredArgumentBuilder
+                                .<CommandSourceStack, String>argument("token", StringArgumentType.string())
+                                .executes(BaseCommandHandler::auth))));
     }
 
     public static int reload(CommandContext<CommandSourceStack> context) {

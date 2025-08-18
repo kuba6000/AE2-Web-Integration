@@ -1,11 +1,11 @@
 {
   "required": true,
-  "minVersion": "0.8.5-GTNH",
+  "minVersion": "0.8",
   "package": "com.kuba6000.ae2webintegration.ae2interface.mixins",
   "plugin": "com.kuba6000.ae2webintegration.ae2interface.mixins.MixinPlugin",
   "refmap": "mixins.ae2webintegration.refmap.json",
   "target": "@env(DEFAULT)",
-  "compatibilityLevel": "JAVA_8",
+  "compatibilityLevel": "JAVA_17",
   "mixins": [],
   "client": [],
   "server": []

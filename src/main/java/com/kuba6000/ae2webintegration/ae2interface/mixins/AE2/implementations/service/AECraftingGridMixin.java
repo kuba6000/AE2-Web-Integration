@@ -4,8 +4,9 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Future;
 
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.Shadow;
 
 import com.google.common.collect.ImmutableSet;
 import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
@@ -29,14 +30,13 @@ import appeng.me.service.helpers.NetworkCraftingProviders;
 @Mixin(value = CraftingService.class, remap = false)
 public class AECraftingGridMixin implements IAECraftingGrid {
 
-    @Accessor
-    public NetworkCraftingProviders getCraftingProviders() {
-        throw new UnsupportedOperationException("Mixin failed to apply.");
-    }
+    @Shadow
+    @Final
+    private NetworkCraftingProviders craftingProviders;
 
     @Override
     public ICraftingMediumTracker web$getCraftingProviders() {
-        return (ICraftingMediumTracker) getCraftingProviders();
+        return (ICraftingMediumTracker) craftingProviders;
     }
 
     @Override

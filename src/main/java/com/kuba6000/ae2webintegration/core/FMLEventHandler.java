@@ -18,7 +18,7 @@ import com.kuba6000.ae2webintegration.core.utils.VersionChecker;
 public class FMLEventHandler {
 
     @SubscribeEvent
-    public void tick(TickEvent.ServerTickEvent event) {
+    public static void tick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.START) return;
         ++AE2Controller.timer;
         if (AE2Controller.timer % 5 == 0) {
@@ -30,7 +30,7 @@ public class FMLEventHandler {
     }
 
     @SubscribeEvent
-    public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+    public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         Player player = event.getEntity();
         if (!(player instanceof ServerPlayer)) return;
         if (VersionChecker.isOutdated() && player.hasPermissions(4)) {

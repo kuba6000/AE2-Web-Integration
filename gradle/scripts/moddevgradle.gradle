@@ -3,9 +3,9 @@ import org.gradle.internal.os.OperatingSystem
 ext.isJetbrainsRuntime = System.getProperty('java.vm.vendor').contains('JetBrains')
 
 mixin {
-    var refmap = add sourceSets.main, "gtceu.refmap.json"
+    var refmap = add sourceSets.main, "mixins.ae2webintegration.refmap.json"
     slimJar.from refmap
-    config 'gtceu.mixins.json'
+    config 'mixins.ae2webintegration.json'
 }
 
 // we have to force LWJGL version 3.3.2, because RenderNurse requires Java 21, and LWJGL 3.3.1 cannot run on Java 21.
@@ -150,7 +150,7 @@ legacyForge {
             // "REGISTRYDUMP": For getting the contents of all registries.
             systemProperty 'forge.logging.markers', 'REGISTRIES'
             // Enable assertions for our classes in dev environment
-            jvmArgument('-ea:com.gregtechceu.gtceu...')
+            jvmArgument('-ea:com.kuba6000.ae2webintegration...')
 
             // Recommended logging level for the console
             // You can set various levels here.
