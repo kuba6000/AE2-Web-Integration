@@ -1,6 +1,8 @@
 package com.kuba6000.ae2webintegration.core;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Random;
 
@@ -76,6 +78,13 @@ public class Config {
         if (configDirectory == null) {
             configDirectory = FMLPaths.CONFIGDIR.get()
                 .resolve("ae2webintegration/");
+            if (Files.notExists(configDirectory)) {
+                try {
+                    Files.createDirectories(configDirectory);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
         }
         return configDirectory.resolve(fileName)
             .toFile();
