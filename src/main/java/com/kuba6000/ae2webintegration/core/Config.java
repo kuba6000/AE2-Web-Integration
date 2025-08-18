@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.util.Random;
 
 import net.minecraftforge.common.ForgeConfigSpec;
+import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.loading.FMLPaths;
 
 public class Config {
@@ -16,6 +17,7 @@ public class Config {
     }
     public static final Config INSTANCE;
     public static final ForgeConfigSpec SPEC;
+    public static ModConfig CONFIG;
 
     private static Path configDirectory;
 

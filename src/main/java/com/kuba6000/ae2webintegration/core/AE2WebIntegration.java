@@ -7,6 +7,7 @@ import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.IExtensionPoint;
+import net.minecraftforge.fml.ModContainer;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
@@ -27,6 +28,8 @@ public class AE2WebIntegration {
     public static final String MODID = "ae2webintegration_core";
     public static final Logger LOG = LogManager.getLogger(MODID);
 
+    public static ModContainer myContainer;
+
     public AE2WebIntegration() {
         ModLoadingContext.get()
             .registerExtensionPoint(
@@ -37,8 +40,18 @@ public class AE2WebIntegration {
             .getModInfo()
             .getVersion()
             .toString();
+        // ModLoadingContext.get()
+        // .registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
+        myContainer = ModLoadingContext.get()
+            .getActiveContainer();
         ModLoadingContext.get()
-            .registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
+            .getActiveContainer()
+            .addConfig(
+                Config.CONFIG = new ModConfig(
+                    ModConfig.Type.COMMON,
+                    Config.SPEC,
+                    myContainer,
+                    "ae2webintegration/ae2webintegration.toml"));
         WebData.loadData();
         GridData.loadData();
 

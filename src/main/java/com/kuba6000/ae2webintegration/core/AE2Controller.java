@@ -120,12 +120,13 @@ public class AE2Controller {
 
     public static ConcurrentLinkedQueue<ISyncedRequest> requests = new ConcurrentLinkedQueue<>();
 
-    private static final RateLimiter rateLimiter = new RateLimiter(
-        Config.INSTANCE.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE.get(),
-        60 * 1000,
-        60 * 60 * 1000); // 60 requests per minute, whitelisted for 1 hour
+    private static RateLimiter rateLimiter;
 
     public static void startHTTPServer() {
+        rateLimiter = new RateLimiter(
+            Config.INSTANCE.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE.get(),
+            60 * 1000,
+            60 * 60 * 1000); // 60 requests per minute, whitelisted for 1 hour
         try {
             server = HttpServer.create(new InetSocketAddress(Config.INSTANCE.AE_PORT.get()), 0);
         } catch (IOException e) {

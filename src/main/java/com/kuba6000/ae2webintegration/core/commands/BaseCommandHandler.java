@@ -12,7 +12,9 @@ import net.minecraft.server.level.ServerPlayer;
 
 import org.apache.commons.lang3.tuple.Pair;
 
+import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 import com.kuba6000.ae2webintegration.core.AE2Controller;
+import com.kuba6000.ae2webintegration.core.Config;
 import com.kuba6000.ae2webintegration.core.WebData;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -37,12 +39,10 @@ public class BaseCommandHandler {
     }
 
     public static int reload(CommandContext<CommandSourceStack> context) {
-        // Config.synchronizeConfiguration(); TODO
+        ((CommentedFileConfig) Config.CONFIG.getConfigData()).load();
+        Config.SPEC.afterReload();
         AE2Controller.stopHTTPServer();
         AE2Controller.startHTTPServer();
-        // context.getSource().sendSystemMessage(
-        // Component.literal(
-        // ChatFormatting.GREEN + "Successfully reloaded the config and restarted the web server!"));
         context.getSource()
             .sendSuccess(
                 () -> Component
