@@ -3,7 +3,7 @@
 # AE2 Web Integration
 
 [![CF Downloads](https://cf.way2muchnoise.eu/full_1122761_downloads.svg)](https://www.curseforge.com/minecraft/mc-mods/ae2-web-integration) [![Modrinth Downloads](https://img.shields.io/modrinth/dt/8MGTfmHF?logo=modrinth)
-](https://modrinth.com/mod/mobsinfo)
+](https://modrinth.com/mod/ae2-web-integration)
 
 </div>
 
