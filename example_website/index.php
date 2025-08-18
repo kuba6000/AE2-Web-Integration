@@ -138,15 +138,20 @@
         LOADING...
     </section>
 </section>
+<section id="alertoverlay">
+    <!-- <section onclick="this.remove();">
+        Error: Invalid grid
+    </section> -->
+</section>
 <section id="terminalgrid">
     <button class='collapsible' id='currentgrid'>No grid selected</button>
     <section style='display: none;'>
         <section style='display: flex; flex-direction: row; flex-wrap: wrap;'>
             <select id="gridselection" size="5" style="margin-right: 10px; overflow-y: auto;" onchange="selectedGridChanged(this);">
-                <option value="1">Grid 1 owned</option>
+                <!-- <option value="1">Grid 1 owned</option>
                 <option value="2">Grid 2 owned</option>
                 <option value="3">Grid 3 owned</option>
-                <option value="4">Grid 4 owned</option>
+                <option value="4">Grid 4 owned</option> -->
             </select>
             <section>
                 <input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">  <label for="thisgridbydefault">Select this grid by default</label> <br>
@@ -389,7 +394,7 @@
         let trackThisGrid = el.checked;
         $.getJSON('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
             if(data.status !== "OK"){
-                alert(data.status + ": " + data.data);
+                showAlert(data.status + ": " + data.data);
                 return;
             }
             data = data.data;
@@ -610,7 +615,7 @@
         $.getJSON('get?grid=' + selectedGrid + '&cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             console.log(data);
             if (data.status !== "OK"){
-                alert(data.status + ": " + data.data);
+                showAlert(data.status + ": " + data.data);
                 popLoadingScreen(message);
                 return;
             }
@@ -667,7 +672,7 @@
         }
         $.getJSON('list?grid=' + selectedGrid, function(data) {
             if(data.status !== "OK"){
-                alert(data.status + ": " + data.data);
+                showAlert(data.status + ": " + data.data);
                 return;
             }
             data = data.data;
@@ -681,7 +686,7 @@
     function updateGridList(){
         $.getJSON('grids', function(data) {
             if(data.status !== "OK"){
-                alert(data.status + ": " + data.data);
+                showAlert(data.status + ": " + data.data);
                 return;
             }
             data = data.data;
@@ -702,7 +707,10 @@
                 }
             }
             document.getElementById('gridselection').innerHTML = html;
-            document.getElementById('gridselection').size = data.length;
+            if (data.length > 1)
+                document.getElementById('gridselection').size = data.length;
+            else
+                document.getElementById('gridselection').size = 2;
         });
     }
     updateGridList();
@@ -837,7 +845,7 @@
         $.getJSON('items?grid=' + selectedGrid, function(data){
             console.log(data);
             if(data.status !== "OK"){
-                alert(data.status + ": " + data.data);
+                showAlert(data.status + ": " + data.data);
                 popLoadingScreen(message);
                 return;
             }
@@ -856,7 +864,7 @@
         $.getJSON('trackinghistory?grid=' + selectedGrid, function(data){
             console.log(data);
             if(data.status !== "OK"){
-                alert(data.status + ": " + data.data);
+                showAlert(data.status + ": " + data.data);
                 popLoadingScreen(message);
                 return;
             }
@@ -1058,7 +1066,7 @@
         $.getJSON('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
             console.log(data);
             if(data.status !== "OK"){
-                alert(data.status + ": " + data.data);
+                showAlert(data.status + ": " + data.data);
                 popLoadingScreen(message);
                 return;
             }
@@ -1128,7 +1136,7 @@
             $.getJSON('order?grid=' + selectedGrid + '&item=' + hashcode + "&quantity=" + quantity, function(data){
                 console.log(data);
                 if(data.status !== "OK"){
-                    alert(data.status + ": " + data.data);
+                    showAlert(data.status + ": " + data.data);
                     popLoadingScreen(message);
                     return;
                 }
@@ -1161,7 +1169,7 @@
             }
             console.log(data);
             if (data.status !== "OK"){
-                alert(data.status + ": " + data.data);
+                showAlert(data.status + ": " + data.data);
                 return;
             }
             data = data.data;
@@ -1225,7 +1233,7 @@
         refreshTerminal();
         $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&cancel", function(data){
             if(data.status !== "OK"){
-                alert(data.status + ": " + data.data);
+                showAlert(data.status + ": " + data.data);
                 return;
             }
             data = data.data;
@@ -1241,7 +1249,7 @@
         pushLoadingScreen(message);
         $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&submit" + "&cpu=" + encodeURIComponent(cpuForJob).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             if (data.status !== "OK"){
-                alert(data.status + ": " + data.data);
+                showAlert(data.status + ": " + data.data);
             }
             popLoadingScreen(message);
             setCurrentScreen(0);
@@ -1278,7 +1286,7 @@
         }
         $.getJSON('icon?items=' + par, function(data){
             if (data.status !== "OK"){
-                alert(data.status + ": " + data.data);
+                showAlert(data.status + ": " + data.data);
                 return;
             }
             data = data.data;
@@ -1347,6 +1355,11 @@
     function updateDoNotShowAgain(el){
         setCookie("DoNotShowUpdateMessage", 1, 7);
         closeTopMessage(el);
+    }
+
+    function showAlert(text){
+        let o = document.getElementById('alertoverlay');
+        o.innerHTML = "<section onclick='this.remove();'>" + text + "</section>" + o.innerHTML;
     }
 
     topMessages = [];
