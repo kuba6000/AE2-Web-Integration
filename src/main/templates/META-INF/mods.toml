@@ -22,3 +22,7 @@ description = "${mod_description}"
 logoFile = ""
 displayURL = "${mod_url}"
 credits = ""
+
+[[dependencies.ae2webintegration_interface]]
+modId = "ae2"
+mandatory = true

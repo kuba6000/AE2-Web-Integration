@@ -8,10 +8,33 @@ plugins {
     //alias libs.plugins.shadow
     alias libs.plugins.spotless
     alias libs.plugins.lombok
+    id 'com.palantir.git-version' version '4.0.0' apply false // 0.13.0 is the last jvm8 supporting version
 }
 
 group = maven_group
 // Formats the mod version to include the loader, Minecraft version, and '-SNAPSHOT-<timestamp>' if enabled.
+
+if (project.file('.git/HEAD').isFile()) {
+    apply plugin: 'com.palantir.git-version'
+}
+
+String identifiedVersion
+String versionOverride = System.getenv("VERSION") ?: null
+try {
+    identifiedVersion = versionOverride == null ? gitVersion() : versionOverride
+}
+catch (Exception ignored) {
+    out.style(Style.Failure).text(
+        'This mod must be version controlled by Git AND the repository must provide at least one tag,\n' +
+            'or the VERSION override must be set! ').style(Style.SuccessHeader).text('(Do NOT download from GitHub using the ZIP option, instead\n' +
+        'clone the repository'
+    )
+    versionOverride = 'NO-GIT-TAG-SET'
+    identifiedVersion = versionOverride
+}
+
+mod_version = identifiedVersion
+
 boolean isSnapshot = System.getenv("SNAPSHOT")
 version = "${mod_version}" + (isSnapshot ? "-SNAPSHOT" : "")
 boolean isCI = System.getenv("CI") != null

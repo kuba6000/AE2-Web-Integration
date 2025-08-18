@@ -32,6 +32,11 @@ public class AE2WebIntegration {
             .registerExtensionPoint(
                 IExtensionPoint.DisplayTest.class,
                 () -> new IExtensionPoint.DisplayTest(() -> NetworkConstants.IGNORESERVERONLY, (a, b) -> true));
+        Tags.VERSION = ModLoadingContext.get()
+            .getActiveContainer()
+            .getModInfo()
+            .getVersion()
+            .toString();
         ModLoadingContext.get()
             .registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
         WebData.loadData();

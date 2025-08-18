@@ -19,7 +19,7 @@ java {
 jar.archiveClassifier = "dev"
 
 base {
-    archivesName = "${project.name}-${libs.versions.minecraft.get()}"
+    archivesName = "${project.name}" // -${libs.versions.minecraft.get()}
 }
 
 afterEvaluate {
@@ -30,10 +30,10 @@ afterEvaluate {
                 'MixinConfigs': 'mixins.ae2webintegration.json',
                 'Specification-Title': project.name,
                 'Specification-Version': mod_version,
-                'Specification-Vendor': 'GregTechCEu Team',
+                'Specification-Vendor': 'kuba6000',
                 'Implementation-Title': base.archivesName,
                 'Implementation-Version': version,
-                'Implementation-Vendor': 'GregTechCEu Team',
+                'Implementation-Vendor': 'kuba6000',
         ])
     }
 }

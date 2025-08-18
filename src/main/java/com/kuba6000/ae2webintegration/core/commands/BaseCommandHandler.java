@@ -86,7 +86,7 @@ public class BaseCommandHandler {
         AE2Controller.awaitingRegistration.remove(id);
 
         context.getSource()
-            .sendSuccess(() -> Component.literal(ChatFormatting.GREEN.getName() + "Registered successfully!"), false);
+            .sendSuccess(() -> Component.literal(ChatFormatting.GREEN + "Registered successfully!"), false);
 
         return 1;
     }

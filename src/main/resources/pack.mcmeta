@@ -1,6 +1,8 @@
 {
   "pack": {
-    "pack_format": 3,
-    "description": "AE2WebIntegration Resource Pack"
+    "description": {
+      "text": "${mod_name} resources"
+    },
+    "pack_format": 15
   }
 }
