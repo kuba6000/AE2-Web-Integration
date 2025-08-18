@@ -51,7 +51,7 @@ public class Config {
         AE_PUBLIC_MODE = builder.comment(
             "Public server mode = enable registration system on the website, players will be able to register and login to monitor their own ae networks, "
                 + "if disabled, there is only one admin account with password set in the config file with access to all networks on the server")
-            .define("public_mode", false);
+            .define("public_mode", true);
         AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE = builder
             .comment("How many requests can be made before user is logged in per minute")
             .defineInRange("max_requests_before_logged_in_per_minute", 20, 1, 1000);
