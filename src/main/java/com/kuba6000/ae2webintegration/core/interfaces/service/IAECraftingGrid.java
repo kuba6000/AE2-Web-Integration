@@ -2,6 +2,7 @@ package com.kuba6000.ae2webintegration.core.interfaces.service;
 
 import java.util.Set;
 import java.util.concurrent.Future;
+import java.util.function.Function;
 
 import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -20,4 +21,6 @@ public interface IAECraftingGrid {
     Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long quantity);
 
     String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower, IAEGrid grid);
+
+    Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter);
 }

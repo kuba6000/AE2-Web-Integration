@@ -3,6 +3,7 @@ package com.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations.s
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Future;
+import java.util.function.Function;
 
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,16 +24,20 @@ import appeng.api.networking.crafting.ICraftingSubmitResult;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
+import appeng.api.storage.AEKeyFilter;
 import appeng.me.helpers.PlayerSource;
 import appeng.me.service.CraftingService;
 import appeng.me.service.helpers.NetworkCraftingProviders;
 
 @Mixin(value = CraftingService.class, remap = false)
-public class AECraftingGridMixin implements IAECraftingGrid {
+public abstract class AECraftingGridMixin implements IAECraftingGrid {
 
     @Shadow
     @Final
     private NetworkCraftingProviders craftingProviders;
+
+    @Shadow
+    public abstract Set<AEKey> getCraftables(AEKeyFilter filter);
 
     @Override
     public ICraftingMediumTracker web$getCraftingProviders() {
@@ -102,5 +107,11 @@ public class AECraftingGridMixin implements IAECraftingGrid {
             default -> errorMessage += "Unknown error occurred during crafting job submission.";
         }
         return errorMessage;
+    }
+
+    @Override
+    public Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter) {
+        return (Set<IAEKey>) (Object) getCraftables(
+            filter == null ? g -> true : (AEKey key) -> filter.apply((IAEKey) key));
     }
 }
