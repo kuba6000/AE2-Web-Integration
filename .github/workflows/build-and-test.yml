@@ -9,7 +9,36 @@ on:
 
 jobs:
   build-and-test:
-    uses: GTNewHorizons/GTNH-Actions-Workflows/.github/workflows/build-and-test.yml@master
-    secrets: inherit
-    with:
-      timeout: 150
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        env:
+          REF: ${{ inputs.ref || github.ref }}
+        with:
+          distribution: temurin
+          java-version: ${{ contains(env.REF, '1.20.1') && '17' || '21' }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-write-only: ${{ inputs.update-cache }}
+          cache-read-only: ${{ github.ref != 'refs/heads/1.20.1' && github.ref != 'refs/heads/1.21' }}
+          add-job-summary: 'on-failure'
+          validate-wrappers: true
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      - name: Build
+        if: steps.filter.outputs.code == 'true'
+        run: ./gradlew assemble
+      - name: Attach compilation artifacts
+        if: steps.filter.outputs.code == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.repository_id }}-build-libs
+          path: build/libs/
+          retention-days: 90
