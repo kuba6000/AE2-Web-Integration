@@ -233,6 +233,35 @@ input, select {
     -ms-transform: translate(-50%,-50%);
 }
 
+#alertoverlay {
+    position: fixed;
+    display: flex;
+    flex-direction: column;
+    width: 15%;
+    height: 100%;
+    top: 5px;
+    left: 5px;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0);
+    z-index: 2;
+}
+#alertoverlay > *{
+    width: 100%;
+    border: black solid 1px;
+    border-radius: 5px;
+    background-color: #cc404049;
+    padding: 10px;
+    cursor: pointer;
+}
+
+#alertoverlay > *::after{
+    content: "X";
+    float: right;
+    color: #e0e0e0;
+
+}
+
 #topMessages{
     position: fixed;
     width: 100%;
