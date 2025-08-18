@@ -88,7 +88,7 @@ jobs:
       - name: Run server for up to 90 seconds
         # if: ${{ !inputs.client-only }}
         run: |
-          mkdir -p run
+          mkdir -p run/server
           echo "eula=true" > run/server/eula.txt
           # Set a constant seed with a village at spawn
           echo "level-seed=-6202107849386030209\nonline-mode=true\n" > run/server/server.properties
