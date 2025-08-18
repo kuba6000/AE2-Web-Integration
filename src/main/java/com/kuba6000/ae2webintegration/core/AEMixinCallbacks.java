@@ -3,8 +3,8 @@ package com.kuba6000.ae2webintegration.core;
 import com.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import com.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import com.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import com.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
@@ -15,14 +15,14 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
     @Override
     public void jobStarted(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging,
         boolean isAuthorPlayer) {
-        if (!Config.TRACKING_TRACK_MACHINE_CRAFTING && !isAuthorPlayer) {
+        if (!Config.INSTANCE.TRACKING_TRACK_MACHINE_CRAFTING.get() && !isAuthorPlayer) {
             return;
         }
         AE2JobTracker.addJob(cpuCluster, cache, grid, isMerging);
     }
 
     @Override
-    public void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, IItemStack diff) {
+    public void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, IAEKey diff) {
         AE2JobTracker.updateCraftingStatus(cpu, diff);
     }
 

@@ -1,22 +1,20 @@
 package com.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
+import com.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import com.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 
-import appeng.api.networking.crafting.CraftingItemList;
-import appeng.api.storage.data.IAEItemStack;
+import appeng.api.stacks.AEKey;
+import appeng.api.stacks.KeyCounter;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
 public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
-
-    @Shadow
-    private appeng.api.storage.data.IItemList<IAEItemStack> waitingFor;
 
     @Unique
     private int web$internalID = -1;
@@ -28,13 +26,13 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Override
     public boolean web$hasCustomName() {
-        return !((CraftingCPUCluster) (Object) this).getName()
-            .isEmpty();
+        return !(((CraftingCPUCluster) (Object) this).getName() == null);
     }
 
     @Override
     public String web$getName() {
-        return web$hasCustomName() ? ((CraftingCPUCluster) (Object) this).getName() : ("CPU #" + web$internalID);
+        return web$hasCustomName() ? ((CraftingCPUCluster) (Object) this).getName()
+            .getString() : ("CPU #" + web$internalID);
     }
 
     @Override
@@ -50,17 +48,18 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Override
     public long web$getUsedStorage() {
-        if (!web$usedStorageInitialized) {
-            web$usedStorageInitialized = true;
-            try {
-                appeng.me.cluster.implementations.CraftingCPUCluster.class.getDeclaredMethod("getUsedStorage");
-            } catch (NoSuchMethodException e) {
-                web$isUsedStorageAvailable = false;
-                return -1L;
-            }
-        }
-        if (!web$isUsedStorageAvailable) return -1L;
-        return ((CraftingCPUCluster) (Object) this).getUsedStorage();
+        return -1L;
+        // if (!web$usedStorageInitialized) {
+        // web$usedStorageInitialized = true;
+        // try {
+        // appeng.me.cluster.implementations.CraftingCPUCluster.class.getDeclaredMethod("getUsedStorage");
+        // } catch (NoSuchMethodException e) {
+        // web$isUsedStorageAvailable = false;
+        // return -1L;
+        // }
+        // }
+        // if (!web$isUsedStorageAvailable) return -1L;
+        // return ((CraftingCPUCluster) (Object) this).getUsedStorage();
     }
 
     @Override
@@ -79,30 +78,34 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     }
 
     @Override
-    public IItemStack web$getFinalOutput() {
-        return (IItemStack) ((CraftingCPUCluster) (Object) this).getFinalOutput();
+    public IAEGenericStack web$getFinalOutput() {
+        return (IAEGenericStack) (Object) ((CraftingCPUCluster) (Object) this).craftingLogic.getFinalJobOutput();
     }
 
     @Override
-    public void web$getActiveItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.ACTIVE);
+    public void web$getAllItems(IItemList list) {
+        ((CraftingCPUCluster) (Object) this).craftingLogic.getAllItems((KeyCounter) (Object) list);
     }
 
     @Override
-    public void web$getPendingItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.PENDING);
+    public long web$getActiveItems(IAEKey key) {
+        return ((CraftingCPUCluster) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
     }
 
     @Override
-    public void web$getStorageItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.STORAGE);
+    public long web$getPendingItems(IAEKey key) {
+        return ((CraftingCPUCluster) (Object) this).craftingLogic.getPendingOutputs((AEKey) key);
+    }
+
+    @Override
+    public long web$getStorageItems(IAEKey key) {
+        return ((CraftingCPUCluster) (Object) this).craftingLogic.getStored((AEKey) key);
     }
 
     @Override
     public IItemList web$getWaitingFor() {
-        return (IItemList) (Object) waitingFor;
+        return (IItemList) (Object) ((ICraftingCPULogicAccessor) ((CraftingCPUCluster) (Object) this).craftingLogic)
+            .web$getJob()
+            .web$getWaitingFor().list;
     }
 }

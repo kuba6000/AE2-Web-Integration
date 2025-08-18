@@ -2,14 +2,16 @@ package com.kuba6000.ae2webintegration.ae2interface.implementations;
 
 import java.util.Iterator;
 
+import net.minecraftforge.server.ServerLifecycleHooks;
+
 import com.kuba6000.ae2webintegration.core.interfaces.IAE;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemList;
 
-import appeng.api.AEApi;
-import appeng.core.worlddata.WorldData;
-import appeng.hooks.TickHandler;
+import appeng.api.features.IPlayerRegistry;
+import appeng.api.stacks.KeyCounter;
+import appeng.hooks.ticking.TickHandler;
 import appeng.me.Grid;
 
 public class AE implements IAE {
@@ -26,7 +28,8 @@ public class AE implements IAE {
         public java.util.Iterator<IAEGrid> iterator() {
             return new java.util.Iterator<>() {
 
-                private final Iterator<Grid> iterator = TickHandler.INSTANCE.getGridList()
+                private final Iterator<Grid> iterator = TickHandler.instance()
+                    .getGridList()
                     .iterator();
 
                 @Override
@@ -49,14 +52,11 @@ public class AE implements IAE {
 
     @Override
     public IItemList web$createItemList() {
-        return (IItemList) (Object) AEApi.instance()
-            .storage()
-            .createItemList();
+        return (IItemList) (Object) new KeyCounter();
     }
 
     @Override
     public IAEPlayerData web$getPlayerData() {
-        return (IAEPlayerData) WorldData.instance()
-            .playerData();
+        return (IAEPlayerData) IPlayerRegistry.getMapping(ServerLifecycleHooks.getCurrentServer());
     }
 }

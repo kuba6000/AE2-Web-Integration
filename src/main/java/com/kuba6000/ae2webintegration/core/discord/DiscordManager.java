@@ -52,9 +52,10 @@ public class DiscordManager extends Thread {
     }
 
     private static void postMessage(DiscordEmbed message) {
-        if (Config.DISCORD_WEBHOOK.isEmpty()) return;
+        if (Config.INSTANCE.DISCORD_WEBHOOK.get()
+            .isEmpty()) return;
 
-        String roleID = Config.DISCORD_ROLE_ID;
+        String roleID = Config.INSTANCE.DISCORD_ROLE_ID.get();
 
         JsonObject json = new JsonObject();
         json.addProperty("username", "AE2 Web Integration");
@@ -70,7 +71,7 @@ public class DiscordManager extends Thread {
 
         URL url = null;
         try {
-            url = new URL(Config.DISCORD_WEBHOOK);
+            url = new URL(Config.INSTANCE.DISCORD_WEBHOOK.get());
 
             HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
             connection.addRequestProperty("Content-Type", "application/json");

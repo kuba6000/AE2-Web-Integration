@@ -7,11 +7,14 @@ import java.util.Map;
 import com.kuba6000.ae2webintegration.core.AE2Controller;
 import com.kuba6000.ae2webintegration.core.AE2JobTracker;
 import com.kuba6000.ae2webintegration.core.api.JSON_CompactedItem;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import com.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import com.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import com.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import com.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+
+import it.unimi.dsi.fastutil.objects.Object2LongMap;
 
 public class GetCPU extends ISyncedRequest {
 
@@ -19,7 +22,7 @@ public class GetCPU extends ISyncedRequest {
 
         public long size;
         public boolean isBusy;
-        public IItemStack finalOutput;
+        public IAEGenericStack finalOutput;
         public ArrayList<JSON_CompactedItem> items;
         public boolean hasTrackingInfo = false;
         public long timeStarted = 0L;
@@ -61,33 +64,24 @@ public class GetCPU extends ISyncedRequest {
             AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.trackingInfoMap.get(cpu);
             clusterData.hasTrackingInfo = trackingInfo != null;
 
-            HashMap<JSON_CompactedItem, JSON_CompactedItem> prep = new HashMap<>();
+            HashMap<IAEKey, JSON_CompactedItem> prep = new HashMap<>();
             IItemList items = AE2Controller.AE2Interface.web$createItemList();
-            cpu.web$getActiveItems(items);
-            for (IItemStack itemStack : items) {
-                JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).active += itemStack.web$getStackSize();
-            }
-            items = AE2Controller.AE2Interface.web$createItemList();
-            cpu.web$getPendingItems(items);
-            for (IItemStack itemStack : items) {
-                JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).pending += itemStack.web$getStackSize();
-            }
-            items = AE2Controller.AE2Interface.web$createItemList();
-            cpu.web$getStorageItems(items);
-            for (IItemStack itemStack : items) {
-                JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).stored += itemStack.web$getStackSize();
+            cpu.web$getAllItems(items);
+            for (Object2LongMap.Entry<IAEKey> entry : items) {
+                IAEKey key = entry.getKey();
+                JSON_CompactedItem compactedItem = JSON_CompactedItem.create(key);
+                compactedItem.active = cpu.web$getActiveItems(key);
+                compactedItem.pending = cpu.web$getPendingItems(key);
+                compactedItem.stored = cpu.web$getStorageItems(key);
+                prep.put(key, compactedItem);
             }
 
             if (clusterData.hasTrackingInfo) {
                 clusterData.timeStarted = trackingInfo.timeStarted;
                 clusterData.timeElapsed = (System.currentTimeMillis()) - clusterData.timeStarted;
-                for (IItemStack stack : trackingInfo.timeSpentOn.keySet()) {
-                    JSON_CompactedItem compactedItem = JSON_CompactedItem.create(stack);
-                    JSON_CompactedItem finalCompactedItem = compactedItem;
-                    compactedItem = prep.computeIfAbsent(compactedItem, k -> finalCompactedItem);
+                for (IAEKey stack : trackingInfo.timeSpentOn.keySet()) {
+                    JSON_CompactedItem compactedItem = prep
+                        .computeIfAbsent(stack, k -> JSON_CompactedItem.create(stack));
                     compactedItem.timeSpentCrafting += trackingInfo.getTimeSpentOn(stack);
                     compactedItem.craftedTotal += trackingInfo.craftedTotal.getOrDefault(stack, 0L);
                     compactedItem.shareInCraftingTime += trackingInfo.getShareInCraftingTime(stack);

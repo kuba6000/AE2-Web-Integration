@@ -41,21 +41,25 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
         List<String> mixins = new ArrayList<>(
             Arrays.asList(
-                "AE2.CraftingGridCacheMixin",
-                "AE2.CraftingCPUClusterMixin",
-                "AE2.implementations.AEItemStackMixin",
-                "AE2.implementations.AEItemListMixin",
+                "AE2.CraftingCPULogicMixin",
+                "AE2.ExecutingCraftingJobMixin",
+                "AE2.NetworkCraftingProvidersMixin",
+                "AE2.ProviderStateMixin",
                 "AE2.implementations.AECraftingCPUClusterMixin",
                 "AE2.implementations.AECraftingJobMixin",
                 "AE2.implementations.AECraftingPatternDetailsMixin",
+                "AE2.implementations.AEGenericStackMixin",
                 "AE2.implementations.AEGridMixin",
+                "AE2.implementations.AEItemListMixin",
+                "AE2.implementations.AEItemMixin",
                 "AE2.implementations.AEMeInventoryItemMixin",
                 "AE2.implementations.AEPlayerDataMixin",
+                "AE2.implementations.CraftingPlanSummaryEntryMixin",
+                "AE2.implementations.CraftingPlanSummaryMixin",
                 "AE2.implementations.PatternProviderViewableMixin",
                 "AE2.implementations.service.AECraftingGridMixin",
                 "AE2.implementations.service.AEPathingGridMixin",
-                "AE2.implementations.service.AEStorageGridMixin",
-                "AE2.implementations.service.AESecurityGridMixin"));
+                "AE2.implementations.service.AEStorageGridMixin"));
 
         LOG.info("MIXING INTO AE2 LETS GOOOOOOOOOOOOOOOOOOOOOOOOO");
 
@@ -63,12 +67,14 @@ public class MixinPlugin implements IMixinConfigPlugin {
     }
 
     @Override
-    public void preApply(String s, ClassNode classNode, String s1, IMixinInfo iMixinInfo) {
+    public void preApply(String targetClassName, org.objectweb.asm.tree.ClassNode targetClass, String mixinClassName,
+        IMixinInfo mixinInfo) {
 
     }
 
     @Override
-    public void postApply(String s, ClassNode classNode, String s1, IMixinInfo iMixinInfo) {
+    public void postApply(String targetClassName, org.objectweb.asm.tree.ClassNode targetClass, String mixinClassName,
+        IMixinInfo mixinInfo) {
 
     }
 }

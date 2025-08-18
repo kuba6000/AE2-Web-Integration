@@ -6,6 +6,6 @@ public interface IAECraftingJob {
 
     long web$getByteTotal();
 
-    void web$populatePlan(IItemList plan);
+    ICraftingPlanSummary web$generateSummary(IAEGrid grid);
 
 }

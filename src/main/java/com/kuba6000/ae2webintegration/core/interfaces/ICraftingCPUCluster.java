@@ -18,13 +18,15 @@ public interface ICraftingCPUCluster {
 
     void web$cancel();
 
-    IItemStack web$getFinalOutput();
+    IAEGenericStack web$getFinalOutput();
 
-    void web$getActiveItems(IItemList list);
+    void web$getAllItems(IItemList list);
 
-    void web$getPendingItems(IItemList list);
+    long web$getActiveItems(IAEKey key);
 
-    void web$getStorageItems(IItemList list);
+    long web$getPendingItems(IAEKey key);
+
+    long web$getStorageItems(IAEKey key);
 
     IItemList web$getWaitingFor();
 

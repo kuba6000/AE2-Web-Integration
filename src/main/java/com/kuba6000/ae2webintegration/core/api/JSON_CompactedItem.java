@@ -1,12 +1,12 @@
 package com.kuba6000.ae2webintegration.core.api;
 
-import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import com.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 public class JSON_CompactedItem {
 
     @GSONUtils.SkipGSON
-    private final IItemStack internalItem;
+    private final IAEKey internalItem;
     @GSONUtils.SkipGSON
     private final int hashcode;
 
@@ -21,14 +21,14 @@ public class JSON_CompactedItem {
     public double shareInCraftingTimeCombined = 0d;
     public double craftsPerSec = 0d;
 
-    public JSON_CompactedItem(IItemStack itemStack) {
+    public JSON_CompactedItem(IAEKey itemStack) {
         this.internalItem = itemStack;
         this.hashcode = this.internalItem.hashCode();
         this.itemid = itemStack.web$getItemID();
         this.itemname = itemStack.web$getDisplayName();
     }
 
-    public static JSON_CompactedItem create(IItemStack stack) {
+    public static JSON_CompactedItem create(IAEKey stack) {
         return new JSON_CompactedItem(stack);
     }
 

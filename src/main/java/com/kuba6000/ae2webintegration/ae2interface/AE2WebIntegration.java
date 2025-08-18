@@ -1,49 +1,44 @@
 package com.kuba6000.ae2webintegration.ae2interface;
 
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.IExtensionPoint;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.minecraftforge.network.NetworkConstants;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import com.kuba6000.ae2webintegration.Tags;
 import com.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import com.kuba6000.ae2webintegration.core.api.IAEWebInterface;
 
-import appeng.me.cache.SecurityCache;
-import cpw.mods.fml.common.Mod;
-import cpw.mods.fml.common.event.FMLInitializationEvent;
-import cpw.mods.fml.common.event.FMLPostInitializationEvent;
-import cpw.mods.fml.common.event.FMLPreInitializationEvent;
-import cpw.mods.fml.common.event.FMLServerStartingEvent;
-
-@Mod(
-    modid = AE2WebIntegration.MODID,
-    version = Tags.VERSION,
-    name = "AE2WebIntegration-Interface",
-    acceptedMinecraftVersions = "[1.7.10]",
-    acceptableRemoteVersions = "*")
+@Mod(value = AE2WebIntegration.MODID)
+@Mod.EventBusSubscriber(modid = AE2WebIntegration.MODID)
 public class AE2WebIntegration {
 
-    public static final String MODID = "ae2webintegration-interface";
+    public static final String MODID = "ae2webintegration_interface";
     public static final Logger LOG = LogManager.getLogger(MODID);
 
-    @Mod.EventHandler
-    public void preInit(FMLPreInitializationEvent event) {}
-
-    @Mod.EventHandler
-    public void init(FMLInitializationEvent event) {
-        IAEWebInterface.getInstance()
-            .initAEInterface(AE.instance);
+    public AE2WebIntegration() {
+        ModLoadingContext.get()
+            .registerExtensionPoint(
+                IExtensionPoint.DisplayTest.class,
+                () -> new IExtensionPoint.DisplayTest(() -> NetworkConstants.IGNORESERVERONLY, (a, b) -> true));
+        // SecurityCache.registerOpPlayer(
+        // IAEWebInterface.getInstance()
+        // .getAEWebGameProfile());
     }
 
-    @Mod.EventHandler
-    public void postInit(FMLPostInitializationEvent event) {
-        SecurityCache.registerOpPlayer(
+    @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
+    private static class eventHandler {
+
+        @SubscribeEvent
+        public static void commonSetup(FMLCommonSetupEvent event) {
+            // This is where you can do common setup tasks
             IAEWebInterface.getInstance()
-                .getAEWebGameProfile());
-    }
-
-    @Mod.EventHandler
-    public void serverStarting(FMLServerStartingEvent event) {
-
+                .initAEInterface(AE.instance);
+        }
     }
 
 }

@@ -10,7 +10,8 @@ import com.google.gson.FieldAttributes;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSerializer;
-import com.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import com.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 public class GSONUtils {
 
@@ -31,18 +32,19 @@ public class GSONUtils {
         }
     };
 
-    private static final JsonSerializer<IItemStack> IItemStackSerializer = (src, typeOfSrc, context) -> {
+    private static final JsonSerializer<IAEGenericStack> IItemStackSerializer = (src, typeOfSrc, context) -> {
         JsonObject json = new JsonObject();
-        json.addProperty("itemid", src.web$getItemID());
-        json.addProperty("itemname", src.web$getDisplayName());
-        json.addProperty("hashcode", src.hashCode());
-        json.addProperty("quantity", src.web$getStackSize());
+        IAEKey key = src.web$what();
+        json.addProperty("itemid", key.web$getItemID());
+        json.addProperty("itemname", key.web$getDisplayName());
+        json.addProperty("hashcode", key.hashCode());
+        json.addProperty("quantity", src.web$amount());
         return json;
     };
 
     public static final GsonBuilder GSON_BUILDER = new GsonBuilder().addSerializationExclusionStrategy(GSONStrategy)
         .addDeserializationExclusionStrategy(GSONStrategy)
-        .registerTypeHierarchyAdapter(IItemStack.class, IItemStackSerializer)
+        .registerTypeHierarchyAdapter(IAEGenericStack.class, IItemStackSerializer)
         .serializeNulls();
 
 }
