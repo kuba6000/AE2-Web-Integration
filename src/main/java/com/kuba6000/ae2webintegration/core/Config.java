@@ -73,7 +73,7 @@ public class Config {
     public static File getConfigFile(String fileName) {
         if (configDirectory == null) {
             configDirectory = FMLPaths.CONFIGDIR.get()
-                .resolve("ae2webintegration");
+                .resolve("ae2webintegration/");
         }
         return configDirectory.resolve(fileName)
             .toFile();

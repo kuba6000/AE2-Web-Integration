@@ -18,13 +18,13 @@ dependencies {
     }
 
     // AE2
-    modCompileOnly(forge.ae2)
+    modApi(forge.ae2)
     modCompileOnly(forge.ae2wtlib)
 
 
     // Standard runtime mods //
     modLocalRuntime(forge.jade)
-    modLocalRuntime(forge.ae2)
+    //modLocalRuntime(forge.ae2)
     modLocalRuntime(forge.spark)
     modLocalRuntime(forge.modernfix)
 
