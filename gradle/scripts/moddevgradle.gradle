@@ -150,7 +150,7 @@ legacyForge {
             // "REGISTRYDUMP": For getting the contents of all registries.
             systemProperty 'forge.logging.markers', 'REGISTRIES'
             // Enable assertions for our classes in dev environment
-            jvmArgument('-ea:com.kuba6000.ae2webintegration...')
+            jvmArgument('-ea:pl.kuba6000.ae2webintegration...')
 
             // Recommended logging level for the console
             // You can set various levels here.
