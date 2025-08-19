@@ -238,7 +238,7 @@ input, select {
     display: flex;
     flex-direction: column;
     width: 15%;
-    height: 100%;
+    height: fit-content;
     top: 5px;
     left: 5px;
     right: 0;
