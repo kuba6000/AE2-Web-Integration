@@ -15,7 +15,18 @@ An add-on for AE2 that lets you view your terminal in your web browser wherever 
 
 # How?
 
-This mod starts a web server on server boot that hosts a simple website that you can access directly, or through API calls
+This mod starts a web server on server boot that hosts a simple website that you can access directly, or through API calls  
+
+## How does web panel know which network to chose from?
+
+Because the mod is server sided only, there is no additional terminal or block added that could identify the networks,  
+Networks are identified through wireless access points (or security terminal on older mc versions),  
+all players who wants to access a specific network through the website, must place an wireless access point on that network,  
+Additionally, if you access the website through an Admin account, you will have access to all networks with at least one wireless access point (doesn't matter if you placed it) 
+  
+On older minecraft versions where there is a security terminal, networks are identified through an security terminal,  
+all players who wants to access the network should have their bio cards in the security terminal block (wild bio card is ignored for security reasons!)
+Admin account will have access to all networks on the server that have security terminal (doesn't matter it has your bio card)
 
 # Current features
 
@@ -62,7 +73,7 @@ token mechanism is the same as in public mode.
 - Download the latest version for your game version from the releases page
 - Drop the mod in your server mods folder (only on the server!) (This also works on single player, but is not recommended)
 - Start the server
-- You can now find the config in /configs/ae2webintegration/ae2webintegration.cfg. Edit the port number and password protection for your needs
+- You can now find the config in /configs/ae2webintegration/ae2webintegration.toml (or .cfg on older mc versions). Edit the port number and password protection for your needs
 - **Disable public mode if you play by yourself**
 - Reload the config (/ae2webintegration reload) or restart the server
 - Make sure you have opened the configured port (firewall, redirections) if you want to use it on public internet
@@ -85,7 +96,7 @@ token mechanism is the same as in public mode.
 
 # Compatibility
 
-The mod is currently implemented only on 1.7.10 and 1.12.2 versions, although it might change in the future!   
+The mod is currently implemented only on 1.20.1, 1.12.2 and 1.7.10 versions, although it might change in the future!   
 A few remarks about compatibility:
 - 1.7.10 version is based on [GTNH fork of AE2](https://github.com/GTNewHorizons/Applied-Energistics-2-Unofficial) and [GTNH fork AE2FC for 1.7.10](https://github.com/GTNewHorizons/AE2FluidCraft-Rework)
 - 1.12.2 version is based on [AE2-UEL](https://github.com/AE2-UEL/Applied-Energistics-2) and [AE2FC for 1.12.2](https://github.com/AE2-UEL/AE2FluidCraft-Rework/)
