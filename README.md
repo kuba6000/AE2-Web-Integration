@@ -13,6 +13,13 @@ An add-on for AE2 that lets you view your terminal in your web browser wherever 
 
 **THE MOD SHOULD ONLY BE INSTALLED ON SERVER SIDE, THERE IS NO ITEMS ADDED IN THE GAME!**
 
+# Showcase on youtube
+
+### Main mod
+[![YT showcase](https://img.youtube.com/vi/3uey6nuW09g/0.jpg)](https://www.youtube.com/watch?v=3uey6nuW09g)  
+### Discord integration
+[![YT showcase](https://img.youtube.com/vi/e4a86dBz7NY/0.jpg)](https://www.youtube.com/watch?v=e4a86dBz7NY)  
+
 # How?
 
 This mod starts a web server on server boot that hosts a simple website that you can access directly, or through API calls  
