@@ -35,8 +35,7 @@ catch (Exception ignored) {
 
 mod_version = identifiedVersion
 
-boolean isSnapshot = System.getenv("SNAPSHOT")
-version = "${mod_version}" + (isSnapshot ? "-SNAPSHOT" : "")
+version = "${mod_version}"
 boolean isCI = System.getenv("CI") != null
 
 java {
