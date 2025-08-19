@@ -7,7 +7,7 @@
 
 </div>
 
-An add-on for AE2 that lets you view your terminal in your web browser wherever you are! This also includes viewing orders, cancelling them and even making a new ones!   
+An add-on for AE2 that lets you view your terminal in your web browser wherever you are! This also includes viewing orders, cancelling them and even making a new ones!   There is also a discord integration (through a webhook)!  
 
 **Now also works on multiple networks and on public server = all players can have their own account!**   
 
