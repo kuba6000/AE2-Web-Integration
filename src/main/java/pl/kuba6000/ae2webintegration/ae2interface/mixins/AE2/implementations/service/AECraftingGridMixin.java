@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations.service;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Future;
@@ -53,9 +54,17 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid {
     @Override
     public Set<ICraftingCPUCluster> web$getCPUs() {
         final ImmutableSet<ICraftingCPU> aecpus = ((CraftingService) (Object) this).getCpus();
+        final ArrayList<ICraftingCPU> sortedCpus = new ArrayList<>(aecpus);
+        sortedCpus.sort((c1, c2) -> {
+            final int a = Long.compare(c2.getCoProcessors(), c1.getCoProcessors());
+            if (a != 0) {
+                return a;
+            }
+            return Long.compare(c2.getAvailableStorage(), c1.getAvailableStorage());
+        });
         final Set<ICraftingCPUCluster> cpus = new LinkedHashSet<>(aecpus.size());
         int i = 1;
-        for (ICraftingCPU cpu : aecpus) {
+        for (ICraftingCPU cpu : sortedCpus) {
             cpus.add((ICraftingCPUCluster) cpu);
             ((ICraftingCPUCluster) cpu).web$setInternalID(i++);
         }
