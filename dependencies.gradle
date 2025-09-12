@@ -35,7 +35,7 @@
  */
 dependencies {
     api("com.github.GTNewHorizons:GTNHLib:0.6.39:dev")
-    api("com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-673-GTNH:dev")
-    api("com.github.GTNewHorizons:AE2FluidCraft-Rework:1.4.108-gtnh:dev")
-    runtimeOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.7.72-GTNH:dev")
+    api("com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-684-GTNH:dev")
+    api("com.github.GTNewHorizons:AE2FluidCraft-Rework:1.4.114-gtnh:dev")
+    runtimeOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.7.82-GTNH:dev")
 }
