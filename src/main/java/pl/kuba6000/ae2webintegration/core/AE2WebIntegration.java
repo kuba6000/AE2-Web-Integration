@@ -2,16 +2,16 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static pl.kuba6000.ae2webintegration.core.AE2WebIntegration.MODID;
 
-import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.event.server.ServerStartedEvent;
-import net.minecraftforge.event.server.ServerStoppingEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.IExtensionPoint;
-import net.minecraftforge.fml.ModContainer;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.network.NetworkConstants;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.ModLoadingContext;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ConfigTracker;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -22,7 +22,7 @@ import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 @Mod(value = MODID)
-@Mod.EventBusSubscriber(modid = MODID)
+@EventBusSubscriber(modid = MODID)
 public class AE2WebIntegration {
 
     public static final String MODID = "ae2webintegration_core";
@@ -31,10 +31,10 @@ public class AE2WebIntegration {
     public static ModContainer myContainer;
 
     public AE2WebIntegration() {
-        ModLoadingContext.get()
-            .registerExtensionPoint(
-                IExtensionPoint.DisplayTest.class,
-                () -> new IExtensionPoint.DisplayTest(() -> NetworkConstants.IGNORESERVERONLY, (a, b) -> true));
+        // ModLoadingContext.get()
+        // .registerExtensionPoint(
+        // IExtensionPoint.DisplayTest.class,
+        // () -> new IExtensionPoint.DisplayTest(() -> NetworkConstants.IGNORESERVERONLY, (a, b) -> true));
         Tags.VERSION = ModLoadingContext.get()
             .getActiveContainer()
             .getModInfo()
@@ -44,14 +44,19 @@ public class AE2WebIntegration {
         // .registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
         myContainer = ModLoadingContext.get()
             .getActiveContainer();
-        ModLoadingContext.get()
-            .getActiveContainer()
-            .addConfig(
-                Config.CONFIG = new ModConfig(
-                    ModConfig.Type.COMMON,
-                    Config.SPEC,
-                    myContainer,
-                    "ae2webintegration/ae2webintegration.toml"));
+        // ModLoadingContext.get()
+        // .getActiveContainer()
+        // .registerConfig(
+        // Config.CONFIG = new ModConfig(
+        // ModConfig.Type.COMMON,
+        // Config.SPEC,
+        // myContainer,
+        // "ae2webintegration/ae2webintegration.toml"));
+        ConfigTracker.INSTANCE.registerConfig(
+            ModConfig.Type.COMMON,
+            Config.SPEC,
+            myContainer,
+            "ae2webintegration/ae2webintegration.toml");
         WebData.loadData();
         GridData.loadData();
 

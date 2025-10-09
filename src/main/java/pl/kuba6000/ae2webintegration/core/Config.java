@@ -6,38 +6,38 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Random;
 
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.loading.FMLPaths;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.loading.FMLPaths;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 public class Config {
 
     static {
-        ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
+        ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
         INSTANCE = new Config(BUILDER);
         SPEC = BUILDER.build();
     }
     public static final Config INSTANCE;
-    public static final ForgeConfigSpec SPEC;
+    public static final ModConfigSpec SPEC;
     public static ModConfig CONFIG;
 
     private static Path configDirectory;
 
-    public final ForgeConfigSpec.ConfigValue<String> AE_PASSWORD;
-    public final ForgeConfigSpec.ConfigValue<Integer> AE_PORT;
-    public final ForgeConfigSpec.ConfigValue<Boolean> ALLOW_NO_PASSWORD_ON_LOCALHOST;
-    public final ForgeConfigSpec.ConfigValue<Boolean> AE_PUBLIC_MODE;
-    public final ForgeConfigSpec.ConfigValue<Integer> AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE;
+    public final ModConfigSpec.ConfigValue<String> AE_PASSWORD;
+    public final ModConfigSpec.ConfigValue<Integer> AE_PORT;
+    public final ModConfigSpec.ConfigValue<Boolean> ALLOW_NO_PASSWORD_ON_LOCALHOST;
+    public final ModConfigSpec.ConfigValue<Boolean> AE_PUBLIC_MODE;
+    public final ModConfigSpec.ConfigValue<Integer> AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE;
 
     // discord
-    public final ForgeConfigSpec.ConfigValue<String> DISCORD_WEBHOOK;
-    public final ForgeConfigSpec.ConfigValue<String> DISCORD_ROLE_ID;
+    public final ModConfigSpec.ConfigValue<String> DISCORD_WEBHOOK;
+    public final ModConfigSpec.ConfigValue<String> DISCORD_ROLE_ID;
 
     // tracking
     // TODO: Add more customization options (order time, size, item type ? etc.)
-    public final ForgeConfigSpec.ConfigValue<Boolean> TRACKING_TRACK_MACHINE_CRAFTING;
+    public final ModConfigSpec.ConfigValue<Boolean> TRACKING_TRACK_MACHINE_CRAFTING;
 
-    private Config(ForgeConfigSpec.Builder builder) {
+    private Config(ModConfigSpec.Builder builder) {
         builder.push("General");
         AE_PORT = builder.comment("Port for the hosted website")
             .defineInRange("port", 2324, 1, 65535);

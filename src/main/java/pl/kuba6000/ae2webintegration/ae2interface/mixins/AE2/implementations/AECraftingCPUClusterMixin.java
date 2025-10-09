@@ -73,7 +73,7 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Override
     public void web$cancel() {
-        ((CraftingCPUCluster) (Object) this).cancel();
+        ((CraftingCPUCluster) (Object) this).cancelJob();
     }
 
     @Override

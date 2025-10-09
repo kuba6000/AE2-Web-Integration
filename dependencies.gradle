@@ -1,41 +1,27 @@
 dependencies {
-    compileOnly(libs.jetbrains.annotations)
-
-    // LDLib
-    //jarJar(modApi(forge.ldlib.get()))
-
-    // Registrate
-    //jarJar(modApi(forge.registrate.get()))
-
-    // Configuration
-    //jarJar(modApi(forge.configuration.get()))
+    //compileOnly(libs.jetbrains.annotations)
 
     // Mixin (& Extras)
-    annotationProcessor(variantOf(libs.mixin) { classifier("processor") })
-    compileOnly(annotationProcessor(forge.mixinExtras.common.get()))
-    jarJar(api(forge.mixinExtras.forge.get())).version {
-        require("[${forge.versions.mixinExtras.get()},)")
-    }
+    // annotationProcessor(variantOf(libs.mixin) { classifier("processor") })
+    // compileOnly(annotationProcessor(forge.mixinExtras.common.get()))
+    // jarJar(api(forge.mixinExtras.forge.get())).version {
+    //     require("[${forge.versions.mixinExtras.get()},)")
+    // }
 
     // AE2
-    modApi(forge.ae2)
-    modCompileOnly(forge.ae2wtlib)
-
+    implementation(neoforge.ae2)
+    //modCompileOnly(forge.ae2wtlib)
 
     // Standard runtime mods //
-    modLocalRuntime(forge.jade)
-    //modLocalRuntime(forge.ae2)
-    modLocalRuntime(forge.spark)
-    modLocalRuntime(forge.modernfix)
+    //modLocalRuntime(forge.jade)
+    //modLocalRuntime(forge.spark)
+    //modLocalRuntime(forge.modernfix)
 
-    // Runtime Recipe Viewers - uncomment whichever one you want to use //
-    modLocalRuntime(forge.emi)
-//    modLocalRuntime(forge.jei.forge.impl)
-//    modLocalRuntime(forge.bundles.rei.runtime)
+    // Runtime Recipe Viewers //
+    //modLocalRuntime(forge.emi)
 
     // Client-only runtime mods //
-    modClientLocalRuntime(forge.embeddium)
-    modClientLocalRuntime(forge.oculus)
-    renderNurseCfg(libs.renderNurse)
+    //modClientLocalRuntime(forge.embeddium)
+    //modClientLocalRuntime(forge.oculus)
 
 }

@@ -2,7 +2,7 @@ package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
 import java.util.Iterator;
 
-import net.minecraftforge.server.ServerLifecycleHooks;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import appeng.api.features.IPlayerRegistry;
 import appeng.api.stacks.KeyCounter;

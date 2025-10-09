@@ -1,19 +1,66 @@
 pluginManagement {
     repositories {
-        maven { url = "https://maven.minecraftforge.net/" }
         gradlePluginPortal()
     }
-    plugins {
-        id 'org.jetbrains.kotlin.jvm' version '2.0.21'
-    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
 }
 
 dependencyResolutionManagement {
     repositories {
+        maven {
+            url = 'https://maven.shedaniel.me/'
+            content {
+                includeGroup 'me.shedaniel'
+                includeGroup 'me.shedaniel.cloth'
+                includeGroup 'dev.architectury'
+            }
+        }
+        maven {
+            url = 'https://maven2.bai.lol'
+            content {
+                includeGroup 'mcp.mobius.waila'
+                includeGroup 'lol.bai'
+            }
+        }
+        maven {
+            name = 'TerraformersMC'
+            url = 'https://maven.terraformersmc.com/'
+            content {
+                includeGroup 'dev.emi'
+            }
+        }
+        maven {
+            name = 'cursemaven'
+            url = 'https://www.cursemaven.com'
+            content {
+                includeGroup 'curse.maven'
+            }
+        }
+        maven { // for TOP
+            url = 'https://maven.k-4u.nl/'
+            content {
+                includeGroup 'mcjty.theoneprobe'
+            }
+        }
+        maven {
+            url = 'https://maven.theillusivec4.top/'
+            content {
+                includeGroup 'top.theillusivec4.curios'
+            }
+        }
+        maven {
+            url = 'https://maven.blamejared.com/'
+            content {
+                includeGroup 'mezz.jei'
+            }
+        }
         mavenCentral()
     }
     versionCatalogs {
-        forge {
+        neoforge {
             from(files("gradle/forge.versions.toml"))
         }
     }

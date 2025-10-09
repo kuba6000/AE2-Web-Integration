@@ -10,7 +10,6 @@ import net.minecraft.server.level.ServerPlayer;
 
 import org.apache.commons.lang3.tuple.Pair;
 
-import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
@@ -38,7 +37,8 @@ public class BaseCommandHandler {
     }
 
     public static int reload(CommandContext<CommandSourceStack> context) {
-        ((CommentedFileConfig) Config.CONFIG.getConfigData()).load();
+        // TODO: what to do?
+        // ((CommentedFileConfig) Config.CONFIG.getLoadedConfig()).load();
         Config.SPEC.afterReload();
         AE2Controller.stopHTTPServer();
         AE2Controller.startHTTPServer();

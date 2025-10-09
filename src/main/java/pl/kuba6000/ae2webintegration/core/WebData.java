@@ -10,7 +10,7 @@ import java.util.HashMap;
 import java.util.Optional;
 import java.util.UUID;
 
-import net.minecraftforge.server.ServerLifecycleHooks;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import com.google.common.io.Files;
 import com.google.gson.Gson;

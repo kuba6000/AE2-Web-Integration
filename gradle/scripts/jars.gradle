@@ -4,15 +4,10 @@ tasks.register('slimJar', Jar) {
     from sourceSets.main.output
 }
 
-obfuscation {
-    reobfuscate(tasks.named('slimJar'), sourceSets.main) {
-        archiveClassifier = "slim"
-    }
-}
 
 // Add sources jar to components.java
 java {
-    artifacts.archives(reobfSlimJar)
+    artifacts.archives(slimJar)
     withSourcesJar()
 }
 
@@ -23,7 +18,7 @@ base {
 }
 
 afterEvaluate {
-    reobfJar.archiveClassifier = ""
+    jar.archiveClassifier = ""
     tasks.withType(org.gradle.jvm.tasks.Jar).configureEach {
         destinationDirectory = file('build/libs/')
         manifest.attributes([

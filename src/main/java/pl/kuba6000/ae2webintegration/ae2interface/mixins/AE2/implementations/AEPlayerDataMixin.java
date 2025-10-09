@@ -2,7 +2,7 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import java.util.UUID;
 
-import net.minecraftforge.server.ServerLifecycleHooks;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
