@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static pl.kuba6000.ae2webintegration.core.AE2WebIntegration.MODID;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -13,7 +15,7 @@ import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
-@EventBusSubscriber(modid = "ae2webintegration_core", bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = MODID, bus = EventBusSubscriber.Bus.MOD)
 public class Config {
 
     static {
