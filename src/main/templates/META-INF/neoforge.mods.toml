@@ -1,5 +1,5 @@
 modLoader = "javafml"
-loaderVersion = "[${neo_version},)"
+loaderVersion = "[2,)"
 issueTrackerURL = "${mod_issue_tracker}"
 license = "${mod_license}"
 
@@ -22,6 +22,9 @@ description = "${mod_description}"
 logoFile = ""
 displayURL = "${mod_url}"
 credits = ""
+
+[[mixins]]
+config = "mixins.ae2webintegration.json"
 
 [[dependencies.ae2webintegration_interface]]
 modId = "ae2"

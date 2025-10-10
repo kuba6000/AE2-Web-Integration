@@ -1,27 +1,20 @@
 dependencies {
-    //compileOnly(libs.jetbrains.annotations)
-
-    // Mixin (& Extras)
-    // annotationProcessor(variantOf(libs.mixin) { classifier("processor") })
-    // compileOnly(annotationProcessor(forge.mixinExtras.common.get()))
-    // jarJar(api(forge.mixinExtras.forge.get())).version {
-    //     require("[${forge.versions.mixinExtras.get()},)")
-    // }
+    compileOnly(libs.jetbrains.annotations)
 
     // AE2
     implementation(neoforge.ae2)
-    //modCompileOnly(forge.ae2wtlib)
+    compileOnly(neoforge.ae2wtlib)
 
     // Standard runtime mods //
-    //modLocalRuntime(forge.jade)
-    //modLocalRuntime(forge.spark)
-    //modLocalRuntime(forge.modernfix)
+    localRuntime(neoforge.jade)
+    localRuntime(neoforge.spark)
+    localRuntime(neoforge.modernfix)
 
     // Runtime Recipe Viewers //
-    //modLocalRuntime(forge.emi)
+    localRuntime(neoforge.emi)
 
     // Client-only runtime mods //
-    //modClientLocalRuntime(forge.embeddium)
+    clientLocalRuntime(neoforge.embeddium)
     //modClientLocalRuntime(forge.oculus)
 
 }

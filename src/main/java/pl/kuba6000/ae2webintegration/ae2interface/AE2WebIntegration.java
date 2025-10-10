@@ -12,7 +12,6 @@ import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.api.IAEWebInterface;
 
 @Mod(value = AE2WebIntegration.MODID)
-@EventBusSubscriber(modid = AE2WebIntegration.MODID)
 public class AE2WebIntegration {
 
     public static final String MODID = "ae2webintegration_interface";
