@@ -13,7 +13,7 @@ import pl.kuba6000.ae2webintegration.Tags;
 public class VersionChecker {
 
     // example version: 0.0.9-alpha-forge-1.12.2
-    private static final String VERSION_IDENTIFIER = "-forge-1.20.1";
+    private static final String VERSION_IDENTIFIER = "-neoforge-1.21.1";
 
     private static final String versionCheckURL = "https://api.github.com/repos/kuba6000/AE2-Web-Integration/tags";
     private static String latestTag = null;
