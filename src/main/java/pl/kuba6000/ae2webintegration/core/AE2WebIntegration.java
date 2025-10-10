@@ -52,7 +52,7 @@ public class AE2WebIntegration {
         // Config.SPEC,
         // myContainer,
         // "ae2webintegration/ae2webintegration.toml"));
-        ConfigTracker.INSTANCE.registerConfig(
+        Config.CONFIG = ConfigTracker.INSTANCE.registerConfig(
             ModConfig.Type.COMMON,
             Config.SPEC,
             myContainer,

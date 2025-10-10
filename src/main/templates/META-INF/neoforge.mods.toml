@@ -29,4 +29,4 @@ config = "mixins.ae2webintegration.json"
 [[dependencies.ae2webintegration_interface]]
 modId = "ae2"
 mandatory = true
-versionRange = "[19.2.17,)"
+versionRange = "[19.2.4,)"

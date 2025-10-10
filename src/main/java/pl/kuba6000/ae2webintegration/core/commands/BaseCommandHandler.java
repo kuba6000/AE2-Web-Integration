@@ -1,12 +1,19 @@
 package pl.kuba6000.ae2webintegration.core.commands;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.file.Path;
 import java.util.UUID;
+import java.util.function.Function;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.fml.config.ConfigTracker;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.config.ModConfigEvent;
 
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -36,12 +43,23 @@ public class BaseCommandHandler {
                                 .executes(BaseCommandHandler::auth))));
     }
 
+    // force config reload, if the config watcher didn't work for some reason
     public static int reload(CommandContext<CommandSourceStack> context) {
-        // TODO: what to do?
-        // ((CommentedFileConfig) Config.CONFIG.getLoadedConfig()).load();
-        Config.SPEC.afterReload();
-        AE2Controller.stopHTTPServer();
-        AE2Controller.startHTTPServer();
+        try {
+            Method m = ConfigTracker.class.getDeclaredMethod("loadConfig", ModConfig.class, Path.class, Function.class);
+            m.setAccessible(true);
+            m.invoke(
+                null,
+                Config.CONFIG,
+                Config.CONFIG.getFullPath(),
+                (Function<ModConfig, ModConfigEvent>) (ModConfigEvent.Reloading::new));
+        } catch (InvocationTargetException | NoSuchMethodException | IllegalAccessException e) {
+            context.getSource()
+                .sendSuccess(
+                    () -> Component
+                        .literal(ChatFormatting.RED + "Error while reloading the config, restart the server instead!"),
+                    false);
+        }
         context.getSource()
             .sendSuccess(
                 () -> Component
