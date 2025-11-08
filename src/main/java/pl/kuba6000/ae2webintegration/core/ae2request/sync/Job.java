@@ -14,7 +14,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
@@ -87,17 +87,17 @@ public class Job extends ISyncedRequest {
                     IItemList plan;
                     craftingJob.web$populatePlan(plan = AE2Controller.AE2Interface.web$createItemList());
                     jobData.plan = new ArrayList<>();
-                    for (IItemStack stack : plan) {
+                    for (IStack stack : plan) {
                         JSON_JobData.JobItem jobItem = new JSON_JobData.JobItem();
                         jobItem.itemid = stack.web$getItemID();
                         jobItem.itemname = stack.web$getDisplayName();
                         jobItem.requested = stack.web$getCountRequestable();
                         jobItem.steps = stack.web$getCountRequestableCrafts();
                         if (jobData.isSimulating) {
-                            IItemStack toExtract = stack.web$copy();
+                            IStack toExtract = stack.web$copy();
                             toExtract.web$reset();
                             toExtract.web$setStackSize(stack.web$getStackSize());
-                            IItemStack missing = toExtract.web$copy();
+                            IStack missing = toExtract.web$copy();
                             toExtract = items.web$extractItems(toExtract, AEActionable.SIMULATE, grid);
                             if (toExtract == null) {
                                 toExtract = missing.web$copy();
@@ -110,7 +110,7 @@ public class Job extends ISyncedRequest {
                             jobItem.missing = 0;
                         }
                         if (jobItem.missing == 0 && jobItem.requested == 0 && jobItem.stored > 0) {
-                            IItemStack realStack = items.web$getAvailableItem(stack);
+                            IStack realStack = items.web$getAvailableItem(stack);
                             long available = 0L;
                             if (realStack != null) available = realStack.web$getStackSize();
                             if (available > 0L) jobItem.usedPercent = (double) jobItem.stored / (double) available;

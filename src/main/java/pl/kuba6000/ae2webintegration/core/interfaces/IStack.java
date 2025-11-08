@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.interfaces;
 
-public interface IItemStack {
+public interface IStack {
 
     String web$getItemID();
 
@@ -16,9 +16,9 @@ public interface IItemStack {
 
     void web$reset();
 
-    boolean web$isSameType(IItemStack other);
+    boolean web$isSameType(IStack other);
 
-    IItemStack web$copy();
+    IStack web$copy();
 
     void web$setStackSize(long size);
 

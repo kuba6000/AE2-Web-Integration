@@ -7,7 +7,7 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.JSON_DetailedItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 public class GetItems extends ISyncedRequest {
@@ -27,7 +27,7 @@ public class GetItems extends ISyncedRequest {
         IItemList storageList = storageGrid.web$getItemStorageList();
         AE2Controller.hashcodeToAEItemStack.clear();
         ArrayList<JSON_DetailedItem> items = new ArrayList<>();
-        for (IItemStack stack : storageList) {
+        for (IStack stack : storageList) {
             int hash;
             AE2Controller.hashcodeToAEItemStack.put(hash = stack.hashCode(), stack);
             JSON_DetailedItem detailedItem = new JSON_DetailedItem();

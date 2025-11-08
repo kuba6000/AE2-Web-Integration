@@ -2,23 +2,27 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import org.spongepowered.asm.mixin.Mixin;
 
+import appeng.api.storage.data.IAEFluidStack;
 import appeng.api.storage.data.IAEItemStack;
+import appeng.api.storage.data.IAEStack;
 import cpw.mods.fml.common.registry.GameRegistry;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 
-@Mixin(IAEItemStack.class)
-public interface AEItemStackMixin extends IAEItemStack, IItemStack {
+@Mixin(IAEStack.class)
+public interface AEStackMixin extends IAEStack, IStack {
 
     @Override
     public default String web$getItemID() {
-        return GameRegistry.findUniqueIdentifierFor(getItem())
+        if (isItem()) return GameRegistry.findUniqueIdentifierFor(((IAEItemStack) this).getItem())
             .toString() + ":"
-            + getItemDamage();
+            + ((IAEItemStack) this).getItemDamage();
+        return ((IAEFluidStack) this).getFluid()
+            .getName();
     }
 
     @Override
     public default String web$getDisplayName() {
-        return getItemStack().getDisplayName();
+        return getDisplayName();
     }
 
     @Override
@@ -47,13 +51,13 @@ public interface AEItemStackMixin extends IAEItemStack, IItemStack {
     }
 
     @Override
-    public default boolean web$isSameType(IItemStack other) {
-        return isSameType((IAEItemStack) other);
+    public default boolean web$isSameType(IStack other) {
+        return isSameType(other);
     }
 
     @Override
-    public default IItemStack web$copy() {
-        return (IItemStack) copy();
+    public default IStack web$copy() {
+        return (IStack) copy();
     }
 
     @Override

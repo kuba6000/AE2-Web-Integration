@@ -18,7 +18,7 @@ public interface ICraftingCPUCluster {
 
     void web$cancel();
 
-    IItemStack web$getFinalOutput();
+    IStack web$getFinalOutput();
 
     void web$getActiveItems(IItemList list);
 

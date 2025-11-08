@@ -6,10 +6,11 @@ import org.spongepowered.asm.mixin.Unique;
 
 import appeng.api.networking.crafting.CraftingItemList;
 import appeng.api.storage.data.IAEItemStack;
+import appeng.api.storage.data.IAEStack;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
 public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
@@ -78,26 +79,29 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     }
 
     @Override
-    public IItemStack web$getFinalOutput() {
-        return (IItemStack) ((CraftingCPUCluster) (Object) this).getFinalOutput();
+    public IStack web$getFinalOutput() {
+        return (IStack) ((CraftingCPUCluster) (Object) this).getFinalMultiOutput();
     }
 
     @Override
     public void web$getActiveItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.ACTIVE);
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem(
+            (appeng.api.storage.data.IItemList<IAEStack<?>>) (Object) list,
+            CraftingItemList.ACTIVE);
     }
 
     @Override
     public void web$getPendingItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.PENDING);
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem(
+            (appeng.api.storage.data.IItemList<IAEStack<?>>) (Object) list,
+            CraftingItemList.PENDING);
     }
 
     @Override
     public void web$getStorageItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.STORAGE);
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem(
+            (appeng.api.storage.data.IItemList<IAEStack<?>>) (Object) list,
+            CraftingItemList.STORAGE);
     }
 
     @Override

@@ -10,7 +10,7 @@ import pl.kuba6000.ae2webintegration.core.api.JSON_CompactedItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 public class GetCPU extends ISyncedRequest {
@@ -19,7 +19,7 @@ public class GetCPU extends ISyncedRequest {
 
         public long size;
         public boolean isBusy;
-        public IItemStack finalOutput;
+        public IStack finalOutput;
         public ArrayList<JSON_CompactedItem> items;
         public boolean hasTrackingInfo = false;
         public long timeStarted = 0L;
@@ -64,19 +64,19 @@ public class GetCPU extends ISyncedRequest {
             HashMap<JSON_CompactedItem, JSON_CompactedItem> prep = new HashMap<>();
             IItemList items = AE2Controller.AE2Interface.web$createItemList();
             cpu.web$getActiveItems(items);
-            for (IItemStack itemStack : items) {
+            for (IStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
                 prep.computeIfAbsent(compactedItem, k -> compactedItem).active += itemStack.web$getStackSize();
             }
             items = AE2Controller.AE2Interface.web$createItemList();
             cpu.web$getPendingItems(items);
-            for (IItemStack itemStack : items) {
+            for (IStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
                 prep.computeIfAbsent(compactedItem, k -> compactedItem).pending += itemStack.web$getStackSize();
             }
             items = AE2Controller.AE2Interface.web$createItemList();
             cpu.web$getStorageItems(items);
-            for (IItemStack itemStack : items) {
+            for (IStack itemStack : items) {
                 JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
                 prep.computeIfAbsent(compactedItem, k -> compactedItem).stored += itemStack.web$getStackSize();
             }
@@ -84,7 +84,7 @@ public class GetCPU extends ISyncedRequest {
             if (clusterData.hasTrackingInfo) {
                 clusterData.timeStarted = trackingInfo.timeStarted;
                 clusterData.timeElapsed = (System.currentTimeMillis()) - clusterData.timeStarted;
-                for (IItemStack stack : trackingInfo.timeSpentOn.keySet()) {
+                for (IStack stack : trackingInfo.timeSpentOn.keySet()) {
                     JSON_CompactedItem compactedItem = JSON_CompactedItem.create(stack);
                     JSON_CompactedItem finalCompactedItem = compactedItem;
                     compactedItem = prep.computeIfAbsent(compactedItem, k -> finalCompactedItem);

@@ -1,7 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.interfaces;
 
-public interface IItemList extends Iterable<IItemStack> {
+public interface IItemList extends Iterable<IStack> {
 
-    IItemStack web$findPrecise(IItemStack stack);
+    IStack web$findPrecise(IStack stack);
 
 }
