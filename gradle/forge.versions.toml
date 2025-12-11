@@ -2,7 +2,7 @@
 mixinExtras = "0.5.0-rc.3"
 
 emi = "1.1.21+1.21.1"
-ae2 = "19.2.4"
+ae2 = "19.2.16"
 theoneprobe = "1.20.1-10.0.1-3"
 
 ## modrinth maven ##
@@ -14,6 +14,8 @@ modernfix = "4SPHwiDB" # 5.24.3+mc1.21.1
 ## cursemaven ##
 ae2wtlib = "6939030"
 spark = "6225208"
+advancedae = "7222372"
+geckolib = "6659026"
 
 
 
@@ -30,5 +32,7 @@ modernfix           = { module = "maven.modrinth:modernfix", version.ref = "mode
 
 ae2wtlib            = { module = "curse.maven:ae2wtlib-459929", version.ref = "ae2wtlib" }
 spark               = { module = "curse.maven:spark-361579", version.ref = "spark" }
+advancedae         = { module = "curse.maven:advancedae-1084104", version.ref = "advancedae" }
+geckolib           = { module = "curse.maven:geckolib-388172", version.ref = "geckolib" }
 
 [bundles]

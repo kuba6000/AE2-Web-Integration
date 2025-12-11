@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
 import java.util.Iterator;
+import java.util.WeakHashMap;
 
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
@@ -11,9 +12,12 @@ import appeng.me.Grid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
 
 public class AE implements IAE {
+
+    public static WeakHashMap<ICraftingCPUCluster, Integer> cpuInternalIDMap = new WeakHashMap<>();
 
     public static AE instance = new AE();
 

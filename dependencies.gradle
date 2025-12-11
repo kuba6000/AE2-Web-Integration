@@ -5,10 +5,14 @@ dependencies {
     implementation(neoforge.ae2)
     compileOnly(neoforge.ae2wtlib)
 
+    // AE addons for compatibility //
+    compileOnly(neoforge.advancedae)
+
     // Standard runtime mods //
     localRuntime(neoforge.jade)
     localRuntime(neoforge.spark)
     localRuntime(neoforge.modernfix)
+
 
     // Runtime Recipe Viewers //
     localRuntime(neoforge.emi)
@@ -16,5 +20,9 @@ dependencies {
     // Client-only runtime mods //
     clientLocalRuntime(neoforge.embeddium)
     //modClientLocalRuntime(forge.oculus)
+
+    // runtime test mods //
+    //localRuntime(neoforge.advancedae)
+    //localRuntime(neoforge.geckolib)
 
 }
