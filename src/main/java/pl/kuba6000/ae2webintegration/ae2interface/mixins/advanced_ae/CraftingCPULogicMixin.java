@@ -1,6 +1,10 @@
-package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
+package pl.kuba6000.ae2webintegration.ae2interface.mixins.advanced_ae;
 
 import java.util.Map;
+
+import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
+import net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic;
+import net.pedroksl.advanced_ae.common.logic.ExecutingCraftingJob;
 
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
@@ -23,9 +27,6 @@ import appeng.api.networking.crafting.ICraftingSubmitResult;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
-import appeng.crafting.execution.CraftingCpuLogic;
-import appeng.crafting.execution.ExecutingCraftingJob;
-import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IExecutingCraftingJobAccessor;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
@@ -36,12 +37,12 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
-@Mixin(value = CraftingCpuLogic.class, remap = false)
-public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
+@Mixin(value = AdvCraftingCPULogic.class, remap = false)
+public abstract class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
 
     @Final
     @Shadow
-    CraftingCPUCluster cluster;
+    AdvCraftingCPU cpu;
 
     @Shadow
     private ExecutingCraftingJob job;
@@ -55,7 +56,7 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
                 .isPresent();
             IAEMixinCallbacks.getInstance()
                 .jobStarted(
-                    (ICraftingCPUCluster) (Object) cluster,
+                    (ICraftingCPUCluster) (Object) cpu,
                     (IAECraftingGrid) grid.getCraftingService(),
                     (IAEGrid) grid,
                     false,
@@ -66,15 +67,15 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
     @Inject(method = "postChange", at = @At("HEAD"))
     void ae2webintegration$postCraftingStatusChange(AEKey diff, CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
-            .craftingStatusPostedUpdate((ICraftingCPUCluster) (Object) cluster, (IAEKey) diff);
+            .craftingStatusPostedUpdate((ICraftingCPUCluster) (Object) cpu, (IAEKey) diff);
     }
 
     @Inject(method = "finishJob", at = @At("HEAD"))
     void ae2webintegration$finishJob(boolean success, CallbackInfo ci) {
         if (success) IAEMixinCallbacks.getInstance()
-            .jobCompleted((IAEGrid) cluster.getGrid(), (ICraftingCPUCluster) (Object) cluster);
+            .jobCompleted((IAEGrid) cpu.getGrid(), (ICraftingCPUCluster) (Object) cpu);
         else IAEMixinCallbacks.getInstance()
-            .jobCancelled((IAEGrid) cluster.getGrid(), (ICraftingCPUCluster) (Object) cluster);
+            .jobCancelled((IAEGrid) cpu.getGrid(), (ICraftingCPUCluster) (Object) cpu);
     }
 
     @Redirect(
@@ -85,7 +86,7 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
     private boolean ae2webintegration$pushPattern(ICraftingProvider medium, IPatternDetails details, KeyCounter[] ic) {
         if (medium.pushPattern(details, ic)) {
             IGridNode viewable = null;
-            Map<ICraftingProvider, IGridNode> mediumToViewable = ((IAECraftingGrid) cluster.getGrid()
+            Map<ICraftingProvider, IGridNode> mediumToViewable = ((IAECraftingGrid) cpu.getGrid()
                 .getService(ICraftingService.class)).web$getCraftingProviders()
                 .web$getCraftingMediums();
             if (mediumToViewable != null) {
@@ -93,7 +94,7 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
             }
             IAEMixinCallbacks.getInstance()
                 .pushedPattern(
-                    (ICraftingCPUCluster) (Object) cluster,
+                    (ICraftingCPUCluster) (Object) cpu,
                     (IPatternProviderViewable) viewable,
                     (IAECraftingPatternDetails) details);
             return true;

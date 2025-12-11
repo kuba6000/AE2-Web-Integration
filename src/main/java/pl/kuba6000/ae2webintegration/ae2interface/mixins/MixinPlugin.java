@@ -5,6 +5,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
+import net.neoforged.fml.loading.FMLLoader;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.spongepowered.asm.lib.tree.ClassNode;
@@ -62,6 +64,12 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.implementations.service.AEStorageGridMixin"));
 
         LOG.info("MIXING INTO AE2 LETS GOOOOOOOOOOOOOOOOOOOOOOOOO");
+
+        if (FMLLoader.getLoadingModList()
+            .getModFileById("advanced_ae") != null) {
+            LOG.info("AdvancedAE detected !, applying mixins for AdvancedAE");
+            mixins.addAll(Arrays.asList("advanced_ae.CraftingCPULogicMixin", "advanced_ae.ExecutingCraftingJobMixin"));
+        }
 
         return mixins;
     }

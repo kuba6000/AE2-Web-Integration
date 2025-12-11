@@ -22,6 +22,9 @@ dependencies {
     modCompileOnly(forge.ae2wtlib)
 
 
+    // AE addons for compatibility //
+    compileOnly(neoforge.advancedae)
+
     // Standard runtime mods //
     modLocalRuntime(forge.jade)
     //modLocalRuntime(forge.ae2)
@@ -37,5 +40,9 @@ dependencies {
     modClientLocalRuntime(forge.embeddium)
     modClientLocalRuntime(forge.oculus)
     renderNurseCfg(libs.renderNurse)
+
+    // runtime test mods //
+    //localRuntime(forge.advancedae)
+    //localRuntime(forge.geckolib)
 
 }
