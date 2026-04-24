@@ -28,6 +28,9 @@ public class Config {
     // TODO: Add more customization options (order time, size, item type ? etc.)
     public static boolean TRACKING_TRACK_MACHINE_CRAFTING = false;
 
+    // updates
+    public static boolean CHECK_FOR_UPDATES = true;
+
     public static void synchronizeConfiguration() {
         Configuration configuration = new Configuration(configFile);
         AE_PORT = configuration
@@ -66,6 +69,12 @@ public class Config {
             "tracking",
             TRACKING_TRACK_MACHINE_CRAFTING,
             "Track automated crafting jobs (not ordered by player)");
+
+        CHECK_FOR_UPDATES = configuration.getBoolean(
+            "check_for_updates",
+            Configuration.CATEGORY_GENERAL,
+            CHECK_FOR_UPDATES,
+            "Check for new versions and display notifications in chat and on the website");
 
         if (configuration.hasKey(Configuration.CATEGORY_GENERAL, "cpu_count_threshold")) {
             configuration.getInt(

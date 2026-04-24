@@ -575,7 +575,7 @@ public class AE2Controller {
                     json.addProperty("token", token);
                     json.addProperty("username", username);
                     json.addProperty("isAdmin", playerID == -1);
-                    json.addProperty("isOutdated", VersionChecker.isOutdated());
+                    json.addProperty("isOutdated", Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated());
                     byte[] raw_response = json.toString()
                         .getBytes();
                     t.sendResponseHeaders(200, raw_response.length);
@@ -681,7 +681,9 @@ public class AE2Controller {
                 }
             }
             response = response.replace("_REPLACE_ME_IS_PUBLIC_MODE", Config.AE_PUBLIC_MODE ? "true" : "false");
-            response = response.replace("_REPLACE_ME_VERSION_OUTDATED", VersionChecker.isOutdated() ? "true" : "false");
+            response = response.replace(
+                "_REPLACE_ME_VERSION_OUTDATED",
+                Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated() ? "true" : "false");
             RequestContext context = requestContext.get();
             if (context != null) {
                 response = response.replace("_REPLACE_ME_USERNAME", context.username);

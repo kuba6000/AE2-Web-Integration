@@ -27,7 +27,7 @@ public class FMLEventHandler {
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.player instanceof EntityPlayerMP)) return;
-        if (VersionChecker.isOutdated() && event.player.canUseCommand(4, "seed")) event.player.sendMessage(
+        if (Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated() && event.player.canUseCommand(4, "seed")) event.player.sendMessage(
             new TextComponentString(
                 TextFormatting.GREEN.toString() + TextFormatting.BOLD
                     + "----> AE2WebIntegration -> New version detected! Consider updating at https://github.com/kuba6000/AE2-Web-Integration/releases/latest"));

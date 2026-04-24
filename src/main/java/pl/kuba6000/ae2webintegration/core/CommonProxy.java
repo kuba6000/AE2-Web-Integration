@@ -24,7 +24,7 @@ public class CommonProxy {
         GridData.loadData();
 
         AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + Tags.VERSION);
-        if (VersionChecker.isOutdated()) AE2WebIntegration.LOG.warn(
+        if (Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated()) AE2WebIntegration.LOG.warn(
             "You are not on latest version ! Consider updating to {} at https://github.com/kuba6000/AE2-Web-Integration/releases/latest",
             VersionChecker.getLatestTag());
 
