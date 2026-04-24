@@ -27,7 +27,8 @@ public class FMLEventHandler {
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.player instanceof EntityPlayerMP)) return;
-        if (VersionChecker.isOutdated() && event.player.canCommandSenderUseCommand(4, "seed"))
+        if (Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated()
+            && event.player.canCommandSenderUseCommand(4, "seed"))
             event.player.addChatMessage(
                 new ChatComponentText(
                     EnumChatFormatting.GREEN.toString() + EnumChatFormatting.BOLD
