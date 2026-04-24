@@ -43,6 +43,9 @@ public class Config {
     // TODO: Add more customization options (order time, size, item type ? etc.)
     public final ModConfigSpec.ConfigValue<Boolean> TRACKING_TRACK_MACHINE_CRAFTING;
 
+    // updates
+    public final ModConfigSpec.ConfigValue<Boolean> CHECK_FOR_UPDATES;
+
     private Config(ModConfigSpec.Builder builder) {
         builder.push("General");
         AE_PORT = builder.comment("Port for the hosted website")
@@ -65,6 +68,9 @@ public class Config {
         AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE = builder
             .comment("How many requests can be made before user is logged in per minute")
             .defineInRange("max_requests_before_logged_in_per_minute", 20, 1, 1000);
+        CHECK_FOR_UPDATES = builder
+            .comment("Check for new versions and display notifications in chat and on the website")
+            .define("check_for_updates", true);
         builder.pop();
         builder.push("Discord");
         DISCORD_WEBHOOK = builder

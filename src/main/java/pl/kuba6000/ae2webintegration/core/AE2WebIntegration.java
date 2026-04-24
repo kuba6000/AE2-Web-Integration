@@ -61,9 +61,6 @@ public class AE2WebIntegration {
         GridData.loadData();
 
         AE2WebIntegration.LOG.info("AE2WebIntegration loading at version {}", Tags.VERSION);
-        if (VersionChecker.isOutdated()) AE2WebIntegration.LOG.warn(
-            "You are not on latest version ! Consider updating to {} at https://github.com/kuba6000/AE2-Web-Integration/releases/latest",
-            VersionChecker.getLatestTag());
     }
 
     @SubscribeEvent
@@ -75,6 +72,9 @@ public class AE2WebIntegration {
     public static void serverStarted(ServerStartedEvent event) {
         AE2Controller.init();
         DiscordManager.init();
+        if (Config.INSTANCE.CHECK_FOR_UPDATES.get() && VersionChecker.isOutdated()) AE2WebIntegration.LOG.warn(
+            "You are not on latest version ! Consider updating to {} at https://github.com/kuba6000/AE2-Web-Integration/releases/latest",
+            VersionChecker.getLatestTag());
         if (!Config.INSTANCE.AE_PUBLIC_MODE.get() && !Config.INSTANCE.DISCORD_WEBHOOK.get()
             .isEmpty()) {
             DiscordManager.postMessageNonBlocking(
