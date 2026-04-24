@@ -33,7 +33,7 @@ public class FMLEventHandler {
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         Player player = event.getEntity();
         if (!(player instanceof ServerPlayer)) return;
-        if (VersionChecker.isOutdated() && player.hasPermissions(4)) {
+        if (Config.INSTANCE.CHECK_FOR_UPDATES.get() && VersionChecker.isOutdated() && player.hasPermissions(4)) {
             player.sendSystemMessage(
                 Component.literal(
                     ChatFormatting.GREEN.toString() + ChatFormatting.BOLD
