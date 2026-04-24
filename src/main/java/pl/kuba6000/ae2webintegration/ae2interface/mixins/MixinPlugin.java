@@ -68,7 +68,11 @@ public class MixinPlugin implements IMixinConfigPlugin {
         if (FMLLoader.getLoadingModList()
             .getModFileById("advanced_ae") != null) {
             LOG.info("AdvancedAE detected !, applying mixins for AdvancedAE");
-            mixins.addAll(Arrays.asList("advanced_ae.CraftingCPULogicMixin", "advanced_ae.ExecutingCraftingJobMixin"));
+            mixins.addAll(
+                Arrays.asList(
+                    "advanced_ae.CraftingCPULogicMixin",
+                    "advanced_ae.ExecutingCraftingJobMixin",
+                    "advanced_ae.AdvCraftingCPUMixin"));
         }
 
         return mixins;
