@@ -26,4 +26,9 @@ public interface AEStorageGridMixin extends IAEStorageGrid {
     public default IAEMeInventoryItem web$getItemInventory() {
         return (IAEMeInventoryItem) ((IStorageGrid) (Object) this).getItemInventory();
     }
+
+    @Override
+    default IAEMeInventoryItem web$getFluidInventory() {
+        return (IAEMeInventoryItem) ((IStorageGrid) (Object) this).getFluidInventory();
+    }
 }

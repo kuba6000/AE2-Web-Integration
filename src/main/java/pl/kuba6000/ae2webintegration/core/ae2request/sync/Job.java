@@ -82,6 +82,7 @@ public class Job extends ISyncedRequest {
                     IAECraftingJob craftingJob = job.get();
                     IAEStorageGrid storageGrid = grid.web$getStorageGrid();
                     IAEMeInventoryItem items = storageGrid.web$getItemInventory();
+                    IAEMeInventoryItem fluids = storageGrid.web$getFluidInventory();
                     jobData.isSimulating = craftingJob.web$isSimulation();
                     jobData.bytesTotal = craftingJob.web$getByteTotal();
                     IItemList plan;
@@ -93,12 +94,13 @@ public class Job extends ISyncedRequest {
                         jobItem.itemname = stack.web$getDisplayName();
                         jobItem.requested = stack.web$getCountRequestable();
                         jobItem.steps = stack.web$getCountRequestableCrafts();
+                        IAEMeInventoryItem inventory = stack.web$isItem() ? items : fluids;
                         if (jobData.isSimulating) {
                             IStack toExtract = stack.web$copy();
                             toExtract.web$reset();
                             toExtract.web$setStackSize(stack.web$getStackSize());
                             IStack missing = toExtract.web$copy();
-                            toExtract = items.web$extractItems(toExtract, AEActionable.SIMULATE, grid);
+                            toExtract = inventory.web$extractItems(toExtract, AEActionable.SIMULATE, grid);
                             if (toExtract == null) {
                                 toExtract = missing.web$copy();
                                 toExtract.web$setStackSize(0);
@@ -110,7 +112,7 @@ public class Job extends ISyncedRequest {
                             jobItem.missing = 0;
                         }
                         if (jobItem.missing == 0 && jobItem.requested == 0 && jobItem.stored > 0) {
-                            IStack realStack = items.web$getAvailableItem(stack);
+                            IStack realStack = inventory.web$getAvailableItem(stack);
                             long available = 0L;
                             if (realStack != null) available = realStack.web$getStackSize();
                             if (available > 0L) jobItem.usedPercent = (double) jobItem.stored / (double) available;

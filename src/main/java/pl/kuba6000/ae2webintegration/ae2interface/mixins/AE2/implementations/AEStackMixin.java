@@ -64,4 +64,9 @@ public interface AEStackMixin extends IAEStack, IStack {
     public default void web$setStackSize(long size) {
         setStackSize(size);
     }
+
+    @Override
+    public default boolean web$isItem() {
+        return isItem();
+    }
 }

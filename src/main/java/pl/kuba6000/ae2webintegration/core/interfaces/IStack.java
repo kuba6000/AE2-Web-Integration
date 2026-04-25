@@ -22,4 +22,6 @@ public interface IStack {
 
     void web$setStackSize(long size);
 
+    boolean web$isItem();
+
 }

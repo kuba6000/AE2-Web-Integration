@@ -11,4 +11,6 @@ public interface IAEStorageGrid {
 
     IAEMeInventoryItem web$getItemInventory();
 
+    IAEMeInventoryItem web$getFluidInventory();
+
 }
