@@ -15,8 +15,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 
@@ -45,23 +45,23 @@ public class AE2JobTracker {
 
     public static class JobTrackingInfo {
 
-        public IItemStack finalOutput;
+        public IStack finalOutput;
         public long timeStarted;
         public long timeDone;
-        public HashMap<IItemStack, Long> timeSpentOn = new HashMap<>();
-        public HashMap<IItemStack, Long> startedWaitingFor = new HashMap<>();
-        public HashMap<IItemStack, Long> craftedTotal = new HashMap<>();
-        public HashMap<IItemStack, Long> waitingFor = new HashMap<>();
-        public HashMap<IItemStack, ArrayList<Pair<Long, Long>>> itemShare = new HashMap<>();
+        public HashMap<IStack, Long> timeSpentOn = new HashMap<>();
+        public HashMap<IStack, Long> startedWaitingFor = new HashMap<>();
+        public HashMap<IStack, Long> craftedTotal = new HashMap<>();
+        public HashMap<IStack, Long> waitingFor = new HashMap<>();
+        public HashMap<IStack, ArrayList<Pair<Long, Long>>> itemShare = new HashMap<>();
         public HashMap<AEInterface, ArrayList<Pair<Long, Long>>> interfaceShare = new HashMap<>();
         public HashMap<AEInterface, Long> interfaceStarted = new HashMap<>();
         public HashMap<AEInterface, AEInterface> interfaceLookup = new HashMap<>();
-        public HashMap<AEInterface, HashSet<IItemStack>> interfaceWaitingFor = new HashMap<>();
-        public HashMap<IItemStack, HashMap<AEInterface, HashSet<IItemStack>>> interfaceWaitingForLookup = new HashMap<>();
+        public HashMap<AEInterface, HashSet<IStack>> interfaceWaitingFor = new HashMap<>();
+        public HashMap<IStack, HashMap<AEInterface, HashSet<IStack>>> interfaceWaitingForLookup = new HashMap<>();
         public boolean isDone = false;
         public boolean wasCancelled = false;
 
-        public long getTimeSpentOn(IItemStack stack) {
+        public long getTimeSpentOn(IStack stack) {
             Long time = timeSpentOn.get(stack);
             if (time == null) return 0L;
             Long additionalTime = startedWaitingFor.get(stack);
@@ -71,10 +71,10 @@ public class AE2JobTracker {
             return time;
         }
 
-        public double getShareInCraftingTime(IItemStack stack) {
+        public double getShareInCraftingTime(IStack stack) {
             long total = 0L;
             long stackTime = 0L;
-            for (IItemStack itemStack : timeSpentOn.keySet()) {
+            for (IStack itemStack : timeSpentOn.keySet()) {
                 long timeSpent = getTimeSpentOn(itemStack);
                 total += timeSpent;
                 if (stack.web$isSameType(itemStack)) {
@@ -106,11 +106,11 @@ public class AE2JobTracker {
             .web$copy();
     }
 
-    public static void updateCraftingStatus(ICraftingCPUCluster cpu, IItemStack diff) {
+    public static void updateCraftingStatus(ICraftingCPUCluster cpu, IStack diff) {
         JobTrackingInfo info = trackingInfoMap.get(cpu);
         if (info == null) return;
         IItemList waitingFor = cpu.web$getWaitingFor();
-        IItemStack found = waitingFor.web$findPrecise(diff);
+        IStack found = waitingFor.web$findPrecise(diff);
         if (found != null && found.web$getStackSize() > 0L) {
             if (!info.startedWaitingFor.containsKey(found)) {
                 info.startedWaitingFor.put(found, System.currentTimeMillis());
@@ -135,10 +135,10 @@ public class AE2JobTracker {
                 info.itemShare.computeIfAbsent(diff, k -> new ArrayList<>())
                     .add(Pair.of(started, endedReal));
                 if (info.interfaceWaitingForLookup.containsKey(diff)) {
-                    for (Map.Entry<AEInterface, HashSet<IItemStack>> entry : info.interfaceWaitingForLookup.get(diff)
+                    for (Map.Entry<AEInterface, HashSet<IStack>> entry : info.interfaceWaitingForLookup.get(diff)
                         .entrySet()) {
                         AEInterface aeInterface = entry.getKey();
-                        HashSet<IItemStack> itemList = entry.getValue();
+                        HashSet<IStack> itemList = entry.getValue();
                         itemList.remove(diff);
                         if (itemList.isEmpty()) {
                             info.interfaceWaitingFor.remove(aeInterface);
@@ -165,10 +165,10 @@ public class AE2JobTracker {
                 .computeIfAbsent(aeInterfaceToLookup, k -> aeInterfaceToLookup);
             aeInterface.location.add(provider.web$getLocation());
             info.interfaceStarted.computeIfAbsent(aeInterface, k -> System.currentTimeMillis());
-            final HashSet<IItemStack> itemList = info.interfaceWaitingFor
+            final HashSet<IStack> itemList = info.interfaceWaitingFor
                 .computeIfAbsent(aeInterface, k -> new HashSet<>());
 
-            for (IItemStack out : details.web$getCondensedOutputs()) {
+            for (IStack out : details.web$getCondensedOutputs()) {
                 info.interfaceWaitingForLookup.computeIfAbsent(out, k -> new HashMap<>())
                     .putIfAbsent(aeInterface, itemList);
                 itemList.add(out);
@@ -181,12 +181,12 @@ public class AE2JobTracker {
         if (info == null) return;
         GridData gridData = GridData.get(grid);
         if (gridData == null || !gridData.isTracked) return; // We don't track this grid, so we don't track jobs on it
-        for (Map.Entry<IItemStack, Long> entry : info.waitingFor.entrySet()) {
+        for (Map.Entry<IStack, Long> entry : info.waitingFor.entrySet()) {
             info.craftedTotal.merge(entry.getKey(), entry.getValue(), Long::sum);
         }
         info.waitingFor.clear();
         final long now = System.currentTimeMillis();
-        for (Map.Entry<IItemStack, Long> entry : info.startedWaitingFor.entrySet()) {
+        for (Map.Entry<IStack, Long> entry : info.startedWaitingFor.entrySet()) {
             info.timeSpentOn.merge(entry.getKey(), now - entry.getValue(), Long::sum);
             info.itemShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
                 .add(Pair.of(entry.getValue(), now));

@@ -21,7 +21,7 @@ import appeng.api.storage.data.IAEItemStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = ICraftingGrid.class)
@@ -46,7 +46,7 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     }
 
     @Override
-    public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IItemStack stack) {
+    public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IStack stack) {
         PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
         final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
             .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, (IAEItemStack) stack, null);

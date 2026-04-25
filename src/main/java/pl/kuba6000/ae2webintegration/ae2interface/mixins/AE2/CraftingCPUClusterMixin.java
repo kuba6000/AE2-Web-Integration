@@ -17,7 +17,6 @@ import com.llamalad7.mixinextras.sugar.Local;
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingMedium;
 import appeng.api.networking.crafting.ICraftingPatternDetails;
-import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.util.IInterfaceViewable;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
@@ -26,8 +25,8 @@ import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
 public class CraftingCPUClusterMixin {
@@ -38,14 +37,14 @@ public class CraftingCPUClusterMixin {
     }
 
     @Shadow
-    private void postCraftingStatusChange(final IAEItemStack diff) {
+    private void postCraftingStatusChange(final IAEStack<?> diff) {
         throw new IllegalStateException("Mixin failed to apply");
     }
 
     @Inject(method = "postCraftingStatusChange", at = @At("HEAD"))
-    void ae2webintegration$postCraftingStatusChange(IAEItemStack diff, CallbackInfo ci) {
+    void ae2webintegration$postCraftingStatusChange(final IAEStack<?> diff, CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
-            .craftingStatusPostedUpdate((ICraftingCPUCluster) this, (IItemStack) diff);
+            .craftingStatusPostedUpdate((ICraftingCPUCluster) this, (IStack) diff);
     }
 
     @Inject(method = "completeJob", at = @At("HEAD"))
@@ -64,10 +63,10 @@ public class CraftingCPUClusterMixin {
         method = "injectItems",
         at = @At(
             value = "INVOKE",
-            target = "Lappeng/api/storage/data/IAEItemStack;setStackSize(J)Lappeng/api/storage/data/IAEStack;",
+            target = "Lappeng/api/storage/data/IAEStack;setStackSize(J)Lappeng/api/storage/data/IAEStack;",
             shift = At.Shift.AFTER,
             ordinal = 2))
-    void ae2webintegration$fixCpuCluster(CallbackInfoReturnable<IAEStack> cir, @Local(ordinal = 1) IAEItemStack is) {
+    void ae2webintegration$fixCpuCluster(CallbackInfoReturnable<IAEStack<?>> cir, @Local(ordinal = 1) IAEStack<?> is) {
         postCraftingStatusChange(is);
     }
 

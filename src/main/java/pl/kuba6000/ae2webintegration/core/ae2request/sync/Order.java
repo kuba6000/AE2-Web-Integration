@@ -11,13 +11,13 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 public class Order extends ISyncedRequest {
 
-    private IItemStack item;
+    private IStack item;
 
     @Override
     boolean init(Map<String, String> getParams) {
@@ -54,7 +54,7 @@ public class Order extends ISyncedRequest {
         if (!allBusy) {
             IAEStorageGrid storageGrid = grid.web$getStorageGrid();
             final IItemList itemList = storageGrid.web$getItemStorageList();
-            IItemStack realItem = itemList.web$findPrecise(this.item);
+            IStack realItem = itemList.web$findPrecise(this.item);
             if (realItem != null && realItem.web$isCraftable()) {
                 Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, this.item);
 

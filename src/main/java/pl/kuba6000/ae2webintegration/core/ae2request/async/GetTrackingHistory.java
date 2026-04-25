@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Map;
 
 import pl.kuba6000.ae2webintegration.core.AE2JobTracker;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 
 public class GetTrackingHistory extends IAsyncRequest {
 
@@ -13,7 +13,7 @@ public class GetTrackingHistory extends IAsyncRequest {
         public long timeStarted;
         public long timeDone;
         public boolean wasCancelled;
-        public IItemStack finalOutput;
+        public IStack finalOutput;
         public int id;
     }
 

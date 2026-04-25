@@ -50,7 +50,7 @@ public class AE implements IAE {
     public IItemList web$createItemList() {
         return (IItemList) (Object) AEApi.instance()
             .storage()
-            .createItemList();
+            .createAEStackList();
     }
 
     @Override

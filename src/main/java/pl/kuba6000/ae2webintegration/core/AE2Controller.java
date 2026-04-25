@@ -49,7 +49,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Order;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 import pl.kuba6000.ae2webintegration.core.utils.RateLimiter;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
@@ -166,7 +166,7 @@ public class AE2Controller {
         }
     };
 
-    public static ConcurrentHashMap<Integer, IItemStack> hashcodeToAEItemStack = new ConcurrentHashMap<>();
+    public static ConcurrentHashMap<Integer, IStack> hashcodeToAEItemStack = new ConcurrentHashMap<>();
 
     private static final HashMap<String, Pair<Long, Integer>> validTokens = new HashMap<>();
 

@@ -11,7 +11,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSerializer;
 
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 
 public class GSONUtils {
 
@@ -32,7 +32,7 @@ public class GSONUtils {
         }
     };
 
-    private static final JsonSerializer<IItemStack> IItemStackSerializer = (src, typeOfSrc, context) -> {
+    private static final JsonSerializer<IStack> IItemStackSerializer = (src, typeOfSrc, context) -> {
         JsonObject json = new JsonObject();
         json.addProperty("itemid", src.web$getItemID());
         json.addProperty("itemname", src.web$getDisplayName());
@@ -43,7 +43,7 @@ public class GSONUtils {
 
     public static final GsonBuilder GSON_BUILDER = new GsonBuilder().addSerializationExclusionStrategy(GSONStrategy)
         .addDeserializationExclusionStrategy(GSONStrategy)
-        .registerTypeHierarchyAdapter(IItemStack.class, IItemStackSerializer)
+        .registerTypeHierarchyAdapter(IStack.class, IItemStackSerializer)
         .serializeNulls();
 
 }
