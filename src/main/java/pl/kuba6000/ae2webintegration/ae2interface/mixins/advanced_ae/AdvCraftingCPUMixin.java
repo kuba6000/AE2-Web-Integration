@@ -55,7 +55,7 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
 
     @Override
     public void web$cancel() {
-        ((ICraftingCPU) this).cancelJob();
+        ((AdvCraftingCPU) (Object) this).cancelJob();
     }
 
     @Override

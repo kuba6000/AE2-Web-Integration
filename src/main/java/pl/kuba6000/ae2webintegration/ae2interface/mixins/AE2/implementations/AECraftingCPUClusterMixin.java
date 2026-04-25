@@ -54,7 +54,7 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Override
     public void web$cancel() {
-        ((ICraftingCPU) this).cancel();
+        ((CraftingCPUCluster) (Object) this).cancel();
     }
 
     @Override

@@ -5,11 +5,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
-import net.neoforged.fml.loading.FMLLoader;
-
+import net.minecraftforge.fml.loading.FMLLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.spongepowered.asm.lib.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 

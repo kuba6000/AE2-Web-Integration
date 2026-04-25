@@ -23,7 +23,7 @@ dependencies {
 
 
     // AE addons for compatibility //
-    compileOnly(neoforge.advancedae)
+    compileOnly(forge.advancedae)
 
     // Standard runtime mods //
     modLocalRuntime(forge.jade)
