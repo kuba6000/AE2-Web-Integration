@@ -38,7 +38,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = AdvCraftingCPULogic.class, remap = false)
-public abstract class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
+public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
 
     @Final
     @Shadow

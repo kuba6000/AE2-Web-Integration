@@ -1,11 +1,12 @@
-package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
+package pl.kuba6000.ae2webintegration.ae2interface.mixins.advanced_ae;
+
+import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
 
 import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
-import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -13,8 +14,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
 
-@Mixin(value = CraftingCPUCluster.class, remap = false)
-public class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
+@Mixin(value = AdvCraftingCPU.class, remap = false)
+public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
 
     @Override
     public void web$setInternalID(int id) {
@@ -54,7 +55,7 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Override
     public void web$cancel() {
-        ((ICraftingCPU) this).cancel();
+        ((ICraftingCPU) this).cancelJob();
     }
 
     @Override
@@ -66,27 +67,27 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Override
     public void web$getAllItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this).craftingLogic.getAllItems((KeyCounter) (Object) list);
+        ((AdvCraftingCPU) (Object) this).craftingLogic.getAllItems((KeyCounter) (Object) list);
     }
 
     @Override
     public long web$getActiveItems(IAEKey key) {
-        return ((CraftingCPUCluster) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
+        return ((AdvCraftingCPU) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
     }
 
     @Override
     public long web$getPendingItems(IAEKey key) {
-        return ((CraftingCPUCluster) (Object) this).craftingLogic.getPendingOutputs((AEKey) key);
+        return ((AdvCraftingCPU) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
     }
 
     @Override
     public long web$getStorageItems(IAEKey key) {
-        return ((CraftingCPUCluster) (Object) this).craftingLogic.getStored((AEKey) key);
+        return ((AdvCraftingCPU) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
     }
 
     @Override
     public IItemList web$getWaitingFor() {
-        return (IItemList) (Object) ((ICraftingCPULogicAccessor) ((CraftingCPUCluster) (Object) this).craftingLogic)
+        return (IItemList) (Object) ((ICraftingCPULogicAccessor) ((AdvCraftingCPU) (Object) this).craftingLogic)
             .web$getJob()
             .web$getWaitingFor().list;
     }
