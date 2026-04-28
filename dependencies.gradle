@@ -18,7 +18,7 @@ dependencies {
     }
 
     // AE2
-    modApi(forge.ae2)
+    modImplementation(forge.ae2)
     modCompileOnly(forge.ae2wtlib)
 
 
@@ -30,6 +30,7 @@ dependencies {
     //modLocalRuntime(forge.ae2)
     modLocalRuntime(forge.spark)
     modLocalRuntime(forge.modernfix)
+    modLocalRuntime(forge.guideme)
 
     // Runtime Recipe Viewers - uncomment whichever one you want to use //
     modLocalRuntime(forge.emi)

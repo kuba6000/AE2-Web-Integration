@@ -1,6 +1,6 @@
 [versions]
 mixinExtras = "0.5.0-rc.3"
-ae2 = "15.0.18"
+ae2 = "15.4.10"
 emi = "1.1.13+1.20.1"
 
 ## modrinth maven ##
@@ -8,6 +8,7 @@ jade = "11.6.3"
 embeddium = "0.3.31+mc1.20.1"
 oculus = "1.20.1-1.8.0"
 modernfix = "DdUByV9S" # 5.24.1+mc1.20.1
+guideme = "20.1.7"
 
 ## cursemaven ##
 ae2wtlib = "5217955"
@@ -25,4 +26,5 @@ jade                = { module = "maven.modrinth:jade", version.ref = "jade" }
 embeddium           = { module = "maven.modrinth:embeddium", version.ref = "embeddium" }
 oculus              = { module = "maven.modrinth:oculus", version.ref = "oculus" }
 modernfix           = { module = "maven.modrinth:modernfix", version.ref = "modernfix" }
+guideme             = { module = "org.appliedenergistics:guideme", version.ref = "guideme" }
 spark               = { module = "curse.maven:spark-361579", version.ref = "spark" }
