@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import static pl.kuba6000.ae2webintegration.core.AE2WebIntegration.LOG;
+import static pl.kuba6000.ae2webintegration.forge.AE2WebIntegrationCore.LOG;
 
 import java.io.File;
 import java.io.Reader;
@@ -11,9 +11,7 @@ import java.util.UUID;
 
 import com.google.common.io.Files;
 import com.google.gson.Gson;
-import com.mojang.authlib.GameProfile;
 
-import cpw.mods.fml.common.FMLCommonHandler;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 public class WebData {
@@ -30,14 +28,12 @@ public class WebData {
         if (name == null || name.isEmpty()) {
             return -1;
         }
-        GameProfile profile = FMLCommonHandler.instance()
-            .getMinecraftServerInstance()
-            .func_152358_ax()
-            .func_152655_a(name);
-        if (profile == null) {
+        UUID uuid = WebEngine.getPlatform()
+            .getOfflinePlayerUUID(name);
+        if (uuid == null) {
             return -1;
         }
-        Integer id = instance.UUIDToId.get(profile.getId());
+        Integer id = instance.UUIDToId.get(uuid);
         if (id != null) {
             return id;
         }
@@ -63,16 +59,16 @@ public class WebData {
         return false;
     }
 
-    public static void setPassword(GameProfile playerId, String passwordHash) {
+    public static void setPassword(UUID playerId, String passwordHash) {
         if (passwordHash == null || passwordHash.isEmpty()) {
-            instance.passwords.remove(playerId.getId());
+            instance.passwords.remove(playerId);
         } else {
             try {
-                instance.passwords.put(playerId.getId(), passwordHash);
+                instance.passwords.put(playerId, passwordHash);
                 int pID = AE2Controller.AE2Interface.web$getPlayerData()
                     .web$getPlayerId(playerId);
-                instance.UUIDToId.put(playerId.getId(), pID);
-                instance.IdToUUID.put(pID, playerId.getId());
+                instance.UUIDToId.put(playerId, pID);
+                instance.IdToUUID.put(pID, playerId);
             } catch (Exception e) {
                 LOG.error("Failed to set password for player ID: {}", playerId, e);
             }

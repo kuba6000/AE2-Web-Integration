@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import static pl.kuba6000.ae2webintegration.core.AE2WebIntegration.LOG;
+import static pl.kuba6000.ae2webintegration.forge.AE2WebIntegrationCore.LOG;
 
 import java.io.File;
 import java.io.Reader;

@@ -114,7 +114,7 @@ public abstract class AEGridMixin implements IAEGrid {
     }
 
     @Override
-    public IChatComponent web$getLastFakePlayerChatMessage() {
+    public Object web$getLastFakePlayerChatMessage() {
         return web$lastFakePlayerChatMessage;
     }
 }

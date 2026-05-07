@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.discord;
 
-import static pl.kuba6000.ae2webintegration.core.AE2WebIntegration.MODID;
+import static pl.kuba6000.ae2webintegration.forge.AE2WebIntegrationCore.MODID;
 
 import java.io.IOException;
 import java.io.OutputStream;

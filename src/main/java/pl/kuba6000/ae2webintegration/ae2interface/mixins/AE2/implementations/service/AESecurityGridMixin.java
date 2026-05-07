@@ -38,7 +38,7 @@ public class AESecurityGridMixin implements IAESecurityGrid {
     }
 
     @Override
-    public GameProfile web$getOwnerProfile() {
+    public pl.kuba6000.ae2webintegration.core.api.PlayerProfile web$getOwnerProfile() {
         IAEPlayerData playerData = (IAEPlayerData) WorldData.instance()
             .playerData();
         return playerData.web$getPlayerProfile(web$getOwner());

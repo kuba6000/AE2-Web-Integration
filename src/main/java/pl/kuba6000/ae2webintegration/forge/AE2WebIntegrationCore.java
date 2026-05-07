@@ -1,6 +1,6 @@
-package pl.kuba6000.ae2webintegration.core;
+package pl.kuba6000.ae2webintegration.forge;
 
-import static pl.kuba6000.ae2webintegration.core.AE2WebIntegration.MODID;
+import static pl.kuba6000.ae2webintegration.forge.AE2WebIntegrationCore.MODID;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -14,6 +14,10 @@ import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 import pl.kuba6000.ae2webintegration.Tags;
+import pl.kuba6000.ae2webintegration.core.*;
+
+import pl.kuba6000.ae2webintegration.core.discord.*;
+import pl.kuba6000.ae2webintegration.core.utils.*;
 
 @Mod(
     modid = MODID,
@@ -21,14 +25,14 @@ import pl.kuba6000.ae2webintegration.Tags;
     name = "AE2WebIntegration-Core",
     acceptedMinecraftVersions = "*",
     acceptableRemoteVersions = "*")
-public class AE2WebIntegration {
+public class AE2WebIntegrationCore {
 
     public static final String MODID = "ae2webintegration-core";
     public static final Logger LOG = LogManager.getLogger(MODID);
 
     @SidedProxy(
-        clientSide = "pl.kuba6000.ae2webintegration.core.ClientProxy",
-        serverSide = "pl.kuba6000.ae2webintegration.core.CommonProxy")
+        clientSide = "pl.kuba6000.ae2webintegration.forge.ClientProxy",
+        serverSide = "pl.kuba6000.ae2webintegration.forge.CommonProxy")
     public static CommonProxy proxy;
 
     @Mod.EventHandler

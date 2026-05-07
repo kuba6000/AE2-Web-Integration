@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import net.minecraft.util.IChatComponent;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
@@ -155,10 +154,10 @@ public class Job extends ISyncedRequest {
                             return;
                         }
                     }
-                    IChatComponent error = craftingGrid.web$submitJob(craftingJob, target, true, grid);
+                    String error = craftingGrid.web$submitJob(craftingJob, target, true, grid);
                     if (error != null) {
                         deny("FAIL");
-                        setData(error.getUnformattedTextForChat());
+                        setData(error);
                     } else {
                         done();
                     }

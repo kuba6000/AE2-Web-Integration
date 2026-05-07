@@ -1,11 +1,11 @@
 package pl.kuba6000.ae2webintegration.core.interfaces;
 
-import com.mojang.authlib.GameProfile;
+import java.util.UUID;
 
 public interface IAEPlayerData {
 
-    GameProfile web$getPlayerProfile(int playerId);
+    pl.kuba6000.ae2webintegration.core.api.PlayerProfile web$getPlayerProfile(int playerId);
 
-    int web$getPlayerId(GameProfile id);
+    int web$getPlayerId(UUID id);
 
 }

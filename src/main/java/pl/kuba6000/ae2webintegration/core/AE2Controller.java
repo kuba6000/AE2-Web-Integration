@@ -24,8 +24,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import net.minecraft.entity.player.EntityPlayerMP;
-
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -35,7 +33,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
-import cpw.mods.fml.common.FMLCommonHandler;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTracking;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTrackingHistory;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.GridSettings;
@@ -92,7 +89,7 @@ public class AE2Controller {
             } else if (userID == -2) {
                 this.username = "localhost";
             } else {
-                GameProfile profile = AE2Controller.AE2Interface.web$getPlayerData()
+                pl.kuba6000.ae2webintegration.core.api.PlayerProfile profile = AE2Controller.AE2Interface.web$getPlayerData()
                     .web$getPlayerProfile(userID);
                 this.username = profile != null ? profile.getName() : "unknown";
             }
@@ -262,16 +259,8 @@ public class AE2Controller {
             if (postData.containsKey("register") && postData.containsKey("password")) {
                 String username = postData.get("register");
                 UUID uuid = null;
-                for (EntityPlayerMP entityPlayerMP : FMLCommonHandler.instance()
-                    .getMinecraftServerInstance()
-                    .getConfigurationManager().playerEntityList) {
-                    if (entityPlayerMP.getCommandSenderName()
-                        .equalsIgnoreCase(username)) {
-                        username = entityPlayerMP.getCommandSenderName();
-                        uuid = entityPlayerMP.getUniqueID();
-                        break;
-                    }
-                }
+                uuid = WebEngine.getPlatform()
+                    .getOnlinePlayerUUID(username);
                 if (uuid == null) {
                     t.getResponseHeaders()
                         .add("Location", "?notonline");
@@ -489,16 +478,8 @@ public class AE2Controller {
                 if (postData.containsKey("register") && postData.containsKey("password")) {
                     String username = postData.get("register");
                     UUID uuid = null;
-                    for (EntityPlayerMP entityPlayerMP : FMLCommonHandler.instance()
-                        .getMinecraftServerInstance()
-                        .getConfigurationManager().playerEntityList) {
-                        if (entityPlayerMP.getCommandSenderName()
-                            .equalsIgnoreCase(username)) {
-                            username = entityPlayerMP.getCommandSenderName();
-                            uuid = entityPlayerMP.getUniqueID();
-                            break;
-                        }
-                    }
+                    uuid = WebEngine.getPlatform()
+                        .getOnlinePlayerUUID(username);
                     if (uuid == null) {
                         byte[] raw_response = "notonline".getBytes();
                         t.sendResponseHeaders(400, raw_response.length);
