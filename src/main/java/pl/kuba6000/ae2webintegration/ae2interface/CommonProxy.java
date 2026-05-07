@@ -32,8 +32,7 @@ public class CommonProxy {
 
         AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + WebEngine.getModVersion());
         if (Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated()) AE2WebIntegration.LOG.warn(
-            "You are not on latest version ! Consider updating to {} at https://github.com/kuba6000/AE2-Web-Integration/releases/latest",
-            VersionChecker.getLatestTag());
+            "You are not on latest version ! Consider updating to " + VersionChecker.getLatestTag() + " at https://github.com/kuba6000/AE2-Web-Integration/releases/latest");
 
         FMLCommonHandler.instance()
             .bus()
