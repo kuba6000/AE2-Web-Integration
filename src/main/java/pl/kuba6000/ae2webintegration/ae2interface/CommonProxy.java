@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.forge;
+package pl.kuba6000.ae2webintegration.ae2interface;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
@@ -8,13 +8,10 @@ import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 import pl.kuba6000.ae2webintegration.Tags;
+import pl.kuba6000.ae2webintegration.ae2interface.commands.BaseCommandHandler;
 import pl.kuba6000.ae2webintegration.core.*;
-
-import pl.kuba6000.ae2webintegration.forge.commands.BaseCommandHandler;
 import pl.kuba6000.ae2webintegration.core.discord.*;
-import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
 import pl.kuba6000.ae2webintegration.core.utils.*;
-import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class CommonProxy {
 
@@ -27,8 +24,8 @@ public class CommonProxy {
         WebData.loadData();
         GridData.loadData();
 
-        AE2WebIntegrationCore.LOG.info("AE2WebIntegration loading at version " + Tags.VERSION);
-        if (Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated()) AE2WebIntegrationCore.LOG.warn(
+        AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + Tags.VERSION);
+        if (Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated()) AE2WebIntegration.LOG.warn(
             "You are not on latest version ! Consider updating to {} at https://github.com/kuba6000/AE2-Web-Integration/releases/latest",
             VersionChecker.getLatestTag());
 

@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.forge.commands;
+package pl.kuba6000.ae2webintegration.ae2interface.commands;
 
 import java.util.UUID;
 
@@ -11,9 +11,8 @@ import net.minecraft.util.EnumChatFormatting;
 
 import org.apache.commons.lang3.tuple.Pair;
 
+import pl.kuba6000.ae2webintegration.ae2interface.ForgeConfig;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.Config;
-import pl.kuba6000.ae2webintegration.forge.ForgeConfig;
 import pl.kuba6000.ae2webintegration.core.WebData;
 
 public class BaseCommandHandler extends CommandBase {

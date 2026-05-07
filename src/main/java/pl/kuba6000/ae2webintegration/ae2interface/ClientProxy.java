@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.forge;
+package pl.kuba6000.ae2webintegration.ae2interface;
 
 public class ClientProxy extends CommonProxy {
 

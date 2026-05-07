@@ -8,6 +8,8 @@ import net.minecraftforge.common.util.FakePlayer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
+import com.mojang.authlib.GameProfile;
+
 import appeng.api.networking.IGridHost;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.IMachineSet;
@@ -59,7 +61,7 @@ public abstract class AEGridMixin implements IAEGrid {
     private Class<? extends IGridHost> web$lastUsedMachineClass = null;
 
     @Unique
-    public IChatComponent web$lastFakePlayerChatMessage;
+    public String web$lastFakePlayerChatMessage;
 
     @Unique
     private PlayerSource web$cachedPlayerSource = null;
@@ -101,11 +103,11 @@ public abstract class AEGridMixin implements IAEGrid {
         }
 
         web$cachedPlayerSource = new PlayerSource(
-            new FakePlayer((WorldServer) world, AE2Controller.AEControllerProfile) {
+            new FakePlayer((WorldServer) world, new GameProfile(AE2Controller.AEControllerUUID, "AE2CONTROLLER")) {
 
                 @Override
                 public void addChatMessage(IChatComponent message) {
-                    web$lastFakePlayerChatMessage = message;
+                    web$lastFakePlayerChatMessage = message.getUnformattedText();
                 }
             },
             actionHost);
@@ -114,7 +116,7 @@ public abstract class AEGridMixin implements IAEGrid {
     }
 
     @Override
-    public Object web$getLastFakePlayerChatMessage() {
+    public String web$getLastFakePlayerChatMessage() {
         return web$lastFakePlayerChatMessage;
     }
 }

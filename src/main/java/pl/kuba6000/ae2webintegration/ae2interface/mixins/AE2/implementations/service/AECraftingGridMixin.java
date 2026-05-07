@@ -4,8 +4,6 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Future;
 
-import net.minecraft.util.IChatComponent;
-
 import org.spongepowered.asm.mixin.Mixin;
 
 import com.google.common.collect.ImmutableSet;
@@ -63,6 +61,7 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
             prioritizePower,
             (BaseActionSource) grid.web$getPlayerSource());
         if (link != null) return null;
-        Object msg = grid.web$getLastFakePlayerChatMessage(); return msg == null ? null : ((net.minecraft.util.IChatComponent)msg).getUnformattedText();
+        Object msg = grid.web$getLastFakePlayerChatMessage();
+        return msg == null ? null : ((net.minecraft.util.IChatComponent) msg).getUnformattedText();
     }
 }

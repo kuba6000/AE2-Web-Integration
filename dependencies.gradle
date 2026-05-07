@@ -35,7 +35,7 @@
  */
 dependencies {
     implementation project(':web-engine')
-    shadow project(':web-engine')
+    shadowImplementation project(':web-engine')
 
     api("com.github.GTNewHorizons:GTNHLib:0.9.53:dev")
     api("com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-909-GTNH:dev")

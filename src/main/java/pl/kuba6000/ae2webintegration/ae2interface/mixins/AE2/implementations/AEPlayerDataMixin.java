@@ -28,7 +28,7 @@ public class AEPlayerDataMixin implements IAEPlayerData {
     }
 
     @Override
-    public pl.kuba6000.ae2webintegration.core.api.PlayerProfile web$getPlayerProfile(int playerId) {
+    public pl.kuba6000.ae2webintegration.core.api.PlayerIdentity web$getPlayerProfile(int playerId) {
         Optional<UUID> maybe = playerMapping.get(playerId);
         if (!maybe.isPresent()) return null;
         UUID uuid = maybe.get();
@@ -44,7 +44,7 @@ public class AEPlayerDataMixin implements IAEPlayerData {
         if (p == null) {
             p = new GameProfile(uuid, uuid.toString());
         }
-        return new pl.kuba6000.ae2webintegration.core.api.PlayerProfile(p.getId(), p.getName());
+        return new pl.kuba6000.ae2webintegration.core.api.PlayerIdentity(p.getId(), p.getName());
     }
 
     @Override

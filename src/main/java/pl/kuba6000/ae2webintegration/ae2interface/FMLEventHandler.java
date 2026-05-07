@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.forge;
+package pl.kuba6000.ae2webintegration.ae2interface;
 
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.util.ChatComponentText;
@@ -9,7 +9,6 @@ import cpw.mods.fml.common.gameevent.PlayerEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import pl.kuba6000.ae2webintegration.core.*;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-
 import pl.kuba6000.ae2webintegration.core.discord.*;
 import pl.kuba6000.ae2webintegration.core.utils.*;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
