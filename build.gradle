@@ -23,3 +23,15 @@ java {
     sourceCompatibility = JavaVersion.VERSION_1_8
     targetCompatibility = JavaVersion.VERSION_1_8
 }
+
+// This submodule is pure Java (no Minecraft/Forge references).
+// Mark outgoing artifacts as already deobfuscated so RFG does not
+// attempt to run DependencyDeobfuscationTransform on this jar.
+configurations.configureEach {
+    if (name in ['apiElements', 'runtimeElements']) {
+        outgoing.attributes.attribute(
+            org.gradle.api.attributes.Attribute.of('rfgDeobfuscatorTransformed', Boolean),
+            true
+        )
+    }
+}
