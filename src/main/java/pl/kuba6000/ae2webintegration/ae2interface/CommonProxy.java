@@ -20,11 +20,13 @@ public class CommonProxy {
     public void preInit(FMLPreInitializationEvent event) {
         ForgeConfig.init(event.getModConfigurationDirectory());
         ForgeConfig.synchronizeConfiguration();
-        WebEngine.init(new ForgePlatform(new java.io.File(event.getModConfigurationDirectory(), "ae2webintegration")));
+        WebEngine.init(
+            new ForgePlatform(new java.io.File(event.getModConfigurationDirectory(), "ae2webintegration")),
+            Tags.VERSION);
         WebData.loadData();
         GridData.loadData();
 
-        AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + Tags.VERSION);
+        AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + WebEngine.getModVersion());
         if (Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated()) AE2WebIntegration.LOG.warn(
             "You are not on latest version ! Consider updating to {} at https://github.com/kuba6000/AE2-Web-Integration/releases/latest",
             VersionChecker.getLatestTag());
