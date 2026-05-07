@@ -105,7 +105,7 @@ public class GridData {
             Type type = new TypeToken<ConcurrentHashMap<Long, GridData>>() {}.getType();
             gridDataMap = gson.fromJson(reader, type);
         } catch (Exception e) {
-            LOG.error("Failed to load web data from file: {}", dataFile.getAbsolutePath(), e);
+            LOG.error("Failed to load web data from file: " + dataFile.getAbsolutePath(), e);
             gridDataMap.clear();
             saveChanges();
         } finally {

@@ -46,14 +46,14 @@ public class WebData {
     public static boolean verifyPassword(int playerId, String password) {
         UUID id = instance.IdToUUID.get(playerId);
         if (id == null) {
-            LOG.warn("Player ID {} not found in IdToUUID map.", playerId);
+            LOG.warn("Player ID " + playerId + " not found in IdToUUID map.");
             return false;
         }
         if (instance.passwords.containsKey(id)) {
             try {
                 return PasswordHelper.validatePassword(password, instance.passwords.get(id));
             } catch (Exception e) {
-                LOG.error("Password verification failed for player ID: {}", playerId, e);
+                LOG.error("Password verification failed for player ID: " + playerId, e);
                 return false;
             }
         }
@@ -72,7 +72,7 @@ public class WebData {
                 instance.UUIDToId.put(playerUuid, pID);
                 instance.IdToUUID.put(pID, playerUuid);
             } catch (Exception e) {
-                LOG.error("Failed to set password for player ID: {}", playerUuid, e);
+                LOG.error("Failed to set password for player ID: " + playerUuid, e);
             }
         }
         saveChanges();
@@ -107,7 +107,7 @@ public class WebData {
             reader = Files.newReader(dataFile, StandardCharsets.UTF_8);
             instance = gson.fromJson(reader, WebData.class);
         } catch (Exception e) {
-            LOG.error("Failed to load web data from file: {}", dataFile.getAbsolutePath(), e);
+            LOG.error("Failed to load web data from file: " + dataFile.getAbsolutePath(), e);
             instance.UUIDToId.clear();
             instance.IdToUUID.clear();
             instance.passwords.clear();

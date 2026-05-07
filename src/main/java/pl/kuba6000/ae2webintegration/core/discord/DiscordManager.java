@@ -86,7 +86,7 @@ public class DiscordManager extends Thread {
 
             int code;
             if ((code = connection.getResponseCode()) != 200 && code != 204) {
-                LOG.error("Error, response code: {}", code);
+                LOG.error("Error, response code: " + code);
             }
         } catch (IOException e) {
             // throw new RuntimeException(e);
