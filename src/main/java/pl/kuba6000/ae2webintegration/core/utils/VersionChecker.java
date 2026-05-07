@@ -8,7 +8,7 @@ import java.net.URL;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.Tags;
+import pl.kuba6000.ae2webintegration.core.WebEngine;
 
 public class VersionChecker {
 
@@ -20,13 +20,15 @@ public class VersionChecker {
 
     private static long lastChecked = 0L;
 
-    private static void updateLatestVersion() {
+    private static void updateLatestVersion(String currentVersion) {
+        if (currentVersion == null || currentVersion.isEmpty()) return;
         if (lastChecked != 0L) {
-            if (!Tags.VERSION.equals(latestTag)) return;
             long elapsed = System.currentTimeMillis() - lastChecked;
             if (latestTag == null) {
                 if (elapsed < 5 * 60 * 1000) // 5 minutes
                     return;
+            } else if (!currentVersion.equals(latestTag)) {
+                return;
             } else if (elapsed < 5 * 60 * 60 * 1000) { // 5 hours
                 return;
             }
@@ -48,7 +50,7 @@ public class VersionChecker {
                         }
                     }
                     // not found???
-                    latestTag = Tags.VERSION;
+                    latestTag = currentVersion;
                 }
             }
 
@@ -58,9 +60,11 @@ public class VersionChecker {
     }
 
     public static boolean isOutdated() {
-        updateLatestVersion();
+        String currentVersion = WebEngine.getModVersion();
+        if (currentVersion == null || currentVersion.isEmpty()) return false;
+        updateLatestVersion(currentVersion);
         if (latestTag == null) return false;
-        return !latestTag.equals(Tags.VERSION);
+        return !latestTag.equals(currentVersion);
     }
 
     public static String getLatestTag() {

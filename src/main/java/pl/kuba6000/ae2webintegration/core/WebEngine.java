@@ -4,7 +4,15 @@ import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
 public class WebEngine {
 
-    public static void init(IServerPlatform serverPlatform) {
+    // Populated by the interface layer from the buildscript-generated mod version.
+    private static volatile String modVersion;
+
+    public static void init(IServerPlatform serverPlatform, String modVersion) {
         AE2Controller.serverPlatform = serverPlatform;
+        WebEngine.modVersion = modVersion;
+    }
+
+    public static String getModVersion() {
+        return modVersion;
     }
 }
