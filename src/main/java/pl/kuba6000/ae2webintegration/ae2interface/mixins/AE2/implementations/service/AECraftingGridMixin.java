@@ -54,7 +54,7 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     }
 
     @Override
-    public default IChatComponent web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
+    public default String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
         IAEGrid grid) {
         ICraftingLink link = ((ICraftingGrid) (Object) this).submitJob(
             (ICraftingJob) job,
@@ -63,6 +63,6 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
             prioritizePower,
             (BaseActionSource) grid.web$getPlayerSource());
         if (link != null) return null;
-        return grid.web$getLastFakePlayerChatMessage();
+        Object msg = grid.web$getLastFakePlayerChatMessage(); return msg == null ? null : ((net.minecraft.util.IChatComponent)msg).getUnformattedText();
     }
 }

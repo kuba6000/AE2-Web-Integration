@@ -2,7 +2,6 @@ package pl.kuba6000.ae2webintegration.core.api;
 
 import java.util.Objects;
 
-import net.minecraft.world.World;
 
 public class DimensionalCoords {
 
@@ -18,12 +17,7 @@ public class DimensionalCoords {
         this.z = z;
     }
 
-    public DimensionalCoords(World world, int x, int y, int z) {
-        this.dimid = world.provider.dimensionId;
-        this.x = x;
-        this.y = y;
-        this.z = z;
-    }
+    
 
     @Override
     public int hashCode() {

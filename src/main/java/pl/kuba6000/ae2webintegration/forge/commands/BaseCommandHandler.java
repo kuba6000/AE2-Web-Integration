@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core.commands;
+package pl.kuba6000.ae2webintegration.forge.commands;
 
 import java.util.UUID;
 
@@ -13,6 +13,7 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.Config;
+import pl.kuba6000.ae2webintegration.forge.ForgeConfig;
 import pl.kuba6000.ae2webintegration.core.WebData;
 
 public class BaseCommandHandler extends CommandBase {
@@ -49,7 +50,7 @@ public class BaseCommandHandler extends CommandBase {
                 sender.addChatMessage(chatcomponenttranslation2);
                 return;
             }
-            Config.synchronizeConfiguration();
+            ForgeConfig.synchronizeConfiguration();
             AE2Controller.stopHTTPServer();
             AE2Controller.startHTTPServer();
             sender.addChatMessage(
@@ -88,7 +89,7 @@ public class BaseCommandHandler extends CommandBase {
                 return;
             }
 
-            WebData.setPassword(((EntityPlayerMP) sender).getGameProfile(), p.getRight());
+            WebData.setPassword(((EntityPlayerMP) sender).getUniqueID(), p.getRight());
 
             AE2Controller.awaitingRegistration.remove(id);
 
