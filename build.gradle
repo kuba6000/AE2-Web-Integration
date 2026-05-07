@@ -28,7 +28,7 @@ java {
 // Mark outgoing artifacts as already deobfuscated so RFG does not
 // attempt to run DependencyDeobfuscationTransform on this jar.
 configurations.configureEach {
-    if (name in ['apiElements', 'runtimeElements']) {
+    if (canBeConsumed) {
         outgoing.attributes.attribute(
             org.gradle.api.attributes.Attribute.of('rfgDeobfuscatorTransformed', Boolean),
             true
