@@ -1,4 +1,4 @@
-[submodule "web-engine"]
-	path = web-engine
+[submodule "core"]
+	path = core
 	url = https://github.com/kuba6000/AE2-Web-Integration.git
 	branch = core
