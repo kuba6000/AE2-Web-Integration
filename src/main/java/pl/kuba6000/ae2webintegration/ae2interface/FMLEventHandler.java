@@ -7,10 +7,9 @@ import net.minecraft.util.EnumChatFormatting;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.PlayerEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
-import pl.kuba6000.ae2webintegration.core.*;
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.Config;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.discord.*;
-import pl.kuba6000.ae2webintegration.core.utils.*;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class FMLEventHandler {
