@@ -11,7 +11,6 @@ import net.minecraft.util.EnumChatFormatting;
 
 import pl.kuba6000.ae2webintegration.ae2interface.ForgeConfig;
 import pl.kuba6000.ae2webintegration.core.CommandProcessor;
-import pl.kuba6000.ae2webintegration.core.Config;
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 
 public class BaseCommandHandler extends CommandBase {
@@ -48,8 +47,7 @@ public class BaseCommandHandler extends CommandBase {
                 sender.addChatMessage(chatcomponenttranslation2);
                 return;
             }
-            CommandResult result = CommandProcessor
-                .reload(() -> ForgeConfig.synchronizeConfiguration(Config.getProvider()));
+            CommandResult result = CommandProcessor.reload(() -> ForgeConfig.synchronizeConfiguration());
             sender.addChatMessage(
                 new ChatComponentText(
                     (result.isSuccess() ? EnumChatFormatting.GREEN : EnumChatFormatting.RED) + result.getMessage()));

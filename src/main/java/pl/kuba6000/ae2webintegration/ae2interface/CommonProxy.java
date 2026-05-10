@@ -10,7 +10,6 @@ import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 import pl.kuba6000.ae2webintegration.Tags;
 import pl.kuba6000.ae2webintegration.ae2interface.commands.BaseCommandHandler;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.Config;
 import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.StartupHandler;
 import pl.kuba6000.ae2webintegration.core.WebData;
@@ -22,7 +21,7 @@ public class CommonProxy {
     // GameRegistry." (Remove if not needed)
     public void preInit(FMLPreInitializationEvent event) {
         ForgeConfig.init(event.getModConfigurationDirectory());
-        ForgeConfig.synchronizeConfiguration(Config.getProvider());
+        ForgeConfig.synchronizeConfiguration();
         WebEngine.init(
             new ForgePlatform(new java.io.File(event.getModConfigurationDirectory(), "ae2webintegration")),
             Tags.VERSION);
