@@ -9,12 +9,10 @@ import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.EnumChatFormatting;
 
-import org.apache.commons.lang3.tuple.Pair;
-
 import pl.kuba6000.ae2webintegration.ae2interface.ForgeConfig;
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.Config;
-import pl.kuba6000.ae2webintegration.core.WebData;
+import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 
 public class BaseCommandHandler extends CommandBase {
 
@@ -50,12 +48,11 @@ public class BaseCommandHandler extends CommandBase {
                 sender.addChatMessage(chatcomponenttranslation2);
                 return;
             }
-            ForgeConfig.synchronizeConfiguration(Config.getProvider());
-            AE2Controller.stopHTTPServer();
-            AE2Controller.startHTTPServer();
+            CommandResult result = CommandProcessor
+                .reload(() -> ForgeConfig.synchronizeConfiguration(Config.getProvider()));
             sender.addChatMessage(
                 new ChatComponentText(
-                    EnumChatFormatting.GREEN + "Successfully reloaded the config and restarted the web server!"));
+                    (result.isSuccess() ? EnumChatFormatting.GREEN : EnumChatFormatting.RED) + result.getMessage()));
         } else {
             // auth command
             if (args.length < 2) {
@@ -73,27 +70,10 @@ public class BaseCommandHandler extends CommandBase {
             }
 
             UUID id = ((EntityPlayerMP) sender).getUniqueID();
-
-            Pair<String, String> p = AE2Controller.awaitingRegistration.get(id);
-            if (p == null) {
-                sender.addChatMessage(
-                    new ChatComponentText(
-                        EnumChatFormatting.RED
-                            + "You have to initialize the registration on the web interface first!"));
-                return;
-            }
-
-            if (!p.getLeft()
-                .equals(token)) {
-                sender.addChatMessage(new ChatComponentText(EnumChatFormatting.RED + "Invalid token!"));
-                return;
-            }
-
-            WebData.setPassword(((EntityPlayerMP) sender).getUniqueID(), p.getRight());
-
-            AE2Controller.awaitingRegistration.remove(id);
-
-            sender.addChatMessage(new ChatComponentText(EnumChatFormatting.GREEN + "Registered successfully!"));
+            CommandResult result = CommandProcessor.registerPlayer(id, token);
+            sender.addChatMessage(
+                new ChatComponentText(
+                    (result.isSuccess() ? EnumChatFormatting.GREEN : EnumChatFormatting.RED) + result.getMessage()));
         }
     }
 }
