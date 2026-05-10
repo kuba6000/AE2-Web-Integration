@@ -1,7 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
 import java.net.InetAddress;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class RateLimiter {
 
@@ -15,9 +15,9 @@ public class RateLimiter {
         RESET_WHITELIST_INTERVAL_MS = resetWhitelistIntervalMs;
     }
 
-    private long lastUpdate = 0;
-    private final HashMap<InetAddress, Integer> requestCounter = new HashMap<>();
-    private final HashMap<InetAddress, Long> whitelist = new HashMap<>();
+    private volatile long lastUpdate = 0;
+    private final ConcurrentHashMap<InetAddress, Integer> requestCounter = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<InetAddress, Long> whitelist = new ConcurrentHashMap<>();
 
     public boolean isAllowed(InetAddress userId) {
         updateRequests();
