@@ -10,7 +10,7 @@ public class UpdateNotifier {
         + " Consider updating at https://github.com/kuba6000/AE2-Web-Integration/releases/latest";
 
     public static void notifyPlayerIfOutdated(IPlayerMessenger messenger, PlayerIdentity player) {
-        if (Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated()) {
+        if (Config.CHECK_FOR_UPDATES() && VersionChecker.isOutdated()) {
             messenger.sendMessage(player, UPDATE_MESSAGE);
         }
     }

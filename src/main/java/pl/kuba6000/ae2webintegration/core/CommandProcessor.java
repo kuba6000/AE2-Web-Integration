@@ -14,7 +14,7 @@ public class CommandProcessor {
      * Reloads the configuration and restarts the HTTP server.
      *
      * @param configReloader a Runnable that performs the Forge-specific config reload
-     *                       (reads the Forge config file and pushes values through IConfigProvider)
+     *                       (reads the Forge config file and applies values to ConfigBootstrap)
      * @return a CommandResult with success/failure status and a human-readable message
      */
     public static CommandResult reload(Runnable configReloader) {

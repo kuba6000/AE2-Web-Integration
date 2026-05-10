@@ -123,13 +123,13 @@ public class AE2Controller {
     public static ConcurrentLinkedQueue<ISyncedRequest> requests = new ConcurrentLinkedQueue<>();
 
     private static final RateLimiter rateLimiter = new RateLimiter(
-        Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE,
+        Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(),
         60 * 1000,
         60 * 60 * 1000); // 60 requests per minute, whitelisted for 1 hour
 
     public static void startHTTPServer() {
         try {
-            server = HttpServer.create(new InetSocketAddress(Config.AE_PORT), 0);
+            server = HttpServer.create(new InetSocketAddress(Config.AE_PORT()), 0);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -187,7 +187,7 @@ public class AE2Controller {
         InetAddress remoteAddress = t.getRemoteAddress()
             .getAddress();
 
-        if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST && remoteAddress.isLoopbackAddress()) {
+        if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && remoteAddress.isLoopbackAddress()) {
             requestContext.set(new RequestContext(t, -2)); // Localhost access
             rateLimiter.ensureWhitelisted(remoteAddress);
             return true;
@@ -290,11 +290,11 @@ public class AE2Controller {
             if (postData.containsKey("password") && postData.containsKey("username")) {
                 String username = postData.get("username");
                 int playerID;
-                if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE) {
+                    if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
                     username = "Admin";
                     playerID = -1;
                     String password = postData.get("password");
-                    if (!password.equals(Config.AE_PASSWORD) && !Config.AE_PASSWORD.isEmpty()) {
+                    if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD().isEmpty()) {
                         t.getResponseHeaders()
                             .add("Location", "?invalidpassword");
                         t.sendResponseHeaders(302, -1);
@@ -513,11 +513,11 @@ public class AE2Controller {
                 if (postData.containsKey("password") && postData.containsKey("username")) {
                     String username = postData.get("username");
                     int playerID;
-                    if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE) {
+                if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
                         username = "Admin";
                         playerID = -1;
                         String password = postData.get("password");
-                        if (!password.equals(Config.AE_PASSWORD) && !Config.AE_PASSWORD.isEmpty()) {
+                        if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD().isEmpty()) {
                             byte[] raw_response = "invalidpassword".getBytes();
                             t.sendResponseHeaders(400, raw_response.length);
                             OutputStream os = t.getResponseBody();
@@ -554,7 +554,7 @@ public class AE2Controller {
                     json.addProperty("token", token);
                     json.addProperty("username", username);
                     json.addProperty("isAdmin", playerID == -1);
-                    json.addProperty("isOutdated", Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated());
+                    json.addProperty("isOutdated", Config.CHECK_FOR_UPDATES() && VersionChecker.isOutdated());
                     byte[] raw_response = json.toString()
                         .getBytes();
                     t.sendResponseHeaders(200, raw_response.length);
@@ -659,10 +659,10 @@ public class AE2Controller {
                         .collect(Collectors.joining(System.lineSeparator()));
                 }
             }
-            response = response.replace("_REPLACE_ME_IS_PUBLIC_MODE", Config.AE_PUBLIC_MODE ? "true" : "false");
+            response = response.replace("_REPLACE_ME_IS_PUBLIC_MODE", Config.AE_PUBLIC_MODE() ? "true" : "false");
             response = response.replace(
                 "_REPLACE_ME_VERSION_OUTDATED",
-                Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated() ? "true" : "false");
+                Config.CHECK_FOR_UPDATES() && VersionChecker.isOutdated() ? "true" : "false");
             RequestContext context = requestContext.get();
             if (context != null) {
                 response = response.replace("_REPLACE_ME_USERNAME", context.username);

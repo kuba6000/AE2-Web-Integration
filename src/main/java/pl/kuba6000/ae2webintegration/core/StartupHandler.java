@@ -11,7 +11,7 @@ public class StartupHandler {
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
     public static void logOutdatedWarning() {
-        if (Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated()) {
+        if (Config.CHECK_FOR_UPDATES() && VersionChecker.isOutdated()) {
             LOG.warn("You are not on latest version ! Consider updating to "
                 + VersionChecker.getLatestTag()
                 + " at https://github.com/kuba6000/AE2-Web-Integration/releases/latest");
@@ -20,10 +20,10 @@ public class StartupHandler {
 
     public static void handleDiscordIntegration() {
         DiscordManager.init();
-        if (!Config.AE_PUBLIC_MODE && !Config.DISCORD_WEBHOOK.isEmpty()) {
+        if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK().isEmpty()) {
             DiscordManager.postMessageNonBlocking(
                 new DiscordManager.DiscordEmbed("AE2 Web Integration", "Discord integration started!"));
-        } else if (Config.AE_PUBLIC_MODE && !Config.DISCORD_WEBHOOK.isEmpty()) {
+        } else if (Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK().isEmpty()) {
             DiscordManager.postMessageNonBlocking(
                 new DiscordManager.DiscordEmbed(
                     "AE2 Web Integration",

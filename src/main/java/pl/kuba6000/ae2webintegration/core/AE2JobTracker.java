@@ -209,7 +209,7 @@ public class AE2JobTracker {
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         double took = info.timeDone - info.timeStarted;
         took /= 1000d;
-        if (!Config.AE_PUBLIC_MODE && !Config.DISCORD_WEBHOOK.isEmpty()) {
+        if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK().isEmpty()) {
             IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
             if (securityGrid != null && securityGrid.web$isAvailable()) {
                 IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
