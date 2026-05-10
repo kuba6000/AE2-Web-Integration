@@ -1,0 +1,33 @@
+package pl.kuba6000.ae2webintegration.core.api;
+
+import java.util.UUID;
+
+/**
+ * Platform-agnostic abstraction over a Minecraft command sender.
+ * <p>
+ * Interface layer implementations wrap either Forge's {@code ICommandSender}
+ * or NeoForge's {@code CommandSourceStack} depending on the MC version.
+ */
+public interface ICommandContext {
+
+    /** Raw arguments passed to the command (everything after the command name). */
+    String[] getArgs();
+
+    /**
+     * UUID of the executing player, or {@code null} if the sender is the
+     * console / command block.
+     */
+    UUID getPlayerUUID();
+
+    /** Whether the sender has the given permission level. */
+    boolean hasPermission(int level);
+
+    /** Sends a success/info message to the sender (interface adds green coloring). */
+    void sendMessage(String text);
+
+    /** Sends an error message to the sender (interface adds red coloring). */
+    void sendError(String text);
+
+    /** Returns a Runnable that triggers the platform-specific config reload. */
+    Runnable getReloader();
+}
