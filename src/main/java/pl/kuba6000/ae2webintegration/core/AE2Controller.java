@@ -122,10 +122,19 @@ public class AE2Controller {
 
     public static ConcurrentLinkedQueue<ISyncedRequest> requests = new ConcurrentLinkedQueue<>();
 
-    private static final RateLimiter rateLimiter = new RateLimiter(
-        Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(),
-        60 * 1000,
-        60 * 60 * 1000); // 60 requests per minute, whitelisted for 1 hour
+    private static RateLimiter rateLimiter;
+
+    private static RateLimiter getRateLimiter() {
+        if (rateLimiter == null) {
+            rateLimiter = new RateLimiter(
+                Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(),
+                60 * 1000,
+                60 * 60 * 1000);
+        }
+        return rateLimiter;
+    }
+        return rateLimiter;
+    }
 
     public static void startHTTPServer() {
         try {
@@ -189,7 +198,7 @@ public class AE2Controller {
 
         if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && remoteAddress.isLoopbackAddress()) {
             requestContext.set(new RequestContext(t, -2)); // Localhost access
-            rateLimiter.ensureWhitelisted(remoteAddress);
+            getRateLimiter().ensureWhitelisted(remoteAddress);
             return true;
         }
 
@@ -204,7 +213,7 @@ public class AE2Controller {
                 long validity = tokenData.getLeft();
                 if (System.currentTimeMillis() < validity) {
                     requestContext.set(new RequestContext(t, tokenData.getRight()));
-                    rateLimiter.ensureWhitelisted(remoteAddress);
+                    getRateLimiter().ensureWhitelisted(remoteAddress);
                     return true; // Token is valid
                 } else {
                     validTokens.remove(token); // Remove expired token
@@ -239,7 +248,7 @@ public class AE2Controller {
                                 return false; // Logout successful
                             }
                             requestContext.set(new RequestContext(t, tokenData.getRight()));
-                            rateLimiter.ensureWhitelisted(remoteAddress);
+                            getRateLimiter().ensureWhitelisted(remoteAddress);
                             return true; // Token is valid
                         } else {
                             validTokens.remove(token); // Remove expired token
@@ -326,7 +335,7 @@ public class AE2Controller {
                 t.getResponseHeaders()
                     .add("Location", ".");
                 t.sendResponseHeaders(302, -1);
-                rateLimiter.ensureWhitelisted(remoteAddress);
+                getRateLimiter().ensureWhitelisted(remoteAddress);
                 return true;
             }
         }
@@ -334,7 +343,7 @@ public class AE2Controller {
     }
 
     private static boolean preHTTPHandler(HttpExchange t) throws IOException {
-        if (!rateLimiter.isAllowed(
+        if (!getRateLimiter().isAllowed(
             t.getRemoteAddress()
                 .getAddress())) {
             byte[] raw_response = "Too Many Requests".getBytes();
@@ -460,7 +469,7 @@ public class AE2Controller {
 
         @Override
         public void handle(HttpExchange t) throws IOException {
-            if (!rateLimiter.isAllowed(
+            if (!getRateLimiter().isAllowed(
                 t.getRemoteAddress()
                     .getAddress())) {
                 byte[] raw_response = "Too Many Requests".getBytes();
@@ -561,7 +570,7 @@ public class AE2Controller {
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
                     os.close();
-                    rateLimiter.ensureWhitelisted(
+                    getRateLimiter().ensureWhitelisted(
                         t.getRemoteAddress()
                             .getAddress());
                     return;
@@ -594,7 +603,7 @@ public class AE2Controller {
         @Override
         public void handle(HttpExchange t) throws IOException {
 
-            if (!rateLimiter.isAllowed(
+            if (!getRateLimiter().isAllowed(
                 t.getRemoteAddress()
                     .getAddress())) {
                 byte[] raw_response = "Too Many Requests".getBytes();
