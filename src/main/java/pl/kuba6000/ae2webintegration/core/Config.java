@@ -3,6 +3,9 @@ package pl.kuba6000.ae2webintegration.core;
 import java.io.File;
 import java.util.Random;
 
+import pl.kuba6000.ae2webintegration.core.api.ConfigKey;
+import pl.kuba6000.ae2webintegration.core.api.IConfigProvider;
+
 
 public class Config {
 
@@ -45,5 +48,62 @@ public class Config {
 
     public static File getConfigFile(String fileName) {
         return new File(configDirectory, fileName);
+    }
+
+    private static final IConfigProvider provider = new IConfigProvider() {
+        @Override
+        public void setValue(ConfigKey key, int value) {
+            switch (key) {
+                case AE_PORT:
+                    AE_PORT = value;
+                    break;
+                case AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE:
+                    AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE = value;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        @Override
+        public void setValue(ConfigKey key, String value) {
+            switch (key) {
+                case AE_PASSWORD:
+                    AE_PASSWORD = value;
+                    break;
+                case DISCORD_WEBHOOK:
+                    DISCORD_WEBHOOK = value;
+                    break;
+                case DISCORD_ROLE_ID:
+                    DISCORD_ROLE_ID = value;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        @Override
+        public void setValue(ConfigKey key, boolean value) {
+            switch (key) {
+                case ALLOW_NO_PASSWORD_ON_LOCALHOST:
+                    ALLOW_NO_PASSWORD_ON_LOCALHOST = value;
+                    break;
+                case AE_PUBLIC_MODE:
+                    AE_PUBLIC_MODE = value;
+                    break;
+                case TRACKING_TRACK_MACHINE_CRAFTING:
+                    TRACKING_TRACK_MACHINE_CRAFTING = value;
+                    break;
+                case CHECK_FOR_UPDATES:
+                    CHECK_FOR_UPDATES = value;
+                    break;
+                default:
+                    break;
+            }
+        }
+    };
+
+    public static IConfigProvider getProvider() {
+        return provider;
     }
 }
