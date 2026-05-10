@@ -133,8 +133,6 @@ public class AE2Controller {
         }
         return rateLimiter;
     }
-        return rateLimiter;
-    }
 
     public static void startHTTPServer() {
         try {
