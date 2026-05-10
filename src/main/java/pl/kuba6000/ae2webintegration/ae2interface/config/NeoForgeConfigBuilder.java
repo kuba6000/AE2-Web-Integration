@@ -14,7 +14,8 @@ import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
  * <li>Sets the human-readable comment on the NeoForge builder</li>
  * <li>Delegates to the appropriate {@code define} / {@code defineInRange} method</li>
  * <li>Returns a {@link NeoForgeConfigValue} wrapping the resulting
- * {@link ModConfigSpec.ConfigValue}</li>
+ * {@link ModConfigSpec.ConfigValue} together with the hardcoded default
+ * (used as fallback before {@code ModConfigEvent.Loading} fires)</li>
  * </ol>
  *
  * All config keys are defined at the root level (no {@code push}/{@code pop}
@@ -33,20 +34,23 @@ public class NeoForgeConfigBuilder implements IConfigBuilder {
     public IConfigValue<Integer> defineInt(String key, int defaultValue, int min, int max, String comment) {
         return new NeoForgeConfigValue<>(
             builder.comment(comment)
-                .defineInRange(key, defaultValue, min, max));
+                .defineInRange(key, defaultValue, min, max),
+            defaultValue);
     }
 
     @Override
     public IConfigValue<String> defineString(String key, String defaultValue, String comment) {
         return new NeoForgeConfigValue<>(
             builder.comment(comment)
-                .define(key, defaultValue));
+                .define(key, defaultValue),
+            defaultValue);
     }
 
     @Override
     public IConfigValue<Boolean> defineBoolean(String key, boolean defaultValue, String comment) {
         return new NeoForgeConfigValue<>(
             builder.comment(comment)
-                .define(key, defaultValue));
+                .define(key, defaultValue),
+            defaultValue);
     }
 }
