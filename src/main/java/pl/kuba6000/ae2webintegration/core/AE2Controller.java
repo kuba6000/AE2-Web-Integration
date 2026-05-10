@@ -63,6 +63,8 @@ public class AE2Controller {
 
     public static UUID AEControllerUUID;
 
+    public static Object AEControllerProfile;
+
     static {
         try {
             AEControllerUUID = UUID.nameUUIDFromBytes("AE2-WEB-INTEGRATION-AE2CONTROLLER".getBytes("UTF-8"));
@@ -90,8 +92,9 @@ public class AE2Controller {
             } else if (userID == -2) {
                 this.username = "localhost";
             } else {
-                PlayerIdentity profile = AE2Controller.AE2Interface.web$getPlayerData()
+                Object profileObj = AE2Controller.AE2Interface.web$getPlayerData()
                     .web$getPlayerProfile(userID);
+                PlayerIdentity profile = profileObj instanceof PlayerIdentity ? (PlayerIdentity) profileObj : null;
                 this.username = profile != null ? profile.name : "unknown";
             }
         }

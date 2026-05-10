@@ -7,6 +7,7 @@ import java.util.Map;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.api.JSON_CompactedItem;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
@@ -19,7 +20,7 @@ public class GetCPU extends ISyncedRequest {
 
         public long size;
         public boolean isBusy;
-        public IStack finalOutput;
+        public IAEGenericStack finalOutput;
         public ArrayList<JSON_CompactedItem> items;
         public boolean hasTrackingInfo = false;
         public long timeStarted = 0L;

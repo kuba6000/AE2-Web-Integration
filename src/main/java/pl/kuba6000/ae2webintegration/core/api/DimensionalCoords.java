@@ -17,6 +17,14 @@ public class DimensionalCoords {
         this.z = z;
     }
 
+    /**
+     * Accepts a Minecraft Level/World object as an opaque Object.
+     * The dimid is derived from the level's hashCode for cross-version compatibility.
+     */
+    public DimensionalCoords(Object level, int x, int y, int z) {
+        this(level.hashCode(), x, y, z);
+    }
+
     @Override
     public int hashCode() {
         return Objects.hash(dimid, x, y, z);

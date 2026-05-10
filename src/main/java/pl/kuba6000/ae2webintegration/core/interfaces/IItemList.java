@@ -4,4 +4,6 @@ public interface IItemList extends Iterable<IStack> {
 
     IStack web$findPrecise(IStack stack);
 
+    long web$findPrecise(IAEKey stack);
+
 }

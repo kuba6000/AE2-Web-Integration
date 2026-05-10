@@ -5,7 +5,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 public class AEMixinCallbacks implements IAEMixinCallbacks {
@@ -22,7 +21,7 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
     }
 
     @Override
-    public void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, IStack diff) {
+    public void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, Object diff) {
         AE2JobTracker.updateCraftingStatus(cpu, diff);
     }
 

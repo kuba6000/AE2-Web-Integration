@@ -8,4 +8,6 @@ public interface IAECraftingJob {
 
     void web$populatePlan(IItemList plan);
 
+    ICraftingPlanSummary web$generateSummary(IAEGrid grid);
+
 }

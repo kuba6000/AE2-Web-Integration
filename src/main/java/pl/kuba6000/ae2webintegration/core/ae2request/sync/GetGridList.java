@@ -57,7 +57,8 @@ public class GetGridList extends ISyncedRequest {
             if (!context.isAdmin() && !security.web$hasPermissions(context.getUserID())) {
                 continue;
             }
-            PlayerIdentity ownerIdentity = security.web$getOwnerProfile();
+            Object ownerProfileObj = security.web$getOwnerProfile();
+            PlayerIdentity ownerIdentity = ownerProfileObj instanceof PlayerIdentity ? (PlayerIdentity) ownerProfileObj : null;
             GridData gridData = GridData.get(security.web$getSecurityKey());
             grids.add(
                 new JSON_GridData(

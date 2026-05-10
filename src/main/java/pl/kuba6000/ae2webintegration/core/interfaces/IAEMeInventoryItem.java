@@ -6,6 +6,10 @@ public interface IAEMeInventoryItem {
 
     IStack web$extractItems(IStack stack, AEActionable mode, IAEGrid grid);
 
+    long web$extractItems(IAEKey stack, long amount, AEActionable mode, IAEGrid grid);
+
     IStack web$getAvailableItem(IStack stack);
+
+    long web$getAvailableItem(IAEKey stack, IAEGrid grid);
 
 }

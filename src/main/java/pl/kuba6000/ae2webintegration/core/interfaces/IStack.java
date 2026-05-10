@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.interfaces;
 
-public interface IStack {
+public interface IStack extends IAEGenericStack {
 
     String web$getItemID();
 

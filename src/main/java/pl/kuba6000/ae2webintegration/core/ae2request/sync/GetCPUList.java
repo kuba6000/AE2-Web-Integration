@@ -4,9 +4,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import pl.kuba6000.ae2webintegration.core.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 public class GetCPUList extends ISyncedRequest {
@@ -14,7 +14,7 @@ public class GetCPUList extends ISyncedRequest {
     private static class JSON_CpuInfo {
 
         public boolean isBusy;
-        public IStack finalOutput;
+        public IAEGenericStack finalOutput;
         public long availableStorage;
         public long usedStorage;
         public long coProcessors;
