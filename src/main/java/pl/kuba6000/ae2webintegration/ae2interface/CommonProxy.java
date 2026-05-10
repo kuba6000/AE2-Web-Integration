@@ -9,7 +9,9 @@ import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 import pl.kuba6000.ae2webintegration.Tags;
 import pl.kuba6000.ae2webintegration.ae2interface.commands.BaseCommandHandler;
+import pl.kuba6000.ae2webintegration.ae2interface.commands.ForgeCommandRegistry;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.CommandBootstrap;
 import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.StartupHandler;
 import pl.kuba6000.ae2webintegration.core.WebData;
@@ -44,7 +46,9 @@ public class CommonProxy {
 
     // register server commands in this event handler (Remove if not needed)
     public void serverStarting(FMLServerStartingEvent event) {
-        event.registerServerCommand(new BaseCommandHandler());
+        ForgeCommandRegistry registry = new ForgeCommandRegistry();
+        CommandBootstrap.init(registry);
+        event.registerServerCommand(new BaseCommandHandler(registry));
     }
 
     public void serverStarted(FMLServerStartedEvent event) {
