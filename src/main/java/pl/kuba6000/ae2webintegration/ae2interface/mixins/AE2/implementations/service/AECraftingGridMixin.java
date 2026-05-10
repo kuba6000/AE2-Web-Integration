@@ -1,8 +1,10 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations.service;
 
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Future;
+import java.util.function.Function;
 
 import org.spongepowered.asm.mixin.Mixin;
 
@@ -18,7 +20,9 @@ import appeng.api.networking.security.PlayerSource;
 import appeng.api.storage.data.IAEItemStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
@@ -63,5 +67,26 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
         if (link != null) return null;
         Object msg = grid.web$getLastFakePlayerChatMessage();
         return msg == null ? null : ((net.minecraft.util.IChatComponent) msg).getUnformattedText();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
+        PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
+        IAEItemStack aeStack = (IAEItemStack) (Object) stack;
+        aeStack.setStackSize(amount);
+        final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
+            .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, aeStack, null);
+        return (Future<IAECraftingJob>) (Object) job;
+    }
+
+    @Override
+    public default ICraftingMediumTracker web$getCraftingProviders() {
+        throw new UnsupportedOperationException("Use on CraftingGridCache implementation");
+    }
+
+    @Override
+    public default Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter) {
+        return Collections.emptySet();
     }
 }

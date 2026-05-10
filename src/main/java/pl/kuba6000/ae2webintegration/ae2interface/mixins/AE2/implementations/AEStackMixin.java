@@ -6,10 +6,12 @@ import appeng.api.storage.data.IAEFluidStack;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
 import cpw.mods.fml.common.registry.GameRegistry;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 
 @Mixin(IAEStack.class)
-public interface AEStackMixin extends IAEStack, IStack {
+public interface AEStackMixin extends IAEStack, IStack, IAEKey {
 
     @Override
     public default String web$getItemID() {
@@ -23,6 +25,16 @@ public interface AEStackMixin extends IAEStack, IStack {
     @Override
     public default String web$getDisplayName() {
         return getDisplayName();
+    }
+
+    @Override
+    public default IAEKey web$what() {
+        return (IAEKey) this;
+    }
+
+    @Override
+    public default long web$amount() {
+        return getStackSize();
     }
 
     @Override
@@ -68,5 +80,18 @@ public interface AEStackMixin extends IAEStack, IStack {
     @Override
     public default boolean web$isItem() {
         return isItem();
+    }
+
+    // --- IAEKey methods ---
+
+    @Override
+    public default boolean web$isCraftable(IAEGrid grid) {
+        return isCraftable();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public default boolean web$isSameType(IAEKey other) {
+        return isSameType((IAEStack) (Object) other);
     }
 }

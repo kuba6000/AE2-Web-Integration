@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import appeng.api.config.SecurityPermissions;
 import appeng.core.worlddata.WorldData;
 import appeng.me.cache.SecurityCache;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 
@@ -39,7 +40,7 @@ public class AESecurityGridMixin implements IAESecurityGrid {
     public pl.kuba6000.ae2webintegration.core.api.PlayerIdentity web$getOwnerProfile() {
         IAEPlayerData playerData = (IAEPlayerData) WorldData.instance()
             .playerData();
-        return playerData.web$getPlayerProfile(web$getOwner());
+        return (PlayerIdentity) playerData.web$getPlayerProfile(web$getOwner());
     }
 
     @Override

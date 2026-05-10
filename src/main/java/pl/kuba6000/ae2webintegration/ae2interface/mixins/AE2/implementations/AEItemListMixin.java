@@ -5,6 +5,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.storage.data.IItemContainer;
 import appeng.api.storage.data.IItemList;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 
 @Mixin(value = IItemList.class, remap = false)
@@ -14,6 +15,13 @@ public interface AEItemListMixin<StackType extends IAEStack>
     @Override
     default IStack web$findPrecise(IStack stack) {
         return (IStack) findPrecise((StackType) stack);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    default long web$findPrecise(IAEKey stack) {
+        StackType found = findPrecise((StackType) (Object) stack);
+        return found == null ? 0 : found.getStackSize();
     }
 
 }

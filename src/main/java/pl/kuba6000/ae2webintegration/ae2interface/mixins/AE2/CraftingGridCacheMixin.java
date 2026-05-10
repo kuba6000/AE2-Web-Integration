@@ -1,5 +1,9 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Map;
+
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -17,16 +21,18 @@ import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.crafting.ICraftingProviderHelper;
 import appeng.api.networking.crafting.ICraftingRequester;
 import appeng.api.networking.security.BaseActionSource;
+import appeng.api.util.IInterfaceViewable;
 import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.CraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = CraftingGridCache.class, remap = false)
-public class CraftingGridCacheMixin {
+public class CraftingGridCacheMixin implements ICraftingMediumTracker {
 
     @Final
     @Shadow
@@ -85,4 +91,17 @@ public class CraftingGridCacheMixin {
         CraftingMediumTracker.doneUpdatingPatterns((CraftingGridCache) (Object) this, grid);
     }
 
+    // --- ICraftingMediumTracker ---
+
+    @Override
+    public Map<Object, Object> web$getCraftingMediums() {
+        IdentityHashMap<ICraftingMedium, IInterfaceViewable> mediums = CraftingMediumTracker.mediumToViewable.get(grid);
+        if (mediums == null) return Collections.emptyMap();
+        return (Map<Object, Object>) (Map<?, ?>) mediums;
+    }
+
+    // This overrides the default from AECraftingGridMixin (interface mixin on ICraftingGrid)
+    public ICraftingMediumTracker web$getCraftingProviders() {
+        return (ICraftingMediumTracker) this;
+    }
 }

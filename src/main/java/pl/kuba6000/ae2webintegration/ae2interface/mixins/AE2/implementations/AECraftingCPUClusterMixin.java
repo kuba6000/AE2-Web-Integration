@@ -8,6 +8,7 @@ import appeng.api.networking.crafting.CraftingItemList;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
@@ -107,5 +108,45 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     @Override
     public IItemList web$getWaitingFor() {
         return (IItemList) (Object) waitingFor;
+    }
+
+    @Override
+    public void web$getAllItems(IItemList list) {
+        web$getActiveItems(list);
+        web$getPendingItems(list);
+        web$getStorageItems(list);
+    }
+
+    @Override
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public long web$getActiveItems(IAEKey key) {
+        appeng.api.storage.data.IItemList items = new appeng.util.item.ItemList();
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem(
+            (appeng.api.storage.data.IItemList<IAEStack<?>>) (Object) items,
+            CraftingItemList.ACTIVE);
+        IAEStack found = items.findPrecise((IAEItemStack) (Object) key);
+        return found == null ? 0 : found.getStackSize();
+    }
+
+    @Override
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public long web$getPendingItems(IAEKey key) {
+        appeng.api.storage.data.IItemList items = new appeng.util.item.ItemList();
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem(
+            (appeng.api.storage.data.IItemList<IAEStack<?>>) (Object) items,
+            CraftingItemList.PENDING);
+        IAEStack found = items.findPrecise((IAEItemStack) (Object) key);
+        return found == null ? 0 : found.getStackSize();
+    }
+
+    @Override
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public long web$getStorageItems(IAEKey key) {
+        appeng.api.storage.data.IItemList items = new appeng.util.item.ItemList();
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem(
+            (appeng.api.storage.data.IItemList<IAEStack<?>>) (Object) items,
+            CraftingItemList.STORAGE);
+        IAEStack found = items.findPrecise((IAEItemStack) (Object) key);
+        return found == null ? 0 : found.getStackSize();
     }
 }
