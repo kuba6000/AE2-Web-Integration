@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import java.util.Random;
+
 import pl.kuba6000.ae2webintegration.core.api.IConfigBuilder;
 import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 
@@ -15,7 +17,7 @@ public class ConfigBootstrap {
     // --- General ---
 
     public static IConfigValue<Integer> aePortValue = () -> 2324;
-    public static IConfigValue<String> aePasswordValue = () -> "";
+    public static IConfigValue<String> aePasswordValue = () -> generateDefaultPassword();
     public static IConfigValue<Boolean> allowNoPasswordOnLocalhostValue = () -> true;
     public static IConfigValue<Boolean> aePublicModeValue = () -> true;
     public static IConfigValue<Integer> aeMaxRequestsBeforeLoggedInPerMinuteValue = () -> 20;
@@ -39,7 +41,8 @@ public class ConfigBootstrap {
      */
     public static void init(IConfigBuilder builder) {
         aePortValue = builder.defineInt("port", 2324, 1, 65535, "Port for the hosted website");
-        aePasswordValue = builder.defineString("password", "", "Password for the admin account");
+        String defaultPassword = generateDefaultPassword();
+        aePasswordValue = builder.defineString("password", defaultPassword, "Password for the admin account");
         allowNoPasswordOnLocalhostValue = builder.defineBoolean(
             "allow_no_password_on_localhost",
             true,
@@ -70,5 +73,19 @@ public class ConfigBootstrap {
             "track_machine_crafting",
             false,
             "Track crafting jobs run directly by machines? (Not manually ordered)");
+    }
+
+    /**
+     * Generates a random 16-character alphanumeric password as the config
+     * default. When no password is set in the config file this default is
+     * persisted, preventing the "empty password → any password accepted"
+     * vulnerability.
+     */
+    private static String generateDefaultPassword() {
+        return new Random().ints(48, 122 + 1)
+            .filter(i -> (i <= 57 || i >= 65) && (i <= 90 || i >= 97))
+            .limit(16)
+            .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+            .toString();
     }
 }

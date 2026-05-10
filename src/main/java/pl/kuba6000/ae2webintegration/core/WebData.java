@@ -65,14 +65,20 @@ public class WebData {
         if (passwordHash == null || passwordHash.isEmpty()) {
             instance.passwords.remove(playerUuid);
         } else {
+            instance.passwords.put(playerUuid, passwordHash);
             try {
-                instance.passwords.put(playerUuid, passwordHash);
                 int pID = AE2Controller.AE2Interface.web$getPlayerData()
                     .web$getPlayerId(playerUuid);
-                instance.UUIDToId.put(playerUuid, pID);
-                instance.IdToUUID.put(pID, playerUuid);
+                if (pID >= 0) {
+                    instance.UUIDToId.put(playerUuid, pID);
+                    instance.IdToUUID.put(pID, playerUuid);
+                } else {
+                    LOG.warn("Could not resolve AE2 player ID for UUID: " + playerUuid
+                        + " — password saved but UUID↔ID map not populated. "
+                        + "The player may need to log in via the game first.");
+                }
             } catch (Exception e) {
-                LOG.error("Failed to set password for player ID: " + playerUuid, e);
+                LOG.error("Failed to resolve AE2 player ID for UUID: " + playerUuid, e);
             }
         }
         saveChanges();
