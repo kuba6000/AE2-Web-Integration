@@ -20,4 +20,17 @@ public class AEStorageGridMixin implements IAEStorageGrid {
     public IAEMeInventoryItem web$getItemInventory() {
         return (IAEMeInventoryItem) ((StorageService) (Object) this).getInventory();
     }
+
+    @Override
+    public IItemList web$getFluidStorageList() {
+        // 1.21.1 AE2 unifies items and fluids; return the same available stacks
+        return (IItemList) (Object) ((StorageService) (Object) this).getInventory()
+            .getAvailableStacks();
+    }
+
+    @Override
+    public IAEMeInventoryItem web$getFluidInventory() {
+        // 1.21.1 AE2 unifies items and fluids; return the same inventory
+        return (IAEMeInventoryItem) ((StorageService) (Object) this).getInventory();
+    }
 }

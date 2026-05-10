@@ -43,7 +43,8 @@ public class NetworkCraftingProvidersMixin implements ICraftingMediumTracker {
     }
 
     @Override
-    public Map<ICraftingProvider, IGridNode> web$getCraftingMediums() {
-        return web$providerToNode;
+    @SuppressWarnings("unchecked")
+    public Map<Object, Object> web$getCraftingMediums() {
+        return (Map<Object, Object>) (Map<?, ?>) web$providerToNode;
     }
 }

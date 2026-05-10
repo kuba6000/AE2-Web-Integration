@@ -86,11 +86,11 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
     private boolean ae2webintegration$pushPattern(ICraftingProvider medium, IPatternDetails details, KeyCounter[] ic) {
         if (medium.pushPattern(details, ic)) {
             IGridNode viewable = null;
-            Map<ICraftingProvider, IGridNode> mediumToViewable = ((IAECraftingGrid) cpu.getGrid()
+            Map<Object, Object> mediumToViewable = ((IAECraftingGrid) cpu.getGrid()
                 .getService(ICraftingService.class)).web$getCraftingProviders()
                 .web$getCraftingMediums();
             if (mediumToViewable != null) {
-                viewable = mediumToViewable.get(medium);
+                viewable = (IGridNode) mediumToViewable.get(medium);
             }
             IAEMixinCallbacks.getInstance()
                 .pushedPattern(
