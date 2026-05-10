@@ -4,7 +4,8 @@ import java.io.File;
 
 import net.minecraftforge.common.config.Configuration;
 
-import pl.kuba6000.ae2webintegration.core.Config;
+import pl.kuba6000.ae2webintegration.core.api.ConfigKey;
+import pl.kuba6000.ae2webintegration.core.api.IConfigProvider;
 
 public class ForgeConfig {
 
@@ -23,49 +24,70 @@ public class ForgeConfig {
         }
     }
 
-    public static void synchronizeConfiguration() {
+    public static void synchronizeConfiguration(IConfigProvider provider) {
         Configuration configuration = new Configuration(configFile);
-        Config.AE_PORT = configuration
-            .getInt("port", Configuration.CATEGORY_GENERAL, Config.AE_PORT, 1, 65535, "Port for the hosted website");
-        Config.AE_PASSWORD = configuration.getString(
-            "password",
-            Configuration.CATEGORY_GENERAL,
-            Config.AE_PASSWORD,
-            "Password for the admin account");
-        Config.ALLOW_NO_PASSWORD_ON_LOCALHOST = configuration.getBoolean(
-            "allow_no_password_on_localhost",
-            Configuration.CATEGORY_GENERAL,
-            Config.ALLOW_NO_PASSWORD_ON_LOCALHOST,
-            "Don't require to login using loopback address (127.0.0.1/localhost)");
-        Config.AE_PUBLIC_MODE = configuration.getBoolean(
-            "public_mode",
-            Configuration.CATEGORY_GENERAL,
-            Config.AE_PUBLIC_MODE,
-            "If enabled every player will have their own 'account' (good for public servers with multiple ME Networks)");
-        Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE = configuration.getInt(
-            "max_requests_before_logged_in_per_minute",
-            Configuration.CATEGORY_GENERAL,
-            Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE,
-            1,
-            999999999,
-            "Max requests per minute before logging in (anti brute force)");
+        provider.setValue(
+            ConfigKey.AE_PORT,
+            configuration.getInt(
+                ConfigKey.AE_PORT.getKey(),
+                ConfigKey.AE_PORT.getCategory(),
+                (int) ConfigKey.AE_PORT.getDefaultValue(),
+                1,
+                65535,
+                ConfigKey.AE_PORT.getDescription()));
+        provider.setValue(
+            ConfigKey.AE_PASSWORD,
+            configuration.getString(
+                ConfigKey.AE_PASSWORD.getKey(),
+                ConfigKey.AE_PASSWORD.getCategory(),
+                (String) ConfigKey.AE_PASSWORD.getDefaultValue(),
+                ConfigKey.AE_PASSWORD.getDescription()));
+        provider.setValue(
+            ConfigKey.ALLOW_NO_PASSWORD_ON_LOCALHOST,
+            configuration.getBoolean(
+                ConfigKey.ALLOW_NO_PASSWORD_ON_LOCALHOST.getKey(),
+                ConfigKey.ALLOW_NO_PASSWORD_ON_LOCALHOST.getCategory(),
+                (boolean) ConfigKey.ALLOW_NO_PASSWORD_ON_LOCALHOST.getDefaultValue(),
+                ConfigKey.ALLOW_NO_PASSWORD_ON_LOCALHOST.getDescription()));
+        provider.setValue(
+            ConfigKey.AE_PUBLIC_MODE,
+            configuration.getBoolean(
+                ConfigKey.AE_PUBLIC_MODE.getKey(),
+                ConfigKey.AE_PUBLIC_MODE.getCategory(),
+                (boolean) ConfigKey.AE_PUBLIC_MODE.getDefaultValue(),
+                ConfigKey.AE_PUBLIC_MODE.getDescription()));
+        provider.setValue(
+            ConfigKey.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE,
+            configuration.getInt(
+                ConfigKey.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE.getKey(),
+                ConfigKey.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE.getCategory(),
+                (int) ConfigKey.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE.getDefaultValue(),
+                1,
+                999999999,
+                ConfigKey.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE.getDescription()));
 
-        Config.DISCORD_WEBHOOK = configuration.getString(
-            "discord_webhook",
-            "discord",
-            Config.DISCORD_WEBHOOK,
-            "Webhook url for discord integration, keep empty to disable");
-        Config.DISCORD_ROLE_ID = configuration.getString(
-            "discord_role_id",
-            "discord",
-            Config.DISCORD_ROLE_ID,
-            "Role id to ping on errors, keep empty to disable pinging (if webhook is empty it will do nothing)");
+        provider.setValue(
+            ConfigKey.DISCORD_WEBHOOK,
+            configuration.getString(
+                ConfigKey.DISCORD_WEBHOOK.getKey(),
+                ConfigKey.DISCORD_WEBHOOK.getCategory(),
+                (String) ConfigKey.DISCORD_WEBHOOK.getDefaultValue(),
+                ConfigKey.DISCORD_WEBHOOK.getDescription()));
+        provider.setValue(
+            ConfigKey.DISCORD_ROLE_ID,
+            configuration.getString(
+                ConfigKey.DISCORD_ROLE_ID.getKey(),
+                ConfigKey.DISCORD_ROLE_ID.getCategory(),
+                (String) ConfigKey.DISCORD_ROLE_ID.getDefaultValue(),
+                ConfigKey.DISCORD_ROLE_ID.getDescription()));
 
-        Config.TRACKING_TRACK_MACHINE_CRAFTING = configuration.getBoolean(
-            "track_machine_crafting",
-            "tracking",
-            Config.TRACKING_TRACK_MACHINE_CRAFTING,
-            "Track crafting jobs run directly by machines ? (Not manually ordered)");
+        provider.setValue(
+            ConfigKey.TRACKING_TRACK_MACHINE_CRAFTING,
+            configuration.getBoolean(
+                ConfigKey.TRACKING_TRACK_MACHINE_CRAFTING.getKey(),
+                ConfigKey.TRACKING_TRACK_MACHINE_CRAFTING.getCategory(),
+                (boolean) ConfigKey.TRACKING_TRACK_MACHINE_CRAFTING.getDefaultValue(),
+                ConfigKey.TRACKING_TRACK_MACHINE_CRAFTING.getDescription()));
 
         if (configuration.hasChanged()) {
             configuration.save();

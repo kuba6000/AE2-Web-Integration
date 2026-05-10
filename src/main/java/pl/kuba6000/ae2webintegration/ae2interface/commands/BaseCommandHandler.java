@@ -13,6 +13,7 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import pl.kuba6000.ae2webintegration.ae2interface.ForgeConfig;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.Config;
 import pl.kuba6000.ae2webintegration.core.WebData;
 
 public class BaseCommandHandler extends CommandBase {
@@ -49,7 +50,7 @@ public class BaseCommandHandler extends CommandBase {
                 sender.addChatMessage(chatcomponenttranslation2);
                 return;
             }
-            ForgeConfig.synchronizeConfiguration();
+            ForgeConfig.synchronizeConfiguration(Config.getProvider());
             AE2Controller.stopHTTPServer();
             AE2Controller.startHTTPServer();
             sender.addChatMessage(

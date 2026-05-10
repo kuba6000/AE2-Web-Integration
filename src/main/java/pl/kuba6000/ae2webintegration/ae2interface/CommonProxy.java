@@ -12,10 +12,9 @@ import pl.kuba6000.ae2webintegration.ae2interface.commands.BaseCommandHandler;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.Config;
 import pl.kuba6000.ae2webintegration.core.GridData;
+import pl.kuba6000.ae2webintegration.core.StartupHandler;
 import pl.kuba6000.ae2webintegration.core.WebData;
 import pl.kuba6000.ae2webintegration.core.WebEngine;
-import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
-import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class CommonProxy {
 
@@ -23,7 +22,7 @@ public class CommonProxy {
     // GameRegistry." (Remove if not needed)
     public void preInit(FMLPreInitializationEvent event) {
         ForgeConfig.init(event.getModConfigurationDirectory());
-        ForgeConfig.synchronizeConfiguration();
+        ForgeConfig.synchronizeConfiguration(Config.getProvider());
         WebEngine.init(
             new ForgePlatform(new java.io.File(event.getModConfigurationDirectory(), "ae2webintegration")),
             Tags.VERSION);
@@ -31,9 +30,7 @@ public class CommonProxy {
         GridData.loadData();
 
         AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + WebEngine.getModVersion());
-        if (Config.CHECK_FOR_UPDATES && VersionChecker.isOutdated()) AE2WebIntegration.LOG.warn(
-            "You are not on latest version ! Consider updating to " + VersionChecker.getLatestTag()
-                + " at https://github.com/kuba6000/AE2-Web-Integration/releases/latest");
+        StartupHandler.logOutdatedWarning();
 
         FMLCommonHandler.instance()
             .bus()
@@ -44,9 +41,7 @@ public class CommonProxy {
     public void init(FMLInitializationEvent event) {}
 
     // postInit "Handle interaction with other mods, complete your setup based on this." (Remove if not needed)
-    public void postInit(FMLPostInitializationEvent event) {
-
-    }
+    public void postInit(FMLPostInitializationEvent event) {}
 
     // register server commands in this event handler (Remove if not needed)
     public void serverStarting(FMLServerStartingEvent event) {
@@ -55,21 +50,10 @@ public class CommonProxy {
 
     public void serverStarted(FMLServerStartedEvent event) {
         AE2Controller.init();
-        DiscordManager.init();
-        if (!Config.AE_PUBLIC_MODE && !Config.DISCORD_WEBHOOK.isEmpty()) {
-            DiscordManager.postMessageNonBlocking(
-                new DiscordManager.DiscordEmbed("AE2 Web Integration", "Discord integration started!"));
-        } else if (Config.AE_PUBLIC_MODE && !Config.DISCORD_WEBHOOK.isEmpty()) {
-            DiscordManager.postMessageNonBlocking(
-                new DiscordManager.DiscordEmbed(
-                    "AE2 Web Integration",
-                    "Warning!\nDiscord integration webhook is set in the config, but the public mode is enabled!\nDiscord integration will be disabled!",
-                    15548997));
-        }
+        StartupHandler.handleDiscordIntegration();
     }
 
     public void serverStopping(FMLServerStoppingEvent event) {
         AE2Controller.stopHTTPServer();
     }
-
 }
