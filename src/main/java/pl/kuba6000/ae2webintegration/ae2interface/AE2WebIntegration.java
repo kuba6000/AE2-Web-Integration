@@ -30,9 +30,9 @@ public class AE2WebIntegration {
     public static final Logger LOG = LogManager.getLogger(MODID);
 
     @SidedProxy(
-        clientSide = "pl.kuba6000.ae2webintegration.ae2interface.ClientProxy",
-        serverSide = "pl.kuba6000.ae2webintegration.ae2interface.CommonProxy")
-    public static CommonProxy proxy;
+        clientSide = "pl.kuba6000.ae2webintegration.ae2interface.proxy.ClientProxy",
+        serverSide = "pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy")
+    public static pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy proxy;
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {

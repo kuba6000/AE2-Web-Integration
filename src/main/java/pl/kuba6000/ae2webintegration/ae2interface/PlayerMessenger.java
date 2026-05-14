@@ -8,7 +8,7 @@ import cpw.mods.fml.common.FMLCommonHandler;
 import pl.kuba6000.ae2webintegration.core.api.IPlayerMessenger;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
-public class ForgePlayerMessenger implements IPlayerMessenger {
+public class PlayerMessenger implements IPlayerMessenger {
 
     @Override
     public void sendMessage(PlayerIdentity player, String message) {

@@ -12,7 +12,7 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
 public class FMLEventHandler {
 
-    private static final ForgePlayerMessenger messenger = new ForgePlayerMessenger();
+    private static final PlayerMessenger messenger = new PlayerMessenger();
 
     @SubscribeEvent
     public void tick(TickEvent.ServerTickEvent event) {

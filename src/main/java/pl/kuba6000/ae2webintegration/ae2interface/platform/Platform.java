@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.ae2interface;
+package pl.kuba6000.ae2webintegration.ae2interface.platform;
 
 import java.io.File;
 import java.util.UUID;
@@ -10,11 +10,11 @@ import com.mojang.authlib.GameProfile;
 import cpw.mods.fml.common.FMLCommonHandler;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
-public class ForgePlatform implements IServerPlatform {
+public class Platform implements IServerPlatform {
 
     private final File configDir;
 
-    public ForgePlatform(File configDir) {
+    public Platform(File configDir) {
         this.configDir = configDir;
     }
 

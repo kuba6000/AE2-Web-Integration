@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.ae2interface;
+package pl.kuba6000.ae2webintegration.ae2interface.config;
 
 import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 
@@ -9,15 +9,15 @@ import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
  * Forge reads config values at definition time (unlike NeoForge's lazy
  * {@code ConfigValue<T>}), so this class stores the value returned by the
  * {@code configuration.getXxx(...)} call. On reload a new
- * {@code ForgeConfigValue} is created with the re-read value.
+ * {@code ConfigValue} is created with the re-read value.
  *
  * @param <T> the value type (Integer, String, Boolean)
  */
-public class ForgeConfigValue<T> implements IConfigValue<T> {
+public class ConfigValue<T> implements IConfigValue<T> {
 
     private final T value;
 
-    ForgeConfigValue(T value) {
+    ConfigValue(T value) {
         this.value = value;
     }
 

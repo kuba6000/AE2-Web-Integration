@@ -7,19 +7,19 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.EnumChatFormatting;
 
-import pl.kuba6000.ae2webintegration.ae2interface.ForgeConfig;
+import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 
 /**
  * {@link ICommandContext} implementation wrapping Forge 1.7.10's
  * {@link ICommandSender} and the raw command arguments.
  */
-public class ForgeCommandContext implements ICommandContext {
+public class CommandContext implements ICommandContext {
 
     private final ICommandSender sender;
     private final String[] args;
 
-    public ForgeCommandContext(ICommandSender sender, String[] args) {
+    public CommandContext(ICommandSender sender, String[] args) {
         this.sender = sender;
         this.args = args;
     }
@@ -54,12 +54,12 @@ public class ForgeCommandContext implements ICommandContext {
 
     /**
      * Returns a Runnable that re-reads the Forge config file via
-     * {@link ForgeConfig#synchronizeConfiguration()} and restarts the
+     * {@link Config#synchronizeConfiguration()} and restarts the
      * HTTP server. {@link pl.kuba6000.ae2webintegration.core.CommandProcessor#reload}
      * handles the actual stop/start — this runnable only re-reads the config.
      */
     @Override
     public Runnable getReloader() {
-        return () -> ForgeConfig.synchronizeConfiguration();
+        return () -> Config.synchronizeConfiguration();
     }
 }

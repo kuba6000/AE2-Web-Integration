@@ -10,7 +10,7 @@ import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 /**
  * {@link ICommandBuilder} implementation for Forge 1.7.10.
  * <p>
- * Builds a tree of {@link ForgeCommandNode} instances as
+ * Builds a tree of {@link CommandNode} instances as
  * {@code CommandBootstrap.init()} calls the fluent API. The tree is then
  * traversed by {@link BaseCommandHandler} at runtime to find the matching
  * handler for the given arguments.
@@ -19,41 +19,41 @@ import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
  * {@code FMLServerStartingEvent} + a {@code CommandBase} subclass, not via
  * the builder.
  */
-public class ForgeCommandBuilder implements ICommandBuilder {
+public class CommandBuilder implements ICommandBuilder {
 
     /** A node in the command tree. */
-    public static class ForgeCommandNode {
+    public static class CommandNode {
 
         public final String name;
         public final int permission;
         public final boolean isArgument;
-        public final List<ForgeCommandNode> children = new ArrayList<>();
+        public final List<CommandNode> children = new ArrayList<>();
         public Consumer<ICommandContext> handler;
 
-        ForgeCommandNode(String name, int permission, boolean isArgument) {
+        CommandNode(String name, int permission, boolean isArgument) {
             this.name = name;
             this.permission = permission;
             this.isArgument = isArgument;
         }
 
-        void addChild(ForgeCommandNode child) {
+        void addChild(CommandNode child) {
             children.add(child);
         }
     }
 
-    private final ForgeCommandNode currentNode;
+    private final CommandNode currentNode;
     private final ICommandBuilder parent;
-    private final List<ForgeCommandNode> rootNodes;
+    private final List<CommandNode> rootNodes;
 
     /** Root constructor. */
-    public ForgeCommandBuilder() {
+    public CommandBuilder() {
         this.currentNode = null;
         this.parent = null;
         this.rootNodes = new ArrayList<>();
     }
 
-    private ForgeCommandBuilder(ForgeCommandNode currentNode, ICommandBuilder parent,
-        List<ForgeCommandNode> rootNodes) {
+    private CommandBuilder(CommandNode currentNode, ICommandBuilder parent,
+        List<CommandNode> rootNodes) {
         this.currentNode = currentNode;
         this.parent = parent;
         this.rootNodes = rootNodes;
@@ -61,22 +61,22 @@ public class ForgeCommandBuilder implements ICommandBuilder {
 
     @Override
     public ICommandBuilder literal(String name, int permission) {
-        ForgeCommandNode child = new ForgeCommandNode(name, permission, false);
+        CommandNode child = new CommandNode(name, permission, false);
         if (parent == null) {
             rootNodes.add(child);
         } else if (currentNode != null) {
             currentNode.addChild(child);
         }
-        return new ForgeCommandBuilder(child, this, rootNodes);
+        return new CommandBuilder(child, this, rootNodes);
     }
 
     @Override
     public ICommandBuilder argument(String name) {
-        ForgeCommandNode child = new ForgeCommandNode(name, 0, true);
+        CommandNode child = new CommandNode(name, 0, true);
         if (currentNode != null) {
             currentNode.addChild(child);
         }
-        return new ForgeCommandBuilder(child, this, rootNodes);
+        return new CommandBuilder(child, this, rootNodes);
     }
 
     @Override
@@ -88,7 +88,7 @@ public class ForgeCommandBuilder implements ICommandBuilder {
     }
 
     /** Returns the top-level nodes built by the fluent calls. */
-    public List<ForgeCommandNode> getRootNodes() {
+    public List<CommandNode> getRootNodes() {
         return rootNodes;
     }
 }

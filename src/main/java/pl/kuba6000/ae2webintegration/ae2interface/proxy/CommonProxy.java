@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.ae2interface;
+package pl.kuba6000.ae2webintegration.ae2interface.proxy;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
@@ -8,8 +8,12 @@ import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 import pl.kuba6000.ae2webintegration.Tags;
+import pl.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration;
+import pl.kuba6000.ae2webintegration.ae2interface.FMLEventHandler;
 import pl.kuba6000.ae2webintegration.ae2interface.commands.BaseCommandHandler;
-import pl.kuba6000.ae2webintegration.ae2interface.commands.ForgeCommandBuilder;
+import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder;
+import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
+import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CommandBootstrap;
 import pl.kuba6000.ae2webintegration.core.GridData;
@@ -22,10 +26,10 @@ public class CommonProxy {
     // preInit "Run before anything else. Read your config, create blocks, items, etc, and register them with the
     // GameRegistry." (Remove if not needed)
     public void preInit(FMLPreInitializationEvent event) {
-        ForgeConfig.init(event.getModConfigurationDirectory());
-        ForgeConfig.synchronizeConfiguration();
+        Config.init(event.getModConfigurationDirectory());
+        Config.synchronizeConfiguration();
         WebEngine.init(
-            new ForgePlatform(new java.io.File(event.getModConfigurationDirectory(), "ae2webintegration")),
+            new Platform(new java.io.File(event.getModConfigurationDirectory(), "ae2webintegration")),
             Tags.VERSION);
         WebData.loadData();
         GridData.loadData();
@@ -46,7 +50,7 @@ public class CommonProxy {
 
     // register server commands in this event handler (Remove if not needed)
     public void serverStarting(FMLServerStartingEvent event) {
-        ForgeCommandBuilder builder = new ForgeCommandBuilder();
+        CommandBuilder builder = new CommandBuilder();
         CommandBootstrap.init(builder);
         event.registerServerCommand(new BaseCommandHandler(builder.getRootNodes()));
     }
