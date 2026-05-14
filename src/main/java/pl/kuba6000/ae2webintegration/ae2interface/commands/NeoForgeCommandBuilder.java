@@ -24,27 +24,34 @@ import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
  * {@link #literal}, {@link #argument}, and {@link #executes}. Top-level
  * literals are collected and registered in {@link #register()}, which is
  * called by {@code CommandBootstrap.init()} after the full tree is defined.
+ * <p>
+ * The fluent parent (returned by {@link #executes}) is tracked separately
+ * from root-level detection — this ensures siblings are added at the correct
+ * tree depth.
  */
 public class NeoForgeCommandBuilder implements ICommandBuilder {
 
     private final CommandDispatcher<CommandSourceStack> dispatcher;
-    private final ICommandBuilder parent;
+    private final ICommandBuilder fluentParent;
+    private final boolean isRoot;
     private final ArgumentBuilder<CommandSourceStack, ?> node;
     private final List<LiteralArgumentBuilder<CommandSourceStack>> rootLiterals;
 
     /** Root constructor — called by AE2WebIntegration. */
     public NeoForgeCommandBuilder(CommandDispatcher<CommandSourceStack> dispatcher) {
         this.dispatcher = dispatcher;
-        this.parent = null;
+        this.fluentParent = null;
+        this.isRoot = true;
         this.node = null;
         this.rootLiterals = new ArrayList<>();
     }
 
     /** Child constructor — created by {@link #literal} and {@link #argument}. */
-    private NeoForgeCommandBuilder(ICommandBuilder parent, ArgumentBuilder<CommandSourceStack, ?> node,
+    private NeoForgeCommandBuilder(ICommandBuilder fluentParent, ArgumentBuilder<CommandSourceStack, ?> node,
         List<LiteralArgumentBuilder<CommandSourceStack>> rootLiterals) {
         this.dispatcher = null;
-        this.parent = parent;
+        this.fluentParent = fluentParent;
+        this.isRoot = false;
         this.node = node;
         this.rootLiterals = rootLiterals;
     }
@@ -54,7 +61,7 @@ public class NeoForgeCommandBuilder implements ICommandBuilder {
         LiteralArgumentBuilder<CommandSourceStack> child = Commands.literal(name)
             .requires(s -> s.hasPermission(permission));
 
-        if (parent == null) {
+        if (isRoot) {
             // Top-level literal on the root builder — collect for later registration
             rootLiterals.add(child);
         } else {
@@ -78,7 +85,7 @@ public class NeoForgeCommandBuilder implements ICommandBuilder {
             handler.accept(new NeoForgeCommandContext(ctx));
             return 1;
         });
-        return parent;
+        return fluentParent;
     }
 
     @Override
