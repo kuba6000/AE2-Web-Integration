@@ -14,27 +14,27 @@ import pl.kuba6000.ae2webintegration.core.ConfigBootstrap;
  * that is owned by {@link ConfigBootstrap}. Instead it:
  * <ol>
  * <li>Creates a {@link ModConfigSpec.Builder}</li>
- * <li>Wraps it in a {@link NeoForgeConfigBuilder}</li>
+ * <li>Wraps it in a {@link ConfigBuilder}</li>
  * <li>Passes the wrapper to {@link ConfigBootstrap#init} so core defines all keys</li>
  * <li>Builds the {@link ModConfigSpec} and exposes it as {@link #SPEC}</li>
  * </ol>
  *
- * Because {@link NeoForgeConfigValue} reads live from the NeoForge config
+ * Because {@link ConfigValue} reads live from the NeoForge config
  * system on every {@code get()}, no explicit value-copying step is needed —
  * values are always current after NeoForge fires its config events.
  */
 @EventBusSubscriber(modid = AE2WebIntegration.MODID, bus = EventBusSubscriber.Bus.MOD)
-public class NeoForgeConfig {
+public class Config {
 
     public static final ModConfigSpec SPEC;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
-        ConfigBootstrap.init(new NeoForgeConfigBuilder(builder));
+        ConfigBootstrap.init(new ConfigBuilder(builder));
         SPEC = builder.build();
     }
 
-    private NeoForgeConfig() {}
+    private Config() {}
 
     // --- Event handlers ---
 

@@ -19,12 +19,12 @@ import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
  *
  * @param <T> the value type (Integer, String, Boolean)
  */
-public class NeoForgeConfigValue<T> implements IConfigValue<T> {
+public class ConfigValue<T> implements IConfigValue<T> {
 
     private final ModConfigSpec.ConfigValue<T> configValue;
     private final T defaultValue;
 
-    public NeoForgeConfigValue(ModConfigSpec.ConfigValue<T> configValue, T defaultValue) {
+    public ConfigValue(ModConfigSpec.ConfigValue<T> configValue, T defaultValue) {
         this.configValue = configValue;
         this.defaultValue = defaultValue;
     }

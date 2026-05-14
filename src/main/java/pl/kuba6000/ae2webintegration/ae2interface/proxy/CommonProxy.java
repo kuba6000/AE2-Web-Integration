@@ -1,7 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.proxy;
 
 import pl.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration;
-import pl.kuba6000.ae2webintegration.ae2interface.platform.ForgePlatform;
+import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.Config;
 import pl.kuba6000.ae2webintegration.core.GridData;
@@ -23,7 +23,7 @@ public class CommonProxy {
      * Called during mod construction (FMLCommonSetupEvent would also work, but
      * loading data earlier avoids race conditions with the web server).
      */
-    public void preInit(ForgePlatform platform, String version) {
+    public void preInit(Platform platform, String version) {
         WebEngine.init(platform, version);
         Config.init(platform.getConfigDirectory());
         WebData.loadData();

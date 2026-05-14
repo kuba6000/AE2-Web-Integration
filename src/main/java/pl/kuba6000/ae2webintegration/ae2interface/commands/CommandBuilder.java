@@ -24,7 +24,7 @@ import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
  * is walked depth-first and the full Brigadier tree is built from scratch,
  * ensuring every subtree is complete before it's attached via {@code .then()}.
  */
-public class NeoForgeCommandBuilder implements ICommandBuilder {
+public class CommandBuilder implements ICommandBuilder {
 
     /** A node in the command tree. */
     private static class CommandNode {
@@ -49,7 +49,7 @@ public class NeoForgeCommandBuilder implements ICommandBuilder {
     private final List<CommandNode> rootNodes;
 
     /** Root constructor — called by AE2WebIntegration. */
-    public NeoForgeCommandBuilder(CommandDispatcher<CommandSourceStack> dispatcher) {
+    public CommandBuilder(CommandDispatcher<CommandSourceStack> dispatcher) {
         this.dispatcher = dispatcher;
         this.fluentParent = null;
         this.isRoot = true;
@@ -58,7 +58,7 @@ public class NeoForgeCommandBuilder implements ICommandBuilder {
     }
 
     /** Child constructor — created by {@link #literal} and {@link #argument}. */
-    private NeoForgeCommandBuilder(ICommandBuilder fluentParent, CommandNode currentNode, List<CommandNode> rootNodes) {
+    private CommandBuilder(ICommandBuilder fluentParent, CommandNode currentNode, List<CommandNode> rootNodes) {
         this.dispatcher = null;
         this.fluentParent = fluentParent;
         this.isRoot = false;
@@ -76,7 +76,7 @@ public class NeoForgeCommandBuilder implements ICommandBuilder {
             currentNode.children.add(child);
         }
 
-        return new NeoForgeCommandBuilder(this, child, rootNodes);
+        return new CommandBuilder(this, child, rootNodes);
     }
 
     @Override
@@ -87,7 +87,7 @@ public class NeoForgeCommandBuilder implements ICommandBuilder {
             currentNode.children.add(child);
         }
 
-        return new NeoForgeCommandBuilder(this, child, rootNodes);
+        return new CommandBuilder(this, child, rootNodes);
     }
 
     @Override
@@ -112,7 +112,7 @@ public class NeoForgeCommandBuilder implements ICommandBuilder {
 
         if (node.handler != null) {
             lit.executes(ctx -> {
-                node.handler.accept(new NeoForgeCommandContext(ctx));
+                node.handler.accept(new CommandContext(ctx));
                 return 1;
             });
         }
@@ -132,7 +132,7 @@ public class NeoForgeCommandBuilder implements ICommandBuilder {
 
             if (node.handler != null) {
                 arg.executes(ctx -> {
-                    node.handler.accept(new NeoForgeCommandContext(ctx));
+                    node.handler.accept(new CommandContext(ctx));
                     return 1;
                 });
             }

@@ -33,7 +33,7 @@ public class FMLEventHandler {
         if (!serverPlayer.hasPermissions(4)) return;
 
         PlayerIdentity identity = new PlayerIdentity(serverPlayer.getUUID(), serverPlayer.getScoreboardName());
-        ForgePlayerMessenger messenger = new ForgePlayerMessenger();
+        PlayerMessenger messenger = new PlayerMessenger();
         UpdateNotifier.notifyPlayerIfOutdated(messenger, identity);
     }
 }

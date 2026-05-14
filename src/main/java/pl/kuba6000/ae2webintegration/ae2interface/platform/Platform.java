@@ -10,7 +10,7 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
-public class ForgePlatform implements IServerPlatform {
+public class Platform implements IServerPlatform {
 
     @Override
     public UUID getOnlinePlayerUUID(String username) {

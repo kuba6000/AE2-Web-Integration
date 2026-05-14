@@ -14,10 +14,10 @@ import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.kuba6000.ae2webintegration.ae2interface.commands.NeoForgeCommandBuilder;
-import pl.kuba6000.ae2webintegration.ae2interface.config.NeoForgeConfig;
+import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder;
+import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
-import pl.kuba6000.ae2webintegration.ae2interface.platform.ForgePlatform;
+import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
 import pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy;
 import pl.kuba6000.ae2webintegration.core.CommandBootstrap;
 import pl.kuba6000.ae2webintegration.core.api.IAEWebInterface;
@@ -32,7 +32,7 @@ public class AE2WebIntegration {
     private static final CommonProxy PROXY = new CommonProxy();
 
     public AE2WebIntegration() {
-        ForgePlatform platform = new ForgePlatform();
+        Platform platform = new Platform();
         String version = ModLoadingContext.get()
             .getActiveContainer()
             .getModInfo()
@@ -43,7 +43,7 @@ public class AE2WebIntegration {
         ModContainer container = ModLoadingContext.get()
             .getActiveContainer();
         container
-            .registerConfig(ModConfig.Type.COMMON, NeoForgeConfig.SPEC, "ae2webintegration/ae2webintegration.toml");
+            .registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
 
         // Delegate remaining init to the proxy
         PROXY.preInit(platform, version);
@@ -61,7 +61,7 @@ public class AE2WebIntegration {
 
     @SubscribeEvent
     public static void commandsRegister(RegisterCommandsEvent event) {
-        CommandBootstrap.init(new NeoForgeCommandBuilder(event.getDispatcher()));
+        CommandBootstrap.init(new CommandBuilder(event.getDispatcher()));
     }
 
     @SubscribeEvent

@@ -7,8 +7,6 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
-import com.mojang.brigadier.context.CommandContext;
-
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 
 /**
@@ -18,12 +16,12 @@ import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
  * Args are extracted from the raw command input string by splitting on
  * whitespace and dropping the first element (the command name).
  */
-public class NeoForgeCommandContext implements ICommandContext {
+public class CommandContext implements ICommandContext {
 
-    private final CommandContext<CommandSourceStack> context;
+    private final com.mojang.brigadier.context.CommandContext<CommandSourceStack> context;
     private final String[] args;
 
-    public NeoForgeCommandContext(CommandContext<CommandSourceStack> context) {
+    public CommandContext(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context) {
         this.context = context;
         this.args = parseArgs(context.getInput());
     }
