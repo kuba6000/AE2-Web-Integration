@@ -3,16 +3,16 @@ package pl.kuba6000.ae2webintegration.core;
 import java.util.UUID;
 
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
+import pl.kuba6000.ae2webintegration.core.api.ICommandBuilder;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
-import pl.kuba6000.ae2webintegration.core.api.ICommandRegistry;
 
 /**
  * Defines ALL commands for AE2 Web Integration.
  * <p>
  * Called once during mod initialization with a platform-specific
- * {@link ICommandRegistry} implementation. All argument parsing and command
- * dispatch lives here — the interface layer handles only registration and
- * platform-specific sender wrappers.
+ * {@link ICommandBuilder} implementation. The full command tree — literals,
+ * arguments, permission levels, and handlers — is defined here using the
+ * builder's fluent API.
  * <p>
  * Supported commands:
  * <ul>
@@ -25,27 +25,17 @@ public class CommandBootstrap {
     private CommandBootstrap() {}
 
     /**
-     * Registers all commands through the given registry.
+     * Builds and registers all commands through the given builder.
      */
-    public static void init(ICommandRegistry registry) {
-        registry.registerCommand("ae2webintegration", 0, ctx -> {
-            String[] args = ctx.getArgs();
-            if (args.length == 0) {
-                ctx.sendError("/ae2webintegration <reload/auth>");
-                return;
-            }
-            switch (args[0]) {
-                case "reload":
-                    handleReload(ctx);
-                    break;
-                case "auth":
-                    handleAuth(ctx);
-                    break;
-                default:
-                    ctx.sendError("/ae2webintegration <reload/auth>");
-                    break;
-            }
-        });
+    public static void init(ICommandBuilder builder) {
+        builder
+            .literal("ae2webintegration", 0)
+                .literal("reload", 4)
+                    .executes(CommandBootstrap::handleReload)
+                .literal("auth", 0)
+                    .argument("token")
+                        .executes(CommandBootstrap::handleAuth);
+        builder.register();
     }
 
     private static void handleReload(ICommandContext ctx) {
