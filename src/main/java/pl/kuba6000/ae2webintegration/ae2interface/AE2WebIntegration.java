@@ -26,7 +26,7 @@ import pl.kuba6000.ae2webintegration.core.api.IAEWebInterface;
 @EventBusSubscriber(modid = AE2WebIntegration.MODID)
 public class AE2WebIntegration {
 
-    public static final String MODID = "ae2webintegration_interface";
+    public static final String MODID = "ae2webintegration";
     public static final Logger LOG = LogManager.getLogger(MODID);
 
     private static final CommonProxy PROXY = new CommonProxy();
