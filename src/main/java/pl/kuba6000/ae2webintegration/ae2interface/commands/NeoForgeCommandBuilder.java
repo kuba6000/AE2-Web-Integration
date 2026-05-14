@@ -9,7 +9,6 @@ import net.minecraft.commands.Commands;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 
@@ -20,86 +19,131 @@ import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
  * {@link ICommandBuilder} implementation that builds a Brigadier command tree
  * and registers it with the {@link CommandDispatcher}.
  * <p>
- * The tree is built incrementally as {@code CommandBootstrap} calls
- * {@link #literal}, {@link #argument}, and {@link #executes}. Top-level
- * literals are collected and registered in {@link #register()}, which is
- * called by {@code CommandBootstrap.init()} after the full tree is defined.
- * <p>
- * The fluent parent (returned by {@link #executes}) is tracked separately
- * from root-level detection — this ensures siblings are added at the correct
- * tree depth.
+ * The tree is stored in simple data nodes during the fluent construction phase
+ * (no Brigadier objects involved). At {@link #register()} time the data tree
+ * is walked depth-first and the full Brigadier tree is built from scratch,
+ * ensuring every subtree is complete before it's attached via {@code .then()}.
  */
 public class NeoForgeCommandBuilder implements ICommandBuilder {
+
+    /** A node in the command tree. */
+    private static class CommandNode {
+
+        final String name;
+        final int permission;
+        final boolean isArgument;
+        final List<CommandNode> children = new ArrayList<>();
+        Consumer<ICommandContext> handler;
+
+        CommandNode(String name, int permission, boolean isArgument) {
+            this.name = name;
+            this.permission = permission;
+            this.isArgument = isArgument;
+        }
+    }
 
     private final CommandDispatcher<CommandSourceStack> dispatcher;
     private final ICommandBuilder fluentParent;
     private final boolean isRoot;
-    private final ArgumentBuilder<CommandSourceStack, ?> node;
-    private final List<LiteralArgumentBuilder<CommandSourceStack>> rootLiterals;
+    private final CommandNode currentNode;
+    private final List<CommandNode> rootNodes;
 
     /** Root constructor — called by AE2WebIntegration. */
     public NeoForgeCommandBuilder(CommandDispatcher<CommandSourceStack> dispatcher) {
         this.dispatcher = dispatcher;
         this.fluentParent = null;
         this.isRoot = true;
-        this.node = null;
-        this.rootLiterals = new ArrayList<>();
+        this.currentNode = null;
+        this.rootNodes = new ArrayList<>();
     }
 
     /** Child constructor — created by {@link #literal} and {@link #argument}. */
-    private NeoForgeCommandBuilder(ICommandBuilder fluentParent, ArgumentBuilder<CommandSourceStack, ?> node,
-        List<LiteralArgumentBuilder<CommandSourceStack>> rootLiterals) {
+    private NeoForgeCommandBuilder(ICommandBuilder fluentParent, CommandNode currentNode, List<CommandNode> rootNodes) {
         this.dispatcher = null;
         this.fluentParent = fluentParent;
         this.isRoot = false;
-        this.node = node;
-        this.rootLiterals = rootLiterals;
+        this.currentNode = currentNode;
+        this.rootNodes = rootNodes;
     }
 
     @Override
     public ICommandBuilder literal(String name, int permission) {
-        LiteralArgumentBuilder<CommandSourceStack> child = Commands.literal(name)
-            .requires(s -> s.hasPermission(permission));
+        CommandNode child = new CommandNode(name, permission, false);
 
         if (isRoot) {
-            // Top-level literal on the root builder — collect for later registration
-            rootLiterals.add(child);
-        } else {
-            // Child literal — attach to current node via .then()
-            addChild(child);
+            rootNodes.add(child);
+        } else if (currentNode != null) {
+            currentNode.children.add(child);
         }
 
-        return new NeoForgeCommandBuilder(this, child, rootLiterals);
+        return new NeoForgeCommandBuilder(this, child, rootNodes);
     }
 
     @Override
     public ICommandBuilder argument(String name) {
-        RequiredArgumentBuilder<CommandSourceStack, String> child = Commands.argument(name, StringArgumentType.word());
-        addChild(child);
-        return new NeoForgeCommandBuilder(this, child, rootLiterals);
+        CommandNode child = new CommandNode(name, 0, true);
+
+        if (currentNode != null) {
+            currentNode.children.add(child);
+        }
+
+        return new NeoForgeCommandBuilder(this, child, rootNodes);
     }
 
     @Override
     public ICommandBuilder executes(Consumer<ICommandContext> handler) {
-        node.executes(ctx -> {
-            handler.accept(new NeoForgeCommandContext(ctx));
-            return 1;
-        });
+        if (currentNode != null) {
+            currentNode.handler = handler;
+        }
         return fluentParent;
     }
 
     @Override
     public void register() {
-        for (LiteralArgumentBuilder<CommandSourceStack> literal : rootLiterals) {
-            dispatcher.register(literal);
+        for (CommandNode root : rootNodes) {
+            dispatcher.register(buildLiteral(root));
         }
     }
 
-    private void addChild(ArgumentBuilder<CommandSourceStack, ?> child) {
-        if (node instanceof LiteralArgumentBuilder) {
-            ((LiteralArgumentBuilder<CommandSourceStack>) node).then(child);
-        } else if (node instanceof RequiredArgumentBuilder) {
-            ((RequiredArgumentBuilder<CommandSourceStack, ?>) node).then(child);
+    /** Builds a Brigadier {@link LiteralArgumentBuilder} from a data node. */
+    private static LiteralArgumentBuilder<CommandSourceStack> buildLiteral(CommandNode node) {
+        LiteralArgumentBuilder<CommandSourceStack> lit = Commands.literal(node.name)
+            .requires(s -> s.hasPermission(node.permission));
+
+        if (node.handler != null) {
+            lit.executes(ctx -> {
+                node.handler.accept(new NeoForgeCommandContext(ctx));
+                return 1;
+            });
+        }
+
+        for (CommandNode child : node.children) {
+            lit.then(buildChild(child));
+        }
+
+        return lit;
+    }
+
+    /** Builds a child node (literal or argument) from a data node. */
+    private static com.mojang.brigadier.builder.ArgumentBuilder<CommandSourceStack, ?> buildChild(CommandNode node) {
+        if (node.isArgument) {
+            RequiredArgumentBuilder<CommandSourceStack, String> arg = Commands
+                .argument(node.name, StringArgumentType.word());
+
+            if (node.handler != null) {
+                arg.executes(ctx -> {
+                    node.handler.accept(new NeoForgeCommandContext(ctx));
+                    return 1;
+                });
+            }
+
+            for (CommandNode child : node.children) {
+                arg.then(buildChild(child));
+            }
+
+            return arg;
+        } else {
+            return buildLiteral(node);
         }
     }
 }
