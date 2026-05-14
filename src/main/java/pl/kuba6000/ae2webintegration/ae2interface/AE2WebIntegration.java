@@ -14,7 +14,7 @@ import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.kuba6000.ae2webintegration.ae2interface.commands.NeoForgeCommandRegistry;
+import pl.kuba6000.ae2webintegration.ae2interface.commands.NeoForgeCommandBuilder;
 import pl.kuba6000.ae2webintegration.ae2interface.config.NeoForgeConfig;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.ae2interface.platform.ForgePlatform;
@@ -61,7 +61,7 @@ public class AE2WebIntegration {
 
     @SubscribeEvent
     public static void commandsRegister(RegisterCommandsEvent event) {
-        CommandBootstrap.init(new NeoForgeCommandRegistry(event.getDispatcher()));
+        CommandBootstrap.init(new NeoForgeCommandBuilder(event.getDispatcher()));
     }
 
     @SubscribeEvent
