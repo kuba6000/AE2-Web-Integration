@@ -15,9 +15,16 @@ dependencies {
     implementation 'commons-io:commons-io:2.5'
     implementation 'org.apache.commons:commons-lang3:3.5'
     implementation 'club.minnced:discord-webhooks:0.8.2'
-    // Log4j is provided by Minecraft at runtime — compileOnly to avoid jar conflicts
-    compileOnly 'org.apache.logging.log4j:log4j-api:2.17.2'
-    compileOnly 'org.apache.logging.log4j:log4j-core:2.17.2'
+    // Log4j is provided by Minecraft at runtime — implementation for standalone core tests
+    implementation 'org.apache.logging.log4j:log4j-api:2.17.2'
+    implementation 'org.apache.logging.log4j:log4j-core:2.17.2'
+    // Testing
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 java {
