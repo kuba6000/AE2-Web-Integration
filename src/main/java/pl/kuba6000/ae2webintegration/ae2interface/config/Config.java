@@ -10,11 +10,11 @@ import pl.kuba6000.ae2webintegration.core.ConfigBootstrap;
  * Forge 1.7.10 config wiring. This class does NOT define what config keys
  * exist — that is owned by {@link ConfigBootstrap}. Instead it:
  * <ol>
- *   <li>Sets up the config directory via {@link #init(File)}</li>
- *   <li>Creates a {@link Configuration} from the config file</li>
- *   <li>Wraps it in a {@link ConfigBuilder}</li>
- *   <li>Passes the wrapper to {@link ConfigBootstrap#init} so core defines all keys</li>
- *   <li>Saves the config if any keys were modified</li>
+ * <li>Sets up the config directory via {@link #init(File)}</li>
+ * <li>Creates a {@link Configuration} from the config file</li>
+ * <li>Wraps it in a {@link ConfigBuilder}</li>
+ * <li>Passes the wrapper to {@link ConfigBootstrap#init} so core defines all keys</li>
+ * <li>Saves the config if any keys were modified</li>
  * </ol>
  *
  * Because Forge reads values synchronously at definition time, each call to

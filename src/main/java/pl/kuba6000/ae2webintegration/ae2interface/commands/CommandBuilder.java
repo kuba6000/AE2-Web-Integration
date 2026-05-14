@@ -52,8 +52,7 @@ public class CommandBuilder implements ICommandBuilder {
         this.rootNodes = new ArrayList<>();
     }
 
-    private CommandBuilder(CommandNode currentNode, ICommandBuilder parent,
-        List<CommandNode> rootNodes) {
+    private CommandBuilder(CommandNode currentNode, ICommandBuilder parent, List<CommandNode> rootNodes) {
         this.currentNode = currentNode;
         this.parent = parent;
         this.rootNodes = rootNodes;
