@@ -42,8 +42,7 @@ public class AE2WebIntegration {
         // Register config before anything that depends on it
         ModContainer container = ModLoadingContext.get()
             .getActiveContainer();
-        container
-            .registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
+        container.registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
 
         // Delegate remaining init to the proxy
         PROXY.preInit(platform, version);
