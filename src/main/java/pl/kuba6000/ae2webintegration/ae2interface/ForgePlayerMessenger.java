@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
@@ -16,7 +17,9 @@ public class ForgePlayerMessenger implements IPlayerMessenger {
             .getPlayerList()
             .getPlayer(player.uuid);
         if (serverPlayer != null) {
-            serverPlayer.sendSystemMessage(Component.literal(message));
+            serverPlayer.sendSystemMessage(
+                Component.literal(message)
+                    .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
         }
     }
 }

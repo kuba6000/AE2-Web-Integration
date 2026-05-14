@@ -6,6 +6,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
 
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 import pl.kuba6000.ae2webintegration.core.api.ICommandRegistry;
@@ -14,9 +15,10 @@ import pl.kuba6000.ae2webintegration.core.api.ICommandRegistry;
  * {@link ICommandRegistry} implementation wrapping NeoForge's Brigadier
  * {@link CommandDispatcher}.
  * <p>
- * Registers commands as literal nodes. Subcommand routing and argument
- * parsing is handled by {@code CommandBootstrap} in core — the registry
- * only sets up the root dispatch point with a basic permission check.
+ * Registers the root command with proper Brigadier subcommands for "reload"
+ * and "auth". Both subcommands delegate to the same {@code CommandBootstrap}
+ * handler, which performs its own argument parsing. The {@code .requires()}
+ * on the "reload" subcommand provides an early permission gate (level 4).
  */
 public class NeoForgeCommandRegistry implements ICommandRegistry {
 
@@ -31,9 +33,27 @@ public class NeoForgeCommandRegistry implements ICommandRegistry {
         dispatcher.register(
             Commands.literal(name)
                 .requires(s -> s.hasPermission(defaultPermission))
+                // Root execute — handles args=[] (shows usage) or unknown args
                 .executes(ctx -> {
                     handler.accept(new NeoForgeCommandContext(ctx));
                     return 1;
-                }));
+                })
+                // /ae2webintegration reload
+                .then(
+                    Commands.literal("reload")
+                        .requires(s -> s.hasPermission(4))
+                        .executes(ctx -> {
+                            handler.accept(new NeoForgeCommandContext(ctx));
+                            return 1;
+                        }))
+                // /ae2webintegration auth <token>
+                .then(
+                    Commands.literal("auth")
+                        .then(
+                            Commands.argument("token", StringArgumentType.word())
+                                .executes(ctx -> {
+                                    handler.accept(new NeoForgeCommandContext(ctx));
+                                    return 1;
+                                }))));
     }
 }
