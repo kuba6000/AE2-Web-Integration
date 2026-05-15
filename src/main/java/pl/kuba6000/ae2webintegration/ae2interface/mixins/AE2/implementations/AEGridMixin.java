@@ -110,13 +110,15 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
             else return web$cachedPlayerSource;
         }
 
-        web$cachedPlayerSource = new PlayerSource(new FakePlayer(world, AE2Controller.AEControllerProfile) {
+        web$cachedPlayerSource = new PlayerSource(
+            new FakePlayer(world, (GameProfile) AE2Controller.AEControllerProfile) {
 
-            @Override
-            public void sendSystemMessage(Component p_component, boolean bypassHiddenChat) {
-                web$lastFakePlayerChatMessage = p_component;
-            }
-        }, actionHost);
+                @Override
+                public void sendSystemMessage(Component p_component, boolean bypassHiddenChat) {
+                    web$lastFakePlayerChatMessage = p_component;
+                }
+            },
+            actionHost);
 
         return web$cachedPlayerSource;
     }

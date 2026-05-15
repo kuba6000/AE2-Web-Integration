@@ -20,4 +20,15 @@ public class AEStorageGridMixin implements IAEStorageGrid {
     public IAEMeInventoryItem web$getItemInventory() {
         return (IAEMeInventoryItem) ((StorageService) (Object) this).getInventory();
     }
+
+    @Override
+    public IItemList web$getFluidStorageList() {
+        return (IItemList) (Object) ((StorageService) (Object) this).getInventory()
+            .getAvailableStacks();
+    }
+
+    @Override
+    public IAEMeInventoryItem web$getFluidInventory() {
+        return (IAEMeInventoryItem) ((StorageService) (Object) this).getInventory();
+    }
 }

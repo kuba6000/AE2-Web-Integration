@@ -44,7 +44,12 @@ public class AEPlayerDataMixin implements IAEPlayerData {
     }
 
     @Override
-    public int web$getPlayerId(GameProfile id) {
-        return getPlayerId(id.getId());
+    public int web$getPlayerId(UUID id) {
+        return getPlayerId(id);
+    }
+
+    @Override
+    public int web$getPlayerId(Object id) {
+        return getPlayerId(((GameProfile) id).getId());
     }
 }

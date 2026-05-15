@@ -1,44 +1,72 @@
 package pl.kuba6000.ae2webintegration.ae2interface;
 
+import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.IExtensionPoint;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.network.NetworkConstants;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder;
+import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
+import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
+import pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy;
+import pl.kuba6000.ae2webintegration.core.CommandBootstrap;
 import pl.kuba6000.ae2webintegration.core.api.IAEWebInterface;
 
 @Mod(value = AE2WebIntegration.MODID)
 @Mod.EventBusSubscriber(modid = AE2WebIntegration.MODID)
 public class AE2WebIntegration {
 
-    public static final String MODID = "ae2webintegration_interface";
+    public static final String MODID = "ae2webintegration";
     public static final Logger LOG = LogManager.getLogger(MODID);
 
+    private static final CommonProxy PROXY = new CommonProxy();
+
     public AE2WebIntegration() {
+        Platform platform = new Platform();
+        String version = ModLoadingContext.get()
+            .getActiveContainer()
+            .getModInfo()
+            .getVersion()
+            .toString();
+
+        // Register config before anything that depends on it
         ModLoadingContext.get()
-            .registerExtensionPoint(
-                IExtensionPoint.DisplayTest.class,
-                () -> new IExtensionPoint.DisplayTest(() -> NetworkConstants.IGNORESERVERONLY, (a, b) -> true));
-        // SecurityCache.registerOpPlayer(
-        // IAEWebInterface.getInstance()
-        // .getAEWebGameProfile());
+            .registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
+
+        // Delegate remaining init to the proxy
+        PROXY.preInit(platform, version);
     }
 
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
-    private static class eventHandler {
+    private static class ModEventHandler {
 
         @SubscribeEvent
         public static void commonSetup(FMLCommonSetupEvent event) {
-            // This is where you can do common setup tasks
             IAEWebInterface.getInstance()
                 .initAEInterface(AE.instance);
         }
     }
 
+    @SubscribeEvent
+    public static void commandsRegister(RegisterCommandsEvent event) {
+        CommandBootstrap.init(new CommandBuilder(event.getDispatcher()));
+    }
+
+    @SubscribeEvent
+    public static void serverStarted(ServerStartedEvent event) {
+        PROXY.onServerStarted();
+    }
+
+    @SubscribeEvent
+    public static void serverStopping(ServerStoppingEvent event) {
+        PROXY.onServerStopping();
+    }
 }

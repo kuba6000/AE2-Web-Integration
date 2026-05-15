@@ -47,6 +47,9 @@ sourceSets {
     main.resources {
         srcDir 'src/generated/resources'
     }
+    main.java {
+        srcDir 'core/src/main/java'
+    }
 
     client {
         compileClasspath += main.output
