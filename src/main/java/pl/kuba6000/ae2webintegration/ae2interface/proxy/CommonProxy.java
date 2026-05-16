@@ -20,12 +20,14 @@ import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.StartupHandler;
 import pl.kuba6000.ae2webintegration.core.WebData;
 import pl.kuba6000.ae2webintegration.core.WebEngine;
+import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class CommonProxy {
 
     // preInit "Run before anything else. Read your config, create blocks, items, etc, and register them with the
     // GameRegistry." (Remove if not needed)
     public void preInit(FMLPreInitializationEvent event) {
+        VersionChecker.setVersionIdentifier("-forge-1.7.10");
         Config.init(event.getModConfigurationDirectory());
         Config.synchronizeConfiguration();
         WebEngine.init(
