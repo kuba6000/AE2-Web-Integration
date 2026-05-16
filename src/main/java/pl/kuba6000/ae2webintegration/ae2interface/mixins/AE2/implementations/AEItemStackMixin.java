@@ -6,10 +6,12 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 
 import appeng.api.storage.data.IAEItemStack;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 
 @Mixin(value = IAEItemStack.class, remap = false)
-public interface AEItemStackMixin extends IAEItemStack, IItemStack {
+public interface AEItemStackMixin extends IAEItemStack, IAEKey, IStack {
 
     @Shadow
     Item getItem();
@@ -17,53 +19,85 @@ public interface AEItemStackMixin extends IAEItemStack, IItemStack {
     @Shadow
     int getItemDamage();
 
+    // --- IAEKey ---
+
     @Override
-    public default String web$getItemID() {
+    default String web$getItemID() {
         return getItem().getRegistryName() + ":" + getItemDamage();
     }
 
     @Override
-    public default String web$getDisplayName() {
+    default String web$getDisplayName() {
         return asItemStackRepresentation().getDisplayName();
     }
 
     @Override
-    public default long web$getStackSize() {
-        return getStackSize();
-    }
-
-    @Override
-    public default boolean web$isCraftable() {
+    default boolean web$isCraftable(IAEGrid grid) {
         return isCraftable();
     }
 
     @Override
-    public default long web$getCountRequestable() {
+    default boolean web$isSameType(IAEKey other) {
+        return isSameType((IAEItemStack) other);
+    }
+
+    // --- IStack ---
+
+    @Override
+    default long web$getStackSize() {
+        return getStackSize();
+    }
+
+    @Override
+    default boolean web$isCraftable() {
+        return isCraftable();
+    }
+
+    @Override
+    default long web$getCountRequestable() {
         return getCountRequestable();
     }
 
     @Override
-    public default long web$getCountRequestableCrafts() {
+    default long web$getCountRequestableCrafts() {
         return 0L;
     }
 
     @Override
-    public default void web$reset() {
+    default void web$reset() {
         reset();
     }
 
     @Override
-    public default boolean web$isSameType(IItemStack other) {
+    default boolean web$isSameType(IStack other) {
         return isSameType((IAEItemStack) other);
     }
 
     @Override
-    public default IItemStack web$copy() {
-        return (IItemStack) copy();
+    default IStack web$copy() {
+        return (IStack) copy();
     }
 
     @Override
-    public default void web$setStackSize(long size) {
+    default void web$setStackSize(long size) {
         setStackSize(size);
+    }
+
+    @Override
+    default boolean web$isItem() {
+        return true;
+    }
+
+    // --- IAEGenericStack ---
+    // web$copy() is provided by IStack.web$copy() with covariant return type
+
+    @Override
+    default IAEKey web$what() {
+        return this;
+    }
+
+    @Override
+    default long web$amount() {
+        return getStackSize();
     }
 }

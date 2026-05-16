@@ -29,15 +29,10 @@ public class AEPlayerDataMixin implements IAEPlayerData {
     }
 
     @Override
-    public GameProfile web$getPlayerProfile(int playerId) {
+    public Object web$getPlayerProfile(int playerId) {
         Optional<UUID> maybe = playerMapping.get(playerId);
         if (!maybe.isPresent()) return null;
         UUID uuid = maybe.get();
-        // for (final EntityPlayer player : CommonHelper.proxy.getPlayers()) {
-        // if (player.getUniqueID().equals(uuid)) {
-        // return player.getGameProfile();
-        // }
-        // }
         GameProfile p = FMLCommonHandler.instance()
             .getMinecraftServerInstance()
             .getPlayerProfileCache()
@@ -49,7 +44,22 @@ public class AEPlayerDataMixin implements IAEPlayerData {
     }
 
     @Override
-    public int web$getPlayerId(GameProfile id) {
-        return getPlayerID(id);
+    public int web$getPlayerId(Object profile) {
+        if (profile instanceof GameProfile) {
+            return getPlayerID((GameProfile) profile);
+        }
+        return -1;
+    }
+
+    @Override
+    public int web$getPlayerId(UUID id) {
+        GameProfile p = FMLCommonHandler.instance()
+            .getMinecraftServerInstance()
+            .getPlayerProfileCache()
+            .getProfileByUUID(id);
+        if (p != null) {
+            return getPlayerID(p);
+        }
+        return -1;
     }
 }

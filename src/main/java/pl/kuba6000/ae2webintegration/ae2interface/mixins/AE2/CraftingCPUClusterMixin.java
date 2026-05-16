@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
-import java.util.Map;
+import java.util.IdentityHashMap;
 
 import net.minecraft.inventory.InventoryCrafting;
 
@@ -22,7 +22,6 @@ import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
@@ -39,7 +38,7 @@ public class CraftingCPUClusterMixin {
     @Inject(method = "postCraftingStatusChange", at = @At("HEAD"))
     void ae2webintegration$postCraftingStatusChange(IAEItemStack diff, CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
-            .craftingStatusPostedUpdate((ICraftingCPUCluster) this, (IItemStack) diff);
+            .craftingStatusPostedUpdate((ICraftingCPUCluster) this, diff);
     }
 
     @Inject(method = "completeJob", at = @At("HEAD"))
@@ -75,10 +74,11 @@ public class CraftingCPUClusterMixin {
         InventoryCrafting ic) {
         if (medium.pushPattern(details, ic)) {
             IInterfaceHost viewable = null;
-            Map<ICraftingMedium, IInterfaceHost> mediumToViewable = CraftingMediumTracker.mediumToViewable
+            IdentityHashMap<ICraftingMedium, IInterfaceHost> mediumViewableMap = CraftingMediumTracker
+                .getMediumToViewable()
                 .get(getGrid());
-            if (mediumToViewable != null) {
-                viewable = mediumToViewable.get(medium);
+            if (mediumViewableMap != null) {
+                viewable = mediumViewableMap.get(medium);
             }
             IAEMixinCallbacks.getInstance()
                 .pushedPattern(

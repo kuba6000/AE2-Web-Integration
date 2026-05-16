@@ -1,16 +1,20 @@
 package pl.kuba6000.ae2webintegration.ae2interface;
 
 import java.util.IdentityHashMap;
+import java.util.Map;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingMedium;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.helpers.IInterfaceHost;
 import appeng.me.cache.CraftingGridCache;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 
-public class CraftingMediumTracker {
+public class CraftingMediumTracker implements ICraftingMediumTracker {
 
-    public static final IdentityHashMap<IGrid, IdentityHashMap<ICraftingMedium, IInterfaceHost>> mediumToViewable = new IdentityHashMap<>();
+    public static final CraftingMediumTracker INSTANCE = new CraftingMediumTracker();
+
+    private static final IdentityHashMap<IGrid, IdentityHashMap<ICraftingMedium, IInterfaceHost>> mediumToViewable = new IdentityHashMap<>();
     private static boolean isUpdatingPatterns = false;
     private static ICraftingProvider currentCraftingProvider = null;
 
@@ -28,12 +32,29 @@ public class CraftingMediumTracker {
         if (!isUpdatingPatterns) return;
         if (currentCraftingProvider == null) return;
         if (currentCraftingProvider instanceof IInterfaceHost viewable && !mediumToViewable.get(grid)
-            .containsKey(medium)) mediumToViewable.get(grid)
+            .containsKey(medium)) {
+            mediumToViewable.get(grid)
                 .put(medium, viewable);
+        }
     }
 
     public static void doneUpdatingPatterns(CraftingGridCache craftingGrid, IGrid grid) {
         isUpdatingPatterns = false;
     }
 
+    /** Accessor for mixins in other packages */
+    public static IdentityHashMap<IGrid, IdentityHashMap<ICraftingMedium, IInterfaceHost>> getMediumToViewable() {
+        return mediumToViewable;
+    }
+
+    @Override
+    public Map<Object, Object> web$getCraftingMediums() {
+        IdentityHashMap<Object, Object> result = new IdentityHashMap<>();
+        for (IdentityHashMap<ICraftingMedium, IInterfaceHost> map : mediumToViewable.values()) {
+            for (Map.Entry<ICraftingMedium, IInterfaceHost> entry : map.entrySet()) {
+                result.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return result;
+    }
 }

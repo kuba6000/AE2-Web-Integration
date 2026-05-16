@@ -9,6 +9,8 @@ import net.minecraftforge.fml.common.FMLCommonHandler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
+import com.mojang.authlib.GameProfile;
+
 import appeng.api.networking.IGridHost;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.IMachineSet;
@@ -102,7 +104,7 @@ public abstract class AEGridMixin implements IAEGrid {
         }
 
         web$cachedPlayerSource = new PlayerSource(
-            new FakePlayer((WorldServer) world, AE2Controller.AEControllerProfile) {
+            new FakePlayer((WorldServer) world, new GameProfile(AE2Controller.AEControllerUUID, "AE2CONTROLLER")) {
 
                 @Override
                 public void sendMessage(ITextComponent message) {

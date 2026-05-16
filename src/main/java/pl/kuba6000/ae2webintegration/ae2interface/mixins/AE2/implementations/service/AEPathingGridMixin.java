@@ -16,11 +16,14 @@ public interface AEPathingGridMixin extends IAEPathingGrid {
 
     @Override
     public default AEControllerState web$getControllerState() {
-        return switch (((IPathingGrid) (Object) this).getControllerState()) {
-            case CONTROLLER_CONFLICT -> AEControllerState.CONTROLLER_CONFLICT;
-            case CONTROLLER_ONLINE -> AEControllerState.CONTROLLER_ONLINE;
-            case NO_CONTROLLER -> AEControllerState.NO_CONTROLLER;
-            default -> AEControllerState.UNSUPPORTED;
-        };
+        appeng.api.networking.pathing.ControllerState state = ((IPathingGrid) (Object) this).getControllerState();
+        if (state == appeng.api.networking.pathing.ControllerState.CONTROLLER_CONFLICT) {
+            return AEControllerState.CONTROLLER_CONFLICT;
+        } else if (state == appeng.api.networking.pathing.ControllerState.CONTROLLER_ONLINE) {
+            return AEControllerState.CONTROLLER_ONLINE;
+        } else if (state == appeng.api.networking.pathing.ControllerState.NO_CONTROLLER) {
+            return AEControllerState.NO_CONTROLLER;
+        }
+        return AEControllerState.UNSUPPORTED;
     }
 }

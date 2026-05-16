@@ -19,8 +19,10 @@ public class SecurityCacheMixin {
         at = @At("RETURN"))
     boolean ae2webintegration$forcePermissionOnAE2WebController(boolean ret, final EntityPlayer player,
         final SecurityPermissions permissions) {
-        if (player.getGameProfile() == IAEWebInterface.getInstance()
-            .getAEWebGameProfile()) {
+        if (player.getUniqueID()
+            .equals(
+                IAEWebInterface.getInstance()
+                    .getAEWebUUID())) {
             return true;
         }
         return ret;

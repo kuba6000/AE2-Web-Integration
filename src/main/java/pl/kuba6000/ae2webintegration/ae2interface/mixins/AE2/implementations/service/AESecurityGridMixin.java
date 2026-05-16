@@ -7,8 +7,6 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 
-import com.mojang.authlib.GameProfile;
-
 import appeng.api.config.SecurityPermissions;
 import appeng.core.worlddata.WorldData;
 import appeng.me.cache.SecurityCache;
@@ -38,7 +36,7 @@ public class AESecurityGridMixin implements IAESecurityGrid {
     }
 
     @Override
-    public GameProfile web$getOwnerProfile() {
+    public Object web$getOwnerProfile() {
         IAEPlayerData playerData = (IAEPlayerData) WorldData.instance()
             .playerData();
         return playerData.web$getPlayerProfile(web$getOwner());
