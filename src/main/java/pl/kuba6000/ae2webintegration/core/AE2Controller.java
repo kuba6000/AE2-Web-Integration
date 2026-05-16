@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Constructor;
@@ -344,7 +345,7 @@ public class AE2Controller {
         if (!getRateLimiter().isAllowed(
             t.getRemoteAddress()
                 .getAddress())) {
-            byte[] raw_response = "Too Many Requests".getBytes();
+            byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
             t.getResponseHeaders()
                 .add("Content-Type", "text/plain");
             t.sendResponseHeaders(429, raw_response.length); // Too Many Requests
@@ -417,7 +418,7 @@ public class AE2Controller {
             }
 
             byte[] raw_response = syncedRequest.getJSON()
-                .getBytes();
+                .getBytes(StandardCharsets.UTF_8);
             t.sendResponseHeaders(200, raw_response.length);
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
@@ -454,7 +455,7 @@ public class AE2Controller {
             asyncRequest.handle(requestContext.get());
 
             byte[] raw_response = asyncRequest.getJSON()
-                .getBytes();
+                .getBytes(StandardCharsets.UTF_8);
             t.sendResponseHeaders(200, raw_response.length);
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
@@ -470,7 +471,7 @@ public class AE2Controller {
             if (!getRateLimiter().isAllowed(
                 t.getRemoteAddress()
                     .getAddress())) {
-                byte[] raw_response = "Too Many Requests".getBytes();
+                byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
                 t.getResponseHeaders()
                     .add("Content-Type", "text/plain");
                 t.sendResponseHeaders(429, raw_response.length); // Too Many Requests
@@ -488,7 +489,7 @@ public class AE2Controller {
                     String username = postData.get("register");
                     UUID uuid = serverPlatform.getOnlinePlayerUUID(username);
                     if (uuid == null) {
-                        byte[] raw_response = "notonline".getBytes();
+                        byte[] raw_response = "notonline".getBytes(StandardCharsets.UTF_8);
                         t.sendResponseHeaders(400, raw_response.length);
                         OutputStream os = t.getResponseBody();
                         os.write(raw_response);
@@ -499,7 +500,7 @@ public class AE2Controller {
                     try {
                         password = PasswordHelper.generateStrongPasswordHash(password);
                     } catch (Exception e) {
-                        byte[] raw_response = "invalidpassword".getBytes();
+                        byte[] raw_response = "invalidpassword".getBytes(StandardCharsets.UTF_8);
                         t.sendResponseHeaders(400, raw_response.length);
                         OutputStream os = t.getResponseBody();
                         os.write(raw_response);
@@ -509,7 +510,7 @@ public class AE2Controller {
 
                     String confirmationToken = generateToken(50);
                     awaitingRegistration.put(uuid, Pair.of(confirmationToken, password));
-                    byte[] raw_response = confirmationToken.getBytes();
+                    byte[] raw_response = confirmationToken.getBytes(StandardCharsets.UTF_8);
                     t.sendResponseHeaders(200, raw_response.length);
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
@@ -525,7 +526,7 @@ public class AE2Controller {
                         playerID = -1;
                         String password = postData.get("password");
                         if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD().isEmpty()) {
-                            byte[] raw_response = "invalidpassword".getBytes();
+                            byte[] raw_response = "invalidpassword".getBytes(StandardCharsets.UTF_8);
                             t.sendResponseHeaders(400, raw_response.length);
                             OutputStream os = t.getResponseBody();
                             os.write(raw_response);
@@ -535,7 +536,7 @@ public class AE2Controller {
                     } else {
                         playerID = WebData.getPlayerId(username);
                         if (playerID == -1) {
-                            byte[] raw_response = "invaliduser".getBytes();
+                            byte[] raw_response = "invaliduser".getBytes(StandardCharsets.UTF_8);
                             t.sendResponseHeaders(400, raw_response.length);
                             OutputStream os = t.getResponseBody();
                             os.write(raw_response);
@@ -544,7 +545,7 @@ public class AE2Controller {
                         }
                         String password = postData.get("password");
                         if (!WebData.verifyPassword(playerID, password)) {
-                            byte[] raw_response = "invalidpassword".getBytes();
+                            byte[] raw_response = "invalidpassword".getBytes(StandardCharsets.UTF_8);
                             t.sendResponseHeaders(400, raw_response.length);
                             OutputStream os = t.getResponseBody();
                             os.write(raw_response);
@@ -563,7 +564,7 @@ public class AE2Controller {
                     json.addProperty("isAdmin", playerID == -1);
                     json.addProperty("isOutdated", Config.CHECK_FOR_UPDATES() && VersionChecker.isOutdated());
                     byte[] raw_response = json.toString()
-                        .getBytes();
+                        .getBytes(StandardCharsets.UTF_8);
                     t.sendResponseHeaders(200, raw_response.length);
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
@@ -604,7 +605,7 @@ public class AE2Controller {
             if (!getRateLimiter().isAllowed(
                 t.getRemoteAddress()
                     .getAddress())) {
-                byte[] raw_response = "Too Many Requests".getBytes();
+                byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
                 t.getResponseHeaders()
                     .add("Content-Type", "text/plain");
                 t.sendResponseHeaders(429, raw_response.length); // Too Many Requests
@@ -643,7 +644,7 @@ public class AE2Controller {
                 && !path.equals("/index.jsp")) {
 
                 String response = "<h1>Invalid url! (ERROR 404)</h1>";
-                byte[] raw_response = response.getBytes();
+                byte[] raw_response = response.getBytes(StandardCharsets.UTF_8);
                 t.sendResponseHeaders(404, raw_response.length);
                 OutputStream os = t.getResponseBody();
                 os.write(raw_response);
@@ -660,7 +661,7 @@ public class AE2Controller {
             String response;
             try (InputStream is = AE2Controller.class.getResourceAsStream(site)) {
                 if (is == null) return;
-                try (InputStreamReader isr = new InputStreamReader(is);
+                try (InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8);
                     BufferedReader reader = new BufferedReader(isr)) {
                     response = reader.lines()
                         .collect(Collectors.joining(System.lineSeparator()));
@@ -675,7 +676,9 @@ public class AE2Controller {
                 response = response.replace("_REPLACE_ME_USERNAME", context.username);
                 response = response.replace("_REPLACE_ME_IS_ADMIN", context.isAdmin() ? "true" : "false");
             }
-            byte[] raw_response = response.getBytes();
+            byte[] raw_response = response.getBytes(StandardCharsets.UTF_8);
+            t.getResponseHeaders()
+                .set("Content-Type", "text/html; charset=UTF-8");
             t.sendResponseHeaders(200, raw_response.length);
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
