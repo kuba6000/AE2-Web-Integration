@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.Shadow;
 
 import com.mojang.authlib.GameProfile;
 
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 
 @Mixin(targets = "appeng.api.features.PlayerRegistryInternal", remap = false)
@@ -25,14 +26,9 @@ public class AEPlayerDataMixin implements IAEPlayerData {
     }
 
     @Override
-    public GameProfile web$getPlayerProfile(int playerId) {
+    public Object web$getPlayerProfile(int playerId) {
         UUID uuid = getProfileId(playerId);
         if (uuid == null) return null;
-        // for (final EntityPlayer player : CommonHelper.proxy.getPlayers()) {
-        // if (player.getUniqueID().equals(uuid)) {
-        // return player.getGameProfile();
-        // }
-        // }
         GameProfile p = ServerLifecycleHooks.getCurrentServer()
             .getProfileCache()
             .get(uuid)
@@ -40,7 +36,7 @@ public class AEPlayerDataMixin implements IAEPlayerData {
         if (p == null) {
             p = new GameProfile(uuid, uuid.toString());
         }
-        return p;
+        return new PlayerIdentity(p.getId(), p.getName());
     }
 
     @Override
