@@ -3,9 +3,9 @@ name: Build and test
 
 on:
   pull_request:
-    branches: [ 1.12.2 ]
+    branches: [ 1.12.2-core-integration ]
   push:
-    branches: [ 1.12.2 ]
+    branches: [ 1.12.2-core-integration ]
 
 jobs:
   build-and-test:
