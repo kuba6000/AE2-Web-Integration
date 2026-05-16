@@ -8,6 +8,7 @@ import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.StartupHandler;
 import pl.kuba6000.ae2webintegration.core.WebData;
 import pl.kuba6000.ae2webintegration.core.WebEngine;
+import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 /**
  * Lifecycle coordinator for AE2 Web Integration.
@@ -24,6 +25,7 @@ public class CommonProxy {
      * loading data earlier avoids race conditions with the web server).
      */
     public void preInit(Platform platform, String version) {
+        VersionChecker.setVersionIdentifier("-neoforge-1.21.1");
         WebEngine.init(platform, version);
         Config.init(platform.getConfigDirectory());
         WebData.loadData();
