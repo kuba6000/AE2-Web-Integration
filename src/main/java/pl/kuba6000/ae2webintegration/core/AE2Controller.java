@@ -12,7 +12,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.security.SecureRandom;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
@@ -64,11 +63,12 @@ public class AE2Controller {
 
     public static UUID AEControllerUUID;
 
-    public static Object AEControllerProfile;
+    public static PlayerIdentity AEControllerProfile;
 
     static {
         try {
             AEControllerUUID = UUID.nameUUIDFromBytes("AE2-WEB-INTEGRATION-AE2CONTROLLER".getBytes("UTF-8"));
+            AEControllerProfile = new PlayerIdentity(AEControllerUUID, "AE2CONTROLLER");
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
         }
@@ -93,9 +93,8 @@ public class AE2Controller {
             } else if (userID == -2) {
                 this.username = "localhost";
             } else {
-                Object profileObj = AE2Controller.AE2Interface.web$getPlayerData()
+                PlayerIdentity profile = AE2Controller.AE2Interface.web$getPlayerData()
                     .web$getPlayerProfile(userID);
-                PlayerIdentity profile = profileObj instanceof PlayerIdentity ? (PlayerIdentity) profileObj : null;
                 this.username = profile != null ? profile.name : "unknown";
             }
         }
@@ -119,7 +118,7 @@ public class AE2Controller {
 
     static ThreadLocal<RequestContext> requestContext = new ThreadLocal<>();
 
-    public static HashMap<UUID, Pair<String, String>> awaitingRegistration = new HashMap<>();
+    public static ConcurrentHashMap<UUID, Pair<String, String>> awaitingRegistration = new ConcurrentHashMap<>();
 
     public static ConcurrentLinkedQueue<ISyncedRequest> requests = new ConcurrentLinkedQueue<>();
 
@@ -177,7 +176,7 @@ public class AE2Controller {
 
     public static ConcurrentHashMap<Integer, IStack> hashcodeToAEItemStack = new ConcurrentHashMap<>();
 
-    private static final HashMap<String, Pair<Long, Integer>> validTokens = new HashMap<>();
+    private static final ConcurrentHashMap<String, Pair<Long, Integer>> validTokens = new ConcurrentHashMap<>();
 
     private static String generateToken() {
         return generateToken(200);

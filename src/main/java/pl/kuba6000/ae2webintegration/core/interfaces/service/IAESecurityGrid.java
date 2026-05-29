@@ -10,7 +10,7 @@ public interface IAESecurityGrid {
 
     int web$getOwner();
 
-    Object web$getOwnerProfile();
+    PlayerIdentity web$getOwnerProfile();
 
     boolean web$hasPermissions(int playerId);
 

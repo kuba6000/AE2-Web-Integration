@@ -62,6 +62,10 @@ public class Config {
         }
     }
 
+    public static File getConfigDirectory() {
+        return configDirectory;
+    }
+
     public static File getConfigFile(String fileName) {
         return new File(configDirectory, fileName);
     }

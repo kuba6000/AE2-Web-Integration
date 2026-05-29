@@ -5,7 +5,6 @@ import java.io.Reader;
 import java.io.Writer;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 
@@ -46,7 +45,7 @@ public class GridData {
     }
 
     @GSONUtils.SkipGSON
-    public HashMap<Integer, Future<IAECraftingJob>> jobs = new HashMap<>();
+    public ConcurrentHashMap<Integer, Future<IAECraftingJob>> jobs = new ConcurrentHashMap<>();
 
     public int addJob(Future<IAECraftingJob> job) {
         int jobID = getNextJobID();

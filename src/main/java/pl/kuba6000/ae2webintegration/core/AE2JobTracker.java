@@ -1,9 +1,9 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -87,7 +87,8 @@ public class AE2JobTracker {
         }
     }
 
-    public static IdentityHashMap<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = new IdentityHashMap<>();
+    public static Map<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = Collections.synchronizedMap(
+        new java.util.IdentityHashMap<>());
     public ConcurrentHashMap<Integer, JobTrackingInfo> trackingInfos = new ConcurrentHashMap<>();
 
     private int nextFreeTrackingInfoID = 1;

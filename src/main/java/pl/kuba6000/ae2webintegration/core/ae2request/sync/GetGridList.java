@@ -1,11 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
-import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
-
 import java.util.ArrayList;
 
-
 import pl.kuba6000.ae2webintegration.core.GridData;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -57,8 +55,7 @@ public class GetGridList extends ISyncedRequest {
             if (!context.isAdmin() && !security.web$hasPermissions(context.getUserID())) {
                 continue;
             }
-            Object ownerProfileObj = security.web$getOwnerProfile();
-            PlayerIdentity ownerIdentity = ownerProfileObj instanceof PlayerIdentity ? (PlayerIdentity) ownerProfileObj : null;
+            PlayerIdentity ownerIdentity = security.web$getOwnerProfile();
             GridData gridData = GridData.get(security.web$getSecurityKey());
             grids.add(
                 new JSON_GridData(

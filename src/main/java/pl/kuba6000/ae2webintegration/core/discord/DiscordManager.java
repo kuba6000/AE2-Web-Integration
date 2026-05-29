@@ -26,6 +26,7 @@ public class DiscordManager extends Thread {
     public static void init() {
         if (thread != null) return;
         thread = new DiscordManager();
+        thread.setDaemon(true);
         thread.start();
     }
 
@@ -95,7 +96,7 @@ public class DiscordManager extends Thread {
 
     @Override
     public void run() {
-        while (true) {
+        while (!isInterrupted()) {
             if (toPush.peek() != null) {
                 DiscordEmbed message;
                 while ((message = toPush.poll()) != null) {
@@ -106,7 +107,7 @@ public class DiscordManager extends Thread {
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
-                // throw new RuntimeException(e);
+                interrupt();
             }
         }
     }
