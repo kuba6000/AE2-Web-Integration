@@ -6,8 +6,11 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.fml.config.ConfigTracker;
+import net.neoforged.fml.config.ModConfig;
 
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
+import pl.kuba6000.ae2webintegration.core.Config;
 
 /**
  * {@link ICommandContext} implementation wrapping a NeoForge Brigadier
@@ -74,15 +77,15 @@ public class CommandContext implements ICommandContext {
     /**
      * Returns a Runnable that restarts the HTTP server.
      * <p>
-     * NeoForge's {@code ConfigValue} instances are always live, so no explicit
-     * config re-read is needed. The HTTP server restart ensures the new values
-     * (already loaded by NeoForge) take effect (e.g. a different port).
-     * {@link pl.kuba6000.ae2webintegration.core.CommandProcessor#reload}
-     * handles the actual stop/start — this runnable is intentionally a no-op
-     * to avoid double-restart.
+     * Reloads the common config file from disk before the HTTP server restarts.
      */
     @Override
     public Runnable getReloader() {
-        return () -> {};
+        return () -> {
+            if (Config.getConfigDirectory() == null) {
+                return;
+            }
+            ConfigTracker.INSTANCE.loadConfigs(ModConfig.Type.COMMON, Config.getConfigDirectory().toPath());
+        };
     }
 }

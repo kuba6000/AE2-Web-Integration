@@ -28,6 +28,7 @@ import appeng.me.Grid;
 import appeng.me.helpers.PlayerSource;
 import appeng.parts.reporting.AbstractTerminalPart;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
@@ -110,8 +111,13 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
             else return web$cachedPlayerSource;
         }
 
+        PlayerIdentity controllerProfile = AE2Controller.AEControllerProfile;
+        if (controllerProfile == null) {
+            controllerProfile = new PlayerIdentity(AE2Controller.AEControllerUUID, "AE2CONTROLLER");
+        }
+
         web$cachedPlayerSource = new PlayerSource(
-            new FakePlayer(world, (com.mojang.authlib.GameProfile) AE2Controller.AEControllerProfile) {
+            new FakePlayer(world, new GameProfile(controllerProfile.uuid, controllerProfile.name)) {
 
                 @Override
                 public void sendSystemMessage(Component p_component, boolean bypassHiddenChat) {
@@ -226,16 +232,17 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
     }
 
     @Override
-    public GameProfile web$getOwnerProfile() {
+    public PlayerIdentity web$getOwnerProfile() {
         UUID profileID = IPlayerRegistry.getMapping(ServerLifecycleHooks.getCurrentServer())
             .getProfileId(web$getOwner());
         if (profileID == null) {
             return null;
         }
-        return ServerLifecycleHooks.getCurrentServer()
+        GameProfile profile = ServerLifecycleHooks.getCurrentServer()
             .getProfileCache()
             .get(profileID)
             .orElse(null);
+        return profile != null ? new PlayerIdentity(profile.getId(), profile.getName()) : null;
     }
 
     @Override
