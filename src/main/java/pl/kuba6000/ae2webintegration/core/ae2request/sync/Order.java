@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
-import static pl.kuba6000.ae2webintegration.core.AE2Controller.hashcodeToAEItemStack;
+import static pl.kuba6000.ae2webintegration.core.AE2Controller.hashcodeToStack;
 
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -27,7 +27,7 @@ public class Order extends ISyncedRequest {
         }
         int hash = Integer.parseInt(getParams.get("item"));
         int quantity = Integer.parseInt(getParams.get("quantity"));
-        this.item = hashcodeToAEItemStack.get(hash);
+        this.item = hashcodeToStack.get(hash);
         if (this.item == null || !this.item.web$isCraftable()) {
             deny("ITEM_NOT_FOUND");
             return false;
@@ -53,9 +53,8 @@ public class Order extends ISyncedRequest {
         }
         if (!allBusy) {
             IAEStorageGrid storageGrid = grid.web$getStorageGrid();
-            final IItemList itemList = storageGrid.web$getItemStorageList();
-            IStack realItem = itemList.web$findPrecise(this.item);
-            if (realItem != null && realItem.web$isCraftable()) {
+            IStack realItem = findCraftableStack(storageGrid, this.item);
+            if (realItem != null) {
                 Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, this.item);
 
                 int jobID = gridData.addJob(job);
@@ -74,6 +73,13 @@ public class Order extends ISyncedRequest {
         } else {
             deny("ALL_CPU_BUSY");
         }
+    }
+
+    private static IStack findCraftableStack(IAEStorageGrid storageGrid, IStack stack) {
+        IItemList list = stack.web$isItem() ? storageGrid.web$getItemStorageList()
+            : storageGrid.web$getFluidStorageList();
+        IStack found = list.web$findPrecise(stack);
+        return found != null && found.web$isCraftable() ? found : null;
     }
 
 }

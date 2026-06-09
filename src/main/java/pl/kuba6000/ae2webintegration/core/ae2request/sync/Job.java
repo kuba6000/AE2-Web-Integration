@@ -5,7 +5,8 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
@@ -19,6 +20,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 public class Job extends ISyncedRequest {
+
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
     private static class JSON_JobData {
 
@@ -130,7 +133,7 @@ public class Job extends ISyncedRequest {
                         return Long.compare(i2.stored, i1.stored);
                     });
                 } catch (InterruptedException | ExecutionException e) {
-                    e.printStackTrace();
+                    LOG.error("Failed to read crafting job", e);
                     deny("INTERNAL_ERROR");
                     return;
                 }
@@ -163,7 +166,7 @@ public class Job extends ISyncedRequest {
                         done();
                     }
                 } catch (InterruptedException | ExecutionException e) {
-                    e.printStackTrace();
+                    LOG.error("Failed to submit crafting job", e);
                     deny("INTERNAL_ERROR");
                 }
             } else {

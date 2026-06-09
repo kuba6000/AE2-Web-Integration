@@ -174,7 +174,7 @@ public class AE2Controller {
         }
     };
 
-    public static ConcurrentHashMap<Integer, IStack> hashcodeToAEItemStack = new ConcurrentHashMap<>();
+    public static ConcurrentHashMap<Integer, IStack> hashcodeToStack = new ConcurrentHashMap<>();
 
     private static final ConcurrentHashMap<String, Pair<Long, Integer>> validTokens = new ConcurrentHashMap<>();
 

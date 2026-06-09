@@ -26,7 +26,7 @@ public class GetItems extends ISyncedRequest {
         IAEStorageGrid storageGrid = grid.web$getStorageGrid();
         IItemList storageList = storageGrid.web$getItemStorageList();
         IItemList fluidStorageList = storageGrid.web$getFluidStorageList();
-        AE2Controller.hashcodeToAEItemStack.clear();
+        AE2Controller.hashcodeToStack.clear();
         ArrayList<JSON_DetailedItem> items = new ArrayList<>();
         processItemList(storageList, items);
         processItemList(fluidStorageList, items);
@@ -37,7 +37,7 @@ public class GetItems extends ISyncedRequest {
     private void processItemList(IItemList itemList, ArrayList<JSON_DetailedItem> items) {
         for (IStack stack : itemList) {
             int hash = stack.hashCode();
-            AE2Controller.hashcodeToAEItemStack.put(hash, stack);
+            AE2Controller.hashcodeToStack.put(hash, stack);
 
             JSON_DetailedItem detailedItem = new JSON_DetailedItem();
             detailedItem.itemid = stack.web$getItemID();
