@@ -17,6 +17,9 @@ dependencies {
         require("[${forge.versions.mixinExtras.get()},)")
     }
 
+    // Core submodule (pure Java — no Forge/MC/AE2 references)
+    implementation project(':core')
+
     // AE2
     modImplementation(forge.ae2)
     modCompileOnly(forge.ae2wtlib)
