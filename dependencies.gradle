@@ -1,6 +1,9 @@
 dependencies {
     compileOnly(libs.jetbrains.annotations)
 
+    // Core submodule (pure Java — no NeoForge/MC/AE2 references)
+    implementation project(':core')
+
     // AE2
     implementation(neoforge.ae2)
     compileOnly(neoforge.ae2wtlib)

@@ -242,7 +242,10 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
             .getProfileCache()
             .get(profileID)
             .orElse(null);
-        return profile != null ? new PlayerIdentity(profile.getId(), profile.getName()) : null;
+        if (profile == null) {
+            return new PlayerIdentity(profileID, profileID.toString());
+        }
+        return new PlayerIdentity(profile.getId(), profile.getName());
     }
 
     @Override

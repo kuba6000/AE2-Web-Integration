@@ -11,14 +11,14 @@ java {
     withSourcesJar()
 }
 
-jar.archiveClassifier = "dev"
-
 base {
     archivesName = "${project.name}" // -${libs.versions.minecraft.get()}
 }
 
 afterEvaluate {
-    jar.archiveClassifier = ""
+    if (!findProperty('usesShadowedDependencies')?.toString()?.toBoolean()) {
+        jar.archiveClassifier = ''
+    }
     tasks.withType(org.gradle.jvm.tasks.Jar).configureEach {
         destinationDirectory = file('build/libs/')
         manifest.attributes([
