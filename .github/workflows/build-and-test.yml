@@ -3,9 +3,9 @@ name: Build and test
 
 on:
   pull_request:
-    branches: [ 1.20.1, 1.20.1-core-integration ]
+    branches: [ 1.20.1 ]
   push:
-    branches: [ 1.20.1, 1.20.1-core-integration ]
+    branches: [ 1.20.1 ]
 
 jobs:
   build-and-test:
@@ -42,10 +42,8 @@ jobs:
           validate-wrappers: true
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
-      - name: Run core unit tests
-        run: ./gradlew --build-cache --info --stacktrace :core:test
       - name: Compile the mod
-        run: ./gradlew --build-cache --info --stacktrace assemble
+        run: ./gradlew --build-cache --info --stacktrace :core:test assemble
       - name: Attach compilation artifacts
         uses: actions/upload-artifact@v4
         with:

@@ -14,7 +14,7 @@ dependencies {
 }
 
 tasks.named('shadowJar').configure {
-    dependsOn(':core:jar')
+    dependsOn(':core:jar', 'createMinecraftArtifacts')
     archiveClassifier = 'dev'
     configurations = [project.configurations.coreShadow]
 
