@@ -5,7 +5,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import appeng.api.config.Actionable;
 import appeng.api.networking.security.BaseActionSource;
 import appeng.api.storage.IMEInventory;
-import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -32,10 +31,9 @@ public interface AEMeInventoryItemMixin extends IAEMeInventoryItem {
     @Override
     @SuppressWarnings("unchecked")
     public default long web$extractItems(IAEKey stack, long amount, AEActionable mode, IAEGrid grid) {
-        IAEItemStack template = (IAEItemStack) (Object) stack;
-        template = template.copy();
+        IAEStack<?> template = ((IAEStack<?>) (Object) stack).copy();
         template.setStackSize(amount);
-        IAEItemStack extracted = (IAEItemStack) ((IMEInventory) (Object) this).extractItems(
+        IAEStack<?> extracted = ((IMEInventory) (Object) this).extractItems(
             template,
             mode == AEActionable.MODULATE ? Actionable.MODULATE : Actionable.SIMULATE,
             (BaseActionSource) grid.web$getPlayerSource());
@@ -45,7 +43,7 @@ public interface AEMeInventoryItemMixin extends IAEMeInventoryItem {
     @Override
     @SuppressWarnings("unchecked")
     public default long web$getAvailableItem(IAEKey stack, IAEGrid grid) {
-        IAEItemStack found = (IAEItemStack) ((IMEInventory) (Object) this).getAvailableItem((IAEStack) (Object) stack);
+        IAEStack<?> found = (IAEStack<?>) ((IMEInventory) (Object) this).getAvailableItem((IAEStack<?>) (Object) stack);
         return found == null ? 0 : found.getStackSize();
     }
 }

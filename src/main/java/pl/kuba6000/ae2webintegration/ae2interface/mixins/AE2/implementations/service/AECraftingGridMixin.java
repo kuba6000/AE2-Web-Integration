@@ -17,7 +17,7 @@ import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.security.BaseActionSource;
 import appeng.api.networking.security.PlayerSource;
-import appeng.api.storage.data.IAEItemStack;
+import appeng.api.storage.data.IAEStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -48,10 +48,11 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IStack stack) {
         PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
         final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
-            .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, (IAEItemStack) stack, null);
+            .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, (IAEStack<?>) (Object) stack, null);
         return (Future<IAECraftingJob>) (Object) job;
     }
 
@@ -73,7 +74,7 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     @SuppressWarnings("unchecked")
     public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
         PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
-        IAEItemStack aeStack = (IAEItemStack) (Object) stack;
+        IAEStack<?> aeStack = ((IAEStack<?>) (Object) stack).copy();
         aeStack.setStackSize(amount);
         final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
             .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, aeStack, null);
