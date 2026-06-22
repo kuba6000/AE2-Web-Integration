@@ -19,6 +19,8 @@ dependencies {
 
     // Core submodule (pure Java — no Forge/MC/AE2 references)
     implementation project(':core')
+    // Dev runs load only this mod's classes dir; core must be on the run classpath for mixins
+    additionalRuntimeClasspath project(':core')
 
     // AE2
     modImplementation(forge.ae2)
