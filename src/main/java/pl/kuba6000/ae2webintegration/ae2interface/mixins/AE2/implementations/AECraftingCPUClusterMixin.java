@@ -131,9 +131,8 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Unique
     private void web$populateList(IStackList list, CraftingItemList which) {
-        ((CraftingCPUCluster) (Object) this).getListOfItem(
-            (appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list,
-            which);
+        ((CraftingCPUCluster) (Object) this)
+            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, which);
     }
 
     @Unique

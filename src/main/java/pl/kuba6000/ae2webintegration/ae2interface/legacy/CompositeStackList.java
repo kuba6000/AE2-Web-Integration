@@ -26,7 +26,8 @@ public final class CompositeStackList implements IStackList {
     public Iterable<IAEGenericStack> web$stacks() {
         return () -> new Iterator<>() {
 
-            private Iterator<IAEGenericStack> current = items.web$stacks().iterator();
+            private Iterator<IAEGenericStack> current = items.web$stacks()
+                .iterator();
             private boolean onFluids = false;
             private IAEGenericStack prepared;
 
@@ -42,7 +43,8 @@ public final class CompositeStackList implements IStackList {
                     }
                     if (!onFluids) {
                         onFluids = true;
-                        current = fluids.web$stacks().iterator();
+                        current = fluids.web$stacks()
+                            .iterator();
                     } else {
                         current = null;
                     }

@@ -23,7 +23,6 @@ public interface AEItemListMixin extends IStackList {
     @Override
     @SuppressWarnings("unchecked")
     default Iterable<IAEGenericStack> web$stacks() {
-        return () -> ((Iterator<IAEGenericStack>) (Iterator<?>) ((IItemList<IAEItemStack>) (Object) this)
-            .iterator());
+        return () -> ((Iterator<IAEGenericStack>) (Iterator<?>) ((IItemList<IAEItemStack>) (Object) this).iterator());
     }
 }
