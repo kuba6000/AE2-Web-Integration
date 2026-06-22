@@ -13,7 +13,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 public class Order extends ISyncedRequest {
 
@@ -56,30 +55,21 @@ public class Order extends ISyncedRequest {
             }
         }
         if (!allBusy) {
-            IAEStorageGrid storageGrid = grid.web$getStorageGrid();
-            if (isPresentInStorage(storageGrid, itemKey)) {
-                Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, itemKey, quantity);
+            Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, itemKey, quantity);
 
-                int jobID = gridData.addJob(job);
-                JsonObject jobData = new JsonObject();
-                jobData.addProperty("jobID", jobID);
-                if (gridData.jobs.size() > 3) {
-                    int toDeleteBelowAndEqual = jobID - 3;
-                    gridData.jobs.entrySet()
-                        .removeIf(integerFutureEntry -> integerFutureEntry.getKey() <= toDeleteBelowAndEqual);
-                }
-                setData(jobData);
-                done();
-            } else {
-                deny("ITEM_NOT_FOUND");
+            int jobID = gridData.addJob(job);
+            JsonObject jobData = new JsonObject();
+            jobData.addProperty("jobID", jobID);
+            if (gridData.jobs.size() > 3) {
+                int toDeleteBelowAndEqual = jobID - 3;
+                gridData.jobs.entrySet()
+                    .removeIf(integerFutureEntry -> integerFutureEntry.getKey() <= toDeleteBelowAndEqual);
             }
+            setData(jobData);
+            done();
         } else {
             deny("ALL_CPU_BUSY");
         }
-    }
-
-    private static boolean isPresentInStorage(IAEStorageGrid storageGrid, IAEKey key) {
-        return storageGrid.web$getStorageList().web$getAmount(key) > 0L;
     }
 
 }
