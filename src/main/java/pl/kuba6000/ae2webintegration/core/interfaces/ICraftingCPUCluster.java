@@ -20,26 +20,14 @@ public interface ICraftingCPUCluster {
 
     IAEGenericStack web$getFinalOutput();
 
-    default void web$getActiveItems(IItemList list) {
-        throw new UnsupportedOperationException("Use web$getActiveItems(IAEKey) on this version");
-    }
-
     long web$getActiveItems(IAEKey key);
-
-    default void web$getPendingItems(IItemList list) {
-        throw new UnsupportedOperationException("Use web$getPendingItems(IAEKey) on this version");
-    }
 
     long web$getPendingItems(IAEKey key);
 
-    default void web$getStorageItems(IItemList list) {
-        throw new UnsupportedOperationException("Use web$getStorageItems(IAEKey) on this version");
-    }
-
     long web$getStorageItems(IAEKey key);
 
-    void web$getAllItems(IItemList list);
+    void web$getAllItems(IStackList list);
 
-    IItemList web$getWaitingFor();
+    IStackList web$getWaitingFor();
 
 }

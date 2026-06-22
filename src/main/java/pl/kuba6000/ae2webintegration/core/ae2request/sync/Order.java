@@ -8,16 +8,17 @@ import java.util.concurrent.Future;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 public class Order extends ISyncedRequest {
 
-    private IStack item;
+    private IAEKey itemKey;
+    private long quantity;
 
     @Override
     boolean init(Map<String, String> getParams) {
@@ -26,14 +27,13 @@ public class Order extends ISyncedRequest {
             return false;
         }
         int hash = Integer.parseInt(getParams.get("item"));
-        int quantity = Integer.parseInt(getParams.get("quantity"));
-        this.item = hashcodeToStack.get(hash);
-        if (this.item == null || !this.item.web$isCraftable()) {
+        this.quantity = Integer.parseInt(getParams.get("quantity"));
+        IAEGenericStack stack = hashcodeToStack.get(hash);
+        if (stack == null) {
             deny("ITEM_NOT_FOUND");
             return false;
         }
-        this.item = this.item.web$copy();
-        this.item.web$setStackSize(quantity);
+        this.itemKey = stack.web$what();
         return true;
     }
 
@@ -41,6 +41,10 @@ public class Order extends ISyncedRequest {
     void handle(IAEGrid grid) {
         if (grid == null) {
             deny("GRID_NOT_FOUND");
+            return;
+        }
+        if (!itemKey.web$isCraftable(grid)) {
+            deny("ITEM_NOT_FOUND");
             return;
         }
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
@@ -53,9 +57,8 @@ public class Order extends ISyncedRequest {
         }
         if (!allBusy) {
             IAEStorageGrid storageGrid = grid.web$getStorageGrid();
-            IStack realItem = findCraftableStack(storageGrid, this.item);
-            if (realItem != null) {
-                Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, this.item);
+            if (isPresentInStorage(storageGrid, itemKey)) {
+                Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, itemKey, quantity);
 
                 int jobID = gridData.addJob(job);
                 JsonObject jobData = new JsonObject();
@@ -75,11 +78,8 @@ public class Order extends ISyncedRequest {
         }
     }
 
-    private static IStack findCraftableStack(IAEStorageGrid storageGrid, IStack stack) {
-        IItemList list = stack.web$isItem() ? storageGrid.web$getItemStorageList()
-            : storageGrid.web$getFluidStorageList();
-        IStack found = list.web$findPrecise(stack);
-        return found != null && found.web$isCraftable() ? found : null;
+    private static boolean isPresentInStorage(IAEStorageGrid storageGrid, IAEKey key) {
+        return storageGrid.web$getStorageList().web$getAmount(key) > 0L;
     }
 
 }

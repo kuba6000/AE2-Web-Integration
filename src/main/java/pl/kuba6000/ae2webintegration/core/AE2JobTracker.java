@@ -14,10 +14,10 @@ import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 
@@ -49,36 +49,37 @@ public class AE2JobTracker {
         public IAEGenericStack finalOutput;
         public long timeStarted;
         public long timeDone;
-        public HashMap<IStack, Long> timeSpentOn = new HashMap<>();
-        public HashMap<IStack, Long> startedWaitingFor = new HashMap<>();
-        public HashMap<IStack, Long> craftedTotal = new HashMap<>();
-        public HashMap<IStack, Long> waitingFor = new HashMap<>();
-        public HashMap<IStack, ArrayList<Pair<Long, Long>>> itemShare = new HashMap<>();
+        public HashMap<IAEKey, Long> timeSpentOn = new HashMap<>();
+        public HashMap<IAEKey, Long> startedWaitingFor = new HashMap<>();
+        public HashMap<IAEKey, Long> craftedTotal = new HashMap<>();
+        public HashMap<IAEKey, Long> waitingFor = new HashMap<>();
+        public HashMap<IAEKey, ArrayList<Pair<Long, Long>>> itemShare = new HashMap<>();
         public HashMap<AEInterface, ArrayList<Pair<Long, Long>>> interfaceShare = new HashMap<>();
         public HashMap<AEInterface, Long> interfaceStarted = new HashMap<>();
         public HashMap<AEInterface, AEInterface> interfaceLookup = new HashMap<>();
-        public HashMap<AEInterface, HashSet<IStack>> interfaceWaitingFor = new HashMap<>();
-        public HashMap<IStack, HashMap<AEInterface, HashSet<IStack>>> interfaceWaitingForLookup = new HashMap<>();
+        public HashMap<AEInterface, HashSet<IAEKey>> interfaceWaitingFor = new HashMap<>();
+        public HashMap<IAEKey, HashMap<AEInterface, HashSet<IAEKey>>> interfaceWaitingForLookup = new HashMap<>();
         public boolean isDone = false;
         public boolean wasCancelled = false;
 
-        public long getTimeSpentOn(IStack stack) {
-            Long time = timeSpentOn.get(stack);
+        public long getTimeSpentOn(IAEKey key) {
+            IAEKey resolved = AE2JobTracker.resolveKey(timeSpentOn, key);
+            Long time = timeSpentOn.get(resolved);
             if (time == null) return 0L;
-            Long additionalTime = startedWaitingFor.get(stack);
+            Long additionalTime = startedWaitingFor.get(resolved);
             if (additionalTime != null) {
                 time += System.currentTimeMillis() - additionalTime;
             }
             return time;
         }
 
-        public double getShareInCraftingTime(IStack stack) {
+        public double getShareInCraftingTime(IAEKey key) {
             long total = 0L;
             long stackTime = 0L;
-            for (IStack itemStack : timeSpentOn.keySet()) {
-                long timeSpent = getTimeSpentOn(itemStack);
+            for (IAEKey itemKey : timeSpentOn.keySet()) {
+                long timeSpent = getTimeSpentOn(itemKey);
                 total += timeSpent;
-                if (stack.web$isSameType(itemStack)) {
+                if (key.web$isSameType(itemKey)) {
                     stackTime = timeSpent;
                 }
             }
@@ -93,13 +94,22 @@ public class AE2JobTracker {
 
     private int nextFreeTrackingInfoID = 1;
 
+    static IAEKey resolveKey(Map<IAEKey, ?> map, IAEKey key) {
+        for (IAEKey existing : map.keySet()) {
+            if (key.web$isSameType(existing)) {
+                return existing;
+            }
+        }
+        return key;
+    }
+
     public static void addJob(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging) {
         GridData gridData = GridData.get(grid);
-        if (gridData == null || !gridData.isTracked) return; // We don't track this grid, so we don't track jobs on it
+        if (gridData == null || !gridData.isTracked) return;
         JobTrackingInfo info;
         if (isMerging) {
             info = trackingInfoMap.get(cpuCluster);
-            if (info == null) return; // We can't start tracking mid crafting :P
+            if (info == null) return;
         } else {
             trackingInfoMap.put(cpuCluster, info = new JobTrackingInfo());
             info.timeStarted = System.currentTimeMillis();
@@ -110,39 +120,40 @@ public class AE2JobTracker {
 
     public static void updateCraftingStatus(ICraftingCPUCluster cpu, Object diff) {
         JobTrackingInfo info = trackingInfoMap.get(cpu);
-        if (info == null || !(diff instanceof IStack)) return;
-        IStack stackDiff = (IStack) diff;
-        IItemList waitingFor = cpu.web$getWaitingFor();
-        IStack found = waitingFor.web$findPrecise(stackDiff);
-        if (found != null && found.web$getStackSize() > 0L) {
-            if (!info.startedWaitingFor.containsKey(found)) {
-                info.startedWaitingFor.put(found, System.currentTimeMillis());
-                info.timeSpentOn.putIfAbsent(found, 0L);
-                info.waitingFor.put(found, found.web$getStackSize());
+        if (info == null || !(diff instanceof IAEKey)) return;
+        IAEKey keyDiff = (IAEKey) diff;
+        IStackList waitingFor = cpu.web$getWaitingFor();
+        long waitingAmount = waitingFor.web$getAmount(keyDiff);
+        if (waitingAmount > 0L) {
+            IAEKey trackKey = resolveKey(info.startedWaitingFor, keyDiff);
+            if (!info.startedWaitingFor.containsKey(trackKey)) {
+                info.startedWaitingFor.put(trackKey, System.currentTimeMillis());
+                info.timeSpentOn.putIfAbsent(trackKey, 0L);
+                info.waitingFor.put(trackKey, waitingAmount);
             } else {
-                long i = info.waitingFor.get(found);
-                long newi = found.web$getStackSize();
-                if (i > newi) {
-                    info.craftedTotal.merge(found, i - newi, Long::sum);
+                long previous = info.waitingFor.get(trackKey);
+                if (previous > waitingAmount) {
+                    info.craftedTotal.merge(trackKey, previous - waitingAmount, Long::sum);
                 }
-                info.waitingFor.put(found, newi);
+                info.waitingFor.put(trackKey, waitingAmount);
             }
         } else {
-            if (info.startedWaitingFor.containsKey(stackDiff)) {
-                long started = info.startedWaitingFor.remove(stackDiff);
+            IAEKey trackKey = resolveKey(info.startedWaitingFor, keyDiff);
+            if (info.startedWaitingFor.containsKey(trackKey)) {
+                long started = info.startedWaitingFor.remove(trackKey);
                 long ended = System.currentTimeMillis();
                 long elapsed = ended - started;
                 long endedReal = System.currentTimeMillis();
-                info.timeSpentOn.merge(stackDiff, elapsed, Long::sum);
-                info.craftedTotal.merge(stackDiff, info.waitingFor.remove(stackDiff), Long::sum);
-                info.itemShare.computeIfAbsent(stackDiff, k -> new ArrayList<>())
+                info.timeSpentOn.merge(trackKey, elapsed, Long::sum);
+                info.craftedTotal.merge(trackKey, info.waitingFor.remove(trackKey), Long::sum);
+                info.itemShare.computeIfAbsent(trackKey, k -> new ArrayList<>())
                     .add(Pair.of(started, endedReal));
-                if (info.interfaceWaitingForLookup.containsKey(stackDiff)) {
-                    for (Map.Entry<AEInterface, HashSet<IStack>> entry : info.interfaceWaitingForLookup.get(stackDiff)
+                if (info.interfaceWaitingForLookup.containsKey(trackKey)) {
+                    for (Map.Entry<AEInterface, HashSet<IAEKey>> entry : info.interfaceWaitingForLookup.get(trackKey)
                         .entrySet()) {
                         AEInterface aeInterface = entry.getKey();
-                        HashSet<IStack> itemList = entry.getValue();
-                        itemList.remove(stackDiff);
+                        HashSet<IAEKey> itemList = entry.getValue();
+                        itemList.removeIf(k -> k.web$isSameType(keyDiff));
                         if (itemList.isEmpty()) {
                             info.interfaceWaitingFor.remove(aeInterface);
                             long interfaceStarted = info.interfaceStarted.remove(aeInterface);
@@ -150,7 +161,7 @@ public class AE2JobTracker {
                                 .add(Pair.of(interfaceStarted, endedReal));
                         }
                     }
-                    info.interfaceWaitingForLookup.remove(stackDiff);
+                    info.interfaceWaitingForLookup.remove(trackKey);
                 }
             }
         }
@@ -168,15 +179,15 @@ public class AE2JobTracker {
                 .computeIfAbsent(aeInterfaceToLookup, k -> aeInterfaceToLookup);
             aeInterface.location.add(provider.web$getLocation());
             info.interfaceStarted.computeIfAbsent(aeInterface, k -> System.currentTimeMillis());
-            final HashSet<IStack> itemList = info.interfaceWaitingFor
+            final HashSet<IAEKey> itemList = info.interfaceWaitingFor
                 .computeIfAbsent(aeInterface, k -> new HashSet<>());
 
             IAEGenericStack[] condensedOutputs = details.web$getCondensedOutputs();
             for (IAEGenericStack out : condensedOutputs) {
-                IStack outStack = (IStack) out;
-                info.interfaceWaitingForLookup.computeIfAbsent(outStack, k -> new HashMap<>())
+                IAEKey outKey = out.web$what();
+                info.interfaceWaitingForLookup.computeIfAbsent(outKey, k -> new HashMap<>())
                     .putIfAbsent(aeInterface, itemList);
-                itemList.add(outStack);
+                itemList.add(outKey);
             }
         }
     }
@@ -185,13 +196,13 @@ public class AE2JobTracker {
         JobTrackingInfo info = trackingInfoMap.remove(cpu);
         if (info == null) return;
         GridData gridData = GridData.get(grid);
-        if (gridData == null || !gridData.isTracked) return; // We don't track this grid, so we don't track jobs on it
-        for (Map.Entry<IStack, Long> entry : info.waitingFor.entrySet()) {
+        if (gridData == null || !gridData.isTracked) return;
+        for (Map.Entry<IAEKey, Long> entry : info.waitingFor.entrySet()) {
             info.craftedTotal.merge(entry.getKey(), entry.getValue(), Long::sum);
         }
         info.waitingFor.clear();
         final long now = System.currentTimeMillis();
-        for (Map.Entry<IStack, Long> entry : info.startedWaitingFor.entrySet()) {
+        for (Map.Entry<IAEKey, Long> entry : info.startedWaitingFor.entrySet()) {
             info.timeSpentOn.merge(entry.getKey(), now - entry.getValue(), Long::sum);
             info.itemShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
                 .add(Pair.of(entry.getValue(), now));
@@ -214,7 +225,7 @@ public class AE2JobTracker {
             IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
             if (securityGrid != null && securityGrid.web$isAvailable()) {
                 IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
-                craftingGrid.web$getCPUs(); // make sure the cpu has id
+                craftingGrid.web$getCPUs();
                 DiscordManager.postMessageNonBlocking(
                     new DiscordManager.DiscordEmbed(
                         "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()

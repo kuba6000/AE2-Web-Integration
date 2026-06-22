@@ -1,12 +1,12 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
-import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 public class JSON_CompactedItem {
 
     @GSONUtils.SkipGSON
-    private final IStack internalItem;
+    private final IAEKey internalKey;
     @GSONUtils.SkipGSON
     private final int hashcode;
 
@@ -21,15 +21,15 @@ public class JSON_CompactedItem {
     public double shareInCraftingTimeCombined = 0d;
     public double craftsPerSec = 0d;
 
-    public JSON_CompactedItem(IStack itemStack) {
-        this.internalItem = itemStack;
-        this.hashcode = this.internalItem.hashCode();
-        this.itemid = itemStack.web$getItemID();
-        this.itemname = itemStack.web$getDisplayName();
+    public JSON_CompactedItem(IAEKey key) {
+        this.internalKey = key;
+        this.hashcode = key.hashCode();
+        this.itemid = key.web$getItemID();
+        this.itemname = key.web$getDisplayName();
     }
 
-    public static JSON_CompactedItem create(IStack stack) {
-        return new JSON_CompactedItem(stack);
+    public static JSON_CompactedItem create(IAEKey key) {
+        return new JSON_CompactedItem(key);
     }
 
     @Override
@@ -40,7 +40,7 @@ public class JSON_CompactedItem {
     @Override
     public boolean equals(Object obj) {
         if (obj instanceof JSON_CompactedItem) {
-            return ((JSON_CompactedItem) obj).internalItem.equals(this.internalItem);
+            return ((JSON_CompactedItem) obj).internalKey.equals(this.internalKey);
         }
         return false;
     }

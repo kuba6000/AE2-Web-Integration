@@ -8,7 +8,7 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import pl.kuba6000.ae2webintegration.core.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 public class JSON_CompactedJobTrackingInfo {
 
@@ -60,18 +60,18 @@ public class JSON_CompactedJobTrackingInfo {
         this.timeDone = info.timeDone;
         long elapsed = this.timeDone - this.timeStarted;
         this.wasCancelled = info.wasCancelled;
-        for (Map.Entry<IStack, Long> entry : info.timeSpentOn.entrySet()) {
-            IStack stack = entry.getKey();
+        for (Map.Entry<IAEKey, Long> entry : info.timeSpentOn.entrySet()) {
+            IAEKey key = entry.getKey();
             long spent = entry.getValue();
             CompactedTrackingGSONItem item = new CompactedTrackingGSONItem();
-            item.itemid = stack.web$getItemID();
-            item.itemname = stack.web$getDisplayName();
+            item.itemid = key.web$getItemID();
+            item.itemname = key.web$getDisplayName();
             item.timeSpentOn = spent;
-            item.craftedTotal = info.craftedTotal.get(stack);
-            item.shareInCraftingTime = info.getShareInCraftingTime(stack);
+            item.craftedTotal = info.craftedTotal.get(key);
+            item.shareInCraftingTime = info.getShareInCraftingTime(key);
             item.shareInCraftingTimeCombined = Math.min(((double) item.timeSpentOn) / (double) elapsed, 1d);
             item.craftsPerSec = (double) item.craftedTotal / (item.timeSpentOn / 1000d);
-            for (Pair<Long, Long> longLongPair : info.itemShare.get(stack)) {
+            for (Pair<Long, Long> longLongPair : info.itemShare.get(key)) {
                 item.timings.add(new timingClass(longLongPair.getKey(), longLongPair.getValue()));
             }
             items.add(item);

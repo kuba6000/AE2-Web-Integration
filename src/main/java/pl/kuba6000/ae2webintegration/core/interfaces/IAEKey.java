@@ -6,20 +6,13 @@ public interface IAEKey {
 
     String web$getDisplayName();
 
-    // long web$getStackSize();
-
     boolean web$isCraftable(IAEGrid grid);
-
-    // long web$getCountRequestable();
-
-    // long web$getCountRequestableCrafts();
-
-    // void web$reset();
 
     boolean web$isSameType(IAEKey other);
 
-    // IAEKey web$copy();
-
-    // void web$setStackSize(long size);
+    /** @return true for fluid stacks on legacy AE2 versions with split channels */
+    default boolean web$isFluid() {
+        return false;
+    }
 
 }

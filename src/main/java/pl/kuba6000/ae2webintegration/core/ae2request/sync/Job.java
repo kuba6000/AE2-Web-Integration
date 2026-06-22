@@ -8,14 +8,13 @@ import java.util.concurrent.Future;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
@@ -84,45 +83,28 @@ public class Job extends ISyncedRequest {
                 try {
                     IAECraftingJob craftingJob = job.get();
                     IAEStorageGrid storageGrid = grid.web$getStorageGrid();
-                    IAEMeInventoryItem items = storageGrid.web$getItemInventory();
-                    IAEMeInventoryItem fluids = storageGrid.web$getFluidInventory();
+                    IAEMeInventoryItem inventory = storageGrid.web$getInventory();
                     jobData.isSimulating = craftingJob.web$isSimulation();
                     jobData.bytesTotal = craftingJob.web$getByteTotal();
-                    IItemList plan;
-                    craftingJob.web$populatePlan(plan = AE2Controller.AE2Interface.web$createItemList());
+                    ICraftingPlanSummary summary = craftingJob.web$generateSummary(grid);
                     jobData.plan = new ArrayList<>();
-                    for (IStack stack : plan) {
+                    for (ICraftingPlanSummaryEntry entry : summary.web$getEntries()) {
+                        IAEKey key = entry.web$getWhat();
                         JSON_JobData.JobItem jobItem = new JSON_JobData.JobItem();
-                        jobItem.itemid = stack.web$getItemID();
-                        jobItem.itemname = stack.web$getDisplayName();
-                        jobItem.requested = stack.web$getCountRequestable();
-                        jobItem.steps = stack.web$getCountRequestableCrafts();
-                        IAEMeInventoryItem inventory = stack.web$isItem() ? items : fluids;
-                        if (jobData.isSimulating) {
-                            IStack toExtract = stack.web$copy();
-                            toExtract.web$reset();
-                            toExtract.web$setStackSize(stack.web$getStackSize());
-                            IStack missing = toExtract.web$copy();
-                            toExtract = inventory.web$extractItems(toExtract, AEActionable.SIMULATE, grid);
-                            if (toExtract == null) {
-                                toExtract = missing.web$copy();
-                                toExtract.web$setStackSize(0);
-                            }
-                            jobItem.stored = toExtract.web$getStackSize();
-                            jobItem.missing = missing.web$getStackSize() - toExtract.web$getStackSize();
-                        } else {
-                            jobItem.stored = stack.web$getStackSize();
-                            jobItem.missing = 0;
-                        }
+                        jobItem.itemid = key.web$getItemID();
+                        jobItem.itemname = key.web$getDisplayName();
+                        jobItem.requested = entry.web$getCraftAmount();
+                        jobItem.steps = entry.web$getCraftSteps();
+                        jobItem.stored = entry.web$getStoredAmount();
+                        jobItem.missing = entry.web$getMissingAmount();
                         if (jobItem.missing == 0 && jobItem.requested == 0 && jobItem.stored > 0) {
-                            IStack realStack = inventory.web$getAvailableItem(stack);
-                            long available = 0L;
-                            if (realStack != null) available = realStack.web$getStackSize();
-                            if (available > 0L) jobItem.usedPercent = (double) jobItem.stored / (double) available;
+                            long available = inventory.web$getAvailable(key, grid);
+                            if (available > 0L) {
+                                jobItem.usedPercent = (double) jobItem.stored / (double) available;
+                            }
                         }
                         jobData.plan.add(jobItem);
                     }
-                    // TODO Move sorting to javascript!
                     jobData.plan.sort((i1, i2) -> {
                         if (i1.missing > 0 && i2.missing > 0) return Long.compare(i2.missing, i1.missing);
                         else if (i1.missing > 0 && i2.missing == 0) return -1;

@@ -1,16 +1,12 @@
 package pl.kuba6000.ae2webintegration.core.interfaces.service;
 
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 public interface IAEStorageGrid {
 
-    IItemList web$getItemStorageList();
+    IStackList web$getStorageList();
 
-    IItemList web$getFluidStorageList();
-
-    IAEMeInventoryItem web$getItemInventory();
-
-    IAEMeInventoryItem web$getFluidInventory();
+    IAEMeInventoryItem web$getInventory();
 
 }
