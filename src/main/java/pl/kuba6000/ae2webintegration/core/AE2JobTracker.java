@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -89,7 +90,7 @@ public class AE2JobTracker {
     }
 
     public static Map<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = Collections.synchronizedMap(
-        new java.util.IdentityHashMap<>());
+        new IdentityHashMap<>());
     public ConcurrentHashMap<Integer, JobTrackingInfo> trackingInfos = new ConcurrentHashMap<>();
 
     private int nextFreeTrackingInfoID = 1;

@@ -4,6 +4,8 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -35,7 +37,7 @@ public class VersionChecker {
      * Matches patterns like -forge-1.7.10 or -neoforge-1.21.1 within the version string.
      */
     private static String extractVersionIdentifier(String version) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("-(?:forge|neoforge)-\\d+\\.\\d+\\.\\d+").matcher(version);
+        Matcher matcher = Pattern.compile("-(?:forge|neoforge)-\\d+\\.\\d+\\.\\d+").matcher(version);
         return matcher.find() ? matcher.group() : "";
     }
 
