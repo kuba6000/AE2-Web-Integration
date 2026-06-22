@@ -15,7 +15,7 @@ import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
 public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
@@ -25,6 +25,15 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Unique
     private int web$internalID = -1;
+
+    @Unique
+    private boolean web$isUsedStorageAvailable = true;
+
+    @Unique
+    private boolean web$usedStorageInitialized = false;
+
+    @Unique
+    private Method web$getUsedStorageMethod = null;
 
     @Override
     public void web$setInternalID(int id) {
@@ -46,15 +55,6 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     public long web$getAvailableStorage() {
         return ((CraftingCPUCluster) (Object) this).getAvailableStorage();
     }
-
-    @Unique
-    private boolean web$isUsedStorageAvailable = true;
-
-    @Unique
-    private boolean web$usedStorageInitialized = false;
-
-    @Unique
-    private Method web$getUsedStorageMethod = null;
 
     @Override
     public long web$getUsedStorage() {
@@ -96,59 +96,51 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     }
 
     @Override
-    public void web$getActiveItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.ACTIVE);
+    public void web$getAllItems(IStackList list) {
+        web$populateList(list, CraftingItemList.ACTIVE);
+        web$populateList(list, CraftingItemList.PENDING);
+        web$populateList(list, CraftingItemList.STORAGE);
+    }
+
+    @Override
+    public IStackList web$getWaitingFor() {
+        return (IStackList) (Object) waitingFor;
     }
 
     @Override
     public long web$getActiveItems(IAEKey key) {
-        IItemList list = web$getItemsFor(CraftingItemList.ACTIVE);
-        return list.web$findPrecise(key);
-    }
-
-    @Override
-    public void web$getPendingItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.PENDING);
+        return web$findAmount(key, CraftingItemList.ACTIVE);
     }
 
     @Override
     public long web$getPendingItems(IAEKey key) {
-        IItemList list = web$getItemsFor(CraftingItemList.PENDING);
-        return list.web$findPrecise(key);
-    }
-
-    @Override
-    public void web$getStorageItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.STORAGE);
+        return web$findAmount(key, CraftingItemList.PENDING);
     }
 
     @Override
     public long web$getStorageItems(IAEKey key) {
-        IItemList list = web$getItemsFor(CraftingItemList.STORAGE);
-        return list.web$findPrecise(key);
+        return web$findAmount(key, CraftingItemList.STORAGE);
     }
 
     @Unique
-    private IItemList web$getItemsFor(CraftingItemList which) {
-        appeng.api.storage.data.IItemList<IAEItemStack> internal = AEApi.instance()
+    private long web$findAmount(IAEKey key, CraftingItemList which) {
+        IStackList list = web$createList();
+        web$populateList(list, which);
+        return list.web$getAmount(key);
+    }
+
+    @Unique
+    private void web$populateList(IStackList list, CraftingItemList which) {
+        ((CraftingCPUCluster) (Object) this).getListOfItem(
+            (appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list,
+            which);
+    }
+
+    @Unique
+    private IStackList web$createList() {
+        return (IStackList) (Object) AEApi.instance()
             .storage()
             .getStorageChannel(IItemStorageChannel.class)
             .createList();
-        ((CraftingCPUCluster) (Object) this).getListOfItem(internal, which);
-        return (IItemList) (Object) internal;
-    }
-
-    @Override
-    public void web$getAllItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.ALL);
-    }
-
-    @Override
-    public IItemList web$getWaitingFor() {
-        return (IItemList) (Object) waitingFor;
     }
 }

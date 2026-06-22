@@ -4,13 +4,17 @@ import java.util.Iterator;
 
 import appeng.api.AEApi;
 import appeng.api.storage.channels.IItemStorageChannel;
+import appeng.api.storage.data.IAEFluidStack;
+import appeng.api.storage.data.IAEItemStack;
 import appeng.core.worlddata.WorldData;
 import appeng.hooks.TickHandler;
 import appeng.me.Grid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 public class AE implements IAE {
 
@@ -23,8 +27,8 @@ public class AE implements IAE {
     static class AEGridIterable implements Iterable<IAEGrid> {
 
         @Override
-        public java.util.Iterator<IAEGrid> iterator() {
-            return new java.util.Iterator<>() {
+        public Iterator<IAEGrid> iterator() {
+            return new Iterator<>() {
 
                 private final Iterator<Grid> iterator = TickHandler.INSTANCE.getGridList()
                     .iterator();
@@ -48,11 +52,23 @@ public class AE implements IAE {
     }
 
     @Override
-    public IItemList web$createItemList() {
-        return (IItemList) (Object) AEApi.instance()
+    public IStackList web$createStackList() {
+        return (IStackList) (Object) AEApi.instance()
             .storage()
             .getStorageChannel(IItemStorageChannel.class)
             .createList();
+    }
+
+    @Override
+    public IAEGenericStack web$stackOf(IAEKey key, long amount) {
+        if (key.web$isFluid()) {
+            IAEFluidStack stack = ((IAEFluidStack) (Object) key).copy();
+            stack.setStackSize(amount);
+            return (IAEGenericStack) stack;
+        }
+        IAEItemStack stack = ((IAEItemStack) (Object) key).copy();
+        stack.setStackSize(amount);
+        return (IAEGenericStack) stack;
     }
 
     @Override

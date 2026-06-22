@@ -1,39 +1,14 @@
-{
-	"modListVersion": 2,
-	"modList": [{
-		"modid": "ae2webintegration-core",
-		"name": "AE2WebIntegration-Core",
-		"description": "AE2 Web Integration mod",
-		"version": "${version}",
-		"mcversion": "*",
-		"url": "https://github.com/kuba6000/AE2-Web-Integration",
-		"updateUrl": "",
-		"authorList": ["kuba6000"],
-		"credits": "",
-		"logoFile": "",
-		"screenshots": [],
-		"parent": "",
-		"requiredMods": [],
-		"dependencies": [],
-		"dependants": [],
-		"useDependencyInformation": false
-	},
-	{
-    	"modid": "ae2webintegration-interface",
-		"name": "AE2WebIntegration-Interface",
-		"description": "AE2 Web Integration mod",
-		"version": "${version}",
-		"mcversion": "${mcversion}",
-		"url": "https://github.com/kuba6000/AE2-Web-Integration",
-		"updateUrl": "",
-		"authorList": ["kuba6000"],
-		"credits": "",
-		"logoFile": "",
-		"screenshots": [],
-		"parent": "",
-		"requiredMods": [],
-		"dependencies": [],
-		"dependants": [],
-		"useDependencyInformation": false
-	}]
-}
+[{
+    "modid": "${modid}",
+    "name": "AE2 Web Integration",
+    "description": "Web terminal for Applied Energistics 2 ME networks.",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "url": "https://github.com/kuba6000/AE2-Web-Integration",
+    "updateUrl": "",
+    "authorList": ["kuba6000"],
+    "credits": "",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+}]

@@ -4,28 +4,47 @@ import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.AEApi;
 import appeng.api.networking.storage.IStorageGrid;
+import appeng.api.storage.channels.IFluidStorageChannel;
 import appeng.api.storage.channels.IItemStorageChannel;
+import appeng.api.storage.data.IAEFluidStack;
+import appeng.api.storage.data.IItemList;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.CompositeStackList;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.DispatchingMeInventory;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.FluidStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = IStorageGrid.class)
 public interface AEStorageGridMixin extends IAEStorageGrid {
 
     @Override
-    public default IItemList web$getItemStorageList() {
-        return (IItemList) (Object) ((IStorageGrid) (Object) this).getInventory(
+    default IStackList web$getStorageList() {
+        IStorageGrid grid = (IStorageGrid) (Object) this;
+        IStackList items = (IStackList) (Object) grid.getInventory(
             AEApi.instance()
                 .storage()
                 .getStorageChannel(IItemStorageChannel.class))
             .getStorageList();
+        IItemList<IAEFluidStack> fluidList = grid.getInventory(
+            AEApi.instance()
+                .storage()
+                .getStorageChannel(IFluidStorageChannel.class))
+            .getStorageList();
+        return new CompositeStackList(items, new FluidStackList(fluidList));
     }
 
     @Override
-    public default IAEMeInventoryItem web$getItemInventory() {
-        return (IAEMeInventoryItem) ((IStorageGrid) (Object) this).getInventory(
-            AEApi.instance()
-                .storage()
-                .getStorageChannel(IItemStorageChannel.class));
+    default IAEMeInventoryItem web$getInventory() {
+        IStorageGrid grid = (IStorageGrid) (Object) this;
+        return new DispatchingMeInventory(
+            (IAEMeInventoryItem) grid.getInventory(
+                AEApi.instance()
+                    .storage()
+                    .getStorageChannel(IItemStorageChannel.class)),
+            (IAEMeInventoryItem) grid.getInventory(
+                AEApi.instance()
+                    .storage()
+                    .getStorageChannel(IFluidStorageChannel.class)));
     }
 }

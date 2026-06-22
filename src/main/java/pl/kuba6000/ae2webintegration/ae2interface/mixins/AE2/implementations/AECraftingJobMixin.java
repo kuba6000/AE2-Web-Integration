@@ -9,12 +9,14 @@ import appeng.api.AEApi;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
+import appeng.api.storage.data.IItemList;
+import pl.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
 
 @Mixin(value = ICraftingJob.class, remap = false)
 public interface AECraftingJobMixin extends IAECraftingJob {
@@ -30,60 +32,77 @@ public interface AECraftingJobMixin extends IAECraftingJob {
     }
 
     @Override
-    default void web$populatePlan(IItemList plan) {
-        ((ICraftingJob) (Object) this).populatePlan((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) plan);
-    }
-
-    @Override
     default ICraftingPlanSummary web$generateSummary(IAEGrid grid) {
-        // 1.12.2 ICraftingJob does not have generateSummary directly.
-        // Populate a plan and create a basic summary from it.
-        appeng.api.storage.data.IItemList<IAEItemStack> plan = AEApi.instance()
+        IItemList<IAEItemStack> plan = AEApi.instance()
             .storage()
             .getStorageChannel(IItemStorageChannel.class)
             .createList();
         ((ICraftingJob) (Object) this).populatePlan(plan);
-        ICraftingJob job = (ICraftingJob) (Object) this;
+
+        final boolean simulation = ((ICraftingJob) (Object) this).isSimulation();
+        final IAEMeInventoryItem inventory = grid.web$getStorageGrid().web$getInventory();
+
+        final List<ICraftingPlanSummaryEntry> entries = new ArrayList<>();
+        for (IAEItemStack captured : plan) {
+            final IAEKey key = (IAEKey) (Object) captured;
+
+            final long stored;
+            final long missing;
+            if (simulation) {
+                long needed = captured.getStackSize();
+                long extracted = inventory.web$extractItems(key, needed, AEActionable.SIMULATE, grid);
+                stored = extracted;
+                missing = needed - extracted;
+            } else {
+                stored = captured.getStackSize();
+                missing = 0L;
+            }
+
+            entries.add(new ICraftingPlanSummaryEntry() {
+
+                @Override
+                public IAEKey web$getWhat() {
+                    return key;
+                }
+
+                @Override
+                public long web$getMissingAmount() {
+                    return missing;
+                }
+
+                @Override
+                public long web$getStoredAmount() {
+                    return stored;
+                }
+
+                @Override
+                public long web$getCraftAmount() {
+                    return captured.getCountRequestable();
+                }
+
+                @Override
+                public long web$getCraftSteps() {
+                    return 0L;
+                }
+            });
+        }
+
+        final long bytes = ((ICraftingJob) (Object) this).getByteTotal();
+
         return new ICraftingPlanSummary() {
 
             @Override
             public long web$getUsedBytes() {
-                return job.getByteTotal();
+                return bytes;
             }
 
             @Override
             public boolean web$isSimulation() {
-                return job.isSimulation();
+                return simulation;
             }
 
             @Override
             public List<ICraftingPlanSummaryEntry> web$getEntries() {
-                List<ICraftingPlanSummaryEntry> entries = new ArrayList<>();
-                for (IAEItemStack stack : plan) {
-                    IAEItemStack copy = stack.copy();
-                    entries.add(new ICraftingPlanSummaryEntry() {
-
-                        @Override
-                        public IAEKey web$getWhat() {
-                            return (IAEKey) (Object) copy;
-                        }
-
-                        @Override
-                        public long web$getStoredAmount() {
-                            return copy.getStackSize();
-                        }
-
-                        @Override
-                        public long web$getMissingAmount() {
-                            return copy.getCountRequestable() - copy.getStackSize();
-                        }
-
-                        @Override
-                        public long web$getCraftAmount() {
-                            return copy.getCountRequestable();
-                        }
-                    });
-                }
                 return entries;
             }
         };
