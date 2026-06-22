@@ -4,13 +4,13 @@ import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.networking.crafting.ICraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 
 @Mixin(value = ICraftingPatternDetails.class, remap = false)
 public interface AECraftingPatternDetailsMixin extends IAECraftingPatternDetails {
 
     @Override
-    public default IStack[] web$getCondensedOutputs() {
-        return (IStack[]) ((ICraftingPatternDetails) (Object) this).getCondensedAEOutputs();
+    default IAEGenericStack[] web$getCondensedOutputs() {
+        return (IAEGenericStack[]) ((ICraftingPatternDetails) (Object) this).getCondensedAEOutputs();
     }
 }

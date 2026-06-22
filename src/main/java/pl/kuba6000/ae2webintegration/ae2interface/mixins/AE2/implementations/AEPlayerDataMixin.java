@@ -13,6 +13,7 @@ import com.mojang.authlib.GameProfile;
 
 import appeng.core.worlddata.IWorldPlayerMapping;
 import cpw.mods.fml.common.FMLCommonHandler;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 
 @Mixin(targets = "appeng.core.worlddata.PlayerData", remap = false)
@@ -28,7 +29,7 @@ public class AEPlayerDataMixin implements IAEPlayerData {
     }
 
     @Override
-    public pl.kuba6000.ae2webintegration.core.api.PlayerIdentity web$getPlayerProfile(int playerId) {
+    public PlayerIdentity web$getPlayerProfile(int playerId) {
         Optional<UUID> maybe = playerMapping.get(playerId);
         if (!maybe.isPresent()) return null;
         UUID uuid = maybe.get();
@@ -44,11 +45,11 @@ public class AEPlayerDataMixin implements IAEPlayerData {
         if (p == null) {
             p = new GameProfile(uuid, uuid.toString());
         }
-        return new pl.kuba6000.ae2webintegration.core.api.PlayerIdentity(p.getId(), p.getName());
+        return new PlayerIdentity(p.getId(), p.getName());
     }
 
     @Override
-    public int web$getPlayerId(java.util.UUID id) {
+    public int web$getPlayerId(UUID id) {
         // getPlayerID requires a complete GameProfile (both UUID and name).
         // First try the server's profile cache (the player is online for
         // the /ae2webintegration auth flow, so their profile should be cached).

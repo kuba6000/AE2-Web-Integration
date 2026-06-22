@@ -6,92 +6,55 @@ import appeng.api.storage.data.IAEFluidStack;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
 import cpw.mods.fml.common.registry.GameRegistry;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 
 @Mixin(IAEStack.class)
-public interface AEStackMixin extends IAEStack, IStack, IAEKey {
+public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
 
     @Override
-    public default String web$getItemID() {
-        if (isItem()) return GameRegistry.findUniqueIdentifierFor(((IAEItemStack) this).getItem())
-            .toString() + ":"
-            + ((IAEItemStack) this).getItemDamage();
-        return ((IAEFluidStack) this).getFluid()
-            .getName();
+    default String web$getItemID() {
+        if (isItem()) {
+            return GameRegistry.findUniqueIdentifierFor(((IAEItemStack) this).getItem())
+                + ":"
+                + ((IAEItemStack) this).getItemDamage();
+        }
+        return ((IAEFluidStack) this).getFluid().getName();
     }
 
     @Override
-    public default String web$getDisplayName() {
+    default String web$getDisplayName() {
         return getDisplayName();
     }
 
     @Override
-    public default IAEKey web$what() {
+    default IAEKey web$what() {
         return (IAEKey) this;
     }
 
     @Override
-    public default long web$amount() {
+    default long web$amount() {
         return getStackSize();
     }
 
     @Override
-    public default long web$getStackSize() {
-        return getStackSize();
+    default IAEGenericStack web$copy() {
+        return (IAEGenericStack) copy();
     }
 
     @Override
-    public default boolean web$isCraftable() {
+    default boolean web$isFluid() {
+        return !isItem();
+    }
+
+    @Override
+    default boolean web$isCraftable(IAEGrid grid) {
         return isCraftable();
     }
 
     @Override
-    public default long web$getCountRequestable() {
-        return getCountRequestable();
-    }
-
-    @Override
-    public default long web$getCountRequestableCrafts() {
-        return getCountRequestableCrafts();
-    }
-
-    @Override
-    public default void web$reset() {
-        reset();
-    }
-
-    @Override
-    public default boolean web$isSameType(IStack other) {
-        return isSameType(other);
-    }
-
-    @Override
-    public default IStack web$copy() {
-        return (IStack) copy();
-    }
-
-    @Override
-    public default void web$setStackSize(long size) {
-        setStackSize(size);
-    }
-
-    @Override
-    public default boolean web$isItem() {
-        return isItem();
-    }
-
-    // --- IAEKey methods ---
-
-    @Override
-    public default boolean web$isCraftable(IAEGrid grid) {
-        return isCraftable();
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public default boolean web$isSameType(IAEKey other) {
+    default boolean web$isSameType(IAEKey other) {
         return isSameType((IAEStack) (Object) other);
     }
 }

@@ -10,6 +10,8 @@ import org.spongepowered.asm.mixin.Mixin;
 
 import com.google.common.collect.ImmutableSet;
 
+import net.minecraft.util.IChatComponent;
+
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingGrid;
@@ -23,7 +25,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = ICraftingGrid.class)
@@ -49,10 +50,12 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
 
     @Override
     @SuppressWarnings("unchecked")
-    public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IStack stack) {
+    public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
         PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
+        IAEStack<?> aeStack = ((IAEStack<?>) (Object) stack).copy();
+        aeStack.setStackSize(amount);
         final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
-            .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, (IAEStack<?>) (Object) stack, null);
+            .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, aeStack, null);
         return (Future<IAECraftingJob>) (Object) job;
     }
 
@@ -67,18 +70,7 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
             (BaseActionSource) grid.web$getPlayerSource());
         if (link != null) return null;
         Object msg = grid.web$getLastFakePlayerChatMessage();
-        return msg == null ? null : ((net.minecraft.util.IChatComponent) msg).getUnformattedText();
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
-        PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
-        IAEStack<?> aeStack = ((IAEStack<?>) (Object) stack).copy();
-        aeStack.setStackSize(amount);
-        final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
-            .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, aeStack, null);
-        return (Future<IAECraftingJob>) (Object) job;
+        return msg == null ? null : ((IChatComponent) msg).getUnformattedText();
     }
 
     @Override

@@ -26,7 +26,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStack;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
 public class CraftingCPUClusterMixin {
@@ -44,7 +43,7 @@ public class CraftingCPUClusterMixin {
     @Inject(method = "postCraftingStatusChange", at = @At("HEAD"))
     void ae2webintegration$postCraftingStatusChange(final IAEStack<?> diff, CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
-            .craftingStatusPostedUpdate((ICraftingCPUCluster) this, (IStack) diff);
+            .craftingStatusPostedUpdate((ICraftingCPUCluster) this, diff);
     }
 
     @Inject(method = "completeJob", at = @At("HEAD"))

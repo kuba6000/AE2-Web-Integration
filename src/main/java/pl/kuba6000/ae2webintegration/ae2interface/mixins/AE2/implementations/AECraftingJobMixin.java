@@ -7,66 +7,85 @@ import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.storage.data.IAEStack;
+import appeng.api.storage.data.IItemList;
+import appeng.util.item.IAEStackList;
+import pl.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
 
 @Mixin(value = ICraftingJob.class, remap = false)
 public interface AECraftingJobMixin extends IAECraftingJob {
 
     @Override
-    public default boolean web$isSimulation() {
+    default boolean web$isSimulation() {
         return ((ICraftingJob) (Object) this).isSimulation();
     }
 
     @Override
-    public default long web$getByteTotal() {
+    default long web$getByteTotal() {
         return ((ICraftingJob) (Object) this).getByteTotal();
     }
 
     @Override
-    public default void web$populatePlan(IItemList plan) {
-        ((ICraftingJob) (Object) this).populatePlan((appeng.api.storage.data.IItemList<IAEStack<?>>) (Object) plan);
-    }
-
-    @Override
     @SuppressWarnings({ "unchecked", "rawtypes" })
-    public default ICraftingPlanSummary web$generateSummary(IAEGrid grid) {
-        appeng.api.storage.data.IItemList plan = new appeng.util.item.ItemList();
+    default ICraftingPlanSummary web$generateSummary(IAEGrid grid) {
+        IItemList<IAEStack<?>> plan = new IAEStackList();
         ((ICraftingJob) (Object) this).populatePlan(plan);
+
+        final boolean simulation = ((ICraftingJob) (Object) this).isSimulation();
+        final IAEMeInventoryItem inventory = grid.web$getStorageGrid().web$getInventory();
 
         final List<ICraftingPlanSummaryEntry> entries = new ArrayList<>();
         for (Object obj : plan) {
             final IAEStack<?> captured = (IAEStack<?>) obj;
+            final IAEKey key = (IAEKey) (Object) captured;
+
+            final long stored;
+            final long missing;
+            if (simulation) {
+                long needed = captured.getStackSize();
+                long extracted = inventory.web$extractItems(key, needed, AEActionable.SIMULATE, grid);
+                stored = extracted;
+                missing = needed - extracted;
+            } else {
+                stored = captured.getStackSize();
+                missing = 0L;
+            }
+
             entries.add(new ICraftingPlanSummaryEntry() {
 
                 @Override
                 public IAEKey web$getWhat() {
-                    return (IAEKey) (Object) captured;
+                    return key;
                 }
 
                 @Override
                 public long web$getMissingAmount() {
-                    return Math.max(0, captured.getCountRequestable() - captured.getStackSize());
+                    return missing;
                 }
 
                 @Override
                 public long web$getStoredAmount() {
-                    return captured.getStackSize();
+                    return stored;
                 }
 
                 @Override
                 public long web$getCraftAmount() {
+                    return captured.getCountRequestable();
+                }
+
+                @Override
+                public long web$getCraftSteps() {
                     return captured.getCountRequestableCrafts();
                 }
             });
         }
 
         final long bytes = ((ICraftingJob) (Object) this).getByteTotal();
-        final boolean simulation = ((ICraftingJob) (Object) this).isSimulation();
 
         return new ICraftingPlanSummary() {
 

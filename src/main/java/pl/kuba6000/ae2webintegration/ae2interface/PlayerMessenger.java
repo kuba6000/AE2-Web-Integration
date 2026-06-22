@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface;
 
+import java.util.List;
+
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.EnumChatFormatting;
@@ -12,7 +14,7 @@ public class PlayerMessenger implements IPlayerMessenger {
 
     @Override
     public void sendMessage(PlayerIdentity player, String message) {
-        for (EntityPlayerMP entityPlayerMP : (java.util.List<EntityPlayerMP>) FMLCommonHandler.instance()
+        for (EntityPlayerMP entityPlayerMP : (List<EntityPlayerMP>) FMLCommonHandler.instance()
             .getMinecraftServerInstance()
             .getConfigurationManager().playerEntityList) {
             if (entityPlayerMP.getUniqueID()

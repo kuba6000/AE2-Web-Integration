@@ -3,32 +3,28 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations.se
 import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.networking.storage.IStorageGrid;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.CompositeStackList;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.DispatchingMeInventory;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = IStorageGrid.class)
 public interface AEStorageGridMixin extends IAEStorageGrid {
 
     @Override
-    public default IItemList web$getItemStorageList() {
-        return (IItemList) (Object) ((IStorageGrid) (Object) this).getItemInventory()
-            .getStorageList();
+    default IStackList web$getStorageList() {
+        IStorageGrid grid = (IStorageGrid) (Object) this;
+        return new CompositeStackList(
+            (IStackList) (Object) grid.getItemInventory().getStorageList(),
+            (IStackList) (Object) grid.getFluidInventory().getStorageList());
     }
 
     @Override
-    default IItemList web$getFluidStorageList() {
-        return (IItemList) (Object) ((IStorageGrid) (Object) this).getFluidInventory()
-            .getStorageList();
-    }
-
-    @Override
-    public default IAEMeInventoryItem web$getItemInventory() {
-        return (IAEMeInventoryItem) ((IStorageGrid) (Object) this).getItemInventory();
-    }
-
-    @Override
-    default IAEMeInventoryItem web$getFluidInventory() {
-        return (IAEMeInventoryItem) ((IStorageGrid) (Object) this).getFluidInventory();
+    default IAEMeInventoryItem web$getInventory() {
+        IStorageGrid grid = (IStorageGrid) (Object) this;
+        return new DispatchingMeInventory(
+            (IAEMeInventoryItem) grid.getItemInventory(),
+            (IAEMeInventoryItem) grid.getFluidInventory());
     }
 }
