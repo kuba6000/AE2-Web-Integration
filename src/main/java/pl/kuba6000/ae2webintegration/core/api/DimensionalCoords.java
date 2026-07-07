@@ -5,24 +5,20 @@ import java.util.Objects;
 
 public class DimensionalCoords {
 
-    int dimid;
+    String dimid;
     int x;
     int y;
     int z;
 
     public DimensionalCoords(int dimid, int x, int y, int z) {
+        this(String.valueOf(dimid), x, y, z);
+    }
+
+    public DimensionalCoords(String dimid, int x, int y, int z) {
         this.dimid = dimid;
         this.x = x;
         this.y = y;
         this.z = z;
-    }
-
-    /**
-     * Accepts a Minecraft Level/World object as an opaque Object.
-     * The dimid is derived from the level's hashCode for cross-version compatibility.
-     */
-    public DimensionalCoords(Object level, int x, int y, int z) {
-        this(level.hashCode(), x, y, z);
     }
 
     @Override
@@ -34,7 +30,7 @@ public class DimensionalCoords {
     public boolean equals(Object obj) {
         if (!(obj instanceof DimensionalCoords)) return false;
         DimensionalCoords coords = (DimensionalCoords) obj;
-        return coords.dimid == dimid
+        return Objects.equals(coords.dimid, dimid)
             && coords.x == x
             && coords.y == y
             && coords.z == z;
