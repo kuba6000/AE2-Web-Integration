@@ -36,7 +36,9 @@
 dependencies {
     implementation project(':core')
     // Select the jar explicitly so shadow resolution does not hit variant ambiguity on the submodule.
-    shadowImplementation project(path: ':core', configuration: 'default')
+    shadowImplementation(project(path: ':core', configuration: 'default')) {
+        exclude group: 'com.google.guava', module: 'guava'
+    }
 
     api("com.github.GTNewHorizons:GTNHLib:0.9.53:dev")
     api("com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-909-GTNH:dev")
