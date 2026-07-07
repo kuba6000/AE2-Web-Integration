@@ -45,7 +45,7 @@ dependencies {
     implementation project(':core')
     // Select the jar explicitly so shadow resolution does not hit variant ambiguity on the submodule.
     shadowImplementation(project(path: ':core', configuration: 'default')) {
-        exclude group: 'com.google.guava', module: 'guava'
+        transitive = false
     }
 }
 
