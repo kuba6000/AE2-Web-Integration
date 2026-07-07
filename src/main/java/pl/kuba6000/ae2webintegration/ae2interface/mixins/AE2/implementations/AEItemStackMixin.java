@@ -36,6 +36,9 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
 
     @Override
     default boolean web$isSameType(IAEKey other) {
+        if (!(other instanceof IAEItemStack)) {
+            return false;
+        }
         return isSameType((IAEItemStack) (Object) other);
     }
 
