@@ -37,7 +37,8 @@ public interface AECraftingJobMixin extends IAECraftingJob {
         ((ICraftingJob) (Object) this).populatePlan(plan);
 
         final boolean simulation = ((ICraftingJob) (Object) this).isSimulation();
-        final IAEMeInventoryItem inventory = grid.web$getStorageGrid().web$getInventory();
+        final IAEMeInventoryItem inventory = grid.web$getStorageGrid()
+            .web$getInventory();
 
         final List<ICraftingPlanSummaryEntry> entries = new ArrayList<>();
         for (Object obj : plan) {

@@ -12,8 +12,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = IItemList.class, remap = false)
-public interface AEItemListMixin<StackType extends IAEStack>
-    extends IItemContainer<StackType>, IStackList {
+public interface AEItemListMixin<StackType extends IAEStack> extends IItemContainer<StackType>, IStackList {
 
     @Override
     @SuppressWarnings("unchecked")
@@ -25,7 +24,6 @@ public interface AEItemListMixin<StackType extends IAEStack>
     @Override
     @SuppressWarnings("unchecked")
     default Iterable<IAEGenericStack> web$stacks() {
-        return () -> ((Iterator<IAEGenericStack>) (Iterator<?>) ((IItemList<StackType>) this)
-            .iterator());
+        return () -> ((Iterator<IAEGenericStack>) (Iterator<?>) ((IItemList<StackType>) this).iterator());
     }
 }

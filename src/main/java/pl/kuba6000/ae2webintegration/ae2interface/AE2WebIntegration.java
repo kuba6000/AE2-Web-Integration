@@ -14,9 +14,9 @@ import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
-import pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy;
 import pl.kuba6000.ae2webintegration.Tags;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
+import pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy;
 import pl.kuba6000.ae2webintegration.core.api.IAEWebInterface;
 
 @Mod(

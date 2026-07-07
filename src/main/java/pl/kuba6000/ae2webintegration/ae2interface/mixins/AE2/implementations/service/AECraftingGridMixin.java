@@ -6,11 +6,11 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 
+import net.minecraft.util.IChatComponent;
+
 import org.spongepowered.asm.mixin.Mixin;
 
 import com.google.common.collect.ImmutableSet;
-
-import net.minecraft.util.IChatComponent;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingCPU;

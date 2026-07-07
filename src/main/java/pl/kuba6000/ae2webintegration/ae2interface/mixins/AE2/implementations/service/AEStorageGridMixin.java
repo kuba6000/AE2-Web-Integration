@@ -16,8 +16,10 @@ public interface AEStorageGridMixin extends IAEStorageGrid {
     default IStackList web$getStorageList() {
         IStorageGrid grid = (IStorageGrid) (Object) this;
         return new CompositeStackList(
-            (IStackList) (Object) grid.getItemInventory().getStorageList(),
-            (IStackList) (Object) grid.getFluidInventory().getStorageList());
+            (IStackList) (Object) grid.getItemInventory()
+                .getStorageList(),
+            (IStackList) (Object) grid.getFluidInventory()
+                .getStorageList());
     }
 
     @Override

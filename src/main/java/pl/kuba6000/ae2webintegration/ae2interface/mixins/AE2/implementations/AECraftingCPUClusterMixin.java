@@ -127,8 +127,6 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @SuppressWarnings("unchecked")
     private void populateList(IStackList list, CraftingItemList type) {
-        ((CraftingCPUCluster) (Object) this).getModernListOfItem(
-            (IItemList<IAEStack<?>>) (Object) list,
-            type);
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem((IItemList<IAEStack<?>>) (Object) list, type);
     }
 }

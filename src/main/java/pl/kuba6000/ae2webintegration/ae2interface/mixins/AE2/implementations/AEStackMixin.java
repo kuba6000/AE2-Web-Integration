@@ -16,11 +16,11 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
     @Override
     default String web$getItemID() {
         if (isItem()) {
-            return GameRegistry.findUniqueIdentifierFor(((IAEItemStack) this).getItem())
-                + ":"
+            return GameRegistry.findUniqueIdentifierFor(((IAEItemStack) this).getItem()) + ":"
                 + ((IAEItemStack) this).getItemDamage();
         }
-        return ((IAEFluidStack) this).getFluid().getName();
+        return ((IAEFluidStack) this).getFluid()
+            .getName();
     }
 
     @Override
