@@ -22,6 +22,6 @@ public interface PatternProviderViewableMixin extends IPatternProviderViewable {
     public default DimensionalCoords web$getLocation() {
         TileEntity te = ((IInterfaceHost) (Object) this).getTileEntity();
         BlockPos coord = te.getPos();
-        return new DimensionalCoords(te.getWorld(), coord.getX(), coord.getY(), coord.getZ());
+        return new DimensionalCoords(te.getWorld().provider.getDimension(), coord.getX(), coord.getY(), coord.getZ());
     }
 }
