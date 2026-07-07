@@ -8,6 +8,7 @@ import java.util.concurrent.Future;
 import java.util.function.Function;
 
 import net.minecraft.util.text.ITextComponent;
+
 import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.networking.IGrid;
@@ -18,8 +19,8 @@ import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.me.helpers.PlayerSource;
-import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.CraftingMediumTracker;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -59,13 +60,12 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
         PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
         IAEItemStack itemStack = ((IAEItemStack) (Object) stack).copy();
         itemStack.setStackSize(amount);
-        final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
-            .beginCraftingJob(
-                ((GridWorldAccessor) grid).web$getPlayerSourceWorld(),
-                (IGrid) grid,
-                actionSrc,
-                itemStack,
-                null);
+        final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this).beginCraftingJob(
+            ((GridWorldAccessor) grid).web$getPlayerSourceWorld(),
+            (IGrid) grid,
+            actionSrc,
+            itemStack,
+            null);
         return (Future<IAECraftingJob>) (Object) job;
     }
 

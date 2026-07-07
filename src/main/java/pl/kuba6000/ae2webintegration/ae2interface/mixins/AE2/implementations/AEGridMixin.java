@@ -22,8 +22,8 @@ import appeng.api.networking.storage.IStorageGrid;
 import appeng.me.Grid;
 import appeng.me.helpers.PlayerSource;
 import appeng.parts.reporting.AbstractPartTerminal;
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
@@ -106,8 +106,7 @@ public abstract class AEGridMixin implements IAEGrid, GridWorldAccessor {
                 .get() != actionHost) {
                 web$cachedPlayerSource = null;
                 web$cachedPlayerSourceWorld = null;
-            }
-            else return web$cachedPlayerSource;
+            } else return web$cachedPlayerSource;
         }
 
         web$cachedPlayerSourceWorld = world;
