@@ -6,7 +6,10 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.fml.config.ConfigTracker;
+import net.minecraftforge.fml.config.ModConfig;
 
+import pl.kuba6000.ae2webintegration.core.Config;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 
 /**
@@ -70,6 +73,14 @@ public class CommandContext implements ICommandContext {
 
     @Override
     public Runnable getReloader() {
-        return () -> {};
+        return () -> {
+            if (Config.getConfigDirectory() == null) {
+                return;
+            }
+            ConfigTracker.INSTANCE.loadConfigs(
+                ModConfig.Type.COMMON,
+                Config.getConfigDirectory()
+                    .toPath());
+        };
     }
 }
