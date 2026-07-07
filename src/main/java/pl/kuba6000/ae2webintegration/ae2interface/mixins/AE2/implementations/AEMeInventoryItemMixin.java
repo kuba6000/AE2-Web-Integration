@@ -35,6 +35,6 @@ public interface AEMeInventoryItemMixin extends IAEMeInventoryItem {
 
     @Override
     default long web$getAvailable(IAEKey key, IAEGrid grid) {
-        return web$extractItems(key, 1, AEActionable.SIMULATE, grid);
+        return web$extractItems(key, Long.MAX_VALUE, AEActionable.SIMULATE, grid);
     }
 }
