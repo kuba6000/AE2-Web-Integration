@@ -1,6 +1,5 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations.service;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -10,6 +9,8 @@ import java.util.function.Function;
 import net.minecraft.util.text.ITextComponent;
 
 import org.spongepowered.asm.mixin.Mixin;
+
+import com.google.common.collect.ImmutableSet;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingCPU;
@@ -32,16 +33,14 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 public interface AECraftingGridMixin extends IAECraftingGrid {
 
     @Override
-    @SuppressWarnings("unchecked")
     default int web$getCPUCount() {
-        return ((Collection<ICraftingCPU>) (Collection<?>) ((ICraftingGrid) (Object) this).getCpus()).size();
+        return ((ICraftingGrid) (Object) this).getCpus()
+            .size();
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     default Set<ICraftingCPUCluster> web$getCPUs() {
-        final Collection<ICraftingCPU> aecpus = (Collection<ICraftingCPU>) (Collection<?>) ((ICraftingGrid) (Object) this)
-            .getCpus();
+        final ImmutableSet<ICraftingCPU> aecpus = ((ICraftingGrid) (Object) this).getCpus();
         final Set<ICraftingCPUCluster> cpus = new LinkedHashSet<>(aecpus.size());
         int i = 1;
         for (ICraftingCPU cpu : aecpus) {
