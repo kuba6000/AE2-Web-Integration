@@ -157,7 +157,7 @@
                 <input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">  <label for="thisgridbydefault">Select this grid by default</label> <br>
                 <input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);"> <label for="trackthisgrid">Enable tracking for this grid (track jobs)</label> <br>
             </section>
-            <span class='note' style="flex: 0 0 100%; margin-top: 10px;">To be able to select a grid, there must be security terminal available and you have to be owner or have every permission enabled in the bio card</span>
+            <span class='note' style="flex: 0 0 100%; margin-top: 10px;">To select a grid, the network must be exposed for web access. On newer versions, place a Wireless Access Point on the network. On older versions, use a Security Terminal and grant the required permissions.</span>
         </section>
     </section>
 </section>
