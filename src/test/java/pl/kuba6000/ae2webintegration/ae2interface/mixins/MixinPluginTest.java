@@ -1,8 +1,8 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Test;
 
 class MixinPluginTest {
 
