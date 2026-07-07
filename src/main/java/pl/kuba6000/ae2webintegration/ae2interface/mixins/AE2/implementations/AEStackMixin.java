@@ -55,6 +55,13 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
 
     @Override
     default boolean web$isSameType(IAEKey other) {
-        return isSameType((IAEStack) (Object) other);
+        if (!(other instanceof IAEStack)) {
+            return false;
+        }
+        IAEStack otherStack = (IAEStack) (Object) other;
+        if (isItem() != otherStack.isItem()) {
+            return false;
+        }
+        return isSameType(otherStack);
     }
 }
