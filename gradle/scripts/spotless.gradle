@@ -3,7 +3,12 @@
 // Can be locally toggled via spotless:off/spotless:on comments
 spotless {
     encoding 'UTF-8'
-    ratchetFrom 'origin/1.20.1'
+
+    if (rootProject.file('.git').isDirectory()) {
+        ratchetFrom 'origin/1.20.1'
+    } else {
+        logger.lifecycle('Skipping Spotless ratchet in Git worktree checkout')
+    }
 
     format 'misc', {
         target '.gitignore'
