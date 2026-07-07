@@ -8,9 +8,6 @@ import java.util.concurrent.Future;
 import java.util.function.Function;
 
 import net.minecraft.util.text.ITextComponent;
-import net.minecraft.world.WorldServer;
-import net.minecraftforge.fml.common.FMLCommonHandler;
-
 import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.networking.IGrid;
@@ -21,6 +18,7 @@ import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.me.helpers.PlayerSource;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.CraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -59,13 +57,15 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
             throw new UnsupportedOperationException("Native fluid crafting is not supported on AE2 1.12.2");
         }
         PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
-        WorldServer world = FMLCommonHandler.instance()
-            .getMinecraftServerInstance()
-            .getWorld(0);
         IAEItemStack itemStack = ((IAEItemStack) (Object) stack).copy();
         itemStack.setStackSize(amount);
         final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
-            .beginCraftingJob(world, (IGrid) grid, actionSrc, itemStack, null);
+            .beginCraftingJob(
+                ((GridWorldAccessor) grid).web$getPlayerSourceWorld(),
+                (IGrid) grid,
+                actionSrc,
+                itemStack,
+                null);
         return (Future<IAECraftingJob>) (Object) job;
     }
 
