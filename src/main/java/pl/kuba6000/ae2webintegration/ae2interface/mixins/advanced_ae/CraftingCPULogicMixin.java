@@ -87,10 +87,7 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
                 .getService(ICraftingService.class)).web$getCraftingProviders()
                 .web$getViewableForCraftingMedium((ICraftingMediumKey) medium);
             IAEMixinCallbacks.getInstance()
-                .pushedPattern(
-                    (ICraftingCPUCluster) (Object) cpu,
-                    viewable,
-                    (IAECraftingPatternDetails) details);
+                .pushedPattern((ICraftingCPUCluster) (Object) cpu, viewable, (IAECraftingPatternDetails) details);
             return true;
         }
         return false;

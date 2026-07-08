@@ -6,4 +6,5 @@ import appeng.api.networking.crafting.ICraftingProvider;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
 
 @Mixin(value = ICraftingProvider.class, remap = false)
-public interface CraftingMediumKeyMixin extends ICraftingMediumKey {}
+public interface CraftingMediumKeyMixin extends ICraftingMediumKey {
+}
