@@ -1,14 +1,14 @@
 package pl.kuba6000.ae2webintegration.ae2interface;
 
 import java.util.IdentityHashMap;
-import java.util.Map;
-
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingMedium;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.helpers.IInterfaceHost;
 import appeng.me.cache.CraftingGridCache;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 
 public class CraftingMediumTracker implements ICraftingMediumTracker {
 
@@ -48,13 +48,11 @@ public class CraftingMediumTracker implements ICraftingMediumTracker {
     }
 
     @Override
-    public Map<Object, Object> web$getCraftingMediums() {
-        IdentityHashMap<Object, Object> result = new IdentityHashMap<>();
+    public IPatternProviderViewable web$getViewableForCraftingMedium(ICraftingMediumKey medium) {
         for (IdentityHashMap<ICraftingMedium, IInterfaceHost> map : mediumToViewable.values()) {
-            for (Map.Entry<ICraftingMedium, IInterfaceHost> entry : map.entrySet()) {
-                result.put(entry.getKey(), entry.getValue());
-            }
+            IInterfaceHost viewable = map.get((ICraftingMedium) medium);
+            if (viewable != null) return (IPatternProviderViewable) viewable;
         }
-        return result;
+        return null;
     }
 }
