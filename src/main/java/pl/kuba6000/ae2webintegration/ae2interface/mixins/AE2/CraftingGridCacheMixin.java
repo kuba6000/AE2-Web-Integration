@@ -1,8 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
-import java.util.Collections;
 import java.util.IdentityHashMap;
-import java.util.Map;
 
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -28,7 +26,9 @@ import pl.kuba6000.ae2webintegration.ae2interface.CraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = CraftingGridCache.class, remap = false)
@@ -94,10 +94,10 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
     // --- ICraftingMediumTracker ---
 
     @Override
-    public Map<Object, Object> web$getCraftingMediums() {
+    public IPatternProviderViewable web$getViewableForCraftingMedium(ICraftingMediumKey medium) {
         IdentityHashMap<ICraftingMedium, IInterfaceViewable> mediums = CraftingMediumTracker.mediumToViewable.get(grid);
-        if (mediums == null) return Collections.emptyMap();
-        return (Map<Object, Object>) (Map<?, ?>) mediums;
+        if (mediums == null) return null;
+        return (IPatternProviderViewable) mediums.get((ICraftingMedium) medium);
     }
 
     // This overrides the default from AECraftingGridMixin (interface mixin on ICraftingGrid)
