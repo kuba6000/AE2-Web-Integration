@@ -9,6 +9,7 @@ public class WebEngine {
 
     public static void init(IServerPlatform serverPlatform, String modVersion) {
         AE2Controller.serverPlatform = serverPlatform;
+        Config.init(serverPlatform.getConfigDirectory());
         WebEngine.modVersion = modVersion;
     }
 

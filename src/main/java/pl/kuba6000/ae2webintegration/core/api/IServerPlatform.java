@@ -9,5 +9,9 @@ public interface IServerPlatform {
 
     UUID getOfflinePlayerUUID(String username);
 
+    default UUID getRegisteredPlayerUUID(String username) {
+        return getOfflinePlayerUUID(username);
+    }
+
     File getConfigDirectory();
 }

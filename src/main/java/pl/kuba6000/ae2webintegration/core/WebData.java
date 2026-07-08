@@ -32,11 +32,11 @@ public class WebData {
         if (name == null || name.isEmpty()) {
             return -1;
         }
-        UUID offlineUuid = AE2Controller.serverPlatform.getOfflinePlayerUUID(name);
-        if (offlineUuid == null) {
+        UUID playerUuid = AE2Controller.serverPlatform.getRegisteredPlayerUUID(name);
+        if (playerUuid == null) {
             return -1;
         }
-        Integer id = instance.UUIDToId.get(offlineUuid);
+        Integer id = instance.UUIDToId.get(playerUuid);
         if (id != null) {
             return id;
         }
