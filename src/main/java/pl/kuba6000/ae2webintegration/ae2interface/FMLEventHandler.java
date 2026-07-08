@@ -30,8 +30,10 @@ public class FMLEventHandler {
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.player instanceof EntityPlayerMP)) return;
         EntityPlayerMP player = (EntityPlayerMP) event.player;
-        if (!player.canCommandSenderUseCommand(4, "seed")) return;
         UpdateNotifier
-            .notifyPlayerIfOutdated(messenger, new PlayerIdentity(player.getUniqueID(), player.getCommandSenderName()));
+            .onPlayerLoggedIn(
+                messenger,
+                new PlayerIdentity(player.getUniqueID(), player.getCommandSenderName()),
+                player.canCommandSenderUseCommand(4, "seed"));
     }
 }
