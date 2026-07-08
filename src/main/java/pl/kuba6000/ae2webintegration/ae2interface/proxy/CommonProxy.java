@@ -29,9 +29,7 @@ public class CommonProxy {
         VersionChecker.setVersionIdentifier("-forge-1.12.2");
         Config.init(event.getModConfigurationDirectory());
         Config.synchronizeConfiguration();
-        WebEngine.init(
-            new Platform(new java.io.File(event.getModConfigurationDirectory(), "ae2webintegration")),
-            Tags.VERSION);
+        WebEngine.init(new Platform(event.getModConfigurationDirectory()), Tags.VERSION);
         WebData.loadData();
         GridData.loadData();
 
