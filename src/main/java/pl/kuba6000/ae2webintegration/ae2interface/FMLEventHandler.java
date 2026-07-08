@@ -30,10 +30,8 @@ public class FMLEventHandler {
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         Player player = event.getEntity();
         if (!(player instanceof ServerPlayer serverPlayer)) return;
-        if (!serverPlayer.hasPermissions(4)) return;
 
         PlayerIdentity identity = new PlayerIdentity(serverPlayer.getUUID(), serverPlayer.getScoreboardName());
-        PlayerMessenger messenger = new PlayerMessenger();
-        UpdateNotifier.notifyPlayerIfOutdated(messenger, identity);
+        UpdateNotifier.onPlayerLoggedIn(new PlayerMessenger(), identity, serverPlayer.hasPermissions(4));
     }
 }
