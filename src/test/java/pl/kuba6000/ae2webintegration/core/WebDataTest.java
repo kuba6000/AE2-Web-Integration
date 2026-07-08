@@ -20,8 +20,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 class WebDataTest {
 
     private static final UUID REGISTERED_UUID = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
-    private static final UUID OFFLINE_UUID = UUID.fromString("11111111-2222-3333-4444-555555555555");
-
     @TempDir
     File configRoot;
 
@@ -54,11 +52,6 @@ class WebDataTest {
         @Override
         public UUID getOnlinePlayerUUID(String username) {
             return REGISTERED_UUID;
-        }
-
-        @Override
-        public UUID getOfflinePlayerUUID(String username) {
-            return OFFLINE_UUID;
         }
 
         @Override

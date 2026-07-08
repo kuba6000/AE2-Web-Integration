@@ -37,13 +37,13 @@ class WebEngineTest {
         }
 
         @Override
-        public UUID getOfflinePlayerUUID(String username) {
-            return null;
+        public File getConfigDirectory() {
+            return configDirectory;
         }
 
         @Override
-        public File getConfigDirectory() {
-            return configDirectory;
+        public UUID getRegisteredPlayerUUID(String username) {
+            return null;
         }
     }
 }

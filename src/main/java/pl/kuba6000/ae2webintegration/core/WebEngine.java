@@ -13,6 +13,21 @@ public class WebEngine {
         WebEngine.modVersion = modVersion;
     }
 
+    public static void loadData() {
+        WebData.loadData();
+        GridData.loadData();
+    }
+
+    public static void onServerStarted() {
+        AE2Controller.init();
+        StartupHandler.logOutdatedWarning();
+        StartupHandler.handleDiscordIntegration();
+    }
+
+    public static void onServerStopping() {
+        AE2Controller.stopHTTPServer();
+    }
+
     public static String getModVersion() {
         return modVersion;
     }
