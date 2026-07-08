@@ -1,7 +1,5 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.advanced_ae;
 
-import java.util.Map;
-
 import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
 import net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic;
 import net.pedroksl.advanced_ae.common.logic.ExecutingCraftingJob;
@@ -18,7 +16,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.networking.IGrid;
-import appeng.api.networking.IGridNode;
 import appeng.api.networking.crafting.ICraftingPlan;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.crafting.ICraftingRequester;
@@ -34,6 +31,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
@@ -85,17 +83,13 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
             target = "Lappeng/api/networking/crafting/ICraftingProvider;pushPattern(Lappeng/api/crafting/IPatternDetails;[Lappeng/api/stacks/KeyCounter;)Z"))
     private boolean ae2webintegration$pushPattern(ICraftingProvider medium, IPatternDetails details, KeyCounter[] ic) {
         if (medium.pushPattern(details, ic)) {
-            IGridNode viewable = null;
-            Map<Object, Object> mediumToViewable = ((IAECraftingGrid) cpu.getGrid()
+            IPatternProviderViewable viewable = ((IAECraftingGrid) cpu.getGrid()
                 .getService(ICraftingService.class)).web$getCraftingProviders()
-                .web$getCraftingMediums();
-            if (mediumToViewable != null) {
-                viewable = (IGridNode) mediumToViewable.get(medium);
-            }
+                .web$getViewableForCraftingMedium((ICraftingMediumKey) medium);
             IAEMixinCallbacks.getInstance()
                 .pushedPattern(
                     (ICraftingCPUCluster) (Object) cpu,
-                    (IPatternProviderViewable) viewable,
+                    viewable,
                     (IAECraftingPatternDetails) details);
             return true;
         }
