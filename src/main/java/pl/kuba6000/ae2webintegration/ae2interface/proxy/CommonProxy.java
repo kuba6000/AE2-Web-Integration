@@ -15,11 +15,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.commands.BaseCommandHandler;
 import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder;
 import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CommandBootstrap;
-import pl.kuba6000.ae2webintegration.core.GridData;
-import pl.kuba6000.ae2webintegration.core.StartupHandler;
-import pl.kuba6000.ae2webintegration.core.WebData;
 import pl.kuba6000.ae2webintegration.core.WebEngine;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
@@ -30,11 +26,9 @@ public class CommonProxy {
         Config.init(event.getModConfigurationDirectory());
         Config.synchronizeConfiguration();
         WebEngine.init(new Platform(event.getModConfigurationDirectory()), Tags.VERSION);
-        WebData.loadData();
-        GridData.loadData();
+        WebEngine.loadData();
 
         AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + WebEngine.getModVersion());
-        StartupHandler.logOutdatedWarning();
 
         FMLCommonHandler.instance()
             .bus()
@@ -52,11 +46,10 @@ public class CommonProxy {
     }
 
     public void serverStarted(FMLServerStartedEvent event) {
-        AE2Controller.init();
-        StartupHandler.handleDiscordIntegration();
+        WebEngine.onServerStarted();
     }
 
     public void serverStopping(FMLServerStoppingEvent event) {
-        AE2Controller.stopHTTPServer();
+        WebEngine.onServerStopping();
     }
 }

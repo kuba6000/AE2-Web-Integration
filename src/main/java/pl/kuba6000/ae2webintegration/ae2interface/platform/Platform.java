@@ -34,7 +34,7 @@ public class Platform implements IServerPlatform {
     }
 
     @Override
-    public UUID getOfflinePlayerUUID(String username) {
+    public UUID getRegisteredPlayerUUID(String username) {
         GameProfile profile = FMLCommonHandler.instance()
             .getMinecraftServerInstance()
             .getPlayerProfileCache()
