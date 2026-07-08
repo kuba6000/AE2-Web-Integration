@@ -45,7 +45,9 @@ public class AE2WebIntegration {
         ModLoadingContext.get()
             .registerExtensionPoint(
                 IExtensionPoint.DisplayTest.class,
-                () -> new IExtensionPoint.DisplayTest(() -> NetworkConstants.IGNORESERVERONLY, (remote, isServer) -> true));
+                () -> new IExtensionPoint.DisplayTest(
+                    () -> NetworkConstants.IGNORESERVERONLY,
+                    (remote, isServer) -> true));
 
         // Delegate remaining init to the proxy
         PROXY.preInit(platform, version);
