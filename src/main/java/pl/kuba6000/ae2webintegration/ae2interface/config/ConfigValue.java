@@ -11,7 +11,7 @@ import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
  * Until {@code ModConfigEvent.Loading} fires, {@code ConfigValue.get()}
  * throws {@link IllegalStateException}. This wrapper catches that and returns
  * the hardcoded default, allowing code that runs <em>before</em> the config
- * event (e.g. static initializers triggered by {@code WebEngine.init()}) to
+ * event (e.g. static initializers triggered by {@code CoreEngine.init()}) to
  * read configuration values without crashing.
  * <p>
  * After the loading event, every call to {@link #get()} reads from the live

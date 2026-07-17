@@ -19,7 +19,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
 import pl.kuba6000.ae2webintegration.core.CommandBootstrap;
-import pl.kuba6000.ae2webintegration.core.WebEngine;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.IAEWebInterface;
 
 @Mod(value = AE2WebIntegration.MODID)
@@ -42,7 +42,7 @@ public class AE2WebIntegration {
             .getActiveContainer();
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
 
-        WebEngine.init(platform, version, "-neoforge-1.21.1");
+        CoreEngine.init(platform, version, "-neoforge-1.21.1");
         LOG.info("AE2WebIntegration loading at version {}", version);
     }
 
@@ -63,11 +63,11 @@ public class AE2WebIntegration {
 
     @SubscribeEvent
     public static void serverStarted(ServerStartedEvent event) {
-        WebEngine.onServerStarted();
+        CoreEngine.onServerStarted();
     }
 
     @SubscribeEvent
     public static void serverStopping(ServerStoppingEvent event) {
-        WebEngine.onServerStopping();
+        CoreEngine.onServerStopping();
     }
 }
