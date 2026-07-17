@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class WebEngine {
 
@@ -11,6 +12,12 @@ public class WebEngine {
         AE2Controller.serverPlatform = serverPlatform;
         Config.init(serverPlatform.getConfigDirectory());
         WebEngine.modVersion = modVersion;
+    }
+
+    public static void init(IServerPlatform serverPlatform, String modVersion, String versionIdentifier) {
+        VersionChecker.setVersionIdentifier(versionIdentifier);
+        init(serverPlatform, modVersion);
+        loadData();
     }
 
     public static void loadData() {
