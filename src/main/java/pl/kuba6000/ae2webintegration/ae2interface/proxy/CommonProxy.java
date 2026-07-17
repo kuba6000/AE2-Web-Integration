@@ -16,18 +16,15 @@ import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
 import pl.kuba6000.ae2webintegration.core.CommandBootstrap;
 import pl.kuba6000.ae2webintegration.core.WebEngine;
-import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class CommonProxy {
 
     // preInit "Run before anything else. Read your config, create blocks, items, etc, and register them with the
     // GameRegistry." (Remove if not needed)
     public void preInit(FMLPreInitializationEvent event) {
-        VersionChecker.setVersionIdentifier("-forge-1.7.10");
         Config.init(event.getModConfigurationDirectory());
         Config.synchronizeConfiguration();
-        WebEngine.init(new Platform(event.getModConfigurationDirectory()), Tags.VERSION);
-        WebEngine.loadData();
+        WebEngine.init(new Platform(event.getModConfigurationDirectory()), Tags.VERSION, "-forge-1.7.10");
 
         AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + WebEngine.getModVersion());
 
