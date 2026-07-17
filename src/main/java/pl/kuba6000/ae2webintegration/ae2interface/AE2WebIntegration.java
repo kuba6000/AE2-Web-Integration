@@ -18,8 +18,8 @@ import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder;
 import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
-import pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy;
 import pl.kuba6000.ae2webintegration.core.CommandBootstrap;
+import pl.kuba6000.ae2webintegration.core.WebEngine;
 import pl.kuba6000.ae2webintegration.core.api.IAEWebInterface;
 
 @Mod(value = AE2WebIntegration.MODID)
@@ -28,8 +28,6 @@ public class AE2WebIntegration {
 
     public static final String MODID = "ae2webintegration";
     public static final Logger LOG = LogManager.getLogger(MODID);
-
-    private static final CommonProxy PROXY = new CommonProxy();
 
     public AE2WebIntegration() {
         Platform platform = new Platform();
@@ -44,8 +42,8 @@ public class AE2WebIntegration {
             .getActiveContainer();
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
 
-        // Delegate remaining init to the proxy
-        PROXY.preInit(platform, version);
+        WebEngine.init(platform, version, "-neoforge-1.21.1");
+        LOG.info("AE2WebIntegration loading at version {}", version);
     }
 
     @EventBusSubscriber(modid = MODID, bus = EventBusSubscriber.Bus.MOD)
@@ -65,11 +63,11 @@ public class AE2WebIntegration {
 
     @SubscribeEvent
     public static void serverStarted(ServerStartedEvent event) {
-        PROXY.onServerStarted();
+        WebEngine.onServerStarted();
     }
 
     @SubscribeEvent
     public static void serverStopping(ServerStoppingEvent event) {
-        PROXY.onServerStopping();
+        WebEngine.onServerStopping();
     }
 }
