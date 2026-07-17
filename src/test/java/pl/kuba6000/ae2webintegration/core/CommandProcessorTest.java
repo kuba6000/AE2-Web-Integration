@@ -20,7 +20,7 @@ class CommandProcessorTest {
 
     @BeforeAll
     static void setupServer() throws Exception {
-        // Initialize Config so WebData can resolve its data file path
+        // Initialize Config so CoreData can resolve its data file path
         Config.init(new java.io.File(System.getProperty("java.io.tmpdir")));
 
         // Start the HTTP server so CommandProcessor.reload() can succeed

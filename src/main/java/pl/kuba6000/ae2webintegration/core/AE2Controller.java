@@ -308,7 +308,7 @@ public class AE2Controller {
                         return false;
                     }
                 } else {
-                    playerID = WebData.getPlayerId(username);
+                    playerID = CoreData.getPlayerId(username);
                     if (playerID == -1) {
                         t.getResponseHeaders()
                             .add("Location", "?invaliduser");
@@ -316,7 +316,7 @@ public class AE2Controller {
                         return false;
                     }
                     String password = postData.get("password");
-                    if (!WebData.verifyPassword(playerID, password)) {
+                    if (!CoreData.verifyPassword(playerID, password)) {
                         t.getResponseHeaders()
                             .add("Location", "?invalidpassword");
                         t.sendResponseHeaders(302, -1);
@@ -533,7 +533,7 @@ public class AE2Controller {
                             return;
                         }
                     } else {
-                        playerID = WebData.getPlayerId(username);
+                        playerID = CoreData.getPlayerId(username);
                         if (playerID == -1) {
                             byte[] raw_response = "invaliduser".getBytes(StandardCharsets.UTF_8);
                             t.sendResponseHeaders(400, raw_response.length);
@@ -543,7 +543,7 @@ public class AE2Controller {
                             return;
                         }
                         String password = postData.get("password");
-                        if (!WebData.verifyPassword(playerID, password)) {
+                        if (!CoreData.verifyPassword(playerID, password)) {
                             byte[] raw_response = "invalidpassword".getBytes(StandardCharsets.UTF_8);
                             t.sendResponseHeaders(400, raw_response.length);
                             OutputStream os = t.getResponseBody();

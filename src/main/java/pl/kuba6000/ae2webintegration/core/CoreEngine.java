@@ -3,7 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
-public class WebEngine {
+public class CoreEngine {
 
     // Populated by the interface layer from the buildscript-generated mod version.
     private static volatile String modVersion;
@@ -11,7 +11,7 @@ public class WebEngine {
     public static void init(IServerPlatform serverPlatform, String modVersion) {
         AE2Controller.serverPlatform = serverPlatform;
         Config.init(serverPlatform.getConfigDirectory());
-        WebEngine.modVersion = modVersion;
+        CoreEngine.modVersion = modVersion;
     }
 
     public static void init(IServerPlatform serverPlatform, String modVersion, String versionIdentifier) {
@@ -21,7 +21,7 @@ public class WebEngine {
     }
 
     public static void loadData() {
-        WebData.loadData();
+        CoreData.loadData();
         GridData.loadData();
     }
 

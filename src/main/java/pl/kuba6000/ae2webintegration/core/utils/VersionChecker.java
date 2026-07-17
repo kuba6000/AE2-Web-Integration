@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.WebEngine;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 
 public class VersionChecker {
 
@@ -90,7 +90,7 @@ public class VersionChecker {
     }
 
     public static boolean isOutdated() {
-        String currentVersion = WebEngine.getModVersion();
+        String currentVersion = CoreEngine.getModVersion();
         if (currentVersion == null || currentVersion.isEmpty()) return false;
         updateLatestVersion(currentVersion);
         if (latestTag == null) return false;

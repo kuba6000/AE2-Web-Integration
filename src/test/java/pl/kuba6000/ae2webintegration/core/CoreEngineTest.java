@@ -10,14 +10,14 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
-class WebEngineTest {
+class CoreEngineTest {
 
     @TempDir
     File configRoot;
 
     @Test
     void initInitializesCoreConfigDirectoryFromPlatform() {
-        WebEngine.init(new TestPlatform(configRoot), "test-version");
+        CoreEngine.init(new TestPlatform(configRoot), "test-version");
 
         assertEquals(new File(configRoot, "ae2webintegration"), Config.getConfigDirectory());
         assertEquals(new File(new File(configRoot, "ae2webintegration"), "webdata.json"), Config.getConfigFile("webdata.json"));

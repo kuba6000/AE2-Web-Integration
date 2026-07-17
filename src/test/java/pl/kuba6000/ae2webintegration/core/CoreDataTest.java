@@ -17,7 +17,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
-class WebDataTest {
+class CoreDataTest {
 
     private static final UUID REGISTERED_UUID = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     @TempDir
@@ -29,16 +29,16 @@ class WebDataTest {
         AE2Controller.serverPlatform = new TestPlatform(configRoot);
         AE2Controller.AE2Interface = new TestAE();
 
-        Field instance = WebData.class.getDeclaredField("instance");
+        Field instance = CoreData.class.getDeclaredField("instance");
         instance.setAccessible(true);
-        instance.set(null, new WebData());
+        instance.set(null, new CoreData());
     }
 
     @Test
     void getPlayerIdUsesRegisteredPlayerUuidInsteadOfOfflineUuid() {
-        WebData.setPassword(REGISTERED_UUID, "hash");
+        CoreData.setPassword(REGISTERED_UUID, "hash");
 
-        assertEquals(42, WebData.getPlayerId("Player"));
+        assertEquals(42, CoreData.getPlayerId("Player"));
     }
 
     private static class TestPlatform implements IServerPlatform {

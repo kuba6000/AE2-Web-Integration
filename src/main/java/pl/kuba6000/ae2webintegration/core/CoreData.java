@@ -16,11 +16,11 @@ import com.google.gson.Gson;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
-public class WebData {
+public class CoreData {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
-    static WebData instance = new WebData();
+    static CoreData instance = new CoreData();
 
     private static final File dataFile = Config.getConfigFile("webdata.json");
 
@@ -111,7 +111,7 @@ public class WebData {
         Reader reader = null;
         try {
             reader = Files.newReader(dataFile, StandardCharsets.UTF_8);
-            instance = gson.fromJson(reader, WebData.class);
+            instance = gson.fromJson(reader, CoreData.class);
         } catch (Exception e) {
             LOG.error("Failed to load web data from file: " + dataFile.getAbsolutePath(), e);
             instance.UUIDToId.clear();
