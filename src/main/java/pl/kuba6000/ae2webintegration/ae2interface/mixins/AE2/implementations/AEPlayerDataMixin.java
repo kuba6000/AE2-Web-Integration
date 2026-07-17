@@ -49,28 +49,7 @@ public class AEPlayerDataMixin implements IAEPlayerData {
     }
 
     @Override
-    public int web$getPlayerId(UUID id) {
-        // getPlayerID requires a complete GameProfile (both UUID and name).
-        // First try the server's profile cache (the player is online for
-        // the /ae2webintegration auth flow, so their profile should be cached).
-        try {
-            GameProfile cached = FMLCommonHandler.instance()
-                .getMinecraftServerInstance()
-                .func_152358_ax()
-                .func_152652_a(id);
-            if (cached != null && cached.isComplete()) {
-                return getPlayerID(cached);
-            }
-        } catch (Exception ignored) {}
-
-        // Graceful fallback — the caller (e.g. CoreData.setPassword) will save
-        // the password hash but skip UUID↔ID map population until the player
-        // logs in via the game (which triggers PlayerData registration).
-        return -1;
-    }
-
-    @Override
-    public int web$getPlayerId(Object profile) {
-        return getPlayerID((GameProfile) profile);
+    public int web$getPlayerId(PlayerIdentity identity) {
+        return getPlayerID(new GameProfile(identity.uuid, identity.name));
     }
 }
