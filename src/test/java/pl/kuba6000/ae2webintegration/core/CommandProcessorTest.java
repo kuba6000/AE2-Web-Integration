@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -22,6 +23,8 @@ class CommandProcessorTest {
 
     private static final UUID TEST_UUID = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     private static final UUID OTHER_UUID = UUID.fromString("11111111-2222-3333-4444-555555555555");
+    private static final PlayerIdentity TEST_PLAYER = new PlayerIdentity(TEST_UUID, "Player");
+    private static final PlayerIdentity OTHER_PLAYER = new PlayerIdentity(OTHER_UUID, "OtherPlayer");
 
     @BeforeAll
     static void setupServer() throws Exception {
@@ -74,7 +77,7 @@ class CommandProcessorTest {
         String token = "correct-token";
         AE2Controller.awaitingRegistration.put(TEST_UUID, Pair.of(token, passwordHash));
 
-        CommandResult result = CommandProcessor.registerPlayer(TEST_UUID, token);
+        CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, token);
 
         assertTrue(result.isSuccess(), "registration should succeed with valid token");
         assertFalse(AE2Controller.awaitingRegistration.containsKey(TEST_UUID),
@@ -86,7 +89,7 @@ class CommandProcessorTest {
         String passwordHash = "test-password-hash";
         AE2Controller.awaitingRegistration.put(TEST_UUID, Pair.of("correct-token", passwordHash));
 
-        CommandResult result = CommandProcessor.registerPlayer(TEST_UUID, "wrong-token");
+        CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, "wrong-token");
 
         assertFalse(result.isSuccess(), "registration should fail with wrong token");
         assertEquals("Invalid token!", result.getMessage());
@@ -101,7 +104,7 @@ class CommandProcessorTest {
         AE2Controller.AE2Interface = new TestAE(-1);
         AE2Controller.awaitingRegistration.put(TEST_UUID, Pair.of(token, "hash"));
 
-        CommandResult result = CommandProcessor.registerPlayer(TEST_UUID, token);
+        CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, token);
 
         assertFalse(result.isSuccess());
         assertTrue(result.getMessage().contains("AE2 player ID"));
@@ -110,7 +113,7 @@ class CommandProcessorTest {
 
     @Test
     void testRegisterPlayerNoRegistration() {
-        CommandResult result = CommandProcessor.registerPlayer(TEST_UUID, "any-token");
+        CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, "any-token");
         assertFalse(result.isSuccess(), "registration should fail when no registration exists");
         assertTrue(result.getMessage().toLowerCase().contains("initialize"),
             "error should mention initialization: " + result.getMessage());
@@ -125,13 +128,13 @@ class CommandProcessorTest {
         AE2Controller.awaitingRegistration.put(OTHER_UUID, Pair.of(token2, "hash2"));
 
         // Auth the first player
-        CommandResult result1 = CommandProcessor.registerPlayer(TEST_UUID, token1);
+        CommandResult result1 = CommandProcessor.registerPlayer(TEST_PLAYER, token1);
         assertTrue(result1.isSuccess(), "player 1 should succeed");
         assertFalse(AE2Controller.awaitingRegistration.containsKey(TEST_UUID),
             "player 1 registration should be removed");
 
         // Auth the second player
-        CommandResult result2 = CommandProcessor.registerPlayer(OTHER_UUID, token2);
+        CommandResult result2 = CommandProcessor.registerPlayer(OTHER_PLAYER, token2);
         assertTrue(result2.isSuccess(), "player 2 should succeed");
         assertFalse(AE2Controller.awaitingRegistration.containsKey(OTHER_UUID),
             "player 2 registration should be removed");
@@ -169,13 +172,8 @@ class CommandProcessorTest {
                 }
 
                 @Override
-                public int web$getPlayerId(UUID id) {
+                public int web$getPlayerId(PlayerIdentity identity) {
                     return playerId;
-                }
-
-                @Override
-                public int web$getPlayerId(Object profile) {
-                    return -1;
                 }
             };
         }

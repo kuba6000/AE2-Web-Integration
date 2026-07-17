@@ -13,7 +13,7 @@ import org.apache.logging.log4j.Logger;
 import com.google.common.io.Files;
 import com.google.gson.Gson;
 
-import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 public class CoreData {
@@ -61,7 +61,8 @@ public class CoreData {
         return false;
     }
 
-    public static boolean setPassword(UUID playerUuid, String passwordHash) {
+    public static boolean setPassword(PlayerIdentity player, String passwordHash) {
+        UUID playerUuid = player.uuid;
         if (passwordHash == null || passwordHash.isEmpty()) {
             instance.passwords.remove(playerUuid);
             saveChanges();
@@ -70,7 +71,7 @@ public class CoreData {
 
         try {
             int playerId = AE2Controller.AE2Interface.web$getPlayerData()
-                .web$getPlayerId(playerUuid);
+                .web$getPlayerId(player);
             if (playerId < 0) {
                 LOG.error("Could not resolve AE2 player ID for UUID: " + playerUuid);
                 return false;

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -23,6 +24,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 class CoreDataTest {
 
     private static final UUID REGISTERED_UUID = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    private static final PlayerIdentity REGISTERED_PLAYER = new PlayerIdentity(REGISTERED_UUID, "Player");
     @TempDir
     File configRoot;
 
@@ -36,7 +38,7 @@ class CoreDataTest {
 
     @Test
     void getPlayerIdUsesRegisteredPlayerUuidInsteadOfOfflineUuid() {
-        CoreData.setPassword(REGISTERED_UUID, "hash");
+        CoreData.setPassword(REGISTERED_PLAYER, "hash");
 
         assertEquals(42, CoreData.getPlayerId("Player"));
     }
@@ -45,7 +47,7 @@ class CoreDataTest {
     void setPasswordRejectsUnresolvedPlayerWithoutMutatingData() throws Exception {
         AE2Controller.AE2Interface = new TestAE(-1, false);
 
-        assertFalse(CoreData.setPassword(REGISTERED_UUID, "hash"));
+        assertFalse(CoreData.setPassword(REGISTERED_PLAYER, "hash"));
 
         assertEquals(-1, CoreData.getPlayerId("Player"));
         assertTrue(getMap("passwords").isEmpty());
@@ -57,7 +59,7 @@ class CoreDataTest {
     void setPasswordRejectsPlayerLookupExceptionWithoutMutatingData() throws Exception {
         AE2Controller.AE2Interface = new TestAE(42, true);
 
-        assertFalse(CoreData.setPassword(REGISTERED_UUID, "hash"));
+        assertFalse(CoreData.setPassword(REGISTERED_PLAYER, "hash"));
 
         assertEquals(-1, CoreData.getPlayerId("Player"));
         assertTrue(getMap("passwords").isEmpty());
@@ -129,16 +131,11 @@ class CoreDataTest {
                 }
 
                 @Override
-                public int web$getPlayerId(UUID id) {
+                public int web$getPlayerId(PlayerIdentity identity) {
                     if (throwOnPlayerLookup) {
                         throw new IllegalStateException("player lookup failed");
                     }
-                    return REGISTERED_UUID.equals(id) ? playerId : -1;
-                }
-
-                @Override
-                public int web$getPlayerId(Object profile) {
-                    return -1;
+                    return REGISTERED_UUID.equals(identity.uuid) ? playerId : -1;
                 }
             };
         }

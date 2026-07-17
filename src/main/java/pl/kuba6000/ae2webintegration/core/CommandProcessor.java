@@ -1,10 +1,9 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import java.util.UUID;
-
 import org.apache.commons.lang3.tuple.Pair;
 
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
 public class CommandProcessor {
 
@@ -31,22 +30,22 @@ public class CommandProcessor {
     /**
      * Registers a player who initiated registration via the web interface.
      *
-     * @param playerId the UUID of the player
-     * @param token    the confirmation token shown on the web interface
+     * @param player the complete identity of the player
+     * @param token  the confirmation token shown on the web interface
      * @return a CommandResult with success/failure status and a human-readable message
      */
-    public static CommandResult registerPlayer(UUID playerId, String token) {
-        Pair<String, String> registration = AE2Controller.awaitingRegistration.get(playerId);
+    public static CommandResult registerPlayer(PlayerIdentity player, String token) {
+        Pair<String, String> registration = AE2Controller.awaitingRegistration.get(player.uuid);
         if (registration == null) {
             return CommandResult.error("You have to initialize the registration on the web interface first!");
         }
         if (!registration.getLeft().equals(token)) {
             return CommandResult.error("Invalid token!");
         }
-        if (!CoreData.setPassword(playerId, registration.getRight())) {
+        if (!CoreData.setPassword(player, registration.getRight())) {
             return CommandResult.error("Failed to resolve AE2 player ID. Please try again while online.");
         }
-        AE2Controller.awaitingRegistration.remove(playerId);
+        AE2Controller.awaitingRegistration.remove(player.uuid);
         return CommandResult.success("Registered successfully!");
     }
 }

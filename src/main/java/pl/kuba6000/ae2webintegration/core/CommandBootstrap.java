@@ -1,10 +1,9 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import java.util.UUID;
-
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.ICommandBuilder;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
 /**
  * Defines ALL commands for AE2 Web Integration.
@@ -57,13 +56,13 @@ public class CommandBootstrap {
             ctx.sendError("/ae2webintegration auth <token>");
             return;
         }
-        UUID playerId = ctx.getPlayerUUID();
-        if (playerId == null) {
+        PlayerIdentity player = ctx.getPlayerIdentity();
+        if (player == null) {
             ctx.sendError("This command can only be used by players!");
             return;
         }
         String token = args[1];
-        CommandResult result = CommandProcessor.registerPlayer(playerId, token);
+        CommandResult result = CommandProcessor.registerPlayer(player, token);
         if (result.isSuccess()) {
             ctx.sendMessage(result.getMessage());
         } else {

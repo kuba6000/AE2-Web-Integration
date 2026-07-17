@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.ICommandBuilder;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -79,7 +80,7 @@ class CommandBootstrapTest {
         // Grant permission
         ctx.hasPermissionResult = true;
         ctx.reloader = () -> {};
-        ctx.playerUuid = UUID.randomUUID();
+        ctx.playerIdentity = new PlayerIdentity(UUID.randomUUID(), "Player");
 
         // Invoke the captured reload handler
         builder.reloadHandler.accept(ctx);
@@ -115,10 +116,10 @@ class CommandBootstrapTest {
 
         RecordingContext ctx = new RecordingContext();
         ctx.args = new String[] { "auth", "my-test-token" };
-        ctx.playerUuid = UUID.randomUUID();
+        ctx.playerIdentity = new PlayerIdentity(UUID.randomUUID(), "Player");
 
         // Put a registration in the awaiting map so registerPlayer succeeds
-        UUID uuid = ctx.playerUuid;
+        UUID uuid = ctx.playerIdentity.uuid;
         AE2Controller.awaitingRegistration.put(uuid,
             org.apache.commons.lang3.tuple.Pair.of("my-test-token", "password-hash"));
 
@@ -140,7 +141,7 @@ class CommandBootstrapTest {
 
         RecordingContext ctx = new RecordingContext();
         ctx.args = new String[0];
-        ctx.playerUuid = UUID.randomUUID();
+        ctx.playerIdentity = new PlayerIdentity(UUID.randomUUID(), "Player");
 
         builder.authHandler.accept(ctx);
 
@@ -156,7 +157,7 @@ class CommandBootstrapTest {
 
         RecordingContext ctx = new RecordingContext();
         ctx.args = new String[] { "auth", "token" };
-        ctx.playerUuid = null; // Console = no player UUID
+        ctx.playerIdentity = null; // Console = no player identity
 
         builder.authHandler.accept(ctx);
 
@@ -245,13 +246,8 @@ class CommandBootstrapTest {
                 }
 
                 @Override
-                public int web$getPlayerId(UUID id) {
+                public int web$getPlayerId(PlayerIdentity identity) {
                     return 42;
-                }
-
-                @Override
-                public int web$getPlayerId(Object profile) {
-                    return -1;
                 }
             };
         }
@@ -266,7 +262,7 @@ class CommandBootstrapTest {
         boolean hasPermissionResult = false;
         String lastMessage;
         String lastError;
-        UUID playerUuid;
+        PlayerIdentity playerIdentity;
         Runnable reloader;
         boolean reloaderRan;
 
@@ -276,8 +272,8 @@ class CommandBootstrapTest {
         }
 
         @Override
-        public UUID getPlayerUUID() {
-            return playerUuid;
+        public PlayerIdentity getPlayerIdentity() {
+            return playerIdentity;
         }
 
         @Override

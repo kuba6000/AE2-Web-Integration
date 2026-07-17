@@ -1,7 +1,5 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
-import java.util.UUID;
-
 /**
  * Platform-agnostic abstraction over a Minecraft command sender.
  * <p>
@@ -13,11 +11,8 @@ public interface ICommandContext {
     /** Raw arguments passed to the command (everything after the command name). */
     String[] getArgs();
 
-    /**
-     * UUID of the executing player, or {@code null} if the sender is the
-     * console / command block.
-     */
-    UUID getPlayerUUID();
+    /** Complete identity of the executing player, or {@code null} for a non-player sender. */
+    PlayerIdentity getPlayerIdentity();
 
     /** Whether the sender has the given permission level. */
     boolean hasPermission(int level);
