@@ -45,22 +45,7 @@ public class AEPlayerDataMixin implements IAEPlayerData {
     }
 
     @Override
-    public int web$getPlayerId(Object profile) {
-        if (profile instanceof GameProfile) {
-            return getPlayerID((GameProfile) profile);
-        }
-        return -1;
-    }
-
-    @Override
-    public int web$getPlayerId(UUID id) {
-        GameProfile p = FMLCommonHandler.instance()
-            .getMinecraftServerInstance()
-            .getPlayerProfileCache()
-            .getProfileByUUID(id);
-        if (p != null) {
-            return getPlayerID(p);
-        }
-        return -1;
+    public int web$getPlayerId(PlayerIdentity identity) {
+        return getPlayerID(new GameProfile(identity.uuid, identity.name));
     }
 }

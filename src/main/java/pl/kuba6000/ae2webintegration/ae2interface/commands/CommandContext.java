@@ -1,7 +1,5 @@
 package pl.kuba6000.ae2webintegration.ae2interface.commands;
 
-import java.util.UUID;
-
 import net.minecraft.command.ICommandSender;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.util.text.TextComponentString;
@@ -9,6 +7,7 @@ import net.minecraft.util.text.TextFormatting;
 
 import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
 /**
  * {@link ICommandContext} implementation wrapping Forge 1.12.2's
@@ -30,9 +29,13 @@ public class CommandContext implements ICommandContext {
     }
 
     @Override
-    public UUID getPlayerUUID() {
+    public PlayerIdentity getPlayerIdentity() {
         if (sender instanceof EntityPlayerMP) {
-            return ((EntityPlayerMP) sender).getUniqueID();
+            EntityPlayerMP player = (EntityPlayerMP) sender;
+            return new PlayerIdentity(
+                player.getUniqueID(),
+                player.getGameProfile()
+                    .getName());
         }
         return null;
     }
