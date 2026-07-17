@@ -61,27 +61,30 @@ public class CoreData {
         return false;
     }
 
-    public static void setPassword(UUID playerUuid, String passwordHash) {
+    public static boolean setPassword(UUID playerUuid, String passwordHash) {
         if (passwordHash == null || passwordHash.isEmpty()) {
             instance.passwords.remove(playerUuid);
-        } else {
-            instance.passwords.put(playerUuid, passwordHash);
-            try {
-                int pID = AE2Controller.AE2Interface.web$getPlayerData()
-                    .web$getPlayerId(playerUuid);
-                if (pID >= 0) {
-                    instance.UUIDToId.put(playerUuid, pID);
-                    instance.IdToUUID.put(pID, playerUuid);
-                } else {
-                    LOG.warn("Could not resolve AE2 player ID for UUID: " + playerUuid
-                        + " — password saved but UUID↔ID map not populated. "
-                        + "The player may need to log in via the game first.");
-                }
-            } catch (Exception e) {
-                LOG.error("Failed to resolve AE2 player ID for UUID: " + playerUuid, e);
-            }
+            saveChanges();
+            return true;
         }
-        saveChanges();
+
+        try {
+            int playerId = AE2Controller.AE2Interface.web$getPlayerData()
+                .web$getPlayerId(playerUuid);
+            if (playerId < 0) {
+                LOG.error("Could not resolve AE2 player ID for UUID: " + playerUuid);
+                return false;
+            }
+
+            instance.passwords.put(playerUuid, passwordHash);
+            instance.UUIDToId.put(playerUuid, playerId);
+            instance.IdToUUID.put(playerId, playerUuid);
+            saveChanges();
+            return true;
+        } catch (Exception e) {
+            LOG.error("Failed to resolve AE2 player ID for UUID: " + playerUuid, e);
+            return false;
+        }
     }
 
     private static void saveChanges() {

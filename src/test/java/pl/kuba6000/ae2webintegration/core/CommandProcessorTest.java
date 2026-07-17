@@ -9,6 +9,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -31,6 +36,8 @@ class CommandProcessorTest {
     void setUp() {
         // Clean registration map before each test
         AE2Controller.awaitingRegistration.clear();
+        AE2Controller.AE2Interface = new TestAE(42);
+        CoreData.instance = new CoreData();
     }
 
     @AfterEach
@@ -89,6 +96,19 @@ class CommandProcessorTest {
     }
 
     @Test
+    void testRegisterPlayerKeepsPendingRegistrationWhenPlayerIdCannotBeResolved() {
+        String token = "correct-token";
+        AE2Controller.AE2Interface = new TestAE(-1);
+        AE2Controller.awaitingRegistration.put(TEST_UUID, Pair.of(token, "hash"));
+
+        CommandResult result = CommandProcessor.registerPlayer(TEST_UUID, token);
+
+        assertFalse(result.isSuccess());
+        assertTrue(result.getMessage().contains("AE2 player ID"));
+        assertTrue(AE2Controller.awaitingRegistration.containsKey(TEST_UUID));
+    }
+
+    @Test
     void testRegisterPlayerNoRegistration() {
         CommandResult result = CommandProcessor.registerPlayer(TEST_UUID, "any-token");
         assertFalse(result.isSuccess(), "registration should fail when no registration exists");
@@ -115,5 +135,49 @@ class CommandProcessorTest {
         assertTrue(result2.isSuccess(), "player 2 should succeed");
         assertFalse(AE2Controller.awaitingRegistration.containsKey(OTHER_UUID),
             "player 2 registration should be removed");
+    }
+
+    private static class TestAE implements IAE {
+
+        private final int playerId;
+
+        TestAE(int playerId) {
+            this.playerId = playerId;
+        }
+
+        @Override
+        public Iterable<pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid> web$getGrids() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public IStackList web$createStackList() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public IAEGenericStack web$stackOf(IAEKey key, long amount) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public IAEPlayerData web$getPlayerData() {
+            return new IAEPlayerData() {
+                @Override
+                public pl.kuba6000.ae2webintegration.core.api.PlayerIdentity web$getPlayerProfile(int playerId) {
+                    return null;
+                }
+
+                @Override
+                public int web$getPlayerId(UUID id) {
+                    return playerId;
+                }
+
+                @Override
+                public int web$getPlayerId(Object profile) {
+                    return -1;
+                }
+            };
+        }
     }
 }

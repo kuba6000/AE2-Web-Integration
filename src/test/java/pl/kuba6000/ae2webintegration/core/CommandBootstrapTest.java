@@ -5,15 +5,27 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.ICommandBuilder;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Tests for {@link CommandBootstrap} command tree definition. */
 class CommandBootstrapTest {
+
+    @BeforeEach
+    void setUpPlayerLookup() {
+        AE2Controller.AE2Interface = new TestAE();
+        CoreData.instance = new CoreData();
+    }
 
     @Test
     void testCommandTreeStructure() {
@@ -204,6 +216,44 @@ class CommandBootstrapTest {
         @Override
         public void register() {
             calls.add("register");
+        }
+    }
+
+    private static class TestAE implements IAE {
+
+        @Override
+        public Iterable<pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid> web$getGrids() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public IStackList web$createStackList() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public IAEGenericStack web$stackOf(IAEKey key, long amount) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public IAEPlayerData web$getPlayerData() {
+            return new IAEPlayerData() {
+                @Override
+                public pl.kuba6000.ae2webintegration.core.api.PlayerIdentity web$getPlayerProfile(int playerId) {
+                    return null;
+                }
+
+                @Override
+                public int web$getPlayerId(UUID id) {
+                    return 42;
+                }
+
+                @Override
+                public int web$getPlayerId(Object profile) {
+                    return -1;
+                }
+            };
         }
     }
 

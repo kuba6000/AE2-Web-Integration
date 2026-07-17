@@ -1,9 +1,12 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -27,11 +30,8 @@ class CoreDataTest {
     void setUp() throws Exception {
         Config.init(configRoot);
         AE2Controller.serverPlatform = new TestPlatform(configRoot);
-        AE2Controller.AE2Interface = new TestAE();
-
-        Field instance = CoreData.class.getDeclaredField("instance");
-        instance.setAccessible(true);
-        instance.set(null, new CoreData());
+        AE2Controller.AE2Interface = new TestAE(42, false);
+        CoreData.instance = new CoreData();
     }
 
     @Test
@@ -39,6 +39,36 @@ class CoreDataTest {
         CoreData.setPassword(REGISTERED_UUID, "hash");
 
         assertEquals(42, CoreData.getPlayerId("Player"));
+    }
+
+    @Test
+    void setPasswordRejectsUnresolvedPlayerWithoutMutatingData() throws Exception {
+        AE2Controller.AE2Interface = new TestAE(-1, false);
+
+        assertFalse(CoreData.setPassword(REGISTERED_UUID, "hash"));
+
+        assertEquals(-1, CoreData.getPlayerId("Player"));
+        assertTrue(getMap("passwords").isEmpty());
+        assertTrue(getMap("UUIDToId").isEmpty());
+        assertTrue(getMap("IdToUUID").isEmpty());
+    }
+
+    @Test
+    void setPasswordRejectsPlayerLookupExceptionWithoutMutatingData() throws Exception {
+        AE2Controller.AE2Interface = new TestAE(42, true);
+
+        assertFalse(CoreData.setPassword(REGISTERED_UUID, "hash"));
+
+        assertEquals(-1, CoreData.getPlayerId("Player"));
+        assertTrue(getMap("passwords").isEmpty());
+        assertTrue(getMap("UUIDToId").isEmpty());
+        assertTrue(getMap("IdToUUID").isEmpty());
+    }
+
+    private Map<?, ?> getMap(String fieldName) throws Exception {
+        Field field = CoreData.class.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return (Map<?, ?>) field.get(CoreData.instance);
     }
 
     private static class TestPlatform implements IServerPlatform {
@@ -67,6 +97,14 @@ class CoreDataTest {
 
     private static class TestAE implements IAE {
 
+        private final int playerId;
+        private final boolean throwOnPlayerLookup;
+
+        TestAE(int playerId, boolean throwOnPlayerLookup) {
+            this.playerId = playerId;
+            this.throwOnPlayerLookup = throwOnPlayerLookup;
+        }
+
         @Override
         public Iterable<pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid> web$getGrids() {
             throw new UnsupportedOperationException();
@@ -92,7 +130,10 @@ class CoreDataTest {
 
                 @Override
                 public int web$getPlayerId(UUID id) {
-                    return REGISTERED_UUID.equals(id) ? 42 : -1;
+                    if (throwOnPlayerLookup) {
+                        throw new IllegalStateException("player lookup failed");
+                    }
+                    return REGISTERED_UUID.equals(id) ? playerId : -1;
                 }
 
                 @Override
