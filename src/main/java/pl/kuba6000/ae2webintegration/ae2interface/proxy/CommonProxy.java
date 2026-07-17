@@ -15,7 +15,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder;
 import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
 import pl.kuba6000.ae2webintegration.core.CommandBootstrap;
-import pl.kuba6000.ae2webintegration.core.WebEngine;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 
 public class CommonProxy {
 
@@ -24,9 +24,9 @@ public class CommonProxy {
     public void preInit(FMLPreInitializationEvent event) {
         Config.init(event.getModConfigurationDirectory());
         Config.synchronizeConfiguration();
-        WebEngine.init(new Platform(event.getModConfigurationDirectory()), Tags.VERSION, "-forge-1.7.10");
+        CoreEngine.init(new Platform(event.getModConfigurationDirectory()), Tags.VERSION, "-forge-1.7.10");
 
-        AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + WebEngine.getModVersion());
+        AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + CoreEngine.getModVersion());
 
         FMLCommonHandler.instance()
             .bus()
@@ -47,10 +47,10 @@ public class CommonProxy {
     }
 
     public void serverStarted(FMLServerStartedEvent event) {
-        WebEngine.onServerStarted();
+        CoreEngine.onServerStarted();
     }
 
     public void serverStopping(FMLServerStoppingEvent event) {
-        WebEngine.onServerStopping();
+        CoreEngine.onServerStopping();
     }
 }

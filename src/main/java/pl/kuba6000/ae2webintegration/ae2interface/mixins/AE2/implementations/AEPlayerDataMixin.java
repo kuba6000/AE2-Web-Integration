@@ -63,7 +63,7 @@ public class AEPlayerDataMixin implements IAEPlayerData {
             }
         } catch (Exception ignored) {}
 
-        // Graceful fallback — the caller (e.g. WebData.setPassword) will save
+        // Graceful fallback — the caller (e.g. CoreData.setPassword) will save
         // the password hash but skip UUID↔ID map population until the player
         // logs in via the game (which triggers PlayerData registration).
         return -1;
