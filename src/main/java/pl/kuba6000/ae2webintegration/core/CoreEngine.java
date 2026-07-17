@@ -8,19 +8,15 @@ public class CoreEngine {
     // Populated by the interface layer from the buildscript-generated mod version.
     private static volatile String modVersion;
 
-    public static void init(IServerPlatform serverPlatform, String modVersion) {
+    public static void init(IServerPlatform serverPlatform, String modVersion, String versionIdentifier) {
+        VersionChecker.setVersionIdentifier(versionIdentifier);
         AE2Controller.serverPlatform = serverPlatform;
         Config.init(serverPlatform.getConfigDirectory());
         CoreEngine.modVersion = modVersion;
-    }
-
-    public static void init(IServerPlatform serverPlatform, String modVersion, String versionIdentifier) {
-        VersionChecker.setVersionIdentifier(versionIdentifier);
-        init(serverPlatform, modVersion);
         loadData();
     }
 
-    public static void loadData() {
+    private static void loadData() {
         CoreData.loadData();
         GridData.loadData();
     }

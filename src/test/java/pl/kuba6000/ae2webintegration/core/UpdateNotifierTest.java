@@ -26,7 +26,7 @@ class UpdateNotifierTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        CoreEngine.init(new TestPlatform(configRoot), "1.0.0-forge-1.20.1");
+        CoreEngine.init(new TestPlatform(configRoot), "1.0.0-forge-1.20.1", "-forge-1.20.1");
         ConfigBootstrap.checkForUpdatesValue = () -> true;
 
         setVersionCheckerField("latestTag", "2.0.0-forge-1.20.1");
