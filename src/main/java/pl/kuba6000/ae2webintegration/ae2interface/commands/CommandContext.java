@@ -1,7 +1,5 @@
 package pl.kuba6000.ae2webintegration.ae2interface.commands;
 
-import java.util.UUID;
-
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
@@ -11,6 +9,7 @@ import net.neoforged.fml.config.ModConfig;
 
 import pl.kuba6000.ae2webintegration.core.Config;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
 /**
  * {@link ICommandContext} implementation wrapping a NeoForge Brigadier
@@ -45,10 +44,14 @@ public class CommandContext implements ICommandContext {
     }
 
     @Override
-    public UUID getPlayerUUID() {
+    public PlayerIdentity getPlayerIdentity() {
         ServerPlayer player = context.getSource()
             .getPlayer();
-        return player != null ? player.getUUID() : null;
+        return player != null ? new PlayerIdentity(
+            player.getUUID(),
+            player.getGameProfile()
+                .getName())
+            : null;
     }
 
     @Override
