@@ -20,7 +20,6 @@ import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.me.helpers.PlayerSource;
-import pl.kuba6000.ae2webintegration.ae2interface.CraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -84,7 +83,7 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
 
     @Override
     default ICraftingMediumTracker web$getCraftingProviders() {
-        return CraftingMediumTracker.INSTANCE;
+        throw new UnsupportedOperationException("Use on CraftingGridCache implementation");
     }
 
     @Override

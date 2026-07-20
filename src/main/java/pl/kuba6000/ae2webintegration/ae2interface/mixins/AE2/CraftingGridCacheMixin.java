@@ -1,8 +1,11 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
+import java.util.IdentityHashMap;
+
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -19,19 +22,28 @@ import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.crafting.ICraftingProviderHelper;
 import appeng.api.networking.crafting.ICraftingRequester;
 import appeng.api.networking.security.IActionSource;
+import appeng.helpers.IInterfaceHost;
 import appeng.me.cache.CraftingGridCache;
-import pl.kuba6000.ae2webintegration.ae2interface.CraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = CraftingGridCache.class, remap = false)
-public class CraftingGridCacheMixin {
+public class CraftingGridCacheMixin implements ICraftingMediumTracker {
 
     @Final
     @Shadow
     private IGrid grid;
+
+    @Unique
+    private final IdentityHashMap<ICraftingMedium, IInterfaceHost> web$mediumToViewable = new IdentityHashMap<>();
+
+    @Unique
+    private ICraftingProvider web$currentCraftingProvider;
 
     @Inject(method = "submitJob", at = @At("RETURN"))
     void ae2webintegration$submitJob(final ICraftingJob job, final ICraftingRequester requestingMachine,
@@ -56,7 +68,8 @@ public class CraftingGridCacheMixin {
         method = "recalculateCraftingPatterns",
         at = @At(value = "INVOKE", target = "Ljava/util/Set;clear()V", ordinal = 0, shift = At.Shift.AFTER))
     void ae2webintegration$updatePatternsStart(CallbackInfo ci) {
-        CraftingMediumTracker.updatingPatterns((CraftingGridCache) (Object) this, grid);
+        web$mediumToViewable.clear();
+        web$currentCraftingProvider = null;
     }
 
     @Redirect(
@@ -66,18 +79,30 @@ public class CraftingGridCacheMixin {
             target = "Lappeng/api/networking/crafting/ICraftingProvider;provideCrafting(Lappeng/api/networking/crafting/ICraftingProviderHelper;)V"))
     void ae2webintegration$provideCrafting(ICraftingProvider instance,
         ICraftingProviderHelper iCraftingProviderHelper) {
-        CraftingMediumTracker.provideCrafting((CraftingGridCache) (Object) this, grid, instance);
-        instance.provideCrafting(iCraftingProviderHelper);
+        ICraftingProvider previousProvider = web$currentCraftingProvider;
+        web$currentCraftingProvider = instance;
+        try {
+            instance.provideCrafting(iCraftingProviderHelper);
+        } finally {
+            web$currentCraftingProvider = previousProvider;
+        }
     }
 
     @Inject(method = "addCraftingOption", at = @At("HEAD"))
     void ae2webintegration$addCraftingOption(ICraftingMedium medium, ICraftingPatternDetails api, CallbackInfo ci) {
-        CraftingMediumTracker.addCraftingOption((CraftingGridCache) (Object) this, grid, medium);
+        if (web$currentCraftingProvider instanceof IInterfaceHost viewable
+            && !web$mediumToViewable.containsKey(medium)) {
+            web$mediumToViewable.put(medium, viewable);
+        }
     }
 
-    @Inject(method = "recalculateCraftingPatterns", at = @At(value = "TAIL"))
-    void ae2webintegration$updatePatternsEnd(CallbackInfo ci) {
-        CraftingMediumTracker.doneUpdatingPatterns((CraftingGridCache) (Object) this, grid);
+    @Override
+    public IPatternProviderViewable web$getViewableForCraftingMedium(ICraftingMediumKey medium) {
+        return (IPatternProviderViewable) web$mediumToViewable.get((ICraftingMedium) medium);
+    }
+
+    public ICraftingMediumTracker web$getCraftingProviders() {
+        return (ICraftingMediumTracker) this;
     }
 
 }
