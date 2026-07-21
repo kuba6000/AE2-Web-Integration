@@ -84,12 +84,11 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
             target = "Lappeng/api/networking/crafting/ICraftingProvider;provideCrafting(Lappeng/api/networking/crafting/ICraftingProviderHelper;)V"))
     void ae2webintegration$provideCrafting(ICraftingProvider instance,
         ICraftingProviderHelper iCraftingProviderHelper) {
-        ICraftingProvider previousProvider = web$currentCraftingProvider;
         web$currentCraftingProvider = instance;
         try {
             instance.provideCrafting(iCraftingProviderHelper);
         } finally {
-            web$currentCraftingProvider = previousProvider;
+            web$currentCraftingProvider = null;
         }
     }
 
