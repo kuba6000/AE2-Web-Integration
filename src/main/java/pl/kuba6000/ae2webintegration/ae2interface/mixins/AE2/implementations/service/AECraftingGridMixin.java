@@ -68,7 +68,9 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
             (BaseActionSource) grid.web$getPlayerSource());
         if (link != null) return null;
         Object msg = grid.web$getLastFakePlayerChatMessage();
-        return msg == null ? null : msg.toString();
+        // A null return means "submitted" to the caller, so never report success when AE2 refused the
+        // job. It rejects a simulated plan (missing ingredients) without emitting any chat message.
+        return msg == null ? "Submission failed" : msg.toString();
     }
 
     @Override
