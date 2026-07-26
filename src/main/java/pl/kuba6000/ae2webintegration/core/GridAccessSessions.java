@@ -44,9 +44,13 @@ public final class GridAccessSessions {
     /**
      * Recomputes which grids {@code userId} may access.
      * <p>
+     * An admin is not permission-checked, so their set is every attachable grid and the check reduces to
+     * "does this grid exist" - which is what the synced path has always required of admins too. Without
+     * it an admin could name any number at all and have a phantom entry written to griddata.json.
+     * <p>
      * MUST run on the Minecraft server thread - it reads live AE2 security state.
      */
-    public static GridAccess compute(IAE ae, int userId, long nowMillis) {
+    public static GridAccess compute(IAE ae, int userId, boolean isAdmin, long nowMillis) {
         Set<Long> keys = new HashSet<>();
         for (IAEGrid grid : ae.web$getGrids()) {
             IAESecurityGrid security = GridFilter.usableSecurity(grid);
@@ -57,7 +61,7 @@ public final class GridAccessSessions {
             if (gridKey == -1) {
                 continue;
             }
-            if (security.web$hasPermissions(userId)) {
+            if (isAdmin || security.web$hasPermissions(userId)) {
                 keys.add(gridKey);
             }
         }
@@ -68,10 +72,10 @@ public final class GridAccessSessions {
      * Refreshes the user's access set when it is missing or past half its lifetime. Cheap on the common
      * path: a single map lookup and a timestamp comparison.
      */
-    public static void refreshIfHalfLifeElapsed(IAE ae, int userId, long nowMillis) {
+    public static void refreshIfHalfLifeElapsed(IAE ae, int userId, boolean isAdmin, long nowMillis) {
         GridAccess current = sessions.get(userId);
         if (current == null || current.isHalfLifeElapsed(nowMillis)) {
-            sessions.put(userId, compute(ae, userId, nowMillis));
+            sessions.put(userId, compute(ae, userId, isAdmin, nowMillis));
         }
     }
 }

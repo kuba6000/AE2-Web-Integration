@@ -10,7 +10,8 @@ public class GetTracking extends IAsyncRequest {
     @Override
     public void handle(Map<String, String> getParams) {
         if (grid == null) {
-            deny("GRID_NOT_FOUND");
+            // The grid is real - access was checked - it simply has no tracking data at all.
+            deny("TRACKING_NOT_FOUND");
             return;
         }
         if (!getParams.containsKey("id")) {

@@ -105,7 +105,7 @@ public class AE2JobTracker {
     }
 
     public static void addJob(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging) {
-        GridData gridData = GridData.get(grid);
+        GridData gridData = GridData.getOrCreate(grid);
         if (gridData == null || !gridData.isTracked) return;
         JobTrackingInfo info;
         if (isMerging) {
@@ -196,7 +196,7 @@ public class AE2JobTracker {
     public static void completeCrafting(IAEGrid grid, ICraftingCPUCluster cpu) {
         JobTrackingInfo info = trackingInfoMap.remove(cpu);
         if (info == null) return;
-        GridData gridData = GridData.get(grid);
+        GridData gridData = GridData.getOrCreate(grid);
         if (gridData == null || !gridData.isTracked) return;
         for (Map.Entry<IAEKey, Long> entry : info.waitingFor.entrySet()) {
             info.craftedTotal.merge(entry.getKey(), entry.getValue(), Long::sum);

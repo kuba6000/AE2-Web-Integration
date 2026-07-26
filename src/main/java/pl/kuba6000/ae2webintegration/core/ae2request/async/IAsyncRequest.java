@@ -39,20 +39,20 @@ public abstract class IAsyncRequest extends IRequest {
             }
         }
         if (gridKey != -1) {
-            if (!context.isAdmin()) {
-                GridAccess access = GridAccessSessions.get(context.getUserID());
-                if (access == null || access.isStale(System.currentTimeMillis())) {
-                    // Distinct from NO_PERMISSIONS so the client can re-fetch the grid list and retry
-                    // instead of reporting a permission error.
-                    deny("REFRESH_REQUIRED");
-                    return;
-                }
-                if (!access.canAccess(gridKey)) {
-                    deny("NO_PERMISSIONS");
-                    return;
-                }
+            GridAccess access = GridAccessSessions.get(context.getUserID());
+            if (access == null || access.isStale(System.currentTimeMillis())) {
+                // Distinct from NO_PERMISSIONS so the client can re-fetch the grid list and retry instead
+                // of reporting a permission error.
+                deny("REFRESH_REQUIRED");
+                return;
             }
-            grid = GridData.get(gridKey);
+            if (!access.canAccess(gridKey)) {
+                deny("NO_PERMISSIONS");
+                return;
+            }
+            // Lookup, not create: a handler that stores something asks for the entry itself, so a plain
+            // read can no longer leave a phantom grid behind in griddata.json.
+            grid = GridData.find(gridKey);
         }
         handle(context.getGetParams());
     }

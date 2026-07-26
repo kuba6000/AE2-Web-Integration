@@ -51,16 +51,24 @@ public class GridData {
         return jobID;
     }
 
-    public static GridData get(long gridKey) {
+    /**
+     * Looks up stored settings without creating them. {@code null} means this grid has none yet, which is
+     * normal - a grid only gets an entry once something is actually stored for it.
+     */
+    public static GridData find(long gridKey) {
+        return gridDataMap.get(gridKey);
+    }
+
+    /**
+     * Creates the entry if it is missing, so only call this when there is something to store. Callers must
+     * have established that the key belongs to a real grid: entries are persisted to griddata.json, so
+     * creating one for an arbitrary key writes a phantom grid to disk.
+     */
+    public static GridData getOrCreate(long gridKey) {
         return gridDataMap.computeIfAbsent(gridKey, k -> new GridData());
     }
 
-    /** Whether an entry already exists, without creating one. */
-    public static boolean isKnown(long gridKey) {
-        return gridDataMap.containsKey(gridKey);
-    }
-
-    public static GridData get(IAEGrid grid) {
+    public static GridData getOrCreate(IAEGrid grid) {
         IAESecurityGrid security = GridFilter.usableSecurity(grid);
         if (security == null) {
             return null;

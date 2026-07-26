@@ -37,8 +37,9 @@ public abstract class ISyncedRequest extends IRequest {
         // We are on the server thread with live AE2 state in hand, so this is the cheapest place to keep
         // the async endpoints' authorization data fresh. Refreshing at half life rather than on expiry
         // means an active session never sees REFRESH_REQUIRED.
-        if (context != null && !context.isAdmin()) {
-            GridAccessSessions.refreshIfHalfLifeElapsed(ae, context.getUserID(), System.currentTimeMillis());
+        if (context != null) {
+            GridAccessSessions
+                .refreshIfHalfLifeElapsed(ae, context.getUserID(), context.isAdmin(), System.currentTimeMillis());
         }
         if (gridKey != -1) {
             for (IAEGrid grid : ae.web$getGrids()) {
@@ -55,7 +56,7 @@ public abstract class ISyncedRequest extends IRequest {
                 }
             }
         }
-        if (grid != null) gridData = GridData.get(gridKey);
+        if (grid != null) gridData = GridData.getOrCreate(gridKey);
         handle(grid);
     }
 

@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Collections;
@@ -110,19 +111,21 @@ class AsyncRequestAuthorizationTest {
     }
 
     @Test
-    void adminBypassesTheCheck() {
-        ProbeRequest request = run(ADMIN, "grid=" + OTHER_GRID);
+    void anAdminIsCheckedTooSoAPhantomKeyIsRejected() {
+        // Admins are not permission-restricted, but their set still only holds grids that exist, so a
+        // made-up key cannot reach GridData and be written to griddata.json.
+        grantAccess(ADMIN, MY_GRID);
 
-        assertStatus("OK", request);
-        assertTrue(request.handlerRan);
+        assertStatus("NO_PERMISSIONS", run(ADMIN, "grid=" + OTHER_GRID));
+        assertStatus("OK", run(ADMIN, "grid=" + MY_GRID));
     }
 
     @Test
-    void localhostBypassesTheCheck() {
-        ProbeRequest request = run(LOCALHOST, "grid=" + OTHER_GRID);
+    void localhostIsCheckedTheSameWay() {
+        grantAccess(LOCALHOST, MY_GRID);
 
-        assertStatus("OK", request);
-        assertTrue(request.handlerRan);
+        assertStatus("NO_PERMISSIONS", run(LOCALHOST, "grid=" + OTHER_GRID));
+        assertStatus("OK", run(LOCALHOST, "grid=" + MY_GRID));
     }
 
     @Test
@@ -132,7 +135,7 @@ class AsyncRequestAuthorizationTest {
 
         run(ME, "grid=" + inventedKey);
 
-        assertFalse(GridData.isKnown(inventedKey), "an unauthorized key must not fabricate a GridData entry");
+        assertNull(GridData.find(inventedKey), "an unauthorized key must not fabricate a GridData entry");
     }
 
     @Test

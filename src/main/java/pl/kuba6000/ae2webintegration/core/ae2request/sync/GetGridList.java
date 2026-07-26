@@ -57,7 +57,7 @@ public class GetGridList extends ISyncedRequest {
             }
             accessibleKeys.add(security.web$getSecurityKey());
             PlayerIdentity ownerIdentity = security.web$getOwnerProfile();
-            GridData gridData = GridData.get(security.web$getSecurityKey());
+            GridData gridData = GridData.getOrCreate(security.web$getSecurityKey());
             grids.add(
                 new JSON_GridData(
                     security.web$getSecurityKey(),
@@ -84,9 +84,7 @@ public class GetGridList extends ISyncedRequest {
                 return Integer.compare(d2.cpuCount, d1.cpuCount); // sort by cpu count if all else is equal
             }
         });
-        if (!context.isAdmin()) {
-            GridAccessSessions.put(context.getUserID(), new GridAccess(accessibleKeys, System.currentTimeMillis()));
-        }
+        GridAccessSessions.put(context.getUserID(), new GridAccess(accessibleKeys, System.currentTimeMillis()));
         setData(grids);
         done();
     }

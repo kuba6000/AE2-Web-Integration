@@ -20,7 +20,9 @@ public class GetTrackingHistory extends IAsyncRequest {
     @Override
     public void handle(Map<String, String> getParams) {
         if (grid == null) {
-            deny("GRID_NOT_FOUND");
+            // Nothing has ever been tracked on this grid; an empty history is the honest answer.
+            setData(new ArrayList<JSON_TrackingHistoryElement>());
+            done();
             return;
         }
         ArrayList<JSON_TrackingHistoryElement> jobs = new ArrayList<>(grid.trackingInfo.trackingInfos.size());
