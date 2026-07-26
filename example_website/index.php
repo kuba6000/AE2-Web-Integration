@@ -392,14 +392,12 @@
     function onTrackThisGridChange(el) {
         if (selectedGrid == -1) return;
         let trackThisGrid = el.checked;
-        $.getJSON('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
-            if(data.status !== "OK"){
-                showAlert(data.status + ": " + data.data);
-                return;
-            }
+        getJSONWithGridRefresh('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
             data = data.data;
             el.checked = data['isTracked'];
             updateGridList();
+        }, function(data) {
+            showAlert(data.status + ": " + data.data);
         });
     }
     function refreshTerminal() {
@@ -683,7 +681,7 @@
             displayCPUList();
         });
     }
-    function updateGridList(){
+    function updateGridList(onDone){
         $.getJSON('grids', function(data) {
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
@@ -711,9 +709,36 @@
                 document.getElementById('gridselection').size = data.length;
             else
                 document.getElementById('gridselection').size = 2;
+            if (onDone)
+                onDone();
         });
     }
     updateGridList();
+    // The async endpoints (trackinghistory / gettracking / gridsettings) authorize against a per-user
+    // access set that the server rebuilds during synced requests. After a long idle period it expires and
+    // the server answers REFRESH_REQUIRED instead of serving the request. Asking for the grid list rebuilds
+    // that set, so retry once before bothering the user with an error.
+    function getJSONWithGridRefresh(url, onSuccess, onFailure){
+        $.getJSON(url, function(data){
+            if (data.status === "REFRESH_REQUIRED"){
+                updateGridList(function(){
+                    $.getJSON(url, function(retried){
+                        if (retried.status !== "OK"){
+                            onFailure(retried);
+                            return;
+                        }
+                        onSuccess(retried);
+                    });
+                });
+                return;
+            }
+            if (data.status !== "OK"){
+                onFailure(data);
+                return;
+            }
+            onSuccess(data);
+        });
+    }
     function selectedGridChanged(el){
         selectedGrid = Number(el.value);
         document.getElementById('thisgridbydefault').disabled = false;
@@ -861,13 +886,8 @@
             return;
         let message = "Asking for tracking history list...";
         pushLoadingScreen(message);
-        $.getJSON('trackinghistory?grid=' + selectedGrid, function(data){
+        getJSONWithGridRefresh('trackinghistory?grid=' + selectedGrid, function(data){
             console.log(data);
-            if(data.status !== "OK"){
-                showAlert(data.status + ": " + data.data);
-                popLoadingScreen(message);
-                return;
-            }
             data = data.data;
             let html = "<table>";
             for (let i = 0; i < data.length; i++){
@@ -887,6 +907,9 @@
             document.getElementById("terminalHistoryHeaderText").innerHTML = "Tracking history";
             document.getElementById("terminalHistoryHeaderRefresh").innerHTML = "Refresh";
             document.getElementById("terminalHistoryDetails").innerHTML = "...";
+            popLoadingScreen(message);
+        }, function(data){
+            showAlert(data.status + ": " + data.data);
             popLoadingScreen(message);
         });
     }
@@ -1063,13 +1086,8 @@
         isInterfaceChartInitialized = false;
         isItemChartInitialized = false;
         pushLoadingScreen(message);
-        $.getJSON('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
+        getJSONWithGridRefresh('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
             console.log(data);
-            if(data.status !== "OK"){
-                showAlert(data.status + ": " + data.data);
-                popLoadingScreen(message);
-                return;
-            }
             data = data.data;
 
             let html = "<button onclick='showInterfaceShare();' id='toggleInterfaceShare' style='width: 90%; font-size: 110%; margin: 10px 5%;'>Show interface usage chart</button><canvas id='interfaceShareChart' style='width:100%;max-width:100%;display:none;'></canvas>";
@@ -1115,6 +1133,9 @@
 
             interfaceShareData = data['interfaceShare'];
 
+            popLoadingScreen(message);
+        }, function(data){
+            showAlert(data.status + ": " + data.data);
             popLoadingScreen(message);
         });
     }
