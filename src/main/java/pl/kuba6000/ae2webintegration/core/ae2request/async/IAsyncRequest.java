@@ -7,6 +7,7 @@ import pl.kuba6000.ae2webintegration.core.GridAccess;
 import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
+import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 /**
  * Requests served directly on the HTTP worker thread, without a hop through the server tick.
@@ -31,12 +32,12 @@ public abstract class IAsyncRequest extends IRequest {
         if (gridstr == null || gridstr.isEmpty()) {
             gridKey = -1;
         } else {
-            try {
-                gridKey = Long.parseLong(gridstr);
-            } catch (NumberFormatException e) {
+            Long parsed = HTTPUtils.parseLong(gridstr);
+            if (parsed == null) {
                 deny("BAD_PARAM");
                 return;
             }
+            gridKey = parsed;
         }
         if (gridKey != -1) {
             GridAccess access = GridAccessSessions.get(context.getUserID());
