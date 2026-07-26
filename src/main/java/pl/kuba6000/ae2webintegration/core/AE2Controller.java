@@ -56,7 +56,6 @@ public class AE2Controller {
     public static IAE AE2Interface;
     public static IServerPlatform serverPlatform;
 
-    public static long timer;
     private static HttpServer server;
 
     public static UUID AEControllerUUID;
@@ -118,7 +117,9 @@ public class AE2Controller {
 
     public static ConcurrentHashMap<UUID, Pair<String, String>> awaitingRegistration = new ConcurrentHashMap<>();
 
-    public static ConcurrentLinkedQueue<ISyncedRequest> requests = new ConcurrentLinkedQueue<>();
+    // Package-private: the tick pump in CoreEngine is the only consumer, and after X-01 nothing outside
+    // core touches the queue at all.
+    static final ConcurrentLinkedQueue<ISyncedRequest> requests = new ConcurrentLinkedQueue<>();
 
     // Rebuilt in startHTTPServer() so /reload picks up config changes, and so two concurrent first
     // requests cannot race to create two limiters with split counters.

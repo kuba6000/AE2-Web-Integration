@@ -49,6 +49,21 @@ public abstract class IRequest {
         this.isDone.set(true);
     }
 
+    /**
+     * Answers a request whose handler died in the tick pump, so its HTTP worker returns at once instead of
+     * spinning out the ten second poll in {@code sendRequest} and then reporting TIMEOUT.
+     * <p>
+     * Does nothing when the handler already produced a result: one that threw after {@link #done()} still
+     * answered, the HTTP thread may already be reading that answer, and overwriting it would be both a
+     * race and a lie about what happened.
+     */
+    public void failIfPending(String status) {
+        if (isDone.get()) {
+            return;
+        }
+        deny(status);
+    }
+
     public void noParam(String... params) {
         deny("NO_PARAM");
         setData(params);
