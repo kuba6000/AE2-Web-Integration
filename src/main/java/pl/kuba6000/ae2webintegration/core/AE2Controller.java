@@ -253,6 +253,19 @@ public class AE2Controller {
 
     private static final ConcurrentHashMap<String, Pair<Long, Integer>> validTokens = new ConcurrentHashMap<>();
 
+    /**
+     * The session cookie authenticates state-changing GET endpoints - /order, /cancelcpu,
+     * /job?...&cancel|submit, /gridsettings?track=1 - so SameSite is what stops another site firing one
+     * through the user's browser. Strict rather than Lax: Lax still sends the cookie on a top-level GET
+     * navigation, which is exactly the shape of those endpoints, so a link would still work.
+     * <p>
+     * Deliberately no Secure attribute: the server speaks plain HTTP, and the cookie would then never be
+     * sent at all.
+     */
+    private static String sessionCookie(String token, long maxAgeSeconds) {
+        return "authenticationToken=" + token + "; Max-Age=" + maxAgeSeconds + "; HttpOnly; SameSite=Strict";
+    }
+
     private static String generateToken() {
         return generateToken(200);
     }
@@ -312,7 +325,7 @@ public class AE2Controller {
                                 validTokens.remove(token); // Invalidate token on logout
                                 GridAccessSessions.invalidate(tokenData.getRight());
                                 t.getResponseHeaders()
-                                    .add("Set-Cookie", "authenticationToken=" + token + "; Max-Age=-1; HttpOnly");
+                                    .add("Set-Cookie", sessionCookie(token, -1));
                                 t.getResponseHeaders()
                                     .add("Location", ".");
                                 t.sendResponseHeaders(302, -1);
@@ -323,12 +336,12 @@ public class AE2Controller {
                         } else {
                             validTokens.remove(token); // Remove expired token
                             t.getResponseHeaders()
-                                .add("Set-Cookie", "authenticationToken=" + token + "; Max-Age=-1; HttpOnly");
+                                .add("Set-Cookie", sessionCookie(token, -1));
                             return false; // Token expired
                         }
                     } else {
                         t.getResponseHeaders()
-                            .add("Set-Cookie", "authenticationToken=" + token + "; Max-Age=-1; HttpOnly");
+                            .add("Set-Cookie", sessionCookie(token, -1));
                         return false; // Invalid token
                     }
                 }
@@ -404,7 +417,7 @@ public class AE2Controller {
                 validTokens.put(token, Pair.of(System.currentTimeMillis() + validFor * 1000L, playerID)); // 1 hour
                                                                                                           // validity
                 t.getResponseHeaders()
-                    .add("Set-Cookie", "authenticationToken=" + token + "; Max-Age=" + validFor + "; HttpOnly");
+                    .add("Set-Cookie", sessionCookie(token, validFor));
                 t.getResponseHeaders()
                     .add("Location", ".");
                 t.sendResponseHeaders(302, -1);

@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import java.util.Random;
+import java.security.SecureRandom;
 
 import pl.kuba6000.ae2webintegration.core.api.IConfigBuilder;
 import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
@@ -94,9 +94,12 @@ public class ConfigBootstrap {
      * default. When no password is set in the config file this default is
      * persisted, preventing the "empty password → any password accepted"
      * vulnerability.
+     * <p>
+     * Uses {@link SecureRandom} for the same reason session tokens do: this value ends up in the config
+     * file as the admin password, and java.util.Random derives its 48-bit seed from the clock.
      */
     private static String generateDefaultPassword() {
-        return new Random().ints(48, 122 + 1)
+        return new SecureRandom().ints(48, 122 + 1)
             .filter(i -> (i <= 57 || i >= 65) && (i <= 90 || i >= 97))
             .limit(16)
             .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
