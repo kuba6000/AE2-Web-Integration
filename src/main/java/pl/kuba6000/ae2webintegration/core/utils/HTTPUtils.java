@@ -25,6 +25,9 @@ public class HTTPUtils {
                         URLDecoder.decode(qs.substring(eqPos + 1, next), "utf-8"));
                 } catch (UnsupportedEncodingException e) {
                     throw new RuntimeException(e); // will never happen, utf-8 support is mandatory for java
+                } catch (IllegalArgumentException e) {
+                    // A malformed percent escape such as %ZZ. This is an unauthenticated boundary, so one
+                    // broken parameter must not decide the fate of the whole request - skip it and go on.
                 }
             }
             last = next + 1;

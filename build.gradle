@@ -63,6 +63,12 @@ java {
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
+// Without this javac reads sources in the platform default encoding, so a non-ASCII literal compiles
+// differently depending on the machine that built it.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
 // This submodule is pure Java (no Minecraft/Forge references).
 // Mark outgoing artifacts as already deobfuscated so RFG does not
 // attempt to run DependencyDeobfuscationTransform on this jar.

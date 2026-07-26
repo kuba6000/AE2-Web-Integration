@@ -14,7 +14,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
-import java.util.Scanner;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -158,6 +157,34 @@ public class AE2Controller {
         }
         Pair<Long, Integer> tokenData = validTokens.get(token);
         return tokenData != null && System.currentTimeMillis() < tokenData.getLeft();
+    }
+
+    private static final int MAX_BODY_BYTES = 8 * 1024;
+
+    /**
+     * Reads a request body the way an unauthenticated boundary has to: bounded, explicitly UTF-8, and
+     * without throwing on anything a client might send. An empty body is a legitimate input and yields an
+     * empty string rather than an exception.
+     *
+     * @return the decoded body, or {@code null} when it is larger than {@link #MAX_BODY_BYTES}.
+     */
+    private static String readBody(HttpExchange t) throws IOException {
+        try (InputStream in = t.getRequestBody()) {
+            // One byte past the limit is enough to detect oversize without buffering the rest.
+            byte[] buffer = new byte[MAX_BODY_BYTES + 1];
+            int read = 0;
+            while (read < buffer.length) {
+                int count = in.read(buffer, read, buffer.length - read);
+                if (count < 0) {
+                    break;
+                }
+                read += count;
+            }
+            if (read > MAX_BODY_BYTES) {
+                return null;
+            }
+            return new String(buffer, 0, read, StandardCharsets.UTF_8);
+        }
     }
 
     private static String extractToken(HttpExchange t) {
@@ -309,7 +336,9 @@ public class AE2Controller {
         }
         if (t.getRequestMethod()
             .equals("POST")) {
-            String postRaw = new Scanner(t.getRequestBody()).nextLine();
+            String postRaw = readBody(t);
+            // Oversize is treated as no usable body: the branches below simply will not match and the
+            // existing flow answers 401. checkAuth must not send its own response here - see C-25.
             Map<String, String> postData = HTTPUtils.parseQueryString(postRaw);
 
             if (postData.containsKey("register") && postData.containsKey("password")) {
@@ -524,7 +553,15 @@ public class AE2Controller {
             }
             if (t.getRequestMethod()
                 .equals("POST")) {
-                String postRaw = new Scanner(t.getRequestBody()).nextLine();
+                String postRaw = readBody(t);
+                if (postRaw == null) {
+                    byte[] raw_response = "requesttoolarge".getBytes(StandardCharsets.UTF_8);
+                    t.sendResponseHeaders(400, raw_response.length);
+                    OutputStream os = t.getResponseBody();
+                    os.write(raw_response);
+                    os.close();
+                    return;
+                }
                 Map<String, String> postData = HTTPUtils.parseQueryString(postRaw);
 
                 if (postData.containsKey("register") && postData.containsKey("password")) {
