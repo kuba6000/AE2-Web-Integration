@@ -1,15 +1,15 @@
 <?php
 
-    // Every state-changing endpoint here is a cookie-authenticated GET forwarded to the mod, so without
-    // SameSite any page the user visits could fire one through their browser. Strict rather than Lax:
-    // Lax still sends the cookie on a top-level GET navigation, which is exactly what these are.
-    // PHP's positional setcookie() has no SameSite parameter - the options array (PHP 7.3+) does.
+    // Lax matches what browsers already apply to a cookie with no SameSite, so this mainly covers older
+    // ones. It stops an image tag or a cross-site fetch carrying the session, but not a top-level
+    // navigation - and the endpoints behind this proxy are state-changing GETs, so the real fix is to
+    // move them to POST. PHP's positional setcookie() has no SameSite parameter; the options array does.
     function cookieOptions($expires, $httpOnly) {
         return [
             'expires' => $expires,
             'path' => '/',
             'httponly' => $httpOnly,
-            'samesite' => 'Strict',
+            'samesite' => 'Lax',
         ];
     }
 

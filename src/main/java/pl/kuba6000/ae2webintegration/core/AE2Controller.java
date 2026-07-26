@@ -254,16 +254,17 @@ public class AE2Controller {
     private static final ConcurrentHashMap<String, Pair<Long, Integer>> validTokens = new ConcurrentHashMap<>();
 
     /**
-     * The session cookie authenticates state-changing GET endpoints - /order, /cancelcpu,
-     * /job?...&cancel|submit, /gridsettings?track=1 - so SameSite is what stops another site firing one
-     * through the user's browser. Strict rather than Lax: Lax still sends the cookie on a top-level GET
-     * navigation, which is exactly the shape of those endpoints, so a link would still work.
+     * Lax, which is also what browsers apply to a cookie with no SameSite at all since Chrome 80 - so
+     * stating it changes little today beyond covering older browsers. Strict would additionally block a
+     * top-level navigation from another site, but it costs a login screen whenever someone follows a link
+     * here, and the endpoints it would protect should stop being GETs instead. See the plan for moving
+     * state-changing operations to POST, which is what actually closes this.
      * <p>
      * Deliberately no Secure attribute: the server speaks plain HTTP, and the cookie would then never be
      * sent at all.
      */
     private static String sessionCookie(String token, long maxAgeSeconds) {
-        return "authenticationToken=" + token + "; Max-Age=" + maxAgeSeconds + "; HttpOnly; SameSite=Strict";
+        return "authenticationToken=" + token + "; Max-Age=" + maxAgeSeconds + "; HttpOnly; SameSite=Lax";
     }
 
     private static String generateToken() {
