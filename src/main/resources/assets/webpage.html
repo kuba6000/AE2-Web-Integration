@@ -1159,30 +1159,31 @@
         updateGridList();
     }
     function isValidCPUForOrder(cluster) {
-        if (!cluster['finalOutput']) return true;
+        // An idle CPU still has to hold the whole plan. Only the merge case used to be measured, so a
+        // too-small idle CPU passed here and AE2 refused the job afterwards without saying anything.
+        // isBusy is the flag the server actually reports; finalOutput is only filled in when busy.
+        if (!cluster['isBusy']) return cluster['availableStorage'] >= currentJob.bytesTotal;
+        if (!cluster['finalOutput']) return false;
         if (currentJob.itemHash != cluster['finalOutput']['hashcode']) return false;
         if (cluster['usedStorage'] == -1) return false;
         return cluster['availableStorage'] >= cluster['usedStorage'] + currentJob.bytesTotal;
     }
     function updateCPUListForJob() {
         let html = "";
+        // A choice carried over from an earlier plan may be too small for this one, so drop it before
+        // picking a default - the loop below only replaced selections naming an unknown CPU.
+        if (cpuForJob && (!globalCPUList[cpuForJob] || !isValidCPUForOrder(globalCPUList[cpuForJob])))
+            cpuForJob = "";
         for (let key in globalCPUList){
             let cluster = globalCPUList[key];
+            let valid = isValidCPUForOrder(cluster);
+            if (valid && !cpuForJob)
+                cpuForJob = key;
             html += "<button onclick='selectCPUForJob(this);' name='" + key + "' class='";
-            if (cluster['finalOutput'])
-            {
-                if (cluster['usedStorage'] != -1 && currentJob.itemHash == cluster['finalOutput']['hashcode'] && cluster['availableStorage'] >= cluster['usedStorage'] + currentJob.bytesTotal){
-                    html += "mergable";
-                    if (!globalCPUList[cpuForJob])
-                        cpuForJob = key;
-                }
-                else
-                    html += "invalid";
-            }
-            else {
-                if (!globalCPUList[cpuForJob])
-                    cpuForJob = key;
-            }
+            if (!valid)
+                html += "invalid";
+            else if (cluster['isBusy'])
+                html += "mergable";
             if (cpuForJob == key)
                 html += " selected";
             html += "'>" + key;
@@ -1674,6 +1675,12 @@
         if (selectedGrid == -1)
             return;
         if (currentWindow != 2){
+            return;
+        }
+        // The selection is only as fresh as the last CPU list, and nothing validated it here before.
+        let cpu = globalCPUList[cpuForJob];
+        if (!cpu || !isValidCPUForOrder(cpu)){
+            showAlert("Select a crafting CPU large enough for this plan.");
             return;
         }
         let message = "Submitting job...";
