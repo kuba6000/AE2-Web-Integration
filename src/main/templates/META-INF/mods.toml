@@ -6,7 +6,7 @@ license = "${mod_license}"
 [[mods]]
 modId = "ae2webintegration"
 version = "${version}"
-displayName = "AE2WebIntegration"
+displayName = "AE2 Web Integration"
 authors = "kuba6000"
 description = "${mod_description}"
 logoFile = ""
