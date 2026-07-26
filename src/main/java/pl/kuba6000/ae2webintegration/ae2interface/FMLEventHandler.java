@@ -5,9 +5,8 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.PlayerEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.UpdateNotifier;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
 public class FMLEventHandler {
@@ -17,13 +16,7 @@ public class FMLEventHandler {
     @SubscribeEvent
     public void tick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.START) return;
-        ++AE2Controller.timer;
-        if (AE2Controller.timer % 5 == 0) {
-            while (AE2Controller.requests.peek() != null) {
-                ISyncedRequest request = AE2Controller.requests.poll();
-                request.handle(AE2Controller.AE2Interface);
-            }
-        }
+        CoreEngine.onServerTick();
     }
 
     @SubscribeEvent
