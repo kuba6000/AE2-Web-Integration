@@ -1,4 +1,5 @@
 {
+  "required": true,
   "package": "pl.kuba6000.ae2webintegration.ae2interface.mixins",
   "plugin": "pl.kuba6000.ae2webintegration.ae2interface.mixins.MixinPlugin",
   "refmap": "mixins.ae2webintegration.refmap.json",
