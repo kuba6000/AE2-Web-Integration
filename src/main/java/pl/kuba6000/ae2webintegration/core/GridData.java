@@ -2,7 +2,6 @@ package pl.kuba6000.ae2webintegration.core;
 
 import java.io.File;
 import java.io.Reader;
-import java.io.Writer;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,8 +23,10 @@ public class GridData {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
-    @GSONUtils.SkipGSON
-    private static final File dataFile = Config.getConfigFile("griddata.json");
+    /** Resolved per call - see the same note on CoreData. */
+    private static File dataFile() {
+        return Config.getConfigFile("griddata.json");
+    }
 
     @GSONUtils.SkipGSON
     private static ConcurrentHashMap<Long, GridData> gridDataMap = new ConcurrentHashMap<>();
@@ -81,43 +82,32 @@ public class GridData {
     }
 
     public static void saveChanges() {
-        Gson gson = GSONUtils.GSON_BUILDER.create();
-        Writer writer = null;
         try {
-            writer = Files.newWriter(dataFile, StandardCharsets.UTF_8);
-            gson.toJson(gridDataMap, writer);
-            writer.flush();
-            writer.close();
+            GSONUtils.writeAtomically(dataFile(), gridDataMap);
         } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (writer != null) try {
-                writer.close();
-            } catch (Exception ignored) {}
+            LOG.error("Failed to save grid data", e);
         }
     }
 
     public static void loadData() {
         Gson gson = GSONUtils.GSON_BUILDER.create();
-        if (!dataFile.exists()) {
+        File file = dataFile();
+        if (!file.exists()) {
             LOG.info("Grid data file not found, creating a new one.");
             saveChanges();
             return;
         }
-        Reader reader = null;
-        try {
-            reader = Files.newReader(dataFile, StandardCharsets.UTF_8);
+        try (Reader reader = Files.newReader(file, StandardCharsets.UTF_8)) {
             Type type = new TypeToken<ConcurrentHashMap<Long, GridData>>() {}.getType();
-            gridDataMap = gson.fromJson(reader, type);
+            ConcurrentHashMap<Long, GridData> loaded = gson.fromJson(reader, type);
+            if (loaded == null) {
+                LOG.error("Grid data file is empty or malformed, keeping the settings already in memory");
+                return;
+            }
+            gridDataMap = loaded;
         } catch (Exception e) {
-            LOG.error("Failed to load web data from file: " + dataFile.getAbsolutePath(), e);
-            gridDataMap.clear();
-            saveChanges();
-        } finally {
-            if (reader != null) try {
-                reader.close();
-            } catch (Exception ignored) {}
+            // As in CoreData: a failed read must not overwrite the file it failed on.
+            LOG.error("Failed to load grid data from file: " + file.getAbsolutePath(), e);
         }
-
     }
 }

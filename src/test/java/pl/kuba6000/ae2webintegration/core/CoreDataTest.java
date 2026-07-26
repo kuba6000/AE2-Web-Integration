@@ -67,6 +67,88 @@ class CoreDataTest {
         assertTrue(getMap("IdToUUID").isEmpty());
     }
 
+    // --- persistence: a bad file must never cost anyone their account ---
+
+    @Test
+    void verifyPasswordReturnsFalseForAKnownPlayerWithNoStoredPassword() throws Exception {
+        CoreData.setPassword(REGISTERED_PLAYER, "hash");
+        // Clearing a password removes only that entry; the id mappings stay.
+        CoreData.setPassword(REGISTERED_PLAYER, "");
+
+        assertFalse(CoreData.verifyPassword(42, "anything"));
+    }
+
+    @Test
+    void savedAccountsSurviveAReload() {
+        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
+
+        CoreData.instance = new CoreData();
+        CoreData.loadData();
+
+        assertEquals(42, CoreData.getPlayerId("Player"));
+    }
+
+    @Test
+    void anEmptyDataFileLeavesTheAccountsInMemoryAlone() throws Exception {
+        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
+        writeDataFile("");
+
+        CoreData.loadData();
+
+        assertEquals(42, CoreData.getPlayerId("Player"), "a broken file must not wipe live accounts");
+    }
+
+    @Test
+    void aMalformedDataFileIsNotOverwritten() throws Exception {
+        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
+        String garbage = "{ this is not json";
+        writeDataFile(garbage);
+
+        CoreData.loadData();
+
+        assertEquals(garbage, readDataFile(), "a failed read must not persist over the file it failed on");
+    }
+
+    @Test
+    void saveLeavesNoTemporaryFileBehind() {
+        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
+
+        assertFalse(new File(configRoot, "ae2webintegration/webdata.json.tmp").exists());
+    }
+
+    @Test
+    void aFileWrittenBeforeVersioningStillLoads() throws Exception {
+        // Same shape as the old format: no schemaVersion field at all.
+        writeDataFile(
+            "{\"UUIDToId\":{\"" + REGISTERED_UUID
+                + "\":42},\"IdToUUID\":{\"42\":\""
+                + REGISTERED_UUID
+                + "\"},\"passwords\":{\""
+                + REGISTERED_UUID
+                + "\":\"legacyhash\"}}");
+
+        CoreData.loadData();
+
+        assertEquals(42, CoreData.getPlayerId("Player"));
+    }
+
+    private File dataFile() {
+        return new File(configRoot, "ae2webintegration/webdata.json");
+    }
+
+    private void writeDataFile(String content) throws Exception {
+        File file = dataFile();
+        file.getParentFile()
+            .mkdirs();
+        java.nio.file.Files.write(file.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private String readDataFile() throws Exception {
+        return new String(
+            java.nio.file.Files.readAllBytes(dataFile().toPath()),
+            java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     private Map<?, ?> getMap(String fieldName) throws Exception {
         Field field = CoreData.class.getDeclaredField(fieldName);
         field.setAccessible(true);
