@@ -4,13 +4,13 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
@@ -24,7 +24,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -33,8 +32,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
-import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
-import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTracking;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTrackingHistory;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.GridSettings;
@@ -47,6 +44,8 @@ import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetItems;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Order;
+import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
@@ -238,6 +237,7 @@ public class AE2Controller {
                                     .getQuery());
                             if (GET_PARAMS.containsKey("logout")) {
                                 validTokens.remove(token); // Invalidate token on logout
+                                GridAccessSessions.invalidate(tokenData.getRight());
                                 t.getResponseHeaders()
                                     .add("Set-Cookie", "authenticationToken=" + token + "; Max-Age=-1; HttpOnly");
                                 t.getResponseHeaders()
@@ -297,11 +297,12 @@ public class AE2Controller {
             if (postData.containsKey("password") && postData.containsKey("username")) {
                 String username = postData.get("username");
                 int playerID;
-                    if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
+                if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
                     username = "Admin";
                     playerID = -1;
                     String password = postData.get("password");
-                    if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD().isEmpty()) {
+                    if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD()
+                        .isEmpty()) {
                         t.getResponseHeaders()
                             .add("Location", "?invalidpassword");
                         t.sendResponseHeaders(302, -1);
@@ -520,11 +521,12 @@ public class AE2Controller {
                 if (postData.containsKey("password") && postData.containsKey("username")) {
                     String username = postData.get("username");
                     int playerID;
-                if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
+                    if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
                         username = "Admin";
                         playerID = -1;
                         String password = postData.get("password");
-                        if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD().isEmpty()) {
+                        if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD()
+                            .isEmpty()) {
                             byte[] raw_response = "invalidpassword".getBytes(StandardCharsets.UTF_8);
                             t.sendResponseHeaders(400, raw_response.length);
                             OutputStream os = t.getResponseBody();
@@ -585,7 +587,10 @@ public class AE2Controller {
                 if (auth != null && !auth.isEmpty()) {
                     String token = auth.get(0);
                     token = token.replace("Bearer ", "");
-                    validTokens.remove(token);
+                    Pair<Long, Integer> revoked = validTokens.remove(token);
+                    if (revoked != null) {
+                        GridAccessSessions.invalidate(revoked.getRight());
+                    }
                     t.sendResponseHeaders(200, -1);
                     return;
                 }

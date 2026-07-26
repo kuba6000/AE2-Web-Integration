@@ -29,6 +29,8 @@ public class CoreEngine {
 
     public static void onServerStopping() {
         AE2Controller.stopHTTPServer();
+        // Authorization must not survive into the next world loaded in this JVM.
+        GridAccessSessions.clear();
     }
 
     public static String getModVersion() {

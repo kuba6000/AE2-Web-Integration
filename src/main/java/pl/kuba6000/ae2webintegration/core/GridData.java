@@ -15,10 +15,8 @@ import com.google.common.io.Files;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
@@ -57,14 +55,14 @@ public class GridData {
         return gridDataMap.computeIfAbsent(gridKey, k -> new GridData());
     }
 
+    /** Whether an entry already exists, without creating one. */
+    public static boolean isKnown(long gridKey) {
+        return gridDataMap.containsKey(gridKey);
+    }
+
     public static GridData get(IAEGrid grid) {
-        IAEPathingGrid pathing = grid.web$getPathingGrid();
-        if (pathing == null || pathing.web$isNetworkBooting()
-            || pathing.web$getControllerState() != AEControllerState.CONTROLLER_ONLINE) {
-            return null;
-        }
-        IAESecurityGrid security = grid.web$getSecurityGrid();
-        if (security == null || !security.web$isAvailable()) {
+        IAESecurityGrid security = GridFilter.usableSecurity(grid);
+        if (security == null) {
             return null;
         }
         long gridKey = security.web$getSecurityKey();
