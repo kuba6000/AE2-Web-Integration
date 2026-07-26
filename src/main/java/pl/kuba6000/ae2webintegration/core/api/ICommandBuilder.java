@@ -11,13 +11,14 @@ import java.util.function.Consumer;
  * (Brigadier for NeoForge, flat CommandBase for Forge 1.7.10).
  * <p>
  * Usage:
+ * 
  * <pre>{@code
  * builder.literal("root", 0)
  *     .literal("sub", 2)
- *         .executes(ctx -> handle(ctx))
+ *     .executes(ctx -> handle(ctx))
  *     .literal("other", 0)
- *         .argument("arg")
- *             .executes(ctx -> handleArg(ctx));
+ *     .argument("arg")
+ *     .executes(ctx -> handleArg(ctx));
  * builder.register();
  * }</pre>
  */

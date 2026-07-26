@@ -34,8 +34,14 @@ public class GSONUtils {
 
     private static final JsonSerializer<IAEGenericStack> IAEGenericStackSerializer = (src, typeOfSrc, context) -> {
         JsonObject json = new JsonObject();
-        json.addProperty("itemid", src.web$what().web$getItemID());
-        json.addProperty("itemname", src.web$what().web$getDisplayName());
+        json.addProperty(
+            "itemid",
+            src.web$what()
+                .web$getItemID());
+        json.addProperty(
+            "itemname",
+            src.web$what()
+                .web$getDisplayName());
         json.addProperty("hashcode", src.hashCode());
         json.addProperty("quantity", src.web$amount());
         return json;

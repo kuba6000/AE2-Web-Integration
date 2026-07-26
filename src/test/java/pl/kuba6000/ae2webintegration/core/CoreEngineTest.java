@@ -24,15 +24,18 @@ class CoreEngineTest {
         CoreEngine.init(new TestPlatform(configRoot), "test-version", "-forge-1.20.1");
 
         assertEquals(new File(configRoot, "ae2webintegration"), Config.getConfigDirectory());
-        assertEquals(new File(new File(configRoot, "ae2webintegration"), "webdata.json"), Config.getConfigFile("webdata.json"));
+        assertEquals(
+            new File(new File(configRoot, "ae2webintegration"), "webdata.json"),
+            Config.getConfigFile("webdata.json"));
         assertEquals("test-version", CoreEngine.getModVersion());
     }
 
     @Test
     void exposesSingleCompleteInitializationPath() throws Exception {
         long initMethods = Arrays.stream(CoreEngine.class.getDeclaredMethods())
-            .filter(method -> method.getName()
-                .equals("init"))
+            .filter(
+                method -> method.getName()
+                    .equals("init"))
             .count();
         Method loadData = CoreEngine.class.getDeclaredMethod("loadData");
 

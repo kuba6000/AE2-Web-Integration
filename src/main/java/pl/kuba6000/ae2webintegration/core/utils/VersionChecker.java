@@ -37,7 +37,8 @@ public class VersionChecker {
      * Matches patterns like -forge-1.7.10 or -neoforge-1.21.1 within the version string.
      */
     private static String extractVersionIdentifier(String version) {
-        Matcher matcher = Pattern.compile("-(?:forge|neoforge)-\\d+\\.\\d+\\.\\d+").matcher(version);
+        Matcher matcher = Pattern.compile("-(?:forge|neoforge)-\\d+\\.\\d+\\.\\d+")
+            .matcher(version);
         return matcher.find() ? matcher.group() : "";
     }
 

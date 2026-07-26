@@ -125,6 +125,7 @@ class CoreDataTest {
         @Override
         public IAEPlayerData web$getPlayerData() {
             return new IAEPlayerData() {
+
                 @Override
                 public pl.kuba6000.ae2webintegration.core.api.PlayerIdentity web$getPlayerProfile(int playerId) {
                     return null;

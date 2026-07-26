@@ -60,10 +60,8 @@ public class ConfigBootstrap {
             "Max requests per minute before logging in (anti brute force)");
         checkForUpdatesValue = builder.defineBoolean("check_for_updates", true, "Check for updates");
 
-        discordWebhookValue = builder.defineString(
-            "discord_webhook",
-            "",
-            "Webhook url for discord integration, keep empty to disable");
+        discordWebhookValue = builder
+            .defineString("discord_webhook", "", "Webhook url for discord integration, keep empty to disable");
         discordRoleIdValue = builder.defineString(
             "discord_role_id",
             "",

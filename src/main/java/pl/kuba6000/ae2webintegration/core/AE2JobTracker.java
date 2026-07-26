@@ -89,8 +89,8 @@ public class AE2JobTracker {
         }
     }
 
-    public static Map<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = Collections.synchronizedMap(
-        new IdentityHashMap<>());
+    public static Map<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = Collections
+        .synchronizedMap(new IdentityHashMap<>());
     public ConcurrentHashMap<Integer, JobTrackingInfo> trackingInfos = new ConcurrentHashMap<>();
 
     private int nextFreeTrackingInfoID = 1;
@@ -222,7 +222,8 @@ public class AE2JobTracker {
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         double took = info.timeDone - info.timeStarted;
         took /= 1000d;
-        if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK().isEmpty()) {
+        if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
+            .isEmpty()) {
             IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
             if (securityGrid != null && securityGrid.web$isAvailable()) {
                 IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
@@ -233,7 +234,8 @@ public class AE2JobTracker {
                             + " ][ "
                             + cpu.web$getName()
                             + " ]",
-                        "Crafting for `" + info.finalOutput.web$what().web$getDisplayName()
+                        "Crafting for `" + info.finalOutput.web$what()
+                            .web$getDisplayName()
                             + " x"
                             + info.finalOutput.web$amount()
                             + "` "

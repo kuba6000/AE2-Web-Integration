@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -8,8 +10,6 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.IConfigBuilder;
 import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 /** Tests for {@link ConfigBootstrap} config key definition. */
 class ConfigBootstrapTest {
@@ -92,10 +92,18 @@ class ConfigBootstrapTest {
         ConfigBootstrap.init(builder);
 
         // After init, values should be returned by the IConfigValue stubs
-        assertEquals(2324, ConfigBootstrap.aePortValue.get().intValue(), "AE_PORT");
+        assertEquals(
+            2324,
+            ConfigBootstrap.aePortValue.get()
+                .intValue(),
+            "AE_PORT");
         assertEquals(true, ConfigBootstrap.allowNoPasswordOnLocalhostValue.get(), "ALLOW_NO_PASSWORD");
         assertEquals(true, ConfigBootstrap.aePublicModeValue.get(), "AE_PUBLIC_MODE");
-        assertEquals(20, ConfigBootstrap.aeMaxRequestsBeforeLoggedInPerMinuteValue.get().intValue(), "MAX_REQUESTS");
+        assertEquals(
+            20,
+            ConfigBootstrap.aeMaxRequestsBeforeLoggedInPerMinuteValue.get()
+                .intValue(),
+            "MAX_REQUESTS");
         assertEquals(true, ConfigBootstrap.checkForUpdatesValue.get(), "CHECK_FOR_UPDATES");
         assertEquals("", ConfigBootstrap.discordWebhookValue.get(), "DISCORD_WEBHOOK");
         assertEquals("", ConfigBootstrap.discordRoleIdValue.get(), "DISCORD_ROLE_ID");
@@ -161,6 +169,7 @@ class ConfigBootstrapTest {
 
     /** Records a single config definition call. */
     private static class DefCall {
+
         final String type;
         final String key;
         final Object defValue;

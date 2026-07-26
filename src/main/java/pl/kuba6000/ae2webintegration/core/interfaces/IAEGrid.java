@@ -1,6 +1,5 @@
 package pl.kuba6000.ae2webintegration.core.interfaces;
 
-
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;

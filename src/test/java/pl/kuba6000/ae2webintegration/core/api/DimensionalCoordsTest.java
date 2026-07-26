@@ -1,9 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
-import com.google.gson.Gson;
+import static org.junit.jupiter.api.Assertions.*;
+
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import com.google.gson.Gson;
 
 class DimensionalCoordsTest {
 

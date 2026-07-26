@@ -15,7 +15,8 @@ public class UpdateNotifier {
         }
     }
 
-    public static void onPlayerLoggedIn(IPlayerMessenger messenger, PlayerIdentity player, boolean canReceiveAdminNotices) {
+    public static void onPlayerLoggedIn(IPlayerMessenger messenger, PlayerIdentity player,
+        boolean canReceiveAdminNotices) {
         if (!canReceiveAdminNotices) return;
         notifyPlayerIfOutdated(messenger, player);
     }

@@ -2,7 +2,6 @@ package pl.kuba6000.ae2webintegration.core.api;
 
 import java.util.Objects;
 
-
 public class DimensionalCoords {
 
     String dimid;
@@ -30,9 +29,6 @@ public class DimensionalCoords {
     public boolean equals(Object obj) {
         if (!(obj instanceof DimensionalCoords)) return false;
         DimensionalCoords coords = (DimensionalCoords) obj;
-        return Objects.equals(coords.dimid, dimid)
-            && coords.x == x
-            && coords.y == y
-            && coords.z == z;
+        return Objects.equals(coords.dimid, dimid) && coords.x == x && coords.y == y && coords.z == z;
     }
 }

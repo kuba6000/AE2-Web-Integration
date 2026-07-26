@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -17,8 +19,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 /** Tests for {@link CommandBootstrap} command tree definition. */
 class CommandBootstrapTest {
 
@@ -35,11 +35,11 @@ class CommandBootstrapTest {
 
         // Expected fluent call sequence:
         // literal("ae2webintegration", 0)
-        //   .literal("reload", 4)
-        //     .executes(handler)
-        //   .literal("auth", 0)
-        //     .argument("token")
-        //       .executes(handler)
+        // .literal("reload", 4)
+        // .executes(handler)
+        // .literal("auth", 0)
+        // .argument("token")
+        // .executes(handler)
         // builder.register()
 
         assertEquals(7, builder.calls.size(), "Expected 7 fluent calls + register");
@@ -103,7 +103,9 @@ class CommandBootstrapTest {
 
         // Should send error when no permission
         assertNotNull(ctx.lastError, "should have sent error message");
-        assertTrue(ctx.lastError.toLowerCase().contains("permission"),
+        assertTrue(
+            ctx.lastError.toLowerCase()
+                .contains("permission"),
             "error should mention permission: " + ctx.lastError);
         // Verify reload was NOT triggered
         assertFalse(ctx.reloaderRan, "reloader should NOT have been invoked");
@@ -120,8 +122,8 @@ class CommandBootstrapTest {
 
         // Put a registration in the awaiting map so registerPlayer succeeds
         UUID uuid = ctx.playerIdentity.uuid;
-        AE2Controller.awaitingRegistration.put(uuid,
-            org.apache.commons.lang3.tuple.Pair.of("my-test-token", "password-hash"));
+        AE2Controller.awaitingRegistration
+            .put(uuid, org.apache.commons.lang3.tuple.Pair.of("my-test-token", "password-hash"));
 
         try {
             builder.authHandler.accept(ctx);
@@ -163,7 +165,9 @@ class CommandBootstrapTest {
 
         // Should reject non-player usage
         assertNotNull(ctx.lastError, "should have sent error for console sender");
-        assertTrue(ctx.lastError.toLowerCase().contains("player"),
+        assertTrue(
+            ctx.lastError.toLowerCase()
+                .contains("player"),
             "error should mention player-only restriction");
     }
 
@@ -240,6 +244,7 @@ class CommandBootstrapTest {
         @Override
         public IAEPlayerData web$getPlayerData() {
             return new IAEPlayerData() {
+
                 @Override
                 public pl.kuba6000.ae2webintegration.core.api.PlayerIdentity web$getPlayerProfile(int playerId) {
                     return null;

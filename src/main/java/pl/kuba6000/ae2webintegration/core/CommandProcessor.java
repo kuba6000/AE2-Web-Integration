@@ -39,7 +39,8 @@ public class CommandProcessor {
         if (registration == null) {
             return CommandResult.error("You have to initialize the registration on the web interface first!");
         }
-        if (!registration.getLeft().equals(token)) {
+        if (!registration.getLeft()
+            .equals(token)) {
             return CommandResult.error("Invalid token!");
         }
         if (!CoreData.setPassword(player, registration.getRight())) {

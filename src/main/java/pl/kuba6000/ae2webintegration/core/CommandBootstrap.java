@@ -15,8 +15,8 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
  * <p>
  * Supported commands:
  * <ul>
- *   <li>{@code /ae2webintegration reload} — reloads config and restarts the web server</li>
- *   <li>{@code /ae2webintegration auth <token>} — completes web registration</li>
+ * <li>{@code /ae2webintegration reload} — reloads config and restarts the web server</li>
+ * <li>{@code /ae2webintegration auth <token>} — completes web registration</li>
  * </ul>
  */
 public class CommandBootstrap {
@@ -27,13 +27,12 @@ public class CommandBootstrap {
      * Builds and registers all commands through the given builder.
      */
     public static void init(ICommandBuilder builder) {
-        builder
-            .literal("ae2webintegration", 0)
-                .literal("reload", 4)
-                    .executes(CommandBootstrap::handleReload)
-                .literal("auth", 0)
-                    .argument("token")
-                        .executes(CommandBootstrap::handleAuth);
+        builder.literal("ae2webintegration", 0)
+            .literal("reload", 4)
+            .executes(CommandBootstrap::handleReload)
+            .literal("auth", 0)
+            .argument("token")
+            .executes(CommandBootstrap::handleAuth);
         builder.register();
     }
 

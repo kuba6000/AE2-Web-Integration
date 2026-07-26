@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.util.UUID;
 
 import org.apache.commons.lang3.tuple.Pair;
@@ -15,8 +17,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 /** Tests for {@link CommandProcessor} static methods. */
 class CommandProcessorTest {
@@ -55,17 +55,21 @@ class CommandProcessorTest {
         CommandResult result = CommandProcessor.reload(() -> {});
         assertTrue(result.isSuccess(), "reload should succeed");
         assertNotNull(result.getMessage());
-        assertTrue(result.getMessage().toLowerCase().contains("success"),
+        assertTrue(
+            result.getMessage()
+                .toLowerCase()
+                .contains("success"),
             "message should indicate success: " + result.getMessage());
     }
 
     @Test
     void testReloadFailure() {
-        CommandResult result = CommandProcessor.reload(() -> {
-            throw new RuntimeException("simulated failure");
-        });
+        CommandResult result = CommandProcessor.reload(() -> { throw new RuntimeException("simulated failure"); });
         assertFalse(result.isSuccess(), "reload should fail when configReloader throws");
-        assertTrue(result.getMessage().toLowerCase().contains("fail"),
+        assertTrue(
+            result.getMessage()
+                .toLowerCase()
+                .contains("fail"),
             "message should indicate failure: " + result.getMessage());
     }
 
@@ -80,7 +84,8 @@ class CommandProcessorTest {
         CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, token);
 
         assertTrue(result.isSuccess(), "registration should succeed with valid token");
-        assertFalse(AE2Controller.awaitingRegistration.containsKey(TEST_UUID),
+        assertFalse(
+            AE2Controller.awaitingRegistration.containsKey(TEST_UUID),
             "registration should be removed after successful auth");
     }
 
@@ -94,7 +99,8 @@ class CommandProcessorTest {
         assertFalse(result.isSuccess(), "registration should fail with wrong token");
         assertEquals("Invalid token!", result.getMessage());
         // Registration should NOT be removed on failure
-        assertTrue(AE2Controller.awaitingRegistration.containsKey(TEST_UUID),
+        assertTrue(
+            AE2Controller.awaitingRegistration.containsKey(TEST_UUID),
             "registration should persist after failed auth");
     }
 
@@ -107,7 +113,9 @@ class CommandProcessorTest {
         CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, token);
 
         assertFalse(result.isSuccess());
-        assertTrue(result.getMessage().contains("AE2 player ID"));
+        assertTrue(
+            result.getMessage()
+                .contains("AE2 player ID"));
         assertTrue(AE2Controller.awaitingRegistration.containsKey(TEST_UUID));
     }
 
@@ -115,7 +123,10 @@ class CommandProcessorTest {
     void testRegisterPlayerNoRegistration() {
         CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, "any-token");
         assertFalse(result.isSuccess(), "registration should fail when no registration exists");
-        assertTrue(result.getMessage().toLowerCase().contains("initialize"),
+        assertTrue(
+            result.getMessage()
+                .toLowerCase()
+                .contains("initialize"),
             "error should mention initialization: " + result.getMessage());
     }
 
@@ -130,13 +141,15 @@ class CommandProcessorTest {
         // Auth the first player
         CommandResult result1 = CommandProcessor.registerPlayer(TEST_PLAYER, token1);
         assertTrue(result1.isSuccess(), "player 1 should succeed");
-        assertFalse(AE2Controller.awaitingRegistration.containsKey(TEST_UUID),
+        assertFalse(
+            AE2Controller.awaitingRegistration.containsKey(TEST_UUID),
             "player 1 registration should be removed");
 
         // Auth the second player
         CommandResult result2 = CommandProcessor.registerPlayer(OTHER_PLAYER, token2);
         assertTrue(result2.isSuccess(), "player 2 should succeed");
-        assertFalse(AE2Controller.awaitingRegistration.containsKey(OTHER_UUID),
+        assertFalse(
+            AE2Controller.awaitingRegistration.containsKey(OTHER_UUID),
             "player 2 registration should be removed");
     }
 
@@ -166,6 +179,7 @@ class CommandProcessorTest {
         @Override
         public IAEPlayerData web$getPlayerData() {
             return new IAEPlayerData() {
+
                 @Override
                 public pl.kuba6000.ae2webintegration.core.api.PlayerIdentity web$getPlayerProfile(int playerId) {
                     return null;

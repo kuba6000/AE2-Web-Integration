@@ -52,7 +52,8 @@ public class DiscordManager extends Thread {
     }
 
     private static void postMessage(DiscordEmbed message) {
-        if (Config.DISCORD_WEBHOOK().isEmpty()) return;
+        if (Config.DISCORD_WEBHOOK()
+            .isEmpty()) return;
 
         String roleID = Config.DISCORD_ROLE_ID();
 
