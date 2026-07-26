@@ -19,6 +19,8 @@ public class ConfigBootstrap {
     public static IConfigValue<Integer> aePortValue = () -> 2324;
     public static IConfigValue<String> aePasswordValue = () -> generateDefaultPassword();
     public static IConfigValue<Boolean> allowNoPasswordOnLocalhostValue = () -> true;
+
+    public static IConfigValue<String> trustedProxiesValue = () -> "";
     public static IConfigValue<Boolean> aePublicModeValue = () -> true;
     public static IConfigValue<Integer> aeMaxRequestsBeforeLoggedInPerMinuteValue = () -> 20;
     public static IConfigValue<Boolean> checkForUpdatesValue = () -> true;
@@ -46,7 +48,21 @@ public class ConfigBootstrap {
         allowNoPasswordOnLocalhostValue = builder.defineBoolean(
             "allow_no_password_on_localhost",
             true,
-            "Don't require login using loopback address (127.0.0.1/localhost)");
+            "Don't require login using loopback address (127.0.0.1/localhost)."
+                + " WARNING: behind a reverse proxy every request arrives from the proxy, which usually is"
+                + " localhost, so leaving this enabled would give every visitor admin access."
+                + " Set trusted_proxies as well, or turn this off.");
+        trustedProxiesValue = builder.defineString(
+            "trusted_proxies",
+            "",
+            "Extra reverse proxies whose X-Forwarded-For / X-Real-IP headers should be believed,"
+                + " as comma-separated addresses/CIDRs, e.g. \"192.168.1.10, 10.0.0.0/24\"."
+                + " A proxy running on this same machine is always accepted and needs no entry here."
+                + " Only list proxies you control: believing those headers from anyone would let a client"
+                + " claim any address it likes."
+                + " Think twice before entering a whole private range - that lets any device on your"
+                + " network claim to be localhost, and with allow_no_password_on_localhost enabled"
+                + " that means admin.");
         aePublicModeValue = builder.defineBoolean(
             "public_mode",
             true,

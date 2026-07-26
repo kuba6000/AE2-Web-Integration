@@ -121,19 +121,68 @@ public class AE2Controller {
 
     public static ConcurrentLinkedQueue<ISyncedRequest> requests = new ConcurrentLinkedQueue<>();
 
-    private static RateLimiter rateLimiter;
+    // Rebuilt in startHTTPServer() so /reload picks up config changes, and so two concurrent first
+    // requests cannot race to create two limiters with split counters.
+    private static volatile RateLimiter rateLimiter = new RateLimiter(20, 60 * 1000);
+    private static volatile ClientAddressResolver clientAddressResolver = ClientAddressResolver.fromConfig("");
 
-    private static RateLimiter getRateLimiter() {
-        if (rateLimiter == null) {
-            rateLimiter = new RateLimiter(
-                Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(),
-                60 * 1000,
-                60 * 60 * 1000);
+    /**
+     * The address to treat this request as coming from. Behind a reverse proxy the TCP peer is always the
+     * proxy, so every decision about who the caller is - the localhost trust check and rate limiting
+     * alike - has to go through here, or the two would disagree.
+     */
+    static InetAddress resolveClientAddress(HttpExchange t) {
+        return clientAddressResolver.resolve(
+            t.getRemoteAddress()
+                .getAddress(),
+            t.getLocalAddress()
+                .getAddress(),
+            t.getRequestHeaders()
+                .get("X-Forwarded-For"),
+            t.getRequestHeaders()
+                .get("X-Real-IP"));
+    }
+
+    /**
+     * Cheap, read-only check for "this caller is already known": a valid session token, or loopback when
+     * password-less local access is enabled. Deliberately does not verify passwords - PBKDF2 must stay
+     * behind the rate limiter - and does not mutate token state or send a response.
+     */
+    private static boolean isAlreadyIdentified(HttpExchange t, InetAddress client) {
+        if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && client.isLoopbackAddress()) {
+            return true;
         }
-        return rateLimiter;
+        String token = extractToken(t);
+        if (token == null) {
+            return false;
+        }
+        Pair<Long, Integer> tokenData = validTokens.get(token);
+        return tokenData != null && System.currentTimeMillis() < tokenData.getLeft();
+    }
+
+    private static String extractToken(HttpExchange t) {
+        List<String> auth = t.getRequestHeaders()
+            .get("Authorization");
+        if (auth != null && !auth.isEmpty()) {
+            return auth.get(0)
+                .replace("Bearer ", "");
+        }
+        List<String> cookies = t.getRequestHeaders()
+            .get("Cookie");
+        if (cookies != null && !cookies.isEmpty()) {
+            for (String cookie : cookies.get(0)
+                .split("; ")) {
+                if (cookie.startsWith("authenticationToken=")) {
+                    return cookie.substring("authenticationToken=".length());
+                }
+            }
+        }
+        return null;
     }
 
     public static void startHTTPServer() {
+        rateLimiter = new RateLimiter(Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(), 60 * 1000);
+        clientAddressResolver = ClientAddressResolver.fromConfig(Config.TRUSTED_PROXIES());
         try {
             server = HttpServer.create(new InetSocketAddress(Config.AE_PORT()), 0);
         } catch (IOException e) {
@@ -190,12 +239,10 @@ public class AE2Controller {
     }
 
     private static boolean checkAuth(HttpExchange t) throws IOException {
-        InetAddress remoteAddress = t.getRemoteAddress()
-            .getAddress();
+        InetAddress client = resolveClientAddress(t);
 
-        if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && remoteAddress.isLoopbackAddress()) {
+        if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && client.isLoopbackAddress()) {
             requestContext.set(new RequestContext(t, -2)); // Localhost access
-            getRateLimiter().ensureWhitelisted(remoteAddress);
             return true;
         }
 
@@ -210,7 +257,6 @@ public class AE2Controller {
                 long validity = tokenData.getLeft();
                 if (System.currentTimeMillis() < validity) {
                     requestContext.set(new RequestContext(t, tokenData.getRight()));
-                    getRateLimiter().ensureWhitelisted(remoteAddress);
                     return true; // Token is valid
                 } else {
                     validTokens.remove(token); // Remove expired token
@@ -246,7 +292,6 @@ public class AE2Controller {
                                 return false; // Logout successful
                             }
                             requestContext.set(new RequestContext(t, tokenData.getRight()));
-                            getRateLimiter().ensureWhitelisted(remoteAddress);
                             return true; // Token is valid
                         } else {
                             validTokens.remove(token); // Remove expired token
@@ -334,7 +379,6 @@ public class AE2Controller {
                 t.getResponseHeaders()
                     .add("Location", ".");
                 t.sendResponseHeaders(302, -1);
-                getRateLimiter().ensureWhitelisted(remoteAddress);
                 return true;
             }
         }
@@ -342,9 +386,8 @@ public class AE2Controller {
     }
 
     private static boolean preHTTPHandler(HttpExchange t) throws IOException {
-        if (!getRateLimiter().isAllowed(
-            t.getRemoteAddress()
-                .getAddress())) {
+        InetAddress client = resolveClientAddress(t);
+        if (!isAlreadyIdentified(t, client) && !rateLimiter.isAllowed(client)) {
             byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
             t.getResponseHeaders()
                 .add("Content-Type", "text/plain");
@@ -468,9 +511,8 @@ public class AE2Controller {
 
         @Override
         public void handle(HttpExchange t) throws IOException {
-            if (!getRateLimiter().isAllowed(
-                t.getRemoteAddress()
-                    .getAddress())) {
+            InetAddress client = resolveClientAddress(t);
+            if (!isAlreadyIdentified(t, client) && !rateLimiter.isAllowed(client)) {
                 byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
                 t.getResponseHeaders()
                     .add("Content-Type", "text/plain");
@@ -570,9 +612,6 @@ public class AE2Controller {
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
                     os.close();
-                    getRateLimiter().ensureWhitelisted(
-                        t.getRemoteAddress()
-                            .getAddress());
                     return;
                 }
             }
@@ -606,9 +645,8 @@ public class AE2Controller {
         @Override
         public void handle(HttpExchange t) throws IOException {
 
-            if (!getRateLimiter().isAllowed(
-                t.getRemoteAddress()
-                    .getAddress())) {
+            InetAddress client = resolveClientAddress(t);
+            if (!isAlreadyIdentified(t, client) && !rateLimiter.isAllowed(client)) {
                 byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
                 t.getResponseHeaders()
                     .add("Content-Type", "text/plain");

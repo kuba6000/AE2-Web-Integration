@@ -18,6 +18,10 @@ public class Config {
         return ConfigBootstrap.aePasswordValue.get();
     }
 
+    public static String TRUSTED_PROXIES() {
+        return ConfigBootstrap.trustedProxiesValue.get();
+    }
+
     public static boolean ALLOW_NO_PASSWORD_ON_LOCALHOST() {
         return ConfigBootstrap.allowNoPasswordOnLocalhostValue.get();
     }

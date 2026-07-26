@@ -2,48 +2,51 @@ package pl.kuba6000.ae2webintegration.core.utils;
 
 import java.net.InetAddress;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 
+/**
+ * Per-address request budget for <b>unauthenticated</b> traffic, guarding the login endpoint against
+ * password guessing.
+ * <p>
+ * There is deliberately no whitelist here. Callers decide who is exempt: a request carrying a valid
+ * session token never reaches this class at all. An earlier version whitelisted an IP once anyone from it
+ * logged in, which meant a single login behind NAT or a reverse proxy disabled the limit for everyone
+ * sharing that address - defeating the purpose exactly where it mattered.
+ */
 public class RateLimiter {
 
-    private final int MAX_REQUESTS_PER_INTERVAL;
-    private final int RESET_INTERVAL_MS;
-    private final int RESET_WHITELIST_INTERVAL_MS; // 1 hour
+    private final int maxRequestsPerInterval;
+    private final int resetIntervalMs;
+    private final LongSupplier clock;
 
-    public RateLimiter(int maxRequestsPerInterval, int resetIntervalMs, int resetWhitelistIntervalMs) {
-        MAX_REQUESTS_PER_INTERVAL = maxRequestsPerInterval;
-        RESET_INTERVAL_MS = resetIntervalMs;
-        RESET_WHITELIST_INTERVAL_MS = resetWhitelistIntervalMs;
-    }
-
-    private volatile long lastUpdate = 0;
+    private final AtomicLong windowStart = new AtomicLong(0);
     private final ConcurrentHashMap<InetAddress, Integer> requestCounter = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<InetAddress, Long> whitelist = new ConcurrentHashMap<>();
 
-    public boolean isAllowed(InetAddress userId) {
-        updateRequests();
-
-        if (whitelist.containsKey(userId)) {
-            return true; // User is whitelisted
-        }
-
-        return requestCounter.merge(userId, 1, Integer::sum) < MAX_REQUESTS_PER_INTERVAL;
+    public RateLimiter(int maxRequestsPerInterval, int resetIntervalMs) {
+        this(maxRequestsPerInterval, resetIntervalMs, System::currentTimeMillis);
     }
 
-    public void ensureWhitelisted(InetAddress userId) {
-        whitelist.put(userId, System.currentTimeMillis());
+    public RateLimiter(int maxRequestsPerInterval, int resetIntervalMs, LongSupplier clock) {
+        this.maxRequestsPerInterval = maxRequestsPerInterval;
+        this.resetIntervalMs = resetIntervalMs;
+        this.clock = clock;
     }
 
-    private void updateRequests() {
-        long currentTime = System.currentTimeMillis();
+    public boolean isAllowed(InetAddress client) {
+        rollWindow();
+        return requestCounter.merge(client, 1, Integer::sum) <= maxRequestsPerInterval;
+    }
 
-        if (currentTime - lastUpdate > RESET_INTERVAL_MS) { // Reset every 60 seconds
+    /**
+     * Only the thread that wins the compare-and-set clears the counters. Without it two threads crossing
+     * the boundary together could both clear, discarding requests counted in between.
+     */
+    private void rollWindow() {
+        long now = clock.getAsLong();
+        long start = windowStart.get();
+        if (now - start > resetIntervalMs && windowStart.compareAndSet(start, now)) {
             requestCounter.clear();
-            lastUpdate = currentTime;
         }
-
-        whitelist.entrySet()
-            .removeIf(entry -> currentTime - entry.getValue() > RESET_WHITELIST_INTERVAL_MS); // Remove entries older
-                                                                                              // than 1 hour
     }
-
 }

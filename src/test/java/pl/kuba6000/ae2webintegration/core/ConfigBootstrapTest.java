@@ -33,13 +33,14 @@ class ConfigBootstrapTest {
         RecordingConfigBuilder builder = new RecordingConfigBuilder();
         ConfigBootstrap.init(builder);
 
-        // Should have exactly 9 config key definitions
-        assertEquals(9, builder.calls.size(), "expected exactly 9 config key definitions");
+        // Should have exactly 10 config key definitions
+        assertEquals(10, builder.calls.size(), "expected exactly 10 config key definitions");
 
         // Verify all expected keys with their types
         assertContainsCall("int", "port", builder.calls);
         assertContainsCall("string", "password", builder.calls);
         assertContainsCall("boolean", "allow_no_password_on_localhost", builder.calls);
+        assertContainsCall("string", "trusted_proxies", builder.calls);
         assertContainsCall("boolean", "public_mode", builder.calls);
         assertContainsCall("int", "max_requests_before_logged_in_per_minute", builder.calls);
         assertContainsCall("boolean", "check_for_updates", builder.calls);
@@ -67,6 +68,10 @@ class ConfigBootstrapTest {
                 case "public_mode":
                 case "check_for_updates":
                     assertEquals(true, call.defValue, call.key + " default");
+                    break;
+                case "trusted_proxies":
+                    // Empty: a proxy on this machine is handled by a built-in rule, not by config.
+                    assertEquals("", call.defValue, "trusted_proxies default");
                     break;
                 case "track_machine_crafting":
                     assertEquals(false, call.defValue, call.key + " default");
