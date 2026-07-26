@@ -1,5 +1,18 @@
 <?php
 
+    // Every state-changing endpoint here is a cookie-authenticated GET forwarded to the mod, so without
+    // SameSite any page the user visits could fire one through their browser. Strict rather than Lax:
+    // Lax still sends the cookie on a top-level GET navigation, which is exactly what these are.
+    // PHP's positional setcookie() has no SameSite parameter - the options array (PHP 7.3+) does.
+    function cookieOptions($expires, $httpOnly) {
+        return [
+            'expires' => $expires,
+            'path' => '/',
+            'httponly' => $httpOnly,
+            'samesite' => 'Strict',
+        ];
+    }
+
     // AE2 Web Terminal url
     $AE2_SERVER_HOST = "http://localhost:2324/";
     // Is the public mode enabled on the server
@@ -50,10 +63,10 @@
             elseif ($httpcode == 200){
                 $json = json_decode($return, true);
                 $validity = $remember ? (time() + (604_800)) : (time() + (3600));
-                setcookie("authenticationToken", $json['token'], $validity, "", "", false, true);
-                setcookie("username", $json['username'], $validity);
-                setcookie("isAdmin", $json['isAdmin'] ? '1' : '0', $validity);
-                setcookie("isOutdated", $json['isOutdated'] ? '1' : '0', $validity);
+                setcookie("authenticationToken", $json['token'], cookieOptions($validity, true));
+                setcookie("username", $json['username'], cookieOptions($validity, false));
+                setcookie("isAdmin", $json['isAdmin'] ? '1' : '0', cookieOptions($validity, false));
+                setcookie("isOutdated", $json['isOutdated'] ? '1' : '0', cookieOptions($validity, false));
                 header("Location: .");
                 exit;
             }
@@ -75,10 +88,10 @@
         $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         $validity = (time() - 3600);
-        setcookie("authenticationToken", "", $validity, "", "", false, true);
-        setcookie("username", "", $validity);
-        setcookie("isAdmin", '', $validity);
-        setcookie("isOutdated", '', $validity);
+        setcookie("authenticationToken", "", cookieOptions($validity, true));
+        setcookie("username", "", cookieOptions($validity, false));
+        setcookie("isAdmin", '', cookieOptions($validity, false));
+        setcookie("isOutdated", '', cookieOptions($validity, false));
         header("Location: .");
         exit;
     }
@@ -102,10 +115,10 @@
 
         if ($httpcode == 401) {
             $validity = (time() - 3600);
-            setcookie("authenticationToken", $validity, time() - 3600, "", "", false, true);
-            setcookie("username", "", $validity);
-            setcookie("isAdmin", '', $validity);
-            setcookie("isOutdated", '', $validity);
+            setcookie("authenticationToken", "", cookieOptions(time() - 3600, true));
+            setcookie("username", "", cookieOptions($validity, false));
+            setcookie("isAdmin", '', cookieOptions($validity, false));
+            setcookie("isOutdated", '', cookieOptions($validity, false));
             header("Location: .");
             exit;
         }
