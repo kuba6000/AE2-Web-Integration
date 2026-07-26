@@ -23,6 +23,7 @@ public class CoreEngine {
 
     public static void onServerStarted() {
         AE2Controller.init();
+        StartupHandler.logOpenAdminAccessWarning();
         StartupHandler.logOutdatedWarning();
         StartupHandler.handleDiscordIntegration();
     }
