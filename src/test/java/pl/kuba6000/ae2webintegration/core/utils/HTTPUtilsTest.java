@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Map;
@@ -111,5 +112,36 @@ class HTTPUtilsTest {
         assertTrue(
             HTTPUtils.parseQueryString("%ZZ")
                 .isEmpty());
+    }
+
+    // --- numeric parameters: null rather than an exception ---
+
+    @Test
+    void parsesValidNumbers() {
+        assertEquals(Long.valueOf(42L), HTTPUtils.parseLong("42"));
+        assertEquals(Long.valueOf(-7L), HTTPUtils.parseLong("-7"));
+        assertEquals(Long.valueOf(Long.MAX_VALUE), HTTPUtils.parseLong(String.valueOf(Long.MAX_VALUE)));
+        assertEquals(Integer.valueOf(42), HTTPUtils.parseInt("42"));
+        assertEquals(Integer.valueOf(-7), HTTPUtils.parseInt("-7"));
+    }
+
+    @Test
+    void rejectsAnythingThatIsNotANumber() {
+        // These reach init() from the query string, and init() is called without a try/catch, so throwing
+        // here drops the connection instead of answering.
+        assertNull(HTTPUtils.parseLong(null));
+        assertNull(HTTPUtils.parseLong(""));
+        assertNull(HTTPUtils.parseLong(" "));
+        assertNull(HTTPUtils.parseLong("abc"));
+        assertNull(HTTPUtils.parseLong("1.5"));
+        assertNull(HTTPUtils.parseLong("0x10"));
+        assertNull(HTTPUtils.parseInt(null));
+        assertNull(HTTPUtils.parseInt("abc"));
+    }
+
+    @Test
+    void rejectsNumbersTooLargeForTheType() {
+        assertNull(HTTPUtils.parseLong("99999999999999999999"));
+        assertNull(HTTPUtils.parseInt(String.valueOf(Long.MAX_VALUE)));
     }
 }

@@ -17,6 +17,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 public class Job extends ISyncedRequest {
 
@@ -57,7 +58,12 @@ public class Job extends ISyncedRequest {
             noParam("id");
             return false;
         }
-        this.jobID = Integer.parseInt(getParams.get("id"));
+        Integer parsedJobID = HTTPUtils.parseInt(getParams.get("id"));
+        if (parsedJobID == null) {
+            deny("BAD_PARAM");
+            return false;
+        }
+        this.jobID = parsedJobID;
         if (getParams.containsKey("cancel")) this.type = ERequestType.CANCEL;
         else if (getParams.containsKey("submit")) {
             this.type = ERequestType.SUBMIT;

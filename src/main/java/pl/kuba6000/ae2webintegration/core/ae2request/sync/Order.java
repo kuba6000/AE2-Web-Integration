@@ -13,6 +13,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 public class Order extends ISyncedRequest {
 
@@ -25,8 +26,20 @@ public class Order extends ISyncedRequest {
             noParam("item", "quantity");
             return false;
         }
-        int hash = Integer.parseInt(getParams.get("item"));
-        this.quantity = Integer.parseInt(getParams.get("quantity"));
+        Integer hash = HTTPUtils.parseInt(getParams.get("item"));
+        Long parsedQuantity = HTTPUtils.parseLong(getParams.get("quantity"));
+        if (hash == null || parsedQuantity == null) {
+            deny("BAD_PARAM");
+            return false;
+        }
+        if (parsedQuantity <= 0) {
+            // Verified that every platform's AE2 takes a long here, so there is no ceiling to enforce;
+            // zero or negative is the only unambiguously invalid amount. A negative stack size has its
+            // own meaning inside AE2, so passing one through would be undefined rather than merely odd.
+            deny("INVALID_QUANTITY");
+            return false;
+        }
+        this.quantity = parsedQuantity;
         IAEGenericStack stack = hashcodeToStack.get(hash);
         if (stack == null) {
             deny("ITEM_NOT_FOUND");

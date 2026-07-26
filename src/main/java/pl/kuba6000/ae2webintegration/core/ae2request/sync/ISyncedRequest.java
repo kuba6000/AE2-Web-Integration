@@ -10,6 +10,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
+import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 public abstract class ISyncedRequest extends IRequest {
 
@@ -26,8 +27,16 @@ public abstract class ISyncedRequest extends IRequest {
         this.context = context;
         String gridstr = context.getGetParams()
             .get("grid");
-        if (gridstr == null || gridstr.isEmpty()) gridKey = -1;
-        else gridKey = Long.parseLong(gridstr);
+        if (gridstr == null || gridstr.isEmpty()) {
+            gridKey = -1;
+        } else {
+            Long parsed = HTTPUtils.parseLong(gridstr);
+            if (parsed == null) {
+                deny("BAD_PARAM");
+                return false;
+            }
+            gridKey = parsed;
+        }
         return init(context.getGetParams());
     }
 
