@@ -1551,7 +1551,13 @@
         if (answer === null) // cancelled
             return;
         let quantity = Number(answer);
-        if (quantity == null || quantity == NaN || quantity <= 0 || quantity > Math.pow(2,31)-1){
+        // Number.isInteger rejects NaN, fractions and Infinity in one go. The old check compared against
+        // NaN with ==, which is always false, so anything non-numeric slipped through and was sent to the
+        // server as the literal "NaN".
+        // The ceiling is JavaScript's own, not the server's: it accepts a long, but a Number cannot hold
+        // an exact integer past MAX_SAFE_INTEGER, so a bigger figure would quietly become a different one.
+        if (!Number.isInteger(quantity) || quantity <= 0 || quantity > Number.MAX_SAFE_INTEGER){
+            showAlert("Enter a whole number between 1 and " + Number.MAX_SAFE_INTEGER + ".");
             return;
         }
         else {
