@@ -9,6 +9,7 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 
 import org.apache.logging.log4j.LogManager;
@@ -69,5 +70,10 @@ public class AE2WebIntegration {
     @SubscribeEvent
     public static void serverStopping(ServerStoppingEvent event) {
         CoreEngine.onServerStopping();
+    }
+
+    @SubscribeEvent
+    public static void serverStopped(ServerStoppedEvent event) {
+        CoreEngine.onServerStopped();
     }
 }
