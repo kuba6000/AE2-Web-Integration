@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.ae2interface;
 
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
+import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.IExtensionPoint;
@@ -74,5 +75,10 @@ public class AE2WebIntegration {
     @SubscribeEvent
     public static void serverStopping(ServerStoppingEvent event) {
         CoreEngine.onServerStopping();
+    }
+
+    @SubscribeEvent
+    public static void serverStopped(ServerStoppedEvent event) {
+        CoreEngine.onServerStopped();
     }
 }
