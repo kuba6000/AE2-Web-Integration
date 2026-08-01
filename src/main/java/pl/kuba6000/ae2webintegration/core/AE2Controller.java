@@ -21,6 +21,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
@@ -59,7 +60,9 @@ public class AE2Controller {
     private static HttpServer server;
     private static ExecutorService serverThread;
     private static final Object serverLifecycleLock = new Object();
-    private static volatile boolean acceptingSyncedRequests;
+    private static final Object authenticationStateLock = new Object();
+    private static final AtomicLong httpLifecycleGeneration = new AtomicLong();
+    private static volatile boolean acceptingHTTPRequests;
 
     public static UUID AEControllerUUID;
 
@@ -236,7 +239,8 @@ public class AE2Controller {
                 newServer.createContext("/auth", new AuthHandler());
                 newServer.createContext("/", new WebHandler());
                 newServer.setExecutor(newServerThread);
-                acceptingSyncedRequests = true;
+                httpLifecycleGeneration.incrementAndGet();
+                acceptingHTTPRequests = true;
                 newServer.start();
                 server = newServer;
                 serverThread = newServerThread;
@@ -252,7 +256,8 @@ public class AE2Controller {
 
     public static void stopHTTPServer() {
         synchronized (serverLifecycleLock) {
-            acceptingSyncedRequests = false;
+            acceptingHTTPRequests = false;
+            httpLifecycleGeneration.incrementAndGet();
             if (server != null) {
                 server.stop(0);
             }
@@ -267,7 +272,8 @@ public class AE2Controller {
     }
 
     private static void abortHTTPServerStart(HttpServer newServer, ExecutorService newServerThread) {
-        acceptingSyncedRequests = false;
+        acceptingHTTPRequests = false;
+        httpLifecycleGeneration.incrementAndGet();
         if (newServer != null) {
             newServer.stop(0);
         }
@@ -307,8 +313,10 @@ public class AE2Controller {
         while ((request = requests.poll()) != null) {
             request.failIfPending("SERVER_STOPPING");
         }
-        awaitingRegistration.clear();
-        validTokens.clear();
+        synchronized (authenticationStateLock) {
+            awaitingRegistration.clear();
+            validTokens.clear();
+        }
         hashcodeToStack.clear();
         requestContext.remove();
     }
@@ -523,12 +531,12 @@ public class AE2Controller {
     }
 
     private static boolean sendRequest(ISyncedRequest request) {
-        if (!acceptingSyncedRequests) {
+        if (!acceptingHTTPRequests) {
             request.failIfPending("SERVER_STOPPING");
             return true;
         }
         requests.offer(request);
-        if (!acceptingSyncedRequests && requests.remove(request)) {
+        if (!acceptingHTTPRequests && requests.remove(request)) {
             request.failIfPending("SERVER_STOPPING");
             return true;
         }
@@ -631,6 +639,7 @@ public class AE2Controller {
 
         @Override
         public void handle(HttpExchange t) throws IOException {
+            long requestLifecycleGeneration = httpLifecycleGeneration.get();
             InetAddress client = resolveClientAddress(t);
             if (!isAlreadyIdentified(t, client) && !rateLimiter.isAllowed(client)) {
                 byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
@@ -679,7 +688,11 @@ public class AE2Controller {
                     }
 
                     String confirmationToken = generateToken(50);
-                    awaitingRegistration.put(uuid, Pair.of(confirmationToken, password));
+                    Pair<String, String> registration = Pair.of(confirmationToken, password);
+                    if (!publishRegistration(requestLifecycleGeneration, uuid, registration)) {
+                        sendServerStopping(t);
+                        return;
+                    }
                     byte[] raw_response = confirmationToken.getBytes(StandardCharsets.UTF_8);
                     t.sendResponseHeaders(200, raw_response.length);
                     OutputStream os = t.getResponseBody();
@@ -727,8 +740,11 @@ public class AE2Controller {
                     boolean rememberMe = postData.containsKey("remember");
                     String token = generateToken();
                     long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
-                    validTokens.put(token, Pair.of(System.currentTimeMillis() + validFor * 1000L, playerID)); // 1 hour
-                                                                                                              // validity
+                    Pair<Long, Integer> tokenData = Pair.of(System.currentTimeMillis() + validFor * 1000L, playerID);
+                    if (!publishToken(requestLifecycleGeneration, token, tokenData)) {
+                        sendServerStopping(t);
+                        return;
+                    }
                     JsonObject json = new JsonObject();
                     json.addProperty("token", token);
                     json.addProperty("username", username);
@@ -766,6 +782,38 @@ public class AE2Controller {
             t.sendResponseHeaders(400, -1);
         }
 
+    }
+
+    private static boolean publishRegistration(long generation, UUID uuid, Pair<String, String> registration) {
+        synchronized (authenticationStateLock) {
+            if (!isCurrentHTTPLifecycle(generation)) {
+                return false;
+            }
+            awaitingRegistration.put(uuid, registration);
+            return true;
+        }
+    }
+
+    private static boolean publishToken(long generation, String token, Pair<Long, Integer> tokenData) {
+        synchronized (authenticationStateLock) {
+            if (!isCurrentHTTPLifecycle(generation)) {
+                return false;
+            }
+            validTokens.put(token, tokenData);
+            return true;
+        }
+    }
+
+    private static boolean isCurrentHTTPLifecycle(long generation) {
+        return acceptingHTTPRequests && httpLifecycleGeneration.get() == generation;
+    }
+
+    private static void sendServerStopping(HttpExchange exchange) throws IOException {
+        byte[] response = "Server stopping".getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(503, response.length);
+        try (OutputStream output = exchange.getResponseBody()) {
+            output.write(response);
+        }
     }
 
     static class WebHandler implements HttpHandler {
