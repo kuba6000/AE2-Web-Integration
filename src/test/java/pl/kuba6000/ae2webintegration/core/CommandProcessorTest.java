@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.UUID;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,8 +32,14 @@ class CommandProcessorTest {
         // Initialize Config so CoreData can resolve its data file path
         Config.init(new java.io.File(System.getProperty("java.io.tmpdir")));
 
-        // Start the HTTP server so CommandProcessor.reload() can succeed
+        // Own a complete listener lifecycle even when another static-state test ran first in this JVM.
+        AE2Controller.stopHTTPServer();
         AE2Controller.startHTTPServer();
+    }
+
+    @AfterAll
+    static void stopServer() {
+        AE2Controller.stopHTTPServer();
     }
 
     @BeforeEach
@@ -71,6 +78,16 @@ class CommandProcessorTest {
                 .toLowerCase()
                 .contains("fail"),
             "message should indicate failure: " + result.getMessage());
+    }
+
+    @Test
+    void repeatedReloadsCreateUsableServerLifecycles() {
+        assertTrue(
+            CommandProcessor.reload(() -> {})
+                .isSuccess());
+        assertTrue(
+            CommandProcessor.reload(() -> {})
+                .isSuccess());
     }
 
     // --- registerPlayer tests ---

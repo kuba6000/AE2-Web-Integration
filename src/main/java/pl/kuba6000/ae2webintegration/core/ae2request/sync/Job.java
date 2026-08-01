@@ -78,7 +78,7 @@ public class Job extends ISyncedRequest {
             deny("GRID_NOT_FOUND");
             return;
         }
-        Future<IAECraftingJob> job = gridData.jobs.get(jobID);
+        Future<IAECraftingJob> job = gridData.getJob(jobID);
         if (job == null) {
             deny("INVALID_ID");
             return;
@@ -129,8 +129,7 @@ public class Job extends ISyncedRequest {
             setData(jobData);
             done();
         } else if (type == ERequestType.CANCEL) {
-            job.cancel(true);
-            gridData.jobs.remove(this.jobID);
+            gridData.cancelJob(this.jobID);
             done();
         } else if (type == ERequestType.SUBMIT) {
             IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
@@ -151,6 +150,7 @@ public class Job extends ISyncedRequest {
                         deny("FAIL");
                         setData(error);
                     } else {
+                        gridData.removeJob(this.jobID);
                         done();
                     }
                 } catch (InterruptedException | ExecutionException e) {

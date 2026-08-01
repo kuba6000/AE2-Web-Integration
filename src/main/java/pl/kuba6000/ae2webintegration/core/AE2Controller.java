@@ -57,6 +57,9 @@ public class AE2Controller {
     public static IServerPlatform serverPlatform;
 
     private static HttpServer server;
+    private static ExecutorService serverThread;
+    private static final Object serverLifecycleLock = new Object();
+    private static volatile boolean acceptingSyncedRequests;
 
     public static UUID AEControllerUUID;
 
@@ -209,46 +212,106 @@ public class AE2Controller {
     }
 
     public static void startHTTPServer() {
-        rateLimiter = new RateLimiter(Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(), 60 * 1000);
-        clientAddressResolver = ClientAddressResolver.fromConfig(Config.TRUSTED_PROXIES());
-        try {
-            server = HttpServer.create(new InetSocketAddress(Config.AE_PORT()), 0);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        synchronized (serverLifecycleLock) {
+            if (server != null || serverThread != null) {
+                throw new IllegalStateException("HTTP server is already running");
+            }
+
+            rateLimiter = new RateLimiter(Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(), 60 * 1000);
+            clientAddressResolver = ClientAddressResolver.fromConfig(Config.TRUSTED_PROXIES());
+            ExecutorService newServerThread = createHTTPExecutor();
+            HttpServer newServer = null;
+            try {
+                newServer = HttpServer.create(new InetSocketAddress(Config.AE_PORT()), 0);
+                newServer.createContext("/grids", new SyncedRequestHandler(GetGridList.class));
+                newServer.createContext("/list", new SyncedRequestHandler(GetCPUList.class));
+                newServer.createContext("/get", new SyncedRequestHandler(GetCPU.class));
+                newServer.createContext("/cancelcpu", new SyncedRequestHandler(CancelCPU.class));
+                newServer.createContext("/items", new SyncedRequestHandler(GetItems.class));
+                newServer.createContext("/order", new SyncedRequestHandler(Order.class));
+                newServer.createContext("/job", new SyncedRequestHandler(Job.class));
+                newServer.createContext("/trackinghistory", new ASyncRequestHandler(GetTrackingHistory.class));
+                newServer.createContext("/gettracking", new ASyncRequestHandler(GetTracking.class));
+                newServer.createContext("/gridsettings", new ASyncRequestHandler(GridSettings.class));
+                newServer.createContext("/auth", new AuthHandler());
+                newServer.createContext("/", new WebHandler());
+                newServer.setExecutor(newServerThread);
+                acceptingSyncedRequests = true;
+                newServer.start();
+                server = newServer;
+                serverThread = newServerThread;
+            } catch (IOException e) {
+                abortHTTPServerStart(newServer, newServerThread);
+                throw new RuntimeException(e);
+            } catch (RuntimeException e) {
+                abortHTTPServerStart(newServer, newServerThread);
+                throw e;
+            }
         }
-        server.createContext("/grids", new SyncedRequestHandler(GetGridList.class));
-        server.createContext("/list", new SyncedRequestHandler(GetCPUList.class));
-        server.createContext("/get", new SyncedRequestHandler(GetCPU.class));
-        server.createContext("/cancelcpu", new SyncedRequestHandler(CancelCPU.class));
-        server.createContext("/items", new SyncedRequestHandler(GetItems.class));
-        server.createContext("/order", new SyncedRequestHandler(Order.class));
-        server.createContext("/job", new SyncedRequestHandler(Job.class));
-        server.createContext("/trackinghistory", new ASyncRequestHandler(GetTrackingHistory.class));
-        server.createContext("/gettracking", new ASyncRequestHandler(GetTracking.class));
-        server.createContext("/gridsettings", new ASyncRequestHandler(GridSettings.class));
-        server.createContext("/auth", new AuthHandler());
-        server.createContext("/", new WebHandler());
-        server.setExecutor(serverThread);
-        server.start();
     }
 
     public static void stopHTTPServer() {
-        server.stop(0);
+        synchronized (serverLifecycleLock) {
+            acceptingSyncedRequests = false;
+            if (server != null) {
+                server.stop(0);
+            }
+            ISyncedRequest request;
+            while ((request = requests.poll()) != null) {
+                request.failIfPending("SERVER_STOPPING");
+            }
+            shutdownHTTPExecutor(serverThread);
+            server = null;
+            serverThread = null;
+        }
     }
 
-    private static final ExecutorService serverThread = new ThreadPoolExecutor(
-        0,
-        Integer.MAX_VALUE,
-        60L,
-        TimeUnit.SECONDS,
-        new SynchronousQueue<Runnable>()) {
-
-        @Override
-        protected void afterExecute(Runnable r, Throwable t) {
-            super.afterExecute(r, t);
-            requestContext.remove();
+    private static void abortHTTPServerStart(HttpServer newServer, ExecutorService newServerThread) {
+        acceptingSyncedRequests = false;
+        if (newServer != null) {
+            newServer.stop(0);
         }
-    };
+        newServerThread.shutdownNow();
+    }
+
+    private static ExecutorService createHTTPExecutor() {
+        return new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>()) {
+
+            @Override
+            protected void afterExecute(Runnable r, Throwable t) {
+                super.afterExecute(r, t);
+                requestContext.remove();
+            }
+        };
+    }
+
+    private static void shutdownHTTPExecutor(ExecutorService executor) {
+        if (executor == null) {
+            return;
+        }
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+                executor.awaitTermination(1, TimeUnit.SECONDS);
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread()
+                .interrupt();
+        }
+    }
+
+    static void clearWorldState() {
+        ISyncedRequest request;
+        while ((request = requests.poll()) != null) {
+            request.failIfPending("SERVER_STOPPING");
+        }
+        awaitingRegistration.clear();
+        validTokens.clear();
+        hashcodeToStack.clear();
+        requestContext.remove();
+    }
 
     public static ConcurrentHashMap<Integer, IAEGenericStack> hashcodeToStack = new ConcurrentHashMap<>();
 
@@ -460,14 +523,27 @@ public class AE2Controller {
     }
 
     private static boolean sendRequest(ISyncedRequest request) {
+        if (!acceptingSyncedRequests) {
+            request.failIfPending("SERVER_STOPPING");
+            return true;
+        }
         requests.offer(request);
+        if (!acceptingSyncedRequests && requests.remove(request)) {
+            request.failIfPending("SERVER_STOPPING");
+            return true;
+        }
         int timeout = 0;
         while (!request.isDone.get() && timeout < 50) {
             try {
                 Thread.sleep(200);
                 timeout++;
             } catch (InterruptedException e) {
-                return requests.remove(request);
+                if (requests.remove(request)) {
+                    request.failIfPending("SERVER_STOPPING");
+                }
+                Thread.currentThread()
+                    .interrupt();
+                return true;
             }
         }
         if (timeout == 50) {

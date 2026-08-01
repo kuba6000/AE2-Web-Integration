@@ -73,11 +73,6 @@ public class Order extends ISyncedRequest {
             int jobID = gridData.addJob(job);
             JsonObject jobData = new JsonObject();
             jobData.addProperty("jobID", jobID);
-            if (gridData.jobs.size() > 3) {
-                int toDeleteBelowAndEqual = jobID - 3;
-                gridData.jobs.entrySet()
-                    .removeIf(integerFutureEntry -> integerFutureEntry.getKey() <= toDeleteBelowAndEqual);
-            }
             setData(jobData);
             done();
         } else {

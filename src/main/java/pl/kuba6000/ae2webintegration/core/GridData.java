@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.Reader;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 
@@ -31,25 +32,58 @@ public class GridData {
     @GSONUtils.SkipGSON
     private static ConcurrentHashMap<Long, GridData> gridDataMap = new ConcurrentHashMap<>();
 
+    @GSONUtils.SkipGSON
+    private static Iterator<GridData> craftingPlanMaintenanceCursor;
+
     public boolean isTracked = false;
 
     @GSONUtils.SkipGSON
     public AE2JobTracker trackingInfo = new AE2JobTracker();
 
     @GSONUtils.SkipGSON
-    private int nextJobID = 1;
-
-    private int getNextJobID() {
-        return nextJobID++;
-    }
-
-    @GSONUtils.SkipGSON
-    public ConcurrentHashMap<Integer, Future<IAECraftingJob>> jobs = new ConcurrentHashMap<>();
+    private CraftingPlanRegistry craftingPlans = new CraftingPlanRegistry(System::nanoTime);
 
     public int addJob(Future<IAECraftingJob> job) {
-        int jobID = getNextJobID();
-        jobs.put(jobID, job);
-        return jobID;
+        return craftingPlans.add(job);
+    }
+
+    public Future<IAECraftingJob> getJob(int jobId) {
+        return craftingPlans.find(jobId);
+    }
+
+    public boolean removeJob(int jobId) {
+        return craftingPlans.remove(jobId);
+    }
+
+    public boolean cancelJob(int jobId) {
+        return craftingPlans.cancel(jobId);
+    }
+
+    public static synchronized void clearRuntimeState() {
+        for (GridData gridData : gridDataMap.values()) {
+            gridData.craftingPlans.clearForServerStop();
+            gridData.trackingInfo.clearHistory();
+        }
+        craftingPlanMaintenanceCursor = null;
+    }
+
+    static synchronized boolean evictExpiredCompletedPlans(long nowNanos, int maxGrids) {
+        if (craftingPlanMaintenanceCursor == null) {
+            craftingPlanMaintenanceCursor = gridDataMap.values()
+                .iterator();
+        }
+
+        int processed = 0;
+        while (processed < maxGrids && craftingPlanMaintenanceCursor.hasNext()) {
+            craftingPlanMaintenanceCursor.next().craftingPlans.evictExpiredCompleted(nowNanos);
+            processed++;
+        }
+
+        if (craftingPlanMaintenanceCursor.hasNext()) {
+            return false;
+        }
+        craftingPlanMaintenanceCursor = null;
+        return true;
     }
 
     /**

@@ -147,4 +147,31 @@ class CoreEngineTickPumpTest {
         assertEquals(Arrays.asList("a"), ran);
         assertFalse(AE2Controller.requests.isEmpty());
     }
+
+    @Test
+    void serverStoppingAnswersEveryQueuedRequestImmediately() {
+        TestRequest first = queue("first", null);
+        TestRequest second = queue("second", null);
+
+        assertDoesNotThrow(CoreEngine::onServerStopping);
+
+        assertTrue(AE2Controller.requests.isEmpty());
+        assertStatus("SERVER_STOPPING", first);
+        assertStatus("SERVER_STOPPING", second);
+        assertTrue(ran.isEmpty(), "stopping answers queued work without touching live AE2 state");
+    }
+
+    @Test
+    void publicTickStillDrainsARequestWhenPlanMaintenanceIsDue() {
+        CoreEngine.onServerStopped();
+        for (int i = 0; i <= CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK; i++) {
+            GridData.getOrCreate(910_000L + i)
+                .addJob(new java.util.concurrent.CompletableFuture<>());
+        }
+        queue("request", null);
+
+        CoreEngine.onServerTick();
+
+        assertEquals(Arrays.asList("request"), ran);
+    }
 }

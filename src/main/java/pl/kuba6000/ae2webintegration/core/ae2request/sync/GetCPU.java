@@ -59,7 +59,7 @@ public class GetCPU extends ISyncedRequest {
         clusterData.isBusy = cpu.web$isBusy();
         if (clusterData.isBusy) {
             clusterData.finalOutput = cpu.web$getFinalOutput();
-            AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.trackingInfoMap.get(cpu);
+            AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cpu);
             clusterData.hasTrackingInfo = trackingInfo != null;
 
             HashMap<JSON_CompactedItem, JSON_CompactedItem> prep = new HashMap<>();

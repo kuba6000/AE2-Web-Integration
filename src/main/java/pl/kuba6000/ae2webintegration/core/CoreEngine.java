@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
 import org.apache.logging.log4j.LogManager;
@@ -21,6 +22,12 @@ public class CoreEngine {
      * {@code /gettracking} - so no count can bound the time.
      */
     static final long DRAIN_BUDGET_NANOS = 5_000_000L;
+    static final long PLAN_SWEEP_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
+    static final int PLAN_SWEEP_GRIDS_PER_TICK = 8;
+
+    private static long nextPlanSweepNanos;
+    private static boolean planSweepScheduled;
+    private static boolean planSweepInProgress;
 
     // Populated by the interface layer from the buildscript-generated mod version.
     private static volatile String modVersion;
@@ -52,6 +59,7 @@ public class CoreEngine {
      */
     public static void onServerTick() {
         drainRequests(System::nanoTime);
+        runPlanMaintenance(System.nanoTime());
     }
 
     /** The clock is the one thing a test cannot control from outside, as in {@code RateLimiter}. */
@@ -80,10 +88,41 @@ public class CoreEngine {
         }
     }
 
+    static synchronized void runPlanMaintenance(long nowNanos) {
+        if (!planSweepInProgress) {
+            if (planSweepScheduled && nowNanos - nextPlanSweepNanos < 0) {
+                return;
+            }
+            planSweepInProgress = true;
+        }
+
+        if (GridData.evictExpiredCompletedPlans(nowNanos, PLAN_SWEEP_GRIDS_PER_TICK)) {
+            planSweepInProgress = false;
+            planSweepScheduled = true;
+            nextPlanSweepNanos = nowNanos + PLAN_SWEEP_INTERVAL_NANOS;
+        }
+    }
+
+    private static synchronized void resetPlanMaintenance() {
+        nextPlanSweepNanos = 0L;
+        planSweepScheduled = false;
+        planSweepInProgress = false;
+    }
+
     public static void onServerStopping() {
         AE2Controller.stopHTTPServer();
         // Authorization must not survive into the next world loaded in this JVM.
         GridAccessSessions.clear();
+    }
+
+    public static synchronized void onServerStopped() {
+        // Defensive when startup failed partway or a platform omits the earlier stopping callback.
+        AE2Controller.stopHTTPServer();
+        AE2Controller.clearWorldState();
+        GridAccessSessions.clear();
+        AE2JobTracker.clearActiveJobs();
+        GridData.clearRuntimeState();
+        resetPlanMaintenance();
     }
 
     public static String getModVersion() {

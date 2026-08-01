@@ -1,14 +1,15 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import org.apache.commons.lang3.tuple.Pair;
+
+import com.google.common.collect.MapMaker;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
@@ -89,11 +90,24 @@ public class AE2JobTracker {
         }
     }
 
-    public static Map<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = Collections
-        .synchronizedMap(new IdentityHashMap<>());
+    private static final ConcurrentMap<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = new MapMaker().weakKeys()
+        .makeMap();
     public ConcurrentHashMap<Integer, JobTrackingInfo> trackingInfos = new ConcurrentHashMap<>();
 
     private int nextFreeTrackingInfoID = 1;
+
+    public static JobTrackingInfo findActiveJob(ICraftingCPUCluster cpu) {
+        return trackingInfoMap.get(cpu);
+    }
+
+    public static void clearActiveJobs() {
+        trackingInfoMap.clear();
+    }
+
+    public void clearHistory() {
+        trackingInfos.clear();
+        nextFreeTrackingInfoID = 1;
+    }
 
     static IAEKey resolveKey(Map<IAEKey, ?> map, IAEKey key) {
         for (IAEKey existing : map.keySet()) {
