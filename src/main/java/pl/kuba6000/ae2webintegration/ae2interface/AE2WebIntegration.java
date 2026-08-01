@@ -13,6 +13,7 @@ import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
+import cpw.mods.fml.common.event.FMLServerStoppedEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 import pl.kuba6000.ae2webintegration.Tags;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
@@ -71,5 +72,10 @@ public class AE2WebIntegration {
     @Mod.EventHandler
     public void serverStopping(FMLServerStoppingEvent event) {
         proxy.serverStopping(event);
+    }
+
+    @Mod.EventHandler
+    public void serverStopped(FMLServerStoppedEvent event) {
+        proxy.serverStopped(event);
     }
 }
