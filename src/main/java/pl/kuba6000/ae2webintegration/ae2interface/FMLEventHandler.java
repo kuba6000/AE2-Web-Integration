@@ -25,7 +25,11 @@ public class FMLEventHandler {
         Player player = event.getEntity();
         if (!(player instanceof ServerPlayer serverPlayer)) return;
 
-        PlayerIdentity identity = new PlayerIdentity(serverPlayer.getUUID(), serverPlayer.getScoreboardName());
+        PlayerIdentity identity = new PlayerIdentity(
+            serverPlayer.getUUID(),
+            serverPlayer.getGameProfile()
+                .getName());
+        CoreEngine.onPlayerSeen(identity);
         UpdateNotifier.onPlayerLoggedIn(new PlayerMessenger(), identity, serverPlayer.hasPermissions(4));
     }
 }
