@@ -6,8 +6,6 @@ import java.util.UUID;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 
-import com.mojang.authlib.GameProfile;
-
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
 public class Platform implements IServerPlatform {
@@ -29,18 +27,6 @@ public class Platform implements IServerPlatform {
                 .equalsIgnoreCase(username)) {
                 return entityPlayerMP.getUniqueID();
             }
-        }
-        return null;
-    }
-
-    @Override
-    public UUID getRegisteredPlayerUUID(String username) {
-        GameProfile profile = FMLCommonHandler.instance()
-            .getMinecraftServerInstance()
-            .getPlayerProfileCache()
-            .getGameProfileForUsername(username);
-        if (profile != null) {
-            return profile.getId();
         }
         return null;
     }
