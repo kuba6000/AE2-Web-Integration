@@ -7,8 +7,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
-import com.mojang.authlib.GameProfile;
-
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
 public class Platform implements IServerPlatform {
@@ -20,22 +18,6 @@ public class Platform implements IServerPlatform {
             .getPlayerList()
             .getPlayerByName(username);
         return player != null ? player.getUUID() : null;
-    }
-
-    @Override
-    public UUID getRegisteredPlayerUUID(String username) {
-        UUID onlineUuid = getOnlinePlayerUUID(username);
-        if (onlineUuid != null) {
-            return onlineUuid;
-        }
-        if (ServerLifecycleHooks.getCurrentServer() == null) {
-            return null;
-        }
-        GameProfile profile = ServerLifecycleHooks.getCurrentServer()
-            .getProfileCache()
-            .get(username)
-            .orElse(null);
-        return profile != null ? profile.getId() : null;
     }
 
     @Override
