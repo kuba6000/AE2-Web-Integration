@@ -23,9 +23,8 @@ public class FMLEventHandler {
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.player instanceof EntityPlayerMP)) return;
         EntityPlayerMP player = (EntityPlayerMP) event.player;
-        UpdateNotifier.onPlayerLoggedIn(
-            messenger,
-            new PlayerIdentity(player.getUniqueID(), player.getCommandSenderName()),
-            player.canCommandSenderUseCommand(4, "seed"));
+        PlayerIdentity identity = new PlayerIdentity(player.getUniqueID(), player.getCommandSenderName());
+        CoreEngine.onPlayerSeen(identity);
+        UpdateNotifier.onPlayerLoggedIn(messenger, identity, player.canCommandSenderUseCommand(4, "seed"));
     }
 }
