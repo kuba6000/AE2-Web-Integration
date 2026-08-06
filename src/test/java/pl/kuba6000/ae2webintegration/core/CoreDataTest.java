@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
@@ -25,6 +26,8 @@ class CoreDataTest {
 
     private static final UUID REGISTERED_UUID = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     private static final PlayerIdentity REGISTERED_PLAYER = new PlayerIdentity(REGISTERED_UUID, "Player");
+    private static final UUID OTHER_UUID = UUID.fromString("11111111-2222-3333-4444-555555555555");
+    private static final PlayerIdentity OTHER_PLAYER = new PlayerIdentity(OTHER_UUID, "OtherPlayer");
     @TempDir
     File configRoot;
 
@@ -89,6 +92,17 @@ class CoreDataTest {
     }
 
     @Test
+    void savedAccountIsResolvedByItsStoredNameWithoutAPlatformProfileLookup() {
+        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
+
+        CoreData.instance = new CoreData();
+        CoreData.loadData();
+        AE2Controller.serverPlatform = null;
+
+        assertEquals(42, CoreData.getPlayerId("pLaYeR"));
+    }
+
+    @Test
     void anEmptyDataFileLeavesTheAccountsInMemoryAlone() throws Exception {
         CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
         writeDataFile("");
@@ -117,7 +131,7 @@ class CoreDataTest {
     }
 
     @Test
-    void aFileWrittenBeforeVersioningStillLoads() throws Exception {
+    void aFileWrittenBeforeVersioningIsCompletedWhenThePlayerIdentityIsObserved() throws Exception {
         // Same shape as the old format: no schemaVersion field at all.
         writeDataFile(
             "{\"UUIDToId\":{\"" + REGISTERED_UUID
@@ -128,8 +142,31 @@ class CoreDataTest {
                 + "\":\"legacyhash\"}}");
 
         CoreData.loadData();
+        CoreEngine.onPlayerSeen(REGISTERED_PLAYER);
+
+        CoreData.instance = new CoreData();
+        CoreData.loadData();
 
         assertEquals(42, CoreData.getPlayerId("Player"));
+    }
+
+    @Test
+    void aNameConfirmedForAnotherUuidStopsSelectingThePreviousAccount() {
+        CoreData.setPassword(REGISTERED_PLAYER, "first-hash");
+        CoreData.setPassword(OTHER_PLAYER, "second-hash");
+
+        CoreEngine.onPlayerSeen(new PlayerIdentity(OTHER_UUID, "Player"));
+
+        assertNull(CoreData.getPlayerName(42));
+        assertEquals("Player", CoreData.getPlayerName(43));
+        assertEquals(43, CoreData.getPlayerId("player"));
+
+        CoreData.instance = new CoreData();
+        CoreData.loadData();
+
+        assertNull(CoreData.getPlayerName(42));
+        assertEquals("Player", CoreData.getPlayerName(43));
+        assertEquals(43, CoreData.getPlayerId("player"));
     }
 
     private File dataFile() {
@@ -165,11 +202,6 @@ class CoreDataTest {
 
         @Override
         public UUID getOnlinePlayerUUID(String username) {
-            return REGISTERED_UUID;
-        }
-
-        @Override
-        public UUID getRegisteredPlayerUUID(String username) {
             return REGISTERED_UUID;
         }
 
@@ -218,7 +250,10 @@ class CoreDataTest {
                     if (throwOnPlayerLookup) {
                         throw new IllegalStateException("player lookup failed");
                     }
-                    return REGISTERED_UUID.equals(identity.uuid) ? playerId : -1;
+                    if (REGISTERED_UUID.equals(identity.uuid)) {
+                        return playerId;
+                    }
+                    return OTHER_UUID.equals(identity.uuid) ? 43 : -1;
                 }
             };
         }

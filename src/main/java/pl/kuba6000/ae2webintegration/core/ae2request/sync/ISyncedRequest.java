@@ -6,13 +6,14 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.GridFilter;
+import pl.kuba6000.ae2webintegration.core.IServerThreadTask;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
-public abstract class ISyncedRequest extends IRequest {
+public abstract class ISyncedRequest extends IRequest implements IServerThreadTask {
 
     protected AE2Controller.RequestContext context = null;
     protected long gridKey = -1;
@@ -67,6 +68,11 @@ public abstract class ISyncedRequest extends IRequest {
         }
         if (grid != null) gridData = GridData.getOrCreate(gridKey);
         handle(grid);
+    }
+
+    @Override
+    public final void runOnServerThread(IAE ae) {
+        handle(ae);
     }
 
     @Override

@@ -23,6 +23,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,11 +67,6 @@ class ServerLifecycleHttpTest {
         }
 
         @Override
-        public UUID getRegisteredPlayerUUID(String username) {
-            return awaitLookup();
-        }
-
-        @Override
         public File getConfigDirectory() {
             return null;
         }
@@ -102,6 +98,11 @@ class ServerLifecycleHttpTest {
         @Override
         public String getRequestMethod() {
             return "POST";
+        }
+
+        @Override
+        public URI getRequestURI() {
+            return URI.create("/");
         }
 
         @Override
@@ -197,7 +198,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void registrationFinishingAfterAWorldSwitchIsRejected() throws Exception {
+    void pendingRegistrationLookupIsRejectedWhenTheServerStops() throws Exception {
         BlockingPlayerLookup platform = new BlockingPlayerLookup(
             UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
         AE2Controller.serverPlatform = platform;
@@ -212,18 +213,17 @@ class ServerLifecycleHttpTest {
                     throw new RuntimeException(e);
                 }
             });
-            assertTrue(platform.entered.await(2, TimeUnit.SECONDS), "the old request should reach player lookup");
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (AE2Controller.requests.isEmpty() && !oldRequest.isDone() && System.nanoTime() < deadline) {
+                Thread.sleep(5L);
+            }
+            assertFalse(oldRequest.isDone(), "the worker should be waiting for the queued lookup");
 
             CoreEngine.onServerStopping();
-            CoreEngine.onServerStopped();
-            AE2Controller.startHTTPServer();
-            platform.release.countDown();
             oldRequest.get(5, TimeUnit.SECONDS);
 
-            assertEquals(
-                503,
-                exchange.responseCode,
-                "a request from the stopped lifecycle must not publish auth state");
+            assertEquals(503, exchange.responseCode, "stopping must release a worker waiting for PlayerList");
+            assertEquals(1L, platform.entered.getCount(), "shutdown must not touch live PlayerList state");
         } finally {
             platform.release.countDown();
             oldWorker.shutdownNow();
@@ -231,7 +231,130 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void loginFinishingAfterAWorldSwitchIsRejected() throws Exception {
+    void registrationLookupTimeoutReturnsServiceUnavailableInsteadOfNotOnline() throws Exception {
+        AtomicInteger playerListLookups = new AtomicInteger();
+        AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public UUID getOnlinePlayerUUID(String username) {
+                playerListLookups.incrementAndGet();
+                return null;
+            }
+
+            @Override
+            public File getConfigDirectory() {
+                return tempDirectory;
+            }
+        };
+        AE2Controller.startHTTPServer();
+        PostExchange exchange = new PostExchange("register=Player&password=test-password");
+
+        new AE2Controller.AuthHandler().handle(exchange);
+
+        assertEquals(503, exchange.responseCode);
+        assertEquals("SERVER_BUSY", exchange.responseBody.toString(StandardCharsets.UTF_8.name()));
+        assertEquals(0, playerListLookups.get(), "a timed-out queued lookup must not run later");
+        assertTrue(AE2Controller.requests.isEmpty());
+    }
+
+    @Test
+    void registrationReportsNotOnlineOnlyAfterTheServerThreadChecksTheLivePlayerList() throws Exception {
+        AtomicInteger playerListLookups = new AtomicInteger();
+        AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public UUID getOnlinePlayerUUID(String username) {
+                playerListLookups.incrementAndGet();
+                return null;
+            }
+
+            @Override
+            public File getConfigDirectory() {
+                return tempDirectory;
+            }
+        };
+        AE2Controller.AE2Interface = TestGridFixtures.ae();
+        AE2Controller.startHTTPServer();
+        PostExchange exchange = new PostExchange("register=MissingPlayer&password=test-password");
+        ExecutorService httpWorker = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> request = httpWorker.submit(() -> {
+                try {
+                    new AE2Controller.AuthHandler().handle(exchange);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (AE2Controller.requests.isEmpty() && !request.isDone() && System.nanoTime() < deadline) {
+                Thread.sleep(5L);
+            }
+            assertFalse(request.isDone(), "HTTP must wait for the server-thread lookup");
+            assertEquals(0, playerListLookups.get(), "the HTTP worker must not inspect PlayerList");
+
+            CoreEngine.onServerTick();
+            request.get(2, TimeUnit.SECONDS);
+
+            assertEquals(1, playerListLookups.get());
+            assertEquals(400, exchange.responseCode);
+            assertEquals("notonline", exchange.responseBody.toString(StandardCharsets.UTF_8.name()));
+        } finally {
+            httpWorker.shutdownNow();
+        }
+    }
+
+    @Test
+    void registrationFormPreservesTheNotOnlineRedirectAfterTheServerThreadLookup() throws Exception {
+        AtomicInteger playerListLookups = new AtomicInteger();
+        AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public UUID getOnlinePlayerUUID(String username) {
+                playerListLookups.incrementAndGet();
+                return null;
+            }
+
+            @Override
+            public File getConfigDirectory() {
+                return tempDirectory;
+            }
+        };
+        AE2Controller.AE2Interface = TestGridFixtures.ae();
+        AE2Controller.startHTTPServer();
+        PostExchange exchange = new PostExchange("register=MissingPlayer&password=test-password");
+        ExecutorService httpWorker = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> request = httpWorker.submit(() -> {
+                try {
+                    new AE2Controller.WebHandler().handle(exchange);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (AE2Controller.requests.isEmpty() && !request.isDone() && System.nanoTime() < deadline) {
+                Thread.sleep(5L);
+            }
+            assertFalse(request.isDone());
+
+            CoreEngine.onServerTick();
+            request.get(2, TimeUnit.SECONDS);
+
+            assertEquals(1, playerListLookups.get());
+            assertEquals(302, exchange.responseCode);
+            assertEquals(
+                "?notonline",
+                exchange.getResponseHeaders()
+                    .getFirst("Location"));
+        } finally {
+            httpWorker.shutdownNow();
+        }
+    }
+
+    @Test
+    void publicLoginDoesNotConsultTheServerPlatform() throws Exception {
         UUID playerUuid = UUID.fromString("11111111-2222-3333-4444-555555555555");
         BlockingPlayerLookup platform = new BlockingPlayerLookup(playerUuid);
         AE2Controller.serverPlatform = platform;
@@ -260,23 +383,52 @@ class ServerLifecycleHttpTest {
                     throw new RuntimeException(e);
                 }
             });
-            assertTrue(platform.entered.await(2, TimeUnit.SECONDS), "the old request should reach player lookup");
+            oldRequest.get(2, TimeUnit.SECONDS);
 
-            CoreEngine.onServerStopping();
-            CoreEngine.onServerStopped();
-            AE2Controller.startHTTPServer();
-            platform.release.countDown();
-            oldRequest.get(5, TimeUnit.SECONDS);
-
-            assertEquals(503, exchange.responseCode, "a login from the stopped lifecycle must not publish a token");
+            assertEquals(200, exchange.responseCode);
+            assertEquals(1L, platform.entered.getCount(), "login must use the account name stored by CoreData");
         } finally {
             platform.release.countDown();
             oldWorker.shutdownNow();
         }
     }
 
+    @Test
+    void authenticatedPageUsesTheAccountNameWithoutReadingTheAeProfile() throws Exception {
+        UUID playerUuid = UUID.fromString("99999999-8888-7777-6666-555555555555");
+        ConfigBootstrap.aePublicModeValue = () -> true;
+        AE2Controller.AE2Interface = new TestGridFixtures.TestAE() {
+
+            @Override
+            public int web$getPlayerId(PlayerIdentity identity) {
+                return playerUuid.equals(identity.uuid) ? 42 : -1;
+            }
+
+            @Override
+            public PlayerIdentity web$getPlayerProfile(int playerId) {
+                throw new AssertionError("authenticated HTTP must not read an AE2 profile");
+            }
+        };
+        CoreData.instance = new CoreData();
+        assertTrue(
+            CoreData.setPassword(
+                new PlayerIdentity(playerUuid, "CanonicalPlayer"),
+                PasswordHelper.generateStrongPasswordHash("player-password")));
+
+        AE2Controller.startHTTPServer();
+        String token = login("canonicalplayer", "player-password");
+        Response page = get("/", token);
+
+        assertEquals(200, page.status);
+        assertTrue(page.body.contains("CanonicalPlayer"));
+    }
+
     private String login() throws IOException {
-        byte[] body = "username=admin&password=lifecycle-password".getBytes(StandardCharsets.UTF_8);
+        return login("admin", "lifecycle-password");
+    }
+
+    private String login(String username, String password) throws IOException {
+        byte[] body = ("username=" + username + "&password=" + password).getBytes(StandardCharsets.UTF_8);
         HttpURLConnection connection = connection("/auth", null);
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);

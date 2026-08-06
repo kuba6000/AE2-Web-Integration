@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import java.io.File;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -19,7 +20,7 @@ public class CoreData {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
-    private static final int CURRENT_SCHEMA_VERSION = 1;
+    private static final int CURRENT_SCHEMA_VERSION = 2;
 
     /**
      * Only ever assigned by {@link #loadData()} at mod init, before any HTTP thread exists, so today it is
@@ -45,20 +46,58 @@ public class CoreData {
     private final ConcurrentHashMap<UUID, Integer> UUIDToId = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, UUID> IdToUUID = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, String> passwords = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, String> usernames = new ConcurrentHashMap<>();
+
+    // Derived from usernames after load. Persisting both directions would create two sources of truth.
+    private transient ConcurrentHashMap<String, UUID> usernameToUUID = new ConcurrentHashMap<>();
+
+    public static final class Account {
+
+        private final UUID uuid;
+        private final int playerId;
+        private final String username;
+
+        private Account(UUID uuid, int playerId, String username) {
+            this.uuid = uuid;
+            this.playerId = playerId;
+            this.username = username;
+        }
+
+        public int getPlayerId() {
+            return playerId;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+    }
+
+    public static Account getAccount(String name) {
+        if (name == null || name.isEmpty()) {
+            return null;
+        }
+        CoreData data = instance;
+        String normalizedName = normalizeUsername(name);
+        UUID playerUuid = data.usernameToUUID.get(normalizedName);
+        if (playerUuid == null) {
+            return null;
+        }
+        Integer playerId = data.UUIDToId.get(playerUuid);
+        String username = data.usernames.get(playerUuid);
+        if (playerId == null || username == null || !normalizedName.equals(normalizeUsername(username))) {
+            return null;
+        }
+        return new Account(playerUuid, playerId, username);
+    }
 
     public static int getPlayerId(String name) {
-        if (name == null || name.isEmpty()) {
-            return -1;
-        }
-        UUID playerUuid = AE2Controller.serverPlatform.getRegisteredPlayerUUID(name);
-        if (playerUuid == null) {
-            return -1;
-        }
-        Integer id = instance.UUIDToId.get(playerUuid);
-        if (id != null) {
-            return id;
-        }
-        return -1;
+        Account account = getAccount(name);
+        return account != null ? account.playerId : -1;
+    }
+
+    public static String getPlayerName(int playerId) {
+        UUID playerUuid = instance.IdToUUID.get(playerId);
+        return playerUuid != null ? instance.usernames.get(playerUuid) : null;
     }
 
     public static boolean verifyPassword(int playerId, String password) {
@@ -67,17 +106,43 @@ public class CoreData {
             LOG.warn("Player ID " + playerId + " not found in IdToUUID map.");
             return false;
         }
+        return verifyPassword(id, password);
+    }
+
+    public static boolean verifyPassword(Account account, String password) {
+        return account != null && verifyPassword(account.uuid, password);
+    }
+
+    private static boolean verifyPassword(UUID playerUuid, String password) {
         // One lookup, not containsKey-then-get: clearing a password is a remove, so the entry can vanish
         // between the two and hand null to the validator.
-        String stored = instance.passwords.get(id);
+        String stored = instance.passwords.get(playerUuid);
         if (stored == null) {
             return false;
         }
         try {
             return PasswordHelper.validatePassword(password, stored);
         } catch (Exception e) {
-            LOG.error("Password verification failed for player ID: " + playerId, e);
+            LOG.error("Password verification failed for player UUID: " + playerUuid, e);
             return false;
+        }
+    }
+
+    /**
+     * Records the canonical name supplied by an online player identity. Legacy accounts did not persist
+     * names, and existing accounts need the same update when their owner renames. The UUID remains the
+     * account identity; the name is only a case-insensitive login index.
+     */
+    public static void observePlayer(PlayerIdentity player) {
+        if (player == null || player.uuid == null || player.name == null || player.name.isEmpty()) {
+            return;
+        }
+        CoreData data = instance;
+        if (!data.passwords.containsKey(player.uuid) || !data.UUIDToId.containsKey(player.uuid)) {
+            return;
+        }
+        if (data.recordUsername(player.uuid, player.name)) {
+            saveChanges();
         }
     }
 
@@ -100,6 +165,7 @@ public class CoreData {
             instance.passwords.put(playerUuid, passwordHash);
             instance.UUIDToId.put(playerUuid, playerId);
             instance.IdToUUID.put(playerId, playerUuid);
+            instance.recordUsername(playerUuid, player.name);
             saveChanges();
             return true;
         } catch (Exception e) {
@@ -140,11 +206,48 @@ public class CoreData {
                         + "), reading it as schema "
                         + CURRENT_SCHEMA_VERSION);
             }
+            loaded.rebuildUsernameIndex();
             instance = loaded;
         } catch (Exception e) {
             // Deliberately no clear-and-save here: a failed read must not persist the loss of every
             // account. Leave the file alone so it can be inspected or restored.
             LOG.error("Failed to load web data from file: " + file.getAbsolutePath(), e);
+        }
+    }
+
+    private static String normalizeUsername(String username) {
+        return username.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Updates both sides of the login-name index. A name belongs to the UUID most recently confirmed by
+     * an online player identity, so reusing a renamed player's old name must also remove that stale name
+     * from the previous account.
+     */
+    private boolean recordUsername(UUID playerUuid, String username) {
+        String previousName = usernames.put(playerUuid, username);
+        if (previousName != null) {
+            usernameToUUID.remove(normalizeUsername(previousName), playerUuid);
+        }
+
+        String normalizedUsername = normalizeUsername(username);
+        UUID previousOwner = usernameToUUID.put(normalizedUsername, playerUuid);
+        if (previousOwner != null && !previousOwner.equals(playerUuid)) {
+            String previousOwnerName = usernames.get(previousOwner);
+            if (previousOwnerName != null && normalizedUsername.equals(normalizeUsername(previousOwnerName))) {
+                usernames.remove(previousOwner, previousOwnerName);
+            }
+        }
+        return !username.equals(previousName);
+    }
+
+    private void rebuildUsernameIndex() {
+        usernameToUUID = new ConcurrentHashMap<>();
+        for (java.util.Map.Entry<UUID, String> entry : usernames.entrySet()) {
+            String username = entry.getValue();
+            if (username != null && !username.isEmpty()) {
+                usernameToUUID.put(normalizeUsername(username), entry.getKey());
+            }
         }
     }
 

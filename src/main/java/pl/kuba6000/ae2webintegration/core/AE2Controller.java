@@ -15,12 +15,15 @@ import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -86,20 +89,16 @@ public class AE2Controller {
         private final String username;
 
         public RequestContext(HttpExchange exchange, int userID) {
+            this(exchange, userID, userID == -1 ? "admin" : userID == -2 ? "localhost" : "unknown");
+        }
+
+        public RequestContext(HttpExchange exchange, int userID, String username) {
             this.exchange = exchange;
             this.getParams = HTTPUtils.parseQueryString(
                 exchange.getRequestURI()
                     .getQuery());
             this.userID = userID;
-            if (userID == -1) {
-                this.username = "admin";
-            } else if (userID == -2) {
-                this.username = "localhost";
-            } else {
-                PlayerIdentity profile = AE2Controller.AE2Interface.web$getPlayerData()
-                    .web$getPlayerProfile(userID);
-                this.username = profile != null ? profile.name : "unknown";
-            }
+            this.username = username;
         }
 
         public HttpExchange getExchange() {
@@ -125,7 +124,43 @@ public class AE2Controller {
 
     // Package-private: the tick pump in CoreEngine is the only consumer, and after X-01 nothing outside
     // core touches the queue at all.
-    static final ConcurrentLinkedQueue<ISyncedRequest> requests = new ConcurrentLinkedQueue<>();
+    static final ConcurrentLinkedQueue<IServerThreadTask> requests = new ConcurrentLinkedQueue<>();
+
+    private static final long AUTH_LOOKUP_TIMEOUT_SECONDS = 2L;
+
+    private static final class ServerTaskUnavailableException extends Exception {
+
+        private static final long serialVersionUID = 1L;
+
+        private final String status;
+
+        private ServerTaskUnavailableException(String status) {
+            super(status);
+            this.status = status;
+        }
+    }
+
+    private static final class OnlinePlayerLookupTask implements IServerThreadTask {
+
+        private final String username;
+        private final CompletableFuture<UUID> result = new CompletableFuture<>();
+
+        private OnlinePlayerLookupTask(String username) {
+            this.username = username;
+        }
+
+        @Override
+        public void runOnServerThread(IAE ae) {
+            if (!result.isDone()) {
+                result.complete(serverPlatform.getOnlinePlayerUUID(username));
+            }
+        }
+
+        @Override
+        public void failIfPending(String status) {
+            result.completeExceptionally(new ServerTaskUnavailableException(status));
+        }
+    }
 
     // Rebuilt in startHTTPServer() so /reload picks up config changes, and so two concurrent first
     // requests cannot race to create two limiters with split counters.
@@ -162,8 +197,8 @@ public class AE2Controller {
         if (token == null) {
             return false;
         }
-        Pair<Long, Integer> tokenData = validTokens.get(token);
-        return tokenData != null && System.currentTimeMillis() < tokenData.getLeft();
+        AuthSession session = validTokens.get(token);
+        return session != null && System.currentTimeMillis() < session.expiresAtMillis;
     }
 
     private static final int MAX_BODY_BYTES = 8 * 1024;
@@ -261,9 +296,9 @@ public class AE2Controller {
             if (server != null) {
                 server.stop(0);
             }
-            ISyncedRequest request;
-            while ((request = requests.poll()) != null) {
-                request.failIfPending("SERVER_STOPPING");
+            IServerThreadTask task;
+            while ((task = requests.poll()) != null) {
+                task.failIfPending("SERVER_STOPPING");
             }
             shutdownHTTPExecutor(serverThread);
             server = null;
@@ -309,9 +344,9 @@ public class AE2Controller {
     }
 
     static void clearWorldState() {
-        ISyncedRequest request;
-        while ((request = requests.poll()) != null) {
-            request.failIfPending("SERVER_STOPPING");
+        IServerThreadTask task;
+        while ((task = requests.poll()) != null) {
+            task.failIfPending("SERVER_STOPPING");
         }
         synchronized (authenticationStateLock) {
             awaitingRegistration.clear();
@@ -323,7 +358,72 @@ public class AE2Controller {
 
     public static ConcurrentHashMap<Integer, IAEGenericStack> hashcodeToStack = new ConcurrentHashMap<>();
 
-    private static final ConcurrentHashMap<String, Pair<Long, Integer>> validTokens = new ConcurrentHashMap<>();
+    private static final class AuthSession {
+
+        private final long expiresAtMillis;
+        private final int playerId;
+        private final String username;
+
+        private AuthSession(long expiresAtMillis, int playerId, String username) {
+            this.expiresAtMillis = expiresAtMillis;
+            this.playerId = playerId;
+            this.username = username;
+        }
+    }
+
+    private static final class LoginResult {
+
+        private final int playerId;
+        private final String username;
+        private final String error;
+
+        private LoginResult(int playerId, String username, String error) {
+            this.playerId = playerId;
+            this.username = username;
+            this.error = error;
+        }
+
+        private static LoginResult success(int playerId, String username) {
+            return new LoginResult(playerId, username, null);
+        }
+
+        private static LoginResult failure(String error) {
+            return new LoginResult(-1, null, error);
+        }
+
+        private boolean succeeded() {
+            return error == null;
+        }
+    }
+
+    private static final class RegistrationResult {
+
+        private final UUID playerUuid;
+        private final String passwordHash;
+        private final String error;
+        private final boolean serviceUnavailable;
+
+        private RegistrationResult(UUID playerUuid, String passwordHash, String error, boolean serviceUnavailable) {
+            this.playerUuid = playerUuid;
+            this.passwordHash = passwordHash;
+            this.error = error;
+            this.serviceUnavailable = serviceUnavailable;
+        }
+
+        private static RegistrationResult success(UUID playerUuid, String passwordHash) {
+            return new RegistrationResult(playerUuid, passwordHash, null, false);
+        }
+
+        private static RegistrationResult failure(String error, boolean serviceUnavailable) {
+            return new RegistrationResult(null, null, error, serviceUnavailable);
+        }
+
+        private boolean succeeded() {
+            return error == null;
+        }
+    }
+
+    private static final ConcurrentHashMap<String, AuthSession> validTokens = new ConcurrentHashMap<>();
 
     /**
      * Lax, which is also what browsers apply to a cookie with no SameSite at all since Chrome 80 - so
@@ -351,12 +451,55 @@ public class AE2Controller {
             .toString();
     }
 
-    private static boolean checkAuth(HttpExchange t) throws IOException {
+    private static LoginResult authenticateLogin(String requestedUsername, String password) {
+        if (requestedUsername.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
+            if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD()
+                .isEmpty()) {
+                return LoginResult.failure("invalidpassword");
+            }
+            return LoginResult.success(-1, "Admin");
+        }
+
+        CoreData.Account account = CoreData.getAccount(requestedUsername);
+        if (account == null) {
+            return LoginResult.failure("invaliduser");
+        }
+        if (!CoreData.verifyPassword(account, password)) {
+            return LoginResult.failure("invalidpassword");
+        }
+        return LoginResult.success(account.getPlayerId(), account.getUsername());
+    }
+
+    private static RegistrationResult prepareRegistration(String username, String password) {
+        UUID playerUuid;
+        try {
+            playerUuid = findOnlinePlayerOnServerThread(username);
+        } catch (ServerTaskUnavailableException e) {
+            return RegistrationResult.failure(e.status, true);
+        }
+        if (playerUuid == null) {
+            return RegistrationResult.failure("notonline", false);
+        }
+        try {
+            return RegistrationResult.success(playerUuid, PasswordHelper.generateStrongPasswordHash(password));
+        } catch (Exception e) {
+            return RegistrationResult.failure("invalidpassword", false);
+        }
+    }
+
+    private enum AuthCheckResult {
+        AUTHENTICATED,
+        UNAUTHENTICATED,
+        RESPONSE_SENT
+    }
+
+    private static AuthCheckResult checkAuth(HttpExchange t) throws IOException {
+        long requestLifecycleGeneration = httpLifecycleGeneration.get();
         InetAddress client = resolveClientAddress(t);
 
         if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && client.isLoopbackAddress()) {
-            requestContext.set(new RequestContext(t, -2)); // Localhost access
-            return true;
+            requestContext.set(new RequestContext(t, -2, "localhost")); // Localhost access
+            return AuthCheckResult.AUTHENTICATED;
         }
 
         // Alternative authentication method
@@ -365,18 +508,18 @@ public class AE2Controller {
         if (auth != null && !auth.isEmpty()) {
             String token = auth.get(0);
             token = token.replace("Bearer ", "");
-            Pair<Long, Integer> tokenData = validTokens.get(token);
-            if (tokenData != null) {
-                long validity = tokenData.getLeft();
+            AuthSession session = validTokens.get(token);
+            if (session != null) {
+                long validity = session.expiresAtMillis;
                 if (System.currentTimeMillis() < validity) {
-                    requestContext.set(new RequestContext(t, tokenData.getRight()));
-                    return true; // Token is valid
+                    requestContext.set(new RequestContext(t, session.playerId, session.username));
+                    return AuthCheckResult.AUTHENTICATED; // Token is valid
                 } else {
                     validTokens.remove(token); // Remove expired token
-                    return false; // Token expired
+                    return AuthCheckResult.UNAUTHENTICATED; // Token expired
                 }
             } else {
-                return false; // Invalid token
+                return AuthCheckResult.UNAUTHENTICATED; // Invalid token
             }
         }
 
@@ -387,35 +530,35 @@ public class AE2Controller {
             for (String cookie : cookiesString.split("; ")) {
                 if (cookie.startsWith("authenticationToken=")) {
                     String token = cookie.substring("authenticationToken=".length());
-                    Pair<Long, Integer> tokenData = validTokens.get(token);
-                    if (tokenData != null) {
-                        long validity = tokenData.getLeft();
+                    AuthSession session = validTokens.get(token);
+                    if (session != null) {
+                        long validity = session.expiresAtMillis;
                         if (System.currentTimeMillis() < validity) {
                             Map<String, String> GET_PARAMS = HTTPUtils.parseQueryString(
                                 t.getRequestURI()
                                     .getQuery());
                             if (GET_PARAMS.containsKey("logout")) {
                                 validTokens.remove(token); // Invalidate token on logout
-                                GridAccessSessions.invalidate(tokenData.getRight());
+                                GridAccessSessions.invalidate(session.playerId);
                                 t.getResponseHeaders()
                                     .add("Set-Cookie", sessionCookie(token, -1));
                                 t.getResponseHeaders()
                                     .add("Location", ".");
                                 t.sendResponseHeaders(302, -1);
-                                return false; // Logout successful
+                                return AuthCheckResult.RESPONSE_SENT; // Logout successful
                             }
-                            requestContext.set(new RequestContext(t, tokenData.getRight()));
-                            return true; // Token is valid
+                            requestContext.set(new RequestContext(t, session.playerId, session.username));
+                            return AuthCheckResult.AUTHENTICATED; // Token is valid
                         } else {
                             validTokens.remove(token); // Remove expired token
                             t.getResponseHeaders()
                                 .add("Set-Cookie", sessionCookie(token, -1));
-                            return false; // Token expired
+                            return AuthCheckResult.UNAUTHENTICATED; // Token expired
                         }
                     } else {
                         t.getResponseHeaders()
                             .add("Set-Cookie", sessionCookie(token, -1));
-                        return false; // Invalid token
+                        return AuthCheckResult.UNAUTHENTICATED; // Invalid token
                     }
                 }
             }
@@ -428,76 +571,60 @@ public class AE2Controller {
             Map<String, String> postData = HTTPUtils.parseQueryString(postRaw);
 
             if (postData.containsKey("register") && postData.containsKey("password")) {
-                String username = postData.get("register");
-                UUID uuid = serverPlatform.getOnlinePlayerUUID(username);
-                if (uuid == null) {
-                    t.getResponseHeaders()
-                        .add("Location", "?notonline");
-                    t.sendResponseHeaders(302, -1);
-                    return false;
+                RegistrationResult registration = prepareRegistration(
+                    postData.get("register"),
+                    postData.get("password"));
+                if (!registration.succeeded() && registration.serviceUnavailable) {
+                    sendServerUnavailable(t, registration.error);
+                    return AuthCheckResult.RESPONSE_SENT;
                 }
-                String password = postData.get("password");
-                try {
-                    password = PasswordHelper.generateStrongPasswordHash(password);
-                } catch (Exception e) {
+                if (!registration.succeeded()) {
                     t.getResponseHeaders()
-                        .add("Location", "?invalidpassword");
+                        .add("Location", "?" + registration.error);
                     t.sendResponseHeaders(302, -1);
-                    return false;
+                    return AuthCheckResult.RESPONSE_SENT;
                 }
 
                 String confirmationToken = generateToken(50);
-                awaitingRegistration.put(uuid, Pair.of(confirmationToken, password));
+                Pair<String, String> pending = Pair.of(confirmationToken, registration.passwordHash);
+                if (!publishRegistration(requestLifecycleGeneration, registration.playerUuid, pending)) {
+                    sendServerStopping(t);
+                    return AuthCheckResult.RESPONSE_SENT;
+                }
                 t.getResponseHeaders()
                     .add("Location", "?confirmregistration&token=" + confirmationToken);
                 t.sendResponseHeaders(302, -1);
-                return false; // Registration initiated
+                return AuthCheckResult.RESPONSE_SENT; // Registration initiated
             }
 
             if (postData.containsKey("password") && postData.containsKey("username")) {
-                String username = postData.get("username");
-                int playerID;
-                if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
-                    username = "Admin";
-                    playerID = -1;
-                    String password = postData.get("password");
-                    if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD()
-                        .isEmpty()) {
-                        t.getResponseHeaders()
-                            .add("Location", "?invalidpassword");
-                        t.sendResponseHeaders(302, -1);
-                        return false;
-                    }
-                } else {
-                    playerID = CoreData.getPlayerId(username);
-                    if (playerID == -1) {
-                        t.getResponseHeaders()
-                            .add("Location", "?invaliduser");
-                        t.sendResponseHeaders(302, -1);
-                        return false;
-                    }
-                    String password = postData.get("password");
-                    if (!CoreData.verifyPassword(playerID, password)) {
-                        t.getResponseHeaders()
-                            .add("Location", "?invalidpassword");
-                        t.sendResponseHeaders(302, -1);
-                        return false;
-                    }
+                LoginResult login = authenticateLogin(postData.get("username"), postData.get("password"));
+                if (!login.succeeded()) {
+                    t.getResponseHeaders()
+                        .add("Location", "?" + login.error);
+                    t.sendResponseHeaders(302, -1);
+                    return AuthCheckResult.RESPONSE_SENT;
                 }
                 boolean rememberMe = postData.containsKey("remember");
                 String token = generateToken();
                 long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
-                validTokens.put(token, Pair.of(System.currentTimeMillis() + validFor * 1000L, playerID)); // 1 hour
-                                                                                                          // validity
+                AuthSession session = new AuthSession(
+                    System.currentTimeMillis() + validFor * 1000L,
+                    login.playerId,
+                    login.username);
+                if (!publishToken(requestLifecycleGeneration, token, session)) {
+                    sendServerStopping(t);
+                    return AuthCheckResult.RESPONSE_SENT;
+                }
                 t.getResponseHeaders()
                     .add("Set-Cookie", sessionCookie(token, validFor));
                 t.getResponseHeaders()
                     .add("Location", ".");
                 t.sendResponseHeaders(302, -1);
-                return true;
+                return AuthCheckResult.RESPONSE_SENT;
             }
         }
-        return false;
+        return AuthCheckResult.UNAUTHENTICATED;
     }
 
     private static boolean preHTTPHandler(HttpExchange t) throws IOException {
@@ -523,21 +650,58 @@ public class AE2Controller {
             t.sendResponseHeaders(204, -1);
             return true;
         }
-        if (!checkAuth(t)) {
+        AuthCheckResult authResult = checkAuth(t);
+        if (authResult == AuthCheckResult.RESPONSE_SENT) {
+            return true;
+        }
+        if (authResult == AuthCheckResult.UNAUTHENTICATED) {
             t.sendResponseHeaders(401, -1);
             return true;
         }
         return false;
     }
 
-    private static boolean sendRequest(ISyncedRequest request) {
+    private static boolean enqueueServerThreadTask(IServerThreadTask task) {
         if (!acceptingHTTPRequests) {
-            request.failIfPending("SERVER_STOPPING");
-            return true;
+            task.failIfPending("SERVER_STOPPING");
+            return false;
         }
-        requests.offer(request);
-        if (!acceptingHTTPRequests && requests.remove(request)) {
-            request.failIfPending("SERVER_STOPPING");
+        requests.offer(task);
+        if (!acceptingHTTPRequests && requests.remove(task)) {
+            task.failIfPending("SERVER_STOPPING");
+            return false;
+        }
+        return true;
+    }
+
+    private static UUID findOnlinePlayerOnServerThread(String username) throws ServerTaskUnavailableException {
+        OnlinePlayerLookupTask task = new OnlinePlayerLookupTask(username);
+        if (!enqueueServerThreadTask(task)) {
+            throw new ServerTaskUnavailableException("SERVER_STOPPING");
+        }
+        try {
+            return task.result.get(AUTH_LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            requests.remove(task);
+            task.failIfPending("SERVER_BUSY");
+            throw new ServerTaskUnavailableException("SERVER_BUSY");
+        } catch (InterruptedException e) {
+            requests.remove(task);
+            task.failIfPending("SERVER_STOPPING");
+            Thread.currentThread()
+                .interrupt();
+            throw new ServerTaskUnavailableException("SERVER_STOPPING");
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof ServerTaskUnavailableException) {
+                throw (ServerTaskUnavailableException) cause;
+            }
+            throw new ServerTaskUnavailableException("INTERNAL_ERROR");
+        }
+    }
+
+    private static boolean sendRequest(ISyncedRequest request) {
+        if (!enqueueServerThreadTask(request)) {
             return true;
         }
         int timeout = 0;
@@ -665,21 +829,15 @@ public class AE2Controller {
                 Map<String, String> postData = HTTPUtils.parseQueryString(postRaw);
 
                 if (postData.containsKey("register") && postData.containsKey("password")) {
-                    String username = postData.get("register");
-                    UUID uuid = serverPlatform.getOnlinePlayerUUID(username);
-                    if (uuid == null) {
-                        byte[] raw_response = "notonline".getBytes(StandardCharsets.UTF_8);
-                        t.sendResponseHeaders(400, raw_response.length);
-                        OutputStream os = t.getResponseBody();
-                        os.write(raw_response);
-                        os.close();
+                    RegistrationResult registration = prepareRegistration(
+                        postData.get("register"),
+                        postData.get("password"));
+                    if (!registration.succeeded() && registration.serviceUnavailable) {
+                        sendServerUnavailable(t, registration.error);
                         return;
                     }
-                    String password = postData.get("password");
-                    try {
-                        password = PasswordHelper.generateStrongPasswordHash(password);
-                    } catch (Exception e) {
-                        byte[] raw_response = "invalidpassword".getBytes(StandardCharsets.UTF_8);
+                    if (!registration.succeeded()) {
+                        byte[] raw_response = registration.error.getBytes(StandardCharsets.UTF_8);
                         t.sendResponseHeaders(400, raw_response.length);
                         OutputStream os = t.getResponseBody();
                         os.write(raw_response);
@@ -688,8 +846,8 @@ public class AE2Controller {
                     }
 
                     String confirmationToken = generateToken(50);
-                    Pair<String, String> registration = Pair.of(confirmationToken, password);
-                    if (!publishRegistration(requestLifecycleGeneration, uuid, registration)) {
+                    Pair<String, String> pending = Pair.of(confirmationToken, registration.passwordHash);
+                    if (!publishRegistration(requestLifecycleGeneration, registration.playerUuid, pending)) {
                         sendServerStopping(t);
                         return;
                     }
@@ -702,53 +860,30 @@ public class AE2Controller {
                 }
 
                 if (postData.containsKey("password") && postData.containsKey("username")) {
-                    String username = postData.get("username");
-                    int playerID;
-                    if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
-                        username = "Admin";
-                        playerID = -1;
-                        String password = postData.get("password");
-                        if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD()
-                            .isEmpty()) {
-                            byte[] raw_response = "invalidpassword".getBytes(StandardCharsets.UTF_8);
-                            t.sendResponseHeaders(400, raw_response.length);
-                            OutputStream os = t.getResponseBody();
-                            os.write(raw_response);
-                            os.close();
-                            return;
-                        }
-                    } else {
-                        playerID = CoreData.getPlayerId(username);
-                        if (playerID == -1) {
-                            byte[] raw_response = "invaliduser".getBytes(StandardCharsets.UTF_8);
-                            t.sendResponseHeaders(400, raw_response.length);
-                            OutputStream os = t.getResponseBody();
-                            os.write(raw_response);
-                            os.close();
-                            return;
-                        }
-                        String password = postData.get("password");
-                        if (!CoreData.verifyPassword(playerID, password)) {
-                            byte[] raw_response = "invalidpassword".getBytes(StandardCharsets.UTF_8);
-                            t.sendResponseHeaders(400, raw_response.length);
-                            OutputStream os = t.getResponseBody();
-                            os.write(raw_response);
-                            os.close();
-                            return;
-                        }
+                    LoginResult login = authenticateLogin(postData.get("username"), postData.get("password"));
+                    if (!login.succeeded()) {
+                        byte[] raw_response = login.error.getBytes(StandardCharsets.UTF_8);
+                        t.sendResponseHeaders(400, raw_response.length);
+                        OutputStream os = t.getResponseBody();
+                        os.write(raw_response);
+                        os.close();
+                        return;
                     }
                     boolean rememberMe = postData.containsKey("remember");
                     String token = generateToken();
                     long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
-                    Pair<Long, Integer> tokenData = Pair.of(System.currentTimeMillis() + validFor * 1000L, playerID);
-                    if (!publishToken(requestLifecycleGeneration, token, tokenData)) {
+                    AuthSession session = new AuthSession(
+                        System.currentTimeMillis() + validFor * 1000L,
+                        login.playerId,
+                        login.username);
+                    if (!publishToken(requestLifecycleGeneration, token, session)) {
                         sendServerStopping(t);
                         return;
                     }
                     JsonObject json = new JsonObject();
                     json.addProperty("token", token);
-                    json.addProperty("username", username);
-                    json.addProperty("isAdmin", playerID == -1);
+                    json.addProperty("username", login.username);
+                    json.addProperty("isAdmin", login.playerId == -1);
                     json.addProperty("isOutdated", Config.CHECK_FOR_UPDATES() && VersionChecker.isOutdated());
                     byte[] raw_response = json.toString()
                         .getBytes(StandardCharsets.UTF_8);
@@ -770,9 +905,9 @@ public class AE2Controller {
                 if (auth != null && !auth.isEmpty()) {
                     String token = auth.get(0);
                     token = token.replace("Bearer ", "");
-                    Pair<Long, Integer> revoked = validTokens.remove(token);
+                    AuthSession revoked = validTokens.remove(token);
                     if (revoked != null) {
-                        GridAccessSessions.invalidate(revoked.getRight());
+                        GridAccessSessions.invalidate(revoked.playerId);
                     }
                     t.sendResponseHeaders(200, -1);
                     return;
@@ -794,12 +929,12 @@ public class AE2Controller {
         }
     }
 
-    private static boolean publishToken(long generation, String token, Pair<Long, Integer> tokenData) {
+    private static boolean publishToken(long generation, String token, AuthSession session) {
         synchronized (authenticationStateLock) {
             if (!isCurrentHTTPLifecycle(generation)) {
                 return false;
             }
-            validTokens.put(token, tokenData);
+            validTokens.put(token, session);
             return true;
         }
     }
@@ -809,7 +944,11 @@ public class AE2Controller {
     }
 
     private static void sendServerStopping(HttpExchange exchange) throws IOException {
-        byte[] response = "Server stopping".getBytes(StandardCharsets.UTF_8);
+        sendServerUnavailable(exchange, "SERVER_STOPPING");
+    }
+
+    private static void sendServerUnavailable(HttpExchange exchange, String status) throws IOException {
+        byte[] response = status.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(503, response.length);
         try (OutputStream output = exchange.getResponseBody()) {
             output.write(response);
@@ -872,7 +1011,11 @@ public class AE2Controller {
 
             String site = "/assets/webpage.html";
 
-            if (!checkAuth(t)) {
+            AuthCheckResult authResult = checkAuth(t);
+            if (authResult == AuthCheckResult.RESPONSE_SENT) {
+                return;
+            }
+            if (authResult == AuthCheckResult.UNAUTHENTICATED) {
                 site = "/assets/login.html";
             }
 

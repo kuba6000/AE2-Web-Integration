@@ -61,9 +61,5 @@ class CoreEngineTest {
             return configDirectory;
         }
 
-        @Override
-        public UUID getRegisteredPlayerUUID(String username) {
-            return null;
-        }
     }
 }

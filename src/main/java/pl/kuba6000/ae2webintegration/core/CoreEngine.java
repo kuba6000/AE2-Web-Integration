@@ -6,8 +6,8 @@ import java.util.function.LongSupplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class CoreEngine {
@@ -62,23 +62,28 @@ public class CoreEngine {
         runPlanMaintenance(System.nanoTime());
     }
 
+    /** Called from the platform's player-login event, which already runs on the server thread. */
+    public static void onPlayerSeen(PlayerIdentity player) {
+        CoreData.observePlayer(player);
+    }
+
     /** The clock is the one thing a test cannot control from outside, as in {@code RateLimiter}. */
     static void drainRequests(LongSupplier nanoClock) {
         long deadline = nanoClock.getAsLong() + DRAIN_BUDGET_NANOS;
-        ISyncedRequest request;
-        while ((request = AE2Controller.requests.poll()) != null) {
+        IServerThreadTask task;
+        while ((task = AE2Controller.requests.poll()) != null) {
             try {
-                request.handle(AE2Controller.AE2Interface);
+                task.runOnServerThread(AE2Controller.AE2Interface);
             } catch (Throwable t) {
                 // Throwable, not Exception, and on purpose. This runs inside the server tick event, which
                 // rethrows: anything escaping here stops being a failed request and becomes a stopped
                 // server. A runaway handler ending in StackOverflowError should not cost the world, and an
                 // OutOfMemoryError resurfaces at the next allocation regardless.
                 LOG.error(
-                    "Synced request " + request.getClass()
+                    "Server-thread task " + task.getClass()
                         .getSimpleName() + " failed",
                     t);
-                request.failIfPending("INTERNAL_ERROR");
+                task.failIfPending("INTERNAL_ERROR");
             }
             // Checked after handling, never before, so a request costlier than the whole budget still runs
             // and can never starve the queue.

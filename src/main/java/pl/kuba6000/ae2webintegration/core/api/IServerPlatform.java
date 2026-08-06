@@ -5,9 +5,8 @@ import java.util.UUID;
 
 public interface IServerPlatform {
 
+    /** Must only be called by a task running on the Minecraft server thread. */
     UUID getOnlinePlayerUUID(String username);
-
-    UUID getRegisteredPlayerUUID(String username);
 
     File getConfigDirectory();
 }

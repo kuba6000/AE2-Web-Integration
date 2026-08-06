@@ -82,11 +82,6 @@ class UpdateNotifierTest {
         }
 
         @Override
-        public UUID getRegisteredPlayerUUID(String username) {
-            return null;
-        }
-
-        @Override
         public File getConfigDirectory() {
             return configDirectory;
         }
