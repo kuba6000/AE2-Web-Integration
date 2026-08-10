@@ -85,7 +85,6 @@ public class GetGridList extends ISyncedRequest {
             }
         });
         GridAccessSessions.put(context.getUserID(), new GridAccess(accessibleKeys, System.currentTimeMillis()));
-        setData(grids);
-        done();
+        succeed(grids);
     }
 }

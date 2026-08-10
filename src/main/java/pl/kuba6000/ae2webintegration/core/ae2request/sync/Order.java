@@ -73,8 +73,7 @@ public class Order extends ISyncedRequest {
             int jobID = gridData.addJob(job);
             JsonObject jobData = new JsonObject();
             jobData.addProperty("jobID", jobID);
-            setData(jobData);
-            done();
+            succeed(jobData);
         } else {
             deny("ALL_CPU_BUSY");
         }

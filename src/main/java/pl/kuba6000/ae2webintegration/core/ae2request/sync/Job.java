@@ -126,8 +126,7 @@ public class Job extends ISyncedRequest {
                     return;
                 }
             }
-            setData(jobData);
-            done();
+            succeed(jobData);
         } else if (type == ERequestType.CANCEL) {
             gridData.cancelJob(this.jobID);
             done();
@@ -147,8 +146,7 @@ public class Job extends ISyncedRequest {
                     }
                     String error = craftingGrid.web$submitJob(craftingJob, target, true, grid);
                     if (error != null) {
-                        deny("FAIL");
-                        setData(error);
+                        deny("FAIL", error);
                     } else {
                         gridData.removeJob(this.jobID);
                         done();

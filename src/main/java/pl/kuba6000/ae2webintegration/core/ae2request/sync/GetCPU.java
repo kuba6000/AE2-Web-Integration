@@ -104,8 +104,7 @@ public class GetCPU extends ISyncedRequest {
 
         }
 
-        setData(clusterData);
-        done();
+        succeed(clusterData);
     }
 
 }

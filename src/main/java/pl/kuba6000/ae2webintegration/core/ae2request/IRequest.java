@@ -1,6 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.ae2request;
 
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import com.google.gson.GsonBuilder;
 
@@ -11,62 +14,66 @@ public abstract class IRequest {
 
     protected static GsonBuilder JSONBuilder = GSONUtils.GSON_BUILDER;
 
-    private static class JSON_Structure {
+    private static final class RequestResult {
 
-        String status;
-        Object data;
+        private final String status;
+        private final Object data;
+
+        private RequestResult(String status, Object data) {
+            this.status = status;
+            this.data = data;
+        }
     }
 
-    public AtomicBoolean isDone = new AtomicBoolean(false);
-    protected String status = "TIMEOUT";
-    protected Object data = null;
+    private static final RequestResult PENDING_RESULT = new RequestResult("TIMEOUT", null);
+    private final CompletableFuture<RequestResult> completion = new CompletableFuture<>();
 
     abstract public void handle(AE2Controller.RequestContext context);
 
-    Object getData() {
-        return data;
-    }
-
-    protected void setData(Object data) {
-        this.data = data;
-    }
-
     public String getJSON() {
-        JSON_Structure structure = new JSON_Structure();
-        structure.status = status;
-        structure.data = getData();
+        RequestResult result = completion.getNow(PENDING_RESULT);
         return JSONBuilder.create()
-            .toJson(structure);
+            .toJson(result);
     }
 
-    public void done() {
-        this.status = "OK";
-        this.isDone.set(true);
+    public final void awaitCompletion(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException {
+        try {
+            completion.get(timeout, unit);
+        } catch (ExecutionException e) {
+            throw new IllegalStateException("Request completion failed", e.getCause());
+        }
     }
 
-    public void deny(String status) {
-        this.status = status;
-        this.isDone.set(true);
+    protected final void succeed(Object data) {
+        completion.complete(new RequestResult("OK", data));
+    }
+
+    public final void done() {
+        succeed(null);
+    }
+
+    public final void deny(String status) {
+        deny(status, null);
+    }
+
+    protected final void deny(String status, Object data) {
+        completion.complete(new RequestResult(status, data));
     }
 
     /**
      * Answers a request whose handler died in the tick pump, so its HTTP worker returns at once instead of
-     * spinning out the ten second poll in {@code sendRequest} and then reporting TIMEOUT.
+     * waiting for the ten second request timeout and then reporting TIMEOUT.
      * <p>
      * Does nothing when the handler already produced a result: one that threw after {@link #done()} still
      * answered, the HTTP thread may already be reading that answer, and overwriting it would be both a
      * race and a lie about what happened.
      */
-    public void failIfPending(String status) {
-        if (isDone.get()) {
-            return;
-        }
+    public final void failIfPending(String status) {
         deny(status);
     }
 
-    public void noParam(String... params) {
-        deny("NO_PARAM");
-        setData(params);
+    public final void noParam(String... params) {
+        deny("NO_PARAM", params);
     }
 
 }

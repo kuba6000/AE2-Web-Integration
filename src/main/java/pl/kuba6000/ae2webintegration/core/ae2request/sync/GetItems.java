@@ -46,8 +46,7 @@ public class GetItems extends ISyncedRequest {
             addItem(items, AE2Controller.AE2Interface.web$stackOf(craftable, 0), grid);
         }
 
-        setData(items);
-        done();
+        succeed(items);
     }
 
     private static void addItem(ArrayList<JSON_DetailedItem> items, IAEGenericStack stack, IAEGrid grid) {

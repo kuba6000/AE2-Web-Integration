@@ -32,8 +32,7 @@ public class GetTracking extends IAsyncRequest {
             return;
         }
 
-        setData(new JSON_CompactedJobTrackingInfo(info));
-        done();
+        succeed(new JSON_CompactedJobTrackingInfo(info));
     }
 
 }

@@ -21,8 +21,7 @@ public class GetTrackingHistory extends IAsyncRequest {
     public void handle(Map<String, String> getParams) {
         if (grid == null) {
             // Nothing has ever been tracked on this grid; an empty history is the honest answer.
-            setData(new ArrayList<JSON_TrackingHistoryElement>());
-            done();
+            succeed(new ArrayList<JSON_TrackingHistoryElement>());
             return;
         }
         ArrayList<JSON_TrackingHistoryElement> jobs = new ArrayList<>(grid.trackingInfo.trackingInfos.size());
@@ -40,8 +39,7 @@ public class GetTrackingHistory extends IAsyncRequest {
 
         jobs.sort((i1, i2) -> Long.compare(i2.timeDone, i1.timeDone));
 
-        setData(jobs);
-        done();
+        succeed(jobs);
     }
 
 }

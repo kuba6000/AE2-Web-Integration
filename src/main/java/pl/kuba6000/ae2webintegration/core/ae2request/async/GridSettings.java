@@ -21,7 +21,6 @@ public class GridSettings extends IAsyncRequest {
             GridData.saveChanges();
             grid = stored;
         }
-        setData(grid != null ? grid : new GridData());
-        done();
+        succeed(grid != null ? grid : new GridData());
     }
 }

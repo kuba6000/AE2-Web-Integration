@@ -59,8 +59,7 @@ public class GetCPUList extends ISyncedRequest {
             }
             cpuList.put(entry.getKey(), cpuInfo);
         }
-        setData(cpuList);
-        done();
+        succeed(cpuList);
     }
 
 }

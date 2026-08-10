@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -17,6 +18,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -258,6 +260,32 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    void registrationFailsFastWhenTheServerThreadQueueIsFull() throws Exception {
+        AE2Controller.startHTTPServer();
+        fillServerThreadQueue();
+        PostExchange exchange = new PostExchange("register=Player&password=test-password");
+
+        assertTimeout(Duration.ofSeconds(1), () -> new AE2Controller.AuthHandler().handle(exchange));
+
+        assertEquals(503, exchange.responseCode);
+        assertEquals("SERVER_BUSY", exchange.responseBody.toString(StandardCharsets.UTF_8.name()));
+        assertEquals(32, AE2Controller.requests.size());
+    }
+
+    @Test
+    void syncedRequestReturnsServiceUnavailableWhenTheServerThreadQueueIsFull() throws Exception {
+        AE2Controller.startHTTPServer();
+        String token = login();
+        fillServerThreadQueue();
+
+        Response response = get("/grids", token);
+
+        assertEquals(503, response.status);
+        assertTrue(response.body.contains("\"status\":\"SERVER_BUSY\""));
+        assertEquals(32, AE2Controller.requests.size());
+    }
+
+    @Test
     void registrationReportsNotOnlineOnlyAfterTheServerThreadChecksTheLivePlayerList() throws Exception {
         AtomicInteger playerListLookups = new AtomicInteger();
         AE2Controller.serverPlatform = new IServerPlatform() {
@@ -425,6 +453,19 @@ class ServerLifecycleHttpTest {
 
     private String login() throws IOException {
         return login("admin", "lifecycle-password");
+    }
+
+    private static void fillServerThreadQueue() {
+        for (int i = 0; i < 32; i++) {
+            assertTrue(AE2Controller.requests.offer(new IServerThreadTask() {
+
+                @Override
+                public void runOnServerThread(IAE ae) {}
+
+                @Override
+                public void failIfPending(String status) {}
+            }));
+        }
     }
 
     private String login(String username, String password) throws IOException {

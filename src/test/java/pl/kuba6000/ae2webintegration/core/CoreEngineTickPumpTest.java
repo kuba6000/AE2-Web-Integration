@@ -96,11 +96,10 @@ class CoreEngineTickPumpTest {
 
     @Test
     void aThrowingHandlerLeavesTheRequestAnsweredWithInternalError() {
-        // Without this the HTTP worker spins the full 50 x 200 ms in sendRequest and then reports TIMEOUT,
-        // which is both slow and the wrong reason.
+        // Without this the HTTP worker waits for the full request timeout and reports TIMEOUT, which is
+        // both slow and the wrong reason.
         TestRequest request = queue("boom", r -> { throw new IllegalStateException(); });
         CoreEngine.drainRequests(clock(0L));
-        assertTrue(request.isDone.get(), "the HTTP worker must not be left waiting");
         assertStatus("INTERNAL_ERROR", request);
     }
 

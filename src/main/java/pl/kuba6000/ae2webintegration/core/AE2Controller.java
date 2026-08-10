@@ -15,12 +15,12 @@ import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -66,6 +66,11 @@ public class AE2Controller {
     private static final Object authenticationStateLock = new Object();
     private static final AtomicLong httpLifecycleGeneration = new AtomicLong();
     private static volatile boolean acceptingHTTPRequests;
+    private static final int HTTP_BACKLOG = 64;
+    private static final int HTTP_CORE_THREADS = 8;
+    private static final int HTTP_MAX_THREADS = 32;
+    private static final int HTTP_QUEUE_CAPACITY = 32;
+    private static final long HTTP_KEEP_ALIVE_SECONDS = 60L;
 
     public static UUID AEControllerUUID;
 
@@ -124,7 +129,8 @@ public class AE2Controller {
 
     // Package-private: the tick pump in CoreEngine is the only consumer, and after X-01 nothing outside
     // core touches the queue at all.
-    static final ConcurrentLinkedQueue<IServerThreadTask> requests = new ConcurrentLinkedQueue<>();
+    private static final int SERVER_THREAD_QUEUE_CAPACITY = 32;
+    static final BlockingQueue<IServerThreadTask> requests = new ArrayBlockingQueue<>(SERVER_THREAD_QUEUE_CAPACITY);
 
     private static final long AUTH_LOOKUP_TIMEOUT_SECONDS = 2L;
 
@@ -260,7 +266,7 @@ public class AE2Controller {
             ExecutorService newServerThread = createHTTPExecutor();
             HttpServer newServer = null;
             try {
-                newServer = HttpServer.create(new InetSocketAddress(Config.AE_PORT()), 0);
+                newServer = HttpServer.create(new InetSocketAddress(Config.AE_PORT()), HTTP_BACKLOG);
                 newServer.createContext("/grids", new SyncedRequestHandler(GetGridList.class));
                 newServer.createContext("/list", new SyncedRequestHandler(GetCPUList.class));
                 newServer.createContext("/get", new SyncedRequestHandler(GetCPU.class));
@@ -315,8 +321,13 @@ public class AE2Controller {
         newServerThread.shutdownNow();
     }
 
-    private static ExecutorService createHTTPExecutor() {
-        return new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>()) {
+    static ExecutorService createHTTPExecutor() {
+        return new ThreadPoolExecutor(
+            HTTP_CORE_THREADS,
+            HTTP_MAX_THREADS,
+            HTTP_KEEP_ALIVE_SECONDS,
+            TimeUnit.SECONDS,
+            new ArrayBlockingQueue<Runnable>(HTTP_QUEUE_CAPACITY)) {
 
             @Override
             protected void afterExecute(Runnable r, Throwable t) {
@@ -661,23 +672,28 @@ public class AE2Controller {
         return false;
     }
 
-    private static boolean enqueueServerThreadTask(IServerThreadTask task) {
+    private static String enqueueServerThreadTask(IServerThreadTask task) {
         if (!acceptingHTTPRequests) {
             task.failIfPending("SERVER_STOPPING");
-            return false;
+            return "SERVER_STOPPING";
         }
-        requests.offer(task);
+        if (!requests.offer(task)) {
+            String status = acceptingHTTPRequests ? "SERVER_BUSY" : "SERVER_STOPPING";
+            task.failIfPending(status);
+            return status;
+        }
         if (!acceptingHTTPRequests && requests.remove(task)) {
             task.failIfPending("SERVER_STOPPING");
-            return false;
+            return "SERVER_STOPPING";
         }
-        return true;
+        return null;
     }
 
     private static UUID findOnlinePlayerOnServerThread(String username) throws ServerTaskUnavailableException {
         OnlinePlayerLookupTask task = new OnlinePlayerLookupTask(username);
-        if (!enqueueServerThreadTask(task)) {
-            throw new ServerTaskUnavailableException("SERVER_STOPPING");
+        String unavailableStatus = enqueueServerThreadTask(task);
+        if (unavailableStatus != null) {
+            throw new ServerTaskUnavailableException(unavailableStatus);
         }
         try {
             return task.result.get(AUTH_LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -701,27 +717,22 @@ public class AE2Controller {
     }
 
     private static boolean sendRequest(ISyncedRequest request) {
-        if (!enqueueServerThreadTask(request)) {
+        if (enqueueServerThreadTask(request) != null) {
             return true;
         }
-        int timeout = 0;
-        while (!request.isDone.get() && timeout < 50) {
-            try {
-                Thread.sleep(200);
-                timeout++;
-            } catch (InterruptedException e) {
-                if (requests.remove(request)) {
-                    request.failIfPending("SERVER_STOPPING");
-                }
-                Thread.currentThread()
-                    .interrupt();
-                return true;
-            }
+        try {
+            request.awaitCompletion(10L, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            requests.remove(request);
+            request.failIfPending("TIMEOUT");
+        } catch (InterruptedException e) {
+            requests.remove(request);
+            request.failIfPending("SERVER_STOPPING");
+            Thread.currentThread()
+                .interrupt();
+            return true;
         }
-        if (timeout == 50) {
-            return requests.remove(request);
-        }
-        return true;
+        return false;
     }
 
     static class SyncedRequestHandler implements HttpHandler {
@@ -748,13 +759,14 @@ public class AE2Controller {
                 throw new RuntimeException(e);
             }
 
+            boolean serviceUnavailable = false;
             if (syncedRequest.init(requestContext.get())) {
-                sendRequest(syncedRequest);
+                serviceUnavailable = sendRequest(syncedRequest);
             }
 
             byte[] raw_response = syncedRequest.getJSON()
                 .getBytes(StandardCharsets.UTF_8);
-            t.sendResponseHeaders(200, raw_response.length);
+            t.sendResponseHeaders(serviceUnavailable ? 503 : 200, raw_response.length);
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
             os.close();
