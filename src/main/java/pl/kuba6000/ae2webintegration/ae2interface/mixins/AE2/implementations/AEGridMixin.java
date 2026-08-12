@@ -5,10 +5,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.core.GlobalPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.Level;
-import net.minecraftforge.common.util.FakePlayer;
+import net.minecraftforge.common.util.FakePlayerFactory;
 import net.minecraftforge.server.ServerLifecycleHooks;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -66,12 +64,6 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
     @Unique
     private Class<?> web$lastUsedMachineClass = null;
 
-    @Unique
-    public Component web$lastFakePlayerChatMessage;
-
-    @Unique
-    private PlayerSource web$cachedPlayerSource = null;
-
     @Override
     public Object web$getPlayerSource() {
         Grid internalGrid = (Grid) (Object) this;
@@ -96,8 +88,8 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
                 .getOwner();
             if (o instanceof IActionHost) actionHost = (IActionHost) o;
             else actionHost = null;
-            world = ServerLifecycleHooks.getCurrentServer()
-                .getLevel(Level.OVERWORLD);
+            world = internalGrid.getPivot()
+                .getLevel();
         } else {
             actionHost = (IActionHost) terminals.iterator()
                 .next();
@@ -105,30 +97,11 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
                 .getLevel();
         }
 
-        if (web$cachedPlayerSource != null) {
-            if (web$cachedPlayerSource.machine()
-                .orElse(null) != actionHost) web$cachedPlayerSource = null;
-            else return web$cachedPlayerSource;
-        }
-
-        web$cachedPlayerSource = new PlayerSource(
-            new FakePlayer(
+        return new PlayerSource(
+            FakePlayerFactory.get(
                 world,
-                new GameProfile(AE2Controller.AEControllerProfile.uuid, AE2Controller.AEControllerProfile.name)) {
-
-                @Override
-                public void sendSystemMessage(Component p_component, boolean bypassHiddenChat) {
-                    web$lastFakePlayerChatMessage = p_component;
-                }
-            },
+                new GameProfile(AE2Controller.AEControllerProfile.uuid, AE2Controller.AEControllerProfile.name)),
             actionHost);
-
-        return web$cachedPlayerSource;
-    }
-
-    @Override
-    public Component web$getLastFakePlayerChatMessage() {
-        return web$lastFakePlayerChatMessage;
     }
 
     @Unique
