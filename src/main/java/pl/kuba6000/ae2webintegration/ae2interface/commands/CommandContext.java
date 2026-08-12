@@ -4,10 +4,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.fml.config.ConfigTracker;
-import net.neoforged.fml.config.ModConfig;
 
-import pl.kuba6000.ae2webintegration.core.Config;
+import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
@@ -77,21 +75,8 @@ public class CommandContext implements ICommandContext {
                     .withStyle(ChatFormatting.RED));
     }
 
-    /**
-     * Returns a Runnable that restarts the HTTP server.
-     * <p>
-     * Reloads the common config file from disk before the HTTP server restarts.
-     */
     @Override
     public Runnable getReloader() {
-        return () -> {
-            if (Config.getConfigDirectory() == null) {
-                return;
-            }
-            ConfigTracker.INSTANCE.loadConfigs(
-                ModConfig.Type.COMMON,
-                Config.getConfigDirectory()
-                    .toPath());
-        };
+        return Config::reloadFromDisk;
     }
 }
