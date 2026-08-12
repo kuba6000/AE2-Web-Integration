@@ -129,11 +129,6 @@ final class TestGridFixtures {
             return null;
         }
 
-        @Override
-        public Object web$getLastFakePlayerChatMessage() {
-            return null;
-        }
-
         // --- IAEPathingGrid ---
         @Override
         public boolean web$isNetworkBooting() {

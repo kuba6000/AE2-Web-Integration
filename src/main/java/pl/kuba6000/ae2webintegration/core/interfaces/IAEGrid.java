@@ -19,6 +19,4 @@ public interface IAEGrid {
 
     Object web$getPlayerSource();
 
-    Object web$getLastFakePlayerChatMessage();
-
 }
