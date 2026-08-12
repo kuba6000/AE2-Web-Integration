@@ -1,10 +1,13 @@
 package pl.kuba6000.ae2webintegration.ae2interface;
 
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.world.WorldServer;
+import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.UpdateNotifier;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
@@ -26,5 +29,13 @@ public class FMLEventHandler {
         PlayerIdentity identity = new PlayerIdentity(player.getUniqueID(), player.getName());
         CoreEngine.onPlayerSeen(identity);
         UpdateNotifier.onPlayerLoggedIn(messenger, identity, player.canUseCommand(4, "seed"));
+    }
+
+    @SubscribeEvent
+    public void onWorldUnload(WorldEvent.Unload event) {
+        if (event.getWorld() instanceof WorldServer) {
+            AE.getInstance()
+                .clearPlayerSources(event.getWorld());
+        }
     }
 }

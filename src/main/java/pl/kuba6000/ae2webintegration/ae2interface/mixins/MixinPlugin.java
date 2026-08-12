@@ -59,7 +59,8 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.implementations.service.AECraftingGridMixin",
                 "AE2.implementations.service.AEPathingGridMixin",
                 "AE2.implementations.service.AEStorageGridMixin",
-                "AE2.implementations.service.AESecurityGridMixin"));
+                "AE2.implementations.service.AESecurityGridMixin",
+                "minecraft.PlayerListAccessor"));
 
         LOG.info("MIXING INTO AE2 LETS GOOOOOOOOOOOOOOOOOOOOOOOOO");
 

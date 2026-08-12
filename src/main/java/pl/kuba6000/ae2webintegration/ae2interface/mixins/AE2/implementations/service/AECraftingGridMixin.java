@@ -6,8 +6,6 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 
-import net.minecraft.util.text.ITextComponent;
-
 import org.spongepowered.asm.mixin.Mixin;
 
 import com.google.common.collect.ImmutableSet;
@@ -21,6 +19,7 @@ import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.me.helpers.PlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -70,15 +69,13 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     @Override
     default String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
         IAEGrid grid) {
-        ICraftingLink link = ((ICraftingGrid) (Object) this).submitJob(
-            (ICraftingJob) job,
-            null,
-            (ICraftingCPU) target,
-            prioritizePower,
-            (IActionSource) grid.web$getPlayerSource());
+        ChatCapturingPlayerSource source = (ChatCapturingPlayerSource) grid.web$getPlayerSource();
+        source.clearLastMessage();
+        ICraftingLink link = ((ICraftingGrid) (Object) this)
+            .submitJob((ICraftingJob) job, null, (ICraftingCPU) target, prioritizePower, (IActionSource) source);
+        String msg = source.takeLastMessage();
         if (link != null) return null;
-        ITextComponent msg = (ITextComponent) grid.web$getLastFakePlayerChatMessage();
-        return msg == null ? "Submission failed" : msg.getUnformattedText();
+        return msg == null ? "Submission failed" : msg;
     }
 
     @Override

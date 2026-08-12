@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.proxy;
 
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
@@ -15,6 +16,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.FMLEventHandler;
 import pl.kuba6000.ae2webintegration.ae2interface.commands.BaseCommandHandler;
 import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder;
 import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
 import pl.kuba6000.ae2webintegration.core.CommandBootstrap;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
@@ -28,9 +30,11 @@ public class CommonProxy {
 
         AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + CoreEngine.getModVersion());
 
+        FMLEventHandler eventHandler = new FMLEventHandler();
         FMLCommonHandler.instance()
             .bus()
-            .register(new FMLEventHandler());
+            .register(eventHandler);
+        MinecraftForge.EVENT_BUS.register(eventHandler);
     }
 
     public void init(FMLInitializationEvent event) {}
@@ -48,6 +52,8 @@ public class CommonProxy {
     }
 
     public void serverStopping(FMLServerStoppingEvent event) {
+        AE.getInstance()
+            .clearPlayerSources(null);
         CoreEngine.onServerStopping();
     }
 

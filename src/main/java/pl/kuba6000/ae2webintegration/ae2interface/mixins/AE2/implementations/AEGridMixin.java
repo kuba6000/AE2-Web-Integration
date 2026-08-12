@@ -1,9 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
-import net.minecraft.util.text.ITextComponent;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
-import net.minecraftforge.common.util.FakePlayer;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,9 +18,11 @@ import appeng.api.networking.security.IActionHost;
 import appeng.api.networking.security.ISecurityGrid;
 import appeng.api.networking.storage.IStorageGrid;
 import appeng.me.Grid;
-import appeng.me.helpers.PlayerSource;
 import appeng.parts.reporting.AbstractPartTerminal;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingFakePlayer;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
@@ -31,7 +31,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = Grid.class, remap = false)
-public abstract class AEGridMixin implements IAEGrid, GridWorldAccessor {
+public abstract class AEGridMixin implements IAEGrid, GridWorldAccessor, PlayerSourceLifecycle {
 
     @Override
     public IAECraftingGrid web$getCraftingGrid() {
@@ -62,10 +62,7 @@ public abstract class AEGridMixin implements IAEGrid, GridWorldAccessor {
     private Class<? extends IGridHost> web$lastUsedMachineClass = null;
 
     @Unique
-    public ITextComponent web$lastFakePlayerChatMessage;
-
-    @Unique
-    private PlayerSource web$cachedPlayerSource = null;
+    private ChatCapturingPlayerSource web$cachedPlayerSource = null;
 
     @Unique
     private World web$cachedPlayerSourceWorld = null;
@@ -103,26 +100,18 @@ public abstract class AEGridMixin implements IAEGrid, GridWorldAccessor {
 
         if (web$cachedPlayerSource != null) {
             if (web$cachedPlayerSource.machine()
-                .orElse(null) != actionHost) {
+                .orElse(null) != actionHost || !web$cachedPlayerSource.isForWorld(world)) {
+                web$cachedPlayerSource.dispose();
                 web$cachedPlayerSource = null;
                 web$cachedPlayerSourceWorld = null;
             } else return web$cachedPlayerSource;
         }
 
         web$cachedPlayerSourceWorld = world;
-        web$cachedPlayerSource = new PlayerSource(
-            new FakePlayer((WorldServer) world, new GameProfile(AE2Controller.AEControllerUUID, "AE2CONTROLLER")) {
-
-                @Override
-                public void sendMessage(ITextComponent message) {
-                    web$lastFakePlayerChatMessage = message;
-                }
-
-                @Override
-                public void sendStatusMessage(ITextComponent message, boolean actionBar) {
-                    web$lastFakePlayerChatMessage = message;
-                }
-            },
+        web$cachedPlayerSource = new ChatCapturingPlayerSource(
+            new ChatCapturingFakePlayer(
+                (WorldServer) world,
+                new GameProfile(AE2Controller.AEControllerUUID, "AE2CONTROLLER")),
             actionHost);
 
         return web$cachedPlayerSource;
@@ -135,7 +124,11 @@ public abstract class AEGridMixin implements IAEGrid, GridWorldAccessor {
     }
 
     @Override
-    public ITextComponent web$getLastFakePlayerChatMessage() {
-        return web$lastFakePlayerChatMessage;
+    public void web$clearPlayerSource(World world) {
+        if (web$cachedPlayerSource == null || world != null && web$cachedPlayerSourceWorld != world) return;
+        web$cachedPlayerSource.dispose();
+        web$cachedPlayerSource = null;
+        web$cachedPlayerSourceWorld = null;
     }
+
 }

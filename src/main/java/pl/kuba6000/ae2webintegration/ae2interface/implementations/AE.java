@@ -9,6 +9,7 @@ import appeng.api.storage.data.IAEItemStack;
 import appeng.core.worlddata.WorldData;
 import appeng.hooks.TickHandler;
 import appeng.me.Grid;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -49,6 +50,14 @@ public class AE implements IAE {
     @Override
     public Iterable<IAEGrid> web$getGrids() {
         return new AEGridIterable();
+    }
+
+    public void clearPlayerSources(net.minecraft.world.World world) {
+        for (IAEGrid grid : web$getGrids()) {
+            if (grid instanceof PlayerSourceLifecycle) {
+                ((PlayerSourceLifecycle) grid).web$clearPlayerSource(world);
+            }
+        }
     }
 
     @Override
