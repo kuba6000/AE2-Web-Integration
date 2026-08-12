@@ -107,7 +107,7 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
 
         if (web$cachedPlayerSource != null) {
             if (web$cachedPlayerSource.machine()
-                .get() != actionHost) web$cachedPlayerSource = null;
+                .orElse(null) != actionHost) web$cachedPlayerSource = null;
             else return web$cachedPlayerSource;
         }
 
