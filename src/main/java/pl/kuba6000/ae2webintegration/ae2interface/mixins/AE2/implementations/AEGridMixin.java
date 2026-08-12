@@ -103,7 +103,7 @@ public abstract class AEGridMixin implements IAEGrid, GridWorldAccessor {
 
         if (web$cachedPlayerSource != null) {
             if (web$cachedPlayerSource.machine()
-                .get() != actionHost) {
+                .orElse(null) != actionHost) {
                 web$cachedPlayerSource = null;
                 web$cachedPlayerSourceWorld = null;
             } else return web$cachedPlayerSource;
