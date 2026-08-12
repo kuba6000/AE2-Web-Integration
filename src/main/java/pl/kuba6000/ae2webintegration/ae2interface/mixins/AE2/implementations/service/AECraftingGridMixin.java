@@ -18,6 +18,7 @@ import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.security.BaseActionSource;
 import appeng.api.networking.security.PlayerSource;
 import appeng.api.storage.data.IAEStack;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -60,17 +61,15 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     @Override
     public default String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
         IAEGrid grid) {
-        ICraftingLink link = ((ICraftingGrid) (Object) this).submitJob(
-            (ICraftingJob) job,
-            null,
-            (ICraftingCPU) target,
-            prioritizePower,
-            (BaseActionSource) grid.web$getPlayerSource());
+        ChatCapturingPlayerSource source = (ChatCapturingPlayerSource) grid.web$getPlayerSource();
+        source.clearLastMessage();
+        ICraftingLink link = ((ICraftingGrid) (Object) this)
+            .submitJob((ICraftingJob) job, null, (ICraftingCPU) target, prioritizePower, (BaseActionSource) source);
+        String msg = source.takeLastMessage();
         if (link != null) return null;
-        Object msg = grid.web$getLastFakePlayerChatMessage();
         // A null return means "submitted" to the caller, so never report success when AE2 refused the
         // job. It rejects a simulated plan (missing ingredients) without emitting any chat message.
-        return msg == null ? "Submission failed" : msg.toString();
+        return msg == null ? "Submission failed" : msg;
     }
 
     @Override
