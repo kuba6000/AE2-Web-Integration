@@ -2,6 +2,8 @@ package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
 import java.util.Iterator;
 
+import net.minecraft.world.World;
+
 import appeng.api.AEApi;
 import appeng.api.storage.data.IAEStack;
 import appeng.core.worlddata.WorldData;
@@ -50,7 +52,7 @@ public class AE implements IAE {
         return new AEGridIterable();
     }
 
-    public void clearPlayerSources(net.minecraft.world.World world) {
+    public void clearPlayerSources(World world) {
         for (IAEGrid grid : web$getGrids()) {
             if (grid instanceof PlayerSourceLifecycle) {
                 ((PlayerSourceLifecycle) grid).web$clearPlayerSource(world);
