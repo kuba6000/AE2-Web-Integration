@@ -15,6 +15,7 @@ import org.apache.logging.log4j.Logger;
 
 import pl.kuba6000.ae2webintegration.Tags;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
+import pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy;
 import pl.kuba6000.ae2webintegration.core.api.IAEWebInterface;
 
 @Mod(
@@ -32,7 +33,7 @@ public class AE2WebIntegration {
     @SidedProxy(
         clientSide = "pl.kuba6000.ae2webintegration.ae2interface.proxy.ClientProxy",
         serverSide = "pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy")
-    public static pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy proxy;
+    public static CommonProxy proxy;
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {

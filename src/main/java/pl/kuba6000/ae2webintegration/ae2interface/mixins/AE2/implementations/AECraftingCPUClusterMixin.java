@@ -11,6 +11,7 @@ import appeng.api.AEApi;
 import appeng.api.networking.crafting.CraftingItemList;
 import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
+import appeng.api.storage.data.IItemList;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -21,7 +22,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Shadow
-    private appeng.api.storage.data.IItemList<IAEItemStack> waitingFor;
+    private IItemList<IAEItemStack> waitingFor;
 
     @Unique
     private int web$internalID = -1;
@@ -131,8 +132,7 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Unique
     private void web$populateList(IStackList list, CraftingItemList which) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, which);
+        ((CraftingCPUCluster) (Object) this).getListOfItem((IItemList<IAEItemStack>) (Object) list, which);
     }
 
     @Unique
