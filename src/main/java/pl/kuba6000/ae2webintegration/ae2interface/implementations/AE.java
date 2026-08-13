@@ -32,8 +32,8 @@ public class AE implements IAE {
     static class AEGridIterable implements Iterable<IAEGrid> {
 
         @Override
-        public java.util.Iterator<IAEGrid> iterator() {
-            return new java.util.Iterator<>() {
+        public Iterator<IAEGrid> iterator() {
+            return new Iterator<>() {
 
                 private final Iterator<Grid> iterator = TickHandler.instance()
                     .getGridList()
