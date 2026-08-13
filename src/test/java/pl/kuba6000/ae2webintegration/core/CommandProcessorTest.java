@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.File;
 import java.util.UUID;
 
 import org.apache.commons.lang3.tuple.Pair;
@@ -15,6 +16,7 @@ import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
@@ -30,7 +32,7 @@ class CommandProcessorTest {
     @BeforeAll
     static void setupServer() throws Exception {
         // Initialize Config so CoreData can resolve its data file path
-        Config.init(new java.io.File(System.getProperty("java.io.tmpdir")));
+        Config.init(new File(System.getProperty("java.io.tmpdir")));
 
         // Own a complete listener lifecycle even when another static-state test ran first in this JVM.
         AE2Controller.stopHTTPServer();
@@ -179,7 +181,7 @@ class CommandProcessorTest {
         }
 
         @Override
-        public Iterable<pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid> web$getGrids() {
+        public Iterable<IAEGrid> web$getGrids() {
             throw new UnsupportedOperationException();
         }
 
@@ -198,7 +200,7 @@ class CommandProcessorTest {
             return new IAEPlayerData() {
 
                 @Override
-                public pl.kuba6000.ae2webintegration.core.api.PlayerIdentity web$getPlayerProfile(int playerId) {
+                public PlayerIdentity web$getPlayerProfile(int playerId) {
                     return null;
                 }
 

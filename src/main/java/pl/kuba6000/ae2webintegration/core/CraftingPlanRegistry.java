@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -81,7 +82,7 @@ public final class CraftingPlanRegistry {
     }
 
     void evictExpiredCompleted(long nowNanos) {
-        for (java.util.Map.Entry<Integer, Entry> planEntry : plans.entrySet()) {
+        for (Map.Entry<Integer, Entry> planEntry : plans.entrySet()) {
             Entry entry = planEntry.getValue();
             if (!entry.plan.isDone()) {
                 continue;

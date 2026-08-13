@@ -11,6 +11,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
@@ -46,7 +47,7 @@ class CraftingPlanRegistryTest {
 
         @Override
         public IAECraftingJob get(long timeout, TimeUnit unit)
-            throws InterruptedException, ExecutionException, java.util.concurrent.TimeoutException {
+            throws InterruptedException, ExecutionException, TimeoutException {
             return null;
         }
     }

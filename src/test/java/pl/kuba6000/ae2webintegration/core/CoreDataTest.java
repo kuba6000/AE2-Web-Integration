@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Map;
 import java.util.UUID;
 
@@ -18,6 +20,7 @@ import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
@@ -177,13 +180,13 @@ class CoreDataTest {
         File file = dataFile();
         file.getParentFile()
             .mkdirs();
-        java.nio.file.Files.write(file.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Files.write(file.toPath(), content.getBytes(StandardCharsets.UTF_8));
     }
 
     private String readDataFile() throws Exception {
         return new String(
-            java.nio.file.Files.readAllBytes(dataFile().toPath()),
-            java.nio.charset.StandardCharsets.UTF_8);
+            Files.readAllBytes(dataFile().toPath()),
+            StandardCharsets.UTF_8);
     }
 
     private Map<?, ?> getMap(String fieldName) throws Exception {
@@ -222,7 +225,7 @@ class CoreDataTest {
         }
 
         @Override
-        public Iterable<pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid> web$getGrids() {
+        public Iterable<IAEGrid> web$getGrids() {
             throw new UnsupportedOperationException();
         }
 
@@ -241,7 +244,7 @@ class CoreDataTest {
             return new IAEPlayerData() {
 
                 @Override
-                public pl.kuba6000.ae2webintegration.core.api.PlayerIdentity web$getPlayerProfile(int playerId) {
+                public PlayerIdentity web$getPlayerProfile(int playerId) {
                     return null;
                 }
 

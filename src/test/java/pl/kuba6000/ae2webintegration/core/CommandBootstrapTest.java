@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +16,7 @@ import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
@@ -123,7 +125,7 @@ class CommandBootstrapTest {
         // Put a registration in the awaiting map so registerPlayer succeeds
         UUID uuid = ctx.playerIdentity.uuid;
         AE2Controller.awaitingRegistration
-            .put(uuid, org.apache.commons.lang3.tuple.Pair.of("my-test-token", "password-hash"));
+            .put(uuid, Pair.of("my-test-token", "password-hash"));
 
         try {
             builder.authHandler.accept(ctx);
@@ -227,7 +229,7 @@ class CommandBootstrapTest {
     private static class TestAE implements IAE {
 
         @Override
-        public Iterable<pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid> web$getGrids() {
+        public Iterable<IAEGrid> web$getGrids() {
             throw new UnsupportedOperationException();
         }
 
@@ -246,7 +248,7 @@ class CommandBootstrapTest {
             return new IAEPlayerData() {
 
                 @Override
-                public pl.kuba6000.ae2webintegration.core.api.PlayerIdentity web$getPlayerProfile(int playerId) {
+                public PlayerIdentity web$getPlayerProfile(int playerId) {
                     return null;
                 }
 

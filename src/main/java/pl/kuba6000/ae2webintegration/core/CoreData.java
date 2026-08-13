@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -243,7 +244,7 @@ public class CoreData {
 
     private void rebuildUsernameIndex() {
         usernameToUUID = new ConcurrentHashMap<>();
-        for (java.util.Map.Entry<UUID, String> entry : usernames.entrySet()) {
+        for (Map.Entry<UUID, String> entry : usernames.entrySet()) {
             String username = entry.getValue();
             if (username != null && !username.isEmpty()) {
                 usernameToUUID.put(normalizeUsername(username), entry.getKey());

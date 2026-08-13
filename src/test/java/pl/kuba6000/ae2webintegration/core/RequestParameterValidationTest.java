@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTracking;
+import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Order;
 
@@ -37,7 +38,7 @@ class RequestParameterValidationTest {
             "expected status " + expected + " but got " + json);
     }
 
-    private static String runSynced(pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest request,
+    private static String runSynced(ISyncedRequest request,
         String query) {
         request.init(TestGridFixtures.context(ME, query));
         return request.getJSON();

@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
@@ -165,7 +166,7 @@ class CoreEngineTickPumpTest {
         CoreEngine.onServerStopped();
         for (int i = 0; i <= CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK; i++) {
             GridData.getOrCreate(910_000L + i)
-                .addJob(new java.util.concurrent.CompletableFuture<>());
+                .addJob(new CompletableFuture<>());
         }
         queue("request", null);
 

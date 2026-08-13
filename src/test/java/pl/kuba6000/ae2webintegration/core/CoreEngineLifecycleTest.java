@@ -15,6 +15,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -40,7 +41,7 @@ class CoreEngineLifecycleTest {
         AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
         AE2Controller.hashcodeToStack.put(1, new TestStack());
 
-        pl.kuba6000.ae2webintegration.core.interfaces.IAE processInterface = TestGridFixtures.ae(grid);
+        IAE processInterface = TestGridFixtures.ae(grid);
         AE2Controller.AE2Interface = processInterface;
         IServerPlatform processPlatform = new IServerPlatform() {
 
