@@ -9,6 +9,7 @@ import net.minecraft.commands.Commands;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 
@@ -116,7 +117,7 @@ public class CommandBuilder implements ICommandBuilder {
         return lit;
     }
 
-    private static com.mojang.brigadier.builder.ArgumentBuilder<CommandSourceStack, ?> buildChild(CommandNode node) {
+    private static ArgumentBuilder<CommandSourceStack, ?> buildChild(CommandNode node) {
         if (node.isArgument) {
             RequiredArgumentBuilder<CommandSourceStack, String> arg = Commands
                 .argument(node.name, StringArgumentType.word());
