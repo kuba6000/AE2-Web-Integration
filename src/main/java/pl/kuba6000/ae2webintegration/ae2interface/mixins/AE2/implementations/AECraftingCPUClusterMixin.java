@@ -5,7 +5,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
 import appeng.api.networking.crafting.CraftingItemList;
-import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.storage.data.IItemList;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
@@ -19,7 +18,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Shadow
-    private IItemList<IAEItemStack> waitingFor;
+    private IItemList<IAEStack<?>> waitingFor;
 
     @Unique
     private int web$internalID = -1;

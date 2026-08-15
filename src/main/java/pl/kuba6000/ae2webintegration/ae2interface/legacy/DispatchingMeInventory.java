@@ -1,5 +1,9 @@
 package pl.kuba6000.ae2webintegration.ae2interface.legacy;
 
+import appeng.api.storage.IMEMonitor;
+import appeng.api.storage.IStorageMonitorable;
+import appeng.api.storage.data.IAEStack;
+import appeng.api.storage.data.IAEStackType;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -7,25 +11,33 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 
 public final class DispatchingMeInventory implements IAEMeInventoryItem {
 
-    private final IAEMeInventoryItem items;
-    private final IAEMeInventoryItem fluids;
+    private final IStorageMonitorable storage;
 
-    public DispatchingMeInventory(IAEMeInventoryItem items, IAEMeInventoryItem fluids) {
-        this.items = items;
-        this.fluids = fluids;
+    public DispatchingMeInventory(IStorageMonitorable storage) {
+        this.storage = storage;
     }
 
     @Override
     public long web$extractItems(IAEKey key, long amount, AEActionable mode, IAEGrid grid) {
-        return channel(key).web$extractItems(key, amount, mode, grid);
+        IAEMeInventoryItem inventory = channel(key);
+        return inventory == null ? 0L : inventory.web$extractItems(key, amount, mode, grid);
     }
 
     @Override
     public long web$getAvailable(IAEKey key, IAEGrid grid) {
-        return channel(key).web$getAvailable(key, grid);
+        IAEMeInventoryItem inventory = channel(key);
+        return inventory == null ? 0L : inventory.web$getAvailable(key, grid);
     }
 
     private IAEMeInventoryItem channel(IAEKey key) {
-        return key.web$isFluid() ? fluids : items;
+        if (!(key instanceof IAEStack)) {
+            return null;
+        }
+        IAEStackType<?> type = ((IAEStack<?>) (Object) key).getStackType();
+        if (type == null) {
+            return null;
+        }
+        IMEMonitor<?> monitor = storage.getMEMonitor(type);
+        return monitor instanceof IAEMeInventoryItem ? (IAEMeInventoryItem) monitor : null;
     }
 }
