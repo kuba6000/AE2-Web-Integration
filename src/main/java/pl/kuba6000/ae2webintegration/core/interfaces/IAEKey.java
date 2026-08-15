@@ -10,9 +10,4 @@ public interface IAEKey {
 
     boolean web$isSameType(IAEKey other);
 
-    /** @return true for fluid stacks on legacy AE2 versions with split channels */
-    default boolean web$isFluid() {
-        return false;
-    }
-
 }
