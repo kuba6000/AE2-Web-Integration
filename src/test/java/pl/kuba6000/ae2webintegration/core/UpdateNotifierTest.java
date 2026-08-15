@@ -13,6 +13,7 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.kuba6000.ae2webintegration.core.api.IPlayerMessenger;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 class UpdateNotifierTest {

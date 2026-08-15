@@ -13,7 +13,7 @@ import org.apache.logging.log4j.Logger;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
-import pl.kuba6000.ae2webintegration.core.Config;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 
 public class DiscordManager extends Thread {
 

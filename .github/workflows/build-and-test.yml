@@ -1,15 +1,33 @@
 
-name: Build and test
+name: Build and test core
 
 on:
   pull_request:
-    branches: [ master, main ]
+    branches: [ core ]
   push:
-    branches: [ master, main ]
+    branches: [ core ]
+  workflow_dispatch:
 
 jobs:
   build-and-test:
-    uses: GTNewHorizons/GTNH-Actions-Workflows/.github/workflows/build-and-test.yml@master
-    secrets: inherit
-    with:
-      timeout: 150
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout core
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: true
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build and test core
+        run: ./gradlew --build-cache --info --stacktrace build

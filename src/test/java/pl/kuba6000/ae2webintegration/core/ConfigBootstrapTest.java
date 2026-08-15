@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.IConfigBuilder;
 import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
+import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 
 /** Tests for {@link ConfigBootstrap} config key definition. */
 class ConfigBootstrapTest {

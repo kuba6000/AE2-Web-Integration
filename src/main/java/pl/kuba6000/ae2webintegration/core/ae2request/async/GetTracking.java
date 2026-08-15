@@ -2,7 +2,7 @@ package pl.kuba6000.ae2webintegration.core.ae2request.async;
 
 import java.util.Map;
 
-import pl.kuba6000.ae2webintegration.core.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.api.JSON_CompactedJobTrackingInfo;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 

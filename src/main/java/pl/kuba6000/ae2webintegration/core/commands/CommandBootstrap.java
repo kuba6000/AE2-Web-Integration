@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core;
+package pl.kuba6000.ae2webintegration.core.commands;
 
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.ICommandBuilder;

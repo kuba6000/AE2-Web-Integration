@@ -6,7 +6,7 @@ import java.util.Map;
 
 import org.apache.commons.lang3.tuple.Pair;
 
-import pl.kuba6000.ae2webintegration.core.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 

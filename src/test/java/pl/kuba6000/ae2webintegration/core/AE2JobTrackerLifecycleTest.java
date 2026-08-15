@@ -11,6 +11,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
+import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 class AE2JobTrackerLifecycleTest {
 

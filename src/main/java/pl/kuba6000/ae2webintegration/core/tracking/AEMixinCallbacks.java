@@ -1,6 +1,7 @@
-package pl.kuba6000.ae2webintegration.core;
+package pl.kuba6000.ae2webintegration.core.tracking;
 
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;

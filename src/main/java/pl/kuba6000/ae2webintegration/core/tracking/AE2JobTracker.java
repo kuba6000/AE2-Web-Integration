@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core;
+package pl.kuba6000.ae2webintegration.core.tracking;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -11,7 +11,9 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import com.google.common.collect.MapMaker;
 
+import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;

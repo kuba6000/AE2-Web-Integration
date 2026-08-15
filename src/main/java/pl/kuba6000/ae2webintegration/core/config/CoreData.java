@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core;
+package pl.kuba6000.ae2webintegration.core.config;
 
 import java.io.File;
 import java.io.Reader;
@@ -14,6 +14,8 @@ import org.apache.logging.log4j.Logger;
 import com.google.common.io.Files;
 import com.google.gson.Gson;
 
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 

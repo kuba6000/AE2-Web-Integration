@@ -2,9 +2,10 @@ name: Test Scala Presence
 
 on:
   pull_request:
-    branches: [ master, main ]
+    branches: [ core ]
   push:
-    branches: [ master, main ]
+    branches: [ core ]
+  workflow_dispatch:
 
 jobs:
   test-scala-presence:

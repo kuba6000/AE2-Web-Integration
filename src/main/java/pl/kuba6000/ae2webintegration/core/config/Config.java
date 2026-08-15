@@ -1,8 +1,10 @@
-package pl.kuba6000.ae2webintegration.core;
+package pl.kuba6000.ae2webintegration.core.config;
 
 import java.io.File;
 
 public class Config {
+
+    // todo: migrate to JSON format
 
     private static File configDirectory;
     private static File configFile;

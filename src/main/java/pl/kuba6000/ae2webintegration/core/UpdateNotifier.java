@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import pl.kuba6000.ae2webintegration.core.api.IPlayerMessenger;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class UpdateNotifier {

@@ -38,6 +38,9 @@ import com.google.gson.JsonObject;
 import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
+import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 
 class ServerLifecycleHttpTest {

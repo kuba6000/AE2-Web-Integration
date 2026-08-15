@@ -1,7 +1,6 @@
-package pl.kuba6000.ae2webintegration.core;
+package pl.kuba6000.ae2webintegration.core.config;
 
-import java.security.SecureRandom;
-
+import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 import pl.kuba6000.ae2webintegration.core.api.IConfigBuilder;
 import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 
@@ -17,7 +16,7 @@ public class ConfigBootstrap {
     // --- General ---
 
     public static IConfigValue<Integer> aePortValue = () -> 2324;
-    public static IConfigValue<String> aePasswordValue = () -> generateDefaultPassword();
+    public static IConfigValue<String> aePasswordValue = PasswordHelper::generateDefaultPassword;
     public static IConfigValue<Boolean> allowNoPasswordOnLocalhostValue = () -> true;
 
     public static IConfigValue<String> trustedProxiesValue = () -> "";
@@ -43,7 +42,7 @@ public class ConfigBootstrap {
      */
     public static void init(IConfigBuilder builder) {
         aePortValue = builder.defineInt("port", 2324, 1, 65535, "Port for the hosted website");
-        String defaultPassword = generateDefaultPassword();
+        String defaultPassword = PasswordHelper.generateDefaultPassword();
         aePasswordValue = builder.defineString("password", defaultPassword, "Password for the admin account");
         allowNoPasswordOnLocalhostValue = builder.defineBoolean(
             "allow_no_password_on_localhost",
@@ -89,20 +88,4 @@ public class ConfigBootstrap {
             "Track crafting jobs run directly by machines? (Not manually ordered)");
     }
 
-    /**
-     * Generates a random 16-character alphanumeric password as the config
-     * default. When no password is set in the config file this default is
-     * persisted, preventing the "empty password → any password accepted"
-     * vulnerability.
-     * <p>
-     * Uses {@link SecureRandom} for the same reason session tokens do: this value ends up in the config
-     * file as the admin password, and java.util.Random derives its 48-bit seed from the clock.
-     */
-    private static String generateDefaultPassword() {
-        return new SecureRandom().ints(48, 122 + 1)
-            .filter(i -> (i <= 57 || i >= 65) && (i <= 90 || i >= 97))
-            .limit(16)
-            .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
-            .toString();
-    }
 }

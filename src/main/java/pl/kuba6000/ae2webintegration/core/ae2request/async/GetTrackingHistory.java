@@ -3,7 +3,7 @@ package pl.kuba6000.ae2webintegration.core.ae2request.async;
 import java.util.ArrayList;
 import java.util.Map;
 
-import pl.kuba6000.ae2webintegration.core.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 
 public class GetTrackingHistory extends IAsyncRequest {
