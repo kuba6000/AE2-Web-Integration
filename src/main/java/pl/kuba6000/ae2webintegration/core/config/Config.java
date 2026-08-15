@@ -7,7 +7,6 @@ public class Config {
     // todo: migrate to JSON format
 
     private static File configDirectory;
-    private static File configFile;
 
     // --- Delegating accessors (backed by ConfigBootstrap) ---
 
@@ -58,13 +57,8 @@ public class Config {
 
     public static void init(File configDirectory) {
         Config.configDirectory = new File(configDirectory, "ae2webintegration");
-        Config.configFile = new File(Config.configDirectory, "ae2webintegration.cfg");
         if (!Config.configDirectory.exists()) {
             Config.configDirectory.mkdirs();
-            File oldConfigFile = new File(configDirectory, "ae2webintegration.cfg");
-            if (oldConfigFile.exists()) {
-                oldConfigFile.renameTo(Config.configFile);
-            }
         }
     }
 

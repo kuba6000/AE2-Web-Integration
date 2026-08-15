@@ -4,8 +4,6 @@ import java.util.List;
 
 public interface ICraftingPlanSummary {
 
-    long web$getUsedBytes();
-
     boolean web$isSimulation();
 
     List<ICraftingPlanSummaryEntry> web$getEntries();

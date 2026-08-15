@@ -120,11 +120,6 @@ final class TestGridFixtures {
         }
 
         @Override
-        public boolean web$isEmpty() {
-            return false;
-        }
-
-        @Override
         public Object web$getPlayerSource() {
             return null;
         }

@@ -15,8 +15,6 @@ public interface IAEGrid {
 
     IAESecurityGrid web$getSecurityGrid();
 
-    boolean web$isEmpty();
-
     Object web$getPlayerSource();
 
 }
