@@ -19,9 +19,9 @@ import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder;
 import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
-import pl.kuba6000.ae2webintegration.core.CommandBootstrap;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.IAEWebInterface;
+import pl.kuba6000.ae2webintegration.core.commands.CommandBootstrap;
 
 @Mod(value = AE2WebIntegration.MODID)
 @Mod.EventBusSubscriber(modid = AE2WebIntegration.MODID)

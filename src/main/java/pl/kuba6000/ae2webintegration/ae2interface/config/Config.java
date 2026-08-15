@@ -9,7 +9,7 @@ import net.minecraftforge.fml.event.config.ModConfigEvent;
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 
 import pl.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration;
-import pl.kuba6000.ae2webintegration.core.ConfigBootstrap;
+import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 
 /**
  * Forge 1.20.1 config wiring. This class does NOT define what config keys
