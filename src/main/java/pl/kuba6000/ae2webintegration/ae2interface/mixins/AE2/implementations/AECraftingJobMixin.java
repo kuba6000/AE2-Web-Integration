@@ -86,14 +86,7 @@ public interface AECraftingJobMixin extends IAECraftingJob {
             });
         }
 
-        final long bytes = ((ICraftingJob) (Object) this).getByteTotal();
-
         return new ICraftingPlanSummary() {
-
-            @Override
-            public long web$getUsedBytes() {
-                return bytes;
-            }
 
             @Override
             public boolean web$isSimulation() {

@@ -52,11 +52,6 @@ public abstract class AEGridMixin implements IAEGrid, PlayerSourceLifecycle {
         return ((Grid) (Object) this).getCache(ISecurityGrid.class);
     }
 
-    @Override
-    public boolean web$isEmpty() {
-        return ((Grid) (Object) this).isEmpty();
-    }
-
     @Unique
     private Class<? extends IGridHost> web$lastUsedMachineClass = null;
 
