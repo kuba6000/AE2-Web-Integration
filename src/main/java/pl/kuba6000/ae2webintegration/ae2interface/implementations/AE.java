@@ -6,8 +6,7 @@ import net.minecraft.world.World;
 
 import appeng.api.AEApi;
 import appeng.api.storage.channels.IItemStorageChannel;
-import appeng.api.storage.data.IAEFluidStack;
-import appeng.api.storage.data.IAEItemStack;
+import appeng.api.storage.data.IAEStack;
 import appeng.core.worlddata.WorldData;
 import appeng.hooks.TickHandler;
 import appeng.me.Grid;
@@ -72,12 +71,7 @@ public class AE implements IAE {
 
     @Override
     public IAEGenericStack web$stackOf(IAEKey key, long amount) {
-        if (key.web$isFluid()) {
-            IAEFluidStack stack = ((IAEFluidStack) (Object) key).copy();
-            stack.setStackSize(amount);
-            return (IAEGenericStack) stack;
-        }
-        IAEItemStack stack = ((IAEItemStack) (Object) key).copy();
+        IAEStack<?> stack = ((IAEStack<?>) (Object) key).copy();
         stack.setStackSize(amount);
         return (IAEGenericStack) stack;
     }

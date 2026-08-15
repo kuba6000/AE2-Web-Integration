@@ -51,8 +51,8 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     @Override
     @SuppressWarnings("unchecked")
     default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
-        if (stack.web$isFluid()) {
-            throw new UnsupportedOperationException("Native fluid crafting is not supported on AE2 1.12.2");
+        if (!(stack instanceof IAEItemStack)) {
+            throw new UnsupportedOperationException("Only item crafting is supported on AE2 1.12.2");
         }
         PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
         IAEItemStack itemStack = ((IAEItemStack) (Object) stack).copy();

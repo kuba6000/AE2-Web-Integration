@@ -35,11 +35,6 @@ public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStac
     }
 
     @Override
-    default boolean web$isFluid() {
-        return true;
-    }
-
-    @Override
     default IAEKey web$what() {
         return this;
     }
