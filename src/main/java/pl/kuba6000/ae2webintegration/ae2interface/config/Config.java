@@ -4,7 +4,7 @@ import java.io.File;
 
 import net.minecraftforge.common.config.Configuration;
 
-import pl.kuba6000.ae2webintegration.core.ConfigBootstrap;
+import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 
 /**
  * Forge 1.7.10 config wiring. This class does NOT define what config keys

@@ -58,7 +58,7 @@ public class CommandContext implements ICommandContext {
     /**
      * Returns a Runnable that re-reads the Forge config file via
      * {@link Config#synchronizeConfiguration()} and restarts the
-     * HTTP server. {@link pl.kuba6000.ae2webintegration.core.CommandProcessor#reload}
+     * HTTP server. {@link pl.kuba6000.ae2webintegration.core.commands.CommandProcessor#reload}
      * handles the actual stop/start — this runnable only re-reads the config.
      */
     @Override
