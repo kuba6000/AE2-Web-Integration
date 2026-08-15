@@ -64,11 +64,7 @@ class CraftingPlanRequestLifecycleTest {
         private final IAECraftingGrid crafting;
 
         private TestGrid(long securityKey, IAECraftingGrid crafting) {
-            super(
-                securityKey,
-                true,
-                false,
-                AEControllerState.CONTROLLER_ONLINE);
+            super(securityKey, true, false, AEControllerState.CONTROLLER_ONLINE);
             this.crafting = crafting;
         }
 

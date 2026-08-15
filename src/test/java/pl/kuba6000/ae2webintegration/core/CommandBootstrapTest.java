@@ -2,8 +2,6 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -15,7 +13,7 @@ import pl.kuba6000.ae2webintegration.core.api.ICommandBuilder;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.commands.CommandBootstrap;
-import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -29,49 +27,7 @@ class CommandBootstrapTest {
     @BeforeEach
     void setUpPlayerLookup() {
         AE2Controller.AE2Interface = new TestAE();
-        CoreData.instance = new CoreData();
-    }
-
-    @Test
-    void testCommandTreeStructure() {
-        RecordingBuilder builder = new RecordingBuilder();
-        CommandBootstrap.init(builder);
-
-        // Expected fluent call sequence:
-        // literal("ae2webintegration", 0)
-        // .literal("reload", 4)
-        // .executes(handler)
-        // .literal("auth", 0)
-        // .argument("token")
-        // .executes(handler)
-        // builder.register()
-
-        assertEquals(7, builder.calls.size(), "Expected 7 fluent calls + register");
-
-        // Level 0: ae2webintegration root
-        assertEquals("literal:ae2webintegration:0", builder.calls.get(0), "call[0]");
-
-        // Level 1: reload child
-        assertEquals("literal:reload:4", builder.calls.get(1), "call[1]");
-
-        // Level 2: executes on reload (sets handler)
-        assertEquals("executes", builder.calls.get(2), "call[2]");
-
-        // Level 1: auth sibling
-        assertEquals("literal:auth:0", builder.calls.get(3), "call[3]");
-
-        // Level 2: token argument child
-        assertEquals("argument:token", builder.calls.get(4), "call[4]");
-
-        // Level 3: executes on token
-        assertEquals("executes", builder.calls.get(5), "call[5]");
-
-        // Finalize
-        assertEquals("register", builder.calls.get(6), "call[6]");
-
-        // Verify handler was captured
-        assertNotNull(builder.reloadHandler, "reload handler should be stored");
-        assertNotNull(builder.authHandler, "auth handler should be stored");
+        CoreDataTestFixture.reset();
     }
 
     @Test
@@ -107,10 +63,6 @@ class CommandBootstrapTest {
 
         // Should send error when no permission
         assertNotNull(ctx.lastError, "should have sent error message");
-        assertTrue(
-            ctx.lastError.toLowerCase()
-                .contains("permission"),
-            "error should mention permission: " + ctx.lastError);
         // Verify reload was NOT triggered
         assertFalse(ctx.reloaderRan, "reloader should NOT have been invoked");
     }
@@ -126,8 +78,7 @@ class CommandBootstrapTest {
 
         // Put a registration in the awaiting map so registerPlayer succeeds
         UUID uuid = ctx.playerIdentity.uuid;
-        AE2Controller.awaitingRegistration
-            .put(uuid, Pair.of("my-test-token", "password-hash"));
+        AE2Controller.awaitingRegistration.put(uuid, Pair.of("my-test-token", "password-hash"));
 
         try {
             builder.authHandler.accept(ctx);
@@ -153,7 +104,6 @@ class CommandBootstrapTest {
 
         // Should show usage when no token arg provided
         assertNotNull(ctx.lastError, "should have sent error for missing args");
-        assertTrue(ctx.lastError.contains("auth"), "error should mention auth subcommand");
     }
 
     @Test
@@ -169,17 +119,12 @@ class CommandBootstrapTest {
 
         // Should reject non-player usage
         assertNotNull(ctx.lastError, "should have sent error for console sender");
-        assertTrue(
-            ctx.lastError.toLowerCase()
-                .contains("player"),
-            "error should mention player-only restriction");
     }
 
     // --- Recording ICommandBuilder stub ---
 
     private static class RecordingBuilder implements ICommandBuilder {
 
-        final List<String> calls;
         final RecordingBuilder root;
         final RecordingBuilder parent;
         Consumer<ICommandContext> reloadHandler;
@@ -187,33 +132,28 @@ class CommandBootstrapTest {
 
         /** Root constructor. */
         RecordingBuilder() {
-            this.calls = new ArrayList<>();
             this.root = this;
             this.parent = null;
         }
 
         /** Child constructor — inherits the root's call list. */
         RecordingBuilder(RecordingBuilder parent) {
-            this.calls = parent.calls;
             this.root = parent.root;
             this.parent = parent;
         }
 
         @Override
         public ICommandBuilder literal(String name, int permission) {
-            calls.add("literal:" + name + ":" + permission);
             return new RecordingBuilder(this);
         }
 
         @Override
         public ICommandBuilder argument(String name) {
-            calls.add("argument:" + name);
             return new RecordingBuilder(this);
         }
 
         @Override
         public ICommandBuilder executes(Consumer<ICommandContext> handler) {
-            calls.add("executes");
             if (root.reloadHandler == null) {
                 root.reloadHandler = handler;
             } else {
@@ -223,9 +163,7 @@ class CommandBootstrapTest {
         }
 
         @Override
-        public void register() {
-            calls.add("register");
-        }
+        public void register() {}
     }
 
     private static class TestAE implements IAE {

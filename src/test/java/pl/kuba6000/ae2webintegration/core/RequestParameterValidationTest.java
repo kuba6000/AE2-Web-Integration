@@ -38,8 +38,7 @@ class RequestParameterValidationTest {
             "expected status " + expected + " but got " + json);
     }
 
-    private static String runSynced(ISyncedRequest request,
-        String query) {
+    private static String runSynced(ISyncedRequest request, String query) {
         request.init(TestGridFixtures.context(ME, query));
         return request.getJSON();
     }

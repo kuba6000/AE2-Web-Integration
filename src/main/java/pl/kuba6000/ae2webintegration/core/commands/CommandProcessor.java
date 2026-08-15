@@ -3,9 +3,9 @@ package pl.kuba6000.ae2webintegration.core.commands;
 import org.apache.commons.lang3.tuple.Pair;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.config.CoreData;
 
 public class CommandProcessor {
 

@@ -15,7 +15,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
-import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -58,15 +57,11 @@ class CoreEngineLifecycleTest {
             }
         };
         AE2Controller.serverPlatform = processPlatform;
-        CoreData processAccounts = new CoreData();
-        CoreData.instance = processAccounts;
-
         CoreEngine.onServerStopped();
         assertDoesNotThrow(CoreEngine::onServerStopped, "world teardown must be idempotent");
 
         assertSame(processInterface, AE2Controller.AE2Interface);
         assertSame(processPlatform, AE2Controller.serverPlatform);
-        assertSame(processAccounts, CoreData.instance);
         assertTrue(gridData.isTracked, "persisted grid settings survive a world switch");
         assertTrue(AE2Controller.awaitingRegistration.isEmpty());
         assertTrue(AE2Controller.hashcodeToStack.isEmpty());

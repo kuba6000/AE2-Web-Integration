@@ -41,6 +41,7 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 
 class ServerLifecycleHttpTest {
@@ -176,9 +177,7 @@ class ServerLifecycleHttpTest {
     @Test
     void secondServerLifecycleRebindsRejectsTheOldTokenAndServesANewSession() throws Exception {
         IAE processInterface = TestGridFixtures.ae();
-        CoreData processAccounts = new CoreData();
         AE2Controller.AE2Interface = processInterface;
-        CoreData.instance = processAccounts;
 
         AE2Controller.startHTTPServer();
         String token = login();
@@ -190,7 +189,6 @@ class ServerLifecycleHttpTest {
         CoreEngine.onServerStopped();
 
         assertSame(processInterface, AE2Controller.AE2Interface);
-        assertSame(processAccounts, CoreData.instance);
         AE2Controller.startHTTPServer();
 
         Response secondWorld = get("/grids", token);
@@ -397,7 +395,7 @@ class ServerLifecycleHttpTest {
                 return 42;
             }
         };
-        CoreData.instance = new CoreData();
+        CoreDataTestFixture.reset();
         assertTrue(
             CoreData.setPassword(
                 new PlayerIdentity(playerUuid, "Player"),
@@ -440,7 +438,7 @@ class ServerLifecycleHttpTest {
                 throw new AssertionError("authenticated HTTP must not read an AE2 profile");
             }
         };
-        CoreData.instance = new CoreData();
+        CoreDataTestFixture.reset();
         assertTrue(
             CoreData.setPassword(
                 new PlayerIdentity(playerUuid, "CanonicalPlayer"),

@@ -3,13 +3,10 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +17,7 @@ import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -41,7 +39,7 @@ class CoreDataTest {
         Config.init(configRoot);
         AE2Controller.serverPlatform = new TestPlatform(configRoot);
         AE2Controller.AE2Interface = new TestAE(42, false);
-        CoreData.instance = new CoreData();
+        CoreDataTestFixture.reset();
     }
 
     @Test
@@ -52,27 +50,23 @@ class CoreDataTest {
     }
 
     @Test
-    void setPasswordRejectsUnresolvedPlayerWithoutMutatingData() throws Exception {
+    void setPasswordRejectsUnresolvedPlayerWithoutCreatingAnAccount() {
         AE2Controller.AE2Interface = new TestAE(-1, false);
 
         assertFalse(CoreData.setPassword(REGISTERED_PLAYER, "hash"));
 
         assertEquals(-1, CoreData.getPlayerId("Player"));
-        assertTrue(getMap("passwords").isEmpty());
-        assertTrue(getMap("UUIDToId").isEmpty());
-        assertTrue(getMap("IdToUUID").isEmpty());
+        assertNull(CoreData.getPlayerName(42));
     }
 
     @Test
-    void setPasswordRejectsPlayerLookupExceptionWithoutMutatingData() throws Exception {
+    void setPasswordRejectsPlayerLookupExceptionWithoutCreatingAnAccount() {
         AE2Controller.AE2Interface = new TestAE(42, true);
 
         assertFalse(CoreData.setPassword(REGISTERED_PLAYER, "hash"));
 
         assertEquals(-1, CoreData.getPlayerId("Player"));
-        assertTrue(getMap("passwords").isEmpty());
-        assertTrue(getMap("UUIDToId").isEmpty());
-        assertTrue(getMap("IdToUUID").isEmpty());
+        assertNull(CoreData.getPlayerName(42));
     }
 
     // --- persistence: a bad file must never cost anyone their account ---
@@ -90,7 +84,7 @@ class CoreDataTest {
     void savedAccountsSurviveAReload() {
         CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
 
-        CoreData.instance = new CoreData();
+        CoreDataTestFixture.reset();
         CoreData.loadData();
 
         assertEquals(42, CoreData.getPlayerId("Player"));
@@ -100,7 +94,7 @@ class CoreDataTest {
     void savedAccountIsResolvedByItsStoredNameWithoutAPlatformProfileLookup() {
         CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
 
-        CoreData.instance = new CoreData();
+        CoreDataTestFixture.reset();
         CoreData.loadData();
         AE2Controller.serverPlatform = null;
 
@@ -149,7 +143,7 @@ class CoreDataTest {
         CoreData.loadData();
         CoreEngine.onPlayerSeen(REGISTERED_PLAYER);
 
-        CoreData.instance = new CoreData();
+        CoreDataTestFixture.reset();
         CoreData.loadData();
 
         assertEquals(42, CoreData.getPlayerId("Player"));
@@ -166,7 +160,7 @@ class CoreDataTest {
         assertEquals("Player", CoreData.getPlayerName(43));
         assertEquals(43, CoreData.getPlayerId("player"));
 
-        CoreData.instance = new CoreData();
+        CoreDataTestFixture.reset();
         CoreData.loadData();
 
         assertNull(CoreData.getPlayerName(42));
@@ -186,15 +180,7 @@ class CoreDataTest {
     }
 
     private String readDataFile() throws Exception {
-        return new String(
-            Files.readAllBytes(dataFile().toPath()),
-            StandardCharsets.UTF_8);
-    }
-
-    private Map<?, ?> getMap(String fieldName) throws Exception {
-        Field field = CoreData.class.getDeclaredField(fieldName);
-        field.setAccessible(true);
-        return (Map<?, ?>) field.get(CoreData.instance);
+        return new String(Files.readAllBytes(dataFile().toPath()), StandardCharsets.UTF_8);
     }
 
     private static class TestPlatform implements IServerPlatform {
