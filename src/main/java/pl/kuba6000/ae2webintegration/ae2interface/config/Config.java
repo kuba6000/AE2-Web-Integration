@@ -13,7 +13,7 @@ import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 import pl.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration;
-import pl.kuba6000.ae2webintegration.core.ConfigBootstrap;
+import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 
 /**
  * NeoForge config wiring. This class does NOT define what config keys exist —
