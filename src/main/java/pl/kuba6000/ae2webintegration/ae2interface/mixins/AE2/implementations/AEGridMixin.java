@@ -56,11 +56,6 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
         return (IAESecurityGrid) this;
     }
 
-    @Override
-    public boolean web$isEmpty() {
-        return ((Grid) (Object) this).isEmpty();
-    }
-
     @Unique
     private Class<?> web$lastUsedMachineClass = null;
 
