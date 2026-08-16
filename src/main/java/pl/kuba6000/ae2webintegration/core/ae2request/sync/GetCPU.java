@@ -84,10 +84,12 @@ public class GetCPU extends ISyncedRequest {
                     compactedItem.timeSpentCrafting += trackingInfo.getTimeSpentOn(key);
                     compactedItem.craftedTotal += trackingInfo.craftedTotal.getOrDefault(key, 0L);
                     compactedItem.shareInCraftingTime += trackingInfo.getShareInCraftingTime(key);
-                    compactedItem.shareInCraftingTimeCombined = Math
-                        .min(((double) compactedItem.timeSpentCrafting) / (double) clusterData.timeElapsed, 1d);
-                    compactedItem.craftsPerSec = (double) compactedItem.craftedTotal
-                        / (compactedItem.timeSpentCrafting / 1000d);
+                    compactedItem.shareInCraftingTimeCombined = clusterData.timeElapsed > 0
+                        ? Math.min(((double) compactedItem.timeSpentCrafting) / (double) clusterData.timeElapsed, 1d)
+                        : 0d;
+                    compactedItem.craftsPerSec = compactedItem.timeSpentCrafting > 0
+                        ? (double) compactedItem.craftedTotal / (compactedItem.timeSpentCrafting / 1000d)
+                        : 0d;
                 }
             }
 

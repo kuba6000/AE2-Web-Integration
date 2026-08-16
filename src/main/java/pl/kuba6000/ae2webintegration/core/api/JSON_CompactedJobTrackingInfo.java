@@ -67,12 +67,17 @@ public class JSON_CompactedJobTrackingInfo {
             item.itemid = key.web$getItemID();
             item.itemname = key.web$getDisplayName();
             item.timeSpentOn = spent;
-            item.craftedTotal = info.craftedTotal.get(key);
+            item.craftedTotal = info.craftedTotal.getOrDefault(key, 0L);
             item.shareInCraftingTime = info.getShareInCraftingTime(key);
-            item.shareInCraftingTimeCombined = Math.min(((double) item.timeSpentOn) / (double) elapsed, 1d);
-            item.craftsPerSec = (double) item.craftedTotal / (item.timeSpentOn / 1000d);
-            for (Pair<Long, Long> longLongPair : info.itemShare.get(key)) {
-                item.timings.add(new timingClass(longLongPair.getKey(), longLongPair.getValue()));
+            item.shareInCraftingTimeCombined = elapsed > 0
+                ? Math.min(((double) item.timeSpentOn) / (double) elapsed, 1d)
+                : 0d;
+            item.craftsPerSec = item.timeSpentOn > 0 ? (double) item.craftedTotal / (item.timeSpentOn / 1000d) : 0d;
+            ArrayList<Pair<Long, Long>> itemTimings = info.itemShare.get(key);
+            if (itemTimings != null) {
+                for (Pair<Long, Long> longLongPair : itemTimings) {
+                    item.timings.add(new timingClass(longLongPair.getKey(), longLongPair.getValue()));
+                }
             }
             items.add(item);
         }
