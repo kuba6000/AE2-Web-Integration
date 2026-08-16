@@ -28,6 +28,8 @@ public class ConfigBootstrap {
 
     public static IConfigValue<String> discordWebhookValue = () -> "";
     public static IConfigValue<String> discordRoleIdValue = () -> "";
+    public static IConfigValue<Integer> discordMinimumCraftingDurationSecondsValue = () -> 0;
+    public static IConfigValue<Integer> discordMinimumCraftingAmountValue = () -> 0;
 
     // --- Tracking ---
 
@@ -81,6 +83,18 @@ public class ConfigBootstrap {
             "discord_role_id",
             "",
             "Role id to ping on errors, keep empty to disable pinging (if webhook is empty it will do nothing)");
+        discordMinimumCraftingDurationSecondsValue = builder.defineInt(
+            "discord_minimum_crafting_duration_seconds",
+            0,
+            0,
+            Integer.MAX_VALUE,
+            "Minimum crafting duration in seconds required for a Discord notification (0 disables this filter)");
+        discordMinimumCraftingAmountValue = builder.defineInt(
+            "discord_minimum_crafting_amount",
+            0,
+            0,
+            Integer.MAX_VALUE,
+            "Minimum final output amount required for a Discord notification (0 disables this filter)");
 
         trackingTrackMachineCraftingValue = builder.defineBoolean(
             "track_machine_crafting",

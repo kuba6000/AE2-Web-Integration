@@ -192,6 +192,10 @@ an `/ae2webintegration auth <token>` command. The player must run that command i
 Create a Discord webhook and set its URL as `discord_webhook` in the AE2 Web Integration config. You can also
 set `discord_role_id` if a role should be pinged on errors.
 
+Crafting completion notifications can be filtered with `discord_minimum_crafting_duration_seconds` and
+`discord_minimum_crafting_amount`. A notification must meet both configured minimums. Both values default to `0`,
+which keeps all crafting completion notifications enabled.
+
 <img width="467" height="224" alt="AE2 Web Integration Discord message" src="https://github.com/user-attachments/assets/f9f7635d-676c-40a3-8334-f7fa35e5867a" />
 
 ## Custom website

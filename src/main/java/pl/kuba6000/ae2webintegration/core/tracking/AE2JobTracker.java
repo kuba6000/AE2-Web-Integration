@@ -236,10 +236,10 @@ public class AE2JobTracker {
         info.isDone = true;
         info.timeDone = System.currentTimeMillis();
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
-        double took = info.timeDone - info.timeStarted;
-        took /= 1000d;
+        long durationMillis = info.timeDone - info.timeStarted;
+        long craftedAmount = info.finalOutput.web$amount();
         if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
-            .isEmpty()) {
+            .isEmpty() && DiscordManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
             IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
             if (securityGrid != null && securityGrid.web$isAvailable()) {
                 IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
@@ -253,12 +253,11 @@ public class AE2JobTracker {
                         "Crafting for `" + info.finalOutput.web$what()
                             .web$getDisplayName()
                             + " x"
-                            + info.finalOutput.web$amount()
+                            + craftedAmount
                             + "` "
                             + (info.wasCancelled ? "cancelled" : "completed")
                             + "!\nIt took "
-                            + took
-                            + "s",
+                            + DiscordManager.formatDuration(durationMillis),
                         info.wasCancelled ? 15548997 : 5763719));
             }
         }
