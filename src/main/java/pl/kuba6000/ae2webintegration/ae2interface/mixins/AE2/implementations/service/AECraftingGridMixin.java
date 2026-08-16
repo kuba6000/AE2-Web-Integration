@@ -1,10 +1,10 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations.service;
 
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Future;
-
-import net.minecraft.util.IChatComponent;
+import java.util.function.Function;
 
 import org.spongepowered.asm.mixin.Mixin;
 
@@ -17,11 +17,13 @@ import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.security.BaseActionSource;
 import appeng.api.networking.security.PlayerSource;
-import appeng.api.storage.data.IAEItemStack;
+import appeng.api.storage.data.IAEStack;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = ICraftingGrid.class)
@@ -46,23 +48,37 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     }
 
     @Override
-    public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IItemStack stack) {
+    @SuppressWarnings("unchecked")
+    public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
         PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
+        IAEStack<?> aeStack = ((IAEStack<?>) (Object) stack).copy();
+        aeStack.setStackSize(amount);
         final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
-            .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, (IAEItemStack) stack, null);
+            .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, aeStack, null);
         return (Future<IAECraftingJob>) (Object) job;
     }
 
     @Override
-    public default IChatComponent web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
+    public default String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
         IAEGrid grid) {
-        ICraftingLink link = ((ICraftingGrid) (Object) this).submitJob(
-            (ICraftingJob) job,
-            null,
-            (ICraftingCPU) target,
-            prioritizePower,
-            (BaseActionSource) grid.web$getPlayerSource());
+        ChatCapturingPlayerSource source = (ChatCapturingPlayerSource) grid.web$getPlayerSource();
+        source.clearLastMessage();
+        ICraftingLink link = ((ICraftingGrid) (Object) this)
+            .submitJob((ICraftingJob) job, null, (ICraftingCPU) target, prioritizePower, (BaseActionSource) source);
+        String msg = source.takeLastMessage();
         if (link != null) return null;
-        return grid.web$getLastFakePlayerChatMessage();
+        // A null return means "submitted" to the caller, so never report success when AE2 refused the
+        // job. It rejects a simulated plan (missing ingredients) without emitting any chat message.
+        return msg == null ? "Submission failed" : msg;
+    }
+
+    @Override
+    public default ICraftingMediumTracker web$getCraftingProviders() {
+        throw new UnsupportedOperationException("Use on CraftingGridCache implementation");
+    }
+
+    @Override
+    public default Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter) {
+        return Collections.emptySet();
     }
 }

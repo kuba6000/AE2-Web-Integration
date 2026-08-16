@@ -98,7 +98,7 @@ token mechanism is the same as in public mode.
 
 - If you already have a web server and want to host the panel there, you can!
 - There is currently no API documentation...
-- Check out [Simple proxy site](https://github.com/kuba6000/AE2-Web-Integration/tree/master/example_website) !
+- Check out [Simple proxy site](https://github.com/kuba6000/AE2-Web-Integration/tree/core/example_website) !
 - There you can find a simple website written in PHP ready to use, it's just simple proxy to API calls to the AE2 endpoint.
 
 # Compatibility

@@ -1,5 +1,8 @@
 {
   "required": true,
+  "injectors": {
+    "defaultRequire": 1
+  },
   "minVersion": "0.8.5-GTNH",
   "package": "pl.kuba6000.ae2webintegration.ae2interface.mixins",
   "plugin": "pl.kuba6000.ae2webintegration.ae2interface.mixins.MixinPlugin",

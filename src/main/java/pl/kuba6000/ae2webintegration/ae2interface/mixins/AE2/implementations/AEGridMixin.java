@@ -1,12 +1,12 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
-import net.minecraft.util.IChatComponent;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
-import net.minecraftforge.common.util.FakePlayer;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
+
+import com.mojang.authlib.GameProfile;
 
 import appeng.api.networking.IGridHost;
 import appeng.api.networking.IGridNode;
@@ -15,11 +15,13 @@ import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.pathing.IPathingGrid;
 import appeng.api.networking.security.IActionHost;
 import appeng.api.networking.security.ISecurityGrid;
-import appeng.api.networking.security.PlayerSource;
 import appeng.api.networking.storage.IStorageGrid;
 import appeng.me.Grid;
 import appeng.parts.reporting.AbstractPartTerminal;
 import cpw.mods.fml.common.FMLCommonHandler;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingFakePlayer;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
@@ -28,7 +30,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = Grid.class, remap = false)
-public abstract class AEGridMixin implements IAEGrid {
+public abstract class AEGridMixin implements IAEGrid, PlayerSourceLifecycle {
 
     @Override
     public IAECraftingGrid web$getCraftingGrid() {
@@ -50,19 +52,11 @@ public abstract class AEGridMixin implements IAEGrid {
         return ((Grid) (Object) this).getCache(ISecurityGrid.class);
     }
 
-    @Override
-    public boolean web$isEmpty() {
-        return ((Grid) (Object) this).isEmpty();
-    }
-
     @Unique
     private Class<? extends IGridHost> web$lastUsedMachineClass = null;
 
     @Unique
-    public IChatComponent web$lastFakePlayerChatMessage;
-
-    @Unique
-    private PlayerSource web$cachedPlayerSource = null;
+    private ChatCapturingPlayerSource web$cachedPlayerSource = null;
 
     @Override
     public Object web$getPlayerSource() {
@@ -96,25 +90,26 @@ public abstract class AEGridMixin implements IAEGrid {
         }
 
         if (web$cachedPlayerSource != null) {
-            if (web$cachedPlayerSource.via != actionHost) web$cachedPlayerSource = null;
-            else return web$cachedPlayerSource;
+            if (web$cachedPlayerSource.via != actionHost || !web$cachedPlayerSource.isForWorld(world)) {
+                web$cachedPlayerSource.dispose();
+                web$cachedPlayerSource = null;
+            } else return web$cachedPlayerSource;
         }
 
-        web$cachedPlayerSource = new PlayerSource(
-            new FakePlayer((WorldServer) world, AE2Controller.AEControllerProfile) {
-
-                @Override
-                public void addChatMessage(IChatComponent message) {
-                    web$lastFakePlayerChatMessage = message;
-                }
-            },
+        web$cachedPlayerSource = new ChatCapturingPlayerSource(
+            new ChatCapturingFakePlayer(
+                (WorldServer) world,
+                new GameProfile(AE2Controller.AEControllerUUID, "AE2CONTROLLER")),
             actionHost);
 
         return web$cachedPlayerSource;
     }
 
     @Override
-    public IChatComponent web$getLastFakePlayerChatMessage() {
-        return web$lastFakePlayerChatMessage;
+    public void web$clearPlayerSource(World world) {
+        if (web$cachedPlayerSource == null || world != null && !web$cachedPlayerSource.isForWorld(world)) return;
+        web$cachedPlayerSource.dispose();
+        web$cachedPlayerSource = null;
     }
+
 }

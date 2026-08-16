@@ -28,7 +28,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        return false;
+        return true;
     }
 
     @Override
@@ -43,7 +43,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
             Arrays.asList(
                 "AE2.CraftingGridCacheMixin",
                 "AE2.CraftingCPUClusterMixin",
-                "AE2.implementations.AEItemStackMixin",
+                "AE2.implementations.AEStackMixin",
                 "AE2.implementations.AEItemListMixin",
                 "AE2.implementations.AECraftingCPUClusterMixin",
                 "AE2.implementations.AECraftingJobMixin",
@@ -51,6 +51,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.implementations.AEGridMixin",
                 "AE2.implementations.AEMeInventoryItemMixin",
                 "AE2.implementations.AEPlayerDataMixin",
+                "AE2.implementations.CraftingMediumKeyMixin",
                 "AE2.implementations.PatternProviderViewableMixin",
                 "AE2.implementations.service.AECraftingGridMixin",
                 "AE2.implementations.service.AEPathingGridMixin",

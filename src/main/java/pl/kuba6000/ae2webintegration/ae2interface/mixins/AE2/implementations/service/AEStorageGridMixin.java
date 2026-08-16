@@ -3,21 +3,24 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations.se
 import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.networking.storage.IStorageGrid;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.DispatchingMeInventory;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.StorageMonitorableStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = IStorageGrid.class)
 public interface AEStorageGridMixin extends IAEStorageGrid {
 
     @Override
-    public default IItemList web$getItemStorageList() {
-        return (IItemList) (Object) ((IStorageGrid) (Object) this).getItemInventory()
-            .getStorageList();
+    default IStackList web$getStorageList() {
+        IStorageGrid grid = (IStorageGrid) (Object) this;
+        return new StorageMonitorableStackList(grid);
     }
 
     @Override
-    public default IAEMeInventoryItem web$getItemInventory() {
-        return (IAEMeInventoryItem) ((IStorageGrid) (Object) this).getItemInventory();
+    default IAEMeInventoryItem web$getInventory() {
+        IStorageGrid grid = (IStorageGrid) (Object) this;
+        return new DispatchingMeInventory(grid);
     }
 }

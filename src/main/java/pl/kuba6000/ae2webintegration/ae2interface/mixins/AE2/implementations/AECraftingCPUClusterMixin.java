@@ -5,17 +5,20 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
 import appeng.api.networking.crafting.CraftingItemList;
-import appeng.api.storage.data.IAEItemStack;
+import appeng.api.storage.data.IAEStack;
+import appeng.api.storage.data.IItemList;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
+import appeng.util.item.IAEStackList;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
 public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Shadow
-    private appeng.api.storage.data.IItemList<IAEItemStack> waitingFor;
+    private IItemList<IAEStack<?>> waitingFor;
 
     @Unique
     private int web$internalID = -1;
@@ -52,7 +55,7 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
         if (!web$usedStorageInitialized) {
             web$usedStorageInitialized = true;
             try {
-                appeng.me.cluster.implementations.CraftingCPUCluster.class.getDeclaredMethod("getUsedStorage");
+                CraftingCPUCluster.class.getDeclaredMethod("getUsedStorage");
             } catch (NoSuchMethodException e) {
                 web$isUsedStorageAvailable = false;
                 return -1L;
@@ -78,30 +81,51 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     }
 
     @Override
-    public IItemStack web$getFinalOutput() {
-        return (IItemStack) ((CraftingCPUCluster) (Object) this).getFinalOutput();
+    public IAEGenericStack web$getFinalOutput() {
+        return (IAEGenericStack) ((CraftingCPUCluster) (Object) this).getFinalMultiOutput();
     }
 
     @Override
-    public void web$getActiveItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.ACTIVE);
+    public void web$getAllItems(IStackList list) {
+        populateList(list, CraftingItemList.ACTIVE);
+        populateList(list, CraftingItemList.PENDING);
+        populateList(list, CraftingItemList.STORAGE);
     }
 
     @Override
-    public void web$getPendingItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.PENDING);
+    public IStackList web$getWaitingFor() {
+        return (IStackList) (Object) waitingFor;
     }
 
     @Override
-    public void web$getStorageItems(IItemList list) {
-        ((CraftingCPUCluster) (Object) this)
-            .getListOfItem((appeng.api.storage.data.IItemList<IAEItemStack>) (Object) list, CraftingItemList.STORAGE);
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public long web$getActiveItems(IAEKey key) {
+        IItemList<IAEStack<?>> items = new IAEStackList();
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem(items, CraftingItemList.ACTIVE);
+        IAEStack<?> found = items.findPrecise((IAEStack<?>) (Object) key);
+        return found == null ? 0 : found.getStackSize();
     }
 
     @Override
-    public IItemList web$getWaitingFor() {
-        return (IItemList) (Object) waitingFor;
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public long web$getPendingItems(IAEKey key) {
+        IItemList<IAEStack<?>> items = new IAEStackList();
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem(items, CraftingItemList.PENDING);
+        IAEStack<?> found = items.findPrecise((IAEStack<?>) (Object) key);
+        return found == null ? 0 : found.getStackSize();
+    }
+
+    @Override
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public long web$getStorageItems(IAEKey key) {
+        IItemList<IAEStack<?>> items = new IAEStackList();
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem(items, CraftingItemList.STORAGE);
+        IAEStack<?> found = items.findPrecise((IAEStack<?>) (Object) key);
+        return found == null ? 0 : found.getStackSize();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void populateList(IStackList list, CraftingItemList type) {
+        ((CraftingCPUCluster) (Object) this).getModernListOfItem((IItemList<IAEStack<?>>) (Object) list, type);
     }
 }
