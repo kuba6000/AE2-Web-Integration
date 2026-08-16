@@ -2,10 +2,10 @@ package pl.kuba6000.ae2webintegration.core.discord;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentLinkedQueue;
-
-import javax.net.ssl.HttpsURLConnection;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -95,18 +95,18 @@ public class DiscordManager extends Thread {
         try {
             url = new URL(Config.DISCORD_WEBHOOK());
 
-            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.addRequestProperty("Content-Type", "application/json");
             connection.addRequestProperty("User-Agent", "AE2-Web-Integration");
             connection.setDoOutput(true);
             connection.setRequestMethod("POST");
 
-            OutputStream stream = connection.getOutputStream();
-            stream.write(
-                json.toString()
-                    .getBytes());
-            stream.flush();
-            stream.close();
+            try (OutputStream stream = connection.getOutputStream()) {
+                stream.write(
+                    json.toString()
+                        .getBytes(StandardCharsets.UTF_8));
+                stream.flush();
+            }
 
             int code;
             if ((code = connection.getResponseCode()) != 200 && code != 204) {
