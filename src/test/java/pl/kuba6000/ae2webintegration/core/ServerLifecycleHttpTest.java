@@ -139,6 +139,7 @@ class ServerLifecycleHttpTest {
     private IConfigValue<String> previousPassword;
     private IConfigValue<Boolean> previousLocalAccess;
     private IConfigValue<Boolean> previousPublicMode;
+    private IConfigValue<Boolean> previousCheckForUpdates;
     private File previousConfigDirectory;
     private IServerPlatform previousServerPlatform;
     private int port;
@@ -150,6 +151,7 @@ class ServerLifecycleHttpTest {
         previousPassword = ConfigBootstrap.aePasswordValue;
         previousLocalAccess = ConfigBootstrap.allowNoPasswordOnLocalhostValue;
         previousPublicMode = ConfigBootstrap.aePublicModeValue;
+        previousCheckForUpdates = ConfigBootstrap.checkForUpdatesValue;
         previousConfigDirectory = Config.getConfigDirectory();
         previousServerPlatform = AE2Controller.serverPlatform;
 
@@ -158,6 +160,7 @@ class ServerLifecycleHttpTest {
         ConfigBootstrap.aePasswordValue = () -> "lifecycle-password";
         ConfigBootstrap.allowNoPasswordOnLocalhostValue = () -> false;
         ConfigBootstrap.aePublicModeValue = () -> false;
+        ConfigBootstrap.checkForUpdatesValue = () -> false;
         Config.init(tempDirectory);
     }
 
@@ -168,6 +171,7 @@ class ServerLifecycleHttpTest {
         ConfigBootstrap.aePasswordValue = previousPassword;
         ConfigBootstrap.allowNoPasswordOnLocalhostValue = previousLocalAccess;
         ConfigBootstrap.aePublicModeValue = previousPublicMode;
+        ConfigBootstrap.checkForUpdatesValue = previousCheckForUpdates;
         AE2Controller.serverPlatform = previousServerPlatform;
         if (previousConfigDirectory != null) {
             Config.init(previousConfigDirectory.getParentFile());
