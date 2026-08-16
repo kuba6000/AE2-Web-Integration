@@ -1,8 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Set;
 
 import pl.kuba6000.ae2webintegration.core.GridAccess;
 import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
@@ -35,8 +33,8 @@ public class GetGridList extends ISyncedRequest {
     @Override
     public void handle(IAE ae) {
         ArrayList<JSON_GridData> grids = new ArrayList<>();
-        // This loop computes exactly the set the async endpoints need, so publish it while we are here.
-        Set<Long> accessibleKeys = new HashSet<>();
+        GridAccess access = GridAccessSessions
+            .refreshIfHalfLifeElapsed(ae, context.getPrincipal(), System.currentTimeMillis());
         for (IAEGrid grid : ae.web$getGrids()) {
             IAESecurityGrid security = GridFilter.usableSecurity(grid);
             if (security == null || security.web$getSecurityKey() == -1) {
@@ -52,19 +50,23 @@ public class GetGridList extends ISyncedRequest {
                 }
                 continue;
             }
-            if (!context.isAdmin() && !security.web$hasPermissions(context.getUserID())) {
+            long securityKey = security.web$getSecurityKey();
+            if (!access.canAccess(securityKey)) {
                 continue;
             }
-            accessibleKeys.add(security.web$getSecurityKey());
+            boolean hasPermissions = access.hasResolvedPlayerId() && security.web$hasPermissions(access.getPlayerId());
+            if (!context.isAdmin() && !hasPermissions) {
+                continue;
+            }
             PlayerIdentity ownerIdentity = security.web$getOwnerProfile();
-            GridData gridData = GridData.getOrCreate(security.web$getSecurityKey());
+            GridData gridData = GridData.getOrCreate(securityKey);
             grids.add(
                 new JSON_GridData(
-                    security.web$getSecurityKey(),
+                    securityKey,
                     grid.web$getCraftingGrid()
                         .web$getCPUCount(),
                     ownerIdentity == null ? "N/A" : ownerIdentity.name,
-                    security.web$hasPermissions(context.getUserID()),
+                    hasPermissions,
                     gridData.isTracked));
         }
         grids.sort((d1, d2) -> {
@@ -84,7 +86,6 @@ public class GetGridList extends ISyncedRequest {
                 return Integer.compare(d2.cpuCount, d1.cpuCount); // sort by cpu count if all else is equal
             }
         });
-        GridAccessSessions.put(context.getUserID(), new GridAccess(accessibleKeys, System.currentTimeMillis()));
         succeed(grids);
     }
 }

@@ -4,6 +4,9 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
@@ -11,8 +14,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 /**
  * Per-user cache of accessible grid keys, written by the server thread and read by HTTP worker threads.
  * <p>
- * Keyed by web user id rather than by session token on purpose: authorization is a property of the user,
- * not of a browser tab, and authentication tokens rotate independently.
+ * Keyed by stable web principal rather than by session token or world-scoped AE2 player id on purpose:
+ * authorization is a property of the user, while both tokens and AE2 ids may change independently.
  * <p>
  * Fail-closed: a user with no cached entry is refused, so async endpoints deny by default until a synced
  * request has established what that user may see.
@@ -21,19 +24,20 @@ public final class GridAccessSessions {
 
     private GridAccessSessions() {}
 
-    private static final ConcurrentHashMap<Integer, GridAccess> sessions = new ConcurrentHashMap<>();
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
+    private static final ConcurrentHashMap<WebPrincipal, GridAccess> sessions = new ConcurrentHashMap<>();
 
-    public static GridAccess get(int userId) {
-        return sessions.get(userId);
+    public static GridAccess get(WebPrincipal principal) {
+        return sessions.get(principal);
     }
 
-    public static void put(int userId, GridAccess access) {
-        sessions.put(userId, access);
+    public static void put(WebPrincipal principal, GridAccess access) {
+        sessions.put(principal, access);
     }
 
     /** Called on explicit logout - a new login recomputes from scratch. */
-    public static void invalidate(int userId) {
-        sessions.remove(userId);
+    public static void invalidate(WebPrincipal principal) {
+        sessions.remove(principal);
     }
 
     /** Called on server stop so authorization never carries across a singleplayer world reload. */
@@ -42,7 +46,7 @@ public final class GridAccessSessions {
     }
 
     /**
-     * Recomputes which grids {@code userId} may access.
+     * Recomputes which grids {@code principal} may access and resolves the current world's AE2 player id.
      * <p>
      * An admin is not permission-checked, so their set is every attachable grid and the check reduces to
      * "does this grid exist" - which is what the synced path has always required of admins too. Without
@@ -50,7 +54,20 @@ public final class GridAccessSessions {
      * <p>
      * MUST run on the Minecraft server thread - it reads live AE2 security state.
      */
-    public static GridAccess compute(IAE ae, int userId, boolean isAdmin, long nowMillis) {
+    public static GridAccess compute(IAE ae, WebPrincipal principal, long nowMillis) {
+        int playerId = GridAccess.UNRESOLVED_PLAYER_ID;
+        if (!principal.isAdmin()) {
+            try {
+                playerId = ae.web$getPlayerData()
+                    .web$getPlayerId(principal.getPlayerIdentity());
+            } catch (Exception e) {
+                LOG.error("Failed to resolve the AE2 player ID for web user " + principal.getUsername(), e);
+            }
+            if (playerId < 0) {
+                return new GridAccess(GridAccess.UNRESOLVED_PLAYER_ID, new HashSet<>(), nowMillis);
+            }
+        }
+
         Set<Long> keys = new HashSet<>();
         for (IAEGrid grid : ae.web$getGrids()) {
             IAESecurityGrid security = GridFilter.usableSecurity(grid);
@@ -61,21 +78,23 @@ public final class GridAccessSessions {
             if (gridKey == -1) {
                 continue;
             }
-            if (isAdmin || security.web$hasPermissions(userId)) {
+            if (principal.isAdmin() || security.web$hasPermissions(playerId)) {
                 keys.add(gridKey);
             }
         }
-        return new GridAccess(keys, nowMillis);
+        return new GridAccess(playerId, keys, nowMillis);
     }
 
     /**
      * Refreshes the user's access set when it is missing or past half its lifetime. Cheap on the common
      * path: a single map lookup and a timestamp comparison.
      */
-    public static void refreshIfHalfLifeElapsed(IAE ae, int userId, boolean isAdmin, long nowMillis) {
-        GridAccess current = sessions.get(userId);
+    public static GridAccess refreshIfHalfLifeElapsed(IAE ae, WebPrincipal principal, long nowMillis) {
+        GridAccess current = sessions.get(principal);
         if (current == null || current.isHalfLifeElapsed(nowMillis)) {
-            sessions.put(userId, compute(ae, userId, isAdmin, nowMillis));
+            current = compute(ae, principal, nowMillis);
+            sessions.put(principal, current);
         }
+        return current;
     }
 }

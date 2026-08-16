@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 import java.util.Map;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.GridAccess;
 import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.GridFilter;
@@ -47,18 +48,23 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
         // We are on the server thread with live AE2 state in hand, so this is the cheapest place to keep
         // the async endpoints' authorization data fresh. Refreshing at half life rather than on expiry
         // means an active session never sees REFRESH_REQUIRED.
+        GridAccess access = null;
         if (context != null) {
-            GridAccessSessions
-                .refreshIfHalfLifeElapsed(ae, context.getUserID(), context.isAdmin(), System.currentTimeMillis());
+            access = GridAccessSessions
+                .refreshIfHalfLifeElapsed(ae, context.getPrincipal(), System.currentTimeMillis());
         }
         if (gridKey != -1) {
+            if (!context.isAdmin() && (access == null || !access.hasResolvedPlayerId())) {
+                deny("NO_PERMISSIONS");
+                return;
+            }
             for (IAEGrid grid : ae.web$getGrids()) {
                 IAESecurityGrid security = GridFilter.usableSecurity(grid);
                 if (security == null) {
                     continue;
                 }
                 if (gridKey == security.web$getSecurityKey()) {
-                    if (!context.isAdmin() && !security.web$hasPermissions(context.getUserID())) {
+                    if (!context.isAdmin() && !security.web$hasPermissions(access.getPlayerId())) {
                         deny("NO_PERMISSIONS");
                         return;
                     }

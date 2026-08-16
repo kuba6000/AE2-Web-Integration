@@ -28,7 +28,7 @@ class RequestParameterValidationTest {
         AE2Controller.AE2Interface = TestGridFixtures.ae();
         Set<Long> keys = new HashSet<>();
         keys.add(GRID);
-        GridAccessSessions.put(ME, new GridAccess(keys, System.currentTimeMillis()));
+        GridAccessSessions.put(TestGridFixtures.principal(ME), new GridAccess(ME, keys, System.currentTimeMillis()));
         AE2Controller.hashcodeToStack.clear();
     }
 

@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
+import java.net.ServerSocket;
 import java.util.UUID;
 
 import org.apache.commons.lang3.tuple.Pair;
@@ -13,9 +14,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
+import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -31,9 +34,18 @@ class CommandProcessorTest {
     private static final UUID OTHER_UUID = UUID.fromString("11111111-2222-3333-4444-555555555555");
     private static final PlayerIdentity TEST_PLAYER = new PlayerIdentity(TEST_UUID, "Player");
     private static final PlayerIdentity OTHER_PLAYER = new PlayerIdentity(OTHER_UUID, "OtherPlayer");
+    private static IConfigValue<Integer> previousPort;
+    private static File previousConfigDirectory;
 
     @BeforeAll
     static void setupServer() throws Exception {
+        previousPort = ConfigBootstrap.aePortValue;
+        previousConfigDirectory = Config.getConfigDirectory();
+        int testPort;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            testPort = socket.getLocalPort();
+        }
+        ConfigBootstrap.aePortValue = () -> testPort;
         // Initialize Config so CoreData can resolve its data file path
         Config.init(new File(System.getProperty("java.io.tmpdir")));
 
@@ -45,6 +57,10 @@ class CommandProcessorTest {
     @AfterAll
     static void stopServer() {
         AE2Controller.stopHTTPServer();
+        ConfigBootstrap.aePortValue = previousPort;
+        if (previousConfigDirectory != null) {
+            Config.init(previousConfigDirectory.getParentFile());
+        }
     }
 
     @BeforeEach
@@ -127,18 +143,15 @@ class CommandProcessorTest {
     }
 
     @Test
-    void testRegisterPlayerKeepsPendingRegistrationWhenPlayerIdCannotBeResolved() {
+    void testRegisterPlayerDoesNotRequireAWorldScopedAePlayerId() {
         String token = "correct-token";
         AE2Controller.AE2Interface = new TestAE(-1);
         AE2Controller.awaitingRegistration.put(TEST_UUID, Pair.of(token, "hash"));
 
         CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, token);
 
-        assertFalse(result.isSuccess());
-        assertTrue(
-            result.getMessage()
-                .contains("AE2 player ID"));
-        assertTrue(AE2Controller.awaitingRegistration.containsKey(TEST_UUID));
+        assertTrue(result.isSuccess());
+        assertFalse(AE2Controller.awaitingRegistration.containsKey(TEST_UUID));
     }
 
     @Test

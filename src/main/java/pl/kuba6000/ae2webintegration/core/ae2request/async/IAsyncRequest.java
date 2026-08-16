@@ -40,7 +40,7 @@ public abstract class IAsyncRequest extends IRequest {
             gridKey = parsed;
         }
         if (gridKey != -1) {
-            GridAccess access = GridAccessSessions.get(context.getUserID());
+            GridAccess access = GridAccessSessions.get(context.getPrincipal());
             if (access == null || access.isStale(System.currentTimeMillis())) {
                 // Distinct from NO_PERMISSIONS so the client can re-fetch the grid list and retry instead
                 // of reporting a permission error.

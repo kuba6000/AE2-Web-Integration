@@ -24,9 +24,9 @@ class AsyncRequestAuthorizationTest {
 
     private static final long MY_GRID = 10L;
     private static final long OTHER_GRID = 20L;
-    private static final int ME = 42;
-    private static final int ADMIN = -1;
-    private static final int LOCALHOST = -2;
+    private static final WebPrincipal ME = TestGridFixtures.principal(42);
+    private static final WebPrincipal ADMIN = WebPrincipal.admin();
+    private static final WebPrincipal LOCALHOST = WebPrincipal.localhost();
 
     /** Minimal concrete handler that records whether it was allowed to run. */
     private static class ProbeRequest extends IAsyncRequest {
@@ -40,17 +40,18 @@ class AsyncRequestAuthorizationTest {
         }
     }
 
-    private static void grantAccess(int userId, long... keys) {
+    private static void grantAccess(WebPrincipal principal, long... keys) {
         Set<Long> set = new HashSet<>();
         for (long key : keys) {
             set.add(key);
         }
-        GridAccessSessions.put(userId, new GridAccess(set, System.currentTimeMillis()));
+        GridAccessSessions
+            .put(principal, new GridAccess(GridAccess.UNRESOLVED_PLAYER_ID, set, System.currentTimeMillis()));
     }
 
-    private static ProbeRequest run(int userId, String query) {
+    private static ProbeRequest run(WebPrincipal principal, String query) {
         ProbeRequest request = new ProbeRequest();
-        request.handle(TestGridFixtures.context(userId, query));
+        request.handle(TestGridFixtures.context(principal, query));
         return request;
     }
 
@@ -101,6 +102,7 @@ class AsyncRequestAuthorizationTest {
         GridAccessSessions.put(
             ME,
             new GridAccess(
+                42,
                 new HashSet<>(Collections.singletonList(MY_GRID)),
                 System.currentTimeMillis() - GridAccess.TTL_MILLIS - 1));
 

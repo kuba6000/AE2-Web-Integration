@@ -14,7 +14,6 @@ import org.apache.logging.log4j.Logger;
 import com.google.common.io.Files;
 import com.google.gson.Gson;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
@@ -23,7 +22,7 @@ public class CoreData {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
-    private static final int CURRENT_SCHEMA_VERSION = 2;
+    private static final int CURRENT_SCHEMA_VERSION = 3;
 
     /**
      * Only ever assigned by {@link #loadData()} at mod init, before any HTTP thread exists, so today it is
@@ -46,8 +45,6 @@ public class CoreData {
 
     // Written from the server thread by setPassword (the in-game /ae2webintegration auth command) and read
     // from HTTP worker threads during login, so plain HashMaps would offer no visibility guarantee at all.
-    private final ConcurrentHashMap<UUID, Integer> UUIDToId = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Integer, UUID> IdToUUID = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, String> passwords = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, String> usernames = new ConcurrentHashMap<>();
 
@@ -56,22 +53,18 @@ public class CoreData {
 
     public static final class Account {
 
-        private final UUID uuid;
-        private final int playerId;
-        private final String username;
+        private final PlayerIdentity identity;
 
-        private Account(UUID uuid, int playerId, String username) {
-            this.uuid = uuid;
-            this.playerId = playerId;
-            this.username = username;
+        private Account(UUID uuid, String username) {
+            this.identity = new PlayerIdentity(uuid, username);
         }
 
-        public int getPlayerId() {
-            return playerId;
+        public PlayerIdentity getIdentity() {
+            return identity;
         }
 
         public String getUsername() {
-            return username;
+            return identity.name;
         }
     }
 
@@ -85,35 +78,15 @@ public class CoreData {
         if (playerUuid == null) {
             return null;
         }
-        Integer playerId = data.UUIDToId.get(playerUuid);
         String username = data.usernames.get(playerUuid);
-        if (playerId == null || username == null || !normalizedName.equals(normalizeUsername(username))) {
+        if (username == null || !normalizedName.equals(normalizeUsername(username))) {
             return null;
         }
-        return new Account(playerUuid, playerId, username);
-    }
-
-    public static int getPlayerId(String name) {
-        Account account = getAccount(name);
-        return account != null ? account.playerId : -1;
-    }
-
-    public static String getPlayerName(int playerId) {
-        UUID playerUuid = instance.IdToUUID.get(playerId);
-        return playerUuid != null ? instance.usernames.get(playerUuid) : null;
-    }
-
-    public static boolean verifyPassword(int playerId, String password) {
-        UUID id = instance.IdToUUID.get(playerId);
-        if (id == null) {
-            LOG.warn("Player ID " + playerId + " not found in IdToUUID map.");
-            return false;
-        }
-        return verifyPassword(id, password);
+        return new Account(playerUuid, username);
     }
 
     public static boolean verifyPassword(Account account, String password) {
-        return account != null && verifyPassword(account.uuid, password);
+        return account != null && verifyPassword(account.identity.uuid, password);
     }
 
     private static boolean verifyPassword(UUID playerUuid, String password) {
@@ -141,7 +114,7 @@ public class CoreData {
             return;
         }
         CoreData data = instance;
-        if (!data.passwords.containsKey(player.uuid) || !data.UUIDToId.containsKey(player.uuid)) {
+        if (!data.passwords.containsKey(player.uuid)) {
             return;
         }
         if (data.recordUsername(player.uuid, player.name)) {
@@ -157,24 +130,10 @@ public class CoreData {
             return true;
         }
 
-        try {
-            int playerId = AE2Controller.AE2Interface.web$getPlayerData()
-                .web$getPlayerId(player);
-            if (playerId < 0) {
-                LOG.error("Could not resolve AE2 player ID for UUID: " + playerUuid);
-                return false;
-            }
-
-            instance.passwords.put(playerUuid, passwordHash);
-            instance.UUIDToId.put(playerUuid, playerId);
-            instance.IdToUUID.put(playerId, playerUuid);
-            instance.recordUsername(playerUuid, player.name);
-            saveChanges();
-            return true;
-        } catch (Exception e) {
-            LOG.error("Failed to resolve AE2 player ID for UUID: " + playerUuid, e);
-            return false;
-        }
+        instance.passwords.put(playerUuid, passwordHash);
+        instance.recordUsername(playerUuid, player.name);
+        saveChanges();
+        return true;
     }
 
     private static void saveChanges() {
@@ -195,8 +154,11 @@ public class CoreData {
             saveChanges();
             return;
         }
-        try (Reader reader = Files.newReader(file, StandardCharsets.UTF_8)) {
-            CoreData loaded = gson.fromJson(reader, CoreData.class);
+        try {
+            CoreData loaded;
+            try (Reader reader = Files.newReader(file, StandardCharsets.UTF_8)) {
+                loaded = gson.fromJson(reader, CoreData.class);
+            }
             if (loaded == null) {
                 // An empty or null-valued file deserializes to null without throwing, so this is not
                 // reachable from the catch below.
@@ -209,8 +171,15 @@ public class CoreData {
                         + "), reading it as schema "
                         + CURRENT_SCHEMA_VERSION);
             }
+            boolean needsMigration = loaded.schemaVersion < CURRENT_SCHEMA_VERSION;
             loaded.rebuildUsernameIndex();
             instance = loaded;
+            if (needsMigration) {
+                // The reader is already closed here, so an atomic replacement also works on Windows.
+                // Rewriting through the current schema removes the obsolete, world-scoped AE2 id maps
+                // while preserving passwords and any canonical usernames already present.
+                saveChanges();
+            }
         } catch (Exception e) {
             // Deliberately no clear-and-save here: a failed read must not persist the loss of every
             // account. Leave the file alone so it can be inspected or restored.

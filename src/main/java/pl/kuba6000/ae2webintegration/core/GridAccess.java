@@ -15,13 +15,24 @@ public final class GridAccess {
 
     /** How long a computed access set stays usable before an async request must refuse to trust it. */
     public static final long TTL_MILLIS = 5L * 60L * 1000L;
+    public static final int UNRESOLVED_PLAYER_ID = -1;
 
+    private final int playerId;
     private final Set<Long> accessibleGridKeys;
     private final long computedAtMillis;
 
-    public GridAccess(Set<Long> accessibleGridKeys, long computedAtMillis) {
+    public GridAccess(int playerId, Set<Long> accessibleGridKeys, long computedAtMillis) {
+        this.playerId = playerId;
         this.accessibleGridKeys = Collections.unmodifiableSet(new HashSet<>(accessibleGridKeys));
         this.computedAtMillis = computedAtMillis;
+    }
+
+    public int getPlayerId() {
+        return playerId;
+    }
+
+    public boolean hasResolvedPlayerId() {
+        return playerId >= 0;
     }
 
     public boolean canAccess(long gridKey) {

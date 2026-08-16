@@ -45,9 +45,7 @@ public class CommandProcessor {
             .equals(token)) {
             return CommandResult.error("Invalid token!");
         }
-        if (!CoreData.setPassword(player, registration.getRight())) {
-            return CommandResult.error("Failed to resolve AE2 player ID. Please try again while online.");
-        }
+        CoreData.setPassword(player, registration.getRight());
         AE2Controller.awaitingRegistration.remove(player.uuid);
         return CommandResult.success("Registered successfully!");
     }

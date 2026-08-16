@@ -19,7 +19,7 @@ class GridAccessTest {
         for (long key : keys) {
             set.add(key);
         }
-        return new GridAccess(set, T0);
+        return new GridAccess(42, set, T0);
     }
 
     @Test
@@ -70,7 +70,7 @@ class GridAccessTest {
     void keySetIsAnImmutableCopy() {
         Set<Long> source = new HashSet<>();
         source.add(10L);
-        GridAccess access = new GridAccess(source, T0);
+        GridAccess access = new GridAccess(42, source, T0);
 
         source.add(99L); // mutating the source must not leak into the snapshot
         assertFalse(access.canAccess(99L));

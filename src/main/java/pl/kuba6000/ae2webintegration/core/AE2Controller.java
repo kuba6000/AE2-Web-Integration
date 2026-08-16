@@ -91,21 +91,14 @@ public class AE2Controller {
 
         private final HttpExchange exchange;
         private final Map<String, String> getParams;
-        // -1 id is admin permissions -2 is localhost access
-        private final int userID;
-        private final String username;
+        private final WebPrincipal principal;
 
-        public RequestContext(HttpExchange exchange, int userID) {
-            this(exchange, userID, userID == -1 ? "admin" : userID == -2 ? "localhost" : "unknown");
-        }
-
-        public RequestContext(HttpExchange exchange, int userID, String username) {
+        public RequestContext(HttpExchange exchange, WebPrincipal principal) {
             this.exchange = exchange;
             this.getParams = HTTPUtils.parseQueryString(
                 exchange.getRequestURI()
                     .getQuery());
-            this.userID = userID;
-            this.username = username;
+            this.principal = principal;
         }
 
         public HttpExchange getExchange() {
@@ -116,12 +109,12 @@ public class AE2Controller {
             return getParams;
         }
 
-        public int getUserID() {
-            return userID;
+        public WebPrincipal getPrincipal() {
+            return principal;
         }
 
         public boolean isAdmin() {
-            return userID == -1 || userID == -2;
+            return principal.isAdmin();
         }
     }
 
@@ -374,34 +367,30 @@ public class AE2Controller {
     private static final class AuthSession {
 
         private final long expiresAtMillis;
-        private final int playerId;
-        private final String username;
+        private final WebPrincipal principal;
 
-        private AuthSession(long expiresAtMillis, int playerId, String username) {
+        private AuthSession(long expiresAtMillis, WebPrincipal principal) {
             this.expiresAtMillis = expiresAtMillis;
-            this.playerId = playerId;
-            this.username = username;
+            this.principal = principal;
         }
     }
 
     private static final class LoginResult {
 
-        private final int playerId;
-        private final String username;
+        private final WebPrincipal principal;
         private final String error;
 
-        private LoginResult(int playerId, String username, String error) {
-            this.playerId = playerId;
-            this.username = username;
+        private LoginResult(WebPrincipal principal, String error) {
+            this.principal = principal;
             this.error = error;
         }
 
-        private static LoginResult success(int playerId, String username) {
-            return new LoginResult(playerId, username, null);
+        private static LoginResult success(WebPrincipal principal) {
+            return new LoginResult(principal, null);
         }
 
         private static LoginResult failure(String error) {
-            return new LoginResult(-1, null, error);
+            return new LoginResult(null, error);
         }
 
         private boolean succeeded() {
@@ -470,7 +459,7 @@ public class AE2Controller {
                 .isEmpty()) {
                 return LoginResult.failure("invalidpassword");
             }
-            return LoginResult.success(-1, "Admin");
+            return LoginResult.success(WebPrincipal.admin());
         }
 
         CoreData.Account account = CoreData.getAccount(requestedUsername);
@@ -480,7 +469,7 @@ public class AE2Controller {
         if (!CoreData.verifyPassword(account, password)) {
             return LoginResult.failure("invalidpassword");
         }
-        return LoginResult.success(account.getPlayerId(), account.getUsername());
+        return LoginResult.success(WebPrincipal.forPlayer(account.getIdentity()));
     }
 
     private static RegistrationResult prepareRegistration(String username, String password) {
@@ -511,7 +500,7 @@ public class AE2Controller {
         InetAddress client = resolveClientAddress(t);
 
         if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && client.isLoopbackAddress()) {
-            requestContext.set(new RequestContext(t, -2, "localhost")); // Localhost access
+            requestContext.set(new RequestContext(t, WebPrincipal.localhost()));
             return AuthCheckResult.AUTHENTICATED;
         }
 
@@ -525,10 +514,12 @@ public class AE2Controller {
             if (session != null) {
                 long validity = session.expiresAtMillis;
                 if (System.currentTimeMillis() < validity) {
-                    requestContext.set(new RequestContext(t, session.playerId, session.username));
+                    requestContext.set(new RequestContext(t, session.principal));
                     return AuthCheckResult.AUTHENTICATED; // Token is valid
                 } else {
-                    validTokens.remove(token); // Remove expired token
+                    if (validTokens.remove(token, session)) {
+                        GridAccessSessions.invalidate(session.principal);
+                    }
                     return AuthCheckResult.UNAUTHENTICATED; // Token expired
                 }
             } else {
@@ -552,7 +543,7 @@ public class AE2Controller {
                                     .getQuery());
                             if (GET_PARAMS.containsKey("logout")) {
                                 validTokens.remove(token); // Invalidate token on logout
-                                GridAccessSessions.invalidate(session.playerId);
+                                GridAccessSessions.invalidate(session.principal);
                                 t.getResponseHeaders()
                                     .add("Set-Cookie", sessionCookie(token, -1));
                                 t.getResponseHeaders()
@@ -560,10 +551,12 @@ public class AE2Controller {
                                 t.sendResponseHeaders(302, -1);
                                 return AuthCheckResult.RESPONSE_SENT; // Logout successful
                             }
-                            requestContext.set(new RequestContext(t, session.playerId, session.username));
+                            requestContext.set(new RequestContext(t, session.principal));
                             return AuthCheckResult.AUTHENTICATED; // Token is valid
                         } else {
-                            validTokens.remove(token); // Remove expired token
+                            if (validTokens.remove(token, session)) {
+                                GridAccessSessions.invalidate(session.principal);
+                            }
                             t.getResponseHeaders()
                                 .add("Set-Cookie", sessionCookie(token, -1));
                             return AuthCheckResult.UNAUTHENTICATED; // Token expired
@@ -621,10 +614,7 @@ public class AE2Controller {
                 boolean rememberMe = postData.containsKey("remember");
                 String token = generateToken();
                 long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
-                AuthSession session = new AuthSession(
-                    System.currentTimeMillis() + validFor * 1000L,
-                    login.playerId,
-                    login.username);
+                AuthSession session = new AuthSession(System.currentTimeMillis() + validFor * 1000L, login.principal);
                 if (!publishToken(requestLifecycleGeneration, token, session)) {
                     sendServerStopping(t);
                     return AuthCheckResult.RESPONSE_SENT;
@@ -888,16 +878,15 @@ public class AE2Controller {
                     long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
                     AuthSession session = new AuthSession(
                         System.currentTimeMillis() + validFor * 1000L,
-                        login.playerId,
-                        login.username);
+                        login.principal);
                     if (!publishToken(requestLifecycleGeneration, token, session)) {
                         sendServerStopping(t);
                         return;
                     }
                     JsonObject json = new JsonObject();
                     json.addProperty("token", token);
-                    json.addProperty("username", login.username);
-                    json.addProperty("isAdmin", login.playerId == -1);
+                    json.addProperty("username", login.principal.getUsername());
+                    json.addProperty("isAdmin", login.principal.isAdmin());
                     json.addProperty("isOutdated", Config.CHECK_FOR_UPDATES() && VersionChecker.isOutdated());
                     byte[] raw_response = json.toString()
                         .getBytes(StandardCharsets.UTF_8);
@@ -921,7 +910,7 @@ public class AE2Controller {
                     token = token.replace("Bearer ", "");
                     AuthSession revoked = validTokens.remove(token);
                     if (revoked != null) {
-                        GridAccessSessions.invalidate(revoked.playerId);
+                        GridAccessSessions.invalidate(revoked.principal);
                     }
                     t.sendResponseHeaders(200, -1);
                     return;
@@ -1048,7 +1037,7 @@ public class AE2Controller {
                 Config.CHECK_FOR_UPDATES() && VersionChecker.isOutdated() ? "true" : "false");
             RequestContext context = requestContext.get();
             if (context != null) {
-                response = response.replace("_REPLACE_ME_USERNAME", context.username);
+                response = response.replace("_REPLACE_ME_USERNAME", context.principal.getUsername());
                 response = response.replace("_REPLACE_ME_IS_ADMIN", context.isAdmin() ? "true" : "false");
             }
             byte[] raw_response = response.getBytes(StandardCharsets.UTF_8);

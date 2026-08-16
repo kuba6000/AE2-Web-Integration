@@ -38,7 +38,8 @@ class CoreEngineLifecycleTest {
 
         ICraftingCPUCluster cpu = new TestCpu();
         AE2JobTracker.addJob(cpu, null, grid, false);
-        GridAccessSessions.put(42, new GridAccess(Collections.singleton(GRID_KEY), 0L));
+        WebPrincipal principal = TestGridFixtures.principal(42);
+        GridAccessSessions.put(principal, new GridAccess(42, Collections.singleton(GRID_KEY), 0L));
         AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
         AE2Controller.hashcodeToStack.put(1, new TestStack());
 
@@ -65,7 +66,7 @@ class CoreEngineLifecycleTest {
         assertTrue(gridData.isTracked, "persisted grid settings survive a world switch");
         assertTrue(AE2Controller.awaitingRegistration.isEmpty());
         assertTrue(AE2Controller.hashcodeToStack.isEmpty());
-        assertNull(GridAccessSessions.get(42));
+        assertNull(GridAccessSessions.get(principal));
         assertNull(AE2JobTracker.findActiveJob(cpu));
         assertTrue(gridData.trackingInfo.trackingInfos.isEmpty());
         assertNull(gridData.getJob(planId));

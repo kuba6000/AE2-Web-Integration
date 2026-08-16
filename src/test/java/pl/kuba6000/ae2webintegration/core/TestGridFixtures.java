@@ -48,8 +48,26 @@ final class TestGridFixtures {
         return new TestAE(grids);
     }
 
+    static PlayerIdentity playerIdentity(int playerId) {
+        return new PlayerIdentity(UUID.nameUUIDFromBytes(("p" + playerId).getBytes()), "Player" + playerId);
+    }
+
+    static WebPrincipal principal(int playerId) {
+        if (playerId == -1) {
+            return WebPrincipal.admin();
+        }
+        if (playerId == -2) {
+            return WebPrincipal.localhost();
+        }
+        return WebPrincipal.forPlayer(playerIdentity(playerId));
+    }
+
     static AE2Controller.RequestContext context(int userId, String query) {
-        return new AE2Controller.RequestContext(new TestExchange(query), userId);
+        return context(principal(userId), query);
+    }
+
+    static AE2Controller.RequestContext context(WebPrincipal principal, String query) {
+        return new AE2Controller.RequestContext(new TestExchange(query), principal);
     }
 
     static class TestGrid implements IAEGrid, IAESecurityGrid, IAEPathingGrid {
@@ -192,11 +210,18 @@ final class TestGridFixtures {
 
         @Override
         public PlayerIdentity web$getPlayerProfile(int playerId) {
-            return new PlayerIdentity(UUID.nameUUIDFromBytes(("p" + playerId).getBytes()), "Player" + playerId);
+            return playerIdentity(playerId);
         }
 
         @Override
         public int web$getPlayerId(PlayerIdentity identity) {
+            if (identity != null && identity.name != null && identity.name.startsWith("Player")) {
+                try {
+                    return Integer.parseInt(identity.name.substring("Player".length()));
+                } catch (NumberFormatException ignored) {
+                    return -1;
+                }
+            }
             return -1;
         }
     }
