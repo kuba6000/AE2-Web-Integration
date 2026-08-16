@@ -40,10 +40,12 @@ public class DiscordManager extends Thread {
         }
 
         long totalSeconds = Math.round(durationMillis / 1000d);
-        long hours = totalSeconds / 3600L;
+        long days = totalSeconds / 86400L;
+        long hours = totalSeconds % 86400L / 3600L;
         long minutes = totalSeconds % 3600L / 60L;
         long seconds = totalSeconds % 60L;
 
+        if (days > 0L) return days + "d " + hours + "h " + minutes + "m " + seconds + "s";
         if (hours > 0L) return hours + "h " + minutes + "m " + seconds + "s";
         if (minutes > 0L) return minutes + "m " + seconds + "s";
         return seconds + "s";
