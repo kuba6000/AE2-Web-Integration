@@ -242,8 +242,6 @@ public class AE2JobTracker {
             .isEmpty() && DiscordManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
             IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
             if (securityGrid != null && securityGrid.web$isAvailable()) {
-                IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
-                craftingGrid.web$getCPUs();
                 DiscordManager.postMessageNonBlocking(
                     new DiscordManager.DiscordEmbed(
                         "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()

@@ -985,7 +985,6 @@ public class AE2Controller {
                     if (is == null) return;
 
                     byte[] raw_response = IOUtils.toByteArray(is);
-                    is.read(raw_response);
                     t.sendResponseHeaders(200, raw_response.length);
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
