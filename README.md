@@ -1,109 +1,17 @@
-<div align=center>
+# AE2 Web Integration — Minecraft 1.7.10
 
-# AE2 Web Integration
+This branch contains the Forge 1.7.10 adapter for AE2 Web Integration, targeting the GTNH forks of AE2 and
+AE2FluidCraft.
 
-[![CF Downloads](https://cf.way2muchnoise.eu/full_1122761_downloads.svg)](https://www.curseforge.com/minecraft/mc-mods/ae2-web-integration) [![Modrinth Downloads](https://img.shields.io/modrinth/dt/8MGTfmHF?logo=modrinth)
-](https://modrinth.com/mod/ae2-web-integration)
+The shared, version-independent logic and full project documentation live on the
+[`core` branch](https://github.com/kuba6000/AE2-Web-Integration/tree/core#readme). The `core` directory in
+this branch is a Git submodule pinned to the exact revision tested with this adapter.
 
-</div>
+If you are building from source, clone the repository with submodules or initialize them after checkout:
 
-An add-on for AE2 that lets you view your terminal in your web browser wherever you are! This also includes viewing orders, cancelling them and even making a new ones!   There is also a discord integration (through a webhook)!  
+```bash
+git submodule update --init --recursive
+```
 
-**Now also works on multiple networks and on public server = all players can have their own account!**   
-
-**THE MOD SHOULD ONLY BE INSTALLED ON SERVER SIDE, THERE IS NO ITEMS ADDED IN THE GAME!**
-
-# Showcase on youtube
-
-### Main mod
-[![YT showcase](https://img.youtube.com/vi/3uey6nuW09g/0.jpg)](https://www.youtube.com/watch?v=3uey6nuW09g)  
-### Discord integration
-[![YT showcase](https://img.youtube.com/vi/e4a86dBz7NY/0.jpg)](https://www.youtube.com/watch?v=e4a86dBz7NY)  
-
-# How?
-
-This mod starts a web server on server boot that hosts a simple website that you can access directly, or through API calls  
-
-## How does web panel know which network to chose from?
-
-Because the mod is server sided only, there is no additional terminal or block added that could identify the networks,  
-Networks are identified through wireless access points (or security terminal on older mc versions),  
-all players who wants to access a specific network through the website, must place an wireless access point on that network,  
-Additionally, if you access the website through an Admin account, you will have access to all networks with at least one wireless access point (doesn't matter if you placed it) 
-  
-On older minecraft versions where there is a security terminal, networks are identified through an security terminal,  
-all players who wants to access the network should have their bio cards in the security terminal block (wild bio card is ignored for security reasons!)
-Admin account will have access to all networks on the server that have security terminal (doesn't matter it has your bio card)
-
-# Current features
-
-- AE2 terminal (item list+sorting+filtering)
-- **Monitor as many networks as you want!**
-- **Public mode, that allows the mod to works on servers with many independent players!**
-- Start a new order
-- Check any CPU status
-- Cancel any CPU order
-- Order tracking
-
-# Gallery
-
-<details>
-<summary>Gallery</summary>
-
-<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/9363c6c4-26dd-46fe-a6c2-84111338e6b0" />
-<img width="737" height="70" alt="image" src="https://github.com/user-attachments/assets/2d95024e-25ca-415f-a63d-945f2c906302" />
-<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/c880a117-75d3-4d53-9ebf-db67135a3275" />
-<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/2aeb72af-7abf-4cad-9a7a-1f66bd243594" />
-
-</details>
-
-# Security
-
-## In public mode,
-
-all users on your server can create an account on the website and access their AE2 networks,  
-passwords are saved on the server as a PBKDF2WithHmacSHA1 hash  
-Once a user is authenticated, server generates a token valid for 1 hour/7 days and uses it to verify all requests after  
-
-## In public mode disabled,
- there is only an admin account which password is set in the config.
-token mechanism is the same as in public mode.
-
-**Note: localhost connections are automatically authenticated by default, you can change that in config!**
-
-# Requirements
-
-- An open port if you want to access the service outside your local network (configurable, terminal will be hosted at http://your-server-ip-or-domain:configured-port/ for example: http://server.kuba6000.pl:2324/)
-
-# How to use
-
-- Download the latest version for your game version from the releases page
-- Drop the mod in your server mods folder (only on the server!) (This also works on single player, but is not recommended)
-- Start the server
-- You can now find the config in /configs/ae2webintegration/ae2webintegration.toml (or .cfg on older mc versions). Edit the port number and password protection for your needs
-- **Disable public mode if you play by yourself**
-- [This step is done automatically by config watcher since 1.21.1, you can still force reload if it didn't worked!] Reload the config (/ae2webintegration reload) or restart the server
-- Make sure you have opened the configured port (firewall, redirections) if you want to use it on public internet
-- Now you can visit http://your-server-ip-or-domain:configured-port/ and login should appear on your browser!
-- **There is a default user Admin which password is set in the config**
-
-# Discord integration
-
-**Note: Discord integration is working only in public mode disabled!**
-- Create a webhook on your discord server and set it in the ae2webintegration config
-- <img width="467" height="224" alt="image" src="https://github.com/user-attachments/assets/f9f7635d-676c-40a3-8334-f7fa35e5867a" />
-
-
-# Custom website
-
-- If you already have a web server and want to host the panel there, you can!
-- There is currently no API documentation...
-- Check out [Simple proxy site](https://github.com/kuba6000/AE2-Web-Integration/tree/core/example_website) !
-- There you can find a simple website written in PHP ready to use, it's just simple proxy to API calls to the AE2 endpoint.
-
-# Compatibility
-
-The mod is currently implemented only on 1.21.1 (NEO), 1.20.1, 1.12.2 and 1.7.10 versions, although it might change in the future!   
-A few remarks about compatibility:
-- 1.7.10 version is based on [GTNH fork of AE2](https://github.com/GTNewHorizons/Applied-Energistics-2-Unofficial) and [GTNH fork AE2FC for 1.7.10](https://github.com/GTNewHorizons/AE2FluidCraft-Rework)
-- 1.12.2 version is based on [AE2-UEL](https://github.com/AE2-UEL/Applied-Energistics-2) and [AE2FC for 1.12.2](https://github.com/AE2-UEL/AE2FluidCraft-Rework/)
+If you only want to install the mod, download the appropriate JAR from the
+[Releases page](https://github.com/kuba6000/AE2-Web-Integration/releases).
