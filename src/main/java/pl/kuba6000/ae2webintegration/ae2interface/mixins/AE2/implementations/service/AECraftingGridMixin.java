@@ -1,10 +1,10 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations.service;
 
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Future;
-
-import net.minecraft.util.text.ITextComponent;
+import java.util.function.Function;
 
 import org.spongepowered.asm.mixin.Mixin;
 
@@ -18,23 +18,26 @@ import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.me.helpers.PlayerSource;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = ICraftingGrid.class)
 public interface AECraftingGridMixin extends IAECraftingGrid {
 
     @Override
-    public default int web$getCPUCount() {
+    default int web$getCPUCount() {
         return ((ICraftingGrid) (Object) this).getCpus()
             .size();
     }
 
     @Override
-    public default Set<ICraftingCPUCluster> web$getCPUs() {
+    default Set<ICraftingCPUCluster> web$getCPUs() {
         final ImmutableSet<ICraftingCPU> aecpus = ((ICraftingGrid) (Object) this).getCpus();
         final Set<ICraftingCPUCluster> cpus = new LinkedHashSet<>(aecpus.size());
         int i = 1;
@@ -46,28 +49,42 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     }
 
     @Override
-    public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IItemStack stack) {
+    @SuppressWarnings("unchecked")
+    default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
+        if (!(stack instanceof IAEItemStack)) {
+            throw new UnsupportedOperationException("Only item crafting is supported on AE2 1.12.2");
+        }
         PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
+        IAEItemStack itemStack = ((IAEItemStack) (Object) stack).copy();
+        itemStack.setStackSize(amount);
         final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this).beginCraftingJob(
-            actionSrc.player()
-                .get().world,
+            ((GridWorldAccessor) grid).web$getPlayerSourceWorld(),
             (IGrid) grid,
             actionSrc,
-            (IAEItemStack) stack,
+            itemStack,
             null);
         return (Future<IAECraftingJob>) (Object) job;
     }
 
     @Override
-    public default ITextComponent web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
+    default String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
         IAEGrid grid) {
-        ICraftingLink link = ((ICraftingGrid) (Object) this).submitJob(
-            (ICraftingJob) job,
-            null,
-            (ICraftingCPU) target,
-            prioritizePower,
-            (IActionSource) grid.web$getPlayerSource());
+        ChatCapturingPlayerSource source = (ChatCapturingPlayerSource) grid.web$getPlayerSource();
+        source.clearLastMessage();
+        ICraftingLink link = ((ICraftingGrid) (Object) this)
+            .submitJob((ICraftingJob) job, null, (ICraftingCPU) target, prioritizePower, (IActionSource) source);
+        String msg = source.takeLastMessage();
         if (link != null) return null;
-        return grid.web$getLastFakePlayerChatMessage();
+        return msg == null ? "Submission failed" : msg;
+    }
+
+    @Override
+    default ICraftingMediumTracker web$getCraftingProviders() {
+        throw new UnsupportedOperationException("Use on CraftingGridCache implementation");
+    }
+
+    @Override
+    default Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter) {
+        return Collections.emptySet();
     }
 }

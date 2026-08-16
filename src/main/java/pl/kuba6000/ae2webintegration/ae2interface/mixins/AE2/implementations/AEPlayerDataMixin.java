@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import com.mojang.authlib.GameProfile;
 
 import appeng.core.worlddata.IWorldPlayerMapping;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 
 @Mixin(targets = "appeng.core.worlddata.PlayerData", remap = false)
@@ -29,15 +30,10 @@ public class AEPlayerDataMixin implements IAEPlayerData {
     }
 
     @Override
-    public GameProfile web$getPlayerProfile(int playerId) {
+    public PlayerIdentity web$getPlayerProfile(int playerId) {
         Optional<UUID> maybe = playerMapping.get(playerId);
         if (!maybe.isPresent()) return null;
         UUID uuid = maybe.get();
-        // for (final EntityPlayer player : CommonHelper.proxy.getPlayers()) {
-        // if (player.getUniqueID().equals(uuid)) {
-        // return player.getGameProfile();
-        // }
-        // }
         GameProfile p = FMLCommonHandler.instance()
             .getMinecraftServerInstance()
             .getPlayerProfileCache()
@@ -45,11 +41,11 @@ public class AEPlayerDataMixin implements IAEPlayerData {
         if (p == null) {
             p = new GameProfile(uuid, uuid.toString());
         }
-        return p;
+        return new PlayerIdentity(p.getId(), p.getName());
     }
 
     @Override
-    public int web$getPlayerId(GameProfile id) {
-        return getPlayerID(id);
+    public int web$getPlayerId(PlayerIdentity identity) {
+        return getPlayerID(new GameProfile(identity.uuid, identity.name));
     }
 }

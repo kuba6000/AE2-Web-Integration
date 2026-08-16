@@ -40,4 +40,15 @@
 dependencies {
     api rfg.deobf("curse.maven:ae2-extended-life-570458:5411078") // AE2UEL 0.56.6
     devOnlyNonPublishable(rfg.deobf("curse.maven:ae2-fluid-crafting-rework-623955:5751930"))
+
+    // Core submodule (pure Java — no Forge/MC/AE2 references)
+    implementation project(':core')
+    // Select the jar explicitly so shadow resolution does not hit variant ambiguity on the submodule.
+    shadowImplementation(project(path: ':core', configuration: 'default')) {
+        transitive = false
+    }
+}
+
+tasks.named("shadowJar").configure {
+    dependsOn(":core:jar")
 }

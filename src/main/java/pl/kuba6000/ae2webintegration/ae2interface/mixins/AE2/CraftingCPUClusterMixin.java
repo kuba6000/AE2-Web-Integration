@@ -1,7 +1,5 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
-import java.util.Map;
-
 import net.minecraft.inventory.InventoryCrafting;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,14 +13,12 @@ import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingMedium;
 import appeng.api.networking.crafting.ICraftingPatternDetails;
 import appeng.api.storage.data.IAEItemStack;
-import appeng.helpers.IInterfaceHost;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.ae2interface.CraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
@@ -39,7 +35,7 @@ public class CraftingCPUClusterMixin {
     @Inject(method = "postCraftingStatusChange", at = @At("HEAD"))
     void ae2webintegration$postCraftingStatusChange(IAEItemStack diff, CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
-            .craftingStatusPostedUpdate((ICraftingCPUCluster) this, (IItemStack) diff);
+            .craftingStatusPostedUpdate((ICraftingCPUCluster) this, diff);
     }
 
     @Inject(method = "completeJob", at = @At("HEAD"))
@@ -74,17 +70,11 @@ public class CraftingCPUClusterMixin {
     private boolean ae2webintegration$pushPattern(ICraftingMedium medium, ICraftingPatternDetails details,
         InventoryCrafting ic) {
         if (medium.pushPattern(details, ic)) {
-            IInterfaceHost viewable = null;
-            Map<ICraftingMedium, IInterfaceHost> mediumToViewable = CraftingMediumTracker.mediumToViewable
-                .get(getGrid());
-            if (mediumToViewable != null) {
-                viewable = mediumToViewable.get(medium);
-            }
+            IPatternProviderViewable viewable = ((IAEGrid) getGrid()).web$getCraftingGrid()
+                .web$getCraftingProviders()
+                .web$getViewableForCraftingMedium((ICraftingMediumKey) medium);
             IAEMixinCallbacks.getInstance()
-                .pushedPattern(
-                    (ICraftingCPUCluster) this,
-                    (IPatternProviderViewable) viewable,
-                    (IAECraftingPatternDetails) details);
+                .pushedPattern((ICraftingCPUCluster) this, viewable, (IAECraftingPatternDetails) details);
             return true;
         }
         return false;

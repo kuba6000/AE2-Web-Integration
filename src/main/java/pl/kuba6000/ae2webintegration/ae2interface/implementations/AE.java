@@ -2,15 +2,21 @@ package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
 import java.util.Iterator;
 
+import net.minecraft.world.World;
+
 import appeng.api.AEApi;
 import appeng.api.storage.channels.IItemStorageChannel;
+import appeng.api.storage.data.IAEStack;
 import appeng.core.worlddata.WorldData;
 import appeng.hooks.TickHandler;
 import appeng.me.Grid;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 public class AE implements IAE {
 
@@ -23,8 +29,8 @@ public class AE implements IAE {
     static class AEGridIterable implements Iterable<IAEGrid> {
 
         @Override
-        public java.util.Iterator<IAEGrid> iterator() {
-            return new java.util.Iterator<>() {
+        public Iterator<IAEGrid> iterator() {
+            return new Iterator<>() {
 
                 private final Iterator<Grid> iterator = TickHandler.INSTANCE.getGridList()
                     .iterator();
@@ -47,12 +53,27 @@ public class AE implements IAE {
         return new AEGridIterable();
     }
 
+    public void clearPlayerSources(World world) {
+        for (IAEGrid grid : web$getGrids()) {
+            if (grid instanceof PlayerSourceLifecycle) {
+                ((PlayerSourceLifecycle) grid).web$clearPlayerSource(world);
+            }
+        }
+    }
+
     @Override
-    public IItemList web$createItemList() {
-        return (IItemList) (Object) AEApi.instance()
+    public IStackList web$createStackList() {
+        return (IStackList) (Object) AEApi.instance()
             .storage()
             .getStorageChannel(IItemStorageChannel.class)
             .createList();
+    }
+
+    @Override
+    public IAEGenericStack web$stackOf(IAEKey key, long amount) {
+        IAEStack<?> stack = ((IAEStack<?>) (Object) key).copy();
+        stack.setStackSize(amount);
+        return (IAEGenericStack) stack;
     }
 
     @Override
