@@ -1,0 +1,122 @@
+name: Update core pins
+
+on:
+  workflow_run:
+    workflows: [ Build and test core ]
+    types: [ completed ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-core-pins
+  cancel-in-progress: false
+
+jobs:
+  update-core-pins:
+    if: >-
+      github.repository == 'kuba6000/AE2-Web-Integration' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'core'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [ 1.7.10, 1.12.2, 1.20.1, 1.21.1 ]
+    env:
+      BOT_EMAIL: agent@kuba6000.pl
+      BOT_LOGIN: kuba6000-agent
+      BOT_NAME: "KLANKER | kuba6000"
+      CORE_SHA: ${{ github.event.workflow_run.head_sha }}
+      TARGET_BRANCH: ${{ matrix.branch }}
+
+    steps:
+      - name: Checkout trusted core automation
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: core
+          submodules: false
+
+      - name: Check whether the pin needs updating
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags origin \
+            "+refs/heads/core:refs/remotes/origin/core" \
+            "+refs/heads/${TARGET_BRANCH}:refs/remotes/origin/${TARGET_BRANCH}"
+
+          latest_core_sha="$(git rev-parse refs/remotes/origin/core)"
+          if [[ "${CORE_SHA}" != "${latest_core_sha}" ]]; then
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            echo "Skipping obsolete successful core build ${CORE_SHA}; latest core is ${latest_core_sha}."
+            exit 0
+          fi
+
+          read -r mode object_type current_pin path \
+            <<< "$(git ls-tree "refs/remotes/origin/${TARGET_BRANCH}" core)"
+          if [[ "${mode}" != "160000" || "${object_type}" != "commit" || "${path}" != "core" ]]; then
+            echo "Branch ${TARGET_BRANCH} does not contain core as a gitlink." >&2
+            exit 1
+          fi
+
+          if [[ "${current_pin}" == "${CORE_SHA}" ]]; then
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            echo "${TARGET_BRANCH} already points to core ${CORE_SHA}."
+            exit 0
+          fi
+
+          echo "skip=false" >> "${GITHUB_OUTPUT}"
+          echo "Updating ${TARGET_BRANCH} from core ${current_pin} to ${CORE_SHA}."
+
+      - name: Verify bot token identity
+        if: steps.prepare.outputs.skip == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.CORE_PIN_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          authenticated_login="$(gh api user --jq .login)"
+          if [[ "${authenticated_login}" != "${BOT_LOGIN}" ]]; then
+            echo "CORE_PIN_BOT_TOKEN belongs to ${authenticated_login}, expected ${BOT_LOGIN}." >&2
+            exit 1
+          fi
+
+      - name: Create core pin commit
+        if: steps.prepare.outputs.skip == 'false'
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          update_worktree="${RUNNER_TEMP}/core-pin-${TARGET_BRANCH}"
+          git worktree add --detach "${update_worktree}" "refs/remotes/origin/${TARGET_BRANCH}"
+
+          python3 .github/scripts/update_core_pin.py \
+            --repository "${update_worktree}" \
+            --core-sha "${CORE_SHA}" \
+            --author-name "${BOT_NAME}" \
+            --author-email "${BOT_EMAIL}"
+
+          echo "worktree=${update_worktree}" >> "${GITHUB_OUTPUT}"
+
+      - name: Push core pin commit
+        if: steps.prepare.outputs.skip == 'false'
+        shell: bash
+        env:
+          CORE_PIN_BOT_TOKEN: ${{ secrets.CORE_PIN_BOT_TOKEN }}
+          UPDATE_WORKTREE: ${{ steps.commit.outputs.worktree }}
+        run: |
+          set -euo pipefail
+
+          basic_auth="$(printf 'x-access-token:%s' "${CORE_PIN_BOT_TOKEN}" | base64 -w 0)"
+          echo "::add-mask::${basic_auth}"
+          git -C "${UPDATE_WORKTREE}" \
+            -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${basic_auth}" \
+            push "https://github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${TARGET_BRANCH}"
