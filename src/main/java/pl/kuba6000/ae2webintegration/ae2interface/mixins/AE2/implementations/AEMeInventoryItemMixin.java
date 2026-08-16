@@ -15,16 +15,16 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 public interface AEMeInventoryItemMixin extends IAEMeInventoryItem {
 
     @Override
-    public default long web$extractItems(IAEKey stack, long amount, AEActionable mode, IAEGrid grid) {
+    default long web$extractItems(IAEKey key, long amount, AEActionable mode, IAEGrid grid) {
         return ((MEStorage) (Object) this).extract(
-            (AEKey) stack,
+            (AEKey) key,
             amount,
             mode == AEActionable.MODULATE ? Actionable.MODULATE : Actionable.SIMULATE,
             (IActionSource) grid.web$getPlayerSource());
     }
 
     @Override
-    public default long web$getAvailableItem(IAEKey stack, IAEGrid grid) {
-        return this.web$extractItems(stack, Long.MAX_VALUE, AEActionable.SIMULATE, grid);
+    default long web$getAvailable(IAEKey key, IAEGrid grid) {
+        return web$extractItems(key, Long.MAX_VALUE, AEActionable.SIMULATE, grid);
     }
 }

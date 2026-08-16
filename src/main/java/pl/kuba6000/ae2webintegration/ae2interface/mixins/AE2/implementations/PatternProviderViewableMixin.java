@@ -58,6 +58,12 @@ public interface PatternProviderViewableMixin extends IPatternProviderViewable {
                 return null; // Not a valid location
             }
         }
-        return new DimensionalCoords(level, pos.getX(), pos.getY(), pos.getZ());
+        return new DimensionalCoords(
+            level.dimension()
+                .location()
+                .toString(),
+            pos.getX(),
+            pos.getY(),
+            pos.getZ());
     }
 }

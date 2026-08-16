@@ -9,6 +9,7 @@ import net.minecraftforge.fml.loading.FMLLoader;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
@@ -29,7 +30,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        return false;
+        return true;
     }
 
     @Override
@@ -55,6 +56,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.implementations.AEItemMixin",
                 "AE2.implementations.AEMeInventoryItemMixin",
                 "AE2.implementations.AEPlayerDataMixin",
+                "AE2.implementations.CraftingMediumKeyMixin",
                 "AE2.implementations.CraftingPlanSummaryEntryMixin",
                 "AE2.implementations.CraftingPlanSummaryMixin",
                 "AE2.implementations.PatternProviderViewableMixin",
@@ -78,14 +80,12 @@ public class MixinPlugin implements IMixinConfigPlugin {
     }
 
     @Override
-    public void preApply(String targetClassName, org.objectweb.asm.tree.ClassNode targetClass, String mixinClassName,
-        IMixinInfo mixinInfo) {
+    public void preApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
 
     }
 
     @Override
-    public void postApply(String targetClassName, org.objectweb.asm.tree.ClassNode targetClass, String mixinClassName,
-        IMixinInfo mixinInfo) {
+    public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
 
     }
 }

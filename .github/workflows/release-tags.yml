@@ -23,6 +23,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 32
+          submodules: 'recursive'
 
       - name: Set up JDK versions
         uses: actions/setup-java@v4
@@ -70,7 +71,13 @@ jobs:
             -f tag_name="${RELEASE_VERSION}" \
             --jq ".body" > "${CHANGELOG_FILE}"
           cat "${CHANGELOG_FILE}"
-          gh release create "${RELEASE_VERSION}" -F "${CHANGELOG_FILE}" $PRERELEASE ./build/libs/*.jar
+          # Upload only the production reobfuscated mod jar (exclude -dev, -slim, -sources).
+          mapfile -t RELEASE_JARS < <(find build/libs -maxdepth 1 -name '*.jar' ! -name '*-dev*' ! -name '*-slim*' ! -name '*-sources*')
+          if [[ ${#RELEASE_JARS[@]} -eq 0 ]]; then
+            echo "No production jar found in build/libs"
+            exit 1
+          fi
+          gh release create "${RELEASE_VERSION}" -F "${CHANGELOG_FILE}" $PRERELEASE "${RELEASE_JARS[@]}"
         shell: bash
         continue-on-error: true
         env:

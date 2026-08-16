@@ -23,7 +23,13 @@ base {
 }
 
 afterEvaluate {
-    reobfJar.archiveClassifier = ""
+    if (findProperty('usesShadowedDependencies')?.toString()?.toBoolean()) {
+        tasks.named('reobfShadowJar').configure {
+            archiveClassifier = ''
+        }
+    } else {
+        reobfJar.archiveClassifier = ''
+    }
     tasks.withType(org.gradle.jvm.tasks.Jar).configureEach {
         destinationDirectory = file('build/libs/')
         manifest.attributes([

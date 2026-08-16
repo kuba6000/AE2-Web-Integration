@@ -87,7 +87,6 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid {
 
     @Override
     public String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower, IAEGrid grid) {
-        if (target == null) throw new UnsupportedOperationException();
         ICraftingSubmitResult result = ((CraftingService) (Object) this).submitJob(
             (ICraftingPlan) job,
             null,

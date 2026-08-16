@@ -6,14 +6,18 @@ import java.util.WeakHashMap;
 import net.minecraftforge.server.ServerLifecycleHooks;
 
 import appeng.api.features.IPlayerRegistry;
+import appeng.api.stacks.AEKey;
+import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
 import appeng.hooks.ticking.TickHandler;
 import appeng.me.Grid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 public class AE implements IAE {
 
@@ -28,8 +32,8 @@ public class AE implements IAE {
     static class AEGridIterable implements Iterable<IAEGrid> {
 
         @Override
-        public java.util.Iterator<IAEGrid> iterator() {
-            return new java.util.Iterator<>() {
+        public Iterator<IAEGrid> iterator() {
+            return new Iterator<>() {
 
                 private final Iterator<Grid> iterator = TickHandler.instance()
                     .getGridList()
@@ -54,8 +58,13 @@ public class AE implements IAE {
     }
 
     @Override
-    public IItemList web$createItemList() {
-        return (IItemList) (Object) new KeyCounter();
+    public IStackList web$createStackList() {
+        return (IStackList) (Object) new KeyCounter();
+    }
+
+    @Override
+    public IAEGenericStack web$stackOf(IAEKey key, long amount) {
+        return (IAEGenericStack) (Object) new GenericStack((AEKey) key, amount);
     }
 
     @Override

@@ -4,6 +4,9 @@ ext.isJetbrainsRuntime = System.getProperty('java.vm.vendor').contains('JetBrain
 
 mixin {
     var refmap = add sourceSets.main, "mixins.ae2webintegration.refmap.json"
+    tasks.named('shadowJar').configure {
+        from refmap
+    }
     slimJar.from refmap
     config 'mixins.ae2webintegration.json'
 }

@@ -1,0 +1,63 @@
+def shadowRelocationPrefix = 'pl.kuba6000.ae2webintegration.shadow'
+
+configurations {
+    coreShadow {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+dependencies {
+    coreShadow(project(':core')) {
+        transitive = false
+    }
+}
+
+tasks.named('shadowJar').configure {
+    dependsOn(':core:jar', 'createMinecraftArtifacts')
+    archiveClassifier = 'dev'
+    configurations = [project.configurations.coreShadow]
+
+    dependencies {
+        exclude(dependency('org.apache.logging.log4j:log4j-api:.*'))
+        exclude(dependency('org.apache.logging.log4j:log4j-core:.*'))
+    }
+
+    if (findProperty('minimizeShadowedDependencies')?.toString()?.toBoolean() != false) {
+        minimize()
+    }
+    if (findProperty('relocateShadowedDependencies')?.toString()?.toBoolean() != false) {
+        relocate('com.google', "${shadowRelocationPrefix}.com.google")
+        relocate('org.apache.commons', "${shadowRelocationPrefix}.org.apache.commons")
+        relocate('commons-io', "${shadowRelocationPrefix}.commons-io")
+        relocate('club.minnced', "${shadowRelocationPrefix}.club.minnced")
+        relocate(
+            'pl.kuba6000.ae2webintegration.core',
+            "${shadowRelocationPrefix}.pl.kuba6000.ae2webintegration.core")
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    enabled = false
+    finalizedBy(tasks.named('shadowJar'))
+}
+
+obfuscation {
+    reobfuscate(tasks.named('shadowJar'), sourceSets.main) {
+        archiveClassifier = ''
+    }
+}
+
+// MDG still wires reobfJar for the disabled plain jar task — turn it off to avoid clashing with reobfShadowJar.
+tasks.named('reobfJar').configure {
+    enabled = false
+}
+
+configurations.runtimeElements.outgoing.artifacts.clear()
+configurations.apiElements.outgoing.artifacts.clear()
+configurations.runtimeElements.outgoing.artifact(tasks.named('shadowJar'))
+configurations.apiElements.outgoing.artifact(tasks.named('shadowJar'))
+
+configurations.named('shadowRuntimeElements') {
+    outgoing.artifacts.clear()
+}
