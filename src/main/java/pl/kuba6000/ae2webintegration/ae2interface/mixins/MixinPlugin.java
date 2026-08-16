@@ -30,7 +30,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        return false;
+        return true;
     }
 
     @Override
@@ -56,6 +56,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.implementations.AEItemMixin",
                 "AE2.implementations.AEMeInventoryItemMixin",
                 "AE2.implementations.AEPlayerDataMixin",
+                "AE2.implementations.CraftingMediumKeyMixin",
                 "AE2.implementations.CraftingPlanSummaryEntryMixin",
                 "AE2.implementations.CraftingPlanSummaryMixin",
                 "AE2.implementations.PatternProviderViewableMixin",

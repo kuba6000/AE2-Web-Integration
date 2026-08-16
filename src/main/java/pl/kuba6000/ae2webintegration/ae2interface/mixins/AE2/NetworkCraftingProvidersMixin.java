@@ -12,7 +12,9 @@ import appeng.api.networking.IGridNode;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.me.service.helpers.NetworkCraftingProviders;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IProviderState;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 
 @Mixin(value = NetworkCraftingProviders.class, remap = false)
 public class NetworkCraftingProvidersMixin implements ICraftingMediumTracker {
@@ -43,7 +45,7 @@ public class NetworkCraftingProvidersMixin implements ICraftingMediumTracker {
     }
 
     @Override
-    public Map<ICraftingProvider, IGridNode> web$getCraftingMediums() {
-        return web$providerToNode;
+    public IPatternProviderViewable web$getViewableForCraftingMedium(ICraftingMediumKey medium) {
+        return (IPatternProviderViewable) web$providerToNode.get((ICraftingProvider) medium);
     }
 }

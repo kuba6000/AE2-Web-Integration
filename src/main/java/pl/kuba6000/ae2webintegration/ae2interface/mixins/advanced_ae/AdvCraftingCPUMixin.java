@@ -12,7 +12,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = AdvCraftingCPU.class, remap = false)
 public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
@@ -66,7 +66,7 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
     }
 
     @Override
-    public void web$getAllItems(IItemList list) {
+    public void web$getAllItems(IStackList list) {
         ((AdvCraftingCPU) (Object) this).craftingLogic.getAllItems((KeyCounter) (Object) list);
     }
 
@@ -86,8 +86,8 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
     }
 
     @Override
-    public IItemList web$getWaitingFor() {
-        return (IItemList) (Object) ((ICraftingCPULogicAccessor) ((AdvCraftingCPU) (Object) this).craftingLogic)
+    public IStackList web$getWaitingFor() {
+        return (IStackList) (Object) ((ICraftingCPULogicAccessor) ((AdvCraftingCPU) (Object) this).craftingLogic)
             .web$getJob()
             .web$getWaitingFor().list;
     }

@@ -19,6 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: 'recursive'
       - name: Checkout workflows repo
         uses: actions/checkout@v4
         with:
@@ -42,7 +43,7 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       - name: Compile the mod
-        run: ./gradlew --build-cache --info --stacktrace assemble
+        run: ./gradlew --build-cache --info --stacktrace :core:test assemble
       - name: Attach compilation artifacts
         uses: actions/upload-artifact@v4
         with:

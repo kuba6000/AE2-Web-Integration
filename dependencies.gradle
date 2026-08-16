@@ -1,6 +1,11 @@
 dependencies {
     compileOnly(libs.jetbrains.annotations)
 
+    // Core submodule (pure Java — no NeoForge/MC/AE2 references)
+    implementation project(':core')
+    // MC 1.21.1 dev runs load only this mod's classes dir; core must be on the run classpath
+    additionalRuntimeClasspath project(':core')
+
     // AE2
     implementation(neoforge.ae2)
     compileOnly(neoforge.ae2wtlib)
@@ -24,5 +29,8 @@ dependencies {
     // runtime test mods //
     //localRuntime(neoforge.advancedae)
     //localRuntime(neoforge.geckolib)
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
 }

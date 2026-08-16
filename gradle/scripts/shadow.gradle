@@ -1,0 +1,49 @@
+def shadowRelocationPrefix = 'pl.kuba6000.ae2webintegration.shadow'
+
+configurations {
+    coreShadow {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+dependencies {
+    coreShadow(project(':core')) {
+        transitive = false
+    }
+}
+
+tasks.named('shadowJar').configure {
+    dependsOn(':core:jar')
+    archiveClassifier = ''
+    configurations = [project.configurations.coreShadow]
+
+    dependencies {
+        exclude(dependency('org.apache.logging.log4j:log4j-api:.*'))
+        exclude(dependency('org.apache.logging.log4j:log4j-core:.*'))
+    }
+
+    if (findProperty('relocateShadowedDependencies')?.toString()?.toBoolean() != false) {
+        relocate('com.google', "${shadowRelocationPrefix}.com.google")
+        relocate('org.apache.commons', "${shadowRelocationPrefix}.org.apache.commons")
+        relocate('commons-io', "${shadowRelocationPrefix}.commons-io")
+        relocate('club.minnced', "${shadowRelocationPrefix}.club.minnced")
+        relocate(
+            'pl.kuba6000.ae2webintegration.core',
+            "${shadowRelocationPrefix}.pl.kuba6000.ae2webintegration.core")
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    enabled = false
+    finalizedBy(tasks.named('shadowJar'))
+}
+
+configurations.runtimeElements.outgoing.artifacts.clear()
+configurations.apiElements.outgoing.artifacts.clear()
+configurations.runtimeElements.outgoing.artifact(tasks.named('shadowJar'))
+configurations.apiElements.outgoing.artifact(tasks.named('shadowJar'))
+
+configurations.named('shadowRuntimeElements') {
+    outgoing.artifacts.clear()
+}

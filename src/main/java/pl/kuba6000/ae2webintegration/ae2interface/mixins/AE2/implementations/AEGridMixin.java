@@ -5,10 +5,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.core.GlobalPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.Level;
-import net.neoforged.neoforge.common.util.FakePlayer;
+import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -28,6 +26,7 @@ import appeng.me.Grid;
 import appeng.me.helpers.PlayerSource;
 import appeng.parts.reporting.AbstractTerminalPart;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
@@ -57,19 +56,8 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
         return (IAESecurityGrid) this;
     }
 
-    @Override
-    public boolean web$isEmpty() {
-        return ((Grid) (Object) this).isEmpty();
-    }
-
     @Unique
     private Class<?> web$lastUsedMachineClass = null;
-
-    @Unique
-    public Component web$lastFakePlayerChatMessage;
-
-    @Unique
-    private PlayerSource web$cachedPlayerSource = null;
 
     @Override
     public Object web$getPlayerSource() {
@@ -95,8 +83,8 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
                 .getOwner();
             if (o instanceof IActionHost) actionHost = (IActionHost) o;
             else actionHost = null;
-            world = ServerLifecycleHooks.getCurrentServer()
-                .getLevel(Level.OVERWORLD);
+            world = internalGrid.getPivot()
+                .getLevel();
         } else {
             actionHost = (IActionHost) terminals.iterator()
                 .next();
@@ -104,26 +92,14 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
                 .getLevel();
         }
 
-        if (web$cachedPlayerSource != null) {
-            if (web$cachedPlayerSource.machine()
-                .get() != actionHost) web$cachedPlayerSource = null;
-            else return web$cachedPlayerSource;
+        PlayerIdentity controllerProfile = AE2Controller.AEControllerProfile;
+        if (controllerProfile == null) {
+            controllerProfile = new PlayerIdentity(AE2Controller.AEControllerUUID, "AE2CONTROLLER");
         }
 
-        web$cachedPlayerSource = new PlayerSource(new FakePlayer(world, AE2Controller.AEControllerProfile) {
-
-            @Override
-            public void sendSystemMessage(Component p_component, boolean bypassHiddenChat) {
-                web$lastFakePlayerChatMessage = p_component;
-            }
-        }, actionHost);
-
-        return web$cachedPlayerSource;
-    }
-
-    @Override
-    public Component web$getLastFakePlayerChatMessage() {
-        return web$lastFakePlayerChatMessage;
+        return new PlayerSource(
+            FakePlayerFactory.get(world, new GameProfile(controllerProfile.uuid, controllerProfile.name)),
+            actionHost);
     }
 
     @Unique
@@ -224,16 +200,20 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
     }
 
     @Override
-    public GameProfile web$getOwnerProfile() {
+    public PlayerIdentity web$getOwnerProfile() {
         UUID profileID = IPlayerRegistry.getMapping(ServerLifecycleHooks.getCurrentServer())
             .getProfileId(web$getOwner());
         if (profileID == null) {
             return null;
         }
-        return ServerLifecycleHooks.getCurrentServer()
+        GameProfile profile = ServerLifecycleHooks.getCurrentServer()
             .getProfileCache()
             .get(profileID)
             .orElse(null);
+        if (profile == null) {
+            return new PlayerIdentity(profileID, profileID.toString());
+        }
+        return new PlayerIdentity(profile.getId(), profile.getName());
     }
 
     @Override
