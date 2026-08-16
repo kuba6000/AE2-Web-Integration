@@ -26,6 +26,8 @@ class ConfigBootstrapTest {
         ConfigBootstrap.checkForUpdatesValue = () -> true;
         ConfigBootstrap.discordWebhookValue = () -> "";
         ConfigBootstrap.discordRoleIdValue = () -> "";
+        ConfigBootstrap.discordMinimumCraftingDurationSecondsValue = () -> 0;
+        ConfigBootstrap.discordMinimumCraftingAmountValue = () -> 0;
         ConfigBootstrap.trackingTrackMachineCraftingValue = () -> false;
     }
 
@@ -34,8 +36,8 @@ class ConfigBootstrapTest {
         RecordingConfigBuilder builder = new RecordingConfigBuilder();
         ConfigBootstrap.init(builder);
 
-        // Should have exactly 10 config key definitions
-        assertEquals(10, builder.calls.size(), "expected exactly 10 config key definitions");
+        // Should have exactly 12 config key definitions
+        assertEquals(12, builder.calls.size(), "expected exactly 12 config key definitions");
 
         // Verify all expected keys with their types
         assertContainsCall("int", "port", builder.calls);
@@ -47,6 +49,8 @@ class ConfigBootstrapTest {
         assertContainsCall("boolean", "check_for_updates", builder.calls);
         assertContainsCall("string", "discord_webhook", builder.calls);
         assertContainsCall("string", "discord_role_id", builder.calls);
+        assertContainsCall("int", "discord_minimum_crafting_duration_seconds", builder.calls);
+        assertContainsCall("int", "discord_minimum_crafting_amount", builder.calls);
         assertContainsCall("boolean", "track_machine_crafting", builder.calls);
     }
 
@@ -64,6 +68,12 @@ class ConfigBootstrapTest {
                     break;
                 case "max_requests_before_logged_in_per_minute":
                     assertEquals(20, call.defValue, "max_requests default");
+                    break;
+                case "discord_minimum_crafting_duration_seconds":
+                case "discord_minimum_crafting_amount":
+                    assertEquals(0, call.defValue, call.key + " default");
+                    assertEquals(0, call.min, call.key + " min");
+                    assertEquals(Integer.MAX_VALUE, call.max, call.key + " max");
                     break;
                 case "allow_no_password_on_localhost":
                 case "public_mode":
@@ -113,6 +123,16 @@ class ConfigBootstrapTest {
         assertEquals(true, ConfigBootstrap.checkForUpdatesValue.get(), "CHECK_FOR_UPDATES");
         assertEquals("", ConfigBootstrap.discordWebhookValue.get(), "DISCORD_WEBHOOK");
         assertEquals("", ConfigBootstrap.discordRoleIdValue.get(), "DISCORD_ROLE_ID");
+        assertEquals(
+            0,
+            ConfigBootstrap.discordMinimumCraftingDurationSecondsValue.get()
+                .intValue(),
+            "DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS");
+        assertEquals(
+            0,
+            ConfigBootstrap.discordMinimumCraftingAmountValue.get()
+                .intValue(),
+            "DISCORD_MINIMUM_CRAFTING_AMOUNT");
         assertEquals(false, ConfigBootstrap.trackingTrackMachineCraftingValue.get(), "TRACK_MACHINE_CRAFTING");
         // Password should be a non-empty random string (generated at init time)
         String password = ConfigBootstrap.aePasswordValue.get();

@@ -48,6 +48,14 @@ public class Config {
         return ConfigBootstrap.discordRoleIdValue.get();
     }
 
+    public static int DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS() {
+        return ConfigBootstrap.discordMinimumCraftingDurationSecondsValue.get();
+    }
+
+    public static int DISCORD_MINIMUM_CRAFTING_AMOUNT() {
+        return ConfigBootstrap.discordMinimumCraftingAmountValue.get();
+    }
+
     // Tracking
     public static boolean TRACKING_TRACK_MACHINE_CRAFTING() {
         return ConfigBootstrap.trackingTrackMachineCraftingValue.get();

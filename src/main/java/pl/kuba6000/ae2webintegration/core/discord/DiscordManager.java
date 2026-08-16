@@ -34,6 +34,28 @@ public class DiscordManager extends Thread {
         toPush.offer(message);
     }
 
+    public static String formatDuration(long durationMillis) {
+        if (durationMillis < 5000L) {
+            return durationMillis / 1000d + "s";
+        }
+
+        long totalSeconds = Math.round(durationMillis / 1000d);
+        long days = totalSeconds / 86400L;
+        long hours = totalSeconds % 86400L / 3600L;
+        long minutes = totalSeconds % 3600L / 60L;
+        long seconds = totalSeconds % 60L;
+
+        if (days > 0L) return days + "d " + hours + "h " + minutes + "m " + seconds + "s";
+        if (hours > 0L) return hours + "h " + minutes + "m " + seconds + "s";
+        if (minutes > 0L) return minutes + "m " + seconds + "s";
+        return seconds + "s";
+    }
+
+    public static boolean shouldPostCraftingNotification(long durationMillis, long craftedAmount) {
+        long minimumDurationMillis = Config.DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS() * 1000L;
+        return durationMillis >= minimumDurationMillis && craftedAmount >= Config.DISCORD_MINIMUM_CRAFTING_AMOUNT();
+    }
+
     public static class DiscordEmbed {
 
         String title;

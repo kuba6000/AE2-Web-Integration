@@ -8,12 +8,18 @@ on:
     branches: [ core ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout core
         uses: actions/checkout@v4
+
+      - name: Test core pin updater
+        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
 
       - name: Set up JDK
         uses: actions/setup-java@v4
