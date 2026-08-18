@@ -85,16 +85,10 @@ public final class GridAccessSessions {
         return new GridAccess(playerId, keys, nowMillis);
     }
 
-    /**
-     * Refreshes the user's access set when it is missing or past half its lifetime. Cheap on the common
-     * path: a single map lookup and a timestamp comparison.
-     */
-    public static GridAccess refreshIfHalfLifeElapsed(IAE ae, WebPrincipal principal, long nowMillis) {
-        GridAccess current = sessions.get(principal);
-        if (current == null || current.isHalfLifeElapsed(nowMillis)) {
-            current = compute(ae, principal, nowMillis);
-            sessions.put(principal, current);
-        }
+    /** Recomputes and publishes the user's access from the live AE2 state on the server thread. */
+    public static GridAccess refresh(IAE ae, WebPrincipal principal, long nowMillis) {
+        GridAccess current = compute(ae, principal, nowMillis);
+        sessions.put(principal, current);
         return current;
     }
 }

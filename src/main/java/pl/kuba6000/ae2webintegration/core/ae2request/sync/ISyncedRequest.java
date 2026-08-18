@@ -20,6 +20,7 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
     protected long gridKey = -1;
     protected IAEGrid grid = null;
     protected GridData gridData = null;
+    protected GridAccess access = null;
 
     boolean init(Map<String, String> getParams) {
         return true;
@@ -45,14 +46,6 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
     void handle(IAEGrid grid) {}
 
     public void handle(IAE ae) {
-        // We are on the server thread with live AE2 state in hand, so this is the cheapest place to keep
-        // the async endpoints' authorization data fresh. Refreshing at half life rather than on expiry
-        // means an active session never sees REFRESH_REQUIRED.
-        GridAccess access = null;
-        if (context != null) {
-            access = GridAccessSessions
-                .refreshIfHalfLifeElapsed(ae, context.getPrincipal(), System.currentTimeMillis());
-        }
         if (gridKey != -1) {
             if (!context.isAdmin() && (access == null || !access.hasResolvedPlayerId())) {
                 deny("NO_PERMISSIONS");
@@ -78,6 +71,12 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
 
     @Override
     public final void runOnServerThread(IAE ae) {
+        // Every synced request already runs with live AE2 state on the server thread. Publish that state
+        // before dynamic dispatch so handlers overriding handle(IAE), such as GetGridList, cannot retain a
+        // stale grid-access snapshot after a security terminal or biometric card changes.
+        if (context != null) {
+            access = GridAccessSessions.refresh(ae, context.getPrincipal(), System.currentTimeMillis());
+        }
         handle(ae);
     }
 

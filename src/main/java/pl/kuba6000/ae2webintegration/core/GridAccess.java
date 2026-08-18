@@ -44,14 +44,6 @@ public final class GridAccess {
         return nowMillis - computedAtMillis >= TTL_MILLIS;
     }
 
-    /**
-     * True once half the lifetime has elapsed. Synced requests refresh at this point rather than on
-     * expiry, so an active session never actually reaches {@link #isStale(long)}.
-     */
-    public boolean isHalfLifeElapsed(long nowMillis) {
-        return nowMillis - computedAtMillis >= TTL_MILLIS / 2L;
-    }
-
     public Set<Long> getAccessibleGridKeys() {
         return accessibleGridKeys;
     }

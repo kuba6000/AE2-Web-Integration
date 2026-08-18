@@ -1,13 +1,12 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -125,76 +124,8 @@ class GridAccessSessionsTest {
     @Test
     void refreshPopulatesWhenAbsent() {
         assertNull(GridAccessSessions.get(OWNER));
-        GridAccessSessions.refreshIfHalfLifeElapsed(TestGridFixtures.ae(TestGridFixtures.grid(10L)), OWNER, T0);
+        GridAccessSessions.refresh(TestGridFixtures.ae(TestGridFixtures.grid(10L)), OWNER, T0);
         assertNotNull(GridAccessSessions.get(OWNER));
-    }
-
-    @Test
-    void refreshIsSkippedBeforeHalfLife() {
-        TestGridFixtures.TestAE ae = TestGridFixtures.ae(TestGridFixtures.grid(10L));
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, OWNER, T0);
-        long firstComputedAt = GridAccessSessions.get(OWNER)
-            .getComputedAtMillis();
-
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, OWNER, T0 + GridAccess.TTL_MILLIS / 2 - 1);
-
-        assertTrue(
-            firstComputedAt == GridAccessSessions.get(OWNER)
-                .getComputedAtMillis(),
-            "must not recompute before half life");
-    }
-
-    @Test
-    void refreshRecomputesAfterHalfLife() {
-        TestGridFixtures.TestAE ae = TestGridFixtures.ae(TestGridFixtures.grid(10L));
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, OWNER, T0);
-
-        long later = T0 + GridAccess.TTL_MILLIS / 2;
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, OWNER, later);
-
-        assertTrue(
-            later == GridAccessSessions.get(OWNER)
-                .getComputedAtMillis());
-    }
-
-    @Test
-    void refreshResolvesTheAePlayerIdOnceAndReusesItBeforeHalfLife() {
-        AtomicInteger playerIdLookups = new AtomicInteger();
-        TestGridFixtures.TestAE ae = new TestGridFixtures.TestAE(TestGridFixtures.grid(10L, PERMITTED_USER_ID)) {
-
-            @Override
-            public int web$getPlayerId(PlayerIdentity identity) {
-                playerIdLookups.incrementAndGet();
-                return PERMITTED_USER_ID;
-            }
-        };
-
-        GridAccess first = GridAccessSessions.refreshIfHalfLifeElapsed(ae, PERMITTED_USER, T0);
-        GridAccess second = GridAccessSessions
-            .refreshIfHalfLifeElapsed(ae, PERMITTED_USER, T0 + GridAccess.TTL_MILLIS / 2L - 1L);
-
-        assertEquals(1, playerIdLookups.get());
-        assertEquals(PERMITTED_USER_ID, first.getPlayerId());
-        assertEquals(PERMITTED_USER_ID, second.getPlayerId());
-        assertTrue(second.canAccess(10L));
-    }
-
-    @Test
-    void refreshResolvesTheAePlayerIdAgainAfterHalfLife() {
-        AtomicInteger playerIdLookups = new AtomicInteger();
-        TestGridFixtures.TestAE ae = new TestGridFixtures.TestAE() {
-
-            @Override
-            public int web$getPlayerId(PlayerIdentity identity) {
-                playerIdLookups.incrementAndGet();
-                return PERMITTED_USER_ID;
-            }
-        };
-
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, PERMITTED_USER, T0);
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, PERMITTED_USER, T0 + GridAccess.TTL_MILLIS / 2L);
-
-        assertEquals(2, playerIdLookups.get());
     }
 
     @Test
@@ -207,7 +138,7 @@ class GridAccessSessionsTest {
             }
         };
 
-        GridAccess access = GridAccessSessions.refreshIfHalfLifeElapsed(ae, PERMITTED_USER, T0);
+        GridAccess access = GridAccessSessions.refresh(ae, PERMITTED_USER, T0);
 
         assertFalse(access.hasResolvedPlayerId());
         assertTrue(
@@ -220,35 +151,27 @@ class GridAccessSessionsTest {
         UUID uuid = UUID.fromString("12345678-1234-5678-9abc-def012345678");
         WebPrincipal oldName = WebPrincipal.forPlayer(new PlayerIdentity(uuid, "OldName"));
         WebPrincipal newName = WebPrincipal.forPlayer(new PlayerIdentity(uuid, "NewName"));
-        AtomicInteger playerIdLookups = new AtomicInteger();
-        TestGridFixtures.TestAE ae = new TestGridFixtures.TestAE() {
+        TestGridFixtures.TestAE ae = new TestGridFixtures.TestAE();
 
-            @Override
-            public int web$getPlayerId(PlayerIdentity identity) {
-                playerIdLookups.incrementAndGet();
-                return PERMITTED_USER_ID;
-            }
-        };
+        GridAccessSessions.refresh(ae, oldName, T0);
+        GridAccess renamedAccess = GridAccessSessions.refresh(ae, newName, T0 + 1L);
 
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, oldName, T0);
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, newName, T0 + 1L);
-
-        assertEquals(1, playerIdLookups.get());
-        assertNotNull(GridAccessSessions.get(newName));
+        assertSame(renamedAccess, GridAccessSessions.get(oldName));
+        assertSame(renamedAccess, GridAccessSessions.get(newName));
     }
 
     @Test
     void refreshPicksUpRevokedPermissions() {
         TestGrid grid = TestGridFixtures.grid(10L, PERMITTED_USER_ID);
         TestGridFixtures.TestAE ae = TestGridFixtures.ae(grid);
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, PERMITTED_USER, T0);
+        GridAccessSessions.refresh(ae, PERMITTED_USER, T0);
         assertTrue(
             GridAccessSessions.get(PERMITTED_USER)
                 .canAccess(10L));
 
         // grid goes offline - the next refresh must drop it
         grid.noController();
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, PERMITTED_USER, T0 + GridAccess.TTL_MILLIS);
+        GridAccessSessions.refresh(ae, PERMITTED_USER, T0 + 1L);
         assertFalse(
             GridAccessSessions.get(PERMITTED_USER)
                 .canAccess(10L));
@@ -281,8 +204,8 @@ class GridAccessSessionsTest {
     @Test
     void invalidateDropsOnlyThatUser() {
         TestGridFixtures.TestAE ae = TestGridFixtures.ae(TestGridFixtures.grid(10L, PERMITTED_USER_ID));
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, OWNER, T0);
-        GridAccessSessions.refreshIfHalfLifeElapsed(ae, PERMITTED_USER, T0);
+        GridAccessSessions.refresh(ae, OWNER, T0);
+        GridAccessSessions.refresh(ae, PERMITTED_USER, T0);
 
         GridAccessSessions.invalidate(PERMITTED_USER);
 
@@ -292,7 +215,7 @@ class GridAccessSessionsTest {
 
     @Test
     void clearDropsEverything() {
-        GridAccessSessions.refreshIfHalfLifeElapsed(TestGridFixtures.ae(TestGridFixtures.grid(10L)), OWNER, T0);
+        GridAccessSessions.refresh(TestGridFixtures.ae(TestGridFixtures.grid(10L)), OWNER, T0);
         GridAccessSessions.clear();
         assertNull(GridAccessSessions.get(OWNER));
     }

@@ -2,8 +2,6 @@ package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
 import java.util.ArrayList;
 
-import pl.kuba6000.ae2webintegration.core.GridAccess;
-import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.GridFilter;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
@@ -33,8 +31,6 @@ public class GetGridList extends ISyncedRequest {
     @Override
     public void handle(IAE ae) {
         ArrayList<JSON_GridData> grids = new ArrayList<>();
-        GridAccess access = GridAccessSessions
-            .refreshIfHalfLifeElapsed(ae, context.getPrincipal(), System.currentTimeMillis());
         for (IAEGrid grid : ae.web$getGrids()) {
             IAESecurityGrid security = GridFilter.usableSecurity(grid);
             if (security == null || security.web$getSecurityKey() == -1) {

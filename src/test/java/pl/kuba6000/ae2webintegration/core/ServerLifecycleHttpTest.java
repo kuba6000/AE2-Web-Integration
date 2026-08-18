@@ -440,7 +440,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void aePlayerIdIsResolvedByTheFirstSyncedRequestAndReusedByTheNextOne() throws Exception {
+    void aePlayerIdIsResolvedByEverySyncedRequestWithoutBlockingLogin() throws Exception {
         UUID playerUuid = UUID.fromString("22222222-3333-4444-5555-666666666666");
         AtomicInteger aePlayerLookups = new AtomicInteger();
         ConfigBootstrap.aePublicModeValue = () -> true;
@@ -464,7 +464,7 @@ class ServerLifecycleHttpTest {
         assertEquals(200, performSyncedRequest(token).status);
         assertEquals(1, aePlayerLookups.get());
         assertEquals(200, performSyncedRequest(token).status);
-        assertEquals(1, aePlayerLookups.get(), "the cached AE2 id must be reused before half life");
+        assertEquals(2, aePlayerLookups.get(), "each synced request must publish access from current AE2 state");
     }
 
     @Test

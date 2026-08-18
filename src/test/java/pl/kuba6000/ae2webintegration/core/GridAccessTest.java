@@ -50,23 +50,6 @@ class GridAccessTest {
     }
 
     @Test
-    void halfLifeElapsesAtHalfTheTtl() {
-        GridAccess access = accessTo(10L);
-        assertFalse(access.isHalfLifeElapsed(T0));
-        assertFalse(access.isHalfLifeElapsed(T0 + GridAccess.TTL_MILLIS / 2 - 1));
-        assertTrue(access.isHalfLifeElapsed(T0 + GridAccess.TTL_MILLIS / 2));
-    }
-
-    @Test
-    void halfLifeElapsesBeforeStaleness() {
-        // The whole point of refreshing at half life: an active session never reaches isStale.
-        long midpoint = T0 + GridAccess.TTL_MILLIS / 2;
-        GridAccess access = accessTo(10L);
-        assertTrue(access.isHalfLifeElapsed(midpoint));
-        assertFalse(access.isStale(midpoint));
-    }
-
-    @Test
     void keySetIsAnImmutableCopy() {
         Set<Long> source = new HashSet<>();
         source.add(10L);
