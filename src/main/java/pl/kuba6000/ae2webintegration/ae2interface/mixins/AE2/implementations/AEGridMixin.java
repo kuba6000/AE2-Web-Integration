@@ -24,22 +24,14 @@ import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingFakePlayer
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.identity.OrderableResources;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.IOrderableResourceProvider;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = Grid.class, remap = false)
-public abstract class AEGridMixin
-    implements IAEGrid, GridWorldAccessor, PlayerSourceLifecycle, IOrderableResourceProvider {
-
-    @Override
-    public OrderableResources web$getOrderableResources() {
-        return ((IOrderableResourceProvider) web$getCraftingGrid()).web$getOrderableResources();
-    }
+public abstract class AEGridMixin implements IAEGrid, GridWorldAccessor, PlayerSourceLifecycle {
 
     @Override
     public IAECraftingGrid web$getCraftingGrid() {
