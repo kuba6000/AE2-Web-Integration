@@ -41,7 +41,12 @@ class CoreEngineLifecycleTest {
         WebPrincipal principal = TestGridFixtures.principal(42);
         GridAccessSessions.put(principal, new GridAccess(42, Collections.singleton(GRID_KEY), 0L));
         AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
-        AE2Controller.hashcodeToStack.put(1, new TestStack());
+        AE2Controller.itemIdentities.rememberLegacy(
+            1,
+            pl.kuba6000.ae2webintegration.core.identity.StableItemKey.parse("ik1:AAAAAAAAAAAAAAAAAAAAAA"));
+        AE2Controller.itemIdentities.rememberLegacy(
+            1,
+            pl.kuba6000.ae2webintegration.core.identity.StableItemKey.parse("ik1:AAAAAAAAAAAAAAAAAAAAAQ"));
 
         IAE processInterface = TestGridFixtures.ae(grid);
         AE2Controller.AE2Interface = processInterface;
@@ -65,7 +70,7 @@ class CoreEngineLifecycleTest {
         assertSame(processPlatform, AE2Controller.serverPlatform);
         assertTrue(gridData.isTracked, "persisted grid settings survive a world switch");
         assertTrue(AE2Controller.awaitingRegistration.isEmpty());
-        assertTrue(AE2Controller.hashcodeToStack.isEmpty());
+        assertNull(assertDoesNotThrow(() -> AE2Controller.itemIdentities.resolveLegacy(1)));
         assertNull(GridAccessSessions.get(principal));
         assertNull(AE2JobTracker.findActiveJob(cpu));
         assertTrue(gridData.trackingInfo.trackingInfos.isEmpty());

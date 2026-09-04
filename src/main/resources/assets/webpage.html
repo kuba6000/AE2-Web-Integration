@@ -689,7 +689,7 @@
 
     currentJob = {
         id: -1,
-        itemHash: -1,
+        itemKey: null,
         bytesTotal: -1,
     }
     function searchStringChanged(el){
@@ -1164,7 +1164,8 @@
         // isBusy is the flag the server actually reports; finalOutput is only filled in when busy.
         if (!cluster['isBusy']) return cluster['availableStorage'] >= currentJob.bytesTotal;
         if (!cluster['finalOutput']) return false;
-        if (currentJob.itemHash != cluster['finalOutput']['hashcode']) return false;
+        if (!currentJob.itemKey || !cluster['finalOutput']['itemKey']
+            || currentJob.itemKey !== cluster['finalOutput']['itemKey']) return false;
         if (cluster['usedStorage'] == -1) return false;
         return cluster['availableStorage'] >= cluster['usedStorage'] + currentJob.bytesTotal;
     }
@@ -1250,11 +1251,18 @@
             else {
                 imgSrc = "data:image/png;base64," + imgSrc;
             }
+            let orderAction = '';
+            if (item['craftable']) {
+                if (isUsableItemKey(item['itemKey']))
+                    orderAction = '<br><button onclick="beginOrderingItem(\'' + item['itemKey'] + '\');">order</button>';
+                else
+                    orderAction = '<br><span>Ordering unavailable</span>';
+            }
             if (settings.showItemIcon){
-                html += "<td class='storage'>" + formatItemName(item) + "<img src='" + imgSrc + "' /><br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+                html += "<td class='storage'>" + formatItemName(item) + "<img src='" + imgSrc + "' /><br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
             }
             else {
-                html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+                html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
             }
             grid_i++;
             if(grid_i == grid_i_max){
@@ -1544,10 +1552,16 @@
             popLoadingScreen(message);
         });
     }
-    function beginOrderingItem(hashcode){
+    function isUsableItemKey(itemKey) {
+        return typeof itemKey === 'string' && /^ik1:[A-Za-z0-9_-]{22}$/.test(itemKey);
+    }
+    function beginOrderingItem(itemKey){
         if (selectedGrid == -1)
             return;
-        console.log(hashcode);
+        if (!isUsableItemKey(itemKey)) {
+            showAlert("Item details are unavailable. Refresh the item list before ordering.");
+            return;
+        }
         let answer = window.prompt("How much to order?", "1");
         if (answer === null) // cancelled
             return;
@@ -1565,10 +1579,13 @@
             document.getElementById('terminalCPUListForJob').innerHTML = "...";
             let message = "Sending order...";
             pushLoadingScreen(message);
-            $.getJSON('order?grid=' + selectedGrid + '&item=' + hashcode + "&quantity=" + quantity, function(data){
+            $.getJSON('order?grid=' + selectedGrid + '&itemKey=' + encodeURIComponent(itemKey) + "&quantity=" + quantity, function(data){
                 console.log(data);
                 if(data.status !== "OK"){
-                    showAlert(data.status + ": " + data.data);
+                    if (data.status === "ITEM_IDENTITY_UNKNOWN")
+                        showAlert("Item details expired. Refresh the item list and place the order again.");
+                    else
+                        showAlert(data.status + ": " + data.data);
                     popLoadingScreen(message);
                     return;
                 }
@@ -1579,13 +1596,16 @@
                     document.getElementById("terminalJobHeaderText").innerHTML = "Calculating, please wait...";
                     cpuForJob = "";
                     currentJob.id = data['jobID'];
-                    currentJob.itemHash = hashcode;
+                    currentJob.itemKey = itemKey;
                     setTimeout(updateCraftingPlan, 1000);
                 }
                 else{
                     //setCurrentScreen(0);
                 }
                 popLoadingScreen(message);
+            }).fail(function() {
+                popLoadingScreen(message);
+                showAlert("The order response was lost. Check the crafting jobs before placing another order.");
             });
         }
     }

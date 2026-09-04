@@ -1,14 +1,16 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
-import static pl.kuba6000.ae2webintegration.core.AE2Controller.hashcodeToStack;
+import static pl.kuba6000.ae2webintegration.core.AE2Controller.itemIdentities;
 
 import java.util.Map;
 import java.util.concurrent.Future;
 
 import com.google.gson.JsonObject;
 
+import pl.kuba6000.ae2webintegration.core.identity.IdentityLimitException;
+import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -17,18 +19,33 @@ import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 public class Order extends ISyncedRequest {
 
-    private IAEKey itemKey;
+    private StableItemKey requestedKey;
+    private Integer legacyHash;
     private long quantity;
 
     @Override
     boolean init(Map<String, String> getParams) {
-        if (!getParams.containsKey("item") || !getParams.containsKey("quantity")) {
-            noParam("item", "quantity");
+        if ((!getParams.containsKey("itemKey") && !getParams.containsKey("item"))
+            || !getParams.containsKey("quantity")) {
+            noParam("itemKey", "quantity");
             return false;
         }
-        Integer hash = HTTPUtils.parseInt(getParams.get("item"));
+        if (getParams.containsKey("itemKey")) {
+            try {
+                requestedKey = StableItemKey.parse(getParams.get("itemKey"));
+            } catch (IllegalArgumentException e) {
+                deny("BAD_PARAM");
+                return false;
+            }
+        } else {
+            legacyHash = HTTPUtils.parseInt(getParams.get("item"));
+            if (legacyHash == null) {
+                deny("BAD_PARAM");
+                return false;
+            }
+        }
         Long parsedQuantity = HTTPUtils.parseLong(getParams.get("quantity"));
-        if (hash == null || parsedQuantity == null) {
+        if (parsedQuantity == null) {
             deny("BAD_PARAM");
             return false;
         }
@@ -40,12 +57,6 @@ public class Order extends ISyncedRequest {
             return false;
         }
         this.quantity = parsedQuantity;
-        IAEGenericStack stack = hashcodeToStack.get(hash);
-        if (stack == null) {
-            deny("ITEM_NOT_FOUND");
-            return false;
-        }
-        this.itemKey = stack.web$what();
         return true;
     }
 
@@ -55,11 +66,26 @@ public class Order extends ISyncedRequest {
             deny("GRID_NOT_FOUND");
             return;
         }
-        if (!itemKey.web$isCraftable(grid)) {
-            deny("ITEM_NOT_FOUND");
+        IAEKey itemKey;
+        try {
+            itemKey = requestedKey != null ? itemIdentities.resolve(requestedKey)
+                : itemIdentities.resolveLegacy(legacyHash);
+        } catch (ItemIdentityRegistry.Ambiguous e) {
+            deny(requestedKey != null ? "AMBIGUOUS_ITEM_KEY" : "AMBIGUOUS_ITEM");
+            return;
+        } catch (IdentityLimitException e) {
+            deny("IDENTITY_LIMIT_EXCEEDED");
+            return;
+        }
+        if (itemKey == null) {
+            deny("ITEM_IDENTITY_UNKNOWN");
             return;
         }
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
+        if (!craftingGrid.web$isCurrentlyCraftable(itemKey)) {
+            deny("ITEM_NOT_FOUND");
+            return;
+        }
         boolean allBusy = true;
         for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
             if (!cpu.web$isBusy()) {

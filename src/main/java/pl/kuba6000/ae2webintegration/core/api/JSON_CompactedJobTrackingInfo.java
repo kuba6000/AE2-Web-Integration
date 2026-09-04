@@ -6,7 +6,6 @@ import java.util.Map;
 
 import org.apache.commons.lang3.tuple.Pair;
 
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
@@ -36,7 +35,7 @@ public class JSON_CompactedJobTrackingInfo {
         public ArrayList<timingClass> timings = new ArrayList<>();
     }
 
-    public IAEGenericStack finalOutput;
+    public JSON_Stack finalOutput;
     public long timeStarted;
     public long timeDone;
     public boolean wasCancelled;

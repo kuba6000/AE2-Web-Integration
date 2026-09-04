@@ -15,6 +15,21 @@ import org.junit.jupiter.params.provider.ValueSource;
 class UniformItemKeyTest {
 
     @Test
+    void eitherHalfOfTheDigestCanDistinguishResources() {
+        StableItemKey zero = StableItemKey.parse("ik1:AAAAAAAAAAAAAAAAAAAAAA");
+        StableItemKey firstOnly = StableItemKey.parse("ik1:AAAAAAAAAAEAAAAAAAAAAA");
+        StableItemKey secondOnly = StableItemKey.parse("ik1:AAAAAAAAAAAAAAAAAAAAAQ");
+        assertNotEquals(zero, firstOnly);
+        assertNotEquals(zero, secondOnly);
+        assertNotEquals(firstOnly, secondOnly);
+        Map<StableItemKey, String> resources = new HashMap<>();
+        resources.put(zero, "zero");
+        resources.put(firstOnly, "first");
+        resources.put(secondOnly, "second");
+        assertEquals(3, resources.size());
+    }
+
+    @Test
     void matchesReferenceMurmurX64VectorsIncludingTheProtocolEnvelope() throws Exception {
         // Python mmh3 5.2.0 reference x64_128_digest, seed 0; expected values are independent literals.
         assertEquals(

@@ -3,7 +3,7 @@ package pl.kuba6000.ae2webintegration.core.ae2request.async;
 import java.util.ArrayList;
 import java.util.Map;
 
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 public class GetTrackingHistory extends IAsyncRequest {
@@ -13,7 +13,7 @@ public class GetTrackingHistory extends IAsyncRequest {
         public long timeStarted;
         public long timeDone;
         public boolean wasCancelled;
-        public IAEGenericStack finalOutput;
+        public JSON_Stack finalOutput;
         public int id;
     }
 

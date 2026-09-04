@@ -7,4 +7,6 @@ public class JSON_DetailedItem {
     public String itemname;
     public long quantity;
     public boolean craftable;
+    public String itemKey;
+    public String identityStatus;
 }

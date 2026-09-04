@@ -29,7 +29,7 @@ class RequestParameterValidationTest {
         Set<Long> keys = new HashSet<>();
         keys.add(GRID);
         GridAccessSessions.put(TestGridFixtures.principal(ME), new GridAccess(ME, keys, System.currentTimeMillis()));
-        AE2Controller.hashcodeToStack.clear();
+        AE2Controller.itemIdentities.clear();
     }
 
     private static void assertStatus(String expected, String json) {
@@ -70,10 +70,8 @@ class RequestParameterValidationTest {
     void orderAcceptsAnAmountBeyondIntRange() {
         // Every platform's AE2 takes a long; the old int ceiling was purely our own parser.
         long beyondInt = (long) Integer.MAX_VALUE + 1;
-        String json = runSynced(new Order(), "grid=" + GRID + "&item=1&quantity=" + beyondInt);
-        // The item is not in the token map, so it stops at ITEM_NOT_FOUND - the point is that the amount
-        // was accepted rather than rejected as a bad parameter.
-        assertStatus("ITEM_NOT_FOUND", json);
+        // Native lookup now runs only after server-thread authorization, not during parameter parsing.
+        assertTrue(new Order().init(TestGridFixtures.context(ME, "grid=" + GRID + "&item=1&quantity=" + beyondInt)));
     }
 
     // --- other numeric parameters ---

@@ -3,7 +3,7 @@ package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
@@ -14,7 +14,7 @@ public class GetCPUList extends ISyncedRequest {
     private static class JSON_CpuInfo {
 
         public boolean isBusy;
-        public IAEGenericStack finalOutput;
+        public JSON_Stack finalOutput;
         public long availableStorage;
         public long usedStorage;
         public long coProcessors;
@@ -51,7 +51,7 @@ public class GetCPUList extends ISyncedRequest {
             cpuInfo.usedStorage = cluster.web$getUsedStorage();
             cpuInfo.coProcessors = cluster.web$getCoProcessors();
             if (cpuInfo.isBusy = cluster.web$isBusy()) {
-                cpuInfo.finalOutput = cluster.web$getFinalOutput();
+                cpuInfo.finalOutput = JSON_Stack.capture(cluster.web$getFinalOutput());
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cluster);
                 if (cpuInfo.hasTrackingInfo = trackingInfo != null) {
                     cpuInfo.timeStarted = trackingInfo.timeStarted;

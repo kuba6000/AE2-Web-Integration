@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
@@ -7,6 +8,9 @@ import java.util.Set;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.JSON_DetailedItem;
+import pl.kuba6000.ae2webintegration.core.identity.IdentityLimitException;
+import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -30,7 +34,6 @@ public class GetItems extends ISyncedRequest {
         IAEStorageGrid storageGrid = grid.web$getStorageGrid();
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
         IStackList storageList = storageGrid.web$getStorageList();
-        AE2Controller.hashcodeToStack.clear();
         ArrayList<JSON_DetailedItem> items = new ArrayList<>();
         Set<IAEKey> listed = new HashSet<>();
 
@@ -40,7 +43,7 @@ public class GetItems extends ISyncedRequest {
         }
 
         for (IAEKey craftable : craftingGrid.web$getCraftables(null)) {
-            if (containsSameType(listed, craftable)) {
+            if (!listed.add(craftable)) {
                 continue;
             }
             addItem(items, AE2Controller.AE2Interface.web$stackOf(craftable, 0), grid);
@@ -53,7 +56,6 @@ public class GetItems extends ISyncedRequest {
         IAEKey key = stack.web$what();
 
         int hash = stack.hashCode();
-        AE2Controller.hashcodeToStack.put(hash, stack);
 
         JSON_DetailedItem detailedItem = new JSON_DetailedItem();
         detailedItem.itemid = key.web$getItemID();
@@ -62,16 +64,22 @@ public class GetItems extends ISyncedRequest {
         detailedItem.craftable = key.web$isCraftable(grid);
         detailedItem.hashcode = hash;
 
-        items.add(detailedItem);
-    }
-
-    private static boolean containsSameType(Set<IAEKey> keys, IAEKey key) {
-        for (IAEKey listed : keys) {
-            if (key.web$isSameType(listed)) {
-                return true;
-            }
+        try {
+            StableItemKey identity = AE2Controller.itemIdentities.remember(key);
+            detailedItem.itemKey = identity.toString();
+            AE2Controller.itemIdentities.rememberLegacy(hash, identity);
+        } catch (IdentityLimitException e) {
+            detailedItem.identityStatus = "LIMIT_EXCEEDED";
+        } catch (ItemIdentityRegistry.Ambiguous e) {
+            detailedItem.identityStatus = "AMBIGUOUS";
+        } catch (UnsupportedOperationException e) {
+            detailedItem.identityStatus = "UNSUPPORTED";
+        } catch (IOException | RuntimeException e) {
+            detailedItem.identityStatus = "UNAVAILABLE";
         }
-        return false;
+        if (detailedItem.itemKey == null) AE2Controller.itemIdentities.rejectLegacy(hash);
+
+        items.add(detailedItem);
     }
 
 }

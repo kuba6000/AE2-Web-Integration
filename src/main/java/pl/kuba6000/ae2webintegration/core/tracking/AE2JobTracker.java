@@ -13,6 +13,7 @@ import com.google.common.collect.MapMaker;
 
 import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
@@ -50,7 +51,7 @@ public class AE2JobTracker {
 
     public static class JobTrackingInfo {
 
-        public IAEGenericStack finalOutput;
+        public volatile JSON_Stack finalOutput;
         public long timeStarted;
         public long timeDone;
         public HashMap<IAEKey, Long> timeSpentOn = new HashMap<>();
@@ -128,11 +129,11 @@ public class AE2JobTracker {
             info = trackingInfoMap.get(cpuCluster);
             if (info == null) return;
         } else {
-            trackingInfoMap.put(cpuCluster, info = new JobTrackingInfo());
+            info = new JobTrackingInfo();
             info.timeStarted = System.currentTimeMillis();
         }
-        info.finalOutput = cpuCluster.web$getFinalOutput()
-            .web$copy();
+        info.finalOutput = JSON_Stack.capture(cpuCluster.web$getFinalOutput());
+        if (!isMerging) trackingInfoMap.put(cpuCluster, info);
     }
 
     public static void updateCraftingStatus(ICraftingCPUCluster cpu, Object diff) {
@@ -237,7 +238,7 @@ public class AE2JobTracker {
         info.timeDone = System.currentTimeMillis();
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         long durationMillis = info.timeDone - info.timeStarted;
-        long craftedAmount = info.finalOutput.web$amount();
+        long craftedAmount = info.finalOutput == null ? 0 : info.finalOutput.quantity;
         if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
             .isEmpty() && DiscordManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
             IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
@@ -250,8 +251,7 @@ public class AE2JobTracker {
                             + " ][ "
                             + cpu.web$getName()
                             + " ]",
-                        "Crafting for `" + info.finalOutput.web$what()
-                            .web$getDisplayName()
+                        "Crafting for `" + (info.finalOutput == null ? null : info.finalOutput.itemname)
                             + " x"
                             + craftedAmount
                             + "` "
