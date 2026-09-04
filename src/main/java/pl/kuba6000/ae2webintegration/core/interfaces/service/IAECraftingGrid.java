@@ -12,6 +12,9 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 
 public interface IAECraftingGrid {
 
+    /** Current order-time validation in this service's grid, independent of saved listing flags. */
+    boolean web$isCurrentlyCraftable(IAEKey key);
+
     int web$getCPUCount();
 
     Set<ICraftingCPUCluster> web$getCPUs();

@@ -1,144 +1,112 @@
 package pl.kuba6000.ae2webintegration.core.identity;
 
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
+import java.util.Objects;
 
-/** Versioned external resource selector. A key is never an authorization grant. */
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
+
+/** Immutable resource identity; neither a grid membership assertion nor an authorization grant. */
 public final class StableItemKey {
 
-    public static final int MAX_TOKEN_LENGTH = 512;
+    public static final int MAX_IDENTITY_BYTES = 256 * 1024;
+    public static final int MAX_TOKEN_LENGTH = 26;
 
-    @FunctionalInterface
-    public interface IdentityWriter {
+    private static final HashFunction HASH = Hashing.murmur3_128(0);
+    private static final byte[] DOMAIN = "AE2WI_ITEM_KEY\0V1\0".getBytes(StandardCharsets.US_ASCII);
 
-        void write(DataOutput output) throws IOException;
+    private final long first;
+    private final long second;
+    private final int hash;
+
+    private StableItemKey(byte[] digest) {
+        ByteBuffer bytes = ByteBuffer.wrap(digest);
+        first = bytes.getLong();
+        second = bytes.getLong();
+        hash = 31 * Long.hashCode(first) + Long.hashCode(second);
     }
 
-    private final String token;
-    private final SimpleItemIdentity simpleIdentity;
-
-    private StableItemKey(String token, SimpleItemIdentity simpleIdentity) {
-        this.token = token;
-        this.simpleIdentity = simpleIdentity;
-    }
-
-    public static StableItemKey of(SimpleItemIdentity identity) {
-        String token = identity.getKind() == SimpleItemIdentity.Kind.ITEM
-            ? "ik1:i:" + identity.getRegistryId() + ":" + identity.getMetadata()
-            : "ik1:f:" + identity.getRegistryId();
-        validateToken(token);
-        return new StableItemKey(token, identity);
+    /** Native adapters supply deterministic, bounded bytes without amount or crafting state. */
+    public static StableItemKey fromIdentityBytes(byte[] identity) throws IOException {
+        Objects.requireNonNull(identity, "identity");
+        if (identity.length > MAX_IDENTITY_BYTES) throw new IdentityLimitException();
+        return new StableItemKey(
+            HASH.newHasher()
+                .putBytes(DOMAIN)
+                .putBytes(identity)
+                .hash()
+                .asBytes());
     }
 
     public static StableItemKey parse(String token) {
-        validateToken(token);
-        if (token.startsWith("ik1:i:")) {
-            int delimiter = token.lastIndexOf(':');
-            if (delimiter <= 6) throw new IllegalArgumentException("Missing item registry identity");
-            StableItemKey key = of(
-                SimpleItemIdentity
-                    .item(token.substring(6, delimiter), Integer.parseInt(token.substring(delimiter + 1))));
-            if (!key.token.equals(token)) throw new IllegalArgumentException("Noncanonical item key");
-            return key;
+        if (token == null || token.length() != MAX_TOKEN_LENGTH || !token.startsWith("ik1:")) {
+            throw new IllegalArgumentException("Invalid resource key");
         }
-        if (token.startsWith("ik1:f:")) return of(SimpleItemIdentity.fluid(token.substring(6)));
-        if (token.startsWith("ik1:h:") && token.length() == 49) {
-            String encoded = token.substring(6);
-            byte[] digest = Base64.getUrlDecoder()
-                .decode(encoded);
-            if (digest.length == 32 && Base64.getUrlEncoder()
-                .withoutPadding()
-                .encodeToString(digest)
-                .equals(encoded)) {
-                return new StableItemKey(token, null);
+        String encoded = token.substring(4);
+        byte[] digest = Base64.getUrlDecoder()
+            .decode(encoded);
+        if (digest.length != 16 || !Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(digest)
+            .equals(encoded)) {
+            throw new IllegalArgumentException("Noncanonical resource key");
+        }
+        return new StableItemKey(digest);
+    }
+
+    /** Length-prefixed strict UTF-8 shared by native encoders; not Java's modified UTF format. */
+    public static void writeText(DataOutput output, String value) throws IOException {
+        int length = utf8Length(value);
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        output.writeInt(length);
+        output.write(bytes);
+    }
+
+    private static int utf8Length(String value) throws IOException {
+        if (value.length() > MAX_IDENTITY_BYTES) throw new IdentityLimitException();
+        int length = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            if (Character.isHighSurrogate(character)) {
+                if (++i == value.length() || !Character.isLowSurrogate(value.charAt(i))) {
+                    throw new IOException("Malformed Unicode in canonical identity");
+                }
+                length += 4;
+            } else if (Character.isLowSurrogate(character)) {
+                throw new IOException("Malformed Unicode in canonical identity");
+            } else {
+                length += character < 0x80 ? 1 : character < 0x800 ? 2 : 3;
             }
+            if (length > MAX_IDENTITY_BYTES) throw new IdentityLimitException();
         }
-        throw new IllegalArgumentException("Unsupported item key");
-    }
-
-    /**
-     * Streams a trusted adapter's canonical identity body into the V1 digest. The writer must propagate
-     * encoding errors; this boundary bounds output bytes, not native traversal or codec allocation.
-     */
-    public static StableItemKey complex(IdentityWriter writer) throws IOException {
-        MessageDigest digest;
-        try {
-            digest = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("Java runtime does not support SHA-256", e);
-        }
-        digest.update("AE2WI_ITEM_KEY\0V1\0".getBytes(StandardCharsets.US_ASCII));
-        BoundedDigestOutput output = new BoundedDigestOutput(digest);
-        writer.write(new DataOutputStream(output));
-        output.checkLimit(0);
-        return new StableItemKey(
-            "ik1:h:" + Base64.getUrlEncoder()
-                .withoutPadding()
-                .encodeToString(digest.digest()),
-            null);
-    }
-
-    private static final class BoundedDigestOutput extends OutputStream {
-
-        private final MessageDigest digest;
-        private int written;
-        private boolean limitExceeded;
-
-        private BoundedDigestOutput(MessageDigest digest) {
-            this.digest = digest;
-        }
-
-        private void checkLimit(int length) throws IdentityLimitException {
-            if (limitExceeded || length > CanonicalIdentityOutput.MAX_IDENTITY_BYTES - written) {
-                limitExceeded = true;
-                throw new IdentityLimitException();
-            }
-        }
-
-        @Override
-        public void write(int value) throws IOException {
-            checkLimit(1);
-            digest.update((byte) value);
-            written++;
-        }
-
-        @Override
-        public void write(byte[] bytes, int offset, int length) throws IOException {
-            if (offset < 0 || length < 0 || offset > bytes.length - length) throw new IndexOutOfBoundsException();
-            checkLimit(length);
-            digest.update(bytes, offset, length);
-            written += length;
-        }
-    }
-
-    private static void validateToken(String token) {
-        if (token == null || token.length() > MAX_TOKEN_LENGTH)
-            throw new IllegalArgumentException("Invalid key length");
-        SimpleItemIdentity.validateText(token);
-    }
-
-    public SimpleItemIdentity getSimpleIdentity() {
-        return simpleIdentity;
+        return length;
     }
 
     @Override
     public String toString() {
-        return token;
+        byte[] digest = ByteBuffer.allocate(16)
+            .putLong(first)
+            .putLong(second)
+            .array();
+        return "ik1:" + Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(digest);
     }
 
     @Override
     public boolean equals(Object other) {
-        return other instanceof StableItemKey && token.equals(((StableItemKey) other).token);
+        if (this == other) return true;
+        if (!(other instanceof StableItemKey)) return false;
+        StableItemKey key = (StableItemKey) other;
+        return first == key.first && second == key.second;
     }
 
     @Override
     public int hashCode() {
-        return token.hashCode();
+        return hash;
     }
 }
