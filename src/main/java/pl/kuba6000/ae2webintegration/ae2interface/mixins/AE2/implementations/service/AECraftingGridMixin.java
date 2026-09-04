@@ -23,26 +23,19 @@ import appeng.api.storage.AEKeyFilter;
 import appeng.me.helpers.PlayerSource;
 import appeng.me.service.CraftingService;
 import appeng.me.service.helpers.NetworkCraftingProviders;
-import pl.kuba6000.ae2webintegration.core.identity.OrderableResources;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
-import pl.kuba6000.ae2webintegration.core.interfaces.IOrderableResourceProvider;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = CraftingService.class, remap = false)
-public abstract class AECraftingGridMixin implements IAECraftingGrid, IOrderableResourceProvider {
+public abstract class AECraftingGridMixin implements IAECraftingGrid {
 
     @Shadow
     @Final
     private NetworkCraftingProviders craftingProviders;
-
-    @Override
-    public OrderableResources web$getOrderableResources() {
-        return ((IOrderableResourceProvider) craftingProviders).web$getOrderableResources();
-    }
 
     @Shadow
     public abstract Set<AEKey> getCraftables(AEKeyFilter filter);
