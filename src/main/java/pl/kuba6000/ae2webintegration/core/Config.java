@@ -24,6 +24,13 @@ public class Config {
     public static String DISCORD_WEBHOOK = "";
     public static String DISCORD_ROLE_ID = "";
 
+    // ntfy
+    public static String NTFY_HOST = "";
+    public static String NTFY_TOPIC = "";
+    public static String NTFY_USER = "";
+    public static String NTFY_PASSWORD = "";
+    public static String AE_FULL_DOMAIN = "";
+
     // tracking
     // TODO: Add more customization options (order time, size, item type ? etc.)
     public static boolean TRACKING_TRACK_MACHINE_CRAFTING = false;
@@ -60,6 +67,17 @@ public class Config {
             "Discord webhook url (OPTIONAL, leave empty to ignore) (WORKS ONLY IF PUBLIC_MODE IS DISABLED)");
         DISCORD_ROLE_ID = configuration
             .getString("discord_role_id", "discord", "", "Role to ping on message (OPTIONAL, leave empty to ignore)");
+
+        NTFY_HOST = configuration
+            .getString("ntfy_host", "ntfy", "", "ntfy hostname, (OPTIONAL, leave empty to disable ntfy integration)");
+        NTFY_TOPIC = configuration.getString("ntfy_topic", "ntfy", "ae2", "ntfy topic to post into");
+        NTFY_USER = configuration.getString(
+            "ntfy_user",
+            "ntfy",
+            "",
+            "ntfy username, needs write permission to channel (OPTIONAL, leave empty to disable auth)");
+        NTFY_PASSWORD = configuration.getString("ntfy_password", "ntfy", "", "ntfy password");
+        AE_FULL_DOMAIN = configuration.getString("ae_full_domain", "ntfy", "", "full ae2 web link");
 
         TRACKING_TRACK_MACHINE_CRAFTING = configuration.getBoolean(
             "track_machine_crafting",

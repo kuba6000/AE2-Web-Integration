@@ -19,6 +19,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
+import pl.kuba6000.ae2webintegration.core.ntfy.NtfyManager;
+import scala.Console;
 
 public class AE2JobTracker {
 
@@ -225,6 +227,30 @@ public class AE2JobTracker {
                             + took
                             + "s",
                         info.wasCancelled ? 15548997 : 5763719));
+            }
+        }
+        if (!Config.AE_PUBLIC_MODE && !Config.NTFY_HOST.isEmpty()) {
+            IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
+            Console.println(securityGrid);
+            Console.println(securityGrid.web$isAvailable());
+            if (securityGrid != null && securityGrid.web$isAvailable()) {
+                IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
+                Console.println(craftingGrid);
+                craftingGrid.web$getCPUs(); // make sure the cpu has id
+                NtfyManager.postMessageNonBlocking(
+                    new NtfyManager.NtfyJsonMessage(
+                        "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()
+                            + " ][ "
+                            + cpu.web$getName()
+                            + " ]",
+                        "Crafting for `" + info.finalOutput.web$getDisplayName()
+                            + " x"
+                            + info.finalOutput.web$getStackSize()
+                            + "` "
+                            + (info.wasCancelled ? "cancelled" : "completed")
+                            + "!\nIt took "
+                            + took
+                            + "s"));
             }
         }
     }
