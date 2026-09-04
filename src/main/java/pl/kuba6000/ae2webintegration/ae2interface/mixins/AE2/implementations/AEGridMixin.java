@@ -27,21 +27,14 @@ import appeng.me.helpers.PlayerSource;
 import appeng.parts.reporting.AbstractTerminalPart;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
-import pl.kuba6000.ae2webintegration.core.identity.OrderableResources;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.IOrderableResourceProvider;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = Grid.class, remap = false)
-public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid, IOrderableResourceProvider {
-
-    @Override
-    public OrderableResources web$getOrderableResources() {
-        return ((IOrderableResourceProvider) ((Grid) (Object) this).getCraftingService()).web$getOrderableResources();
-    }
+public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
 
     @Override
     public IAECraftingGrid web$getCraftingGrid() {
