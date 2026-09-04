@@ -42,6 +42,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
         List<String> mixins = new ArrayList<>(
             Arrays.asList(
                 "AE2.CraftingGridCacheMixin",
+                "accessors.IdentityNBTListAccessor",
                 "AE2.CraftingCPUClusterMixin",
                 "AE2.implementations.AEStackMixin",
                 "AE2.implementations.AEItemListMixin",
