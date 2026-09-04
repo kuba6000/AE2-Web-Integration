@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
 import java.util.IdentityHashMap;
+import java.util.Set;
 
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -12,6 +13,8 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import com.google.common.collect.ImmutableList;
+
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingJob;
@@ -22,10 +25,13 @@ import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.crafting.ICraftingProviderHelper;
 import appeng.api.networking.crafting.ICraftingRequester;
 import appeng.api.networking.security.IActionSource;
+import appeng.api.storage.data.IAEItemStack;
 import appeng.helpers.IInterfaceHost;
 import appeng.me.cache.CraftingGridCache;
+import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
@@ -38,6 +44,23 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
     @Final
     @Shadow
     private IGrid grid;
+
+    @Shadow
+    @Final
+    private Object2ObjectMap<IAEItemStack, ImmutableList<ICraftingPatternDetails>> craftableItems;
+
+    @Shadow
+    @Final
+    private Set<IAEItemStack> emitableItems;
+
+    @Shadow
+    private boolean updatePatterns;
+
+    public boolean web$isCurrentlyCraftable(IAEKey key) {
+        // Native fluid crafting remains disabled on this adapter.
+        return key instanceof IAEItemStack && !updatePatterns
+            && (craftableItems.containsKey(key) || emitableItems.contains(key));
+    }
 
     @Unique
     private final IdentityHashMap<ICraftingMedium, IInterfaceHost> web$mediumToViewable = new IdentityHashMap<>();

@@ -1,17 +1,30 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import java.io.IOException;
+
 import net.minecraft.item.Item;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 
 import appeng.api.storage.data.IAEItemStack;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 @Mixin(value = IAEItemStack.class, remap = false)
 public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack {
+
+    @Override
+    default byte[] web$getIdentityBytes() throws IOException {
+        return LegacyItemIdentity.encode(this);
+    }
+
+    @Override
+    default IAEKey web$copyIdentity() throws IOException {
+        return LegacyItemIdentity.copy(this);
+    }
 
     @Shadow
     Item getItem();
