@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core.ntfy;
+package pl.kuba6000.ae2webintegration.core.notification.ntfy;
 
 import static pl.kuba6000.ae2webintegration.core.AE2WebIntegration.MODID;
 

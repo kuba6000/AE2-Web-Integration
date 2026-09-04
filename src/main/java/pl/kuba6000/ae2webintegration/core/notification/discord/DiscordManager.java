@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core.discord;
+package pl.kuba6000.ae2webintegration.core.notification.discord;
 
 import static pl.kuba6000.ae2webintegration.core.AE2WebIntegration.MODID;
 

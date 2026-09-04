@@ -9,8 +9,8 @@ import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 import pl.kuba6000.ae2webintegration.Tags;
 import pl.kuba6000.ae2webintegration.core.commands.BaseCommandHandler;
-import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
-import pl.kuba6000.ae2webintegration.core.ntfy.NtfyManager;
+import pl.kuba6000.ae2webintegration.core.notification.discord.DiscordManager;
+import pl.kuba6000.ae2webintegration.core.notification.ntfy.NtfyManager;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class CommonProxy {
