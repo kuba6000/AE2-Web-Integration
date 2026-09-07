@@ -13,8 +13,13 @@ public interface IAEMixinCallbacks {
         return AEMixinCallbacks.INSTANCE;
     }
 
+    default void jobStarted(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging,
+        boolean isAuthorPlayer) {
+        jobStarted(cpuCluster, cache, grid, isMerging, isAuthorPlayer, null);
+    }
+
     void jobStarted(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging,
-        boolean isAuthorPlayer);
+        boolean isAuthorPlayer, String requester);
 
     void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, Object diff);
 

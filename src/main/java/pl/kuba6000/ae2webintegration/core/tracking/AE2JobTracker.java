@@ -51,6 +51,7 @@ public class AE2JobTracker {
     public static class JobTrackingInfo {
 
         public IAEGenericStack finalOutput;
+        public String requester;
         public long timeStarted;
         public long timeDone;
         public HashMap<IAEKey, Long> timeSpentOn = new HashMap<>();
@@ -121,15 +122,26 @@ public class AE2JobTracker {
     }
 
     public static void addJob(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging) {
+        addJob(cpuCluster, cache, grid, isMerging, null);
+    }
+
+    public static void addJob(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging,
+        String requester) {
         GridData gridData = GridData.getOrCreate(grid);
         if (gridData == null || !gridData.isTracked) return;
         JobTrackingInfo info;
         if (isMerging) {
             info = trackingInfoMap.get(cpuCluster);
             if (info == null) return;
+            if (info.requester == null && requester != null) {
+                info.requester = requester;
+            } else if (requester != null && !info.requester.contains(requester)) {
+                info.requester += ", " + requester;
+            }
         } else {
             trackingInfoMap.put(cpuCluster, info = new JobTrackingInfo());
             info.timeStarted = System.currentTimeMillis();
+            info.requester = requester;
         }
         info.finalOutput = cpuCluster.web$getFinalOutput()
             .web$copy();
@@ -256,7 +268,11 @@ public class AE2JobTracker {
                             + craftedAmount
                             + "` "
                             + (info.wasCancelled ? "cancelled" : "completed")
-                            + "!\nIt took "
+                            + "!\n"
+                            + (info.requester != null && !info.requester.isEmpty()
+                                ? "Requested by: **" + info.requester + "**\n"
+                                : "")
+                            + "It took "
                             + DiscordManager.formatDuration(durationMillis),
                         info.wasCancelled ? 15548997 : 5763719));
             }

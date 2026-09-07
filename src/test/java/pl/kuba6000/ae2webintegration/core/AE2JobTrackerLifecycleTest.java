@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -48,6 +49,21 @@ class AE2JobTrackerLifecycleTest {
         AE2JobTracker.clearActiveJobs();
 
         assertNull(AE2JobTracker.findActiveJob(cpu));
+    }
+
+    @Test
+    void addJobTracksRequesterAndAppendsOnMerge() {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, null, grid, false, "PlayerOne");
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+        assertNotNull(info);
+        assertEquals("PlayerOne", info.requester);
+
+        AE2JobTracker.addJob(cpu, null, grid, true, "PlayerTwo");
+        assertEquals("PlayerOne, PlayerTwo", info.requester);
+
+        AE2JobTracker.addJob(cpu, null, grid, true, "PlayerOne");
+        assertEquals("PlayerOne, PlayerTwo", info.requester);
     }
 
     private static final class EqualCpu implements ICraftingCPUCluster {
