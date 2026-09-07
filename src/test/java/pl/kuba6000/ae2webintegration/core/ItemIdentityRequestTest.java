@@ -174,6 +174,11 @@ class ItemIdentityRequestTest {
             public StableItemKey web$getStableKey() {
                 throw new UnsupportedOperationException();
             }
+
+            @Override
+            public IAEKey web$copyIdentity() {
+                return this;
+            }
         });
         com.google.gson.JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
         JsonObject normal = rows.get(0)

@@ -296,7 +296,11 @@ class OutputSnapshotTest {
 
         public IAEKey web$copyIdentity() {
             available();
-            return new Resource();
+            Resource copy = new Resource();
+            copy.brokenIdentity = brokenIdentity;
+            copy.unsupportedIdentity = unsupportedIdentity;
+            copy.brokenName = brokenName;
+            return copy;
         }
 
         @Override

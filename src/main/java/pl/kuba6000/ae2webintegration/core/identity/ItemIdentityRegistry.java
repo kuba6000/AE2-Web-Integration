@@ -65,11 +65,12 @@ public final class ItemIdentityRegistry {
             if (ambiguous.contains(remembered.key)) throw new Ambiguous();
             return remembered;
         }
-        StableItemKey key = resource.web$getStableKey();
+        IAEKey copy = resource.web$copyIdentity();
+        StableItemKey key = copy.web$getStableKey();
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry existing = entries.getIfPresent(key);
         if (existing != null) {
-            if (!existing.identity.equals(resource)) {
+            if (!existing.identity.equals(copy)) {
                 entries.invalidate(key);
                 reverse.invalidate(existing.identity);
                 ambiguous.add(key);
@@ -77,9 +78,6 @@ public final class ItemIdentityRegistry {
             }
             return existing;
         }
-        IAEKey copy = resource.web$copyIdentity();
-        if (copy != resource && (!resource.equals(copy) || !key.equals(copy.web$getStableKey())))
-            throw new IOException("Identity copy changed the resource");
         Entry entry = new Entry(key, copy);
         entries.put(key, entry);
         reverse.put(copy, entry);

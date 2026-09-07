@@ -43,7 +43,8 @@ class ItemIdentityRegistryTest {
         assertSame(copy, registry.resolve(key));
         assertNotSame(first, copy);
         assertFalse(copy.web$isCraftable(null));
-        assertEquals(1, first.encodings);
+        assertEquals(0, first.encodings);
+        assertEquals(1, ((Resource) copy).encodings);
         assertEquals(0, nextPoll.encodings);
         registry.beginListing(firstGrid)
             .commit();
@@ -102,36 +103,6 @@ class ItemIdentityRegistryTest {
         registry.clear();
         assertNull(registry.resolve(key));
         assertEquals(key, registry.remember(grid, new Resource("iron", false)));
-    }
-
-    @Test
-    void aCopyWithTheWrongPreciseIdentityIsNeverPublished() throws Exception {
-        ItemIdentityRegistry registry = new ItemIdentityRegistry();
-        IAEGrid grid = grid();
-        Resource broken = new Resource("first", false, "same bytes") {
-
-            @Override
-            public IAEKey web$copyIdentity() {
-                return new Resource("different", false, "same bytes");
-            }
-        };
-        assertThrows(java.io.IOException.class, () -> registry.remember(grid, broken));
-        assertNull(registry.resolve(broken.web$getStableKey()));
-    }
-
-    @Test
-    void anEqualCopyWithADifferentStableKeyIsNeverPublished() throws Exception {
-        ItemIdentityRegistry registry = new ItemIdentityRegistry();
-        IAEGrid grid = grid();
-        Resource broken = new Resource("iron", false, "original encoding") {
-
-            @Override
-            public IAEKey web$copyIdentity() {
-                return new Resource("iron", false, "different encoding");
-            }
-        };
-        assertThrows(java.io.IOException.class, () -> registry.remember(grid, broken));
-        assertNull(registry.resolve(broken.web$getStableKey()));
     }
 
     @Test

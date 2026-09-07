@@ -12,7 +12,7 @@ public interface IAEKey {
     @NotNull
     StableItemKey web$getStableKey() throws IOException;
 
-    /** Retainable identity without mutable quantity/crafting state; native read-only identity data may be shared. */
+    /** Preserves resource identity for retention; quantity/crafting state may be reset and read-only data shared. */
     @NotNull
     IAEKey web$copyIdentity() throws IOException;
 
