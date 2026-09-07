@@ -5,12 +5,14 @@ import java.io.IOException;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
+import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 
 import appeng.api.stacks.AEKey;
 import appeng.me.Grid;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.NativeItemIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
@@ -18,8 +20,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 public abstract class AEItemMixin implements IAEKey {
 
     @Override
-    public byte[] web$getIdentityBytes() throws IOException {
-        return NativeItemIdentity.bytes((AEKey) (Object) this);
+    public @NotNull StableItemKey web$getStableKey() throws IOException {
+        return NativeItemIdentity.getStableKey((AEKey) (Object) this);
     }
 
     @Override

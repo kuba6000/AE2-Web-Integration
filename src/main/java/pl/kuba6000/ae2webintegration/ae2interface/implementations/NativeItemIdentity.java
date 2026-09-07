@@ -1,88 +1,90 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
+
+import org.jetbrains.annotations.NotNull;
 
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 
-/** Exact supported AE key identity; component codecs are preflighted before native encoding. */
+/** Exact native AE key identity, including persistent addon data supported by native codecs. */
 public final class NativeItemIdentity {
 
     private NativeItemIdentity() {}
 
-    public static byte[] bytes(AEKey key) throws IOException {
+    public static @NotNull StableItemKey getStableKey(@NotNull AEKey key) throws IOException {
+        if (key instanceof AEItemKey item) {
+            checkPersistent(
+                item.getReadOnlyStack()
+                    .getComponentsPatch());
+        } else if (key instanceof AEFluidKey fluid) {
+            // FluidStack copies its component map shallowly; component values are immutable.
+            checkPersistent(
+                fluid.toStack(1)
+                    .getComponentsPatch());
+        }
         HolderLookup.Provider registries = registries();
-        CompoundTag tag = encode(key, registries);
-        requireEqualCopy(key, tag, registries);
-        CanonicalNbt.Budget budget = headerBudget(key);
-        CanonicalNbt.measure(tag, budget, 0);
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        DataOutputStream output = new DataOutputStream(bytes);
-        StableItemKey.writeText(output, kind(key));
-        StableItemKey.writeText(
-            output,
-            key.getId()
-                .toString());
-        output.writeInt(0);
-        output.writeByte(1);
-        CanonicalNbt.write(tag, output);
-        return bytes.toByteArray();
-    }
-
-    public static AEKey copy(AEKey key) throws IOException {
-        HolderLookup.Provider registries = registries();
-        return requireEqualCopy(key, encode(key, registries), registries);
-    }
-
-    private static CompoundTag encode(AEKey key, HolderLookup.Provider registries) throws IOException {
-        CanonicalNbt.Budget budget = headerBudget(key);
-        budget.add(128);
-        budget.text(
-            key.getId()
-                .toString());
-        ComponentIdentityPreflight.check(key, budget);
         CompoundTag tag = key.toTagGeneric(registries);
-        CanonicalNbt.measure(tag, headerBudget(key), 0);
-        return tag;
+        if (!(key instanceof AEItemKey) && !(key instanceof AEFluidKey)) {
+            requireEqualCopy(key, tag, registries);
+        }
+        // The native codec allocates its tag first. Bounds cover only the subsequent traversal.
+        return StableItemKey.create(sink -> {
+            StableItemKey.writeText(sink, kind(key));
+            StableItemKey.writeText(
+                sink,
+                key.getId()
+                    .toString());
+            sink.putInt(0);
+            sink.putByte((byte) 1);
+            CanonicalNbt.write(tag, sink);
+        });
     }
 
-    private static AEKey requireEqualCopy(AEKey key, CompoundTag tag, HolderLookup.Provider registries) {
-        AEKey copy = key instanceof AEItemKey ? AEItemKey.fromTag(registries, tag)
-            : AEFluidKey.fromTag(registries, tag);
+    public static @NotNull AEKey copy(@NotNull AEKey key) throws IOException {
+        // Built-in AE keys retain immutable identity under AE2's read-only tag/stack contract.
+        if (key instanceof AEItemKey || key instanceof AEFluidKey) return key;
+        HolderLookup.Provider registries = registries();
+        return requireEqualCopy(key, key.toTagGeneric(registries), registries);
+    }
+
+    private static @NotNull AEKey requireEqualCopy(@NotNull AEKey key, @NotNull CompoundTag tag,
+        @NotNull HolderLookup.Provider registries) {
+        AEKey copy = key.getType()
+            .loadKeyFromTag(registries, tag);
         if (copy == null || !key.equals(copy)) {
-            throw new UnsupportedOperationException("Native components do not survive serialization");
+            throw new UnsupportedOperationException("Native identity does not survive serialization");
         }
         return copy;
     }
 
-    private static HolderLookup.Provider registries() throws IOException {
+    private static void checkPersistent(@NotNull DataComponentPatch patch) {
+        for (var entry : patch.entrySet()) {
+            if (entry.getKey()
+                .isTransient()) {
+                throw new UnsupportedOperationException("Transient component cannot be serialized as native identity");
+            }
+        }
+    }
+
+    private static @NotNull HolderLookup.Provider registries() throws IOException {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) throw new IOException("No current server for native identity");
         return server.registryAccess();
     }
 
-    private static CanonicalNbt.Budget headerBudget(AEKey key) throws IOException {
-        CanonicalNbt.Budget budget = new CanonicalNbt.Budget();
-        budget.text(kind(key));
-        budget.text(
-            key.getId()
-                .toString());
-        budget.add(5);
-        return budget;
-    }
-
-    private static String kind(AEKey key) {
+    private static @NotNull String kind(@NotNull AEKey key) {
         if (key instanceof AEItemKey) return "item";
         if (key instanceof AEFluidKey) return "fluid";
-        throw new UnsupportedOperationException("Unsupported AE key type");
+        return "ae-key:" + key.getType()
+            .getId();
     }
 }
