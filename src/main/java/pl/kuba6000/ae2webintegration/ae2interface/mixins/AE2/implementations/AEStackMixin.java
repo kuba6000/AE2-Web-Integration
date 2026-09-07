@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import java.io.IOException;
 
+import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.storage.data.IAEFluidStack;
@@ -10,6 +11,7 @@ import appeng.api.storage.data.IAEStack;
 import appeng.api.storage.data.IAEStackType;
 import cpw.mods.fml.common.registry.GameRegistry;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -18,7 +20,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
 
     @Override
-    default byte[] web$getIdentityBytes() throws IOException {
+    default @NotNull StableItemKey web$getStableKey() throws IOException {
         return LegacyItemIdentity.encode(this);
     }
 
