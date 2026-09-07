@@ -6,6 +6,7 @@ import java.util.Map;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.JSON_CompactedItem;
+import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -20,7 +21,7 @@ public class GetCPU extends ISyncedRequest {
 
         public long size;
         public boolean isBusy;
-        public IAEGenericStack finalOutput;
+        public JSON_Stack finalOutput;
         public ArrayList<JSON_CompactedItem> items;
         public boolean hasTrackingInfo = false;
         public long timeStarted = 0L;
@@ -58,7 +59,7 @@ public class GetCPU extends ISyncedRequest {
         clusterData.size = cpu.web$getAvailableStorage();
         clusterData.isBusy = cpu.web$isBusy();
         if (clusterData.isBusy) {
-            clusterData.finalOutput = cpu.web$getFinalOutput();
+            clusterData.finalOutput = JSON_Stack.capture(grid, cpu.web$getFinalOutput());
             AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cpu);
             clusterData.hasTrackingInfo = trackingInfo != null;
 

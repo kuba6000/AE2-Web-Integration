@@ -15,6 +15,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -28,20 +29,22 @@ class CoreEngineLifecycleTest {
     private static final long GRID_KEY = 900_201L;
 
     @Test
-    void serverStoppedClearsWorldRuntimeStateButPreservesProcessState() {
+    void serverStoppedClearsWorldRuntimeStateButPreservesProcessState() throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(GRID_KEY);
         GridData gridData = GridData.getOrCreate(GRID_KEY);
         gridData.isTracked = true;
         CompletableFuture<IAECraftingJob> pendingPlan = new CompletableFuture<>();
         int planId = gridData.addJob(pendingPlan);
-        gridData.trackingInfo.trackingInfos.put(1, new AE2JobTracker.JobTrackingInfo());
-
         ICraftingCPUCluster cpu = new TestCpu();
         AE2JobTracker.addJob(cpu, null, grid, false);
+        gridData.trackingInfo.trackingInfos.put(1, AE2JobTracker.findActiveJob(cpu));
         WebPrincipal principal = TestGridFixtures.principal(42);
         GridAccessSessions.put(principal, new GridAccess(42, Collections.singleton(GRID_KEY), 0L));
         AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
-        AE2Controller.hashcodeToStack.put(1, new TestStack());
+        pl.kuba6000.ae2webintegration.core.identity.StableItemKey itemKey = AE2Controller.itemIdentities.remember(
+            grid,
+            cpu.web$getFinalOutput()
+                .web$what());
 
         IAE processInterface = TestGridFixtures.ae(grid);
         AE2Controller.AE2Interface = processInterface;
@@ -65,7 +68,7 @@ class CoreEngineLifecycleTest {
         assertSame(processPlatform, AE2Controller.serverPlatform);
         assertTrue(gridData.isTracked, "persisted grid settings survive a world switch");
         assertTrue(AE2Controller.awaitingRegistration.isEmpty());
-        assertTrue(AE2Controller.hashcodeToStack.isEmpty());
+        assertNull(AE2Controller.itemIdentities.resolve(itemKey));
         assertNull(GridAccessSessions.get(principal));
         assertNull(AE2JobTracker.findActiveJob(cpu));
         assertTrue(gridData.trackingInfo.trackingInfos.isEmpty());
@@ -74,11 +77,41 @@ class CoreEngineLifecycleTest {
         assertEquals(1, gridData.addJob(new CompletableFuture<>()), "the next world gets fresh plan ids");
     }
 
-    private static final class TestStack implements IAEGenericStack {
+    private static final class TestStack implements IAEGenericStack, IAEKey {
+
+        @Override
+        public StableItemKey web$getStableKey() {
+            return StableItemKey.create(sink -> sink.putBytes(new byte[] { 7 }));
+        }
+
+        @Override
+        public IAEKey web$copyIdentity() {
+            return this;
+        }
+
+        @Override
+        public String web$getItemID() {
+            return "test:output";
+        }
+
+        @Override
+        public String web$getDisplayName() {
+            return "Output";
+        }
+
+        @Override
+        public boolean web$isCraftable(pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid grid) {
+            return false;
+        }
+
+        @Override
+        public boolean web$isSameType(IAEKey other) {
+            return this == other;
+        }
 
         @Override
         public IAEKey web$what() {
-            return null;
+            return this;
         }
 
         @Override

@@ -41,6 +41,7 @@ repositories {
 }
 
 dependencies {
+    compileOnlyApi 'org.jetbrains:annotations:26.0.2'
     implementation 'com.google.code.gson:gson:2.8.9'
     implementation 'com.google.guava:guava:21.0'
     implementation 'commons-io:commons-io:2.5'

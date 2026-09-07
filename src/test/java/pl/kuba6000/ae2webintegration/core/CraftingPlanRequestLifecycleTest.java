@@ -76,6 +76,11 @@ class CraftingPlanRequestLifecycleTest {
 
     private static final class TestCraftingGrid implements IAECraftingGrid {
 
+        @Override
+        public boolean web$isCurrentlyCraftable(IAEKey key) {
+            throw new AssertionError("Existing plan lifecycle must not start another order");
+        }
+
         private final String submitResult;
 
         private TestCraftingGrid(String submitResult) {

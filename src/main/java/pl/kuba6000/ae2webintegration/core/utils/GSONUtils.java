@@ -17,10 +17,6 @@ import java.nio.file.StandardCopyOption;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonSerializer;
-
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 
 public class GSONUtils {
 
@@ -41,24 +37,8 @@ public class GSONUtils {
         }
     };
 
-    private static final JsonSerializer<IAEGenericStack> IAEGenericStackSerializer = (src, typeOfSrc, context) -> {
-        JsonObject json = new JsonObject();
-        json.addProperty(
-            "itemid",
-            src.web$what()
-                .web$getItemID());
-        json.addProperty(
-            "itemname",
-            src.web$what()
-                .web$getDisplayName());
-        json.addProperty("hashcode", src.hashCode());
-        json.addProperty("quantity", src.web$amount());
-        return json;
-    };
-
     public static final GsonBuilder GSON_BUILDER = new GsonBuilder().addSerializationExclusionStrategy(GSONStrategy)
         .addDeserializationExclusionStrategy(GSONStrategy)
-        .registerTypeHierarchyAdapter(IAEGenericStack.class, IAEGenericStackSerializer)
         .serializeNulls();
 
     /**

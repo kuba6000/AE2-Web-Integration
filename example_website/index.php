@@ -298,7 +298,7 @@
 
     currentJob = {
         id: -1,
-        itemHash: -1,
+        itemKey: null,
         bytesTotal: -1,
     }
     function searchStringChanged(el){
@@ -475,7 +475,7 @@
         cookie = getCookie("showItemID");
         if (cookie != "")
             settings.showItemID = Number(cookie) == 1;
-            cookie = getCookie("showItemIcon");
+        cookie = getCookie("showItemIcon");
         if (cookie != "")
             settings.showItemIcon = Number(cookie) == 1;
         document.getElementById('sortByButton').innerHTML = sortByDisplay[sortingOptions.sortBy];
@@ -773,7 +773,8 @@
         // isBusy is the flag the server actually reports; finalOutput is only filled in when busy.
         if (!cluster['isBusy']) return cluster['availableStorage'] >= currentJob.bytesTotal;
         if (!cluster['finalOutput']) return false;
-        if (currentJob.itemHash != cluster['finalOutput']['hashcode']) return false;
+        if (!isUsableItemKey(currentJob.itemKey) || !isUsableItemKey(cluster['finalOutput']['itemKey'])
+            || currentJob.itemKey !== cluster['finalOutput']['itemKey']) return false;
         if (cluster['usedStorage'] == -1) return false;
         return cluster['availableStorage'] >= cluster['usedStorage'] + currentJob.bytesTotal;
     }
@@ -853,17 +854,24 @@
                 continue;
             let imgSrc = getIcon(item);
             if (imgSrc === null){
-                itemsNoIcon.push(item);
+                if (isUsableItemKey(item['itemKey'])) itemsNoIcon.push(item);
                 imgSrc = '';
             }
             else {
                 imgSrc = "data:image/png;base64," + imgSrc;
             }
+            let orderAction = '';
+            if (item['craftable']) {
+                if (isUsableItemKey(item['itemKey']))
+                    orderAction = '<br><button onclick="beginOrderingItem(\'' + item['itemKey'] + '\');">order</button>';
+                else
+                    orderAction = '<br><span>Ordering unavailable</span>';
+            }
             if (settings.showItemIcon){
-                html += "<td class='storage'>" + formatItemName(item) + "<img src='" + imgSrc + "' /><br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+                html += "<td class='storage'>" + formatItemName(item) + "<img src='" + imgSrc + "' /><br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
             }
             else {
-                html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+                html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
             }
             grid_i++;
             if(grid_i == grid_i_max){
@@ -1153,10 +1161,17 @@
             popLoadingScreen(message);
         });
     }
-    function beginOrderingItem(hashcode){
+    function isUsableItemKey(itemKey) {
+        // The last Base64URL character contains only two data bits for a 128-bit key.
+        return typeof itemKey === 'string' && /^[A-Za-z0-9_-]{21}[AQgw]$/.test(itemKey);
+    }
+    function beginOrderingItem(itemKey){
         if (selectedGrid == -1)
             return;
-        console.log(hashcode);
+        if (!isUsableItemKey(itemKey)) {
+            showAlert("Item details are unavailable. Refresh the item list before ordering.");
+            return;
+        }
         let answer = window.prompt("How much to order?", "1");
         if (answer === null) // cancelled
             return;
@@ -1174,10 +1189,13 @@
             document.getElementById('terminalCPUListForJob').innerHTML = "...";
             let message = "Sending order...";
             pushLoadingScreen(message);
-            $.getJSON('order?grid=' + selectedGrid + '&item=' + hashcode + "&quantity=" + quantity, function(data){
+            $.getJSON('order?grid=' + selectedGrid + '&itemKey=' + encodeURIComponent(itemKey) + "&quantity=" + quantity, function(data){
                 console.log(data);
                 if(data.status !== "OK"){
-                    showAlert(data.status + ": " + data.data);
+                    if (data.status === "ITEM_IDENTITY_UNKNOWN")
+                        showAlert("Item details expired. Refresh the item list and place the order again.");
+                    else
+                        showAlert(data.status + ": " + data.data);
                     popLoadingScreen(message);
                     return;
                 }
@@ -1188,13 +1206,16 @@
                     document.getElementById("terminalJobHeaderText").innerHTML = "Calculating, please wait...";
                     cpuForJob = "";
                     currentJob.id = data['jobID'];
-                    currentJob.itemHash = hashcode;
+                    currentJob.itemKey = itemKey;
                     setTimeout(updateCraftingPlan, 1000);
                 }
                 else{
                     //setCurrentScreen(0);
                 }
                 popLoadingScreen(message);
+            }).fail(function() {
+                popLoadingScreen(message);
+                showAlert("The order response was lost. Check the crafting jobs before placing another order.");
             });
         }
     }
@@ -1320,7 +1341,8 @@
     }
 
     function getIcon(item) {
-        let data = localStorage.getItem("itemIcon" + item['hashcode']);
+        if (!isUsableItemKey(item['itemKey'])) return null;
+        let data = localStorage.getItem("itemIcon" + item['itemKey']);
         if (data === null)
             return null;
         return data;
@@ -1329,7 +1351,7 @@
     function fetchIcons(items) {
         let par = '';
         for(let i = 0; i < items.length; i++){
-            par += items[i]['hashcode'] + ',';
+            par += items[i]['itemKey'] + ',';
         }
         $.getJSON('icon?items=' + par, function(data){
             if (data.status !== "OK"){
@@ -1340,7 +1362,7 @@
             console.log(data);
             let items = data;
             for(let i = 0; i < items.length; i++){
-                localStorage.setItem("itemIcon" + items[i]['hashcode'], items[i]['pngData']);
+                localStorage.setItem("itemIcon" + items[i]['itemKey'], items[i]['pngData']);
             }
             refreshDisplay();
         });

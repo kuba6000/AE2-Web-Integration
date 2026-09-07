@@ -51,8 +51,8 @@ import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 import pl.kuba6000.ae2webintegration.core.utils.RateLimiter;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
@@ -358,11 +358,11 @@ public class AE2Controller {
             awaitingRegistration.clear();
             validTokens.clear();
         }
-        hashcodeToStack.clear();
+        itemIdentities.clear();
         requestContext.remove();
     }
 
-    public static ConcurrentHashMap<Integer, IAEGenericStack> hashcodeToStack = new ConcurrentHashMap<>();
+    public static final ItemIdentityRegistry itemIdentities = new ItemIdentityRegistry();
 
     private static final class AuthSession {
 
