@@ -4,11 +4,13 @@ import java.io.IOException;
 
 import net.minecraft.item.Item;
 
+import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 
 import appeng.api.storage.data.IAEItemStack;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -17,7 +19,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack {
 
     @Override
-    default byte[] web$getIdentityBytes() throws IOException {
+    default @NotNull StableItemKey web$getStableKey() throws IOException {
         return LegacyItemIdentity.encode(this);
     }
 
