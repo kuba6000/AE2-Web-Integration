@@ -3,6 +3,8 @@ package pl.kuba6000.ae2webintegration.core.ae2request.async;
 import java.util.ArrayList;
 import java.util.Map;
 
+import org.jetbrains.annotations.NotNull;
+
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
@@ -13,7 +15,7 @@ public class GetTrackingHistory extends IAsyncRequest {
         public long timeStarted;
         public long timeDone;
         public boolean wasCancelled;
-        public JSON_Stack finalOutput;
+        public @NotNull JSON_Stack finalOutput;
         public int id;
     }
 

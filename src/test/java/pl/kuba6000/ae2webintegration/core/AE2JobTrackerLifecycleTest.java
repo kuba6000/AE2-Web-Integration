@@ -4,11 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Collections;
 import java.util.HashMap;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -32,6 +34,13 @@ class AE2JobTrackerLifecycleTest {
     void setUp() {
         AE2JobTracker.clearActiveJobs();
         GridData.getOrCreate(GRID_KEY).isTracked = true;
+        GridData.getOrCreate(GRID_KEY).trackingInfo.clearHistory();
+    }
+
+    @AfterEach
+    void tearDown() {
+        AE2JobTracker.clearActiveJobs();
+        GridData.getOrCreate(GRID_KEY).trackingInfo.clearHistory();
     }
 
     @Test
@@ -58,6 +67,54 @@ class AE2JobTrackerLifecycleTest {
         AE2JobTracker.clearActiveJobs();
 
         assertNull(AE2JobTracker.findActiveJob(cpu));
+    }
+
+    @Test
+    void missingFinalOutputDoesNotStartTrackingOrProduceHistory() {
+        EqualCpu cpu = new EqualCpu();
+        cpu.output = null;
+        AE2JobTracker.addJob(cpu, null, grid, false);
+
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        update(cpu, new Resource(1, 0), 10);
+        AE2JobTracker.completeCrafting(grid, cpu);
+        AE2JobTracker.cancelCrafting(grid, cpu);
+        assertTrue(GridData.getOrCreate(GRID_KEY).trackingInfo.trackingInfos.isEmpty());
+    }
+
+    @Test
+    void missingFinalOutputOnMergeDiscardsTrackingWithoutPublishingPartialHistory() {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, null, grid, false);
+        update(cpu, new Resource(1, 0), 10);
+        assertNotNull(AE2JobTracker.findActiveJob(cpu));
+
+        cpu.output = null;
+        AE2JobTracker.addJob(cpu, null, grid, true);
+
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        cpu.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
+        AE2JobTracker.addJob(cpu, null, grid, true);
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        update(cpu, new Resource(1, 0), 0);
+        AE2JobTracker.completeCrafting(grid, cpu);
+        assertTrue(GridData.getOrCreate(GRID_KEY).trackingInfo.trackingInfos.isEmpty());
+    }
+
+    @Test
+    void completionKeepsKnownOutputWhenTheNativeCpuHasAlreadyClearedItsStack() {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, null, grid, false);
+        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
+        cpu.output = null;
+
+        AE2JobTracker.completeCrafting(grid, cpu);
+
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        assertSame(info, GridData.getOrCreate(GRID_KEY).trackingInfo.trackingInfos.get(1));
+        assertTrue(info.isDone);
+        assertEquals(5, info.finalOutput.quantity);
+        assertEquals("example:resource:7", info.finalOutput.itemid);
     }
 
     @Test
@@ -240,6 +297,7 @@ class AE2JobTrackerLifecycleTest {
 
     private static final class EqualCpu implements ICraftingCPUCluster {
 
+        private IAEGenericStack output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 5);
         private final HashMap<IAEKey, Long> waiting = new HashMap<>();
         private final IStackList waitingList = new IStackList() {
 
@@ -302,7 +360,7 @@ class AE2JobTrackerLifecycleTest {
 
         @Override
         public IAEGenericStack web$getFinalOutput() {
-            return null;
+            return output;
         }
 
         @Override

@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.jetbrains.annotations.NotNull;
 
 import com.google.common.collect.MapMaker;
 
@@ -51,7 +52,7 @@ public class AE2JobTracker {
 
     public static class JobTrackingInfo {
 
-        public volatile JSON_Stack finalOutput;
+        public volatile @NotNull JSON_Stack finalOutput;
         public long timeStarted;
         public long timeDone;
         public HashMap<IAEKey, Long> timeSpentOn = new HashMap<>();
@@ -66,6 +67,11 @@ public class AE2JobTracker {
         public HashMap<IAEKey, HashMap<AEInterface, HashSet<IAEKey>>> interfaceWaitingForLookup = new HashMap<>();
         public boolean isDone = false;
         public boolean wasCancelled = false;
+
+        public JobTrackingInfo(@NotNull JSON_Stack finalOutput) {
+            this.finalOutput = finalOutput;
+            this.timeStarted = System.currentTimeMillis();
+        }
 
         public long getTimeSpentOn(IAEKey key) {
             Long time = timeSpentOn.get(key);
@@ -114,16 +120,18 @@ public class AE2JobTracker {
     public static void addJob(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging) {
         GridData gridData = GridData.getOrCreate(grid);
         if (gridData == null || !gridData.isTracked) return;
-        JobTrackingInfo info;
-        if (isMerging) {
-            info = trackingInfoMap.get(cpuCluster);
-            if (info == null) return;
-        } else {
-            info = new JobTrackingInfo();
-            info.timeStarted = System.currentTimeMillis();
+        JobTrackingInfo info = isMerging ? trackingInfoMap.get(cpuCluster) : null;
+        if (isMerging && info == null) return;
+        JSON_Stack finalOutput = JSON_Stack.capture(grid, cpuCluster.web$getFinalOutput());
+        if (finalOutput == null) {
+            trackingInfoMap.remove(cpuCluster);
+            return;
         }
-        info.finalOutput = JSON_Stack.capture(grid, cpuCluster.web$getFinalOutput());
-        if (!isMerging) trackingInfoMap.put(cpuCluster, info);
+        if (isMerging) {
+            info.finalOutput = finalOutput;
+        } else {
+            trackingInfoMap.put(cpuCluster, new JobTrackingInfo(finalOutput));
+        }
     }
 
     public static void updateCraftingStatus(ICraftingCPUCluster cpu, Object diff) {
@@ -224,7 +232,7 @@ public class AE2JobTracker {
         info.timeDone = System.currentTimeMillis();
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         long durationMillis = info.timeDone - info.timeStarted;
-        long craftedAmount = info.finalOutput == null ? 0 : info.finalOutput.quantity;
+        long craftedAmount = info.finalOutput.quantity;
         if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
             .isEmpty() && DiscordManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
             IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
@@ -237,7 +245,7 @@ public class AE2JobTracker {
                             + " ][ "
                             + cpu.web$getName()
                             + " ]",
-                        "Crafting for `" + (info.finalOutput == null ? null : info.finalOutput.itemname)
+                        "Crafting for `" + info.finalOutput.itemname
                             + " x"
                             + craftedAmount
                             + "` "

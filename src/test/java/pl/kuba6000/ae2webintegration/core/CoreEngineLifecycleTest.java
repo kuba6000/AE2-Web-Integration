@@ -35,10 +35,9 @@ class CoreEngineLifecycleTest {
         gridData.isTracked = true;
         CompletableFuture<IAECraftingJob> pendingPlan = new CompletableFuture<>();
         int planId = gridData.addJob(pendingPlan);
-        gridData.trackingInfo.trackingInfos.put(1, new AE2JobTracker.JobTrackingInfo());
-
         ICraftingCPUCluster cpu = new TestCpu();
         AE2JobTracker.addJob(cpu, null, grid, false);
+        gridData.trackingInfo.trackingInfos.put(1, AE2JobTracker.findActiveJob(cpu));
         WebPrincipal principal = TestGridFixtures.principal(42);
         GridAccessSessions.put(principal, new GridAccess(42, Collections.singleton(GRID_KEY), 0L));
         AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
