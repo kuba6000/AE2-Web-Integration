@@ -104,15 +104,39 @@ test(page + ': obsolete or noncanonical resource keys cannot start an order', ()
     assert.equal(prompts, 0);
 });
 
-test(page + ': displaying resources does not read old icon caches or request unavailable icons', () => {
+test(page + ': icons render from cache and missing icons round-trip using resource keys', () => {
     const { context, requests, elements } = terminal(page);
+    const cached = 'AAAAAAAAAAAAAAAAAAAAAA';
+    const missing = 'qTcTDu8-ZBplmiM8QEpOSQ';
+    const cache = new Map([['itemIcon' + cached, 'Y2FjaGVk']]);
+    context.localStorage.getItem = key => cache.get(key) ?? null;
+    context.localStorage.setItem = (key, value) => cache.set(key, value);
     context.settings.showItemIcon = true;
-    context.localStorage.getItem = () => { throw new Error('Obsolete icon cache read'); };
     context.globalItemList = [
-        { itemid: 'minecraft:stone', itemname: 'Stone', quantity: 4, craftable: false, itemKey: 'AAAAAAAAAAAAAAAAAAAAAA' }
+        { itemid: 'minecraft:stone', itemname: 'Stone', quantity: 4, itemKey: cached },
+        { itemid: 'minecraft:dirt', itemname: 'Dirt', quantity: 2, itemKey: missing },
+        { itemid: 'minecraft:sand', itemname: 'Sand', quantity: 1 }
     ];
     context.displayItemList(true);
-    assert.equal(requests.length, 0);
+    assert.ok(elements.get('terminalcontent').innerHTML.includes('data:image/png;base64,Y2FjaGVk'));
+    assert.equal(requests.length, 1);
+    const query = new URL(requests[0].url, 'http://local/').searchParams;
+    assert.deepEqual(query.get('items').split(',').filter(Boolean), [missing]);
+    requests[0].success({ status: 'OK', data: [{ itemKey: missing, pngData: 'bmV3' }] });
+    assert.equal(cache.get('itemIcon' + missing), 'bmV3');
+    assert.ok(elements.get('terminalcontent').innerHTML.includes('data:image/png;base64,bmV3'));
+    assert.equal(requests.length, 1);
+});
+
+test(page + ': icon preference persists and controls image rendering', () => {
+    const { context, elements } = terminal(page);
+    context.globalItemList = [{ itemid: 'minecraft:stone', itemname: 'Stone', quantity: 4, itemKey: 'AAAAAAAAAAAAAAAAAAAAAA' }];
+    context.changeShowItemIcon({ checked: true });
+    assert.ok(elements.get('terminalcontent').innerHTML.includes('<img'));
+    context.settings.showItemIcon = false;
+    context.initSettings();
+    assert.equal(elements.get('showitemicon').checked, true);
+    context.changeShowItemIcon({ checked: false });
     assert.equal(elements.get('terminalcontent').innerHTML.includes('<img'), false);
 });
 

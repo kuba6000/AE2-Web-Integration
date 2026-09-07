@@ -243,7 +243,9 @@
                 <br>
                 <input type="checkbox" name="showitemid" id="showitemid" onchange="changeShowItemID(this);"> <label for="showitemid">Show item id</label>
                 <br>
+                <input type="checkbox" name="showitemicon" id="showitemicon" onchange="changeShowItemIcon(this);" disabled title="Work in progress"> <label for="showitemicon" title="Work in progress">Show item icons [work in progress]</label>
                 <br>
+                <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
                 <br>
                 You are logged in as <span id="username" style="font-weight: bold;"></span> <br>
                 <button onclick="document.location.href='?logout'">LogOut</button>
@@ -277,7 +279,8 @@
         autoRefresh: false,
         itemsPerRow: 5,
         numberFormat: 0,
-        showItemID: false
+        showItemID: false,
+        showItemIcon: false
     }
     const screens = [
         ["terminalOptions", "terminalTerminalHeader"],
@@ -390,6 +393,11 @@
         setCookie("showItemID", settings.showItemID ? 1 : 0, 7);
         refreshDisplay();
     }
+    function changeShowItemIcon(el){
+        settings.showItemIcon = el.checked;
+        setCookie("showItemIcon", settings.showItemIcon ? 1 : 0, 7);
+        refreshDisplay();
+    }
     function onThisGridByDefaultChange(el) {
         settings.defaultGrid = el.checked ? selectedGrid : -1;
         setCookie("defaultGrid", settings.defaultGrid, 7);
@@ -467,6 +475,9 @@
         cookie = getCookie("showItemID");
         if (cookie != "")
             settings.showItemID = Number(cookie) == 1;
+        cookie = getCookie("showItemIcon");
+        if (cookie != "")
+            settings.showItemIcon = Number(cookie) == 1;
         document.getElementById('sortByButton').innerHTML = sortByDisplay[sortingOptions.sortBy];
         document.getElementById('storedCraftableButton').innerHTML = storedCraftableDisplay[filteringOptions.storedCraftable];
         document.getElementById('itemsFluidsButton').innerHTML = itemsTypeDisplay[filteringOptions.itemsType];
@@ -475,6 +486,7 @@
         document.getElementById('itemsperrow').value = settings.itemsPerRow;
         document.getElementById('numberformat').value = settings.numberFormat;
         document.getElementById('showitemid').checked = settings.showItemID;
+        document.getElementById('showitemicon').checked = settings.showItemIcon;
         selectedGrid = settings.defaultGrid;
     }
     initSettings();
@@ -829,16 +841,25 @@
         setCurrentScreen(3);
         getCraftingHistory();
     }
-    function displayItemList(){
+    function displayItemList(shouldFetchIcons = false){
         let html = "<table>";
         let grid_i_max = settings.itemsPerRow;
         let grid_i = 0;
         html += "<tr>";
         let items = globalItemList;
+        let itemsNoIcon = [];
         for(let i = 0; i < items.length; i++){
             let item = items[i];
             if (!shouldDisplay(item))
                 continue;
+            let imgSrc = getIcon(item);
+            if (imgSrc === null){
+                if (isUsableItemKey(item['itemKey'])) itemsNoIcon.push(item);
+                imgSrc = '';
+            }
+            else {
+                imgSrc = "data:image/png;base64," + imgSrc;
+            }
             let orderAction = '';
             if (item['craftable']) {
                 if (isUsableItemKey(item['itemKey']))
@@ -846,7 +867,12 @@
                 else
                     orderAction = '<br><span>Ordering unavailable</span>';
             }
-            html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
+            if (settings.showItemIcon){
+                html += "<td class='storage'>" + formatItemName(item) + "<img src='" + imgSrc + "' /><br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
+            }
+            else {
+                html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
+            }
             grid_i++;
             if(grid_i == grid_i_max){
                 html += "</tr><tr>";
@@ -855,6 +881,8 @@
         }
         html += "</tr></table>";
         document.getElementById("terminalcontent").innerHTML = html;
+        if (settings.showItemIcon && shouldFetchIcons && itemsNoIcon.length > 0)
+            fetchIcons(itemsNoIcon);
     }
     function getItemList(){
         if (selectedGrid == -1)
@@ -871,7 +899,7 @@
             data = data.data;
             globalItemList = data;
             sortItemList();
-            displayItemList();
+            displayItemList(true);
             popLoadingScreen(message);
         });
     }
@@ -1309,6 +1337,34 @@
             updateCPUList();
             refreshTerminal();
             popLoadingScreen(message);
+        });
+    }
+
+    function getIcon(item) {
+        if (!isUsableItemKey(item['itemKey'])) return null;
+        let data = localStorage.getItem("itemIcon" + item['itemKey']);
+        if (data === null)
+            return null;
+        return data;
+    }
+
+    function fetchIcons(items) {
+        let par = '';
+        for(let i = 0; i < items.length; i++){
+            par += items[i]['itemKey'] + ',';
+        }
+        $.getJSON('icon?items=' + par, function(data){
+            if (data.status !== "OK"){
+                showAlert(data.status + ": " + data.data);
+                return;
+            }
+            data = data.data;
+            console.log(data);
+            let items = data;
+            for(let i = 0; i < items.length; i++){
+                localStorage.setItem("itemIcon" + items[i]['itemKey'], items[i]['pngData']);
+            }
+            refreshDisplay();
         });
     }
 
