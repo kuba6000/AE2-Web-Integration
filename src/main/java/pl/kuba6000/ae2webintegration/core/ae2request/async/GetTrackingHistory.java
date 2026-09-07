@@ -14,6 +14,7 @@ public class GetTrackingHistory extends IAsyncRequest {
         public long timeDone;
         public boolean wasCancelled;
         public IAEGenericStack finalOutput;
+        public String requester;
         public int id;
     }
 
@@ -34,6 +35,7 @@ public class GetTrackingHistory extends IAsyncRequest {
             element.timeDone = integerJobTrackingInfoEntry.getValue().timeDone;
             element.wasCancelled = integerJobTrackingInfoEntry.getValue().wasCancelled;
             element.finalOutput = integerJobTrackingInfoEntry.getValue().finalOutput;
+            element.requester = integerJobTrackingInfoEntry.getValue().requester;
             jobs.add(element);
         }
 

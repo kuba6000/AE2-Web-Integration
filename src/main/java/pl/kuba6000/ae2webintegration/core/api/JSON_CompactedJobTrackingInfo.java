@@ -37,6 +37,7 @@ public class JSON_CompactedJobTrackingInfo {
     }
 
     public IAEGenericStack finalOutput;
+    public String requester;
     public long timeStarted;
     public long timeDone;
     public boolean wasCancelled;
@@ -56,6 +57,7 @@ public class JSON_CompactedJobTrackingInfo {
 
     public JSON_CompactedJobTrackingInfo(AE2JobTracker.JobTrackingInfo info) {
         this.finalOutput = info.finalOutput;
+        this.requester = info.requester;
         this.timeStarted = info.timeStarted;
         this.timeDone = info.timeDone;
         long elapsed = this.timeDone - this.timeStarted;

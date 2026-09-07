@@ -66,6 +66,15 @@ class AE2JobTrackerLifecycleTest {
         assertEquals("PlayerOne, PlayerTwo", info.requester);
     }
 
+    @Test
+    void compactedTrackingInfoCopiesRequester() {
+        AE2JobTracker.JobTrackingInfo info = new AE2JobTracker.JobTrackingInfo();
+        info.requester = "TestPlayer";
+        pl.kuba6000.ae2webintegration.core.api.JSON_CompactedJobTrackingInfo compacted =
+            new pl.kuba6000.ae2webintegration.core.api.JSON_CompactedJobTrackingInfo(info);
+        assertEquals("TestPlayer", compacted.requester);
+    }
+
     private static final class EqualCpu implements ICraftingCPUCluster {
 
         private final IAEGenericStack output = new IAEGenericStack() {
