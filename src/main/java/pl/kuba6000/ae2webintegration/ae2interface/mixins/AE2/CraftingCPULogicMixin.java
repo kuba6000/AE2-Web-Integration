@@ -51,13 +51,23 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
             .successful()) {
             boolean isMachine = !src.player()
                 .isPresent();
+            String requesterName = null;
+            if (src.player().isPresent()) {
+                String name = src.player().get().getScoreboardName();
+                requesterName = "AE2CONTROLLER".equals(name) ? "Web Panel" : name;
+            } else if (requester != null) {
+                requesterName = "Machine (" + requester.getClass().getSimpleName() + ")";
+            } else if (src.machine().isPresent()) {
+                requesterName = "Machine";
+            }
             IAEMixinCallbacks.getInstance()
                 .jobStarted(
                     (ICraftingCPUCluster) (Object) cluster,
                     (IAECraftingGrid) grid.getCraftingService(),
                     (IAEGrid) grid,
                     false,
-                    !isMachine);
+                    !isMachine,
+                    requesterName);
         }
     }
 
