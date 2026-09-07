@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import java.util.Objects;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
@@ -22,28 +23,25 @@ public final class WebPrincipal {
     private static final WebPrincipal ADMIN = new WebPrincipal(Kind.ADMIN, null, "Admin");
     private static final WebPrincipal LOCALHOST = new WebPrincipal(Kind.LOCALHOST, null, "localhost");
 
-    private final Kind kind;
-    private final PlayerIdentity playerIdentity;
-    private final String username;
+    private final @NotNull Kind kind;
+    private final @Nullable PlayerIdentity playerIdentity;
+    private final @NotNull String username;
 
-    private WebPrincipal(Kind kind, PlayerIdentity playerIdentity, String username) {
+    private WebPrincipal(@NotNull Kind kind, @Nullable PlayerIdentity playerIdentity, @NotNull String username) {
         this.kind = kind;
         this.playerIdentity = playerIdentity;
         this.username = username;
     }
 
-    public static WebPrincipal forPlayer(PlayerIdentity identity) {
-        Objects.requireNonNull(identity, "identity");
-        Objects.requireNonNull(identity.uuid, "identity.uuid");
-        Objects.requireNonNull(identity.name, "identity.name");
+    public static @NotNull WebPrincipal forPlayer(@NotNull PlayerIdentity identity) {
         return new WebPrincipal(Kind.PLAYER, identity, identity.name);
     }
 
-    public static WebPrincipal admin() {
+    public static @NotNull WebPrincipal admin() {
         return ADMIN;
     }
 
-    public static WebPrincipal localhost() {
+    public static @NotNull WebPrincipal localhost() {
         return LOCALHOST;
     }
 
@@ -51,16 +49,16 @@ public final class WebPrincipal {
         return kind != Kind.PLAYER;
     }
 
-    public PlayerIdentity getPlayerIdentity() {
+    public @Nullable PlayerIdentity getPlayerIdentity() {
         return playerIdentity;
     }
 
-    public String getUsername() {
+    public @NotNull String getUsername() {
         return username;
     }
 
     @Override
-    public boolean equals(Object object) {
+    public boolean equals(@Nullable Object object) {
         if (this == object) {
             return true;
         }

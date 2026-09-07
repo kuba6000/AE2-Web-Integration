@@ -3,8 +3,10 @@ package pl.kuba6000.ae2webintegration.core.identity;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -29,8 +31,7 @@ public final class ItemIdentityRegistry {
     private final Set<StableItemKey> ambiguous = new HashSet<>();
 
     /** Retain an output identity until the grid next publishes its complete item list. */
-    public StableItemKey remember(IAEGrid grid, IAEKey resource) throws IOException {
-        Objects.requireNonNull(grid, "grid");
+    public @NotNull StableItemKey remember(@NotNull IAEGrid grid, @NotNull IAEKey resource) throws IOException {
         cleanUp();
         Entry entry = findOrCreate(resource);
         owners.asMap()
@@ -40,13 +41,12 @@ public final class ItemIdentityRegistry {
     }
 
     /** Start a replacement list; the previous list stays owned until commit succeeds. */
-    public Listing beginListing(IAEGrid grid) {
-        Objects.requireNonNull(grid, "grid");
+    public @NotNull Listing beginListing(@NotNull IAEGrid grid) {
         cleanUp();
         return new Listing(grid);
     }
 
-    public IAEKey resolve(StableItemKey key) {
+    public @Nullable IAEKey resolve(@NotNull StableItemKey key) {
         cleanUp();
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry entry = entries.getIfPresent(key);
@@ -60,8 +60,7 @@ public final class ItemIdentityRegistry {
         ambiguous.clear();
     }
 
-    private Entry findOrCreate(IAEKey resource) throws IOException {
-        Objects.requireNonNull(resource, "resource");
+    private @NotNull Entry findOrCreate(@NotNull IAEKey resource) throws IOException {
         Entry remembered = reverse.getIfPresent(resource);
         if (remembered != null) {
             if (ambiguous.contains(remembered.key)) throw new Ambiguous();
@@ -103,11 +102,11 @@ public final class ItemIdentityRegistry {
         private IAEGrid grid;
         private Set<Entry> collected = new HashSet<>();
 
-        private Listing(IAEGrid grid) {
+        private Listing(@NotNull IAEGrid grid) {
             this.grid = grid;
         }
 
-        public StableItemKey remember(IAEKey resource) throws IOException {
+        public @NotNull StableItemKey remember(@NotNull IAEKey resource) throws IOException {
             requireOpen();
             Entry entry = findOrCreate(resource);
             collected.add(entry);
@@ -142,7 +141,7 @@ public final class ItemIdentityRegistry {
         private final IAEKey identity;
         private final byte[] bytes;
 
-        private Entry(StableItemKey key, IAEKey identity, byte[] bytes) {
+        private Entry(@NotNull StableItemKey key, @NotNull IAEKey identity, byte @NotNull [] bytes) {
             this.key = key;
             this.identity = identity;
             this.bytes = bytes.clone();

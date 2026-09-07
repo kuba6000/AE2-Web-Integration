@@ -5,7 +5,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.Objects;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
@@ -22,7 +24,7 @@ public final class StableItemKey {
     private final long second;
     private final int hash;
 
-    private StableItemKey(byte[] digest) {
+    private StableItemKey(byte @NotNull [] digest) {
         ByteBuffer bytes = ByteBuffer.wrap(digest);
         first = bytes.getLong();
         second = bytes.getLong();
@@ -30,15 +32,14 @@ public final class StableItemKey {
     }
 
     /** Native adapters supply deterministic, bounded bytes without amount or crafting state. */
-    public static StableItemKey fromIdentityBytes(byte[] identity) throws IOException {
-        Objects.requireNonNull(identity, "identity");
+    public static @NotNull StableItemKey fromIdentityBytes(byte @NotNull [] identity) throws IOException {
         if (identity.length > MAX_IDENTITY_BYTES) throw new IdentityLimitException();
         return new StableItemKey(
             HASH.hashBytes(identity)
                 .asBytes());
     }
 
-    public static StableItemKey parse(String token) {
+    public static @NotNull StableItemKey parse(@Nullable String token) {
         if (token == null || token.length() != MAX_TOKEN_LENGTH) {
             throw new IllegalArgumentException("Invalid resource key");
         }
@@ -54,14 +55,14 @@ public final class StableItemKey {
     }
 
     /** Length-prefixed strict UTF-8 shared by native encoders; not Java's modified UTF format. */
-    public static void writeText(DataOutput output, String value) throws IOException {
+    public static void writeText(@NotNull DataOutput output, @NotNull String value) throws IOException {
         int length = utf8Length(value);
         byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
         output.writeInt(length);
         output.write(bytes);
     }
 
-    private static int utf8Length(String value) throws IOException {
+    private static int utf8Length(@NotNull String value) throws IOException {
         if (value.length() > MAX_IDENTITY_BYTES) throw new IdentityLimitException();
         int length = 0;
         for (int i = 0; i < value.length(); i++) {
@@ -82,7 +83,7 @@ public final class StableItemKey {
     }
 
     @Override
-    public String toString() {
+    public @NotNull String toString() {
         byte[] digest = ByteBuffer.allocate(16)
             .putLong(first)
             .putLong(second)
@@ -93,7 +94,7 @@ public final class StableItemKey {
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equals(@Nullable Object other) {
         if (this == other) return true;
         if (!(other instanceof StableItemKey)) return false;
         StableItemKey key = (StableItemKey) other;
