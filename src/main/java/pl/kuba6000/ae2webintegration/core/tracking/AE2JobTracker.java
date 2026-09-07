@@ -132,7 +132,7 @@ public class AE2JobTracker {
             info = new JobTrackingInfo();
             info.timeStarted = System.currentTimeMillis();
         }
-        info.finalOutput = JSON_Stack.capture(cpuCluster.web$getFinalOutput());
+        info.finalOutput = JSON_Stack.capture(grid, cpuCluster.web$getFinalOutput());
         if (!isMerging) trackingInfoMap.put(cpuCluster, info);
     }
 

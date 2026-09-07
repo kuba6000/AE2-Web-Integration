@@ -5,6 +5,7 @@ import java.util.function.Supplier;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 /** Immutable output data captured on the server thread, safe for later asynchronous serialization. */
@@ -22,7 +23,7 @@ public final class JSON_Stack {
         this.itemKey = itemKey;
     }
 
-    public static JSON_Stack capture(IAEGenericStack stack) {
+    public static JSON_Stack capture(IAEGrid grid, IAEGenericStack stack) {
         if (stack == null) return null;
         IAEKey key = read(stack::web$what, null);
         String itemid = key == null ? null : read(key::web$getItemID, null);
@@ -30,7 +31,7 @@ public final class JSON_Stack {
         long quantity = read(stack::web$amount, 0L);
         try {
             String itemKey = key == null ? null
-                : AE2Controller.itemIdentities.remember(key)
+                : AE2Controller.itemIdentities.remember(grid, key)
                     .toString();
             return new JSON_Stack(itemid, itemname, quantity, itemKey);
         } catch (IOException | RuntimeException exception) {

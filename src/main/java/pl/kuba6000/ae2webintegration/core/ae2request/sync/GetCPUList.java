@@ -51,7 +51,7 @@ public class GetCPUList extends ISyncedRequest {
             cpuInfo.usedStorage = cluster.web$getUsedStorage();
             cpuInfo.coProcessors = cluster.web$getCoProcessors();
             if (cpuInfo.isBusy = cluster.web$isBusy()) {
-                cpuInfo.finalOutput = JSON_Stack.capture(cluster.web$getFinalOutput());
+                cpuInfo.finalOutput = JSON_Stack.capture(grid, cluster.web$getFinalOutput());
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cluster);
                 if (cpuInfo.hasTrackingInfo = trackingInfo != null) {
                     cpuInfo.timeStarted = trackingInfo.timeStarted;

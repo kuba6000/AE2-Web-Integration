@@ -59,7 +59,7 @@ public class GetCPU extends ISyncedRequest {
         clusterData.size = cpu.web$getAvailableStorage();
         clusterData.isBusy = cpu.web$isBusy();
         if (clusterData.isBusy) {
-            clusterData.finalOutput = JSON_Stack.capture(cpu.web$getFinalOutput());
+            clusterData.finalOutput = JSON_Stack.capture(grid, cpu.web$getFinalOutput());
             AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cpu);
             clusterData.hasTrackingInfo = trackingInfo != null;
 

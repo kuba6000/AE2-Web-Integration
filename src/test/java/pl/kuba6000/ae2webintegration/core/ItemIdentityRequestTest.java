@@ -23,6 +23,82 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
 class ItemIdentityRequestTest {
 
     @Test
+    void completeListingsReplaceOwnershipWithoutDiscardingAnotherGridsSharedKey() throws Exception {
+        Grid first = new Grid(910009, new Resource("iron", 5, true));
+        Grid second = new Grid(910010, new Resource("iron", 8, true) {
+
+            @Override
+            public byte[] web$getIdentityBytes() {
+                throw new AssertionError("Warm shared identity must not encode native data again");
+            }
+        });
+        String key = run(new GetItems(), first, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject()
+            .get("itemKey")
+            .getAsString();
+        assertEquals(
+            key,
+            run(new GetItems(), second, "").getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject()
+                .get("itemKey")
+                .getAsString());
+        first.rows.clear();
+        assertEquals(
+            "OK",
+            run(new GetItems(), first, "").get("status")
+                .getAsString());
+        System.gc();
+        assertEquals(
+            "OK",
+            run(new Order(), second, "&itemKey=" + key + "&quantity=1").get("status")
+                .getAsString());
+        second.rows.clear();
+        assertEquals(
+            "OK",
+            run(new GetItems(), second, "").get("status")
+                .getAsString());
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        String status;
+        do {
+            System.gc();
+            Thread.sleep(10);
+            status = run(new Order(), second, "&itemKey=" + key + "&quantity=1").get("status")
+                .getAsString();
+        } while (status.equals("ITEM_NOT_FOUND") && System.nanoTime() < deadline);
+        assertEquals("ITEM_IDENTITY_UNKNOWN", status);
+        assertEquals(1, second.jobs);
+    }
+
+    @Test
+    void failedListingTraversalPreservesPreviouslyCompletedOwnership() {
+        Grid grid = new Grid(910011, new Resource("iron", 5, true));
+        String key = run(new GetItems(), grid, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject()
+            .get("itemKey")
+            .getAsString();
+        grid.rows.clear();
+        grid.rows.add(new Resource("gold", 2, true));
+        grid.rows.add(new Resource("broken", 1, false) {
+
+            @Override
+            public String web$getDisplayName() {
+                throw new IllegalStateException("Native traversal failed");
+            }
+        });
+        assertThrows(IllegalStateException.class, () -> run(new GetItems(), grid, ""));
+        System.gc();
+        grid.rows.clear();
+        grid.rows.add(new Resource("iron", 5, true));
+        assertEquals(
+            "OK",
+            run(new Order(), grid, "&itemKey=" + key + "&quantity=1").get("status")
+                .getAsString());
+    }
+
+    @Test
     void storedAndRecipeRowsMergeOnlyForPreciselyEqualResources() {
         Resource stored = new Resource("variantA", 5, true) {
 

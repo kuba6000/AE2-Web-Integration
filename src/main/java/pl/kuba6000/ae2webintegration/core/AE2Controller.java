@@ -362,11 +362,7 @@ public class AE2Controller {
         requestContext.remove();
     }
 
-    public static final ItemIdentityRegistry itemIdentities = new ItemIdentityRegistry(
-        65_536,
-        64L * 1024 * 1024,
-        30L * 60 * 1000,
-        System::currentTimeMillis);
+    public static final ItemIdentityRegistry itemIdentities = new ItemIdentityRegistry();
 
     private static final class AuthSession {
 

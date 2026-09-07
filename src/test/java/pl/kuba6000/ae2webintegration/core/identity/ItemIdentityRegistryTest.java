@@ -2,8 +2,9 @@ package pl.kuba6000.ae2webintegration.core.identity;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.lang.ref.WeakReference;
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
 
@@ -13,23 +14,83 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 class ItemIdentityRegistryTest {
 
     @Test
-    void warmEquivalentResourcesReuseIdentityEncodingUntilCleared() throws Exception {
-        ItemIdentityRegistry registry = new ItemIdentityRegistry(10, 100_000, 1000, () -> 0);
+    void equivalentResourcesShareOneDetachedIdentityAcrossGrids() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid firstGrid = grid();
+        IAEGrid secondGrid = grid();
         Resource first = new Resource("iron", true);
-        StableItemKey key = registry.remember(first);
+        StableItemKey key = registry.remember(firstGrid, first);
+        IAEKey copy = registry.resolve(key);
         Resource nextPoll = new Resource("iron", false);
-        assertEquals(key, registry.remember(nextPoll));
+        assertEquals(key, registry.remember(secondGrid, nextPoll));
+        assertSame(copy, registry.resolve(key));
+        assertNotSame(first, copy);
+        assertFalse(copy.web$isCraftable(null));
         assertEquals(1, first.encodings);
         assertEquals(0, nextPoll.encodings);
+        registry.beginListing(firstGrid)
+            .commit();
+        System.gc();
+        assertSame(copy, registry.resolve(key));
+        assertEquals(key, registry.remember(secondGrid, nextPoll));
+        assertEquals(0, nextPoll.encodings);
+    }
+
+    @Test
+    void refreshingAListingReusesItsIdentitiesAndReleasesRemovedResources() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid grid = grid();
+        StableItemKey iron = registry.remember(grid, new Resource("iron", true));
+        StableItemKey gold = registry.remember(grid, new Resource("gold", true));
+        WeakReference<IAEKey> removed = new WeakReference<>(registry.resolve(gold));
+        Resource nextPoll = new Resource("iron", false);
+        ItemIdentityRegistry.Listing listing = registry.beginListing(grid);
+        assertEquals(iron, listing.remember(nextPoll));
+        assertEquals(0, nextPoll.encodings);
+        listing.commit();
+        awaitCollected(removed, () -> registry.resolve(gold));
+        assertNull(registry.resolve(gold));
+        assertNotNull(registry.resolve(iron));
+        assertEquals(iron, registry.remember(grid, nextPoll));
+    }
+
+    @Test
+    void unfinishedListingKeepsThePreviouslyPublishedResources() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid grid = grid();
+        StableItemKey iron = registry.remember(grid, new Resource("iron", true));
+        registry.beginListing(grid)
+            .remember(new Resource("gold", true));
+        System.gc();
+        assertNotNull(registry.resolve(iron));
+        assertEquals(iron, registry.remember(grid, new Resource("iron", false)));
+    }
+
+    @Test
+    void unreachableGridDoesNotKeepItsIdentitiesAlive() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        StableItemKey key = StableItemKey.fromIdentityBytes("iron".getBytes(StandardCharsets.UTF_8));
+        WeakReference<IAEGrid> owner = rememberTemporaryGrid(registry);
+        WeakReference<IAEKey> identity = new WeakReference<>(registry.resolve(key));
+        awaitCollected(owner, () -> registry.resolve(key));
+        awaitCollected(identity, () -> registry.resolve(key));
+        assertNull(registry.resolve(key));
+    }
+
+    @Test
+    void gridAndRegistryClearDoNotChangeDeterministicIds() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid grid = grid();
+        StableItemKey key = registry.remember(grid, new Resource("iron", true));
         registry.clear();
         assertNull(registry.resolve(key));
-        assertEquals(key, registry.remember(nextPoll));
-        assertEquals(1, nextPoll.encodings);
+        assertEquals(key, registry.remember(grid, new Resource("iron", false)));
     }
 
     @Test
     void aCopyWithTheWrongPreciseIdentityIsNeverPublished() throws Exception {
-        ItemIdentityRegistry registry = new ItemIdentityRegistry(10, 100_000, 1000, () -> 0);
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid grid = grid();
         Resource broken = new Resource("first", false, "same bytes") {
 
             @Override
@@ -37,58 +98,68 @@ class ItemIdentityRegistryTest {
                 return new Resource("different", false, "same bytes");
             }
         };
-        assertThrows(java.io.IOException.class, () -> registry.remember(broken));
+        assertThrows(java.io.IOException.class, () -> registry.remember(grid, broken));
         assertNull(registry.resolve(StableItemKey.fromIdentityBytes(broken.web$getIdentityBytes())));
     }
 
     @Test
-    void conflictingIdentityCannotRedefineAnIdEvenAfterExpiration() throws Exception {
-        AtomicLong now = new AtomicLong();
-        ItemIdentityRegistry registry = new ItemIdentityRegistry(10, 100_000, 1000, now::get);
-        StableItemKey key = registry.remember(new Resource("first", false, "same bytes"));
+    void observedConflictCannotBeReusedThroughEitherGridOrTheWarmIndex() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid first = grid();
+        IAEGrid second = grid();
+        StableItemKey key = registry.remember(first, new Resource("first", false, "same bytes"));
         assertThrows(
             ItemIdentityRegistry.Ambiguous.class,
-            () -> registry.remember(new Resource("second", false, "same bytes")));
+            () -> registry.remember(second, new Resource("second", false, "same bytes")));
         assertThrows(ItemIdentityRegistry.Ambiguous.class, () -> registry.resolve(key));
-        now.set(2000);
         assertThrows(
             ItemIdentityRegistry.Ambiguous.class,
-            () -> registry.remember(new Resource("first", false, "same bytes")));
+            () -> registry.remember(first, new Resource("first", false, "same bytes")));
+        registry.beginListing(first)
+            .commit();
+        registry.beginListing(second)
+            .commit();
+        assertThrows(ItemIdentityRegistry.Ambiguous.class, () -> registry.resolve(key));
     }
 
     @Test
-    void capacityRejectsNewResourcesWithoutEvictingActiveOnesAndExpiryAllowsAdmission() throws Exception {
-        AtomicLong now = new AtomicLong();
-        ItemIdentityRegistry registry = new ItemIdentityRegistry(1, 100_000, 1000, now::get);
-        StableItemKey iron = registry.remember(new Resource("iron", true));
-        assertThrows(IdentityLimitException.class, () -> registry.remember(new Resource("gold", true)));
-        now.set(999);
-        assertNotNull(registry.resolve(iron));
-        now.set(1500);
-        assertThrows(IdentityLimitException.class, () -> registry.remember(new Resource("gold", true)));
-        now.set(2000);
-        assertNull(registry.resolve(iron));
-        StableItemKey gold = registry.remember(new Resource("gold", false));
-        assertEquals(
-            "gold",
-            registry.resolve(gold)
-                .web$getItemID());
-        ItemIdentityRegistry tooSmall = new ItemIdentityRegistry(10, 1, 1000, now::get);
-        assertThrows(IdentityLimitException.class, () -> tooSmall.remember(new Resource("iron", false)));
+    void completedListingCannotBeReusedToRestoreAnObsoleteSnapshot() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid grid = grid();
+        ItemIdentityRegistry.Listing listing = registry.beginListing(grid);
+        listing.remember(new Resource("iron", true));
+        listing.commit();
+        assertThrows(IllegalStateException.class, listing::commit);
+        assertThrows(IllegalStateException.class, () -> listing.remember(new Resource("gold", true)));
     }
 
-    @Test
-    void rememberedIdentitySurvivesOtherListsAndDoesNotRetainCraftingFlags() throws Exception {
-        AtomicLong now = new AtomicLong();
-        ItemIdentityRegistry registry = new ItemIdentityRegistry(10, 100_000, 1000, now::get);
-        Resource iron = new Resource("iron", true);
-        StableItemKey key = registry.remember(iron);
-        registry.remember(new Resource("gold", false));
-        IAEKey resolved = registry.resolve(StableItemKey.parse(key.toString()));
-        assertEquals("iron", resolved.web$getItemID());
-        assertNotSame(iron, resolved);
-        assertFalse(resolved.web$isCraftable(null));
-        assertEquals(key, registry.remember(new Resource("iron", false)));
+    private static WeakReference<IAEGrid> rememberTemporaryGrid(ItemIdentityRegistry registry) throws Exception {
+        IAEGrid grid = grid();
+        registry.remember(grid, new Resource("iron", true));
+        return new WeakReference<>(grid);
+    }
+
+    private static void awaitCollected(WeakReference<?> reference, Runnable maintenance) throws Exception {
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (reference.get() != null && System.nanoTime() < deadline) {
+            System.gc();
+            maintenance.run();
+            Thread.sleep(10);
+        }
+        assertNull(reference.get(), "Registry must not retain an unowned grid or resource");
+    }
+
+    private static IAEGrid grid() {
+        return (IAEGrid) Proxy.newProxyInstance(
+            IAEGrid.class.getClassLoader(),
+            new Class<?>[] { IAEGrid.class },
+            (proxy, method, args) -> {
+                if (method.getName()
+                    .equals("hashCode")) return System.identityHashCode(proxy);
+                if (method.getName()
+                    .equals("equals")) return proxy == args[0];
+                return null;
+            });
     }
 
     static class Resource implements IAEKey {

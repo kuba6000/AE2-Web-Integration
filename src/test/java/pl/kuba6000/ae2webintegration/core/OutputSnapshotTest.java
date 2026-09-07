@@ -43,7 +43,8 @@ class OutputSnapshotTest {
     void capturedOutputSerializesAfterNativeAccessIsUnavailable() {
         Resource key = new Resource();
         Stack stack = new Stack(key, 5);
-        JSON_Stack snapshot = JSON_Stack.capture(stack);
+        IAEGrid grid = TestGridFixtures.grid(990125);
+        JSON_Stack snapshot = JSON_Stack.capture(grid, stack);
         key.unavailable = true;
         stack.unavailable = true;
         JsonObject json = JsonParser.parseString(
@@ -68,13 +69,16 @@ class OutputSnapshotTest {
                 StableItemKey.parse(
                     json.get("itemKey")
                         .getAsString())));
+        AE2Controller.itemIdentities.beginListing(grid)
+            .commit();
     }
 
     @Test
     void failedIdentityPreservesDisplayWithOrdinaryNullableJsonFields() {
         Resource key = new Resource();
         key.brokenIdentity = true;
-        JSON_Stack snapshot = assertDoesNotThrow(() -> JSON_Stack.capture(new Stack(key, 9)));
+        JSON_Stack snapshot = assertDoesNotThrow(
+            () -> JSON_Stack.capture(TestGridFixtures.grid(990125), new Stack(key, 9)));
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("output", snapshot);
         response.put("unrelated", null);
@@ -104,7 +108,8 @@ class OutputSnapshotTest {
     void unsupportedNativeIdentityCannotEscapeSnapshotCapture() {
         Resource key = new Resource();
         key.unsupportedIdentity = true;
-        JSON_Stack snapshot = assertDoesNotThrow(() -> JSON_Stack.capture(new Stack(key, 4)));
+        JSON_Stack snapshot = assertDoesNotThrow(
+            () -> JSON_Stack.capture(TestGridFixtures.grid(990125), new Stack(key, 4)));
         JsonObject json = JsonParser.parseString(
             GSONUtils.GSON_BUILDER.create()
                 .toJson(snapshot))
@@ -122,7 +127,8 @@ class OutputSnapshotTest {
     void brokenDisplayCallbackPreservesAvailableOutputData() {
         Resource key = new Resource();
         key.brokenName = true;
-        JSON_Stack snapshot = assertDoesNotThrow(() -> JSON_Stack.capture(new Stack(key, 6)));
+        JSON_Stack snapshot = assertDoesNotThrow(
+            () -> JSON_Stack.capture(TestGridFixtures.grid(990125), new Stack(key, 6)));
         assertEquals("example:resource:7", snapshot.itemid);
         assertEquals(6, snapshot.quantity);
         assertNotNull(snapshot.itemKey);

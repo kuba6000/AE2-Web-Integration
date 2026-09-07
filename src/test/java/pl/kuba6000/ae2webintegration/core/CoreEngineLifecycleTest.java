@@ -42,6 +42,7 @@ class CoreEngineLifecycleTest {
         GridAccessSessions.put(principal, new GridAccess(42, Collections.singleton(GRID_KEY), 0L));
         AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
         pl.kuba6000.ae2webintegration.core.identity.StableItemKey itemKey = AE2Controller.itemIdentities.remember(
+            grid,
             cpu.web$getFinalOutput()
                 .web$what());
 
