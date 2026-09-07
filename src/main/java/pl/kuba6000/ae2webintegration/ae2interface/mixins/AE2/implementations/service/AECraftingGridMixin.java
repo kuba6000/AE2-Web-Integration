@@ -37,6 +37,14 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid {
     @Final
     private NetworkCraftingProviders craftingProviders;
 
+    @Override
+    public boolean web$isCurrentlyCraftable(IAEKey key) {
+        return craftingProviders.getCraftableKeys()
+            .contains(key)
+            || craftingProviders.getEmittableKeys()
+                .contains(key);
+    }
+
     @Shadow
     public abstract Set<AEKey> getCraftables(AEKeyFilter filter);
 
