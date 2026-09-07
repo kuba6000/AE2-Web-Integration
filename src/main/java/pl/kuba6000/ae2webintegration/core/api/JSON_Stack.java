@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
 import java.io.IOException;
-import java.util.function.Supplier;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -14,12 +13,12 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 /** Immutable output data captured on the server thread, safe for later asynchronous serialization. */
 public final class JSON_Stack {
 
-    public final @Nullable String itemid;
-    public final @Nullable String itemname;
+    public final @NotNull String itemid;
+    public final @NotNull String itemname;
     public final long quantity;
     public final @Nullable String itemKey;
 
-    private JSON_Stack(@Nullable String itemid, @Nullable String itemname, long quantity, @Nullable String itemKey) {
+    private JSON_Stack(@NotNull String itemid, @NotNull String itemname, long quantity, @Nullable String itemKey) {
         this.itemid = itemid;
         this.itemname = itemname;
         this.quantity = quantity;
@@ -28,25 +27,17 @@ public final class JSON_Stack {
 
     public static @Nullable JSON_Stack capture(@NotNull IAEGrid grid, @Nullable IAEGenericStack stack) {
         if (stack == null) return null;
-        IAEKey key = read(stack::web$what, null);
-        String itemid = key == null ? null : read(key::web$getItemID, null);
-        String itemname = key == null ? null : read(key::web$getDisplayName, null);
-        long quantity = read(stack::web$amount, 0L);
+        IAEKey key = stack.web$what();
+        String itemid = key.web$getItemID();
+        String itemname = key.web$getDisplayName();
+        long quantity = stack.web$amount();
         try {
-            String itemKey = key == null ? null
-                : AE2Controller.itemIdentities.remember(grid, key)
-                    .toString();
+            String itemKey = AE2Controller.itemIdentities.remember(grid, key)
+                .toString();
             return new JSON_Stack(itemid, itemname, quantity, itemKey);
         } catch (IOException | RuntimeException exception) {
             return new JSON_Stack(itemid, itemname, quantity, null);
         }
     }
 
-    private static <T> T read(Supplier<T> nativeValue, T fallback) {
-        try {
-            return nativeValue.get();
-        } catch (RuntimeException exception) {
-            return fallback;
-        }
-    }
 }

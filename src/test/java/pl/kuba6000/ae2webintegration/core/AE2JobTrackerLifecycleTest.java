@@ -52,24 +52,6 @@ class AE2JobTrackerLifecycleTest {
 
     private static final class EqualCpu implements ICraftingCPUCluster {
 
-        private final IAEGenericStack output = new IAEGenericStack() {
-
-            @Override
-            public IAEKey web$what() {
-                return null;
-            }
-
-            @Override
-            public long web$amount() {
-                return 1;
-            }
-
-            @Override
-            public IAEGenericStack web$copy() {
-                return this;
-            }
-        };
-
         @Override
         public boolean equals(Object other) {
             return other instanceof EqualCpu;
@@ -118,7 +100,7 @@ class AE2JobTrackerLifecycleTest {
 
         @Override
         public IAEGenericStack web$getFinalOutput() {
-            return output;
+            return null;
         }
 
         @Override

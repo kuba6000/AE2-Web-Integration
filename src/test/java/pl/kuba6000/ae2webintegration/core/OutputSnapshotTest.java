@@ -124,14 +124,12 @@ class OutputSnapshotTest {
     }
 
     @Test
-    void brokenDisplayCallbackPreservesAvailableOutputData() {
+    void brokenDisplayCallbackFailsSnapshotCapture() {
         Resource key = new Resource();
         key.brokenName = true;
-        JSON_Stack snapshot = assertDoesNotThrow(
+        assertThrows(
+            IllegalStateException.class,
             () -> JSON_Stack.capture(TestGridFixtures.grid(990125), new Stack(key, 6)));
-        assertEquals("example:resource:7", snapshot.itemid);
-        assertEquals(6, snapshot.quantity);
-        assertNotNull(snapshot.itemKey);
     }
 
     @Test
