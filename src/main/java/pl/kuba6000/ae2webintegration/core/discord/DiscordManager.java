@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.discord;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -101,12 +102,11 @@ public class DiscordManager extends Thread {
             connection.setDoOutput(true);
             connection.setRequestMethod("POST");
 
-            OutputStream stream = connection.getOutputStream();
-            stream.write(
-                json.toString()
-                    .getBytes());
-            stream.flush();
-            stream.close();
+            try (OutputStream stream = connection.getOutputStream()) {
+                stream.write(
+                    json.toString()
+                        .getBytes(StandardCharsets.UTF_8));
+            }
 
             int code;
             if ((code = connection.getResponseCode()) != 200 && code != 204) {
