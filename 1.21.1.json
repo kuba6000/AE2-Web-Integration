@@ -3,7 +3,7 @@
   "releases": {
     "stable": {
       "newest": "1.0.2",
-      "timestamp": "2026-04-25T08:52:44Z",
+      "timestamp": 1777107164,
       "github_release_tag": "1.0.2-neoforge-1.21.1",
       "github_release_url": "https://github.com/kuba6000/AE2-Web-Integration/releases/tag/1.0.2-neoforge-1.21.1",
       "github_release_download_url": "https://github.com/kuba6000/AE2-Web-Integration/releases/download/1.0.2-neoforge-1.21.1/ae2webintegration-1.0.2-neoforge-1.21.1.jar"
