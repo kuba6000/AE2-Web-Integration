@@ -25,7 +25,7 @@ import com.google.common.hash.PrimitiveSink;
 import appeng.api.storage.data.IAEStack;
 import appeng.util.item.AEFluidStack;
 import appeng.util.item.AEItemStack;
-import cpw.mods.fml.common.registry.GameRegistry;
+import cpw.mods.fml.common.registry.GameData;
 import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
@@ -40,10 +40,10 @@ public final class LegacyItemIdentity {
     public static @NotNull StableItemKey encode(@NotNull IAEStack<?> stack) {
         if (stack instanceof AEItemStack) {
             AEItemStack item = (AEItemStack) stack;
-            GameRegistry.UniqueIdentifier name = GameRegistry.findUniqueIdentifierFor(item.getItem());
             return encode(
                 "item",
-                name == null ? null : name.toString(),
+                GameData.getItemRegistry()
+                    .getNameForObject(item.getItem()),
                 item.getItemDamage(),
                 (NBTTagCompound) item.getTagCompound());
         }

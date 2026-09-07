@@ -9,7 +9,7 @@ import appeng.api.storage.data.IAEFluidStack;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.storage.data.IAEStackType;
-import cpw.mods.fml.common.registry.GameRegistry;
+import cpw.mods.fml.common.registry.GameData;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
 import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -32,7 +32,8 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
     @Override
     default String web$getItemID() {
         if (this instanceof IAEItemStack) {
-            return GameRegistry.findUniqueIdentifierFor(((IAEItemStack) this).getItem()) + ":"
+            return GameData.getItemRegistry()
+                .getNameForObject(((IAEItemStack) this).getItem()) + ":"
                 + ((IAEItemStack) this).getItemDamage();
         }
         if (this instanceof IAEFluidStack) {
