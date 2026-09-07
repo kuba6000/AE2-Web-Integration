@@ -5,7 +5,6 @@ import org.apache.logging.log4j.Logger;
 
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
-import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class StartupHandler {
 
@@ -29,14 +28,6 @@ public class StartupHandler {
                 + " cancelling crafting jobs."
                 + " Set 'password' in the config to require a login."
                 + " (Access from localhost is controlled separately by 'allow_no_password_on_localhost'.)");
-    }
-
-    public static void logOutdatedWarning() {
-        if (Config.CHECK_FOR_UPDATES() && VersionChecker.isOutdated()) {
-            LOG.warn(
-                "You are not on latest version ! Consider updating to " + VersionChecker.getLatestTag()
-                    + " at https://github.com/kuba6000/AE2-Web-Integration/releases/latest");
-        }
     }
 
     public static void handleDiscordIntegration() {

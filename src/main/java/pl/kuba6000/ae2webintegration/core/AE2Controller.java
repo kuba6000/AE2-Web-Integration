@@ -55,7 +55,6 @@ import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 import pl.kuba6000.ae2webintegration.core.utils.RateLimiter;
-import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class AE2Controller {
 
@@ -887,7 +886,9 @@ public class AE2Controller {
                     json.addProperty("token", token);
                     json.addProperty("username", login.principal.getUsername());
                     json.addProperty("isAdmin", login.principal.isAdmin());
-                    json.addProperty("isOutdated", Config.CHECK_FOR_UPDATES() && VersionChecker.isOutdated());
+                    json.addProperty(
+                        "isOutdated",
+                        Config.CHECK_FOR_UPDATES() && CoreEngine.getAvailableUpdate() != null);
                     byte[] raw_response = json.toString()
                         .getBytes(StandardCharsets.UTF_8);
                     t.sendResponseHeaders(200, raw_response.length);
@@ -1033,7 +1034,7 @@ public class AE2Controller {
             response = response.replace("_REPLACE_ME_IS_PUBLIC_MODE", Config.AE_PUBLIC_MODE() ? "true" : "false");
             response = response.replace(
                 "_REPLACE_ME_VERSION_OUTDATED",
-                Config.CHECK_FOR_UPDATES() && VersionChecker.isOutdated() ? "true" : "false");
+                Config.CHECK_FOR_UPDATES() && CoreEngine.getAvailableUpdate() != null ? "true" : "false");
             RequestContext context = requestContext.get();
             if (context != null) {
                 response = response.replace("_REPLACE_ME_USERNAME", context.principal.getUsername());

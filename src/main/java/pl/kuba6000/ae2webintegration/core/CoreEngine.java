@@ -1,16 +1,20 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class CoreEngine {
@@ -34,9 +38,14 @@ public class CoreEngine {
 
     // Populated by the interface layer from the buildscript-generated mod version.
     private static volatile String modVersion;
+    private static String versionIdentifier;
+    private static volatile @Nullable VersionChecker versionChecker;
+    private static boolean serverRunning;
 
     public static void init(IServerPlatform serverPlatform, String modVersion, String versionIdentifier) {
-        VersionChecker.setVersionIdentifier(versionIdentifier);
+        serverRunning = false;
+        stopVersionChecker();
+        CoreEngine.versionIdentifier = versionIdentifier;
         AE2Controller.serverPlatform = serverPlatform;
         Config.init(serverPlatform.getConfigDirectory());
         CoreEngine.modVersion = modVersion;
@@ -49,9 +58,10 @@ public class CoreEngine {
     }
 
     public static void onServerStarted() {
+        serverRunning = true;
         AE2Controller.init();
         StartupHandler.logOpenAdminAccessWarning();
-        StartupHandler.logOutdatedWarning();
+        maintainVersionChecker();
         StartupHandler.handleDiscordIntegration();
     }
 
@@ -63,6 +73,36 @@ public class CoreEngine {
     public static void onServerTick() {
         drainRequests(System::nanoTime);
         runPlanMaintenance(System.nanoTime());
+        maintainVersionChecker();
+    }
+
+    private static void maintainVersionChecker() {
+        if (!serverRunning) return;
+        if (!Config.CHECK_FOR_UPDATES()) {
+            stopVersionChecker();
+        } else if (versionChecker == null && modVersion != null) {
+            try {
+                versionChecker = new VersionChecker(
+                    new URL("https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/version/"),
+                    modVersion,
+                    versionIdentifier);
+                versionChecker.checkForUpdates();
+            } catch (MalformedURLException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
+    private static void stopVersionChecker() {
+        if (versionChecker != null) {
+            versionChecker.close();
+            versionChecker = null;
+        }
+    }
+
+    public static @Nullable ReleaseManifest.Release getAvailableUpdate() {
+        VersionChecker checker = versionChecker;
+        return checker == null ? null : checker.getAvailableUpdate();
     }
 
     /** Called from the platform's player-login event, which already runs on the server thread. */
@@ -118,12 +158,16 @@ public class CoreEngine {
     }
 
     public static void onServerStopping() {
+        serverRunning = false;
+        stopVersionChecker();
         AE2Controller.stopHTTPServer();
         // Authorization must not survive into the next world loaded in this JVM.
         GridAccessSessions.clear();
     }
 
     public static synchronized void onServerStopped() {
+        serverRunning = false;
+        stopVersionChecker();
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.
         AE2Controller.stopHTTPServer();
         AE2Controller.clearWorldState();
