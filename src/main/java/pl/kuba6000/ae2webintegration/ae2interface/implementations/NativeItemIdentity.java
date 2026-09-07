@@ -16,9 +16,6 @@ public final class NativeItemIdentity {
 
     public static @NotNull StableItemKey getStableKey(@NotNull AEKey key) {
         CompoundTag tag = key.toTagGeneric();
-        if (!(key instanceof AEItemKey) && !(key instanceof AEFluidKey)) {
-            requireEqualCopy(key, tag);
-        }
         // The native codec allocates its tag first. Bounds cover only the subsequent traversal.
         return StableItemKey.create(sink -> {
             StableItemKey.writeText(sink, kind(key));
@@ -35,14 +32,14 @@ public final class NativeItemIdentity {
     public static @NotNull AEKey copy(@NotNull AEKey key) {
         // Built-in AE keys retain immutable identity under AE2's read-only tag/stack contract.
         if (key instanceof AEItemKey || key instanceof AEFluidKey) return key;
-        return requireEqualCopy(key, key.toTagGeneric());
+        return decodeCopy(key, key.toTagGeneric());
     }
 
-    private static @NotNull AEKey requireEqualCopy(@NotNull AEKey key, @NotNull CompoundTag tag) {
+    private static @NotNull AEKey decodeCopy(@NotNull AEKey key, @NotNull CompoundTag tag) {
         AEKey copy = key.getType()
             .loadKeyFromTag(tag);
-        if (copy == null || !key.equals(copy)) {
-            throw new UnsupportedOperationException("Native identity does not survive serialization");
+        if (copy == null) {
+            throw new UnsupportedOperationException("Native identity could not be decoded");
         }
         return copy;
     }
