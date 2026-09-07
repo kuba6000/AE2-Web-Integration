@@ -46,24 +46,30 @@ class RequestParameterValidationTest {
     // --- Order ---
 
     @Test
-    void orderWithANonNumericItemIsAnsweredNotThrown() {
-        assertStatus("BAD_PARAM", runSynced(new Order(), "grid=" + GRID + "&item=abc&quantity=1"));
+    void orderWithAMalformedItemKeyIsAnsweredNotThrown() {
+        assertStatus("BAD_PARAM", runSynced(new Order(), "grid=" + GRID + "&itemKey=abc&quantity=1"));
     }
 
     @Test
     void orderWithANonNumericQuantityIsAnsweredNotThrown() {
-        assertStatus("BAD_PARAM", runSynced(new Order(), "grid=" + GRID + "&item=1&quantity=abc"));
+        assertStatus(
+            "BAD_PARAM",
+            runSynced(new Order(), "grid=" + GRID + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=abc"));
     }
 
     @Test
     void orderOfZeroIsRejected() {
-        assertStatus("INVALID_QUANTITY", runSynced(new Order(), "grid=" + GRID + "&item=1&quantity=0"));
+        assertStatus(
+            "INVALID_QUANTITY",
+            runSynced(new Order(), "grid=" + GRID + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=0"));
     }
 
     @Test
     void orderOfANegativeAmountIsRejected() {
         // A negative stack size has its own meaning inside AE2, so it must never reach the planner.
-        assertStatus("INVALID_QUANTITY", runSynced(new Order(), "grid=" + GRID + "&item=1&quantity=-5"));
+        assertStatus(
+            "INVALID_QUANTITY",
+            runSynced(new Order(), "grid=" + GRID + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=-5"));
     }
 
     @Test
@@ -71,14 +77,17 @@ class RequestParameterValidationTest {
         // Every platform's AE2 takes a long; the old int ceiling was purely our own parser.
         long beyondInt = (long) Integer.MAX_VALUE + 1;
         // Native lookup now runs only after server-thread authorization, not during parameter parsing.
-        assertTrue(new Order().init(TestGridFixtures.context(ME, "grid=" + GRID + "&item=1&quantity=" + beyondInt)));
+        assertTrue(
+            new Order().init(
+                TestGridFixtures
+                    .context(ME, "grid=" + GRID + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=" + beyondInt)));
     }
 
     // --- other numeric parameters ---
 
     @Test
     void aNonNumericGridIsAnsweredNotThrown() {
-        assertStatus("BAD_PARAM", runSynced(new Order(), "grid=abc&item=1&quantity=1"));
+        assertStatus("BAD_PARAM", runSynced(new Order(), "grid=abc&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=1"));
     }
 
     @Test

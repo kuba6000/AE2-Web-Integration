@@ -14,10 +14,9 @@ import com.google.common.hash.Hashing;
 public final class StableItemKey {
 
     public static final int MAX_IDENTITY_BYTES = 256 * 1024;
-    public static final int MAX_TOKEN_LENGTH = 26;
+    public static final int MAX_TOKEN_LENGTH = 22;
 
     private static final HashFunction HASH = Hashing.murmur3_128(0);
-    private static final byte[] DOMAIN = "AE2WI_ITEM_KEY\0V1\0".getBytes(StandardCharsets.US_ASCII);
 
     private final long first;
     private final long second;
@@ -35,24 +34,20 @@ public final class StableItemKey {
         Objects.requireNonNull(identity, "identity");
         if (identity.length > MAX_IDENTITY_BYTES) throw new IdentityLimitException();
         return new StableItemKey(
-            HASH.newHasher()
-                .putBytes(DOMAIN)
-                .putBytes(identity)
-                .hash()
+            HASH.hashBytes(identity)
                 .asBytes());
     }
 
     public static StableItemKey parse(String token) {
-        if (token == null || token.length() != MAX_TOKEN_LENGTH || !token.startsWith("ik1:")) {
+        if (token == null || token.length() != MAX_TOKEN_LENGTH) {
             throw new IllegalArgumentException("Invalid resource key");
         }
-        String encoded = token.substring(4);
         byte[] digest = Base64.getUrlDecoder()
-            .decode(encoded);
+            .decode(token);
         if (digest.length != 16 || !Base64.getUrlEncoder()
             .withoutPadding()
             .encodeToString(digest)
-            .equals(encoded)) {
+            .equals(token)) {
             throw new IllegalArgumentException("Noncanonical resource key");
         }
         return new StableItemKey(digest);
@@ -92,7 +87,7 @@ public final class StableItemKey {
             .putLong(first)
             .putLong(second)
             .array();
-        return "ik1:" + Base64.getUrlEncoder()
+        return Base64.getUrlEncoder()
             .withoutPadding()
             .encodeToString(digest);
     }

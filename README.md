@@ -88,34 +88,6 @@ password accordingly!
 - Track active and completed crafting jobs
 - Send crafting updates through a Discord webhook
 
-## Resource IDs for API clients
-
-Item-list rows expose an optional `itemKey`, for example `ik1:10DWn4Y74ZFdUi70c1iPyQ`.
-Pass that value as the `itemKey` parameter when creating an order, together with the selected grid and
-quantity. Treat it as an opaque, case-sensitive string and URL-encode parameter values. If both `itemKey`
-and the deprecated numeric `item` parameter are supplied, `itemKey` takes precedence; an invalid primary
-key does not fall back to the numeric value.
-
-The ID identifies an exact item or fluid, including supported metadata and secondary data. Its quantity,
-craftability and network do not change the ID. It uses versioned MurmurHash3-128 with a fixed seed and
-Base64URL encoding; IDs are not authorization credentials. Every order still checks permissions and
-current craftability in its selected network.
-
-The server remembers listed identities in a bounded runtime registry. Obtain a fresh list after reconnecting
-or receiving `ITEM_IDENTITY_UNKNOWN`, then make a new explicit order. IDs can remain stable across restarts,
-but the server-side mapping is not persisted. Never automatically retry an order after a transport failure
-when its outcome is unknown.
-
-Rows without a usable key remain visible. `identityStatus` explains unsupported native identity data,
-size/capacity limits, ambiguity or encoding failure. Such rows cannot be ordered through the bundled panel.
-Some native addon/capability/component encodings are deliberately unsupported until their full identity
-can be represented safely. Minecraft 1.12.2 native fluids remain display-only.
-
-The old `hashcode` field and numeric `item` parameter remain for the first stable-ID release and are
-scheduled for removal in the following release. Numeric aliases are remembered from lists, are invalid
-across server restarts and fail closed on conflicts (`AMBIGUOUS_ITEM`). If safe alias history reaches its
-limit, numeric ordering is disabled until restart; clients should migrate to `itemKey`.
-
 ## Gallery
 
 <details>

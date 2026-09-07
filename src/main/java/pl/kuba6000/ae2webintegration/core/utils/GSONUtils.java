@@ -17,12 +17,6 @@ import java.nio.file.StandardCopyOption;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonSerializer;
-
-import pl.kuba6000.ae2webintegration.core.api.JSON_DetailedItem;
-import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 
 public class GSONUtils {
 
@@ -43,38 +37,8 @@ public class GSONUtils {
         }
     };
 
-    private static final JsonSerializer<IAEGenericStack> IAEGenericStackSerializer = (src, typeOfSrc, context) -> {
-        JsonObject json = new JsonObject();
-        json.addProperty(
-            "itemid",
-            src.web$what()
-                .web$getItemID());
-        json.addProperty(
-            "itemname",
-            src.web$what()
-                .web$getDisplayName());
-        json.addProperty("hashcode", src.hashCode());
-        json.addProperty("quantity", src.web$amount());
-        return json;
-    };
-
-    private static final JsonSerializer<JSON_DetailedItem> DETAILED_ITEM_SERIALIZER = (src, type, context) -> {
-        JsonObject json = new JsonObject();
-        json.addProperty("itemid", src.itemid);
-        json.addProperty("itemname", src.itemname);
-        json.addProperty("hashcode", src.hashcode);
-        json.addProperty("quantity", src.quantity);
-        json.addProperty("craftable", src.craftable);
-        if (src.itemKey != null) json.addProperty("itemKey", src.itemKey);
-        if (src.identityStatus != null) json.addProperty("identityStatus", src.identityStatus);
-        return json;
-    };
-
     public static final GsonBuilder GSON_BUILDER = new GsonBuilder().addSerializationExclusionStrategy(GSONStrategy)
         .addDeserializationExclusionStrategy(GSONStrategy)
-        .registerTypeHierarchyAdapter(IAEGenericStack.class, IAEGenericStackSerializer)
-        .registerTypeAdapter(JSON_DetailedItem.class, DETAILED_ITEM_SERIALIZER)
-        .registerTypeAdapter(JSON_Stack.class, JSON_Stack.SERIALIZER)
         .serializeNulls();
 
     /**

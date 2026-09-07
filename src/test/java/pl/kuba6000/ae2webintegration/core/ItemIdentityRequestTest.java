@@ -57,22 +57,30 @@ class ItemIdentityRequestTest {
     }
 
     @Test
-    void anUnsupportedRowCannotReuseAnOlderResourcesLegacyAlias() {
-        Grid grid = new Grid(910007, new Resource("Aa", 1, true));
-        run(new GetItems(), grid, "");
-        grid.rows.add(new Resource("BB", 1, true) {
-
-            @Override
-            public byte[] web$getIdentityBytes() {
-                throw new UnsupportedOperationException();
-            }
-        });
-        run(new GetItems(), grid, "");
+    void orderingRequiresTheRawItemKeyAndRejectsFormerInputs() {
+        Grid grid = new Grid(910007, new Resource("iron", 1, true));
+        String key = run(new GetItems(), grid, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject()
+            .get("itemKey")
+            .getAsString();
         assertEquals(
-            "AMBIGUOUS_ITEM",
+            "NO_PARAM",
             run(new Order(), grid, "&item=2112&quantity=1").get("status")
                 .getAsString());
+        assertEquals(
+            "BAD_PARAM",
+            run(new Order(), grid, "&itemKey=2112&quantity=1").get("status")
+                .getAsString());
+        assertEquals(
+            "BAD_PARAM",
+            run(new Order(), grid, "&itemKey=ik1:" + key + "&quantity=1").get("status")
+                .getAsString());
         assertEquals(0, grid.jobs);
+        assertEquals(
+            "OK",
+            run(new Order(), grid, "&itemKey=" + key + "&quantity=1").get("status")
+                .getAsString());
     }
 
     @BeforeEach
@@ -94,13 +102,19 @@ class ItemIdentityRequestTest {
         JsonObject normal = rows.get(0)
             .getAsJsonObject();
         assertTrue(normal.has("itemKey"));
-        assertFalse(normal.has("identityStatus"));
+        assertTrue(
+            normal.get("identityStatus")
+                .isJsonNull());
+        assertFalse(normal.has("hashcode"));
         assertFalse(
             normal.get("craftable")
                 .getAsBoolean());
         JsonObject unsupported = rows.get(1)
             .getAsJsonObject();
-        assertFalse(unsupported.has("itemKey"));
+        assertTrue(
+            unsupported.get("itemKey")
+                .isJsonNull());
+        assertFalse(unsupported.has("hashcode"));
         assertEquals(
             "UNSUPPORTED",
             unsupported.get("identityStatus")
@@ -116,7 +130,7 @@ class ItemIdentityRequestTest {
     }
 
     @Test
-    void oldHashCollisionsFailClosedWhileStableKeysRemainDistinct() {
+    void ordinaryHashCollisionsDoNotMergeStableKeys() {
         Grid grid = new Grid(910004, new Resource("Aa", 1, true), new Resource("BB", 1, true));
         com.google.gson.JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
         String first = rows.get(0)
@@ -129,35 +143,22 @@ class ItemIdentityRequestTest {
             .getAsString();
         assertNotEquals(first, second);
         assertEquals(
-            "AMBIGUOUS_ITEM",
-            run(new Order(), grid, "&item=2112&quantity=1").get("status")
-                .getAsString());
-        assertEquals(0, grid.jobs);
-        assertEquals(
             "OK",
-            run(new Order(), grid, "&itemKey=" + first + "&item=invalid&quantity=1").get("status")
+            run(new Order(), grid, "&itemKey=" + first + "&quantity=1").get("status")
                 .getAsString());
         assertEquals("Aa", grid.ordered.web$getItemID());
     }
 
     @Test
-    void malformedPrimaryDoesNotFallBackAndUnknownIdsDoNotStartJobs() {
+    void malformedAndUnknownIdsDoNotStartJobs() {
         Grid grid = new Grid(910005, new Resource("iron", 1, true));
-        JsonObject row = run(new GetItems(), grid, "").getAsJsonArray("data")
-            .get(0)
-            .getAsJsonObject();
         assertEquals(
             "BAD_PARAM",
-            run(
-                new Order(),
-                grid,
-                "&itemKey=broken&item=" + row.get("hashcode")
-                    .getAsInt() + "&quantity=1")
-                .get("status")
+            run(new Order(), grid, "&itemKey=broken&quantity=1").get("status")
                 .getAsString());
         assertEquals(
             "ITEM_IDENTITY_UNKNOWN",
-            run(new Order(), grid, "&itemKey=ik1:AAAAAAAAAAAAAAAAAAAAAA&quantity=1").get("status")
+            run(new Order(), grid, "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=1").get("status")
                 .getAsString());
         assertEquals(0, grid.jobs);
     }
@@ -167,8 +168,8 @@ class ItemIdentityRequestTest {
         Grid grid = new Grid(910006, new Resource("iron", 1, true));
         Order request = new Order();
         assertTrue(
-            request.init(
-                TestGridFixtures.context(42, "grid=" + grid.id + "&itemKey=ik1:AAAAAAAAAAAAAAAAAAAAAA&quantity=1")));
+            request
+                .init(TestGridFixtures.context(42, "grid=" + grid.id + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=1")));
         request.runOnServerThread(TestGridFixtures.ae(grid));
         assertEquals(
             "NO_PERMISSIONS",

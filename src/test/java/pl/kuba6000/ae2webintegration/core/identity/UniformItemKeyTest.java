@@ -16,9 +16,9 @@ class UniformItemKeyTest {
 
     @Test
     void eitherHalfOfTheDigestCanDistinguishResources() {
-        StableItemKey zero = StableItemKey.parse("ik1:AAAAAAAAAAAAAAAAAAAAAA");
-        StableItemKey firstOnly = StableItemKey.parse("ik1:AAAAAAAAAAEAAAAAAAAAAA");
-        StableItemKey secondOnly = StableItemKey.parse("ik1:AAAAAAAAAAAAAAAAAAAAAQ");
+        StableItemKey zero = StableItemKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        StableItemKey firstOnly = StableItemKey.parse("AAAAAAAAAAEAAAAAAAAAAA");
+        StableItemKey secondOnly = StableItemKey.parse("AAAAAAAAAAAAAAAAAAAAAQ");
         assertNotEquals(zero, firstOnly);
         assertNotEquals(zero, secondOnly);
         assertNotEquals(firstOnly, secondOnly);
@@ -30,14 +30,14 @@ class UniformItemKeyTest {
     }
 
     @Test
-    void matchesReferenceMurmurX64VectorsIncludingTheProtocolEnvelope() throws Exception {
+    void matchesReferenceMurmurX64VectorsForRawCanonicalBytes() throws Exception {
         // Python mmh3 5.2.0 reference x64_128_digest, seed 0; expected values are independent literals.
         assertEquals(
-            "ik1:Uc1y13wJk_4iruKW-iee1g",
+            "AAAAAAAAAAAAAAAAAAAAAA",
             StableItemKey.fromIdentityBytes(new byte[0])
                 .toString());
         assertEquals(
-            "ik1:9_lvbWH4m1GmC7L8AV0zLA",
+            "qTcTDu8-ZBplmiM8QEpOSQ",
             StableItemKey.fromIdentityBytes(new byte[] { 1, 2, 3 })
                 .toString());
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -47,7 +47,7 @@ class UniformItemKeyTest {
         output.writeInt(0);
         output.writeByte(0);
         assertEquals(
-            "ik1:10DWn4Y74ZFdUi70c1iPyQ",
+            "tO3YysETF1p1PZHh2U6-XQ",
             StableItemKey.fromIdentityBytes(bytes.toByteArray())
                 .toString());
     }
@@ -55,17 +55,17 @@ class UniformItemKeyTest {
     @ParameterizedTest
     @NullSource
     @ValueSource(
-        strings = { "", "ik1:i:minecraft:stone:0", "ik1:f:water", "ik1:h:9_lvbWH4m1GmC7L8AV0zLA",
-            "ik2:9_lvbWH4m1GmC7L8AV0zLA", "ik1:9_lvbWH4m1GmC7L8AV0zLA=", "ik1:9_lvbWH4m1GmC7L8AV0zLB",
-            "ik1:9+lvbWH4m1GmC7L8AV0zLA", "ik1:9_lvbWH4m1GmC7L8AV0zL", "ik1:9_lvbWH4m1GmC7L8AV0zLAA" })
+        strings = { "", "ik1:qTcTDu8-ZBplmiM8QEpOSQ", "i:minecraft:stone:0", "f:water", "h:9_lvbWH4m1GmC7L8AV0zLA",
+            "ik2:9_lvbWH4m1GmC7L8AV0zLA", "9_lvbWH4m1GmC7L8AV0zLA=", "9_lvbWH4m1GmC7L8AV0zLB", "9+lvbWH4m1GmC7L8AV0zLA",
+            "9_lvbWH4m1GmC7L8AV0zL", "9_lvbWH4m1GmC7L8AV0zLAA" })
     void rejectsMalformedIdsAndFormerFormats(String value) {
         assertThrows(IllegalArgumentException.class, () -> StableItemKey.parse(value));
     }
 
     @Test
     void completeDigestEqualityKeepsBucketCollisionsSeparate() {
-        StableItemKey first = StableItemKey.parse("ik1:AAAAAAAAAAAAAAAAAAAAAA");
-        StableItemKey second = StableItemKey.parse("ik1:AAAAAAAAAAEAAAAA____4Q");
+        StableItemKey first = StableItemKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        StableItemKey second = StableItemKey.parse("AAAAAAAAAAEAAAAA____4Q");
         assertNotEquals(first, second);
         assertEquals(first.hashCode(), second.hashCode());
         Map<StableItemKey, String> resources = new HashMap<>();
@@ -78,7 +78,7 @@ class UniformItemKeyTest {
     @Test
     void rejectsOversizedBodiesInsteadOfHashingATruncatedIdentity() throws Exception {
         assertEquals(
-            26,
+            22,
             StableItemKey.fromIdentityBytes(new byte[256 * 1024])
                 .toString()
                 .length());
@@ -92,7 +92,7 @@ class UniformItemKeyTest {
         Map<StableItemKey, String> resources = new HashMap<>();
         resources.put(key, "resource");
         assertEquals(
-            26,
+            22,
             key.toString()
                 .length());
         assertEquals("resource", resources.get(StableItemKey.parse(key.toString())));

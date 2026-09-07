@@ -19,8 +19,6 @@ public final class ItemIdentityRegistry {
     private final Map<StableItemKey, Entry> entries = new LinkedHashMap<>(16, 0.75f, true);
     private final Map<IAEKey, StableItemKey> reverse = new HashMap<>();
     private final Set<StableItemKey> ambiguous = new HashSet<>();
-    private final Map<Integer, StableItemKey> legacyAliases = new HashMap<>();
-    private boolean legacyDisabled;
     private final int maxEntries;
     private final long maxBytes;
     private final long idleMillis;
@@ -82,46 +80,10 @@ public final class ItemIdentityRegistry {
         return entry.identity;
     }
 
-    /** Remember observed old hashes without allowing reassignment after resource expiry. */
-    public void rememberLegacy(int oldHash, StableItemKey key) {
-        Objects.requireNonNull(key, "key");
-        recordLegacy(oldHash, key);
-    }
-
-    /** A displayed row without usable identity must not accidentally reuse another resource's old hash. */
-    public void rejectLegacy(int oldHash) {
-        recordLegacy(oldHash, null);
-    }
-
-    private void recordLegacy(int oldHash, StableItemKey key) {
-        if (legacyDisabled) return;
-        if (legacyAliases.containsKey(oldHash)) {
-            if (key == null || !key.equals(legacyAliases.get(oldHash))) legacyAliases.put(oldHash, null);
-            return;
-        }
-        if (legacyAliases.size() >= maxEntries || 96 > maxBytes - retainedBytes) {
-            legacyDisabled = true;
-            retainedBytes -= 96L * legacyAliases.size();
-            legacyAliases.clear();
-            return;
-        }
-        legacyAliases.put(oldHash, key);
-        retainedBytes += 96;
-    }
-
-    public IAEKey resolveLegacy(int oldHash) throws IdentityLimitException {
-        if (legacyDisabled) throw new IdentityLimitException();
-        StableItemKey key = legacyAliases.get(oldHash);
-        if (key == null && legacyAliases.containsKey(oldHash)) throw new Ambiguous();
-        return key == null ? null : resolve(key);
-    }
-
     public void clear() {
         entries.clear();
         reverse.clear();
         ambiguous.clear();
-        legacyAliases.clear();
-        legacyDisabled = false;
         retainedBytes = 0;
     }
 

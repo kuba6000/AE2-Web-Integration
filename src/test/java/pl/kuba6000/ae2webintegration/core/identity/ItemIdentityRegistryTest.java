@@ -13,7 +13,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 class ItemIdentityRegistryTest {
 
     @Test
-    void warmEquivalentResourcesReuseIdentityEncodingAndClearDropsConflictHistory() throws Exception {
+    void warmEquivalentResourcesReuseIdentityEncodingUntilCleared() throws Exception {
         ItemIdentityRegistry registry = new ItemIdentityRegistry(10, 100_000, 1000, () -> 0);
         Resource first = new Resource("iron", true);
         StableItemKey key = registry.remember(first);
@@ -21,9 +21,6 @@ class ItemIdentityRegistryTest {
         assertEquals(key, registry.remember(nextPoll));
         assertEquals(1, first.encodings);
         assertEquals(0, nextPoll.encodings);
-        registry.rejectLegacy(42);
-        registry.rememberLegacy(42, key);
-        assertThrows(ItemIdentityRegistry.Ambiguous.class, () -> registry.resolveLegacy(42));
         registry.clear();
         assertNull(registry.resolve(key));
         assertEquals(key, registry.remember(nextPoll));
@@ -42,43 +39,6 @@ class ItemIdentityRegistryTest {
         };
         assertThrows(java.io.IOException.class, () -> registry.remember(broken));
         assertNull(registry.resolve(StableItemKey.fromIdentityBytes(broken.web$getIdentityBytes())));
-    }
-
-    @Test
-    void legacyAliasAssignmentsStayStickyWhenPayloadExpiresAndStopClearsEverything() throws Exception {
-        AtomicLong now = new AtomicLong();
-        ItemIdentityRegistry registry = new ItemIdentityRegistry(10, 100_000, 1000, now::get);
-        StableItemKey first = registry.remember(new Resource("iron", true));
-        registry.rememberLegacy(12, first);
-        assertEquals(
-            "iron",
-            registry.resolveLegacy(12)
-                .web$getItemID());
-        now.set(2000);
-        assertNull(registry.resolveLegacy(12));
-        StableItemKey second = registry.remember(new Resource("gold", true));
-        registry.rememberLegacy(12, second);
-        assertThrows(ItemIdentityRegistry.Ambiguous.class, () -> registry.resolveLegacy(12));
-        registry.clear();
-        assertNull(registry.resolve(first));
-        assertNull(registry.resolve(second));
-        assertNull(registry.resolveLegacy(12));
-        registry.rememberLegacy(12, registry.remember(new Resource("gold", true)));
-        assertEquals(
-            "gold",
-            registry.resolveLegacy(12)
-                .web$getItemID());
-    }
-
-    @Test
-    void fullLegacyHistoryDisablesOldOrdersWhileStableKeysStillWork() throws Exception {
-        ItemIdentityRegistry registry = new ItemIdentityRegistry(1, 100_000, 1000, () -> 0);
-        StableItemKey key = registry.remember(new Resource("iron", false));
-        registry.rememberLegacy(1, key);
-        registry.rememberLegacy(2, key);
-        assertThrows(IdentityLimitException.class, () -> registry.resolveLegacy(1));
-        assertThrows(IdentityLimitException.class, () -> registry.resolveLegacy(2));
-        assertNotNull(registry.resolve(key));
     }
 
     @Test

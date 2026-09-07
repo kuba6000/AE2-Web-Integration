@@ -55,19 +55,15 @@ public class GetItems extends ISyncedRequest {
     private static void addItem(ArrayList<JSON_DetailedItem> items, IAEGenericStack stack, IAEGrid grid) {
         IAEKey key = stack.web$what();
 
-        int hash = stack.hashCode();
-
         JSON_DetailedItem detailedItem = new JSON_DetailedItem();
         detailedItem.itemid = key.web$getItemID();
         detailedItem.itemname = key.web$getDisplayName();
         detailedItem.quantity = stack.web$amount();
         detailedItem.craftable = key.web$isCraftable(grid);
-        detailedItem.hashcode = hash;
 
         try {
             StableItemKey identity = AE2Controller.itemIdentities.remember(key);
             detailedItem.itemKey = identity.toString();
-            AE2Controller.itemIdentities.rememberLegacy(hash, identity);
         } catch (IdentityLimitException e) {
             detailedItem.identityStatus = "LIMIT_EXCEEDED";
         } catch (ItemIdentityRegistry.Ambiguous e) {
@@ -77,7 +73,6 @@ public class GetItems extends ISyncedRequest {
         } catch (IOException | RuntimeException e) {
             detailedItem.identityStatus = "UNAVAILABLE";
         }
-        if (detailedItem.itemKey == null) AE2Controller.itemIdentities.rejectLegacy(hash);
 
         items.add(detailedItem);
     }

@@ -62,10 +62,7 @@ class OutputSnapshotTest {
             5,
             json.get("quantity")
                 .getAsLong());
-        assertEquals(
-            41,
-            json.get("hashcode")
-                .getAsInt());
+        assertFalse(json.has("hashcode"));
         assertNotNull(
             AE2Controller.itemIdentities.resolve(
                 StableItemKey.parse(
@@ -74,7 +71,7 @@ class OutputSnapshotTest {
     }
 
     @Test
-    void failedIdentityPreservesDisplayAndOmitsOnlyUnavailableKey() {
+    void failedIdentityPreservesDisplayWithOrdinaryNullableJsonFields() {
         Resource key = new Resource();
         key.brokenIdentity = true;
         JSON_Stack snapshot = assertDoesNotThrow(() -> JSON_Stack.capture(new Stack(key, 9)));
@@ -94,7 +91,9 @@ class OutputSnapshotTest {
             9,
             output.get("quantity")
                 .getAsLong());
-        assertFalse(output.has("itemKey"));
+        assertTrue(
+            output.get("itemKey")
+                .isJsonNull());
         assertTrue(json.has("unrelated"));
         assertTrue(
             json.get("unrelated")
@@ -114,7 +113,9 @@ class OutputSnapshotTest {
             4,
             json.get("quantity")
                 .getAsLong());
-        assertFalse(json.has("itemKey"));
+        assertTrue(
+            json.get("itemKey")
+                .isJsonNull());
     }
 
     @Test

@@ -634,9 +634,7 @@
                 <br>
                 <input type="checkbox" name="showitemid" id="showitemid" onchange="changeShowItemID(this);"> <label for="showitemid">Show item id</label>
                 <br>
-                <input type="checkbox" name="showitemicon" id="showitemicon" onchange="changeShowItemIcon(this);" disabled title="Work in progress"> <label for="showitemicon" title="Work in progress">Show item icons [work in progress]</label>
                 <br>
-                <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
                 <br>
                 You are logged in as <span id="username" style="font-weight: bold;"></span> <br>
                 <button onclick="document.location.href='?logout'">LogOut</button>
@@ -670,8 +668,7 @@
         autoRefresh: false,
         itemsPerRow: 5,
         numberFormat: 0,
-        showItemID: false,
-        showItemIcon: false
+        showItemID: false
     }
     const screens = [
         ["terminalOptions", "terminalTerminalHeader"],
@@ -784,11 +781,6 @@
         setCookie("showItemID", settings.showItemID ? 1 : 0, 7);
         refreshDisplay();
     }
-    function changeShowItemIcon(el){
-        settings.showItemIcon = el.checked;
-        setCookie("showItemIcon", settings.showItemIcon ? 1 : 0, 7);
-        refreshDisplay();
-    }
     function onThisGridByDefaultChange(el) {
         settings.defaultGrid = el.checked ? selectedGrid : -1;
         setCookie("defaultGrid", settings.defaultGrid, 7);
@@ -866,9 +858,6 @@
         cookie = getCookie("showItemID");
         if (cookie != "")
             settings.showItemID = Number(cookie) == 1;
-            cookie = getCookie("showItemIcon");
-        if (cookie != "")
-            settings.showItemIcon = Number(cookie) == 1;
         document.getElementById('sortByButton').innerHTML = sortByDisplay[sortingOptions.sortBy];
         document.getElementById('storedCraftableButton').innerHTML = storedCraftableDisplay[filteringOptions.storedCraftable];
         document.getElementById('itemsFluidsButton').innerHTML = itemsTypeDisplay[filteringOptions.itemsType];
@@ -877,7 +866,6 @@
         document.getElementById('itemsperrow').value = settings.itemsPerRow;
         document.getElementById('numberformat').value = settings.numberFormat;
         document.getElementById('showitemid').checked = settings.showItemID;
-        document.getElementById('showitemicon').checked = settings.showItemIcon;
         selectedGrid = settings.defaultGrid;
     }
     initSettings();
@@ -1164,7 +1152,7 @@
         // isBusy is the flag the server actually reports; finalOutput is only filled in when busy.
         if (!cluster['isBusy']) return cluster['availableStorage'] >= currentJob.bytesTotal;
         if (!cluster['finalOutput']) return false;
-        if (!currentJob.itemKey || !cluster['finalOutput']['itemKey']
+        if (!isUsableItemKey(currentJob.itemKey) || !isUsableItemKey(cluster['finalOutput']['itemKey'])
             || currentJob.itemKey !== cluster['finalOutput']['itemKey']) return false;
         if (cluster['usedStorage'] == -1) return false;
         return cluster['availableStorage'] >= cluster['usedStorage'] + currentJob.bytesTotal;
@@ -1232,25 +1220,16 @@
         setCurrentScreen(3);
         getCraftingHistory();
     }
-    function displayItemList(shouldFetchIcons = false){
+    function displayItemList(){
         let html = "<table>";
         let grid_i_max = settings.itemsPerRow;
         let grid_i = 0;
         html += "<tr>";
         let items = globalItemList;
-        let itemsNoIcon = [];
         for(let i = 0; i < items.length; i++){
             let item = items[i];
             if (!shouldDisplay(item))
                 continue;
-            let imgSrc = getIcon(item);
-            if (imgSrc === null){
-                itemsNoIcon.push(item);
-                imgSrc = '';
-            }
-            else {
-                imgSrc = "data:image/png;base64," + imgSrc;
-            }
             let orderAction = '';
             if (item['craftable']) {
                 if (isUsableItemKey(item['itemKey']))
@@ -1258,12 +1237,7 @@
                 else
                     orderAction = '<br><span>Ordering unavailable</span>';
             }
-            if (settings.showItemIcon){
-                html += "<td class='storage'>" + formatItemName(item) + "<img src='" + imgSrc + "' /><br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
-            }
-            else {
-                html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
-            }
+            html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
             grid_i++;
             if(grid_i == grid_i_max){
                 html += "</tr><tr>";
@@ -1272,8 +1246,6 @@
         }
         html += "</tr></table>";
         document.getElementById("terminalcontent").innerHTML = html;
-        if (settings.showItemIcon && shouldFetchIcons && itemsNoIcon.length > 0)
-            fetchIcons(itemsNoIcon);
     }
     function getItemList(){
         if (selectedGrid == -1)
@@ -1290,7 +1262,7 @@
             data = data.data;
             globalItemList = data;
             sortItemList();
-            displayItemList(true);
+            displayItemList();
             popLoadingScreen(message);
         });
     }
@@ -1553,7 +1525,8 @@
         });
     }
     function isUsableItemKey(itemKey) {
-        return typeof itemKey === 'string' && /^ik1:[A-Za-z0-9_-]{22}$/.test(itemKey);
+        // The last Base64URL character contains only two data bits for a 128-bit key.
+        return typeof itemKey === 'string' && /^[A-Za-z0-9_-]{21}[AQgw]$/.test(itemKey);
     }
     function beginOrderingItem(itemKey){
         if (selectedGrid == -1)
@@ -1727,33 +1700,6 @@
             updateCPUList();
             refreshTerminal();
             popLoadingScreen(message);
-        });
-    }
-
-    function getIcon(item) {
-        let data = localStorage.getItem("itemIcon" + item['hashcode']);
-        if (data === null)
-            return null;
-        return data;
-    }
-
-    function fetchIcons(items) {
-        let par = '';
-        for(let i = 0; i < items.length; i++){
-            par += items[i]['hashcode'] + ',';
-        }
-        $.getJSON('icon?items=' + par, function(data){
-            if (data.status !== "OK"){
-                showAlert(data.status + ": " + data.data);
-                return;
-            }
-            data = data.data;
-            console.log(data);
-            let items = data;
-            for(let i = 0; i < items.length; i++){
-                localStorage.setItem("itemIcon" + items[i]['hashcode'], items[i]['pngData']);
-            }
-            refreshDisplay();
         });
     }
 
