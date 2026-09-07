@@ -15,6 +15,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -80,8 +81,8 @@ class CoreEngineLifecycleTest {
     private static final class TestStack implements IAEGenericStack, IAEKey {
 
         @Override
-        public byte[] web$getIdentityBytes() {
-            return new byte[] { 7 };
+        public StableItemKey web$getStableKey() {
+            return StableItemKey.create(sink -> sink.putBytes(new byte[] { 7 }));
         }
 
         @Override

@@ -2,8 +2,6 @@ package pl.kuba6000.ae2webintegration.core.identity;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -13,6 +11,17 @@ import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class UniformItemKeyTest {
+
+    @Test
+    void streamingChunksPreserveTheCanonicalIdentity() {
+        StableItemKey whole = StableItemKey.create(sink -> sink.putBytes(new byte[] { 1, 2, 3 }));
+        StableItemKey chunks = StableItemKey.create(sink -> {
+            sink.putByte((byte) 1);
+            sink.putBytes(new byte[] { 2, 3 });
+        });
+        assertEquals("qTcTDu8-ZBplmiM8QEpOSQ", whole.toString());
+        assertEquals(whole, chunks);
+    }
 
     @Test
     void eitherHalfOfTheDigestCanDistinguishResources() {
@@ -30,26 +39,22 @@ class UniformItemKeyTest {
     }
 
     @Test
-    void matchesReferenceMurmurX64VectorsForRawCanonicalBytes() throws Exception {
+    void matchesReferenceMurmurX64VectorsForRawCanonicalBytes() {
         // Python mmh3 5.2.0 reference x64_128_digest, seed 0; expected values are independent literals.
         assertEquals(
             "AAAAAAAAAAAAAAAAAAAAAA",
-            StableItemKey.fromIdentityBytes(new byte[0])
+            StableItemKey.create(sink -> {})
                 .toString());
         assertEquals(
             "qTcTDu8-ZBplmiM8QEpOSQ",
-            StableItemKey.fromIdentityBytes(new byte[] { 1, 2, 3 })
+            StableItemKey.create(sink -> sink.putBytes(new byte[] { 1, 2, 3 }))
                 .toString());
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        DataOutputStream output = new DataOutputStream(bytes);
-        StableItemKey.writeText(output, "item");
-        StableItemKey.writeText(output, "minecraft:stone");
-        output.writeInt(0);
-        output.writeByte(0);
-        assertEquals(
-            "tO3YysETF1p1PZHh2U6-XQ",
-            StableItemKey.fromIdentityBytes(bytes.toByteArray())
-                .toString());
+        assertEquals("tO3YysETF1p1PZHh2U6-XQ", StableItemKey.create(sink -> {
+            StableItemKey.writeText(sink, "item");
+            StableItemKey.writeText(sink, "minecraft:stone");
+            sink.putBytes(new byte[] { 0, 0, 0, 0, 0 });
+        })
+            .toString());
     }
 
     @ParameterizedTest
@@ -76,19 +81,9 @@ class UniformItemKeyTest {
     }
 
     @Test
-    void rejectsOversizedBodiesInsteadOfHashingATruncatedIdentity() throws Exception {
-        assertEquals(
-            22,
-            StableItemKey.fromIdentityBytes(new byte[256 * 1024])
-                .toString()
-                .length());
-        assertThrows(IdentityLimitException.class, () -> StableItemKey.fromIdentityBytes(new byte[256 * 1024 + 1]));
-    }
-
-    @Test
-    void parsedIdFindsTheSameMapEntryAsTheOriginalIdentity() throws Exception {
+    void parsedIdFindsTheSameMapEntryAsTheOriginalIdentity() {
         byte[] identity = new byte[] { 1, 2, 3 };
-        StableItemKey key = StableItemKey.fromIdentityBytes(identity);
+        StableItemKey key = StableItemKey.create(sink -> sink.putBytes(identity));
         Map<StableItemKey, String> resources = new HashMap<>();
         resources.put(key, "resource");
         assertEquals(
@@ -97,7 +92,7 @@ class UniformItemKeyTest {
                 .length());
         assertEquals("resource", resources.get(StableItemKey.parse(key.toString())));
         identity[0] = 9;
-        assertEquals(key, StableItemKey.fromIdentityBytes(new byte[] { 1, 2, 3 }));
-        assertNotEquals(key, StableItemKey.fromIdentityBytes(identity));
+        assertEquals(key, StableItemKey.create(sink -> sink.putBytes(new byte[] { 1, 2, 3 })));
+        assertNotEquals(key, StableItemKey.create(sink -> sink.putBytes(identity)));
     }
 }

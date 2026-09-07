@@ -8,7 +8,6 @@ import java.util.Set;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.JSON_DetailedItem;
-import pl.kuba6000.ae2webintegration.core.identity.IdentityLimitException;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -67,8 +66,7 @@ public class GetItems extends ISyncedRequest {
         try {
             StableItemKey identity = listing.remember(key);
             detailedItem.itemKey = identity.toString();
-        } catch (IdentityLimitException e) {
-            detailedItem.identityStatus = "LIMIT_EXCEEDED";
+
         } catch (ItemIdentityRegistry.Ambiguous e) {
             detailedItem.identityStatus = "AMBIGUOUS";
         } catch (UnsupportedOperationException e) {

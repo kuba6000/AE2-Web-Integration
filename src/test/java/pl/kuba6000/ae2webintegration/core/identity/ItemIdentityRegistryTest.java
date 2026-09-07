@@ -14,6 +14,23 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 class ItemIdentityRegistryTest {
 
     @Test
+    void immutableNativeIdentityIsHashedOnlyOnceOnAdmission() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid grid = grid();
+        Resource immutable = new Resource("stone", false) {
+
+            @Override
+            public IAEKey web$copyIdentity() {
+                return this;
+            }
+        };
+        StableItemKey key = registry.remember(grid, immutable);
+        assertSame(immutable, registry.resolve(key));
+        assertEquals(1, immutable.encodings);
+        assertEquals(key, registry.remember(grid, immutable));
+    }
+
+    @Test
     void equivalentResourcesShareOneDetachedIdentityAcrossGrids() throws Exception {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid firstGrid = grid();
@@ -69,7 +86,7 @@ class ItemIdentityRegistryTest {
     @Test
     void unreachableGridDoesNotKeepItsIdentitiesAlive() throws Exception {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
-        StableItemKey key = StableItemKey.fromIdentityBytes("iron".getBytes(StandardCharsets.UTF_8));
+        StableItemKey key = StableItemKey.create(sink -> sink.putBytes("iron".getBytes(StandardCharsets.UTF_8)));
         WeakReference<IAEGrid> owner = rememberTemporaryGrid(registry);
         WeakReference<IAEKey> identity = new WeakReference<>(registry.resolve(key));
         awaitCollected(owner, () -> registry.resolve(key));
@@ -99,7 +116,22 @@ class ItemIdentityRegistryTest {
             }
         };
         assertThrows(java.io.IOException.class, () -> registry.remember(grid, broken));
-        assertNull(registry.resolve(StableItemKey.fromIdentityBytes(broken.web$getIdentityBytes())));
+        assertNull(registry.resolve(broken.web$getStableKey()));
+    }
+
+    @Test
+    void anEqualCopyWithADifferentStableKeyIsNeverPublished() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid grid = grid();
+        Resource broken = new Resource("iron", false, "original encoding") {
+
+            @Override
+            public IAEKey web$copyIdentity() {
+                return new Resource("iron", false, "different encoding");
+            }
+        };
+        assertThrows(java.io.IOException.class, () -> registry.remember(grid, broken));
+        assertNull(registry.resolve(broken.web$getStableKey()));
     }
 
     @Test
@@ -180,9 +212,9 @@ class ItemIdentityRegistryTest {
         }
 
         @Override
-        public byte[] web$getIdentityBytes() {
+        public StableItemKey web$getStableKey() {
             encodings++;
-            return encodedName.getBytes(StandardCharsets.UTF_8);
+            return StableItemKey.create(sink -> sink.putBytes(encodedName.getBytes(StandardCharsets.UTF_8)));
         }
 
         @Override

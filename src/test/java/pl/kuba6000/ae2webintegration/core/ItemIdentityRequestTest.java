@@ -17,6 +17,7 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.*;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.*;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
 
@@ -28,7 +29,7 @@ class ItemIdentityRequestTest {
         Grid second = new Grid(910010, new Resource("iron", 8, true) {
 
             @Override
-            public byte[] web$getIdentityBytes() {
+            public StableItemKey web$getStableKey() {
                 throw new AssertionError("Warm shared identity must not encode native data again");
             }
         });
@@ -170,7 +171,7 @@ class ItemIdentityRequestTest {
         Grid grid = new Grid(910003, new Resource("iron", 20, false), new Resource("unsupported", 3, true) {
 
             @Override
-            public byte[] web$getIdentityBytes() {
+            public StableItemKey web$getStableKey() {
                 throw new UnsupportedOperationException();
             }
         });
@@ -329,8 +330,8 @@ class ItemIdentityRequestTest {
             this.craftable = craftable;
         }
 
-        public byte[] web$getIdentityBytes() {
-            return id.getBytes(StandardCharsets.UTF_8);
+        public StableItemKey web$getStableKey() {
+            return StableItemKey.create(sink -> sink.putBytes(id.getBytes(StandardCharsets.UTF_8)));
         }
 
         public IAEKey web$copyIdentity() {

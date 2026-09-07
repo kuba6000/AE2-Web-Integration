@@ -287,11 +287,11 @@ class OutputSnapshotTest {
             return equals(key);
         }
 
-        public byte[] web$getIdentityBytes() throws IOException {
+        public StableItemKey web$getStableKey() throws IOException {
             available();
             if (brokenIdentity) throw new IOException("Broken native codec");
             if (unsupportedIdentity) throw new UnsupportedOperationException("Unsupported native identity");
-            return "resource".getBytes(StandardCharsets.UTF_8);
+            return StableItemKey.create(sink -> sink.putBytes("resource".getBytes(StandardCharsets.UTF_8)));
         }
 
         public IAEKey web$copyIdentity() {

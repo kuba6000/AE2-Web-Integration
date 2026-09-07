@@ -4,12 +4,15 @@ import java.io.IOException;
 
 import org.jetbrains.annotations.NotNull;
 
+import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
+
 public interface IAEKey {
 
-    /** Canonical resource identity only; unsupported native forms throw UnsupportedOperationException. */
-    byte @NotNull [] web$getIdentityBytes() throws IOException;
+    /** Stable identity from canonical native data, independent of quantity or craftability. */
+    @NotNull
+    StableItemKey web$getStableKey() throws IOException;
 
-    /** Detached identity suitable for retention, without mutable quantity or craftable state. */
+    /** Retainable identity without mutable quantity/crafting state; native read-only identity data may be shared. */
     @NotNull
     IAEKey web$copyIdentity() throws IOException;
 

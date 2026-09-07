@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.identity;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -66,12 +65,11 @@ public final class ItemIdentityRegistry {
             if (ambiguous.contains(remembered.key)) throw new Ambiguous();
             return remembered;
         }
-        byte[] body = resource.web$getIdentityBytes();
-        StableItemKey key = StableItemKey.fromIdentityBytes(body);
+        StableItemKey key = resource.web$getStableKey();
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry existing = entries.getIfPresent(key);
         if (existing != null) {
-            if (!Arrays.equals(body, existing.bytes) || !existing.identity.equals(resource)) {
+            if (!existing.identity.equals(resource)) {
                 entries.invalidate(key);
                 reverse.invalidate(existing.identity);
                 ambiguous.add(key);
@@ -80,9 +78,9 @@ public final class ItemIdentityRegistry {
             return existing;
         }
         IAEKey copy = resource.web$copyIdentity();
-        if (!resource.equals(copy) || !Arrays.equals(body, copy.web$getIdentityBytes()))
+        if (copy != resource && (!resource.equals(copy) || !key.equals(copy.web$getStableKey())))
             throw new IOException("Identity copy changed the resource");
-        Entry entry = new Entry(key, copy, body);
+        Entry entry = new Entry(key, copy);
         entries.put(key, entry);
         reverse.put(copy, entry);
         return entry;
@@ -139,12 +137,10 @@ public final class ItemIdentityRegistry {
 
         private final StableItemKey key;
         private final IAEKey identity;
-        private final byte[] bytes;
 
-        private Entry(@NotNull StableItemKey key, @NotNull IAEKey identity, byte @NotNull [] bytes) {
+        private Entry(@NotNull StableItemKey key, @NotNull IAEKey identity) {
             this.key = key;
             this.identity = identity;
-            this.bytes = bytes.clone();
         }
     }
 }

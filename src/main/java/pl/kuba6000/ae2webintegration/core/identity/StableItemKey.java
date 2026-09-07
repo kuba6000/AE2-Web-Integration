@@ -1,21 +1,21 @@
 package pl.kuba6000.ae2webintegration.core.identity;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.function.Consumer;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
+import com.google.common.hash.PrimitiveSink;
 
 /** Immutable resource identity; neither a grid membership assertion nor an authorization grant. */
 public final class StableItemKey {
 
-    public static final int MAX_IDENTITY_BYTES = 256 * 1024;
     public static final int MAX_TOKEN_LENGTH = 22;
 
     private static final HashFunction HASH = Hashing.murmur3_128(0);
@@ -31,11 +31,12 @@ public final class StableItemKey {
         hash = 31 * Long.hashCode(first) + Long.hashCode(second);
     }
 
-    /** Native adapters supply deterministic, bounded bytes without amount or crafting state. */
-    public static @NotNull StableItemKey fromIdentityBytes(byte @NotNull [] identity) throws IOException {
-        if (identity.length > MAX_IDENTITY_BYTES) throw new IdentityLimitException();
+    /** Hash deterministic native identity data directly, without retaining its serialized body. */
+    public static @NotNull StableItemKey create(@NotNull Consumer<PrimitiveSink> writeIdentity) {
+        Hasher hasher = HASH.newHasher();
+        writeIdentity.accept(hasher);
         return new StableItemKey(
-            HASH.hashBytes(identity)
+            hasher.hash()
                 .asBytes());
     }
 
@@ -54,32 +55,30 @@ public final class StableItemKey {
         return new StableItemKey(digest);
     }
 
-    /** Length-prefixed strict UTF-8 shared by native encoders; not Java's modified UTF format. */
-    public static void writeText(@NotNull DataOutput output, @NotNull String value) throws IOException {
+    /** Big-endian length-prefixed strict UTF-8, independent of native modified-UTF serializers. */
+    public static void writeText(@NotNull PrimitiveSink output, @NotNull String value) {
         int length = utf8Length(value);
-        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-        output.writeInt(length);
-        output.write(bytes);
+        output.putInt(Integer.reverseBytes(length));
+        output.putString(value, StandardCharsets.UTF_8);
     }
 
-    private static int utf8Length(@NotNull String value) throws IOException {
-        if (value.length() > MAX_IDENTITY_BYTES) throw new IdentityLimitException();
-        int length = 0;
+    private static int utf8Length(@NotNull String value) {
+        long length = 0;
         for (int i = 0; i < value.length(); i++) {
             char character = value.charAt(i);
             if (Character.isHighSurrogate(character)) {
                 if (++i == value.length() || !Character.isLowSurrogate(value.charAt(i))) {
-                    throw new IOException("Malformed Unicode in canonical identity");
+                    throw new IllegalArgumentException("Malformed Unicode in canonical identity");
                 }
                 length += 4;
             } else if (Character.isLowSurrogate(character)) {
-                throw new IOException("Malformed Unicode in canonical identity");
+                throw new IllegalArgumentException("Malformed Unicode in canonical identity");
             } else {
                 length += character < 0x80 ? 1 : character < 0x800 ? 2 : 3;
             }
-            if (length > MAX_IDENTITY_BYTES) throw new IdentityLimitException();
         }
-        return length;
+        if (length > Integer.MAX_VALUE) throw new IllegalArgumentException("Identity text is too long");
+        return (int) length;
     }
 
     @Override
