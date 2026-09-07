@@ -54,13 +54,23 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
             boolean isMachine = (requestingMachine != null || src.machine()
                 .isPresent()) && !src.player()
                     .isPresent();
+            String requester = null;
+            if (src != null && src.player().isPresent()) {
+                String name = src.player().get().getName();
+                requester = "AE2CONTROLLER".equals(name) ? "Web Panel" : name;
+            } else if (requestingMachine != null) {
+                requester = "Machine (" + requestingMachine.getClass().getSimpleName() + ")";
+            } else if (src != null && src.machine().isPresent()) {
+                requester = "Machine";
+            }
             IAEMixinCallbacks.getInstance()
                 .jobStarted(
                     (ICraftingCPUCluster) (Object) ((CraftingLinkAccessor) (Object) link).callGetCpu(),
                     (IAECraftingGrid) this,
                     (IAEGrid) grid,
                     false,
-                    !isMachine);
+                    !isMachine,
+                    requester);
         }
     }
 
