@@ -59,11 +59,16 @@ class ItemIdentityRegistryTest {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid grid = grid();
         StableItemKey iron = registry.remember(grid, new Resource("iron", true));
+        String ironToken = iron.toString();
         StableItemKey gold = registry.remember(grid, new Resource("gold", true));
         WeakReference<IAEKey> removed = new WeakReference<>(registry.resolve(gold));
         Resource nextPoll = new Resource("iron", false);
         ItemIdentityRegistry.Listing listing = registry.beginListing(grid);
         assertEquals(iron, listing.remember(nextPoll));
+        assertSame(
+            ironToken,
+            listing.remember(nextPoll)
+                .toString());
         assertEquals(0, nextPoll.encodings);
         listing.commit();
         awaitCollected(removed, () -> registry.resolve(gold));

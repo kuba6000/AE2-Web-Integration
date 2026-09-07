@@ -23,6 +23,7 @@ public final class StableItemKey {
     private final long first;
     private final long second;
     private final int hash;
+    private volatile @Nullable String text;
 
     private StableItemKey(byte @NotNull [] digest) {
         ByteBuffer bytes = ByteBuffer.wrap(digest);
@@ -83,13 +84,18 @@ public final class StableItemKey {
 
     @Override
     public @NotNull String toString() {
-        byte[] digest = ByteBuffer.allocate(16)
-            .putLong(first)
-            .putLong(second)
-            .array();
-        return Base64.getUrlEncoder()
-            .withoutPadding()
-            .encodeToString(digest);
+        String result = text;
+        if (result == null) {
+            byte[] digest = ByteBuffer.allocate(16)
+                .putLong(first)
+                .putLong(second)
+                .array();
+            result = Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(digest);
+            text = result;
+        }
+        return result;
     }
 
     @Override
