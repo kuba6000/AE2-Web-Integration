@@ -20,6 +20,7 @@ import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.crafting.ICraftingProviderHelper;
 import appeng.api.networking.crafting.ICraftingRequester;
 import appeng.api.networking.security.BaseActionSource;
+import appeng.api.networking.security.PlayerSource;
 import appeng.api.util.IInterfaceViewable;
 import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
@@ -58,13 +59,26 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
         ICraftingLink link = instance.submitJob(craftID, whatLink, list, e);
         if (link != null) { // job started successfully
             boolean isMachine = e != null || list.isMachine();
+            String requester = null;
+            if (list instanceof PlayerSource) {
+                PlayerSource ps = (PlayerSource) list;
+                if (ps.player != null) {
+                    String name = ps.player.getCommandSenderName();
+                    requester = "AE2CONTROLLER".equals(name) ? "Web Panel" : name;
+                }
+            } else if (e != null) {
+                requester = "Machine (" + e.getClass().getSimpleName() + ")";
+            } else if (list != null && list.isMachine()) {
+                requester = "Machine";
+            }
             IAEMixinCallbacks.getInstance()
                 .jobStarted(
                     (ICraftingCPUCluster) (Object) instance,
                     (IAECraftingGrid) this,
                     (IAEGrid) grid,
                     isMerging,
-                    !isMachine);
+                    !isMachine,
+                    requester);
         }
         return link;
     }
