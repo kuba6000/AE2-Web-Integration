@@ -1,14 +1,29 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import java.io.IOException;
+
+import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.storage.data.IAEFluidStack;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 @Mixin(value = IAEFluidStack.class, remap = false)
 public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStack {
+
+    @Override
+    default @NotNull StableItemKey web$getStableKey() throws IOException {
+        return LegacyItemIdentity.encode(this);
+    }
+
+    @Override
+    default IAEKey web$copyIdentity() throws IOException {
+        return LegacyItemIdentity.copy(this);
+    }
 
     @Override
     default String web$getItemID() {
