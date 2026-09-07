@@ -8,9 +8,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-import com.llamalad7.mixinextras.sugar.Local;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingMedium;
@@ -32,11 +29,6 @@ public class CraftingCPUClusterMixin {
         throw new IllegalStateException("Mixin failed to apply");
     }
 
-    @Shadow
-    private void postCraftingStatusChange(final IAEStack<?> diff) {
-        throw new IllegalStateException("Mixin failed to apply");
-    }
-
     @Inject(method = "postCraftingStatusChange", at = @At("HEAD"))
     void ae2webintegration$postCraftingStatusChange(final IAEStack<?> diff, CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
@@ -53,17 +45,6 @@ public class CraftingCPUClusterMixin {
     void ae2webintegration$cancel(CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
             .jobCancelled((IAEGrid) getGrid(), (ICraftingCPUCluster) this);
-    }
-
-    @Inject(
-        method = "injectItems",
-        at = @At(
-            value = "INVOKE",
-            target = "Lappeng/api/storage/data/IAEStack;setStackSize(J)Lappeng/api/storage/data/IAEStack;",
-            shift = At.Shift.AFTER,
-            ordinal = 2))
-    void ae2webintegration$fixCpuCluster(CallbackInfoReturnable<IAEStack<?>> cir, @Local(ordinal = 1) IAEStack<?> is) {
-        postCraftingStatusChange(is);
     }
 
     @Redirect(

@@ -2,8 +2,7 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import java.util.UUID;
 
-import javax.annotation.Nonnull;
-
+import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -24,7 +23,7 @@ public class AEPlayerDataMixin implements IAEPlayerData {
     private IWorldPlayerMapping playerMapping;
 
     @Shadow
-    public int getPlayerID(@Nonnull final GameProfile profile) {
+    public int getPlayerID(@NotNull final GameProfile profile) {
         throw new UnsupportedOperationException("Mixin failed to apply.");
     }
 

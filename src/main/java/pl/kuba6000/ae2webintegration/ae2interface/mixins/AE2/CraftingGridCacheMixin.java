@@ -1,6 +1,9 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2;
 
 import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -11,6 +14,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.google.common.collect.ImmutableList;
+
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
@@ -20,11 +25,13 @@ import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.crafting.ICraftingProviderHelper;
 import appeng.api.networking.crafting.ICraftingRequester;
 import appeng.api.networking.security.BaseActionSource;
+import appeng.api.storage.data.IAEStack;
 import appeng.api.util.IInterfaceViewable;
 import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
@@ -37,6 +44,27 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
     @Final
     @Shadow
     private IGrid grid;
+
+    @Shadow
+    @Final
+    protected Map<IAEStack<?>, ImmutableList<ICraftingPatternDetails>> craftableItems;
+
+    @Shadow
+    @Final
+    protected Map<IAEStack<?>, List<ICraftingMedium>> emitableMediums;
+
+    @Shadow
+    protected static int pauseRebuilds;
+
+    @Shadow
+    protected static Set<CraftingGridCache> rebuildNeeded;
+
+    public boolean web$isCurrentlyCraftable(IAEKey key) {
+        // Reading the storage monitor here can refresh the entire catalogue after an item transfer.
+        return key instanceof IAEStack && pauseRebuilds == 0
+            && !rebuildNeeded.contains((CraftingGridCache) (Object) this)
+            && (craftableItems.containsKey(key) || emitableMediums.containsKey(key));
+    }
 
     @Unique
     private final IdentityHashMap<ICraftingMedium, IInterfaceViewable> web$mediumToViewable = new IdentityHashMap<>();
