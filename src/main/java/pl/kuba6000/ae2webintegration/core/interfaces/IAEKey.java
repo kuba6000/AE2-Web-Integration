@@ -6,6 +6,7 @@ import org.jetbrains.annotations.NotNull;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
 
+/** Native resource key: equals/hashCode identify the exact variant independently of quantity or crafting state. */
 public interface IAEKey {
 
     /** Stable identity from canonical native data, independent of quantity or craftability. */
