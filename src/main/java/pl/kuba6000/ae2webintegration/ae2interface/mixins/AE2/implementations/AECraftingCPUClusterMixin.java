@@ -1,5 +1,9 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import net.minecraft.world.World;
+
+import org.jetbrains.annotations.NotNull;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -7,6 +11,7 @@ import org.spongepowered.asm.mixin.Unique;
 import appeng.api.networking.crafting.CraftingItemList;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.storage.data.IItemList;
+import appeng.api.util.WorldCoord;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import appeng.util.item.IAEStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -18,10 +23,22 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
     @Shadow
+    @Final
+    protected WorldCoord min;
+
+    @Shadow
+    protected abstract World getWorld();
+
+    @Shadow
     private IItemList<IAEStack<?>> waitingFor;
 
     @Unique
     private int web$internalID = -1;
+
+    @Override
+    public @NotNull String web$getId() {
+        return "ae2:" + getWorld().provider.dimensionId + ":" + min.x + ":" + min.y + ":" + min.z;
+    }
 
     @Override
     public void web$setInternalID(int id) {
