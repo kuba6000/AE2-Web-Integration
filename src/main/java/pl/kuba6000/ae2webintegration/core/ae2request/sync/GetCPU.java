@@ -31,6 +31,8 @@ public class GetCPU extends ISyncedRequest {
         public long timeElapsed = 0L;
     }
 
+    // Assigned by successful init() before the request is submitted.
+    @SuppressWarnings("NotNullFieldNotInitialized")
     private @NotNull StableKey cpuId;
 
     @Override
