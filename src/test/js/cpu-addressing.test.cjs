@@ -14,6 +14,11 @@ test(page + ': duplicate CPU names remain separate and requests use stable IDs',
     context.displayCPUList();
     const rendered = elements.get('terminalCPUList').innerHTML;
     assert.equal((rendered.match(/<button/g) || []).length, 2);
+    const labels = html => [...html.matchAll(/<button\b[^>]*>([^<]*)/g)].map(match => match[1]);
+    assert.deepEqual(labels(rendered), ['Main &lt;CPU&gt;', 'Main &lt;CPU&gt;']);
+    context.currentJob.bytesTotal = 16;
+    context.updateCPUListForJob();
+    assert.deepEqual(labels(elements.get('terminalCPUListForJob').innerHTML), ['Main &lt;CPU&gt;', 'Main &lt;CPU&gt;']);
     assert.ok(rendered.includes('Main &lt;CPU&gt;'));
     assert.ok(!rendered.includes('Main <CPU>'));
     context.selectCPU({ name: second });

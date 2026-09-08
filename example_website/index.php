@@ -608,28 +608,14 @@
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         })[character]);
     }
-    function cpuDisplayLabels() {
-        const counts = new Map();
-        const numbers = new Map();
-        const labels = new Map();
-        for (const cpu of Object.values(globalCPUList))
-            counts.set(cpu.name, (counts.get(cpu.name) || 0) + 1);
-        for (const [id, cpu] of Object.entries(globalCPUList)) {
-            const number = (numbers.get(cpu.name) || 0) + 1;
-            numbers.set(cpu.name, number);
-            labels.set(id, cpu.name + (counts.get(cpu.name) > 1 ? ' (' + number + ')' : ''));
-        }
-        return labels;
-    }
     function displayCPUList(){
-        const labels = cpuDisplayLabels();
         let html = "";
         for (let key in globalCPUList){
             let cluster = globalCPUList[key];
             html += "<button onclick='selectCPU(this);' name='" + escapeCPUText(key) + "' ";
             if (selectedCPU == key)
                 html += "class='selected'";
-            html += ">" + escapeCPUText(labels.get(key));
+            html += ">" + escapeCPUText(cluster.name);
             if (cluster['finalOutput'])
                 html += " - " + formatItemName(cluster['finalOutput'], false) + " x" + cluster['finalOutput']['quantity'];
             html += "</button>";
@@ -665,9 +651,9 @@
             let html = "";
             if (data['finalOutput'])
                 document.getElementById("terminalCPUHeaderText").innerHTML =
-                    escapeCPUText(cpuDisplayLabels().get(selectedCPU)) + ": Crafting " + formatItemName(data['finalOutput'], false) + " x" + data['finalOutput']['quantity'];
+                    escapeCPUText(globalCPUList[cpuId].name) + ": Crafting " + formatItemName(data['finalOutput'], false) + " x" + data['finalOutput']['quantity'];
             else
-                document.getElementById("terminalCPUHeaderText").innerHTML = escapeCPUText(cpuDisplayLabels().get(selectedCPU)) + ": Idle";
+                document.getElementById("terminalCPUHeaderText").innerHTML = escapeCPUText(globalCPUList[cpuId].name) + ": Idle";
             let hasTrackingInfo = data['hasTrackingInfo'];
             if (data['items'] && data['items'].length > 0) {
                 document.getElementById("cancelJobOnCPUButton").style.display = 'block';
@@ -823,7 +809,6 @@
     }
     function updateCPUListForJob() {
         if (currentJob.bytesTotal < 0) return;
-        const labels = cpuDisplayLabels();
         let html = "";
         // Empty means a new plan may select a default; null requires a new user choice after invalidation.
         if (cpuForJob && (!globalCPUList[cpuForJob] || !isValidCPUForOrder(globalCPUList[cpuForJob])))
@@ -840,7 +825,7 @@
                 html += "mergable";
             if (cpuForJob == key)
                 html += " selected";
-            html += "'>" + escapeCPUText(labels.get(key));
+            html += "'>" + escapeCPUText(cluster.name);
             if (cluster['finalOutput'])
                 html += " - " + formatItemName(cluster['finalOutput'], false) + " x" + cluster['finalOutput']['quantity'];
             if (cluster['usedStorage'] && cluster['usedStorage'] != -1){
