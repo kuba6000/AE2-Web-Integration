@@ -1,7 +1,5 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
-import java.io.IOException;
-
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
@@ -20,12 +18,12 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 public abstract class AEItemMixin implements IAEKey {
 
     @Override
-    public @NotNull StableKey web$getStableKey() throws IOException {
-        return NativeItemIdentity.getStableKey((AEKey) (Object) this);
+    public @NotNull StableKey web$getKey() {
+        return NativeItemIdentity.getKey((AEKey) (Object) this);
     }
 
     @Override
-    public IAEKey web$copyIdentity() throws IOException {
+    public IAEKey web$copyIdentity() {
         return (IAEKey) NativeItemIdentity.copy((AEKey) (Object) this);
     }
 

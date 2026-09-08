@@ -39,7 +39,7 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
     private @Nullable StableKey web$stableKey;
 
     @Override
-    public @NotNull StableKey web$getId() {
+    public @NotNull StableKey web$getKey() {
         if (web$stableKey == null) {
             web$stableKey = StableKey.create(sink -> {
                 if (uniqueId != null) {

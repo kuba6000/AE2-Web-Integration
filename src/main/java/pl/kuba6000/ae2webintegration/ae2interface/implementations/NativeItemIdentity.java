@@ -1,7 +1,5 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
-import java.io.IOException;
-
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.nbt.CompoundTag;
@@ -20,7 +18,7 @@ public final class NativeItemIdentity {
 
     private NativeItemIdentity() {}
 
-    public static @NotNull StableKey getStableKey(@NotNull AEKey key) throws IOException {
+    public static @NotNull StableKey getKey(@NotNull AEKey key) {
         if (key instanceof AEItemKey item) {
             checkPersistent(
                 item.getReadOnlyStack()
@@ -46,7 +44,7 @@ public final class NativeItemIdentity {
         });
     }
 
-    public static @NotNull AEKey copy(@NotNull AEKey key) throws IOException {
+    public static @NotNull AEKey copy(@NotNull AEKey key) {
         // Built-in AE keys retain immutable identity under AE2's read-only tag/stack contract.
         if (key instanceof AEItemKey || key instanceof AEFluidKey) return key;
         HolderLookup.Provider registries = registries();
@@ -72,9 +70,9 @@ public final class NativeItemIdentity {
         }
     }
 
-    private static @NotNull HolderLookup.Provider registries() throws IOException {
+    private static @NotNull HolderLookup.Provider registries() {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null) throw new IOException("No current server for native identity");
+        if (server == null) throw new IllegalStateException("No current server for native identity");
         return server.registryAccess();
     }
 
