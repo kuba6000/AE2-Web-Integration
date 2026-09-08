@@ -10,7 +10,7 @@ import org.jetbrains.annotations.NotNull;
 
 import com.google.common.hash.PrimitiveSink;
 
-import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Streams typed native data without allocating a complete canonical byte representation. */
 final class CanonicalNbt {
@@ -54,7 +54,7 @@ final class CanonicalNbt {
                 writeLong(sink, Double.doubleToLongBits(((NumericTag) tag).getAsDouble()));
                 break;
             case Tag.TAG_STRING:
-                StableItemKey.writeText(sink, tag.getAsString());
+                StableKey.writeText(sink, tag.getAsString());
                 break;
             case Tag.TAG_BYTE_ARRAY:
                 byte[] bytes = ((ByteArrayTag) tag).getAsByteArray();
@@ -85,7 +85,7 @@ final class CanonicalNbt {
                 Collections.sort(names);
                 writeInt(sink, names.size());
                 for (String name : names) {
-                    StableItemKey.writeText(sink, name);
+                    StableKey.writeText(sink, name);
                     writeTag(compound.get(name), sink, depth + 1);
                 }
                 break;

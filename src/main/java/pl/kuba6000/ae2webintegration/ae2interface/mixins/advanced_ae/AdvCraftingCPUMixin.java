@@ -1,14 +1,23 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.advanced_ae;
 
-import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
+import java.util.UUID;
 
+import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
+import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPUCluster;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -16,6 +25,43 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = AdvCraftingCPU.class, remap = false)
 public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
+
+    @Shadow
+    @Final
+    @Nullable
+    private UUID uniqueId;
+
+    @Shadow
+    @Final
+    private AdvCraftingCPUCluster cluster;
+
+    @Unique
+    private @Nullable StableKey web$stableKey;
+
+    @Override
+    public @NotNull StableKey web$getKey() {
+        if (web$stableKey == null) {
+            web$stableKey = StableKey.create(sink -> {
+                if (uniqueId != null) {
+                    sink.putLong(uniqueId.getMostSignificantBits())
+                        .putLong(uniqueId.getLeastSignificantBits());
+                } else {
+                    // The free-capacity CPU has no UUID and is recreated as available storage changes.
+                    var position = cluster.getBoundsMin();
+                    StableKey.writeText(
+                        sink,
+                        cluster.getLevel()
+                            .dimension()
+                            .location()
+                            .toString());
+                    sink.putInt(position.getX())
+                        .putInt(position.getY())
+                        .putInt(position.getZ());
+                }
+            });
+        }
+        return web$stableKey;
+    }
 
     @Override
     public void web$setInternalID(int id) {
