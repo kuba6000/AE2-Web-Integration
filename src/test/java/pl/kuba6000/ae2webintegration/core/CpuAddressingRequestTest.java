@@ -31,6 +31,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPUList;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.identity.CpuIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -49,8 +50,16 @@ class CpuAddressingRequestTest {
 
     @Test
     void equallyNamedCpusAreListedIndividuallyByAddress() {
-        TestCpu first = new TestCpu("ae2:0:10:20:30", "Main CPU", 64);
-        TestCpu second = new TestCpu("ae2:0:40:20:30", "Main CPU", 128);
+        TestCpu first = new TestCpu(
+            CpuIdentity.ae2("0", 10, 20, 30)
+                .toString(),
+            "Main CPU",
+            64);
+        TestCpu second = new TestCpu(
+            CpuIdentity.ae2("0", 40, 20, 30)
+                .toString(),
+            "Main CPU",
+            128);
         JsonObject response = request(new GetCPUList(), new TestGrid(GRID, first, second), "");
         assertStatus("OK", response);
         JsonObject cpus = response.getAsJsonObject("data");
@@ -79,8 +88,16 @@ class CpuAddressingRequestTest {
 
     @Test
     void selectionSurvivesRenameReorderAndReconstructedObjects() {
-        TestCpu first = new TestCpu("ae2:0:10:20:30", "Main CPU", 64);
-        TestCpu second = new TestCpu("ae2:0:40:20:30", "Main CPU", 128);
+        TestCpu first = new TestCpu(
+            CpuIdentity.ae2("0", 10, 20, 30)
+                .toString(),
+            "Main CPU",
+            64);
+        TestCpu second = new TestCpu(
+            CpuIdentity.ae2("0", 40, 20, 30)
+                .toString(),
+            "Main CPU",
+            128);
         TestGrid grid = new TestGrid(GRID, first, second);
         assertEquals(
             64,
@@ -94,7 +111,11 @@ class CpuAddressingRequestTest {
             request(new GetCPU(), grid, "&cpu=" + first.id).getAsJsonObject("data")
                 .get("size")
                 .getAsLong());
-        TestCpu restored = new TestCpu(first.id, "Renamed", 256);
+        TestCpu restored = new TestCpu(
+            CpuIdentity.ae2("0", 10, 20, 30)
+                .toString(),
+            "Renamed",
+            256);
         grid.cpus = new LinkedHashSet<>(Arrays.asList(second, restored));
         assertEquals(
             256,
@@ -105,8 +126,16 @@ class CpuAddressingRequestTest {
 
     @Test
     void cancellationTargetsOnlyTheSelectedAddress() {
-        TestCpu first = new TestCpu("ae2:0:10:20:30", "Main CPU", 64);
-        TestCpu second = new TestCpu("ae2:0:40:20:30", "Main CPU", 128);
+        TestCpu first = new TestCpu(
+            CpuIdentity.ae2("0", 10, 20, 30)
+                .toString(),
+            "Main CPU",
+            64);
+        TestCpu second = new TestCpu(
+            CpuIdentity.ae2("0", 40, 20, 30)
+                .toString(),
+            "Main CPU",
+            128);
         first.busy = second.busy = true;
         TestGrid grid = new TestGrid(GRID, first, second);
         assertStatus("OK", request(new CancelCPU(), grid, "&cpu=" + first.id));
@@ -117,8 +146,16 @@ class CpuAddressingRequestTest {
 
     @Test
     void explicitSubmissionTargetsItsAddressAndAbsentSelectionUsesAutomaticChoice() {
-        TestCpu first = new TestCpu("ae2:0:10:20:30", "Main CPU", 64);
-        TestCpu second = new TestCpu("ae2:0:40:20:30", "Main CPU", 128);
+        TestCpu first = new TestCpu(
+            CpuIdentity.ae2("0", 10, 20, 30)
+                .toString(),
+            "Main CPU",
+            64);
+        TestCpu second = new TestCpu(
+            CpuIdentity.ae2("0", 40, 20, 30)
+                .toString(),
+            "Main CPU",
+            128);
         TestGrid grid = new TestGrid(GRID, first, second);
         assertStatus("OK", submit(grid, "&cpu=" + first.id));
         assertSame(first, grid.submitted);
@@ -129,9 +166,14 @@ class CpuAddressingRequestTest {
 
     @Test
     void missingExplicitAddressAndOldDisplayNameNeverSelectAnotherCpu() {
-        TestCpu cpu = new TestCpu("ae2:0:10:20:30", "Main", 64);
+        TestCpu cpu = new TestCpu(
+            CpuIdentity.ae2("0", 10, 20, 30)
+                .toString(),
+            "Main",
+            64);
         TestGrid grid = new TestGrid(GRID, cpu);
-        for (String invalid : new String[] { "ae2:0:40:20:30", "Main", "" }) {
+        for (String invalid : new String[] { CpuIdentity.ae2("0", 40, 20, 30)
+            .toString(), "Main", "" }) {
             assertStatus("CPU_NOT_FOUND", request(new GetCPU(), grid, "&cpu=" + invalid));
             assertStatus("CPU_NOT_FOUND", request(new CancelCPU(), grid, "&cpu=" + invalid));
             assertStatus("CPU_NOT_FOUND", submit(grid, "&cpu=" + invalid));
@@ -144,7 +186,11 @@ class CpuAddressingRequestTest {
 
     @Test
     void addressFromAnotherGridDoesNotResolve() {
-        TestCpu remote = new TestCpu("ae2:0:10:20:30", "Main", 64);
+        TestCpu remote = new TestCpu(
+            CpuIdentity.ae2("0", 10, 20, 30)
+                .toString(),
+            "Main",
+            64);
         TestGrid selected = new TestGrid(GRID);
         TestGrid other = new TestGrid(GRID + 1, remote);
         for (ISyncedRequest request : new ISyncedRequest[] { new GetCPU(), new CancelCPU(), new Job() }) {
@@ -164,9 +210,17 @@ class CpuAddressingRequestTest {
 
     @Test
     void duplicateAddressesAreLoggedWithoutDroppingTheRestOfTheList() {
-        TestCpu first = new TestCpu("ae2:0:10:20:30", "First", 64);
+        TestCpu first = new TestCpu(
+            CpuIdentity.ae2("0", 10, 20, 30)
+                .toString(),
+            "First",
+            64);
         TestCpu second = new TestCpu(first.id, "Second", 128);
-        TestCpu third = new TestCpu("ae2:0:40:20:30", "Third", 256);
+        TestCpu third = new TestCpu(
+            CpuIdentity.ae2("0", 40, 20, 30)
+                .toString(),
+            "Third",
+            256);
         TestGrid grid = new TestGrid(GRID, first, second, third);
         ArrayList<String> errors = new ArrayList<>();
         Logger logger = (Logger) LogManager.getLogger("ae2webintegration");

@@ -24,7 +24,7 @@ class ItemIdentityRegistryTest {
                 return this;
             }
         };
-        StableItemKey key = registry.remember(grid, immutable);
+        StableKey key = registry.remember(grid, immutable);
         assertSame(immutable, registry.resolve(key));
         assertEquals(1, immutable.encodings);
         assertEquals(key, registry.remember(grid, immutable));
@@ -36,7 +36,7 @@ class ItemIdentityRegistryTest {
         IAEGrid firstGrid = grid();
         IAEGrid secondGrid = grid();
         Resource first = new Resource("iron", true);
-        StableItemKey key = registry.remember(firstGrid, first);
+        StableKey key = registry.remember(firstGrid, first);
         IAEKey copy = registry.resolve(key);
         Resource nextPoll = new Resource("iron", false);
         assertEquals(key, registry.remember(secondGrid, nextPoll));
@@ -58,9 +58,9 @@ class ItemIdentityRegistryTest {
     void refreshingAListingReusesItsIdentitiesAndReleasesRemovedResources() throws Exception {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid grid = grid();
-        StableItemKey iron = registry.remember(grid, new Resource("iron", true));
+        StableKey iron = registry.remember(grid, new Resource("iron", true));
         String ironToken = iron.toString();
-        StableItemKey gold = registry.remember(grid, new Resource("gold", true));
+        StableKey gold = registry.remember(grid, new Resource("gold", true));
         WeakReference<IAEKey> removed = new WeakReference<>(registry.resolve(gold));
         Resource nextPoll = new Resource("iron", false);
         ItemIdentityRegistry.Listing listing = registry.beginListing(grid);
@@ -81,7 +81,7 @@ class ItemIdentityRegistryTest {
     void unfinishedListingKeepsThePreviouslyPublishedResources() throws Exception {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid grid = grid();
-        StableItemKey iron = registry.remember(grid, new Resource("iron", true));
+        StableKey iron = registry.remember(grid, new Resource("iron", true));
         registry.beginListing(grid)
             .remember(new Resource("gold", true));
         System.gc();
@@ -92,7 +92,7 @@ class ItemIdentityRegistryTest {
     @Test
     void unreachableGridDoesNotKeepItsIdentitiesAlive() throws Exception {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
-        StableItemKey key = StableItemKey.create(sink -> sink.putBytes("iron".getBytes(StandardCharsets.UTF_8)));
+        StableKey key = StableKey.create(sink -> sink.putBytes("iron".getBytes(StandardCharsets.UTF_8)));
         WeakReference<IAEGrid> owner = rememberTemporaryGrid(registry);
         WeakReference<IAEKey> identity = new WeakReference<>(registry.resolve(key));
         awaitCollected(owner, () -> registry.resolve(key));
@@ -104,7 +104,7 @@ class ItemIdentityRegistryTest {
     void gridAndRegistryClearDoNotChangeDeterministicIds() throws Exception {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid grid = grid();
-        StableItemKey key = registry.remember(grid, new Resource("iron", true));
+        StableKey key = registry.remember(grid, new Resource("iron", true));
         registry.clear();
         assertNull(registry.resolve(key));
         assertEquals(key, registry.remember(grid, new Resource("iron", false)));
@@ -115,7 +115,7 @@ class ItemIdentityRegistryTest {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid first = grid();
         IAEGrid second = grid();
-        StableItemKey key = registry.remember(first, new Resource("first", false, "same bytes"));
+        StableKey key = registry.remember(first, new Resource("first", false, "same bytes"));
         assertThrows(
             ItemIdentityRegistry.Ambiguous.class,
             () -> registry.remember(second, new Resource("second", false, "same bytes")));
@@ -188,9 +188,9 @@ class ItemIdentityRegistryTest {
         }
 
         @Override
-        public StableItemKey web$getStableKey() {
+        public StableKey web$getStableKey() {
             encodings++;
-            return StableItemKey.create(sink -> sink.putBytes(encodedName.getBytes(StandardCharsets.UTF_8)));
+            return StableKey.create(sink -> sink.putBytes(encodedName.getBytes(StandardCharsets.UTF_8)));
         }
 
         @Override

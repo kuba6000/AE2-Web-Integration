@@ -9,7 +9,7 @@ import java.util.Set;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.JSON_DetailedItem;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
-import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -64,7 +64,7 @@ public class GetItems extends ISyncedRequest {
         detailedItem.craftable = key.web$isCraftable(grid);
 
         try {
-            StableItemKey identity = listing.remember(key);
+            StableKey identity = listing.remember(key);
             detailedItem.itemKey = identity.toString();
 
         } catch (ItemIdentityRegistry.Ambiguous e) {

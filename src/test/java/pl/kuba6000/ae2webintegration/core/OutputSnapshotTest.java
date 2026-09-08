@@ -21,7 +21,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPUList;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
-import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -66,7 +66,7 @@ class OutputSnapshotTest {
         assertFalse(json.has("hashcode"));
         assertNotNull(
             AE2Controller.itemIdentities.resolve(
-                StableItemKey.parse(
+                StableKey.parse(
                     json.get("itemKey")
                         .getAsString())));
         AE2Controller.itemIdentities.beginListing(grid)
@@ -289,11 +289,11 @@ class OutputSnapshotTest {
             return equals(key);
         }
 
-        public StableItemKey web$getStableKey() throws IOException {
+        public StableKey web$getStableKey() throws IOException {
             available();
             if (brokenIdentity) throw new IOException("Broken native codec");
             if (unsupportedIdentity) throw new UnsupportedOperationException("Unsupported native identity");
-            return StableItemKey.create(sink -> sink.putBytes("resource".getBytes(StandardCharsets.UTF_8)));
+            return StableKey.create(sink -> sink.putBytes("resource".getBytes(StandardCharsets.UTF_8)));
         }
 
         public IAEKey web$copyIdentity() {

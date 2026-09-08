@@ -20,17 +20,17 @@ public final class ItemIdentityRegistry {
     private final Cache<IAEGrid, Set<Entry>> owners = CacheBuilder.newBuilder()
         .weakKeys()
         .build();
-    private final Cache<StableItemKey, Entry> entries = CacheBuilder.newBuilder()
+    private final Cache<StableKey, Entry> entries = CacheBuilder.newBuilder()
         .weakValues()
         .build();
     private final Cache<IAEKey, Entry> reverse = CacheBuilder.newBuilder()
         .weakValues()
         .build();
     // Remember observed conflicts until world teardown, without retaining native resource data.
-    private final Set<StableItemKey> ambiguous = new HashSet<>();
+    private final Set<StableKey> ambiguous = new HashSet<>();
 
     /** Retain an output identity until the grid next publishes its complete item list. */
-    public @NotNull StableItemKey remember(@NotNull IAEGrid grid, @NotNull IAEKey resource) throws IOException {
+    public @NotNull StableKey remember(@NotNull IAEGrid grid, @NotNull IAEKey resource) throws IOException {
         cleanUp();
         Entry entry = findOrCreate(resource);
         owners.asMap()
@@ -45,7 +45,7 @@ public final class ItemIdentityRegistry {
         return new Listing(grid);
     }
 
-    public @Nullable IAEKey resolve(@NotNull StableItemKey key) {
+    public @Nullable IAEKey resolve(@NotNull StableKey key) {
         cleanUp();
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry entry = entries.getIfPresent(key);
@@ -66,7 +66,7 @@ public final class ItemIdentityRegistry {
             return remembered;
         }
         IAEKey copy = resource.web$copyIdentity();
-        StableItemKey key = copy.web$getStableKey();
+        StableKey key = copy.web$getStableKey();
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry existing = entries.getIfPresent(key);
         if (existing != null) {
@@ -102,7 +102,7 @@ public final class ItemIdentityRegistry {
             this.grid = grid;
         }
 
-        public @NotNull StableItemKey remember(@NotNull IAEKey resource) throws IOException {
+        public @NotNull StableKey remember(@NotNull IAEKey resource) throws IOException {
             requireOpen();
             Entry entry = findOrCreate(resource);
             collected.add(entry);
@@ -133,10 +133,10 @@ public final class ItemIdentityRegistry {
 
     private static final class Entry {
 
-        private final StableItemKey key;
+        private final StableKey key;
         private final IAEKey identity;
 
-        private Entry(@NotNull StableItemKey key, @NotNull IAEKey identity) {
+        private Entry(@NotNull StableKey key, @NotNull IAEKey identity) {
             this.key = key;
             this.identity = identity;
         }

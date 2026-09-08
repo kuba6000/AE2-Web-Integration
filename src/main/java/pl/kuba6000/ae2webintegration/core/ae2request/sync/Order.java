@@ -8,7 +8,7 @@ import java.util.concurrent.Future;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
-import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -18,7 +18,7 @@ import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 public class Order extends ISyncedRequest {
 
-    private StableItemKey requestedKey;
+    private StableKey requestedKey;
     private long quantity;
 
     @Override
@@ -28,7 +28,7 @@ public class Order extends ISyncedRequest {
             return false;
         }
         try {
-            requestedKey = StableItemKey.parse(getParams.get("itemKey"));
+            requestedKey = StableKey.parse(getParams.get("itemKey"));
         } catch (IllegalArgumentException e) {
             deny("BAD_PARAM");
             return false;
