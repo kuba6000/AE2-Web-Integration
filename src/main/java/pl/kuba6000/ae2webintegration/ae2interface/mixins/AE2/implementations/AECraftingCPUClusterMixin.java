@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 import net.minecraft.world.World;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -14,6 +15,8 @@ import appeng.api.storage.data.IItemList;
 import appeng.api.util.WorldCoord;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import appeng.util.item.IAEStackList;
+import pl.kuba6000.ae2webintegration.core.identity.CpuIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -35,9 +38,15 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     @Unique
     private int web$internalID = -1;
 
+    @Unique
+    private @Nullable StableKey web$stableKey;
+
     @Override
     public @NotNull String web$getId() {
-        return "ae2:" + getWorld().provider.dimensionId + ":" + min.x + ":" + min.y + ":" + min.z;
+        if (web$stableKey == null) {
+            web$stableKey = CpuIdentity.ae2(Integer.toString(getWorld().provider.dimensionId), min.x, min.y, min.z);
+        }
+        return web$stableKey.toString();
     }
 
     @Override
