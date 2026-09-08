@@ -14,7 +14,7 @@ public final class NativeItemIdentity {
 
     private NativeItemIdentity() {}
 
-    public static @NotNull StableKey getStableKey(@NotNull AEKey key) {
+    public static @NotNull StableKey getKey(@NotNull AEKey key) {
         CompoundTag tag = key.toTagGeneric();
         // The native codec allocates its tag first. Bounds cover only the subsequent traversal.
         return StableKey.create(sink -> {
