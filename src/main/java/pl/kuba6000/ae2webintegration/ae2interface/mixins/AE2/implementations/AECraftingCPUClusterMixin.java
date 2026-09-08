@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.networking.crafting.ICraftingCPU;
@@ -15,6 +16,15 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
 public class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
+
+    @Override
+    public @NotNull String web$getId() {
+        CraftingCPUCluster cluster = (CraftingCPUCluster) (Object) this;
+        var position = cluster.getBoundsMin();
+        return "ae2:" + cluster.getLevel()
+            .dimension()
+            .location() + ":" + position.getX() + ":" + position.getY() + ":" + position.getZ();
+    }
 
     @Override
     public void web$setInternalID(int id) {

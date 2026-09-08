@@ -1,8 +1,15 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.advanced_ae;
 
-import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
+import java.util.UUID;
 
+import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
+import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPUCluster;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.stacks.AEKey;
@@ -16,6 +23,26 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = AdvCraftingCPU.class, remap = false)
 public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
+
+    @Shadow
+    @Final
+    @Nullable
+    private UUID uniqueId;
+
+    @Shadow
+    @Final
+    private AdvCraftingCPUCluster cluster;
+
+    @Override
+    public @NotNull String web$getId() {
+        if (uniqueId != null) return "advanced_ae:" + uniqueId;
+
+        // The free-capacity CPU has no UUID and is recreated as available storage changes.
+        var position = cluster.getBoundsMin();
+        return "advanced_ae:free:" + cluster.getLevel()
+            .dimension()
+            .location() + ":" + position.getX() + ":" + position.getY() + ":" + position.getZ();
+    }
 
     @Override
     public void web$setInternalID(int id) {
