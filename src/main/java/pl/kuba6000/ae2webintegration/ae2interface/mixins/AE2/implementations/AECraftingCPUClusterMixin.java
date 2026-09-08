@@ -11,7 +11,6 @@ import appeng.api.stacks.KeyCounter;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
-import pl.kuba6000.ae2webintegration.core.identity.CpuIdentity;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -29,14 +28,18 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
         if (web$stableKey == null) {
             CraftingCPUCluster cluster = (CraftingCPUCluster) (Object) this;
             var position = cluster.getBoundsMin();
-            web$stableKey = CpuIdentity.ae2(
-                cluster.getLevel()
-                    .dimension()
-                    .location()
-                    .toString(),
-                position.getX(),
-                position.getY(),
-                position.getZ());
+            web$stableKey = StableKey.create(sink -> {
+                StableKey.writeText(sink, "cpu:ae2");
+                StableKey.writeText(
+                    sink,
+                    cluster.getLevel()
+                        .dimension()
+                        .location()
+                        .toString());
+                sink.putInt(position.getX())
+                    .putInt(position.getY())
+                    .putInt(position.getZ());
+            });
         }
         return web$stableKey.toString();
     }
