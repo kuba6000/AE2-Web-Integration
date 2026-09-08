@@ -7,7 +7,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 
 public class CancelCPU extends ISyncedRequest {
 
-    private String cpuName;
+    private String cpuId;
 
     @Override
     boolean init(Map<String, String> getParams) {
@@ -15,7 +15,7 @@ public class CancelCPU extends ISyncedRequest {
             noParam("cpu");
             return false;
         }
-        cpuName = getParams.get("cpu");
+        cpuId = getParams.get("cpu");
         return true;
     }
 
@@ -25,8 +25,12 @@ public class CancelCPU extends ISyncedRequest {
             deny("GRID_NOT_FOUND");
             return;
         }
-        ICraftingCPUCluster cluster = GetCPUList.getCPUList(grid.web$getCraftingGrid())
-            .get(cpuName);
+        Map<String, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(grid.web$getCraftingGrid());
+        if (cpus == null) {
+            deny("CPU_ID_CONFLICT");
+            return;
+        }
+        ICraftingCPUCluster cluster = cpus.get(cpuId);
         if (cluster == null) {
             deny("CPU_NOT_FOUND");
             return;

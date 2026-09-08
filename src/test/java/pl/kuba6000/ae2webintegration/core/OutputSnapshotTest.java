@@ -142,6 +142,8 @@ class OutputSnapshotTest {
                 switch (method.getName()) {
                     case "web$getFinalOutput":
                         return output;
+                    case "web$getId":
+                        return "ae2:0:1:2:3";
                     case "web$getName":
                         return "cpu";
                     case "web$isBusy":
@@ -197,12 +199,12 @@ class OutputSnapshotTest {
         AE2Controller.AE2Interface = ae;
         try {
             for (ISyncedRequest request : new ISyncedRequest[] { new GetCPUList(), new GetCPU() }) {
-                assertTrue(request.init(TestGridFixtures.context(-1, "grid=990124&cpu=cpu")));
+                assertTrue(request.init(TestGridFixtures.context(-1, "grid=990124&cpu=ae2:0:1:2:3")));
                 request.runOnServerThread(ae);
                 JsonObject data = JsonParser.parseString(request.getJSON())
                     .getAsJsonObject()
                     .getAsJsonObject("data");
-                if (data.has("cpu")) data = data.getAsJsonObject("cpu");
+                if (data.has("ae2:0:1:2:3")) data = data.getAsJsonObject("ae2:0:1:2:3");
                 JsonObject snapshot = data.getAsJsonObject("finalOutput");
                 assertEquals(
                     12,

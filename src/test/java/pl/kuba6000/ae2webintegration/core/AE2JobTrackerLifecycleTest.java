@@ -297,6 +297,10 @@ class AE2JobTrackerLifecycleTest {
 
     private static final class EqualCpu implements ICraftingCPUCluster {
 
+        public String web$getId() {
+            return "test-cpu";
+        }
+
         private IAEGenericStack output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 5);
         private final HashMap<IAEKey, Long> waiting = new HashMap<>();
         private final IStackList waitingList = new IStackList() {

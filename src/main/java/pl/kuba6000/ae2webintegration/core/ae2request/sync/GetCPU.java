@@ -28,7 +28,7 @@ public class GetCPU extends ISyncedRequest {
         public long timeElapsed = 0L;
     }
 
-    String cpuName = null;
+    String cpuId = null;
 
     @Override
     boolean init(Map<String, String> getParams) {
@@ -36,7 +36,7 @@ public class GetCPU extends ISyncedRequest {
             noParam("cpu");
             return false;
         }
-        cpuName = getParams.get("cpu");
+        cpuId = getParams.get("cpu");
         return true;
     }
 
@@ -48,8 +48,12 @@ public class GetCPU extends ISyncedRequest {
         }
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
 
-        ICraftingCPUCluster cpu = GetCPUList.getCPUList(craftingGrid)
-            .get(cpuName);
+        Map<String, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
+        if (cpus == null) {
+            deny("CPU_ID_CONFLICT");
+            return;
+        }
+        ICraftingCPUCluster cpu = cpus.get(cpuId);
         if (cpu == null) {
             deny("CPU_NOT_FOUND");
             return;

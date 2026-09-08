@@ -50,7 +50,7 @@ public class Job extends ISyncedRequest {
 
     private ERequestType type = null;
     private int jobID;
-    private String cpuName;
+    private String cpuId;
 
     @Override
     boolean init(Map<String, String> getParams) {
@@ -67,7 +67,7 @@ public class Job extends ISyncedRequest {
         if (getParams.containsKey("cancel")) this.type = ERequestType.CANCEL;
         else if (getParams.containsKey("submit")) {
             this.type = ERequestType.SUBMIT;
-            if (getParams.containsKey("cpu")) this.cpuName = getParams.get("cpu");
+            if (getParams.containsKey("cpu")) this.cpuId = getParams.get("cpu");
         } else this.type = ERequestType.CHECK;
         return true;
     }
@@ -136,9 +136,13 @@ public class Job extends ISyncedRequest {
                 try {
                     IAECraftingJob craftingJob = job.get();
                     ICraftingCPUCluster target = null;
-                    if (cpuName != null) {
-                        target = GetCPUList.getCPUList(craftingGrid)
-                            .get(cpuName);
+                    if (cpuId != null) {
+                        Map<String, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
+                        if (cpus == null) {
+                            deny("CPU_ID_CONFLICT");
+                            return;
+                        }
+                        target = cpus.get(cpuId);
                         if (target == null) {
                             deny("CPU_NOT_FOUND");
                             return;
