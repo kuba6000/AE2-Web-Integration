@@ -8,7 +8,7 @@ public interface ICraftingCPUCluster {
 
     /** Stable address within a saved world, independent of display name and current crafting job. */
     @NotNull
-    StableKey web$getId();
+    StableKey web$getKey();
 
     void web$setInternalID(int id);
 

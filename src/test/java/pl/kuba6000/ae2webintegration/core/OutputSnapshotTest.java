@@ -141,7 +141,7 @@ class OutputSnapshotTest {
                 switch (method.getName()) {
                     case "web$getFinalOutput":
                         return output;
-                    case "web$getId":
+                    case "web$getKey":
                         return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
                     case "web$getName":
                         return "cpu";
@@ -288,7 +288,7 @@ class OutputSnapshotTest {
             return equals(key);
         }
 
-        public StableKey web$getStableKey() {
+        public StableKey web$getKey() {
             available();
             if (brokenIdentity) throw new IllegalStateException("Broken native codec");
             if (unsupportedIdentity) throw new UnsupportedOperationException("Unsupported native identity");

@@ -9,7 +9,7 @@ public interface IAEKey {
 
     /** Stable identity from canonical native data, independent of quantity or craftability. */
     @NotNull
-    StableKey web$getStableKey();
+    StableKey web$getKey();
 
     /** Preserves resource identity for retention; quantity/crafting state may be reset and read-only data shared. */
     @NotNull

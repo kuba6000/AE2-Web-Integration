@@ -35,7 +35,7 @@ public class GetCPUList extends ISyncedRequest {
     public static Map<StableKey, ICraftingCPUCluster> getCPUList(@NotNull IAECraftingGrid craftingGrid) {
         LinkedHashMap<StableKey, ICraftingCPUCluster> orderedMap = new LinkedHashMap<>();
         for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
-            StableKey id = cpu.web$getId();
+            StableKey id = cpu.web$getKey();
             ICraftingCPUCluster previous = orderedMap.put(id, cpu);
             if (previous != null) {
                 LOG.error(

@@ -118,7 +118,7 @@ class TrackingStatisticsResponseTest {
                 switch (method.getName()) {
                     case "web$getFinalOutput":
                         return output;
-                    case "web$getId":
+                    case "web$getKey":
                         return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
                     case "web$getName":
                         return "cpu";

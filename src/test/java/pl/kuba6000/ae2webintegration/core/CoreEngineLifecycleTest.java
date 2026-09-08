@@ -80,7 +80,7 @@ class CoreEngineLifecycleTest {
     private static final class TestStack implements IAEGenericStack, IAEKey {
 
         @Override
-        public StableKey web$getStableKey() {
+        public StableKey web$getKey() {
             return StableKey.create(sink -> sink.putBytes(new byte[] { 7 }));
         }
 
@@ -127,7 +127,7 @@ class CoreEngineLifecycleTest {
 
     private static final class TestCpu implements ICraftingCPUCluster {
 
-        public StableKey web$getId() {
+        public StableKey web$getKey() {
             return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         }
 

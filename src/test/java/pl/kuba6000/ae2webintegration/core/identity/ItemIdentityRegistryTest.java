@@ -188,7 +188,7 @@ class ItemIdentityRegistryTest {
         }
 
         @Override
-        public StableKey web$getStableKey() {
+        public StableKey web$getKey() {
             encodings++;
             return StableKey.create(sink -> sink.putBytes(encodedName.getBytes(StandardCharsets.UTF_8)));
         }

@@ -365,7 +365,7 @@ class CpuAddressingRequestTest {
             this.storage = storage;
         }
 
-        public StableKey web$getId() {
+        public StableKey web$getKey() {
             return key;
         }
 

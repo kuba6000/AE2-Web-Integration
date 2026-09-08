@@ -29,7 +29,7 @@ class ItemIdentityRequestTest {
         Grid second = new Grid(910010, new Resource("iron", 8, true) {
 
             @Override
-            public StableKey web$getStableKey() {
+            public StableKey web$getKey() {
                 throw new AssertionError("Warm shared identity must not encode native data again");
             }
         });
@@ -171,7 +171,7 @@ class ItemIdentityRequestTest {
         Grid grid = new Grid(910003, new Resource("iron", 20, false), new Resource("unsupported", 3, true) {
 
             @Override
-            public StableKey web$getStableKey() {
+            public StableKey web$getKey() {
                 throw new UnsupportedOperationException();
             }
 
@@ -335,7 +335,7 @@ class ItemIdentityRequestTest {
             this.craftable = craftable;
         }
 
-        public StableKey web$getStableKey() {
+        public StableKey web$getKey() {
             return StableKey.create(sink -> sink.putBytes(id.getBytes(StandardCharsets.UTF_8)));
         }
 

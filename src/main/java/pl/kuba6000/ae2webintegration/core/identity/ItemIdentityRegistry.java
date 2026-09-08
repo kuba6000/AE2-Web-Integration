@@ -65,7 +65,7 @@ public final class ItemIdentityRegistry {
             return remembered;
         }
         IAEKey copy = resource.web$copyIdentity();
-        StableKey key = copy.web$getStableKey();
+        StableKey key = copy.web$getKey();
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry existing = entries.getIfPresent(key);
         if (existing != null) {

@@ -270,7 +270,7 @@ class AE2JobTrackerLifecycleTest {
         }
 
         @Override
-        public StableKey web$getStableKey() {
+        public StableKey web$getKey() {
             throw new AssertionError("Tracking must not encode stable resource IDs");
         }
 
@@ -297,7 +297,7 @@ class AE2JobTrackerLifecycleTest {
 
     private static final class EqualCpu implements ICraftingCPUCluster {
 
-        public StableKey web$getId() {
+        public StableKey web$getKey() {
             return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         }
 
