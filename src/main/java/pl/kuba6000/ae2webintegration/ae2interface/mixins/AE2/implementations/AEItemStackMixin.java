@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.Shadow;
 
 import appeng.api.storage.data.IAEItemStack;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
-import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -19,7 +19,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack {
 
     @Override
-    default @NotNull StableItemKey web$getStableKey() throws IOException {
+    default @NotNull StableKey web$getStableKey() throws IOException {
         return LegacyItemIdentity.encode(this);
     }
 

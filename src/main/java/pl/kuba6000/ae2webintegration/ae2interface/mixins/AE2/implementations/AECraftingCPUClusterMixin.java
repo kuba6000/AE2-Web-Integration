@@ -6,6 +6,7 @@ import java.lang.reflect.Method;
 import net.minecraft.world.World;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -18,6 +19,8 @@ import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.api.util.WorldCoord;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.identity.CpuIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -50,9 +53,15 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     @Unique
     private Method web$getUsedStorageMethod = null;
 
+    @Unique
+    private @Nullable StableKey web$stableKey;
+
     @Override
     public @NotNull String web$getId() {
-        return "ae2:" + getWorld().provider.getDimension() + ":" + min.x + ":" + min.y + ":" + min.z;
+        if (web$stableKey == null) {
+            web$stableKey = CpuIdentity.ae2(Integer.toString(getWorld().provider.getDimension()), min.x, min.y, min.z);
+        }
+        return web$stableKey.toString();
     }
 
     @Override
