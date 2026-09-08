@@ -41,7 +41,7 @@ public final class StableKey {
                 .asBytes());
     }
 
-    public static @NotNull StableKey parse(@Nullable String token) {
+    public static @NotNull StableKey parse(@NotNull String token) {
         if (token == null || token.length() != MAX_TOKEN_LENGTH) {
             throw new IllegalArgumentException("Invalid resource key");
         }
