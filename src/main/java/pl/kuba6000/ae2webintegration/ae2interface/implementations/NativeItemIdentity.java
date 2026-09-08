@@ -13,14 +13,14 @@ import org.jetbrains.annotations.NotNull;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
-import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Exact native AE key identity, including persistent addon data supported by native codecs. */
 public final class NativeItemIdentity {
 
     private NativeItemIdentity() {}
 
-    public static @NotNull StableItemKey getStableKey(@NotNull AEKey key) throws IOException {
+    public static @NotNull StableKey getStableKey(@NotNull AEKey key) throws IOException {
         if (key instanceof AEItemKey item) {
             checkPersistent(
                 item.getReadOnlyStack()
@@ -34,9 +34,9 @@ public final class NativeItemIdentity {
         HolderLookup.Provider registries = registries();
         CompoundTag tag = key.toTagGeneric(registries);
         // The native codec allocates its tag first. Bounds cover only the subsequent traversal.
-        return StableItemKey.create(sink -> {
-            StableItemKey.writeText(sink, kind(key));
-            StableItemKey.writeText(
+        return StableKey.create(sink -> {
+            StableKey.writeText(sink, kind(key));
+            StableKey.writeText(
                 sink,
                 key.getId()
                     .toString());
