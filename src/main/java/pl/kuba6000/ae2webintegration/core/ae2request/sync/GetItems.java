@@ -1,6 +1,5 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
@@ -71,7 +70,7 @@ public class GetItems extends ISyncedRequest {
             detailedItem.identityStatus = "AMBIGUOUS";
         } catch (UnsupportedOperationException e) {
             detailedItem.identityStatus = "UNSUPPORTED";
-        } catch (IOException | RuntimeException e) {
+        } catch (RuntimeException e) {
             detailedItem.identityStatus = "UNAVAILABLE";
         }
 

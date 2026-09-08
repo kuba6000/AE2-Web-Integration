@@ -1,6 +1,5 @@
 package pl.kuba6000.ae2webintegration.core.identity;
 
-import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -30,7 +29,7 @@ public final class ItemIdentityRegistry {
     private final Set<StableKey> ambiguous = new HashSet<>();
 
     /** Retain an output identity until the grid next publishes its complete item list. */
-    public @NotNull StableKey remember(@NotNull IAEGrid grid, @NotNull IAEKey resource) throws IOException {
+    public @NotNull StableKey remember(@NotNull IAEGrid grid, @NotNull IAEKey resource) {
         cleanUp();
         Entry entry = findOrCreate(resource);
         owners.asMap()
@@ -59,7 +58,7 @@ public final class ItemIdentityRegistry {
         ambiguous.clear();
     }
 
-    private @NotNull Entry findOrCreate(@NotNull IAEKey resource) throws IOException {
+    private @NotNull Entry findOrCreate(@NotNull IAEKey resource) {
         Entry remembered = reverse.getIfPresent(resource);
         if (remembered != null) {
             if (ambiguous.contains(remembered.key)) throw new Ambiguous();
@@ -102,7 +101,7 @@ public final class ItemIdentityRegistry {
             this.grid = grid;
         }
 
-        public @NotNull StableKey remember(@NotNull IAEKey resource) throws IOException {
+        public @NotNull StableKey remember(@NotNull IAEKey resource) {
             requireOpen();
             Entry entry = findOrCreate(resource);
             collected.add(entry);

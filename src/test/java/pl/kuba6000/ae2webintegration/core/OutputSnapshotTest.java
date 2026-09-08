@@ -2,7 +2,6 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -289,9 +288,9 @@ class OutputSnapshotTest {
             return equals(key);
         }
 
-        public StableKey web$getStableKey() throws IOException {
+        public StableKey web$getStableKey() {
             available();
-            if (brokenIdentity) throw new IOException("Broken native codec");
+            if (brokenIdentity) throw new IllegalStateException("Broken native codec");
             if (unsupportedIdentity) throw new UnsupportedOperationException("Unsupported native identity");
             return StableKey.create(sink -> sink.putBytes("resource".getBytes(StandardCharsets.UTF_8)));
         }
