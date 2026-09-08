@@ -19,7 +19,6 @@ import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.api.util.WorldCoord;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.identity.CpuIdentity;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -59,7 +58,13 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     @Override
     public @NotNull String web$getId() {
         if (web$stableKey == null) {
-            web$stableKey = CpuIdentity.ae2(Integer.toString(getWorld().provider.getDimension()), min.x, min.y, min.z);
+            web$stableKey = StableKey.create(sink -> {
+                StableKey.writeText(sink, "cpu:ae2");
+                StableKey.writeText(sink, Integer.toString(getWorld().provider.getDimension()));
+                sink.putInt(min.x)
+                    .putInt(min.y)
+                    .putInt(min.z);
+            });
         }
         return web$stableKey.toString();
     }
