@@ -26,10 +26,6 @@ public class CancelCPU extends ISyncedRequest {
             return;
         }
         Map<String, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(grid.web$getCraftingGrid());
-        if (cpus == null) {
-            deny("CPU_ID_CONFLICT");
-            return;
-        }
         ICraftingCPUCluster cluster = cpus.get(cpuId);
         if (cluster == null) {
             deny("CPU_NOT_FOUND");

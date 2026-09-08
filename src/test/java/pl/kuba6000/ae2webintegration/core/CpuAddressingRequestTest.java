@@ -7,11 +7,18 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.Property;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -156,17 +163,54 @@ class CpuAddressingRequestTest {
     }
 
     @Test
-    void duplicateAddressesAreRejectedBeforeListingOrTargetedOperations() {
+    void duplicateAddressesAreLoggedWithoutDroppingTheRestOfTheList() {
         TestCpu first = new TestCpu("ae2:0:10:20:30", "First", 64);
         TestCpu second = new TestCpu(first.id, "Second", 128);
-        TestGrid grid = new TestGrid(GRID, first, second);
-        assertStatus("CPU_ID_CONFLICT", request(new GetCPUList(), grid, ""));
-        assertStatus("CPU_ID_CONFLICT", request(new GetCPU(), grid, "&cpu=" + first.id));
-        assertStatus("CPU_ID_CONFLICT", request(new CancelCPU(), grid, "&cpu=" + first.id));
-        assertStatus("CPU_ID_CONFLICT", submit(grid, "&cpu=" + first.id));
-        assertEquals(0, grid.submissions);
-        assertFalse(first.cancelled);
-        assertFalse(second.cancelled);
+        TestCpu third = new TestCpu("ae2:0:40:20:30", "Third", 256);
+        TestGrid grid = new TestGrid(GRID, first, second, third);
+        ArrayList<String> errors = new ArrayList<>();
+        Logger logger = (Logger) LogManager.getLogger("ae2webintegration");
+        AbstractAppender appender = new AbstractAppender("cpu-id-errors", null, null, false, Property.EMPTY_ARRAY) {
+
+            @Override
+            public void append(LogEvent event) {
+                if (event.getLevel() == Level.ERROR) errors.add(
+                    event.getMessage()
+                        .getFormattedMessage());
+            }
+        };
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            JsonObject response = request(new GetCPUList(), grid, "");
+            assertStatus("OK", response);
+            JsonObject cpus = response.getAsJsonObject("data");
+            assertEquals(2, cpus.size());
+            assertEquals(
+                "Second",
+                cpus.getAsJsonObject(first.id)
+                    .get("name")
+                    .getAsString());
+            assertEquals(
+                "Third",
+                cpus.getAsJsonObject(third.id)
+                    .get("name")
+                    .getAsString());
+            assertTrue(
+                errors.stream()
+                    .anyMatch(message -> message.contains(first.id)));
+            assertStatus("OK", request(new GetCPU(), grid, "&cpu=" + third.id));
+            first.busy = second.busy = true;
+            assertStatus("OK", request(new CancelCPU(), grid, "&cpu=" + first.id));
+            assertFalse(first.cancelled);
+            assertTrue(second.cancelled);
+            assertFalse(third.cancelled);
+            assertStatus("OK", submit(grid, "&cpu=" + first.id));
+            assertSame(second, grid.submitted);
+        } finally {
+            logger.removeAppender(appender);
+            appender.stop();
+        }
     }
 
     private static int addPlan() {

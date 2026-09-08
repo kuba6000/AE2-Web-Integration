@@ -3,7 +3,9 @@ package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import org.jetbrains.annotations.Nullable;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -12,6 +14,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 public class GetCPUList extends ISyncedRequest {
+
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
     private static class JSON_CpuInfo {
 
@@ -25,12 +29,20 @@ public class GetCPUList extends ISyncedRequest {
         public long timeStarted = 0L;
     }
 
-    /** Returns null if native CPUs expose ambiguous addresses. */
-    @Nullable
-    public static Map<String, ICraftingCPUCluster> getCPUList(IAECraftingGrid craftingGrid) {
+    /** Duplicate addresses are logged; the last CPU for an address is retained. */
+    @NotNull
+    public static Map<String, ICraftingCPUCluster> getCPUList(@NotNull IAECraftingGrid craftingGrid) {
         LinkedHashMap<String, ICraftingCPUCluster> orderedMap = new LinkedHashMap<>();
         for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
-            if (orderedMap.put(cpu.web$getId(), cpu) != null) return null;
+            String id = cpu.web$getId();
+            ICraftingCPUCluster previous = orderedMap.put(id, cpu);
+            if (previous != null) {
+                LOG.error(
+                    "Duplicate crafting CPU ID '{}' for '{}' and '{}'; retaining the last CPU",
+                    id,
+                    previous.web$getName(),
+                    cpu.web$getName());
+            }
         }
         return orderedMap;
     }
@@ -47,10 +59,6 @@ public class GetCPUList extends ISyncedRequest {
             return;
         }
         Map<String, ICraftingCPUCluster> clusters = getCPUList(grid.web$getCraftingGrid());
-        if (clusters == null) {
-            deny("CPU_ID_CONFLICT");
-            return;
-        }
         LinkedHashMap<String, JSON_CpuInfo> cpuList = new LinkedHashMap<>(clusters.size());
         for (Map.Entry<String, ICraftingCPUCluster> entry : clusters.entrySet()) {
             JSON_CpuInfo cpuInfo = new JSON_CpuInfo();

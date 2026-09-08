@@ -644,7 +644,7 @@
             if (data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 popLoadingScreen(message);
-                if (data.status === "CPU_NOT_FOUND" || data.status === "CPU_ID_CONFLICT") updateCPUList();
+                if (data.status === "CPU_NOT_FOUND") updateCPUList();
                 return;
             }
             data = data.data;
@@ -1349,7 +1349,7 @@
         $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&submit" + "&cpu=" + encodeURIComponent(cpuForJob).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             if (data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
-                if (data.status === "CPU_NOT_FOUND" || data.status === "CPU_ID_CONFLICT") {
+                if (data.status === "CPU_NOT_FOUND") {
                     cpuForJob = null;
                     popLoadingScreen(message);
                     updateCPUList();

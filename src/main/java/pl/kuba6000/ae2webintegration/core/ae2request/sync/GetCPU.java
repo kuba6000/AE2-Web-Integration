@@ -49,10 +49,6 @@ public class GetCPU extends ISyncedRequest {
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
 
         Map<String, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
-        if (cpus == null) {
-            deny("CPU_ID_CONFLICT");
-            return;
-        }
         ICraftingCPUCluster cpu = cpus.get(cpuId);
         if (cpu == null) {
             deny("CPU_NOT_FOUND");

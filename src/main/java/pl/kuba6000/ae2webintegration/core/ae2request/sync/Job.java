@@ -138,10 +138,6 @@ public class Job extends ISyncedRequest {
                     ICraftingCPUCluster target = null;
                     if (cpuId != null) {
                         Map<String, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
-                        if (cpus == null) {
-                            deny("CPU_ID_CONFLICT");
-                            return;
-                        }
                         target = cpus.get(cpuId);
                         if (target == null) {
                             deny("CPU_NOT_FOUND");
