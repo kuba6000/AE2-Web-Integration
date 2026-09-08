@@ -29,7 +29,6 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
             CraftingCPUCluster cluster = (CraftingCPUCluster) (Object) this;
             var position = cluster.getBoundsMin();
             web$stableKey = StableKey.create(sink -> {
-                StableKey.writeText(sink, "cpu:ae2");
                 StableKey.writeText(
                     sink,
                     cluster.getLevel()
