@@ -1,7 +1,5 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
-import java.io.IOException;
-
 import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 
@@ -16,12 +14,12 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStack {
 
     @Override
-    default @NotNull StableKey web$getStableKey() throws IOException {
+    default @NotNull StableKey web$getKey() {
         return LegacyItemIdentity.encode(this);
     }
 
     @Override
-    default IAEKey web$copyIdentity() throws IOException {
+    default IAEKey web$copyIdentity() {
         return LegacyItemIdentity.copy(this);
     }
 
