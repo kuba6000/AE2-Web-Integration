@@ -26,7 +26,7 @@ import appeng.api.storage.data.IAEStack;
 import appeng.util.item.AEFluidStack;
 import appeng.util.item.AEItemStack;
 import cpw.mods.fml.common.registry.GameData;
-import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 /** Canonical native identity only; amounts, crafting flags and display data never enter these bytes. */
@@ -37,7 +37,7 @@ public final class LegacyItemIdentity {
 
     private LegacyItemIdentity() {}
 
-    public static @NotNull StableItemKey encode(@NotNull IAEStack<?> stack) {
+    public static @NotNull StableKey encode(@NotNull IAEStack<?> stack) {
         if (stack instanceof AEItemStack) {
             AEItemStack item = (AEItemStack) stack;
             return encode(
@@ -69,16 +69,16 @@ public final class LegacyItemIdentity {
         return (IAEKey) result;
     }
 
-    private static StableItemKey encode(String kind, @Nullable String registry, int metadata,
+    private static StableKey encode(String kind, @Nullable String registry, int metadata,
         @Nullable NBTTagCompound secondary) {
         if (registry == null || registry.isEmpty()) {
             throw new UnsupportedOperationException("Resource has no registered identity");
         }
-        return StableItemKey.create(sink -> {
+        return StableKey.create(sink -> {
             DataOutputStream output = new DataOutputStream(Funnels.asOutputStream(sink));
             try {
-                StableItemKey.writeText(sink, kind);
-                StableItemKey.writeText(sink, registry);
+                StableKey.writeText(sink, kind);
+                StableKey.writeText(sink, registry);
                 output.writeInt(metadata);
                 output.writeByte(secondary == null ? 0 : 1);
                 if (secondary != null) new Tags(output, sink, "fluid".equals(kind)).write(secondary, 0, true, false);
@@ -141,7 +141,7 @@ public final class LegacyItemIdentity {
                     output.write(byteArray);
                     break;
                 case 8:
-                    StableItemKey.writeText(sink, ((NBTTagString) tag).func_150285_a_());
+                    StableKey.writeText(sink, ((NBTTagString) tag).func_150285_a_());
                     break;
                 case 9:
                     NBTTagList list = (NBTTagList) tag;
@@ -184,7 +184,7 @@ public final class LegacyItemIdentity {
                     Arrays.sort(names);
                     output.writeInt(names.length);
                     for (String name : names) {
-                        StableItemKey.writeText(sink, name);
+                        StableKey.writeText(sink, name);
                         write(compound.getTag(name), depth + 1, true, owned);
                     }
                     break;
