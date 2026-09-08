@@ -19,6 +19,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTracking;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPU;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -117,6 +118,8 @@ class TrackingStatisticsResponseTest {
                 switch (method.getName()) {
                     case "web$getFinalOutput":
                         return output;
+                    case "web$getKey":
+                        return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
                     case "web$getName":
                         return "cpu";
                     case "web$isBusy":
@@ -166,7 +169,7 @@ class TrackingStatisticsResponseTest {
         AE2Controller.AE2Interface = ae;
         try {
             GetCPU request = new GetCPU();
-            assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + GRID + "&cpu=cpu")));
+            assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + GRID + "&cpu=AAAAAAAAAAAAAAAAAAAAAA")));
             request.runOnServerThread(ae);
             JsonObject response = JsonParser.parseString(request.getJSON())
                 .getAsJsonObject();

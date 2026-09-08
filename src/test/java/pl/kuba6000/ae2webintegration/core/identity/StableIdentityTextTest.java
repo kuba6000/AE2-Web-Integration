@@ -15,7 +15,7 @@ class StableIdentityTextTest {
     void textUsesByteLengthAndStandardUtf8IncludingNulAndSupplementaryCharacters() {
         Hasher sink = Hashing.sha256()
             .newHasher();
-        StableItemKey.writeText(sink, "\u0000\u00e9\ud83d\ude00");
+        StableKey.writeText(sink, "\u0000\u00e9\ud83d\ude00");
 
         assertEquals(
             Hashing.sha256()
@@ -30,7 +30,7 @@ class StableIdentityTextTest {
     void malformedUnicodeCannotBeReplacedWithAnotherIdentity(String text) {
         Hasher sink = Hashing.sha256()
             .newHasher();
-        assertThrows(IllegalArgumentException.class, () -> StableItemKey.writeText(sink, text));
+        assertThrows(IllegalArgumentException.class, () -> StableKey.writeText(sink, text));
         assertEquals(
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             sink.hash()

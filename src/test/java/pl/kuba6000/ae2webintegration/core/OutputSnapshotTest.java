@@ -2,7 +2,6 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -21,7 +20,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPUList;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
-import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -66,7 +65,7 @@ class OutputSnapshotTest {
         assertFalse(json.has("hashcode"));
         assertNotNull(
             AE2Controller.itemIdentities.resolve(
-                StableItemKey.parse(
+                StableKey.parse(
                     json.get("itemKey")
                         .getAsString())));
         AE2Controller.itemIdentities.beginListing(grid)
@@ -142,6 +141,8 @@ class OutputSnapshotTest {
                 switch (method.getName()) {
                     case "web$getFinalOutput":
                         return output;
+                    case "web$getKey":
+                        return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
                     case "web$getName":
                         return "cpu";
                     case "web$isBusy":
@@ -197,12 +198,12 @@ class OutputSnapshotTest {
         AE2Controller.AE2Interface = ae;
         try {
             for (ISyncedRequest request : new ISyncedRequest[] { new GetCPUList(), new GetCPU() }) {
-                assertTrue(request.init(TestGridFixtures.context(-1, "grid=990124&cpu=cpu")));
+                assertTrue(request.init(TestGridFixtures.context(-1, "grid=990124&cpu=AAAAAAAAAAAAAAAAAAAAAA")));
                 request.runOnServerThread(ae);
                 JsonObject data = JsonParser.parseString(request.getJSON())
                     .getAsJsonObject()
                     .getAsJsonObject("data");
-                if (data.has("cpu")) data = data.getAsJsonObject("cpu");
+                if (data.has("AAAAAAAAAAAAAAAAAAAAAA")) data = data.getAsJsonObject("AAAAAAAAAAAAAAAAAAAAAA");
                 JsonObject snapshot = data.getAsJsonObject("finalOutput");
                 assertEquals(
                     12,
@@ -287,11 +288,11 @@ class OutputSnapshotTest {
             return equals(key);
         }
 
-        public StableItemKey web$getStableKey() throws IOException {
+        public StableKey web$getKey() {
             available();
-            if (brokenIdentity) throw new IOException("Broken native codec");
+            if (brokenIdentity) throw new IllegalStateException("Broken native codec");
             if (unsupportedIdentity) throw new UnsupportedOperationException("Unsupported native identity");
-            return StableItemKey.create(sink -> sink.putBytes("resource".getBytes(StandardCharsets.UTF_8)));
+            return StableKey.create(sink -> sink.putBytes("resource".getBytes(StandardCharsets.UTF_8)));
         }
 
         public IAEKey web$copyIdentity() {

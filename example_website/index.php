@@ -264,7 +264,7 @@
     globalItemList = {};
     globalCPUList = {};
     currentWindow = 0; // 0 - main, 1 - CPU, 2 - Order screen, 3 - History window
-    selectedCPU = 0;
+    selectedCPU = "";
     filteringOptions = {
         searchString: "",
         storedCraftable: 2, // 0 - stored, 1 - craftable, 2 - both
@@ -603,14 +603,19 @@
             html += (allowNewLines ? "<br>" : "") + " " + itemObject['itemid'];
         return html;
     }
+    function escapeCPUText(value) {
+        return String(value).replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[character]);
+    }
     function displayCPUList(){
         let html = "";
         for (let key in globalCPUList){
             let cluster = globalCPUList[key];
-            html += "<button onclick='selectCPU(this);' name='" + key + "' ";
+            html += "<button onclick='selectCPU(this);' name='" + escapeCPUText(key) + "' ";
             if (selectedCPU == key)
                 html += "class='selected'";
-            html += ">" + key;
+            html += ">" + escapeCPUText(cluster.name);
             if (cluster['finalOutput'])
                 html += " - " + formatItemName(cluster['finalOutput'], false) + " x" + cluster['finalOutput']['quantity'];
             html += "</button>";
@@ -620,23 +625,35 @@
     function displayCPUDetails(){
         if (selectedGrid == -1)
             return;
-        if (Object.keys(globalCPUList).length == 0) return;
-        let message = "Asking for " + selectedCPU + "...";
+        if (!globalCPUList[selectedCPU]) {
+            document.getElementById("terminalCPUHeaderText").textContent = 'Select a crafting CPU.';
+            document.getElementById("terminalcontent").innerHTML = '';
+            document.getElementById("cancelJobOnCPUButton").style.display = 'none';
+            return;
+        }
+        const cpuId = selectedCPU;
+        const gridId = selectedGrid;
+        let message = "Asking for " + escapeCPUText(globalCPUList[cpuId].name) + "...";
         pushLoadingScreen(message);
-        $.getJSON('get?grid=' + selectedGrid + '&cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        $.getJSON('get?grid=' + gridId + '&cpu=' + encodeURIComponent(cpuId).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+            if (selectedCPU !== cpuId || selectedGrid !== gridId || !globalCPUList[cpuId]) {
+                popLoadingScreen(message);
+                return;
+            }
             console.log(data);
             if (data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 popLoadingScreen(message);
+                if (data.status === "CPU_NOT_FOUND") updateCPUList();
                 return;
             }
             data = data.data;
             let html = "";
             if (data['finalOutput'])
                 document.getElementById("terminalCPUHeaderText").innerHTML =
-                    selectedCPU + ": Crafting " + formatItemName(data['finalOutput'], false) + " x" + data['finalOutput']['quantity'];
+                    escapeCPUText(globalCPUList[cpuId].name) + ": Crafting " + formatItemName(data['finalOutput'], false) + " x" + data['finalOutput']['quantity'];
             else
-                document.getElementById("terminalCPUHeaderText").innerHTML = selectedCPU + ": Idle";
+                document.getElementById("terminalCPUHeaderText").innerHTML = escapeCPUText(globalCPUList[cpuId].name) + ": Idle";
             let hasTrackingInfo = data['hasTrackingInfo'];
             if (data['items'] && data['items'].length > 0) {
                 document.getElementById("cancelJobOnCPUButton").style.display = 'block';
@@ -681,17 +698,25 @@
         if (selectedGrid == -1){
             return;
         }
-        $.getJSON('list?grid=' + selectedGrid, function(data) {
+        const gridId = selectedGrid;
+        $.getJSON('list?grid=' + gridId, function(data) {
+            if (selectedGrid !== gridId) return;
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 return;
             }
             data = data.data;
-            clusters = data;
-            globalCPUList = clusters;
-            if (!globalCPUList[selectedCPU])
-                selectedCPU = Object.keys(globalCPUList)[0];
+            globalCPUList = data;
+            if (selectedCPU && !globalCPUList[selectedCPU]) {
+                selectedCPU = null;
+                document.getElementById("cancelJobOnCPUButton").style.display = 'none';
+                document.getElementById("terminalCPUHeaderText").textContent = 'Select a crafting CPU.';
+                if (currentWindow === 1) document.getElementById("terminalcontent").innerHTML = '';
+            } else if (selectedCPU === "") {
+                selectedCPU = Object.keys(globalCPUList)[0] || "";
+            }
             displayCPUList();
+            if (currentWindow === 2) updateCPUListForJob();
         });
     }
     function updateGridList(onDone){
@@ -754,6 +779,9 @@
     }
     function selectedGridChanged(el){
         selectedGrid = Number(el.value);
+        selectedCPU = "";
+        cpuForJob = "";
+        globalCPUList = {};
         document.getElementById('thisgridbydefault').disabled = false;
         document.getElementById('trackthisgrid').disabled = false;
         if (settings.defaultGrid != -1 && settings.defaultGrid == selectedGrid) {
@@ -768,6 +796,7 @@
         updateGridList();
     }
     function isValidCPUForOrder(cluster) {
+        if (currentJob.bytesTotal < 0) return false;
         // An idle CPU still has to hold the whole plan. Only the merge case used to be measured, so a
         // too-small idle CPU passed here and AE2 refused the job afterwards without saying anything.
         // isBusy is the flag the server actually reports; finalOutput is only filled in when busy.
@@ -779,24 +808,24 @@
         return cluster['availableStorage'] >= cluster['usedStorage'] + currentJob.bytesTotal;
     }
     function updateCPUListForJob() {
+        if (currentJob.bytesTotal < 0) return;
         let html = "";
-        // A choice carried over from an earlier plan may be too small for this one, so drop it before
-        // picking a default - the loop below only replaced selections naming an unknown CPU.
+        // Empty means a new plan may select a default; null requires a new user choice after invalidation.
         if (cpuForJob && (!globalCPUList[cpuForJob] || !isValidCPUForOrder(globalCPUList[cpuForJob])))
-            cpuForJob = "";
+            cpuForJob = null;
         for (let key in globalCPUList){
             let cluster = globalCPUList[key];
             let valid = isValidCPUForOrder(cluster);
-            if (valid && !cpuForJob)
+            if (valid && cpuForJob === "")
                 cpuForJob = key;
-            html += "<button onclick='selectCPUForJob(this);' name='" + key + "' class='";
+            html += "<button onclick='selectCPUForJob(this);' name='" + escapeCPUText(key) + "' class='";
             if (!valid)
                 html += "invalid";
             else if (cluster['isBusy'])
                 html += "mergable";
             if (cpuForJob == key)
                 html += " selected";
-            html += "'>" + key;
+            html += "'>" + escapeCPUText(cluster.name);
             if (cluster['finalOutput'])
                 html += " - " + formatItemName(cluster['finalOutput'], false) + " x" + cluster['finalOutput']['quantity'];
             if (cluster['usedStorage'] && cluster['usedStorage'] != -1){
@@ -818,6 +847,7 @@
         updateCPUListForJob();
     }
     function selectCPU(el) {
+        if (!globalCPUList[el.name]) return;
         selectedCPU = el.name;
         displayCPUList();
         displayCPUDetails();
@@ -1206,6 +1236,7 @@
                     document.getElementById("terminalJobHeaderText").innerHTML = "Calculating, please wait...";
                     cpuForJob = "";
                     currentJob.id = data['jobID'];
+                    currentJob.bytesTotal = -1;
                     currentJob.itemKey = itemKey;
                     setTimeout(updateCraftingPlan, 1000);
                 }
@@ -1318,6 +1349,12 @@
         $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&submit" + "&cpu=" + encodeURIComponent(cpuForJob).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             if (data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
+                if (data.status === "CPU_NOT_FOUND") {
+                    cpuForJob = null;
+                    popLoadingScreen(message);
+                    updateCPUList();
+                    return;
+                }
             }
             popLoadingScreen(message);
             setCurrentScreen(0);
@@ -1328,12 +1365,13 @@
     function cancelJobOnCPU(selectedCPU){
         if (selectedGrid == -1)
             return;
-        if (selectedCPU == ""){
+        if (!selectedCPU || !globalCPUList[selectedCPU]){
             return;
         }
         let message = "Cancelling job...";
         pushLoadingScreen(message);
         $.getJSON('cancelcpu?grid=' + selectedGrid + '&cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+            if (data.status !== "OK") showAlert(data.status + ": " + data.data);
             updateCPUList();
             refreshTerminal();
             popLoadingScreen(message);

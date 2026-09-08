@@ -13,8 +13,8 @@ import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 
-/** Immutable resource identity; neither a grid membership assertion nor an authorization grant. */
-public final class StableItemKey {
+/** Immutable hashed identity; neither a grid membership assertion nor an authorization grant. */
+public final class StableKey {
 
     public static final int MAX_TOKEN_LENGTH = 22;
 
@@ -25,7 +25,7 @@ public final class StableItemKey {
     private final int hash;
     private volatile @Nullable String text;
 
-    private StableItemKey(byte @NotNull [] digest) {
+    private StableKey(byte @NotNull [] digest) {
         ByteBuffer bytes = ByteBuffer.wrap(digest);
         first = bytes.getLong();
         second = bytes.getLong();
@@ -33,15 +33,15 @@ public final class StableItemKey {
     }
 
     /** Hash deterministic native identity data directly, without retaining its serialized body. */
-    public static @NotNull StableItemKey create(@NotNull Consumer<PrimitiveSink> writeIdentity) {
+    public static @NotNull StableKey create(@NotNull Consumer<PrimitiveSink> writeIdentity) {
         Hasher hasher = HASH.newHasher();
         writeIdentity.accept(hasher);
-        return new StableItemKey(
+        return new StableKey(
             hasher.hash()
                 .asBytes());
     }
 
-    public static @NotNull StableItemKey parse(@Nullable String token) {
+    public static @NotNull StableKey parse(@NotNull String token) {
         if (token == null || token.length() != MAX_TOKEN_LENGTH) {
             throw new IllegalArgumentException("Invalid resource key");
         }
@@ -53,7 +53,7 @@ public final class StableItemKey {
             .equals(token)) {
             throw new IllegalArgumentException("Noncanonical resource key");
         }
-        return new StableItemKey(digest);
+        return new StableKey(digest);
     }
 
     /** Big-endian length-prefixed strict UTF-8, independent of native modified-UTF serializers. */
@@ -101,8 +101,8 @@ public final class StableItemKey {
     @Override
     public boolean equals(@Nullable Object other) {
         if (this == other) return true;
-        if (!(other instanceof StableItemKey)) return false;
-        StableItemKey key = (StableItemKey) other;
+        if (!(other instanceof StableKey)) return false;
+        StableKey key = (StableKey) other;
         return first == key.first && second == key.second;
     }
 

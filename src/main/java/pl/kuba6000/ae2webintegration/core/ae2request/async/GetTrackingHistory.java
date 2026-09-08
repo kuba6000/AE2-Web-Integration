@@ -15,8 +15,12 @@ public class GetTrackingHistory extends IAsyncRequest {
         public long timeStarted;
         public long timeDone;
         public boolean wasCancelled;
-        public @NotNull JSON_Stack finalOutput;
+        public final @NotNull JSON_Stack finalOutput;
         public int id;
+
+        private JSON_TrackingHistoryElement(@NotNull JSON_Stack finalOutput) {
+            this.finalOutput = finalOutput;
+        }
     }
 
     @Override
@@ -30,12 +34,12 @@ public class GetTrackingHistory extends IAsyncRequest {
 
         for (Map.Entry<Integer, AE2JobTracker.JobTrackingInfo> integerJobTrackingInfoEntry : grid.trackingInfo.trackingInfos
             .entrySet()) {
-            JSON_TrackingHistoryElement element = new JSON_TrackingHistoryElement();
+            JSON_TrackingHistoryElement element = new JSON_TrackingHistoryElement(
+                integerJobTrackingInfoEntry.getValue().finalOutput);
             element.id = integerJobTrackingInfoEntry.getKey();
             element.timeStarted = integerJobTrackingInfoEntry.getValue().timeStarted;
             element.timeDone = integerJobTrackingInfoEntry.getValue().timeDone;
             element.wasCancelled = integerJobTrackingInfoEntry.getValue().wasCancelled;
-            element.finalOutput = integerJobTrackingInfoEntry.getValue().finalOutput;
             jobs.add(element);
         }
 
