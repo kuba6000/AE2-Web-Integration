@@ -1,7 +1,5 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
-import java.io.IOException;
-
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,7 +33,7 @@ public final class JSON_Stack {
             String itemKey = AE2Controller.itemIdentities.remember(grid, key)
                 .toString();
             return new JSON_Stack(itemid, itemname, quantity, itemKey);
-        } catch (IOException | RuntimeException exception) {
+        } catch (RuntimeException exception) {
             return new JSON_Stack(itemid, itemname, quantity, null);
         }
     }

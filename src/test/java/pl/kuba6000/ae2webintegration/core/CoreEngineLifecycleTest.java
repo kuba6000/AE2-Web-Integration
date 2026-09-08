@@ -15,7 +15,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
-import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -41,7 +41,7 @@ class CoreEngineLifecycleTest {
         WebPrincipal principal = TestGridFixtures.principal(42);
         GridAccessSessions.put(principal, new GridAccess(42, Collections.singleton(GRID_KEY), 0L));
         AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
-        pl.kuba6000.ae2webintegration.core.identity.StableItemKey itemKey = AE2Controller.itemIdentities.remember(
+        pl.kuba6000.ae2webintegration.core.identity.StableKey itemKey = AE2Controller.itemIdentities.remember(
             grid,
             cpu.web$getFinalOutput()
                 .web$what());
@@ -80,8 +80,8 @@ class CoreEngineLifecycleTest {
     private static final class TestStack implements IAEGenericStack, IAEKey {
 
         @Override
-        public StableItemKey web$getStableKey() {
-            return StableItemKey.create(sink -> sink.putBytes(new byte[] { 7 }));
+        public StableKey web$getKey() {
+            return StableKey.create(sink -> sink.putBytes(new byte[] { 7 }));
         }
 
         @Override
@@ -126,6 +126,10 @@ class CoreEngineLifecycleTest {
     }
 
     private static final class TestCpu implements ICraftingCPUCluster {
+
+        public StableKey web$getKey() {
+            return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        }
 
         private final IAEGenericStack output = new TestStack();
 

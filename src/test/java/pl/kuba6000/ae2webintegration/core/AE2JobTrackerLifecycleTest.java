@@ -15,7 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.identity.StableItemKey;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -270,7 +270,7 @@ class AE2JobTrackerLifecycleTest {
         }
 
         @Override
-        public StableItemKey web$getStableKey() {
+        public StableKey web$getKey() {
             throw new AssertionError("Tracking must not encode stable resource IDs");
         }
 
@@ -296,6 +296,10 @@ class AE2JobTrackerLifecycleTest {
     }
 
     private static final class EqualCpu implements ICraftingCPUCluster {
+
+        public StableKey web$getKey() {
+            return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        }
 
         private IAEGenericStack output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 5);
         private final HashMap<IAEKey, Long> waiting = new HashMap<>();

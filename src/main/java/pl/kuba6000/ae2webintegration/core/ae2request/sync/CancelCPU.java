@@ -2,12 +2,17 @@ package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
 import java.util.Map;
 
+import org.jetbrains.annotations.NotNull;
+
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 
 public class CancelCPU extends ISyncedRequest {
 
-    private String cpuName;
+    // Assigned by successful init() before the request is submitted.
+    @SuppressWarnings("NotNullFieldNotInitialized")
+    private @NotNull StableKey cpuId;
 
     @Override
     boolean init(Map<String, String> getParams) {
@@ -15,7 +20,12 @@ public class CancelCPU extends ISyncedRequest {
             noParam("cpu");
             return false;
         }
-        cpuName = getParams.get("cpu");
+        try {
+            cpuId = StableKey.parse(getParams.get("cpu"));
+        } catch (IllegalArgumentException e) {
+            deny("CPU_NOT_FOUND");
+            return false;
+        }
         return true;
     }
 
@@ -25,8 +35,8 @@ public class CancelCPU extends ISyncedRequest {
             deny("GRID_NOT_FOUND");
             return;
         }
-        ICraftingCPUCluster cluster = GetCPUList.getCPUList(grid.web$getCraftingGrid())
-            .get(cpuName);
+        Map<StableKey, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(grid.web$getCraftingGrid());
+        ICraftingCPUCluster cluster = cpus.get(cpuId);
         if (cluster == null) {
             deny("CPU_NOT_FOUND");
             return;
