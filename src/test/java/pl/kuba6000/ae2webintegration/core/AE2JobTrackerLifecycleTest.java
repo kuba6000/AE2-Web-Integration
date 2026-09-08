@@ -297,8 +297,8 @@ class AE2JobTrackerLifecycleTest {
 
     private static final class EqualCpu implements ICraftingCPUCluster {
 
-        public String web$getId() {
-            return "test-cpu";
+        public StableKey web$getId() {
+            return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         }
 
         private IAEGenericStack output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 5);

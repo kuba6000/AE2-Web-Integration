@@ -43,6 +43,26 @@ class CpuAddressingRequestTest {
 
     private static final long GRID = 991234;
 
+    @Test
+    void lookupUsesTheFullStableKeyEvenWhenMapHashCodesCollide() {
+        TestCpu first = new TestCpu("AAAAAAAAAAAAAAAAAAAAAA", "Same name", 64);
+        TestCpu second = new TestCpu("AAAAAAAAAAEAAAAA____4Q", "Same name", 128);
+        StableKey firstKey = StableKey.parse(first.id);
+        StableKey secondKey = StableKey.parse(second.id);
+        assertEquals(firstKey.hashCode(), secondKey.hashCode());
+        TestGrid grid = new TestGrid(GRID, first, second);
+        assertSame(
+            first,
+            GetCPUList.getCPUList(grid.web$getCraftingGrid())
+                .get(firstKey));
+        assertSame(
+            second,
+            GetCPUList.getCPUList(grid.web$getCraftingGrid())
+                .get(secondKey));
+        assertStatus("OK", submit(grid, "&cpu=" + second.id));
+        assertSame(second, grid.submitted);
+    }
+
     @AfterEach
     void clearPlans() {
         GridData.clearRuntimeState();
@@ -283,8 +303,9 @@ class CpuAddressingRequestTest {
     }
 
     private static JsonObject request(ISyncedRequest request, TestGrid grid, String params) {
-        assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + GRID + params)));
-        request.handle(TestGridFixtures.ae(grid));
+        if (request.init(TestGridFixtures.context(-1, "grid=" + GRID + params))) {
+            request.handle(TestGridFixtures.ae(grid));
+        }
         return JsonParser.parseString(request.getJSON())
             .getAsJsonObject();
     }
@@ -331,6 +352,7 @@ class CpuAddressingRequestTest {
     private static final class TestCpu implements ICraftingCPUCluster {
 
         final String id;
+        final StableKey key;
         String name;
         final long storage;
         boolean busy;
@@ -338,12 +360,13 @@ class CpuAddressingRequestTest {
 
         TestCpu(String id, String name, long storage) {
             this.id = id;
+            this.key = StableKey.parse(id);
             this.name = name;
             this.storage = storage;
         }
 
-        public String web$getId() {
-            return id;
+        public StableKey web$getId() {
+            return key;
         }
 
         public void web$setInternalID(int id) {}

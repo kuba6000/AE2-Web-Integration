@@ -8,6 +8,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
@@ -31,10 +32,10 @@ public class GetCPUList extends ISyncedRequest {
 
     /** Duplicate addresses are logged; the last CPU for an address is retained. */
     @NotNull
-    public static Map<String, ICraftingCPUCluster> getCPUList(@NotNull IAECraftingGrid craftingGrid) {
-        LinkedHashMap<String, ICraftingCPUCluster> orderedMap = new LinkedHashMap<>();
+    public static Map<StableKey, ICraftingCPUCluster> getCPUList(@NotNull IAECraftingGrid craftingGrid) {
+        LinkedHashMap<StableKey, ICraftingCPUCluster> orderedMap = new LinkedHashMap<>();
         for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
-            String id = cpu.web$getId();
+            StableKey id = cpu.web$getId();
             ICraftingCPUCluster previous = orderedMap.put(id, cpu);
             if (previous != null) {
                 LOG.error(
@@ -58,9 +59,9 @@ public class GetCPUList extends ISyncedRequest {
             deny("GRID_NOT_FOUND");
             return;
         }
-        Map<String, ICraftingCPUCluster> clusters = getCPUList(grid.web$getCraftingGrid());
+        Map<StableKey, ICraftingCPUCluster> clusters = getCPUList(grid.web$getCraftingGrid());
         LinkedHashMap<String, JSON_CpuInfo> cpuList = new LinkedHashMap<>(clusters.size());
-        for (Map.Entry<String, ICraftingCPUCluster> entry : clusters.entrySet()) {
+        for (Map.Entry<StableKey, ICraftingCPUCluster> entry : clusters.entrySet()) {
             JSON_CpuInfo cpuInfo = new JSON_CpuInfo();
             ICraftingCPUCluster cluster = entry.getValue();
             cpuInfo.name = cluster.web$getName();
@@ -74,7 +75,10 @@ public class GetCPUList extends ISyncedRequest {
                     cpuInfo.timeStarted = trackingInfo.timeStarted;
                 }
             }
-            cpuList.put(entry.getKey(), cpuInfo);
+            cpuList.put(
+                entry.getKey()
+                    .toString(),
+                cpuInfo);
         }
         succeed(cpuList);
     }

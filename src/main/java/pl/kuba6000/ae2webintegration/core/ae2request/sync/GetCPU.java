@@ -4,9 +4,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.jetbrains.annotations.NotNull;
+
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.JSON_CompactedItem;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -28,7 +31,7 @@ public class GetCPU extends ISyncedRequest {
         public long timeElapsed = 0L;
     }
 
-    String cpuId = null;
+    private @NotNull StableKey cpuId;
 
     @Override
     boolean init(Map<String, String> getParams) {
@@ -36,7 +39,12 @@ public class GetCPU extends ISyncedRequest {
             noParam("cpu");
             return false;
         }
-        cpuId = getParams.get("cpu");
+        try {
+            cpuId = StableKey.parse(getParams.get("cpu"));
+        } catch (IllegalArgumentException e) {
+            deny("CPU_NOT_FOUND");
+            return false;
+        }
         return true;
     }
 
@@ -48,7 +56,7 @@ public class GetCPU extends ISyncedRequest {
         }
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
 
-        Map<String, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
+        Map<StableKey, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
         ICraftingCPUCluster cpu = cpus.get(cpuId);
         if (cpu == null) {
             deny("CPU_NOT_FOUND");

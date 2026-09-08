@@ -7,7 +7,9 @@ import java.util.concurrent.Future;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -50,7 +52,7 @@ public class Job extends ISyncedRequest {
 
     private ERequestType type = null;
     private int jobID;
-    private String cpuId;
+    private @Nullable StableKey cpuId;
 
     @Override
     boolean init(Map<String, String> getParams) {
@@ -67,7 +69,14 @@ public class Job extends ISyncedRequest {
         if (getParams.containsKey("cancel")) this.type = ERequestType.CANCEL;
         else if (getParams.containsKey("submit")) {
             this.type = ERequestType.SUBMIT;
-            if (getParams.containsKey("cpu")) this.cpuId = getParams.get("cpu");
+            if (getParams.containsKey("cpu")) {
+                try {
+                    this.cpuId = StableKey.parse(getParams.get("cpu"));
+                } catch (IllegalArgumentException e) {
+                    deny("CPU_NOT_FOUND");
+                    return false;
+                }
+            }
         } else this.type = ERequestType.CHECK;
         return true;
     }
@@ -137,7 +146,7 @@ public class Job extends ISyncedRequest {
                     IAECraftingJob craftingJob = job.get();
                     ICraftingCPUCluster target = null;
                     if (cpuId != null) {
-                        Map<String, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
+                        Map<StableKey, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
                         target = cpus.get(cpuId);
                         if (target == null) {
                             deny("CPU_NOT_FOUND");

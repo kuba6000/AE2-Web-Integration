@@ -127,8 +127,8 @@ class CoreEngineLifecycleTest {
 
     private static final class TestCpu implements ICraftingCPUCluster {
 
-        public String web$getId() {
-            return "test-cpu";
+        public StableKey web$getId() {
+            return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         }
 
         private final IAEGenericStack output = new TestStack();
