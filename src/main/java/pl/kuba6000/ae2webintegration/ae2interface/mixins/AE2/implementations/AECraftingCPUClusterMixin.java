@@ -43,13 +43,13 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     @Override
     public @NotNull StableKey web$getId() {
         if (web$stableKey == null) {
-            web$stableKey = StableKey.create(sink -> {
-                StableKey.writeText(sink, "cpu:ae2");
-                StableKey.writeText(sink, Integer.toString(getWorld().provider.dimensionId));
-                sink.putInt(min.x)
-                    .putInt(min.y)
-                    .putInt(min.z);
-            });
+            web$stableKey = StableKey.create(
+                sink -> {
+                    sink.putInt(getWorld().provider.dimensionId)
+                        .putInt(min.x)
+                        .putInt(min.y)
+                        .putInt(min.z);
+                });
         }
         return web$stableKey;
     }
