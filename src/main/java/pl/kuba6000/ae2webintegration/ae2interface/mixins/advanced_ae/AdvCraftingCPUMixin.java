@@ -43,13 +43,11 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
         if (web$stableKey == null) {
             web$stableKey = StableKey.create(sink -> {
                 if (uniqueId != null) {
-                    StableKey.writeText(sink, "cpu:advanced_ae");
                     sink.putLong(uniqueId.getMostSignificantBits())
                         .putLong(uniqueId.getLeastSignificantBits());
                 } else {
                     // The free-capacity CPU has no UUID and is recreated as available storage changes.
                     var position = cluster.getBoundsMin();
-                    StableKey.writeText(sink, "cpu:advanced_ae:free");
                     StableKey.writeText(
                         sink,
                         cluster.getLevel()
