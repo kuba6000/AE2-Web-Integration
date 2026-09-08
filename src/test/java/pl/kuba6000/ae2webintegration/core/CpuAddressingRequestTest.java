@@ -31,7 +31,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPUList;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
-import pl.kuba6000.ae2webintegration.core.identity.CpuIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -51,12 +51,12 @@ class CpuAddressingRequestTest {
     @Test
     void equallyNamedCpusAreListedIndividuallyByAddress() {
         TestCpu first = new TestCpu(
-            CpuIdentity.ae2("0", 10, 20, 30)
+            StableKey.create(sink -> sink.putInt(1))
                 .toString(),
             "Main CPU",
             64);
         TestCpu second = new TestCpu(
-            CpuIdentity.ae2("0", 40, 20, 30)
+            StableKey.create(sink -> sink.putInt(2))
                 .toString(),
             "Main CPU",
             128);
@@ -89,12 +89,12 @@ class CpuAddressingRequestTest {
     @Test
     void selectionSurvivesRenameReorderAndReconstructedObjects() {
         TestCpu first = new TestCpu(
-            CpuIdentity.ae2("0", 10, 20, 30)
+            StableKey.create(sink -> sink.putInt(1))
                 .toString(),
             "Main CPU",
             64);
         TestCpu second = new TestCpu(
-            CpuIdentity.ae2("0", 40, 20, 30)
+            StableKey.create(sink -> sink.putInt(2))
                 .toString(),
             "Main CPU",
             128);
@@ -112,7 +112,7 @@ class CpuAddressingRequestTest {
                 .get("size")
                 .getAsLong());
         TestCpu restored = new TestCpu(
-            CpuIdentity.ae2("0", 10, 20, 30)
+            StableKey.create(sink -> sink.putInt(1))
                 .toString(),
             "Renamed",
             256);
@@ -127,12 +127,12 @@ class CpuAddressingRequestTest {
     @Test
     void cancellationTargetsOnlyTheSelectedAddress() {
         TestCpu first = new TestCpu(
-            CpuIdentity.ae2("0", 10, 20, 30)
+            StableKey.create(sink -> sink.putInt(1))
                 .toString(),
             "Main CPU",
             64);
         TestCpu second = new TestCpu(
-            CpuIdentity.ae2("0", 40, 20, 30)
+            StableKey.create(sink -> sink.putInt(2))
                 .toString(),
             "Main CPU",
             128);
@@ -147,12 +147,12 @@ class CpuAddressingRequestTest {
     @Test
     void explicitSubmissionTargetsItsAddressAndAbsentSelectionUsesAutomaticChoice() {
         TestCpu first = new TestCpu(
-            CpuIdentity.ae2("0", 10, 20, 30)
+            StableKey.create(sink -> sink.putInt(1))
                 .toString(),
             "Main CPU",
             64);
         TestCpu second = new TestCpu(
-            CpuIdentity.ae2("0", 40, 20, 30)
+            StableKey.create(sink -> sink.putInt(2))
                 .toString(),
             "Main CPU",
             128);
@@ -167,12 +167,12 @@ class CpuAddressingRequestTest {
     @Test
     void missingExplicitAddressAndOldDisplayNameNeverSelectAnotherCpu() {
         TestCpu cpu = new TestCpu(
-            CpuIdentity.ae2("0", 10, 20, 30)
+            StableKey.create(sink -> sink.putInt(1))
                 .toString(),
             "Main",
             64);
         TestGrid grid = new TestGrid(GRID, cpu);
-        for (String invalid : new String[] { CpuIdentity.ae2("0", 40, 20, 30)
+        for (String invalid : new String[] { StableKey.create(sink -> sink.putInt(2))
             .toString(), "Main", "" }) {
             assertStatus("CPU_NOT_FOUND", request(new GetCPU(), grid, "&cpu=" + invalid));
             assertStatus("CPU_NOT_FOUND", request(new CancelCPU(), grid, "&cpu=" + invalid));
@@ -187,7 +187,7 @@ class CpuAddressingRequestTest {
     @Test
     void addressFromAnotherGridDoesNotResolve() {
         TestCpu remote = new TestCpu(
-            CpuIdentity.ae2("0", 10, 20, 30)
+            StableKey.create(sink -> sink.putInt(1))
                 .toString(),
             "Main",
             64);
@@ -211,13 +211,13 @@ class CpuAddressingRequestTest {
     @Test
     void duplicateAddressesAreLoggedWithoutDroppingTheRestOfTheList() {
         TestCpu first = new TestCpu(
-            CpuIdentity.ae2("0", 10, 20, 30)
+            StableKey.create(sink -> sink.putInt(1))
                 .toString(),
             "First",
             64);
         TestCpu second = new TestCpu(first.id, "Second", 128);
         TestCpu third = new TestCpu(
-            CpuIdentity.ae2("0", 40, 20, 30)
+            StableKey.create(sink -> sink.putInt(2))
                 .toString(),
             "Third",
             256);
