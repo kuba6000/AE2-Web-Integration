@@ -41,7 +41,7 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     private @Nullable StableKey web$stableKey;
 
     @Override
-    public @NotNull String web$getId() {
+    public @NotNull StableKey web$getId() {
         if (web$stableKey == null) {
             web$stableKey = StableKey.create(sink -> {
                 StableKey.writeText(sink, "cpu:ae2");
@@ -51,7 +51,7 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
                     .putInt(min.z);
             });
         }
-        return web$stableKey.toString();
+        return web$stableKey;
     }
 
     @Override
