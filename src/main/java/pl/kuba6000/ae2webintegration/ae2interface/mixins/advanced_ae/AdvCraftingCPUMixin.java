@@ -10,12 +10,15 @@ import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
+import pl.kuba6000.ae2webintegration.core.identity.CpuIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -33,15 +36,28 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
     @Final
     private AdvCraftingCPUCluster cluster;
 
+    @Unique
+    private @Nullable StableKey web$stableKey;
+
     @Override
     public @NotNull String web$getId() {
-        if (uniqueId != null) return "advanced_ae:" + uniqueId;
-
-        // The free-capacity CPU has no UUID and is recreated as available storage changes.
-        var position = cluster.getBoundsMin();
-        return "advanced_ae:free:" + cluster.getLevel()
-            .dimension()
-            .location() + ":" + position.getX() + ":" + position.getY() + ":" + position.getZ();
+        if (web$stableKey == null) {
+            if (uniqueId != null) {
+                web$stableKey = CpuIdentity.advanced(uniqueId);
+            } else {
+                // The free-capacity CPU has no UUID and is recreated as available storage changes.
+                var position = cluster.getBoundsMin();
+                web$stableKey = CpuIdentity.advancedFree(
+                    cluster.getLevel()
+                        .dimension()
+                        .location()
+                        .toString(),
+                    position.getX(),
+                    position.getY(),
+                    position.getZ());
+            }
+        }
+        return web$stableKey.toString();
     }
 
     @Override

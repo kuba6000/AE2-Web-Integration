@@ -1,7 +1,9 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.stacks.AEKey;
@@ -9,6 +11,8 @@ import appeng.api.stacks.KeyCounter;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
+import pl.kuba6000.ae2webintegration.core.identity.CpuIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -17,13 +21,24 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 @Mixin(value = CraftingCPUCluster.class, remap = false)
 public class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
 
+    @Unique
+    private @Nullable StableKey web$stableKey;
+
     @Override
     public @NotNull String web$getId() {
-        CraftingCPUCluster cluster = (CraftingCPUCluster) (Object) this;
-        var position = cluster.getBoundsMin();
-        return "ae2:" + cluster.getLevel()
-            .dimension()
-            .location() + ":" + position.getX() + ":" + position.getY() + ":" + position.getZ();
+        if (web$stableKey == null) {
+            CraftingCPUCluster cluster = (CraftingCPUCluster) (Object) this;
+            var position = cluster.getBoundsMin();
+            web$stableKey = CpuIdentity.ae2(
+                cluster.getLevel()
+                    .dimension()
+                    .location()
+                    .toString(),
+                position.getX(),
+                position.getY(),
+                position.getZ());
+        }
+        return web$stableKey.toString();
     }
 
     @Override
