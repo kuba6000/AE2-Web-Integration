@@ -24,7 +24,7 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     private @Nullable StableKey web$stableKey;
 
     @Override
-    public @NotNull String web$getId() {
+    public @NotNull StableKey web$getId() {
         if (web$stableKey == null) {
             CraftingCPUCluster cluster = (CraftingCPUCluster) (Object) this;
             var position = cluster.getBoundsMin();
@@ -41,7 +41,7 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
                     .putInt(position.getZ());
             });
         }
-        return web$stableKey.toString();
+        return web$stableKey;
     }
 
     @Override
