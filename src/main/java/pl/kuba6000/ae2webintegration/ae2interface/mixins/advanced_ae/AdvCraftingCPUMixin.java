@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.advanced_ae;
 
 import java.util.UUID;
 
+import net.minecraft.network.chat.Component;
 import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
 import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPUCluster;
 
@@ -16,6 +17,7 @@ import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -24,7 +26,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = AdvCraftingCPU.class, remap = false)
-public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
+@SuppressWarnings("UnstableApiUsage")
+public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNameIndex {
 
     @Shadow
     @Final
@@ -69,14 +72,9 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster {
     }
 
     @Override
-    public boolean web$hasCustomName() {
-        return !(((ICraftingCPU) this).getName() == null);
-    }
-
-    @Override
     public String web$getName() {
-        return web$hasCustomName() ? ((ICraftingCPU) this).getName()
-            .getString() : ("CPU #" + AE.cpuInternalIDMap.getOrDefault(this, -1));
+        Component name = ((ICraftingCPU) this).getName();
+        return name != null ? name.getString() : ("CPU #" + AE.cpuInternalIDMap.getOrDefault(this, -1));
     }
 
     @Override

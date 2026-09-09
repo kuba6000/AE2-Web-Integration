@@ -17,7 +17,7 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 
 /**
  * NeoForge config wiring. This class does NOT define what config keys exist —
- * that is owned by {@link ConfigBootstrap}. Instead it:
+ * that is owned by {@link ConfigBootstrap}. Instead, it:
  * <ol>
  * <li>Creates a {@link ModConfigSpec.Builder}</li>
  * <li>Wraps it in a {@link ConfigBuilder}</li>
@@ -29,7 +29,7 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
  * system on every {@code get()}, no explicit value-copying step is needed —
  * values are always current after NeoForge fires its config events.
  */
-@EventBusSubscriber(modid = AE2WebIntegration.MODID, bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = AE2WebIntegration.MODID)
 public class Config {
 
     public static final ModConfigSpec SPEC;

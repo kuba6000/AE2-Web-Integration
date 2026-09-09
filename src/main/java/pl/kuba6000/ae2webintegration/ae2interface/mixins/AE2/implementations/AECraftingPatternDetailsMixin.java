@@ -10,7 +10,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 public interface AECraftingPatternDetailsMixin extends IAECraftingPatternDetails {
 
     @Override
-    public default IAEGenericStack[] web$getCondensedOutputs() {
+    default IAEGenericStack[] web$getCondensedOutputs() {
         return ((IPatternDetails) this).getOutputs()
             .toArray(new IAEGenericStack[0]);
     }

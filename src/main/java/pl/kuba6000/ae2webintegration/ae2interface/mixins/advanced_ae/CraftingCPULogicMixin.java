@@ -25,15 +25,14 @@ import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IExecutingCraftingJobAccessor;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = AdvCraftingCPULogic.class, remap = false)
 public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
@@ -50,15 +49,10 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
         @Nullable ICraftingRequester requester, CallbackInfoReturnable<ICraftingSubmitResult> ci) {
         if (ci.getReturnValue()
             .successful()) {
-            boolean isMachine = !src.player()
-                .isPresent();
+            boolean isMachine = src.player()
+                .isEmpty();
             IAEMixinCallbacks.getInstance()
-                .jobStarted(
-                    (ICraftingCPUCluster) (Object) cpu,
-                    (IAECraftingGrid) grid.getCraftingService(),
-                    (IAEGrid) grid,
-                    false,
-                    !isMachine);
+                .jobStarted((ICraftingCPUCluster) (Object) cpu, (IAEGrid) grid, false, !isMachine);
         }
     }
 
@@ -83,9 +77,8 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
             target = "Lappeng/api/networking/crafting/ICraftingProvider;pushPattern(Lappeng/api/crafting/IPatternDetails;[Lappeng/api/stacks/KeyCounter;)Z"))
     private boolean ae2webintegration$pushPattern(ICraftingProvider medium, IPatternDetails details, KeyCounter[] ic) {
         if (medium.pushPattern(details, ic)) {
-            IPatternProviderViewable viewable = ((IAECraftingGrid) cpu.getGrid()
-                .getService(ICraftingService.class)).web$getCraftingProviders()
-                .web$getViewableForCraftingMedium((ICraftingMediumKey) medium);
+            IPatternProviderViewable viewable = ((ICraftingMediumTracker) cpu.getGrid()
+                .getService(ICraftingService.class)).web$getViewableForCraftingMedium(medium);
             IAEMixinCallbacks.getInstance()
                 .pushedPattern((ICraftingCPUCluster) (Object) cpu, viewable, (IAECraftingPatternDetails) details);
             return true;

@@ -5,6 +5,8 @@ import java.util.WeakHashMap;
 
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
+import org.jetbrains.annotations.NotNull;
+
 import appeng.api.features.IPlayerRegistry;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
@@ -25,14 +27,10 @@ public class AE implements IAE {
 
     public static AE instance = new AE();
 
-    public static AE getInstance() {
-        return instance;
-    }
-
     static class AEGridIterable implements Iterable<IAEGrid> {
 
         @Override
-        public Iterator<IAEGrid> iterator() {
+        public @NotNull Iterator<IAEGrid> iterator() {
             return new Iterator<>() {
 
                 private final Iterator<Grid> iterator = TickHandler.instance()

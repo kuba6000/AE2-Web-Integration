@@ -9,7 +9,6 @@ import net.neoforged.fml.loading.FMLLoader;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.spongepowered.asm.lib.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
@@ -56,7 +55,6 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.implementations.AEItemMixin",
                 "AE2.implementations.AEMeInventoryItemMixin",
                 "AE2.implementations.AEPlayerDataMixin",
-                "AE2.implementations.CraftingMediumKeyMixin",
                 "AE2.implementations.CraftingPlanSummaryEntryMixin",
                 "AE2.implementations.CraftingPlanSummaryMixin",
                 "AE2.implementations.PatternProviderViewableMixin",

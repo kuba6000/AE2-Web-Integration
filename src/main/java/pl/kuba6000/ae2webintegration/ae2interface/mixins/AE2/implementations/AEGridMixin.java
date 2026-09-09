@@ -25,6 +25,7 @@ import appeng.blockentity.networking.WirelessAccessPointBlockEntity;
 import appeng.me.Grid;
 import appeng.me.helpers.PlayerSource;
 import appeng.parts.reporting.AbstractTerminalPart;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -34,7 +35,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = Grid.class, remap = false)
-public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
+public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, IAESecurityGrid {
 
     @Override
     public IAECraftingGrid web$getCraftingGrid() {
@@ -60,7 +61,7 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
     private Class<?> web$lastUsedMachineClass = null;
 
     @Override
-    public Object web$getPlayerSource() {
+    public PlayerSource web$getPlayerSource() {
         Grid internalGrid = (Grid) (Object) this;
         Set<?> terminals = null;
         if (web$lastUsedMachineClass != null) terminals = internalGrid.getMachines(web$lastUsedMachineClass);
@@ -78,7 +79,6 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
         IActionHost actionHost;
         ServerLevel world;
         if (web$lastUsedMachineClass == null || terminals.isEmpty()) {
-            // throw new RuntimeException("There is no terminal in the AE system");
             Object o = internalGrid.getPivot()
                 .getOwner();
             if (o instanceof IActionHost) actionHost = (IActionHost) o;
@@ -190,8 +190,8 @@ public abstract class AEGridMixin implements IAEGrid, IAESecurityGrid {
         return web$hashKey;
     }
 
-    @Override
-    public int web$getOwner() {
+    @Unique
+    private int web$getOwner() {
         return web$ownerTracker.keySet()
             .stream()
             .sorted()

@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -21,7 +22,7 @@ public class AEGenericStackMixin implements IAEGenericStack {
     private long amount;
 
     @Override
-    public IAEKey web$what() {
+    public @NotNull IAEKey web$what() {
         return (IAEKey) what;
     }
 
@@ -30,8 +31,4 @@ public class AEGenericStackMixin implements IAEGenericStack {
         return amount;
     }
 
-    @Override
-    public IAEGenericStack web$copy() {
-        return (IAEGenericStack) (Object) new GenericStack(this.what, this.amount);
-    }
 }

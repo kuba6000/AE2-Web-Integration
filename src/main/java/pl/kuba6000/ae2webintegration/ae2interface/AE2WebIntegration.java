@@ -47,7 +47,7 @@ public class AE2WebIntegration {
         LOG.info("AE2WebIntegration loading at version {}", version);
     }
 
-    @EventBusSubscriber(modid = MODID, bus = EventBusSubscriber.Bus.MOD)
+    @EventBusSubscriber(modid = MODID)
     private static class ModEventHandler {
 
         @SubscribeEvent

@@ -15,23 +15,26 @@ import com.google.common.collect.ImmutableSet;
 import appeng.api.networking.crafting.CalculationStrategy;
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingPlan;
+import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.crafting.ICraftingSubmitResult;
-import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.api.storage.AEKeyFilter;
 import appeng.me.helpers.PlayerSource;
 import appeng.me.service.CraftingService;
 import appeng.me.service.helpers.NetworkCraftingProviders;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = CraftingService.class, remap = false)
-public abstract class AECraftingGridMixin implements IAECraftingGrid {
+public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingMediumTracker {
 
     @Shadow
     @Final
@@ -49,8 +52,8 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid {
     public abstract Set<AEKey> getCraftables(AEKeyFilter filter);
 
     @Override
-    public ICraftingMediumTracker web$getCraftingProviders() {
-        return (ICraftingMediumTracker) craftingProviders;
+    public IPatternProviderViewable web$getViewableForCraftingMedium(ICraftingProvider medium) {
+        return ((ICraftingMediumTracker) craftingProviders).web$getViewableForCraftingMedium(medium);
     }
 
     @Override
@@ -74,14 +77,14 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid {
         int i = 1;
         for (ICraftingCPU cpu : sortedCpus) {
             cpus.add((ICraftingCPUCluster) cpu);
-            ((ICraftingCPUCluster) cpu).web$setInternalID(i++);
+            ((ICraftingCPUNameIndex) cpu).web$setInternalID(i++);
         }
         return cpus;
     }
 
     @Override
     public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
-        PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
+        PlayerSource actionSrc = ((IGridPlayerSource) grid).web$getPlayerSource();
         final Future<ICraftingPlan> job = ((CraftingService) (Object) this).beginCraftingCalculation(
             actionSrc.player()
                 .get()
@@ -100,7 +103,7 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid {
             null,
             (ICraftingCPU) target,
             prioritizePower,
-            (IActionSource) grid.web$getPlayerSource());
+            ((IGridPlayerSource) grid).web$getPlayerSource());
         if (result.successful()) return null;
         String errorMessage = "";
         switch (result.errorCode()) {
