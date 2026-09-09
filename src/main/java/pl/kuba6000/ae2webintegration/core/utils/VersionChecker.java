@@ -1,110 +1,152 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import pl.kuba6000.ae2webintegration.core.CoreEngine;
+/** One server lifecycle's background checks and last completed recommendation. */
+public final class VersionChecker implements AutoCloseable {
 
-public class VersionChecker {
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
+    private static final long CHECK_INTERVAL_HOURS = 5;
+    private static final long RETRY_DELAY_MINUTES = 5;
+    private static final long FETCH_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(15);
+    private static final int HTTP_TIMEOUT_MILLIS = (int) TimeUnit.SECONDS.toMillis(5);
+    private static final int MAX_RESPONSE_BYTES = 64 * 1024;
+    private static final int READ_BUFFER_BYTES = 4 * 1024;
+    private final @NotNull String currentVersion;
+    private final @NotNull String versionIdentifier;
+    private final @NotNull String minecraftVersion;
+    private final @NotNull URL feedUrl;
+    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "AE2WebIntegration-VersionChecker");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private volatile @Nullable ReleaseManifest.Release availableUpdate;
+    private @Nullable CompletableFuture<ReleaseManifest.Release> pending;
+    private @Nullable ScheduledFuture<?> scheduled;
+    private boolean closed;
 
-    // example version: 0.0.9-alpha-forge-1.12.2
-    private static String VERSION_IDENTIFIER = "";
-
-    private static final String versionCheckURL = "https://api.github.com/repos/kuba6000/AE2-Web-Integration/tags";
-    private static String latestTag = null;
-
-    private static long lastChecked = 0L;
-
-    /**
-     * Sets the version identifier used to filter GitHub tags for update checks.
-     * Must be called from the interface layer before any version check runs.
-     * Example: "-forge-1.7.10", "-forge-1.12.2", "-neoforge-1.21.1".
-     */
-    public static void setVersionIdentifier(String identifier) {
-        VERSION_IDENTIFIER = identifier;
-    }
-
-    /**
-     * Extracts the version identifier suffix from a version string when
-     * VERSION_IDENTIFIER has not been explicitly set via setVersionIdentifier().
-     * Matches patterns like -forge-1.7.10 or -neoforge-1.21.1 within the version string.
-     */
-    private static String extractVersionIdentifier(String version) {
-        Matcher matcher = Pattern.compile("-(?:forge|neoforge)-\\d+\\.\\d+\\.\\d+")
-            .matcher(version);
-        return matcher.find() ? matcher.group() : "";
-    }
-
-    private static void updateLatestVersion(String currentVersion) {
-        if (currentVersion == null || currentVersion.isEmpty()) return;
-
-        // Fallback: extract VERSION_IDENTIFIER from currentVersion if not explicitly set
-        if (VERSION_IDENTIFIER == null || VERSION_IDENTIFIER.isEmpty()) {
-            VERSION_IDENTIFIER = extractVersionIdentifier(currentVersion);
-            if (VERSION_IDENTIFIER == null || VERSION_IDENTIFIER.isEmpty()) {
-                return; // Cannot determine version identifier for this version
-            }
-        }
-
-        if (lastChecked != 0L) {
-            long elapsed = System.currentTimeMillis() - lastChecked;
-            if (latestTag == null) {
-                if (elapsed < 5 * 60 * 1000) // 5 minutes
-                    return;
-            } else if (!currentVersion.equals(latestTag)) {
-                return;
-            } else if (elapsed < 5 * 60 * 60 * 1000) { // 5 hours
-                return;
-            }
-        }
-        lastChecked = System.currentTimeMillis();
+    public VersionChecker(@NotNull URL feedBaseUrl, @NotNull String currentVersion, @NotNull String versionIdentifier) {
+        this.currentVersion = currentVersion;
+        this.versionIdentifier = versionIdentifier;
+        Matcher target = Pattern.compile("-(?:neo)?forge-(\\d+\\.\\d+\\.\\d+)")
+            .matcher(versionIdentifier);
+        if (!target.matches())
+            throw new IllegalArgumentException("Unsupported version identifier: " + versionIdentifier);
+        minecraftVersion = target.group(1);
         try {
-            HttpURLConnection conn = (HttpURLConnection) new URL(versionCheckURL).openConnection();
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            conn.setRequestProperty("User-Agent", "AE2-Web-Integration");
-            if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                try (BufferedReader buf = new BufferedReader(
-                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-                    JsonElement element = new JsonParser().parse(buf);
-                    // this should be sorted right?
-                    for (JsonElement tag : element.getAsJsonArray()) {
-                        String name = tag.getAsJsonObject()
-                            .get("name")
-                            .getAsString();
-                        if (name.contains(VERSION_IDENTIFIER)) {
-                            latestTag = name;
-                            return;
-                        }
-                    }
-                    // not found???
-                    latestTag = currentVersion;
-                }
-            }
-
-        } catch (Exception ignored) {
-
+            feedUrl = new URL(feedBaseUrl, minecraftVersion + ".json");
+        } catch (MalformedURLException e) {
+            throw new IllegalArgumentException("Invalid feed URL", e);
         }
     }
 
-    public static boolean isOutdated() {
-        String currentVersion = CoreEngine.getModVersion();
-        if (currentVersion == null || currentVersion.isEmpty()) return false;
-        updateLatestVersion(currentVersion);
-        if (latestTag == null) return false;
-        return !latestTag.equals(currentVersion);
+    /**
+     * Starts or joins a background refresh. Successful checks repeat after five hours; failures retry in five minutes.
+     */
+    public synchronized @NotNull CompletableFuture<ReleaseManifest.Release> checkForUpdates() {
+        if (closed) {
+            CompletableFuture<ReleaseManifest.Release> cancelled = new CompletableFuture<>();
+            cancelled.cancel(false);
+            return cancelled;
+        }
+        if (pending != null) return pending;
+        if (scheduled != null) scheduled.cancel(false);
+        CompletableFuture<ReleaseManifest.Release> result = new CompletableFuture<>();
+        pending = result;
+        executor.execute(() -> refresh(result));
+        return result;
     }
 
-    public static String getLatestTag() {
-        return latestTag;
+    /** Read-only snapshot; this never performs network I/O. Null means no completed recommendation. */
+    public @Nullable ReleaseManifest.Release getAvailableUpdate() {
+        return availableUpdate;
     }
 
+    private void refresh(CompletableFuture<ReleaseManifest.Release> result) {
+        try {
+            ReleaseManifest.Release release = fetch().findUpdate(currentVersion, versionIdentifier);
+            synchronized (this) {
+                if (closed) return;
+                ReleaseManifest.Release previous = availableUpdate;
+                availableUpdate = release;
+                if (release != null && (previous == null || !previous.tag.equals(release.tag))) {
+                    LOG.warn(
+                        "New {} release of AE2 Web Integration: {} at {}",
+                        release.channel == ReleaseManifest.Channel.STABLE ? "stable" : "prerelease",
+                        release.tag,
+                        release.releaseUrl);
+                }
+                pending = null;
+                scheduled = executor.schedule(this::checkForUpdates, CHECK_INTERVAL_HOURS, TimeUnit.HOURS);
+                result.complete(release);
+            }
+        } catch (Exception e) {
+            synchronized (this) {
+                if (closed) return;
+                LOG.debug("Could not check AE2 Web Integration releases", e);
+                pending = null;
+                scheduled = executor.schedule(this::checkForUpdates, RETRY_DELAY_MINUTES, TimeUnit.MINUTES);
+                result.completeExceptionally(e);
+            }
+        }
+    }
+
+    private ReleaseManifest fetch() throws IOException {
+        long deadline = System.nanoTime() + FETCH_TIMEOUT_NANOS;
+        HttpURLConnection request = (HttpURLConnection) feedUrl.openConnection();
+        request.setConnectTimeout(HTTP_TIMEOUT_MILLIS);
+        request.setReadTimeout(HTTP_TIMEOUT_MILLIS);
+        request.setRequestProperty("User-Agent", "AE2-Web-Integration");
+        request.setRequestProperty("Accept", "application/json");
+        synchronized (this) {
+            if (closed) throw new IOException("Version checker stopped");
+        }
+        try {
+            if (request.getResponseCode() != HttpURLConnection.HTTP_OK)
+                throw new IOException("Release feed HTTP status: " + request.getResponseCode());
+            if (request.getContentLengthLong() > MAX_RESPONSE_BYTES) throw new IOException("Release feed is too large");
+            try (InputStream input = request.getInputStream();
+                ByteArrayOutputStream body = new ByteArrayOutputStream()) {
+                byte[] bytes = new byte[READ_BUFFER_BYTES];
+                int length;
+                while ((length = input.read(bytes)) != -1) {
+                    if (System.nanoTime() - deadline >= 0) throw new IOException("Release feed timed out");
+                    if (body.size() + length > MAX_RESPONSE_BYTES) throw new IOException("Release feed is too large");
+                    body.write(bytes, 0, length);
+                }
+                return ReleaseManifest.parse(new String(body.toByteArray(), StandardCharsets.UTF_8), minecraftVersion);
+            }
+        } finally {
+            request.disconnect();
+        }
+    }
+
+    @Override
+    public synchronized void close() {
+        closed = true;
+        availableUpdate = null;
+        if (pending != null) pending.cancel(false);
+        // HttpURLConnection.disconnect can block behind an in-progress read. The worker owns
+        // closing its connection; finite I/O timeouts bound cleanup without stalling server stop.
+        executor.shutdownNow();
+    }
 }

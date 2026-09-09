@@ -22,7 +22,7 @@ jobs:
       - name: Checkout core
         uses: actions/checkout@v4
 
-      - name: Test core pin updater
+      - name: Test repository automation
         run: python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
 
       - name: Set up Node.js
