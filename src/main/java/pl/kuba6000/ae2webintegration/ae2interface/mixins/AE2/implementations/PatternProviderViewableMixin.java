@@ -23,7 +23,7 @@ public interface PatternProviderViewableMixin extends IPatternProviderViewable {
     Object getOwner();
 
     @Override
-    public default String web$getName() {
+    default String web$getName() {
         Object o = getOwner();
         if (o instanceof PatternContainer) {
             PatternContainerGroup group = ((PatternContainer) o).getTerminalGroup();
@@ -38,7 +38,7 @@ public interface PatternProviderViewableMixin extends IPatternProviderViewable {
     }
 
     @Override
-    public default DimensionalCoords web$getLocation() {
+    default DimensionalCoords web$getLocation() {
         BlockPos pos;
         Level level;
         if (this instanceof InWorldGridNode) {

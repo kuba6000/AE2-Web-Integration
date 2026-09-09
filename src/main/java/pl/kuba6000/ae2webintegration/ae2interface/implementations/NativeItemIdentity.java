@@ -10,6 +10,7 @@ import appeng.api.stacks.AEKey;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Exact native AE key identity, including persistent addon data supported by native codecs. */
+@SuppressWarnings("UnstableApiUsage")
 public final class NativeItemIdentity {
 
     private NativeItemIdentity() {}

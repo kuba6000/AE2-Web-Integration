@@ -13,6 +13,7 @@ import com.google.common.hash.PrimitiveSink;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Streams typed native data without allocating a complete canonical byte representation. */
+@SuppressWarnings("UnstableApiUsage")
 final class CanonicalNbt {
 
     private static final int MAX_DEPTH = 64;

@@ -23,7 +23,7 @@ public abstract class AEItemMixin implements IAEKey {
     }
 
     @Override
-    public IAEKey web$copyIdentity() {
+    public @NotNull IAEKey web$copyIdentity() {
         return (IAEKey) NativeItemIdentity.copy((AEKey) (Object) this);
     }
 
@@ -38,54 +38,20 @@ public abstract class AEItemMixin implements IAEKey {
     }
 
     @Override
-    public String web$getItemID() {
+    public @NotNull String web$getItemID() {
         ResourceLocation rs = getId();
         return rs.getNamespace() + ":" + rs.getPath();
     }
 
     @Override
-    public String web$getDisplayName() {
+    public @NotNull String web$getDisplayName() {
         return getDisplayName().getString();
     }
 
-    // @Override
-    // public default long web$getStackSize() {
-    // return getStackSize();
-    // }
-    //
     @Override
     public boolean web$isCraftable(IAEGrid grid) {
         return ((Grid) grid).getCraftingService()
             .isCraftable((AEKey) (Object) this);
     }
-    //
-    // @Override
-    // public default long web$getCountRequestable() {
-    // return getCountRequestable();
-    // }
-    //
-    // @Override
-    // public default long web$getCountRequestableCrafts() {
-    // return getCountRequestableCrafts();
-    // }
-    //
-    // @Override
-    // public default void web$reset() {
-    // reset();
-    // }
 
-    @Override
-    public boolean web$isSameType(IAEKey other) {
-        return this.equals(other);
-    }
-
-    // @Override
-    // public default IAEKey web$copy() {
-    // return (IAEKey) copy();
-    // }
-    //
-    // @Override
-    // public default void web$setStackSize(long size) {
-    // setStackSize(size);
-    // }
 }

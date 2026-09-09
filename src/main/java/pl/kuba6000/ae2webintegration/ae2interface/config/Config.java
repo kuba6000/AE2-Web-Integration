@@ -13,7 +13,7 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 
 /**
  * Forge 1.20.1 config wiring. This class does NOT define what config keys
- * exist — that is owned by {@link ConfigBootstrap}. Instead it:
+ * exist — that is owned by {@link ConfigBootstrap}. Instead, it:
  * <ol>
  * <li>Creates a {@link ForgeConfigSpec.Builder}</li>
  * <li>Wraps it in a {@link ConfigBuilder}</li>

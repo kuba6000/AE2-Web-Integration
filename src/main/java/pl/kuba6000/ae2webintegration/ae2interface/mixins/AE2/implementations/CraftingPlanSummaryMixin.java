@@ -12,11 +12,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 public class CraftingPlanSummaryMixin implements ICraftingPlanSummary {
 
     @Override
-    public boolean web$isSimulation() {
-        return ((CraftingPlanSummary) (Object) this).isSimulation();
-    }
-
-    @Override
     public List<ICraftingPlanSummaryEntry> web$getEntries() {
         return (List<ICraftingPlanSummaryEntry>) (Object) ((CraftingPlanSummary) (Object) this).getEntries();
     }
