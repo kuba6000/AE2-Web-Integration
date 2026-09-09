@@ -9,9 +9,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import pl.kuba6000.ae2webintegration.core.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.ntfy.NtfyDestination;
+import pl.kuba6000.ae2webintegration.core.notification.message.ErrorMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 
 public class NotificationManager extends Thread {
@@ -30,6 +32,20 @@ public class NotificationManager extends Thread {
         if (discord.isUsable()) destinations.add(discord);
         NtfyDestination ntfy = new NtfyDestination();
         if (ntfy.isUsable()) destinations.add(ntfy);
+
+        if (!Config.AE_PUBLIC_MODE && (!destinations.isEmpty())) {
+            NotificationManager.postMessageNonBlocking(
+                new ErrorMessage(
+                    "AE2 Web Integration",
+                    "Notification integration started!",
+                    ErrorMessage.Severity.NONE));
+        } else if (Config.AE_PUBLIC_MODE && (!destinations.isEmpty())) {
+            NotificationManager.postMessageNonBlocking(
+                new ErrorMessage(
+                    "AE2 Web Integration",
+                    "Warning!\nNotifications are enabled in the config, but the public mode is enabled!\nNotifications will be disabled!",
+                    ErrorMessage.Severity.WARNING));
+        }
 
         thread = new NotificationManager();
         thread.start();
