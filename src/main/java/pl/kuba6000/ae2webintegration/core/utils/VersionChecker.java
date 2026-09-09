@@ -24,7 +24,12 @@ import org.jetbrains.annotations.Nullable;
 public final class VersionChecker implements AutoCloseable {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
+    private static final long CHECK_INTERVAL_HOURS = 5;
+    private static final long RETRY_DELAY_MINUTES = 5;
+    private static final long FETCH_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(15);
+    private static final int HTTP_TIMEOUT_MILLIS = (int) TimeUnit.SECONDS.toMillis(5);
     private static final int MAX_RESPONSE_BYTES = 64 * 1024;
+    private static final int READ_BUFFER_BYTES = 4 * 1024;
     private final @NotNull String currentVersion;
     private final @NotNull String versionIdentifier;
     private final @NotNull String minecraftVersion;
@@ -91,7 +96,7 @@ public final class VersionChecker implements AutoCloseable {
                         release.releaseUrl);
                 }
                 pending = null;
-                scheduled = executor.schedule(this::checkForUpdates, 5, TimeUnit.HOURS);
+                scheduled = executor.schedule(this::checkForUpdates, CHECK_INTERVAL_HOURS, TimeUnit.HOURS);
                 result.complete(release);
             }
         } catch (Exception e) {
@@ -99,29 +104,29 @@ public final class VersionChecker implements AutoCloseable {
                 if (closed) return;
                 LOG.debug("Could not check AE2 Web Integration releases", e);
                 pending = null;
-                scheduled = executor.schedule(this::checkForUpdates, 5, TimeUnit.MINUTES);
+                scheduled = executor.schedule(this::checkForUpdates, RETRY_DELAY_MINUTES, TimeUnit.MINUTES);
                 result.completeExceptionally(e);
             }
         }
     }
 
     private ReleaseManifest fetch() throws IOException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+        long deadline = System.nanoTime() + FETCH_TIMEOUT_NANOS;
         HttpURLConnection request = (HttpURLConnection) feedUrl.openConnection();
-        request.setConnectTimeout(5000);
-        request.setReadTimeout(5000);
+        request.setConnectTimeout(HTTP_TIMEOUT_MILLIS);
+        request.setReadTimeout(HTTP_TIMEOUT_MILLIS);
         request.setRequestProperty("User-Agent", "AE2-Web-Integration");
         request.setRequestProperty("Accept", "application/json");
         synchronized (this) {
             if (closed) throw new IOException("Version checker stopped");
         }
         try {
-            if (request.getResponseCode() != 200)
+            if (request.getResponseCode() != HttpURLConnection.HTTP_OK)
                 throw new IOException("Release feed HTTP status: " + request.getResponseCode());
             if (request.getContentLengthLong() > MAX_RESPONSE_BYTES) throw new IOException("Release feed is too large");
             try (InputStream input = request.getInputStream();
                 ByteArrayOutputStream body = new ByteArrayOutputStream()) {
-                byte[] bytes = new byte[4096];
+                byte[] bytes = new byte[READ_BUFFER_BYTES];
                 int length;
                 while ((length = input.read(bytes)) != -1) {
                     if (System.nanoTime() - deadline >= 0) throw new IOException("Release feed timed out");
