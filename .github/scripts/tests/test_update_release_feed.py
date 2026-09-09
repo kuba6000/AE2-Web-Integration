@@ -157,6 +157,64 @@ class UpdateReleaseFeedTest(unittest.TestCase):
                 self.assertNotEqual(0, result.returncode)
                 self.assertEqual(before, self.git("rev-parse", "HEAD"))
 
+    def test_current_pre_suffix_and_github_flag_select_prerelease_channel(self):
+        releases = [release("1.2.0-pre-forge-1.7.10"),
+                    release("1.2.0-pre.2-forge-1.12.2"),
+                    release("1.2.0-forge-1.20.1", prerelease=True),
+                    release("1.2.0-pre-neoforge-1.21.1")]
+        result = self.update(releases)
+        self.assertEqual(0, result.returncode, result.stderr)
+        for target, expected in zip(TARGETS, ("1.2.0-pre", "1.2.0-pre.2", "1.2.0", "1.2.0-pre")):
+            with self.subTest(target=target):
+                channels = self.feed(target)["releases"]
+                self.assertIsNone(channels["stable"])
+                self.assertEqual(expected, channels["prerelease"]["newest"])
+
+    def test_same_tag_refreshes_published_metadata_without_changing_other_channel(self):
+        stable = release("1.1.0-forge-1.7.10")
+        preview = release("1.2.0-pre-forge-1.7.10")
+        self.assertEqual(0, self.update([stable, preview]).returncode)
+        unchanged_pre = self.feed()["releases"]["prerelease"]
+        before = self.git("rev-parse", "HEAD")
+        stable["published_at"] = "2026-09-08T12:00:00Z"
+        stable["html_url"] += "?release=updated"
+        stable["assets"][-1]["browser_download_url"] += "?asset=updated"
+        result = self.update([stable])
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertNotEqual(before, self.git("rev-parse", "HEAD"))
+        channels = self.feed()["releases"]
+        self.assertEqual("1.1.0", channels["stable"]["newest"])
+        self.assertEqual(1788868800, channels["stable"]["timestamp"])
+        self.assertEqual(stable["html_url"], channels["stable"]["github_release_url"])
+        self.assertEqual(stable["assets"][-1]["browser_download_url"],
+                         channels["stable"]["github_release_download_url"])
+        self.assertEqual(unchanged_pre, channels["prerelease"])
+
+    def test_reconciliation_is_independent_of_release_api_order(self):
+        releases = [release("1.0.0-forge-1.7.10"), release("1.10.0-forge-1.7.10"),
+                    release("1.9.0-forge-1.7.10"), release("1.11.0-pre.10-forge-1.7.10"),
+                    release("1.11.0-pre.2-forge-1.7.10")]
+        result = self.update(releases)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("1.10.0", self.feed()["releases"]["stable"]["newest"])
+        self.assertEqual("1.11.0-pre.10", self.feed()["releases"]["prerelease"]["newest"])
+        before = self.git("rev-parse", "HEAD")
+        result = self.update(list(reversed(releases)))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(before, self.git("rev-parse", "HEAD"))
+
+    def test_stable_promotion_preserves_existing_pre_and_does_not_restore_empty_pre(self):
+        preview = release("1.2.0-pre-forge-1.7.10")
+        self.assertEqual(0, self.update([preview]).returncode)
+        pre = self.feed()["releases"]["prerelease"]
+        result = self.update([preview, release("1.2.0-forge-1.7.10"),
+                              release("1.2.0-pre-forge-1.12.2"), release("1.2.0-forge-1.12.2")])
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("1.2.0", self.feed()["releases"]["stable"]["newest"])
+        self.assertEqual(pre, self.feed()["releases"]["prerelease"])
+        self.assertEqual("1.2.0", self.feed("1.12.2")["releases"]["stable"]["newest"])
+        self.assertIsNone(self.feed("1.12.2")["releases"]["prerelease"])
+
 
 if __name__ == "__main__":
     unittest.main()

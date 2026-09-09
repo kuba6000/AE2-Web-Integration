@@ -2,12 +2,16 @@ package pl.kuba6000.ae2webintegration.core.utils;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -17,6 +21,45 @@ import org.junit.jupiter.api.Test;
 import com.sun.net.httpserver.HttpServer;
 
 class VersionCheckerTest {
+
+    @Test
+    void rejectsOversizedChunkedFeedWithoutContentLength() throws Exception {
+        AtomicReference<String> body = new AtomicReference<>(ReleaseManifestTest.feed("1.1.0", null));
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, 0);
+            try {
+                exchange.getResponseBody()
+                    .write(
+                        body.get()
+                            .getBytes(StandardCharsets.UTF_8));
+            } finally {
+                exchange.close();
+            }
+        });
+        server.start();
+        try (VersionChecker checker = new VersionChecker(
+            new URL(
+                "http://127.0.0.1:" + server.getAddress()
+                    .getPort() + "/"),
+            "1.0.0-forge-1.7.10",
+            "-forge-1.7.10")) {
+            assertEquals(
+                "1.1.0",
+                checker.checkForUpdates()
+                    .get(5, TimeUnit.SECONDS).version);
+            // Valid JSON plus whitespace would parse successfully without the streaming size limit.
+            body.set(body.get() + new String(new char[70_000]).replace('\0', ' '));
+            ExecutionException failure = assertThrows(
+                ExecutionException.class,
+                () -> checker.checkForUpdates()
+                    .get(5, TimeUnit.SECONDS));
+            assertInstanceOf(IOException.class, failure.getCause());
+            assertEquals("1.1.0", checker.getAvailableUpdate().version);
+        } finally {
+            server.stop(0);
+        }
+    }
 
     @Test
     void refreshesExistingUpdateAndRetainsLastGoodResultAcrossFailures() throws Exception {
@@ -113,6 +156,12 @@ class VersionCheckerTest {
                 .get(1, TimeUnit.SECONDS);
             assertTrue(result.isCancelled());
             respond.countDown();
+            // Wait for the old worker to finish before checking for a late publication.
+            // This is fixture synchronization, without a production-only test accessor.
+            Field executorField = VersionChecker.class.getDeclaredField("executor");
+            executorField.setAccessible(true);
+            ExecutorService executor = (ExecutorService) executorField.get(checker);
+            assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
             assertNull(checker.getAvailableUpdate());
             assertTrue(
                 checker.checkForUpdates()
