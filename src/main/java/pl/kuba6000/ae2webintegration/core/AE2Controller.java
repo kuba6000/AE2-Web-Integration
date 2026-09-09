@@ -7,6 +7,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -536,7 +537,7 @@ public class AE2Controller {
                                     .add("Set-Cookie", sessionCookie(token, -1));
                                 t.getResponseHeaders()
                                     .add("Location", ".");
-                                t.sendResponseHeaders(302, -1); // NOPMD - HTTP status code.
+                                t.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
                                 return AuthCheckResult.RESPONSE_SENT; // Logout successful
                             }
                             requestContext.set(new RequestContext(t, session.principal));
@@ -575,7 +576,7 @@ public class AE2Controller {
                 if (!registration.succeeded()) {
                     t.getResponseHeaders()
                         .add("Location", "?" + registration.error);
-                    t.sendResponseHeaders(302, -1); // NOPMD - HTTP status code.
+                    t.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
                     return AuthCheckResult.RESPONSE_SENT;
                 }
 
@@ -587,7 +588,7 @@ public class AE2Controller {
                 }
                 t.getResponseHeaders()
                     .add("Location", "?confirmregistration&token=" + confirmationToken);
-                t.sendResponseHeaders(302, -1); // NOPMD - HTTP status code.
+                t.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
                 return AuthCheckResult.RESPONSE_SENT; // Registration initiated
             }
 
@@ -596,7 +597,7 @@ public class AE2Controller {
                 if (!login.succeeded()) {
                     t.getResponseHeaders()
                         .add("Location", "?" + login.error);
-                    t.sendResponseHeaders(302, -1); // NOPMD - HTTP status code.
+                    t.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
                     return AuthCheckResult.RESPONSE_SENT;
                 }
                 boolean rememberMe = postData.containsKey("remember");
@@ -613,7 +614,7 @@ public class AE2Controller {
                     .add("Set-Cookie", sessionCookie(token, validFor));
                 t.getResponseHeaders()
                     .add("Location", ".");
-                t.sendResponseHeaders(302, -1); // NOPMD - HTTP status code.
+                t.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
                 return AuthCheckResult.RESPONSE_SENT;
             }
         }
@@ -640,7 +641,7 @@ public class AE2Controller {
                 .add("Access-Control-Allow-Methods", "GET, OPTIONS");
             t.getResponseHeaders()
                 .add("Access-Control-Allow-Headers", "Content-Type,Authorization");
-            t.sendResponseHeaders(204, -1); // NOPMD - HTTP status code.
+            t.sendResponseHeaders(HttpURLConnection.HTTP_NO_CONTENT, -1);
             return true;
         }
         AuthCheckResult authResult = checkAuth(t);
@@ -648,7 +649,7 @@ public class AE2Controller {
             return true;
         }
         if (authResult == AuthCheckResult.UNAUTHENTICATED) {
-            t.sendResponseHeaders(401, -1); // NOPMD - HTTP status code.
+            t.sendResponseHeaders(HttpURLConnection.HTTP_UNAUTHORIZED, -1);
             return true;
         }
         return false;
@@ -750,7 +751,9 @@ public class AE2Controller {
 
             byte[] raw_response = syncedRequest.getJSON()
                 .getBytes(StandardCharsets.UTF_8);
-            t.sendResponseHeaders(serviceUnavailable ? 503 : 200, raw_response.length); // NOPMD - HTTP status code.
+            t.sendResponseHeaders(
+                serviceUnavailable ? HttpURLConnection.HTTP_UNAVAILABLE : HttpURLConnection.HTTP_OK,
+                raw_response.length);
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
             os.close();
@@ -787,7 +790,7 @@ public class AE2Controller {
 
             byte[] raw_response = asyncRequest.getJSON()
                 .getBytes(StandardCharsets.UTF_8);
-            t.sendResponseHeaders(200, raw_response.length); // NOPMD - HTTP status code.
+            t.sendResponseHeaders(HttpURLConnection.HTTP_OK, raw_response.length);
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
             os.close();
@@ -816,7 +819,7 @@ public class AE2Controller {
                 String postRaw = readBody(t);
                 if (postRaw == null) {
                     byte[] raw_response = "requesttoolarge".getBytes(StandardCharsets.UTF_8);
-                    t.sendResponseHeaders(400, raw_response.length); // NOPMD - HTTP status code.
+                    t.sendResponseHeaders(HttpURLConnection.HTTP_BAD_REQUEST, raw_response.length);
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
                     os.close();
@@ -834,7 +837,7 @@ public class AE2Controller {
                     }
                     if (!registration.succeeded()) {
                         byte[] raw_response = registration.error.getBytes(StandardCharsets.UTF_8);
-                        t.sendResponseHeaders(400, raw_response.length); // NOPMD - HTTP status code.
+                        t.sendResponseHeaders(HttpURLConnection.HTTP_BAD_REQUEST, raw_response.length);
                         OutputStream os = t.getResponseBody();
                         os.write(raw_response);
                         os.close();
@@ -848,7 +851,7 @@ public class AE2Controller {
                         return;
                     }
                     byte[] raw_response = confirmationToken.getBytes(StandardCharsets.UTF_8);
-                    t.sendResponseHeaders(200, raw_response.length); // NOPMD - HTTP status code.
+                    t.sendResponseHeaders(HttpURLConnection.HTTP_OK, raw_response.length);
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
                     os.close();
@@ -859,7 +862,7 @@ public class AE2Controller {
                     LoginResult login = authenticateLogin(postData.get("username"), postData.get("password"));
                     if (!login.succeeded()) {
                         byte[] raw_response = login.error.getBytes(StandardCharsets.UTF_8);
-                        t.sendResponseHeaders(400, raw_response.length); // NOPMD - HTTP status code.
+                        t.sendResponseHeaders(HttpURLConnection.HTTP_BAD_REQUEST, raw_response.length);
                         OutputStream os = t.getResponseBody();
                         os.write(raw_response);
                         os.close();
@@ -884,7 +887,7 @@ public class AE2Controller {
                         Config.CHECK_FOR_UPDATES() && CoreEngine.getAvailableUpdate() != null);
                     byte[] raw_response = json.toString()
                         .getBytes(StandardCharsets.UTF_8);
-                    t.sendResponseHeaders(200, raw_response.length); // NOPMD - HTTP status code.
+                    t.sendResponseHeaders(HttpURLConnection.HTTP_OK, raw_response.length);
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
                     os.close();
@@ -906,12 +909,12 @@ public class AE2Controller {
                     if (revoked != null) {
                         GridAccessSessions.invalidate(revoked.principal);
                     }
-                    t.sendResponseHeaders(200, -1); // NOPMD - HTTP status code.
+                    t.sendResponseHeaders(HttpURLConnection.HTTP_OK, -1);
                     return;
                 }
             }
 
-            t.sendResponseHeaders(400, -1); // NOPMD - HTTP status code.
+            t.sendResponseHeaders(HttpURLConnection.HTTP_BAD_REQUEST, -1);
         }
 
     }
@@ -946,7 +949,7 @@ public class AE2Controller {
 
     private static void sendServerUnavailable(HttpExchange exchange, String status) throws IOException {
         byte[] response = status.getBytes(StandardCharsets.UTF_8);
-        exchange.sendResponseHeaders(503, response.length); // NOPMD - HTTP status code.
+        exchange.sendResponseHeaders(HttpURLConnection.HTTP_UNAVAILABLE, response.length);
         try (OutputStream output = exchange.getResponseBody()) {
             output.write(response);
         }
@@ -979,7 +982,7 @@ public class AE2Controller {
                     if (is == null) return;
 
                     byte[] raw_response = IOUtils.toByteArray(is);
-                    t.sendResponseHeaders(200, raw_response.length); // NOPMD - HTTP status code.
+                    t.sendResponseHeaders(HttpURLConnection.HTTP_OK, raw_response.length);
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
                     os.close();
@@ -998,7 +1001,7 @@ public class AE2Controller {
 
                 String response = "<h1>Invalid url! (ERROR 404)</h1>";
                 byte[] raw_response = response.getBytes(StandardCharsets.UTF_8);
-                t.sendResponseHeaders(404, raw_response.length); // NOPMD - HTTP status code.
+                t.sendResponseHeaders(HttpURLConnection.HTTP_NOT_FOUND, raw_response.length);
                 OutputStream os = t.getResponseBody();
                 os.write(raw_response);
                 os.close();
@@ -1036,7 +1039,7 @@ public class AE2Controller {
             byte[] raw_response = response.getBytes(StandardCharsets.UTF_8);
             t.getResponseHeaders()
                 .set("Content-Type", "text/html; charset=UTF-8");
-            t.sendResponseHeaders(200, raw_response.length); // NOPMD - HTTP status code.
+            t.sendResponseHeaders(HttpURLConnection.HTTP_OK, raw_response.length);
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
             os.close();

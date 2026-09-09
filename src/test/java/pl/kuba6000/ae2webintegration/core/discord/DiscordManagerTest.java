@@ -105,7 +105,8 @@ class DiscordManagerTest {
     }
 
     @ParameterizedTest
-    @CsvSource({ "250, 0.25s", "3285, 3.285s", "47000, 47s", "800000, '13m 20s'", "3661000, '1h 1m 1s'",
+    @CsvSource({ "250, 0.25s", "3285, 3.285s", "4999, 4.999s", "5000, 5s", "59499, 59s", "59500, '1m 0s'",
+        "3599500, '1h 0m 0s'", "86399500, '1d 0h 0m 0s'", "47000, 47s", "800000, '13m 20s'", "3661000, '1h 1m 1s'",
         "7509000, '2h 5m 9s'", "86400000, '1d 0h 0m 0s'", "183845000, '2d 3h 4m 5s'" })
     void formatsCraftingDurationForDiscord(long durationMillis, String expected) {
         assertEquals(expected, DiscordManager.formatDuration(durationMillis));

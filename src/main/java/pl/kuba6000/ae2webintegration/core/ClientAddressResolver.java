@@ -30,23 +30,22 @@ public final class ClientAddressResolver {
             this.prefixBits = prefixBits;
         }
 
-        @SuppressWarnings("PMD.AvoidMagicNumbers") // CIDR matching uses byte widths and masks.
         boolean matches(byte[] candidate) {
             // Different families (4 vs 16 bytes) never match.
             if (candidate.length != address.length) {
                 return false;
             }
-            int fullBytes = prefixBits / 8;
+            int fullBytes = prefixBits / Byte.SIZE;
             for (int i = 0; i < fullBytes; i++) {
                 if (candidate[i] != address[i]) {
                     return false;
                 }
             }
-            int remainingBits = prefixBits % 8;
+            int remainingBits = prefixBits % Byte.SIZE;
             if (remainingBits == 0) {
                 return true;
             }
-            int mask = 0xFF << (8 - remainingBits);
+            int mask = 0xFF << (Byte.SIZE - remainingBits); // NOPMD - Unsigned byte mask for the CIDR prefix.
             return (candidate[fullBytes] & mask) == (address[fullBytes] & mask);
         }
     }
@@ -97,7 +96,7 @@ public final class ClientAddressResolver {
         if (address == null) {
             return null;
         }
-        int maxBits = address.length * 8; // NOPMD - Convert address bytes to bits.
+        int maxBits = address.length * Byte.SIZE;
         if (prefixBits < 0) {
             prefixBits = maxBits;
         } else if (prefixBits > maxBits) {
