@@ -19,8 +19,7 @@ public class PlayerMessenger implements IPlayerMessenger {
             if (entityPlayerMP.getUniqueID()
                 .equals(player.uuid)) {
                 entityPlayerMP.sendMessage(
-                    new TextComponentString(
-                        TextFormatting.GREEN.toString() + TextFormatting.BOLD.toString() + message));
+                    new TextComponentString(TextFormatting.GREEN.toString() + TextFormatting.BOLD + message));
                 return;
             }
         }

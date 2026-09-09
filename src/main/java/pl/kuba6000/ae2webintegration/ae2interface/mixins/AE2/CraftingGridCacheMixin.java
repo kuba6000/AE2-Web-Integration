@@ -29,14 +29,12 @@ import appeng.api.storage.data.IAEItemStack;
 import appeng.helpers.IInterfaceHost;
 import appeng.me.cache.CraftingGridCache;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = CraftingGridCache.class, remap = false)
 public class CraftingGridCacheMixin implements ICraftingMediumTracker {
@@ -80,7 +78,6 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
             IAEMixinCallbacks.getInstance()
                 .jobStarted(
                     (ICraftingCPUCluster) (Object) ((CraftingLinkAccessor) (Object) link).callGetCpu(),
-                    (IAECraftingGrid) this,
                     (IAEGrid) grid,
                     false,
                     !isMachine);
@@ -119,12 +116,8 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
     }
 
     @Override
-    public IPatternProviderViewable web$getViewableForCraftingMedium(ICraftingMediumKey medium) {
-        return (IPatternProviderViewable) web$mediumToViewable.get((ICraftingMedium) medium);
-    }
-
-    public ICraftingMediumTracker web$getCraftingProviders() {
-        return (ICraftingMediumTracker) this;
+    public IPatternProviderViewable web$getViewableForCraftingMedium(ICraftingMedium medium) {
+        return (IPatternProviderViewable) web$mediumToViewable.get(medium);
     }
 
 }

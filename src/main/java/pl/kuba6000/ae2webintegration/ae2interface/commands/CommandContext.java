@@ -30,8 +30,7 @@ public class CommandContext implements ICommandContext {
 
     @Override
     public PlayerIdentity getPlayerIdentity() {
-        if (sender instanceof EntityPlayerMP) {
-            EntityPlayerMP player = (EntityPlayerMP) sender;
+        if (sender instanceof EntityPlayerMP player) {
             return new PlayerIdentity(
                 player.getUniqueID(),
                 player.getGameProfile()
@@ -63,6 +62,6 @@ public class CommandContext implements ICommandContext {
      */
     @Override
     public Runnable getReloader() {
-        return () -> Config.synchronizeConfiguration();
+        return Config::synchronizeConfiguration;
     }
 }

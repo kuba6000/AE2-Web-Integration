@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.proxy;
 
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
@@ -28,12 +27,9 @@ public class CommonProxy {
         Config.synchronizeConfiguration();
         CoreEngine.init(new Platform(event.getModConfigurationDirectory()), Tags.VERSION, "-forge-1.12.2");
 
-        AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + CoreEngine.getModVersion());
+        AE2WebIntegration.LOG.info("AE2WebIntegration loading at version {}", CoreEngine.getModVersion());
 
         FMLEventHandler eventHandler = new FMLEventHandler();
-        FMLCommonHandler.instance()
-            .bus()
-            .register(eventHandler);
         MinecraftForge.EVENT_BUS.register(eventHandler);
     }
 

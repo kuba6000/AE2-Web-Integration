@@ -1,15 +1,15 @@
 package pl.kuba6000.ae2webintegration.ae2interface.legacy;
 
+import appeng.api.config.Actionable;
 import appeng.api.storage.IMEMonitor;
 import appeng.api.storage.IStorageChannel;
 import appeng.api.storage.IStorageMonitorable;
 import appeng.api.storage.data.IAEStack;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IMeInventoryExtraction;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 
-public final class DispatchingMeInventory implements IAEMeInventoryItem {
+public final class DispatchingMeInventory implements IMeInventoryExtraction {
 
     private final IStorageMonitorable storage;
 
@@ -18,19 +18,19 @@ public final class DispatchingMeInventory implements IAEMeInventoryItem {
     }
 
     @Override
-    public long web$extractItems(IAEKey key, long amount, AEActionable mode, IAEGrid grid) {
-        IAEMeInventoryItem inventory = channel(key);
+    public long web$extractItems(IAEKey key, long amount, Actionable mode, IAEGrid grid) {
+        IMeInventoryExtraction inventory = channel(key);
         return inventory == null ? 0L : inventory.web$extractItems(key, amount, mode, grid);
     }
 
     @Override
     public long web$getAvailable(IAEKey key, IAEGrid grid) {
-        IAEMeInventoryItem inventory = channel(key);
+        IMeInventoryExtraction inventory = channel(key);
         return inventory == null ? 0L : inventory.web$getAvailable(key, grid);
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
-    private IAEMeInventoryItem channel(IAEKey key) {
+    private IMeInventoryExtraction channel(IAEKey key) {
         if (!(key instanceof IAEStack)) {
             return null;
         }
@@ -39,6 +39,6 @@ public final class DispatchingMeInventory implements IAEMeInventoryItem {
             return null;
         }
         IMEMonitor<?> monitor = storage.getInventory((IStorageChannel) channel);
-        return monitor instanceof IAEMeInventoryItem ? (IAEMeInventoryItem) monitor : null;
+        return monitor instanceof IMeInventoryExtraction ? (IMeInventoryExtraction) monitor : null;
     }
 }

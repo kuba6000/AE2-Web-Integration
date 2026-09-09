@@ -11,12 +11,12 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 public interface AEPathingGridMixin extends IAEPathingGrid {
 
     @Override
-    public default boolean web$isNetworkBooting() {
+    default boolean web$isNetworkBooting() {
         return ((IPathingGrid) (Object) this).isNetworkBooting();
     }
 
     @Override
-    public default AEControllerState web$getControllerState() {
+    default AEControllerState web$getControllerState() {
         ControllerState state = ((IPathingGrid) (Object) this).getControllerState();
         if (state == ControllerState.CONTROLLER_CONFLICT) {
             return AEControllerState.CONTROLLER_CONFLICT;

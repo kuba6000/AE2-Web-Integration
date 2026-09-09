@@ -13,11 +13,11 @@ import org.spongepowered.asm.mixin.Shadow;
 import com.mojang.authlib.GameProfile;
 
 import appeng.core.worlddata.IWorldPlayerMapping;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IPlayerProfileLookup;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 
 @Mixin(targets = "appeng.core.worlddata.PlayerData", remap = false)
-public class AEPlayerDataMixin implements IAEPlayerData {
+public class AEPlayerDataMixin implements IPlayerProfileLookup {
 
     @Shadow
     @Final

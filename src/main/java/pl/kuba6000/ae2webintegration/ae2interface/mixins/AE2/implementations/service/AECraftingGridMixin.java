@@ -15,16 +15,16 @@ import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
-import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.me.helpers.PlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = ICraftingGrid.class)
@@ -43,7 +43,7 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
         int i = 1;
         for (ICraftingCPU cpu : aecpus) {
             cpus.add((ICraftingCPUCluster) cpu);
-            ((ICraftingCPUCluster) cpu).web$setInternalID(i++);
+            ((ICraftingCPUNameIndex) cpu).web$setInternalID(i++);
         }
         return cpus;
     }
@@ -54,7 +54,7 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
         if (!(stack instanceof IAEItemStack)) {
             throw new UnsupportedOperationException("Only item crafting is supported on AE2 1.12.2");
         }
-        PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
+        PlayerSource actionSrc = ((IGridPlayerSource) grid).web$getPlayerSource();
         IAEItemStack itemStack = ((IAEItemStack) (Object) stack).copy();
         itemStack.setStackSize(amount);
         final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this).beginCraftingJob(
@@ -69,18 +69,13 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     @Override
     default String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
         IAEGrid grid) {
-        ChatCapturingPlayerSource source = (ChatCapturingPlayerSource) grid.web$getPlayerSource();
+        ChatCapturingPlayerSource source = (ChatCapturingPlayerSource) ((IGridPlayerSource) grid).web$getPlayerSource();
         source.clearLastMessage();
         ICraftingLink link = ((ICraftingGrid) (Object) this)
-            .submitJob((ICraftingJob) job, null, (ICraftingCPU) target, prioritizePower, (IActionSource) source);
+            .submitJob((ICraftingJob) job, null, (ICraftingCPU) target, prioritizePower, source);
         String msg = source.takeLastMessage();
         if (link != null) return null;
         return msg == null ? "Submission failed" : msg;
-    }
-
-    @Override
-    default ICraftingMediumTracker web$getCraftingProviders() {
-        throw new UnsupportedOperationException("Use on CraftingGridCache implementation");
     }
 
     @Override

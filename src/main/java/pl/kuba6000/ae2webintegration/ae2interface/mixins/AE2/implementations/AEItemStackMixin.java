@@ -22,7 +22,7 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
     }
 
     @Override
-    default IAEKey web$copyIdentity() {
+    default @NotNull IAEKey web$copyIdentity() {
         return LegacyItemIdentity.copy(this);
     }
 
@@ -33,12 +33,12 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
     int getItemDamage();
 
     @Override
-    default String web$getItemID() {
+    default @NotNull String web$getItemID() {
         return getItem().getRegistryName() + ":" + getItemDamage();
     }
 
     @Override
-    default String web$getDisplayName() {
+    default @NotNull String web$getDisplayName() {
         return asItemStackRepresentation().getDisplayName();
     }
 
@@ -48,15 +48,7 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
     }
 
     @Override
-    default boolean web$isSameType(IAEKey other) {
-        if (!(other instanceof IAEItemStack)) {
-            return false;
-        }
-        return isSameType((IAEItemStack) (Object) other);
-    }
-
-    @Override
-    default IAEKey web$what() {
+    default @NotNull IAEKey web$what() {
         return this;
     }
 
@@ -65,8 +57,4 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
         return getStackSize();
     }
 
-    @Override
-    default IAEGenericStack web$copy() {
-        return (IAEGenericStack) copy();
-    }
 }

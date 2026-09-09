@@ -40,8 +40,7 @@ public final class StorageMonitorableStackList implements IStackList {
                 .storage()
                 .storageChannels()
                 .iterator();
-            private Iterator<?> stacks = Collections.emptyList()
-                .iterator();
+            private Iterator<?> stacks = Collections.emptyIterator();
             private IAEGenericStack prepared;
 
             @Override
@@ -61,8 +60,7 @@ public final class StorageMonitorableStackList implements IStackList {
                         return false;
                     }
                     IMEMonitor<?> monitor = monitor(channels.next());
-                    stacks = monitor == null ? Collections.emptyList()
-                        .iterator()
+                    stacks = monitor == null ? Collections.emptyIterator()
                         : monitor.getStorageList()
                             .iterator();
                 }

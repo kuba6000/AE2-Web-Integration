@@ -13,13 +13,13 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 public interface PatternProviderViewableMixin extends IPatternProviderViewable {
 
     @Override
-    public default String web$getName() {
+    default String web$getName() {
         return ((IInterfaceHost) (Object) this).getInterfaceDuality()
             .getTermName();
     }
 
     @Override
-    public default DimensionalCoords web$getLocation() {
+    default DimensionalCoords web$getLocation() {
         TileEntity te = ((IInterfaceHost) (Object) this).getTileEntity();
         BlockPos coord = te.getPos();
         return new DimensionalCoords(te.getWorld().provider.getDimension(), coord.getX(), coord.getY(), coord.getZ());

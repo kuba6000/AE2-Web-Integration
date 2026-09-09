@@ -4,6 +4,8 @@ import java.util.Iterator;
 
 import net.minecraft.world.World;
 
+import org.jetbrains.annotations.NotNull;
+
 import appeng.api.AEApi;
 import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEStack;
@@ -29,7 +31,7 @@ public class AE implements IAE {
     static class AEGridIterable implements Iterable<IAEGrid> {
 
         @Override
-        public Iterator<IAEGrid> iterator() {
+        public @NotNull Iterator<IAEGrid> iterator() {
             return new Iterator<>() {
 
                 private final Iterator<Grid> iterator = TickHandler.INSTANCE.getGridList()

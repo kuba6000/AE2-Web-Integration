@@ -1,6 +1,9 @@
 package pl.kuba6000.ae2webintegration.ae2interface.config;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 
 import net.minecraftforge.common.config.Configuration;
 
@@ -8,7 +11,7 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 
 /**
  * Forge 1.12.2 config wiring. This class does NOT define what config keys
- * exist — that is owned by {@link ConfigBootstrap}. Instead it:
+ * exist — that is owned by {@link ConfigBootstrap}. Instead, it:
  * <ol>
  * <li>Sets up the config directory via {@link #init(File)}</li>
  * <li>Creates a {@link Configuration} from the config file</li>
@@ -23,18 +26,19 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
  */
 public class Config {
 
-    private static File configDirectory;
     private static File configFile;
 
     public static void init(File rootConfigDirectory) {
-        configDirectory = new File(rootConfigDirectory, "ae2webintegration");
+        File configDirectory = new File(rootConfigDirectory, "ae2webintegration");
         configFile = new File(configDirectory, "ae2webintegration.cfg");
-        if (!configDirectory.exists()) {
-            configDirectory.mkdirs();
+        try {
+            Files.createDirectories(configDirectory.toPath());
             File oldConfigFile = new File(rootConfigDirectory, "ae2webintegration.cfg");
-            if (oldConfigFile.exists()) {
-                oldConfigFile.renameTo(configFile);
+            if (!configFile.exists() && oldConfigFile.exists()) {
+                Files.move(oldConfigFile.toPath(), configFile.toPath());
             }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not prepare configuration file " + configFile, e);
         }
     }
 
@@ -44,9 +48,5 @@ public class Config {
         if (configuration.hasChanged()) {
             configuration.save();
         }
-    }
-
-    public static File getConfigFile(String fileName) {
-        return new File(configDirectory, fileName);
     }
 }

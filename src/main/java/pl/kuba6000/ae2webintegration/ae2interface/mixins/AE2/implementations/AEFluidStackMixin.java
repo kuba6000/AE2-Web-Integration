@@ -19,17 +19,17 @@ public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStac
     }
 
     @Override
-    default IAEKey web$copyIdentity() {
+    default @NotNull IAEKey web$copyIdentity() {
         return LegacyItemIdentity.copy(this);
     }
 
     @Override
-    default String web$getItemID() {
+    default @NotNull String web$getItemID() {
         return getFluid().getName();
     }
 
     @Override
-    default String web$getDisplayName() {
+    default @NotNull String web$getDisplayName() {
         return getFluidStack().getLocalizedName();
     }
 
@@ -40,15 +40,7 @@ public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStac
     }
 
     @Override
-    default boolean web$isSameType(IAEKey other) {
-        if (!(other instanceof IAEFluidStack)) {
-            return false;
-        }
-        return getFluid() == ((IAEFluidStack) (Object) other).getFluid();
-    }
-
-    @Override
-    default IAEKey web$what() {
+    default @NotNull IAEKey web$what() {
         return this;
     }
 
@@ -57,8 +49,4 @@ public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStac
         return getStackSize();
     }
 
-    @Override
-    default IAEGenericStack web$copy() {
-        return (IAEGenericStack) copy();
-    }
 }

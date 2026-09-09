@@ -19,6 +19,7 @@ import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.api.util.WorldCoord;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -26,7 +27,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
-public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
+@SuppressWarnings("UnstableApiUsage")
+public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICraftingCPUNameIndex {
 
     @Shadow
     @Final
@@ -59,12 +61,10 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
     public @NotNull StableKey web$getKey() {
         if (web$stableKey == null) {
             web$stableKey = StableKey.create(
-                sink -> {
-                    sink.putInt(getWorld().provider.getDimension())
-                        .putInt(min.x)
-                        .putInt(min.y)
-                        .putInt(min.z);
-                });
+                sink -> sink.putInt(getWorld().provider.getDimension())
+                    .putInt(min.x)
+                    .putInt(min.y)
+                    .putInt(min.z));
         }
         return web$stableKey;
     }
@@ -74,8 +74,8 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster {
         web$internalID = id;
     }
 
-    @Override
-    public boolean web$hasCustomName() {
+    @Unique
+    private boolean web$hasCustomName() {
         return !((CraftingCPUCluster) (Object) this).getName()
             .isEmpty();
     }
