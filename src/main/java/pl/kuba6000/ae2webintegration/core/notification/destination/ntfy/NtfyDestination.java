@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core.notification.ntfy;
+package pl.kuba6000.ae2webintegration.core.notification.destination.ntfy;
 
 import static pl.kuba6000.ae2webintegration.core.AE2WebIntegration.MODID;
 
@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -16,8 +18,10 @@ import org.apache.logging.log4j.Logger;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.Config;
-import pl.kuba6000.ae2webintegration.core.notification.INotificationDestination;
-import pl.kuba6000.ae2webintegration.core.notification.INotificationPayload;
+import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
+import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.ErrorMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 import scala.Console;
 
 public class NtfyDestination implements INotificationDestination {
@@ -30,15 +34,50 @@ public class NtfyDestination implements INotificationDestination {
     }
 
     @Override
-    public boolean supports(INotificationPayload notificationPayload) {
-        return notificationPayload instanceof NtfyPayload;
+    public boolean supports(IMessage message) {
+        return true;
     }
 
     @Override
-    public void sendNotification(INotificationPayload message) {
-        NtfyPayload payload = (NtfyPayload) message;
+    public void sendNotification(IMessage message) {
         if (Config.NTFY_HOST.isEmpty()) return;
 
+        NtfyPayload payload = null;
+        if (message instanceof CraftingMessage craftingMessage) {
+            List<String> tags = new ArrayList<>();
+            if (craftingMessage.wasCancelled()) tags.add("x");
+            else tags.add("heavy_check_mark");
+
+            payload = new NtfyPayload(
+                "AE2 Job Tracker [ Grid " + craftingMessage.grid() + " ][ " + craftingMessage.cpuName() + " ]",
+                "Crafting for `" + craftingMessage.outputItemName()
+                    + " x"
+                    + craftingMessage.outputItemAmount()
+                    + "` "
+                    + (craftingMessage.wasCancelled() ? "cancelled" : "completed")
+                    + "!\nIt took "
+                    + craftingMessage.duration()
+                    + "s",
+                3,
+                tags);
+        } else if (message instanceof ErrorMessage errorMessage) {
+            ErrorMessage.Severity severity = errorMessage.severity();
+            List<String> tags = new ArrayList<>();
+            int priority = 3;
+            switch (severity) {
+                case ERROR -> {
+                    priority = 5;
+                    tags.add("rotating_light");
+                }
+                case WARNING -> {
+                    priority = 4;
+                    tags.add("warning");
+                }
+            };
+            payload = new NtfyPayload(errorMessage.title(), errorMessage.description(), priority, tags);
+        }
+
+        if (payload == null) return;
         JsonObject json = payload.serializePayload();
 
         URL url = null;

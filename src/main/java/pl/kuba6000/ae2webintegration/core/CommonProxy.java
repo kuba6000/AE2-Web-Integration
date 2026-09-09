@@ -10,8 +10,7 @@ import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 import pl.kuba6000.ae2webintegration.Tags;
 import pl.kuba6000.ae2webintegration.core.commands.BaseCommandHandler;
 import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
-import pl.kuba6000.ae2webintegration.core.notification.discord.DiscordPayload;
-import pl.kuba6000.ae2webintegration.core.notification.ntfy.NtfyPayload;
+import pl.kuba6000.ae2webintegration.core.notification.message.ErrorMessage;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class CommonProxy {
@@ -50,24 +49,18 @@ public class CommonProxy {
     public void serverStarted(FMLServerStartedEvent event) {
         AE2Controller.init();
         NotificationManager.init();
-        if (!Config.AE_PUBLIC_MODE && !Config.DISCORD_WEBHOOK.isEmpty()) {
-            NotificationManager
-                .postMessageNonBlocking(new DiscordPayload("AE2 Web Integration", "Discord integration started!"));
-        } else if (Config.AE_PUBLIC_MODE && !Config.DISCORD_WEBHOOK.isEmpty()) {
+        if (!Config.AE_PUBLIC_MODE && (!Config.DISCORD_WEBHOOK.isEmpty() || !Config.NTFY_HOST.isEmpty())) {
             NotificationManager.postMessageNonBlocking(
-                new DiscordPayload(
+                new ErrorMessage(
                     "AE2 Web Integration",
-                    "Warning!\nDiscord integration webhook is set in the config, but the public mode is enabled!\nDiscord integration will be disabled!",
-                    15548997));
-        }
-        if (!Config.AE_PUBLIC_MODE && !Config.NTFY_HOST.isEmpty()) {
-            NotificationManager.postMessageNonBlocking(new NtfyPayload("AE2 Web Integration", "Ntfy integration started!"));
-        } else if (Config.AE_PUBLIC_MODE && !Config.NTFY_HOST.isEmpty()) {
+                    "Notification integration started!",
+                    ErrorMessage.Severity.NONE));
+        } else if (Config.AE_PUBLIC_MODE && (!Config.DISCORD_WEBHOOK.isEmpty() || !Config.NTFY_HOST.isEmpty())) {
             NotificationManager.postMessageNonBlocking(
-                new NtfyPayload(
+                new ErrorMessage(
                     "AE2 Web Integration",
-                    "Warning!\nNtfy host is set in the config, but the public mode is enabled!\nNtfy integration will be disabled!",
-                    4));
+                    "Warning!\nNotifications are enabled in the config, but the public mode is enabled!\nNotifications will be disabled!",
+                    ErrorMessage.Severity.WARNING));
         }
     }
 

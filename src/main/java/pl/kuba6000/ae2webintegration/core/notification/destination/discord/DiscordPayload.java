@@ -1,10 +1,10 @@
-package pl.kuba6000.ae2webintegration.core.notification.discord;
+package pl.kuba6000.ae2webintegration.core.notification.destination.discord;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.Config;
-import pl.kuba6000.ae2webintegration.core.notification.INotificationPayload;
+import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationPayload;
 
 public class DiscordPayload implements INotificationPayload {
 

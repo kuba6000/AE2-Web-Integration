@@ -19,9 +19,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
-import pl.kuba6000.ae2webintegration.core.notification.discord.DiscordPayload;
-import pl.kuba6000.ae2webintegration.core.notification.ntfy.NtfyPayload;
-import scala.Console;
+import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
 
 public class AE2JobTracker {
 
@@ -208,40 +206,19 @@ public class AE2JobTracker {
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         double took = info.timeDone - info.timeStarted;
         took /= 1000d;
-        if (!Config.AE_PUBLIC_MODE && !Config.DISCORD_WEBHOOK.isEmpty()) {
+        if (!Config.AE_PUBLIC_MODE) {
             IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
             if (securityGrid != null && securityGrid.web$isAvailable()) {
                 IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
                 craftingGrid.web$getCPUs(); // make sure the cpu has id
                 NotificationManager.postMessageNonBlocking(
-                    new DiscordPayload(
-                        "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()
-                            + " ][ "
-                            + cpu.web$getName()
-                            + " ]",
-                        "Crafting for `" + info.finalOutput.web$getDisplayName()
-                            + " x"
-                            + info.finalOutput.web$getStackSize()
-                            + "` "
-                            + (info.wasCancelled ? "cancelled" : "completed")
-                            + "!\nIt took "
-                            + took
-                            + "s",
-                        info.wasCancelled ? 15548997 : 5763719));
-                NotificationManager.postMessageNonBlocking(
-                    new NtfyPayload(
-                        "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()
-                            + " ][ "
-                            + cpu.web$getName()
-                            + " ]",
-                        "Crafting for `" + info.finalOutput.web$getDisplayName()
-                            + " x"
-                            + info.finalOutput.web$getStackSize()
-                            + "` "
-                            + (info.wasCancelled ? "cancelled" : "completed")
-                            + "!\nIt took "
-                            + took
-                            + "s"));
+                    new CraftingMessage(
+                        securityGrid.web$getSecurityKey(),
+                        cpu.web$getName(),
+                        info.finalOutput.web$getDisplayName(),
+                        info.finalOutput.web$getStackSize(),
+                        took,
+                        info.wasCancelled));
             }
         }
     }

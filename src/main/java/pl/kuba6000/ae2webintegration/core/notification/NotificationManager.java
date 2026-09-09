@@ -9,8 +9,10 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.kuba6000.ae2webintegration.core.notification.discord.DiscordDestination;
-import pl.kuba6000.ae2webintegration.core.notification.ntfy.NtfyDestination;
+import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
+import pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination;
+import pl.kuba6000.ae2webintegration.core.notification.destination.ntfy.NtfyDestination;
+import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 
 public class NotificationManager extends Thread {
 
@@ -18,7 +20,7 @@ public class NotificationManager extends Thread {
 
     private static NotificationManager thread;
 
-    private static final ConcurrentLinkedQueue<INotificationPayload> toPush = new ConcurrentLinkedQueue<>();
+    private static final ConcurrentLinkedQueue<IMessage> toPush = new ConcurrentLinkedQueue<>();
     private static final List<INotificationDestination> destinations = new ArrayList<>();
 
     public static void init() {
@@ -33,12 +35,12 @@ public class NotificationManager extends Thread {
         thread.start();
     }
 
-    public static void postMessageNonBlocking(INotificationPayload message) {
+    public static void postMessageNonBlocking(IMessage message) {
         toPush.offer(message);
     }
 
-    private static void postMessage(INotificationPayload message) {
-        for (INotificationDestination destination: destinations) {
+    private static void postMessage(IMessage message) {
+        for (INotificationDestination destination : destinations) {
             if (destination.supports(message)) {
                 destination.sendNotification(message);
             }
@@ -49,7 +51,7 @@ public class NotificationManager extends Thread {
     public void run() {
         while (true) {
             if (toPush.peek() != null) {
-                INotificationPayload message;
+                IMessage message;
                 while ((message = toPush.poll()) != null) {
                     postMessage(message);
                 }
