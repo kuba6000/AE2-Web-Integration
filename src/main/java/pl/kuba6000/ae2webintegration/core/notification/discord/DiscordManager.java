@@ -12,7 +12,6 @@ import javax.net.ssl.HttpsURLConnection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.Config;
@@ -23,7 +22,7 @@ public class DiscordManager extends Thread {
 
     private static DiscordManager thread;
 
-    private static ConcurrentLinkedQueue<DiscordEmbed> toPush = new ConcurrentLinkedQueue<>();
+    private static ConcurrentLinkedQueue<DiscordPayload> toPush = new ConcurrentLinkedQueue<>();
 
     public static void init() {
         if (thread != null) return;
@@ -31,43 +30,14 @@ public class DiscordManager extends Thread {
         thread.start();
     }
 
-    public static void postMessageNonBlocking(DiscordEmbed message) {
+    public static void postMessageNonBlocking(DiscordPayload message) {
         toPush.offer(message);
     }
 
-    public static class DiscordEmbed {
-
-        String title;
-        String description;
-        int color;
-
-        public DiscordEmbed(String title, String description, int color) {
-            this.title = title;
-            this.description = description;
-            this.color = color;
-        }
-
-        public DiscordEmbed(String title, String description) {
-            this(title, description, 1752220);
-        }
-    }
-
-    private static void postMessage(DiscordEmbed message) {
+    private static void postMessage(DiscordPayload message) {
         if (Config.DISCORD_WEBHOOK.isEmpty()) return;
 
-        String roleID = Config.DISCORD_ROLE_ID;
-
-        JsonObject json = new JsonObject();
-        json.addProperty("username", "AE2 Web Integration");
-        json.addProperty("content", !roleID.isEmpty() ? "<@&" + roleID + ">" : "");
-        JsonArray embeds = new JsonArray();
-        JsonObject embed = new JsonObject();
-        embed.addProperty("title", message.title);
-        embed.addProperty("description", message.description);
-        embed.addProperty("color", message.color);
-        embeds.add(embed);
-        json.add("embeds", embeds);
-        json.add("attachments", new JsonArray());
+        JsonObject json = message.serializePayload();
 
         URL url = null;
         try {
@@ -99,7 +69,7 @@ public class DiscordManager extends Thread {
     public void run() {
         while (true) {
             if (toPush.peek() != null) {
-                DiscordEmbed message;
+                DiscordPayload message;
                 while ((message = toPush.poll()) != null) {
                     postMessage(message);
                 }

@@ -25,7 +25,7 @@ public class NtfyManager extends Thread {
 
     private static NtfyManager thread;
 
-    private static ConcurrentLinkedQueue<NtfyJsonMessage> toPush = new ConcurrentLinkedQueue<>();
+    private static ConcurrentLinkedQueue<NtfyPayload> toPush = new ConcurrentLinkedQueue<>();
 
     public static void init() {
         if (thread != null) return;
@@ -33,41 +33,14 @@ public class NtfyManager extends Thread {
         thread.start();
     }
 
-    public static void postMessageNonBlocking(NtfyJsonMessage message) {
+    public static void postMessageNonBlocking(NtfyPayload message) {
         toPush.offer(message);
     }
 
-    public static class NtfyJsonMessage {
-
-        String title;
-        String description;
-        int priority;
-
-        public NtfyJsonMessage(String title, String description, int priority) {
-            this.title = title;
-            this.description = description;
-            this.priority = priority;
-        }
-
-        public NtfyJsonMessage(String title, String description) {
-            this(title, description, 3);
-        }
-    }
-
-    private static void postMessage(NtfyJsonMessage message) {
+    private static void postMessage(NtfyPayload message) {
         if (Config.NTFY_HOST.isEmpty()) return;
 
-        String topic = Config.NTFY_TOPIC;
-
-        JsonObject json = new JsonObject();
-        json.addProperty("topic", topic);
-        json.addProperty("message", message.description);
-        json.addProperty("title", message.title);
-        // json.addProperty("tags", "");
-        json.addProperty("priority", message.priority);
-        if (!Config.AE_FULL_DOMAIN.isEmpty()) {
-            json.addProperty("click", Config.AE_FULL_DOMAIN);
-        }
+        JsonObject json = message.serializePayload();
 
         URL url = null;
         try {
@@ -109,7 +82,7 @@ public class NtfyManager extends Thread {
     public void run() {
         while (true) {
             if (toPush.peek() != null) {
-                NtfyJsonMessage message;
+                NtfyPayload message;
                 while ((message = toPush.poll()) != null) {
                     postMessage(message);
                 }

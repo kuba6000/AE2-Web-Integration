@@ -10,7 +10,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.commons.lang3.tuple.Pair;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.notification.discord.DiscordManager;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -19,7 +18,10 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
+import pl.kuba6000.ae2webintegration.core.notification.discord.DiscordManager;
+import pl.kuba6000.ae2webintegration.core.notification.discord.DiscordPayload;
 import pl.kuba6000.ae2webintegration.core.notification.ntfy.NtfyManager;
+import pl.kuba6000.ae2webintegration.core.notification.ntfy.NtfyPayload;
 import scala.Console;
 
 public class AE2JobTracker {
@@ -213,7 +215,7 @@ public class AE2JobTracker {
                 IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
                 craftingGrid.web$getCPUs(); // make sure the cpu has id
                 DiscordManager.postMessageNonBlocking(
-                    new DiscordManager.DiscordEmbed(
+                    new DiscordPayload(
                         "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()
                             + " ][ "
                             + cpu.web$getName()
@@ -238,7 +240,7 @@ public class AE2JobTracker {
                 Console.println(craftingGrid);
                 craftingGrid.web$getCPUs(); // make sure the cpu has id
                 NtfyManager.postMessageNonBlocking(
-                    new NtfyManager.NtfyJsonMessage(
+                    new NtfyPayload(
                         "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()
                             + " ][ "
                             + cpu.web$getName()
