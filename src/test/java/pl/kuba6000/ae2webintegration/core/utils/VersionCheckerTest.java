@@ -5,7 +5,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
@@ -17,10 +20,51 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.sun.net.httpserver.HttpServer;
 
 class VersionCheckerTest {
+
+    @ParameterizedTest
+    @ValueSource(booleans = { true, false })
+    void timesOutIdleResponseAndCanCheckAgain(boolean headers) throws Exception {
+        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"));
+            VersionChecker checker = new VersionChecker(
+                new URL("http://127.0.0.1:" + server.getLocalPort() + "/"),
+                "1.0.0-forge-1.7.10",
+                "-forge-1.7.10")) {
+            server.setSoTimeout(5000);
+            CompletableFuture<ReleaseManifest.Release> first = checker.checkForUpdates();
+            try (Socket stalled = server.accept()) {
+                stalled.getOutputStream()
+                    .write(
+                        (headers ? "HTTP/1.1 200 OK\r\nX-Slow: " : "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
+                            .getBytes(StandardCharsets.US_ASCII));
+                stalled.getOutputStream()
+                    .flush();
+                ExecutionException failure = assertThrows(
+                    ExecutionException.class,
+                    () -> first.get(8, TimeUnit.SECONDS));
+                assertInstanceOf(IOException.class, failure.getCause());
+            }
+            CompletableFuture<ReleaseManifest.Release> second = checker.checkForUpdates();
+            try (Socket healthy = server.accept()) {
+                byte[] body = ReleaseManifestTest.feed("1.1.0", null)
+                    .getBytes(StandardCharsets.UTF_8);
+                healthy.getOutputStream()
+                    .write(
+                        ("HTTP/1.1 200 OK\r\nContent-Length: " + body.length + "\r\nConnection: close\r\n\r\n")
+                            .getBytes(StandardCharsets.US_ASCII));
+                healthy.getOutputStream()
+                    .write(body);
+                healthy.getOutputStream()
+                    .flush();
+                assertEquals("1.1.0", second.get(5, TimeUnit.SECONDS).version);
+            }
+        }
+    }
 
     @Test
     void rejectsOversizedChunkedFeedWithoutContentLength() throws Exception {

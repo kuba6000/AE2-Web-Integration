@@ -32,8 +32,6 @@ def version_key(value):
 
 
 def newer(candidate, current):
-    if current is None:
-        return True
     left, left_pre = version_key(candidate["newest"])
     right, right_pre = version_key(current["newest"])
     if left != right:
@@ -105,7 +103,6 @@ def update(repository, releases, author_name, author_email):
         if feed["version"] != target:
             raise ValueError(f"Incorrect Minecraft target in {path}")
         feeds[target] = feed
-    original = json.dumps(feeds, sort_keys=True)
     records = [record for release in releases if (record := release_record(release)) is not None]
     for target, feed in feeds.items():
         channels = feed["releases"]
@@ -116,15 +113,17 @@ def update(repository, releases, author_name, author_email):
                 stable_base = version_key(channels["stable"]["newest"])[0]
                 candidates = [record for record in candidates if version_key(record["newest"])[0] > stable_base]
             channels[channel] = recommendation(candidates, channels[channel])
-    if json.dumps(feeds, sort_keys=True) == original:
-        print("Release feed is already current")
-        return
+    changed = False
     for target, feed in feeds.items():
         path = repository / f"{target}.json"
         # Leave unchanged files byte-for-byte intact, including their formatting.
         if json.loads(path.read_text(encoding="utf-8")) != feed:
             path.write_text(json.dumps(feed, indent=2) + "\n", encoding="utf-8")
             git(repository, "add", "--", path.name)
+            changed = True
+    if not changed:
+        print("Release feed is already current")
+        return
     git(repository, "-c", f"user.name={author_name}", "-c", f"user.email={author_email}",
         "-c", "commit.gpgsign=false", "commit", "-m", "Update published release feed")
     print("Committed updated release feed")

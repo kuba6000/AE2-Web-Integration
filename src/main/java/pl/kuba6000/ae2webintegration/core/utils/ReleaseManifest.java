@@ -5,6 +5,7 @@ import java.net.URI;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,14 +30,15 @@ public final class ReleaseManifest {
         public final @NotNull String tag;
         public final @NotNull String releaseUrl;
         public final @NotNull String downloadUrl;
-        private final Version comparable;
+        private final @NotNull Version comparable;
 
-        private Release(JsonObject json, Channel channel) {
+        private Release(JsonObject json, @NotNull Channel channel) {
             version = string(json, "newest");
-            comparable = Version.parse(version);
-            if (comparable == null || (channel == Channel.STABLE && comparable.suffix != null)) {
+            Version parsed = Version.parse(version);
+            if (parsed == null || (channel == Channel.STABLE && parsed.suffix != null)) {
                 throw new IllegalArgumentException("Invalid release version");
             }
+            comparable = parsed;
             this.channel = channel;
             String seconds = json.get("timestamp")
                 .toString();
@@ -97,6 +99,7 @@ public final class ReleaseManifest {
         return selected;
     }
 
+    @Contract("null, _, _, _, _ -> false")
     private static boolean isUpgrade(@Nullable Release release, Version installed, String installedTag, boolean isPre,
         boolean development) {
         if (release == null || release.tag.equals(installedTag)) return false;
@@ -108,7 +111,7 @@ public final class ReleaseManifest {
         return release.comparable.comparePrerelease(installed) > 0;
     }
 
-    private static @Nullable Release readRelease(JsonObject releases, String name, Channel channel) {
+    private static @Nullable Release readRelease(JsonObject releases, String name, @NotNull Channel channel) {
         JsonElement value = releases.get(name);
         if (value == null) throw new IllegalArgumentException("Missing release channel: " + name);
         return value.isJsonNull() ? null : new Release(value.getAsJsonObject(), channel);
@@ -138,6 +141,8 @@ public final class ReleaseManifest {
 
         private static final Pattern FORMAT = Pattern.compile(
             "(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?");
+        private static final Pattern ORDERED_PRERELEASE = Pattern
+            .compile("[a-zA-Z][a-zA-Z0-9-]*\\.[0-9]+(?:\\.[0-9]+)*");
         private final BigInteger[] numbers;
         private final @Nullable String suffix;
 
@@ -169,8 +174,11 @@ public final class ReleaseManifest {
 
         private int comparePrerelease(Version other) {
             if (suffix == null || other.suffix == null
-                || !suffix.matches("[a-zA-Z][a-zA-Z0-9-]*\\.[0-9]+(?:\\.[0-9]+)*")
-                || !other.suffix.matches("[a-zA-Z][a-zA-Z0-9-]*\\.[0-9]+(?:\\.[0-9]+)*")) return 0;
+                || !ORDERED_PRERELEASE.matcher(suffix)
+                    .matches()
+                || !ORDERED_PRERELEASE.matcher(other.suffix)
+                    .matches())
+                return 0;
             String[] left = suffix.split("\\.");
             String[] right = other.suffix.split("\\.");
             int label = left[0].compareTo(right[0]);

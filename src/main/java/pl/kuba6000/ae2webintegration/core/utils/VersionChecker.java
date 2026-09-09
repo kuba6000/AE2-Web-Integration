@@ -1,6 +1,5 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -20,16 +19,17 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.google.common.io.ByteStreams;
+
 /** One server lifecycle's background checks and last completed recommendation. */
 public final class VersionChecker implements AutoCloseable {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private static final long CHECK_INTERVAL_HOURS = 5;
     private static final long RETRY_DELAY_MINUTES = 5;
-    private static final long FETCH_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(15);
+    // These bound connection and read inactivity, not total response duration.
     private static final int HTTP_TIMEOUT_MILLIS = (int) TimeUnit.SECONDS.toMillis(5);
     private static final int MAX_RESPONSE_BYTES = 64 * 1024;
-    private static final int READ_BUFFER_BYTES = 4 * 1024;
     private final @NotNull String currentVersion;
     private final @NotNull String versionIdentifier;
     private final @NotNull String minecraftVersion;
@@ -111,7 +111,6 @@ public final class VersionChecker implements AutoCloseable {
     }
 
     private ReleaseManifest fetch() throws IOException {
-        long deadline = System.nanoTime() + FETCH_TIMEOUT_NANOS;
         HttpURLConnection request = (HttpURLConnection) feedUrl.openConnection();
         request.setConnectTimeout(HTTP_TIMEOUT_MILLIS);
         request.setReadTimeout(HTTP_TIMEOUT_MILLIS);
@@ -121,19 +120,13 @@ public final class VersionChecker implements AutoCloseable {
             if (closed) throw new IOException("Version checker stopped");
         }
         try {
-            if (request.getResponseCode() != HttpURLConnection.HTTP_OK)
-                throw new IOException("Release feed HTTP status: " + request.getResponseCode());
+            int status = request.getResponseCode();
+            if (status != HttpURLConnection.HTTP_OK) throw new IOException("Release feed HTTP status: " + status);
             if (request.getContentLengthLong() > MAX_RESPONSE_BYTES) throw new IOException("Release feed is too large");
-            try (InputStream input = request.getInputStream();
-                ByteArrayOutputStream body = new ByteArrayOutputStream()) {
-                byte[] bytes = new byte[READ_BUFFER_BYTES];
-                int length;
-                while ((length = input.read(bytes)) != -1) {
-                    if (System.nanoTime() - deadline >= 0) throw new IOException("Release feed timed out");
-                    if (body.size() + length > MAX_RESPONSE_BYTES) throw new IOException("Release feed is too large");
-                    body.write(bytes, 0, length);
-                }
-                return ReleaseManifest.parse(new String(body.toByteArray(), StandardCharsets.UTF_8), minecraftVersion);
+            try (InputStream body = request.getInputStream()) {
+                byte[] bytes = ByteStreams.toByteArray(ByteStreams.limit(body, MAX_RESPONSE_BYTES + 1));
+                if (bytes.length > MAX_RESPONSE_BYTES) throw new IOException("Release feed is too large");
+                return ReleaseManifest.parse(new String(bytes, StandardCharsets.UTF_8), minecraftVersion);
             }
         } finally {
             request.disconnect();
@@ -145,8 +138,8 @@ public final class VersionChecker implements AutoCloseable {
         closed = true;
         availableUpdate = null;
         if (pending != null) pending.cancel(false);
-        // HttpURLConnection.disconnect can block behind an in-progress read. The worker owns
-        // closing its connection; finite I/O timeouts bound cleanup without stalling server stop.
+        // The worker owns disconnect: calling it here can block the server thread behind an active read.
+        // Interruption does not guarantee immediate termination of HttpURLConnection I/O.
         executor.shutdownNow();
     }
 }

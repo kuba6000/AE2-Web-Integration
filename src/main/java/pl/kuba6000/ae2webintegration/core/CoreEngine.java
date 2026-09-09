@@ -82,11 +82,12 @@ public class CoreEngine {
             stopVersionChecker();
         } else if (versionChecker == null && modVersion != null) {
             try {
-                versionChecker = new VersionChecker(
+                VersionChecker checker = new VersionChecker(
                     new URL("https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/version/"),
                     modVersion,
                     versionIdentifier);
-                versionChecker.checkForUpdates();
+                versionChecker = checker;
+                checker.checkForUpdates();
             } catch (MalformedURLException e) {
                 throw new IllegalStateException(e);
             }
@@ -94,8 +95,9 @@ public class CoreEngine {
     }
 
     private static void stopVersionChecker() {
-        if (versionChecker != null) {
-            versionChecker.close();
+        VersionChecker checker = versionChecker;
+        if (checker != null) {
+            checker.close();
             versionChecker = null;
         }
     }
