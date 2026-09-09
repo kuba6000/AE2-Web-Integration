@@ -5,7 +5,6 @@ import static pl.kuba6000.ae2webintegration.core.AE2WebIntegration.MODID;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URL;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -15,29 +14,24 @@ import org.apache.logging.log4j.Logger;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.Config;
+import pl.kuba6000.ae2webintegration.core.notification.INotificationDestination;
+import pl.kuba6000.ae2webintegration.core.notification.INotificationPayload;
 
-public class DiscordManager extends Thread {
+public class DiscordDestination implements INotificationDestination {
 
     private static final Logger LOG = LogManager.getLogger(MODID + " - DISCORD INTEGRATION");
 
-    private static DiscordManager thread;
-
-    private static ConcurrentLinkedQueue<DiscordPayload> toPush = new ConcurrentLinkedQueue<>();
-
-    public static void init() {
-        if (thread != null) return;
-        thread = new DiscordManager();
-        thread.start();
+    @Override
+    public boolean supports(INotificationPayload notificationPayload) {
+        return notificationPayload instanceof DiscordPayload;
     }
 
-    public static void postMessageNonBlocking(DiscordPayload message) {
-        toPush.offer(message);
-    }
-
-    private static void postMessage(DiscordPayload message) {
+    @Override
+    public void sendNotification(INotificationPayload message) {
+        DiscordPayload payload = (DiscordPayload) message;
         if (Config.DISCORD_WEBHOOK.isEmpty()) return;
 
-        JsonObject json = message.serializePayload();
+        JsonObject json = payload.serializePayload();
 
         URL url = null;
         try {
@@ -62,24 +56,6 @@ public class DiscordManager extends Thread {
             }
         } catch (IOException e) {
             // throw new RuntimeException(e);
-        }
-    }
-
-    @Override
-    public void run() {
-        while (true) {
-            if (toPush.peek() != null) {
-                DiscordPayload message;
-                while ((message = toPush.poll()) != null) {
-                    postMessage(message);
-                }
-            }
-
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                // throw new RuntimeException(e);
-            }
         }
     }
 }

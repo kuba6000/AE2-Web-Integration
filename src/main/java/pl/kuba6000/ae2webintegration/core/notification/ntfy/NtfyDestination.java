@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -17,30 +16,25 @@ import org.apache.logging.log4j.Logger;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.Config;
+import pl.kuba6000.ae2webintegration.core.notification.INotificationDestination;
+import pl.kuba6000.ae2webintegration.core.notification.INotificationPayload;
 import scala.Console;
 
-public class NtfyManager extends Thread {
+public class NtfyDestination implements INotificationDestination {
 
     private static final Logger LOG = LogManager.getLogger(MODID + " - NTFY INTEGRATION");
 
-    private static NtfyManager thread;
-
-    private static ConcurrentLinkedQueue<NtfyPayload> toPush = new ConcurrentLinkedQueue<>();
-
-    public static void init() {
-        if (thread != null) return;
-        thread = new NtfyManager();
-        thread.start();
+    @Override
+    public boolean supports(INotificationPayload notificationPayload) {
+        return notificationPayload instanceof NtfyPayload;
     }
 
-    public static void postMessageNonBlocking(NtfyPayload message) {
-        toPush.offer(message);
-    }
-
-    private static void postMessage(NtfyPayload message) {
+    @Override
+    public void sendNotification(INotificationPayload message) {
+        NtfyPayload payload = (NtfyPayload) message;
         if (Config.NTFY_HOST.isEmpty()) return;
 
-        JsonObject json = message.serializePayload();
+        JsonObject json = payload.serializePayload();
 
         URL url = null;
         try {
@@ -75,24 +69,6 @@ public class NtfyManager extends Thread {
             }
         } catch (IOException e) {
             // throw new RuntimeException(e);
-        }
-    }
-
-    @Override
-    public void run() {
-        while (true) {
-            if (toPush.peek() != null) {
-                NtfyPayload message;
-                while ((message = toPush.poll()) != null) {
-                    postMessage(message);
-                }
-            }
-
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                // throw new RuntimeException(e);
-            }
         }
     }
 }

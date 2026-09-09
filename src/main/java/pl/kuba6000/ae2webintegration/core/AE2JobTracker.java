@@ -18,9 +18,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
-import pl.kuba6000.ae2webintegration.core.notification.discord.DiscordManager;
+import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
 import pl.kuba6000.ae2webintegration.core.notification.discord.DiscordPayload;
-import pl.kuba6000.ae2webintegration.core.notification.ntfy.NtfyManager;
 import pl.kuba6000.ae2webintegration.core.notification.ntfy.NtfyPayload;
 import scala.Console;
 
@@ -214,7 +213,7 @@ public class AE2JobTracker {
             if (securityGrid != null && securityGrid.web$isAvailable()) {
                 IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
                 craftingGrid.web$getCPUs(); // make sure the cpu has id
-                DiscordManager.postMessageNonBlocking(
+                NotificationManager.postMessageNonBlocking(
                     new DiscordPayload(
                         "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()
                             + " ][ "
@@ -239,7 +238,7 @@ public class AE2JobTracker {
                 IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
                 Console.println(craftingGrid);
                 craftingGrid.web$getCPUs(); // make sure the cpu has id
-                NtfyManager.postMessageNonBlocking(
+                NotificationManager.postMessageNonBlocking(
                     new NtfyPayload(
                         "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()
                             + " ][ "
