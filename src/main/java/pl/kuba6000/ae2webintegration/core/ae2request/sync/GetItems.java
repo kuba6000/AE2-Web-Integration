@@ -2,7 +2,6 @@ package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
@@ -17,11 +16,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 public class GetItems extends ISyncedRequest {
-
-    @Override
-    boolean init(Map<String, String> getParams) {
-        return true;
-    }
 
     @Override
     void handle(IAEGrid grid) {

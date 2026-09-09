@@ -18,6 +18,7 @@ import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
+@SuppressWarnings("UnstableApiUsage")
 public class CoreData {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
@@ -63,9 +64,6 @@ public class CoreData {
             return identity;
         }
 
-        public String getUsername() {
-            return identity.name;
-        }
     }
 
     public static Account getAccount(String name) {
@@ -99,7 +97,7 @@ public class CoreData {
         try {
             return PasswordHelper.validatePassword(password, stored);
         } catch (Exception e) {
-            LOG.error("Password verification failed for player UUID: " + playerUuid, e);
+            LOG.error("Password verification failed for player UUID: {}", playerUuid, e);
             return false;
         }
     }
@@ -109,6 +107,7 @@ public class CoreData {
      * names, and existing accounts need the same update when their owner renames. The UUID remains the
      * account identity; the name is only a case-insensitive login index.
      */
+    @SuppressWarnings("ConstantValue") // Keep validation of externally supplied identity data.
     public static void observePlayer(PlayerIdentity player) {
         if (player == null || player.uuid == null || player.name == null || player.name.isEmpty()) {
             return;
@@ -167,9 +166,9 @@ public class CoreData {
             }
             if (loaded.schemaVersion > CURRENT_SCHEMA_VERSION) {
                 LOG.warn(
-                    "Web data file was written by a newer version (schema " + loaded.schemaVersion
-                        + "), reading it as schema "
-                        + CURRENT_SCHEMA_VERSION);
+                    "Web data file was written by a newer version (schema {}), reading it as schema {}",
+                    loaded.schemaVersion,
+                    CURRENT_SCHEMA_VERSION);
             }
             boolean needsMigration = loaded.schemaVersion < CURRENT_SCHEMA_VERSION;
             loaded.rebuildUsernameIndex();
@@ -183,7 +182,7 @@ public class CoreData {
         } catch (Exception e) {
             // Deliberately no clear-and-save here: a failed read must not persist the loss of every
             // account. Leave the file alone so it can be inspected or restored.
-            LOG.error("Failed to load web data from file: " + file.getAbsolutePath(), e);
+            LOG.error("Failed to load web data from file: {}", file.getAbsolutePath(), e);
         }
     }
 

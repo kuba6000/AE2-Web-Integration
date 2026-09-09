@@ -16,6 +16,7 @@ import com.google.common.net.InetAddresses;
  * direct peer is a configured trusted proxy. That condition is the entire safety mechanism - do not
  * relax it.
  */
+@SuppressWarnings("UnstableApiUsage")
 public final class ClientAddressResolver {
 
     /** A configured trusted entry: an address plus how many leading bits of it are significant. */
@@ -29,6 +30,7 @@ public final class ClientAddressResolver {
             this.prefixBits = prefixBits;
         }
 
+        @SuppressWarnings("PMD.AvoidMagicNumbers") // CIDR matching uses byte widths and masks.
         boolean matches(byte[] candidate) {
             // Different families (4 vs 16 bytes) never match.
             if (candidate.length != address.length) {
@@ -95,7 +97,7 @@ public final class ClientAddressResolver {
         if (address == null) {
             return null;
         }
-        int maxBits = address.length * 8;
+        int maxBits = address.length * 8; // NOPMD - Convert address bytes to bits.
         if (prefixBits < 0) {
             prefixBits = maxBits;
         } else if (prefixBits > maxBits) {
@@ -136,12 +138,12 @@ public final class ClientAddressResolver {
      * nothing extra either - anything running on this host can already reach us over loopback.
      */
     private static boolean isSameMachine(InetAddress peer, InetAddress localAddress) {
-        return peer.isLoopbackAddress() || (localAddress != null && peer.equals(localAddress));
+        return peer.isLoopbackAddress() || peer.equals(localAddress);
     }
 
     /**
      * @param peer         the address the TCP connection actually came from
-     * @param localAddress the address the connection arrived on, or {@code null} if unknown
+     * @param localAddress the local destination address, or {@code null} if unknown
      * @param forwardedFor {@code X-Forwarded-For} header values, or {@code null}
      * @param realIp       {@code X-Real-IP} header values, or {@code null}
      * @return the address to treat as the client. Falls back to {@code peer} whenever the headers cannot

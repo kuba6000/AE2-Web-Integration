@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.Collections;
 import java.util.HashMap;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class AE2JobTrackerLifecycleTest {
 
     private static final long GRID_KEY = 900_101L;
@@ -48,8 +50,8 @@ class AE2JobTrackerLifecycleTest {
         EqualCpu first = new EqualCpu();
         EqualCpu second = new EqualCpu();
 
-        AE2JobTracker.addJob(first, null, grid, false);
-        AE2JobTracker.addJob(second, null, grid, false);
+        AE2JobTracker.addJob(first, grid, false);
+        AE2JobTracker.addJob(second, grid, false);
 
         AE2JobTracker.JobTrackingInfo firstInfo = AE2JobTracker.findActiveJob(first);
         AE2JobTracker.JobTrackingInfo secondInfo = AE2JobTracker.findActiveJob(second);
@@ -61,7 +63,7 @@ class AE2JobTrackerLifecycleTest {
     @Test
     void serverStopCleanupDropsEveryActiveCpuTrackingEntry() {
         EqualCpu cpu = new EqualCpu();
-        AE2JobTracker.addJob(cpu, null, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false);
         assertNotNull(AE2JobTracker.findActiveJob(cpu));
 
         AE2JobTracker.clearActiveJobs();
@@ -73,7 +75,7 @@ class AE2JobTrackerLifecycleTest {
     void missingFinalOutputDoesNotStartTrackingOrProduceHistory() {
         EqualCpu cpu = new EqualCpu();
         cpu.output = null;
-        AE2JobTracker.addJob(cpu, null, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false);
 
         assertNull(AE2JobTracker.findActiveJob(cpu));
         update(cpu, new Resource(1, 0), 10);
@@ -85,16 +87,16 @@ class AE2JobTrackerLifecycleTest {
     @Test
     void missingFinalOutputOnMergeDiscardsTrackingWithoutPublishingPartialHistory() {
         EqualCpu cpu = new EqualCpu();
-        AE2JobTracker.addJob(cpu, null, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false);
         update(cpu, new Resource(1, 0), 10);
         assertNotNull(AE2JobTracker.findActiveJob(cpu));
 
         cpu.output = null;
-        AE2JobTracker.addJob(cpu, null, grid, true);
+        AE2JobTracker.addJob(cpu, grid, true);
 
         assertNull(AE2JobTracker.findActiveJob(cpu));
         cpu.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
-        AE2JobTracker.addJob(cpu, null, grid, true);
+        AE2JobTracker.addJob(cpu, grid, true);
         assertNull(AE2JobTracker.findActiveJob(cpu));
         update(cpu, new Resource(1, 0), 0);
         AE2JobTracker.completeCrafting(grid, cpu);
@@ -104,7 +106,7 @@ class AE2JobTrackerLifecycleTest {
     @Test
     void completionKeepsKnownOutputWhenTheNativeCpuHasAlreadyClearedItsStack() {
         EqualCpu cpu = new EqualCpu();
-        AE2JobTracker.addJob(cpu, null, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false);
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
         cpu.output = null;
 
@@ -120,7 +122,7 @@ class AE2JobTrackerLifecycleTest {
     @Test
     void deliveriesKeepTaggedVariantsSeparateAcrossEquivalentKeysAndWaitingCycles() {
         EqualCpu cpu = new EqualCpu();
-        AE2JobTracker.addJob(cpu, null, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false);
         Resource first = new Resource(1, 0);
         Resource second = new Resource(1, 1);
 
@@ -159,13 +161,15 @@ class AE2JobTrackerLifecycleTest {
     @Test
     void providersShareNamesAndLocationsButFinishOnlyAfterAllTheirOutputsArrive() {
         EqualCpu cpu = new EqualCpu();
-        AE2JobTracker.addJob(cpu, null, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false);
         Resource first = new Resource(1, 0);
         Resource second = new Resource(2, 0);
         DimensionalCoords firstLocation = new DimensionalCoords(0, 1, 2, 3);
         DimensionalCoords secondLocation = new DimensionalCoords(0, 4, 5, 6);
         // Aa and BB also exercise distinct provider names with the same String hash.
         push(cpu, "Aa", firstLocation, first);
+        // Equal names must group even when they are different String instances.
+        // noinspection StringOperationCanBeSimplified
         push(cpu, new String("Aa"), secondLocation, second);
         push(cpu, "BB", firstLocation, first);
         push(cpu, "Aa", firstLocation, first);
@@ -178,7 +182,7 @@ class AE2JobTrackerLifecycleTest {
             .stream()
             .filter(provider -> provider.name.equals("Aa"))
             .findFirst()
-            .get();
+            .orElseThrow(() -> new AssertionError("Expected the grouped provider named Aa"));
         assertEquals(2, grouped.location.size());
         assertTrue(grouped.location.contains(firstLocation));
         assertTrue(grouped.location.contains(secondLocation));
@@ -220,7 +224,7 @@ class AE2JobTrackerLifecycleTest {
         IAEGenericStack output = new IAEGenericStack() {
 
             @Override
-            public IAEKey web$what() {
+            public @NotNull IAEKey web$what() {
                 return resource;
             }
 
@@ -229,10 +233,6 @@ class AE2JobTrackerLifecycleTest {
                 return 1;
             }
 
-            @Override
-            public IAEGenericStack web$copy() {
-                return this;
-            }
         };
         IAECraftingPatternDetails pattern = () -> new IAEGenericStack[] { output };
         AE2JobTracker.pushedPattern(cpu, provider, pattern);
@@ -264,28 +264,22 @@ class AE2JobTrackerLifecycleTest {
         }
 
         @Override
-        public boolean web$isSameType(IAEKey other) {
-            // Legacy fluid type checks ignore NBT, unlike native resource equality.
-            return other instanceof Resource && id == ((Resource) other).id;
-        }
-
-        @Override
-        public StableKey web$getKey() {
+        public @NotNull StableKey web$getKey() {
             throw new AssertionError("Tracking must not encode stable resource IDs");
         }
 
         @Override
-        public IAEKey web$copyIdentity() {
+        public @NotNull IAEKey web$copyIdentity() {
             return this;
         }
 
         @Override
-        public String web$getItemID() {
+        public @NotNull String web$getItemID() {
             return "test:resource";
         }
 
         @Override
-        public String web$getDisplayName() {
+        public @NotNull String web$getDisplayName() {
             return "Resource";
         }
 
@@ -297,7 +291,7 @@ class AE2JobTrackerLifecycleTest {
 
     private static final class EqualCpu implements ICraftingCPUCluster {
 
-        public StableKey web$getKey() {
+        public @NotNull StableKey web$getKey() {
             return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         }
 
@@ -324,14 +318,6 @@ class AE2JobTrackerLifecycleTest {
         @Override
         public int hashCode() {
             return 1;
-        }
-
-        @Override
-        public void web$setInternalID(int id) {}
-
-        @Override
-        public boolean web$hasCustomName() {
-            return false;
         }
 
         @Override

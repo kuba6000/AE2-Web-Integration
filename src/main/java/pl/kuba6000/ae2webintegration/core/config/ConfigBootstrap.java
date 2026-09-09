@@ -6,11 +6,12 @@ import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 
 /**
  * Defines ALL configuration keys for AE2 Web Integration.
- *
+ * <p>
  * Called once during mod initialization with a platform-specific
  * {@link IConfigBuilder} implementation. Before {@link #init(IConfigBuilder)}
  * has been called every value returns its hard-coded default.
  */
+@SuppressWarnings("PMD.AvoidMagicNumbers") // Configuration defaults and bounds are defined alongside their keys.
 public class ConfigBootstrap {
 
     // --- General ---

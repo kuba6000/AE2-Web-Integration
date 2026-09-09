@@ -4,7 +4,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AEMixinCallbacks;
 
 public interface IAEMixinCallbacks {
@@ -13,8 +12,7 @@ public interface IAEMixinCallbacks {
         return AEMixinCallbacks.INSTANCE;
     }
 
-    void jobStarted(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging,
-        boolean isAuthorPlayer);
+    void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isAuthorPlayer);
 
     void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, Object diff);
 

@@ -38,6 +38,7 @@ public class HTTPUtils {
         }
     }
 
+    @SuppressWarnings("CharsetObjectCanBeUsed") // URLDecoder's Charset overload is unavailable on Java 8.
     public static Map<String, String> parseQueryString(String qs) {
         Map<String, String> result = new HashMap<>();
         if (qs == null) return result;

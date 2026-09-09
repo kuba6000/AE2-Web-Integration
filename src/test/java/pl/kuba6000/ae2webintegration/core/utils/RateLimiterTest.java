@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class RateLimiterTest {
 
     private static final int WINDOW_MS = 60_000;

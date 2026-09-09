@@ -21,6 +21,8 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
  */
 public class CommandBootstrap {
 
+    public static final int ADMIN_PERMISSION_LEVEL = 4;
+
     private CommandBootstrap() {}
 
     /**
@@ -28,7 +30,7 @@ public class CommandBootstrap {
      */
     public static void init(ICommandBuilder builder) {
         builder.literal("ae2webintegration", 0)
-            .literal("reload", 4)
+            .literal("reload", ADMIN_PERMISSION_LEVEL)
             .executes(CommandBootstrap::handleReload)
             .literal("auth", 0)
             .argument("token")
@@ -37,7 +39,7 @@ public class CommandBootstrap {
     }
 
     private static void handleReload(ICommandContext ctx) {
-        if (!ctx.hasPermission(4)) {
+        if (!ctx.hasPermission(ADMIN_PERMISSION_LEVEL)) {
             ctx.sendError("You do not have permission to use this command!");
             return;
         }

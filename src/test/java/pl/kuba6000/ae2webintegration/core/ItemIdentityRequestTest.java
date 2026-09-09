@@ -7,8 +7,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -21,15 +23,17 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.*;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
 
+@SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class ItemIdentityRequestTest {
 
     @Test
+    @SuppressWarnings("BusyWait") // Wait for GC to release ownership, bounded by the deadline below.
     void completeListingsReplaceOwnershipWithoutDiscardingAnotherGridsSharedKey() throws Exception {
         Grid first = new Grid(910009, new Resource("iron", 5, true));
         Grid second = new Grid(910010, new Resource("iron", 8, true) {
 
             @Override
-            public StableKey web$getKey() {
+            public @NotNull StableKey web$getKey() {
                 throw new AssertionError("Warm shared identity must not encode native data again");
             }
         });
@@ -60,7 +64,7 @@ class ItemIdentityRequestTest {
             "OK",
             run(new GetItems(), second, "").get("status")
                 .getAsString());
-        long deadline = System.nanoTime() + 5_000_000_000L;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         String status;
         do {
             System.gc();
@@ -85,7 +89,7 @@ class ItemIdentityRequestTest {
         grid.rows.add(new Resource("broken", 1, false) {
 
             @Override
-            public String web$getDisplayName() {
+            public @NotNull String web$getDisplayName() {
                 throw new IllegalStateException("Native traversal failed");
             }
         });
@@ -101,22 +105,10 @@ class ItemIdentityRequestTest {
 
     @Test
     void storedAndRecipeRowsMergeOnlyForPreciselyEqualResources() {
-        Resource stored = new Resource("variantA", 5, true) {
-
-            @Override
-            public boolean web$isSameType(IAEKey other) {
-                return true;
-            }
-        };
+        Resource stored = new Resource("variantA", 5, true);
         Grid grid = new Grid(910008, stored);
         grid.recipes = new LinkedHashSet<>(
-            Arrays.asList(new Resource("variantA", 0, true), new Resource("variantB", 0, true) {
-
-                @Override
-                public boolean web$isSameType(IAEKey other) {
-                    return true;
-                }
-            }));
+            Arrays.asList(new Resource("variantA", 0, true), new Resource("variantB", 0, true)));
         com.google.gson.JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
         assertEquals(2, rows.size());
         assertEquals(
@@ -171,12 +163,12 @@ class ItemIdentityRequestTest {
         Grid grid = new Grid(910003, new Resource("iron", 20, false), new Resource("unsupported", 3, true) {
 
             @Override
-            public StableKey web$getKey() {
+            public @NotNull StableKey web$getKey() {
                 throw new UnsupportedOperationException();
             }
 
             @Override
-            public IAEKey web$copyIdentity() {
+            public @NotNull IAEKey web$copyIdentity() {
                 return this;
             }
         });
@@ -303,7 +295,7 @@ class ItemIdentityRequestTest {
             public IAEGenericStack web$stackOf(IAEKey key, long amount) {
                 return new IAEGenericStack() {
 
-                    public IAEKey web$what() {
+                    public @NotNull IAEKey web$what() {
                         return key;
                     }
 
@@ -311,9 +303,6 @@ class ItemIdentityRequestTest {
                         return amount;
                     }
 
-                    public IAEGenericStack web$copy() {
-                        return this;
-                    }
                 };
             }
         };
@@ -335,19 +324,19 @@ class ItemIdentityRequestTest {
             this.craftable = craftable;
         }
 
-        public StableKey web$getKey() {
+        public @NotNull StableKey web$getKey() {
             return StableKey.create(sink -> sink.putBytes(id.getBytes(StandardCharsets.UTF_8)));
         }
 
-        public IAEKey web$copyIdentity() {
+        public @NotNull IAEKey web$copyIdentity() {
             return new Resource(id, 0, false);
         }
 
-        public String web$getItemID() {
+        public @NotNull String web$getItemID() {
             return id;
         }
 
-        public String web$getDisplayName() {
+        public @NotNull String web$getDisplayName() {
             return id;
         }
 
@@ -355,20 +344,12 @@ class ItemIdentityRequestTest {
             return craftable;
         }
 
-        public boolean web$isSameType(IAEKey key) {
-            return equals(key);
-        }
-
-        public IAEKey web$what() {
+        public @NotNull IAEKey web$what() {
             return this;
         }
 
         public long web$amount() {
             return quantity;
-        }
-
-        public IAEGenericStack web$copy() {
-            return new Resource(id, quantity, craftable);
         }
 
         @Override
@@ -437,10 +418,6 @@ class ItemIdentityRequestTest {
         }
 
         public String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean power, IAEGrid grid) {
-            throw new AssertionError();
-        }
-
-        public ICraftingMediumTracker web$getCraftingProviders() {
             throw new AssertionError();
         }
 

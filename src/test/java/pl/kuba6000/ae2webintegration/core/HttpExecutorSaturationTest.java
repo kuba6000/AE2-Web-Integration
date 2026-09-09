@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -13,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class HttpExecutorSaturationTest {
 
     @Test
@@ -43,7 +45,7 @@ class HttpExecutorSaturationTest {
             ExecutionException rejection = assertThrows(
                 ExecutionException.class,
                 () -> excessSubmission.get(1, TimeUnit.SECONDS));
-            assertTrue(rejection.getCause() instanceof RejectedExecutionException);
+            assertInstanceOf(RejectedExecutionException.class, rejection.getCause());
         } finally {
             releaseWorkers.countDown();
             executor.shutdownNow();

@@ -4,7 +4,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -18,11 +19,17 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 
 public class DiscordManager extends Thread {
 
+    public static final int COLOR_TURQUOISE = 0x1ABC9C;
+    public static final int COLOR_RED = 0xED4245;
+    public static final int COLOR_GREEN = 0x57F287;
+
     private static final Logger LOG = LogManager.getLogger("ae2webintegration" + " - DISCORD INTEGRATION");
 
     private static DiscordManager thread;
 
-    private static ConcurrentLinkedQueue<DiscordEmbed> toPush = new ConcurrentLinkedQueue<>();
+    private static final BlockingQueue<DiscordEmbed> toPush = new LinkedBlockingQueue<>();
+    private static final int WEBHOOK_TIMEOUT_MILLIS = 10_000;
+    private static final long FRACTIONAL_SECONDS_THRESHOLD_MILLIS = 5000L;
 
     public static void init() {
         if (thread != null) return;
@@ -31,12 +38,15 @@ public class DiscordManager extends Thread {
         thread.start();
     }
 
+    @SuppressWarnings("ResultOfMethodCallIgnored") // Enqueue success is not exposed by this fire-and-forget API.
     public static void postMessageNonBlocking(DiscordEmbed message) {
         toPush.offer(message);
     }
 
+    @SuppressWarnings("PMD.AvoidMagicNumbers") // Standard conversions between milliseconds, seconds, minutes, hours and
+                                               // days.
     public static String formatDuration(long durationMillis) {
-        if (durationMillis < 5000L) {
+        if (durationMillis < FRACTIONAL_SECONDS_THRESHOLD_MILLIS) {
             return durationMillis / 1000d + "s";
         }
 
@@ -53,7 +63,8 @@ public class DiscordManager extends Thread {
     }
 
     public static boolean shouldPostCraftingNotification(long durationMillis, long craftedAmount) {
-        long minimumDurationMillis = Config.DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS() * 1000L;
+        // Seconds to milliseconds.
+        long minimumDurationMillis = Config.DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS() * 1000L; // NOPMD
         return durationMillis >= minimumDurationMillis && craftedAmount >= Config.DISCORD_MINIMUM_CRAFTING_AMOUNT();
     }
 
@@ -70,13 +81,13 @@ public class DiscordManager extends Thread {
         }
 
         public DiscordEmbed(String title, String description) {
-            this(title, description, 1752220);
+            this(title, description, COLOR_TURQUOISE);
         }
     }
 
     private static void postMessage(DiscordEmbed message) {
-        if (Config.DISCORD_WEBHOOK()
-            .isEmpty()) return;
+        String webhook = Config.DISCORD_WEBHOOK();
+        if (webhook.isEmpty()) return;
 
         String roleID = Config.DISCORD_ROLE_ID();
 
@@ -92,11 +103,17 @@ public class DiscordManager extends Thread {
         json.add("embeds", embeds);
         json.add("attachments", new JsonArray());
 
-        URL url = null;
+        HttpsURLConnection connection = null;
         try {
-            url = new URL(Config.DISCORD_WEBHOOK());
+            URL url = new URL(webhook);
+            if (!"https".equalsIgnoreCase(url.getProtocol())) {
+                LOG.error("Discord webhook URL must use HTTPS");
+                return;
+            }
 
-            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+            connection = (HttpsURLConnection) url.openConnection();
+            connection.setConnectTimeout(WEBHOOK_TIMEOUT_MILLIS);
+            connection.setReadTimeout(WEBHOOK_TIMEOUT_MILLIS);
             connection.addRequestProperty("Content-Type", "application/json");
             connection.addRequestProperty("User-Agent", "AE2-Web-Integration");
             connection.setDoOutput(true);
@@ -109,26 +126,25 @@ public class DiscordManager extends Thread {
             }
 
             int code;
-            if ((code = connection.getResponseCode()) != 200 && code != 204) {
-                LOG.error("Error, response code: " + code);
+            if ((code = connection.getResponseCode()) != 200 && code != 204) { // NOPMD - HTTP OK and No Content.
+                LOG.error("Error, response code: {}", code);
             }
-        } catch (IOException e) {
-            // throw new RuntimeException(e);
+        } catch (IOException | IllegalArgumentException e) {
+            // Exception messages may contain the webhook URL, including its secret token.
+            LOG.error(
+                "Discord webhook request failed ({})",
+                e.getClass()
+                    .getSimpleName());
+        } finally {
+            if (connection != null) connection.disconnect();
         }
     }
 
     @Override
     public void run() {
         while (!isInterrupted()) {
-            if (toPush.peek() != null) {
-                DiscordEmbed message;
-                while ((message = toPush.poll()) != null) {
-                    postMessage(message);
-                }
-            }
-
             try {
-                Thread.sleep(1000);
+                postMessage(toPush.take());
             } catch (InterruptedException e) {
                 interrupt();
             }

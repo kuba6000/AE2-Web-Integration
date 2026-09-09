@@ -8,7 +8,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 /**
  * Shared "is this grid usable by the web interface" predicate.
  * <p>
- * The same online + security check used to be spelled out separately in {@link GridData#get(IAEGrid)},
+ * The same online + security check used to be spelled out separately in {@link GridData#getOrCreate(IAEGrid)},
  * {@code ISyncedRequest#handle(IAE)} and {@code GetGridList#handle(IAE)}. Keeping a single copy stops the
  * three from drifting apart.
  */

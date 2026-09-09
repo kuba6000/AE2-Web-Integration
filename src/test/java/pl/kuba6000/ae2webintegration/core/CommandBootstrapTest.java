@@ -22,6 +22,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 /** Tests for {@link CommandBootstrap} command tree definition. */
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class CommandBootstrapTest {
 
     @BeforeEach
@@ -162,8 +163,6 @@ class CommandBootstrapTest {
             return parent != null ? parent : this;
         }
 
-        @Override
-        public void register() {}
     }
 
     private static class TestAE implements IAE {
@@ -185,18 +184,7 @@ class CommandBootstrapTest {
 
         @Override
         public IAEPlayerData web$getPlayerData() {
-            return new IAEPlayerData() {
-
-                @Override
-                public PlayerIdentity web$getPlayerProfile(int playerId) {
-                    return null;
-                }
-
-                @Override
-                public int web$getPlayerId(PlayerIdentity identity) {
-                    return 42;
-                }
-            };
+            return identity -> 42;
         }
     }
 
@@ -207,7 +195,6 @@ class CommandBootstrapTest {
         String[] args = new String[0];
         int lastPermissionCheck = -1;
         boolean hasPermissionResult = false;
-        String lastMessage;
         String lastError;
         PlayerIdentity playerIdentity;
         Runnable reloader;
@@ -230,9 +217,7 @@ class CommandBootstrapTest {
         }
 
         @Override
-        public void sendMessage(String text) {
-            lastMessage = text;
-        }
+        public void sendMessage(String text) {}
 
         @Override
         public void sendError(String text) {

@@ -11,6 +11,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 
 public class GetGridList extends ISyncedRequest {
 
+    @SuppressWarnings("unused") // Gson reads the fields reflectively.
     private static class JSON_GridData {
 
         JSON_GridData(long key, int cpuCount, String owner, boolean isOwned, boolean isTrackingEnabled) {
@@ -25,7 +26,7 @@ public class GetGridList extends ISyncedRequest {
         public int cpuCount;
         public String owner;
         public boolean isOwned;
-        public boolean isTrackingEnabled = false;
+        public boolean isTrackingEnabled;
     }
 
     @Override

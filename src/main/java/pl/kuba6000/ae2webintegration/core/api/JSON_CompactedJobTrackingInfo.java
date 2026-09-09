@@ -10,6 +10,7 @@ import org.jetbrains.annotations.NotNull;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
+@SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class JSON_CompactedJobTrackingInfo {
 
     public static class timingClass {
@@ -72,7 +73,8 @@ public class JSON_CompactedJobTrackingInfo {
             item.shareInCraftingTimeCombined = elapsed > 0
                 ? Math.min(((double) item.timeSpentOn) / (double) elapsed, 1d)
                 : 0d;
-            item.craftsPerSec = item.timeSpentOn > 0 ? (double) item.craftedTotal / (item.timeSpentOn / 1000d) : 0d;
+            // Milliseconds to fractional seconds.
+            item.craftsPerSec = item.timeSpentOn > 0 ? (double) item.craftedTotal / (item.timeSpentOn / 1000d) : 0d; // NOPMD
             for (Pair<Long, Long> longLongPair : info.itemShare.get(key)) {
                 item.timings.add(new timingClass(longLongPair.getKey(), longLongPair.getValue()));
             }

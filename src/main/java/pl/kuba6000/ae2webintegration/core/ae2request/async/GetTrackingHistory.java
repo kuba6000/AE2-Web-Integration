@@ -10,6 +10,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 public class GetTrackingHistory extends IAsyncRequest {
 
+    @SuppressWarnings("unused") // Gson reads the fields reflectively.
     private static class JSON_TrackingHistoryElement {
 
         public long timeStarted;

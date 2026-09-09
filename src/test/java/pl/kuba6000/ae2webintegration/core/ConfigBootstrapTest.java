@@ -13,6 +13,7 @@ import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 
 /** Tests for {@link ConfigBootstrap} config key definition. */
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class ConfigBootstrapTest {
 
     /** Reset ConfigBootstrap fields to their pre-init defaults before each test. */
@@ -176,19 +177,19 @@ class ConfigBootstrapTest {
 
         @Override
         public IConfigValue<Integer> defineInt(String key, int defaultValue, int min, int max, String comment) {
-            calls.add(new DefCall("int", key, defaultValue, min, max, comment));
+            calls.add(new DefCall("int", key, defaultValue, min, max));
             return () -> defaultValue;
         }
 
         @Override
         public IConfigValue<String> defineString(String key, String defaultValue, String comment) {
-            calls.add(new DefCall("string", key, defaultValue, comment));
+            calls.add(new DefCall("string", key, defaultValue));
             return () -> defaultValue;
         }
 
         @Override
         public IConfigValue<Boolean> defineBoolean(String key, boolean defaultValue, String comment) {
-            calls.add(new DefCall("boolean", key, defaultValue, comment));
+            calls.add(new DefCall("boolean", key, defaultValue));
             return () -> defaultValue;
         }
     }
@@ -201,19 +202,17 @@ class ConfigBootstrapTest {
         final Object defValue;
         final int min;
         final int max;
-        final String comment;
 
-        DefCall(String type, String key, Object defValue, int min, int max, String comment) {
+        DefCall(String type, String key, Object defValue, int min, int max) {
             this.type = type;
             this.key = key;
             this.defValue = defValue;
             this.min = min;
             this.max = max;
-            this.comment = comment;
         }
 
-        DefCall(String type, String key, Object defValue, String comment) {
-            this(type, key, defValue, 0, 0, comment);
+        DefCall(String type, String key, Object defValue) {
+            this(type, key, defValue, 0, 0);
         }
     }
 }

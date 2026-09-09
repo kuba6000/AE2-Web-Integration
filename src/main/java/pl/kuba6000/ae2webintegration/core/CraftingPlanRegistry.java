@@ -63,8 +63,8 @@ public final class CraftingPlanRegistry {
         return true;
     }
 
-    public boolean remove(int id) {
-        return plans.remove(id) != null;
+    public void remove(int id) {
+        plans.remove(id);
     }
 
     public void clearForServerStop() {

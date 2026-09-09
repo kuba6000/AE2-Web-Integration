@@ -9,6 +9,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 /** Immutable output data captured on the server thread, safe for later asynchronous serialization. */
+@SuppressWarnings("unused") // Gson reads the fields reflectively.
 public final class JSON_Stack {
 
     public final @NotNull String itemid;
