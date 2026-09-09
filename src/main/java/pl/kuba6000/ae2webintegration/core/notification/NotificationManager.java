@@ -18,13 +18,17 @@ public class NotificationManager extends Thread {
 
     private static NotificationManager thread;
 
-    private static ConcurrentLinkedQueue<INotificationPayload> toPush = new ConcurrentLinkedQueue<>();
-    private static List<INotificationDestination> destinations = new ArrayList<>();
+    private static final ConcurrentLinkedQueue<INotificationPayload> toPush = new ConcurrentLinkedQueue<>();
+    private static final List<INotificationDestination> destinations = new ArrayList<>();
 
     public static void init() {
         if (thread != null) return;
-        destinations.add(new DiscordDestination());
-        destinations.add(new NtfyDestination());
+
+        DiscordDestination discord = new DiscordDestination();
+        if (discord.isUsable()) destinations.add(discord);
+        NtfyDestination ntfy = new NtfyDestination();
+        if (ntfy.isUsable()) destinations.add(ntfy);
+
         thread = new NotificationManager();
         thread.start();
     }

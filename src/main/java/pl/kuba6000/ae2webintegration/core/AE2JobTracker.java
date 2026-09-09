@@ -228,16 +228,6 @@ public class AE2JobTracker {
                             + took
                             + "s",
                         info.wasCancelled ? 15548997 : 5763719));
-            }
-        }
-        if (!Config.AE_PUBLIC_MODE && !Config.NTFY_HOST.isEmpty()) {
-            IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
-            Console.println(securityGrid);
-            Console.println(securityGrid.web$isAvailable());
-            if (securityGrid != null && securityGrid.web$isAvailable()) {
-                IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
-                Console.println(craftingGrid);
-                craftingGrid.web$getCPUs(); // make sure the cpu has id
                 NotificationManager.postMessageNonBlocking(
                     new NtfyPayload(
                         "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()

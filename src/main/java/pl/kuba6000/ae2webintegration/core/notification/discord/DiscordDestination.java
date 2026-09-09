@@ -22,6 +22,11 @@ public class DiscordDestination implements INotificationDestination {
     private static final Logger LOG = LogManager.getLogger(MODID + " - DISCORD INTEGRATION");
 
     @Override
+    public boolean isUsable() {
+        return !Config.DISCORD_WEBHOOK.isEmpty();
+    }
+
+    @Override
     public boolean supports(INotificationPayload notificationPayload) {
         return notificationPayload instanceof DiscordPayload;
     }
@@ -29,7 +34,6 @@ public class DiscordDestination implements INotificationDestination {
     @Override
     public void sendNotification(INotificationPayload message) {
         DiscordPayload payload = (DiscordPayload) message;
-        if (Config.DISCORD_WEBHOOK.isEmpty()) return;
 
         JsonObject json = payload.serializePayload();
 

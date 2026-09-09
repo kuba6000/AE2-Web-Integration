@@ -25,6 +25,11 @@ public class NtfyDestination implements INotificationDestination {
     private static final Logger LOG = LogManager.getLogger(MODID + " - NTFY INTEGRATION");
 
     @Override
+    public boolean isUsable() {
+        return !Config.NTFY_HOST.isEmpty();
+    }
+
+    @Override
     public boolean supports(INotificationPayload notificationPayload) {
         return notificationPayload instanceof NtfyPayload;
     }
