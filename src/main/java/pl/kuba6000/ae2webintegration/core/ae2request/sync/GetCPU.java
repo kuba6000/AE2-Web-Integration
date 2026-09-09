@@ -20,6 +20,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 public class GetCPU extends ISyncedRequest {
 
+    @SuppressWarnings("unused") // Gson reads the fields reflectively.
     private static class JSON_ClusterData {
 
         public long size;
@@ -98,8 +99,9 @@ public class GetCPU extends ISyncedRequest {
                     compactedItem.shareInCraftingTimeCombined = clusterData.timeElapsed > 0
                         ? Math.min(((double) compactedItem.timeSpentCrafting) / (double) clusterData.timeElapsed, 1d)
                         : 0d;
+                    // Milliseconds to fractional seconds.
                     compactedItem.craftsPerSec = compactedItem.timeSpentCrafting > 0
-                        ? (double) compactedItem.craftedTotal / (compactedItem.timeSpentCrafting / 1000d)
+                        ? (double) compactedItem.craftedTotal / (compactedItem.timeSpentCrafting / 1000d) // NOPMD
                         : 0d;
                 }
             }

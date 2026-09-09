@@ -7,13 +7,13 @@ import java.util.concurrent.TimeoutException;
 
 import com.google.gson.GsonBuilder;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 public abstract class IRequest {
 
     protected static GsonBuilder JSONBuilder = GSONUtils.GSON_BUILDER;
 
+    @SuppressWarnings({ "unused", "FieldCanBeLocal" }) // Gson reads the fields reflectively.
     private static final class RequestResult {
 
         private final String status;
@@ -27,8 +27,6 @@ public abstract class IRequest {
 
     private static final RequestResult PENDING_RESULT = new RequestResult("TIMEOUT", null);
     private final CompletableFuture<RequestResult> completion = new CompletableFuture<>();
-
-    abstract public void handle(AE2Controller.RequestContext context);
 
     public String getJSON() {
         RequestResult result = completion.getNow(PENDING_RESULT);
@@ -62,7 +60,7 @@ public abstract class IRequest {
 
     /**
      * Answers a request whose handler died in the tick pump, so its HTTP worker returns at once instead of
-     * waiting for the ten second request timeout and then reporting TIMEOUT.
+     * waiting for the request timeout and then reporting TIMEOUT.
      * <p>
      * Does nothing when the handler already produced a result: one that threw after {@link #done()} still
      * answered, the HTTP thread may already be reading that answer, and overwriting it would be both a

@@ -25,6 +25,7 @@ public class Job extends ISyncedRequest {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
+    @SuppressWarnings("unused") // Gson reads the fields reflectively.
     private static class JSON_JobData {
 
         boolean isDone;
@@ -94,7 +95,8 @@ public class Job extends ISyncedRequest {
         }
         if (type == ERequestType.CHECK) {
             JSON_JobData jobData = new JSON_JobData();
-            if (jobData.isDone = job.isDone()) {
+            jobData.isDone = job.isDone();
+            if (jobData.isDone) {
                 try {
                     IAECraftingJob craftingJob = job.get();
                     IAEStorageGrid storageGrid = grid.web$getStorageGrid();

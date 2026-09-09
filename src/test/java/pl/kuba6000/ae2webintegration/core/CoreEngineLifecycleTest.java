@@ -12,6 +12,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
@@ -24,6 +25,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
+@SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class CoreEngineLifecycleTest {
 
     private static final long GRID_KEY = 900_201L;
@@ -36,7 +38,7 @@ class CoreEngineLifecycleTest {
         CompletableFuture<IAECraftingJob> pendingPlan = new CompletableFuture<>();
         int planId = gridData.addJob(pendingPlan);
         ICraftingCPUCluster cpu = new TestCpu();
-        AE2JobTracker.addJob(cpu, null, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false);
         gridData.trackingInfo.trackingInfos.put(1, AE2JobTracker.findActiveJob(cpu));
         WebPrincipal principal = TestGridFixtures.principal(42);
         GridAccessSessions.put(principal, new GridAccess(42, Collections.singleton(GRID_KEY), 0L));
@@ -80,22 +82,22 @@ class CoreEngineLifecycleTest {
     private static final class TestStack implements IAEGenericStack, IAEKey {
 
         @Override
-        public StableKey web$getKey() {
+        public @NotNull StableKey web$getKey() {
             return StableKey.create(sink -> sink.putBytes(new byte[] { 7 }));
         }
 
         @Override
-        public IAEKey web$copyIdentity() {
+        public @NotNull IAEKey web$copyIdentity() {
             return this;
         }
 
         @Override
-        public String web$getItemID() {
+        public @NotNull String web$getItemID() {
             return "test:output";
         }
 
         @Override
-        public String web$getDisplayName() {
+        public @NotNull String web$getDisplayName() {
             return "Output";
         }
 
@@ -105,12 +107,7 @@ class CoreEngineLifecycleTest {
         }
 
         @Override
-        public boolean web$isSameType(IAEKey other) {
-            return this == other;
-        }
-
-        @Override
-        public IAEKey web$what() {
+        public @NotNull IAEKey web$what() {
             return this;
         }
 
@@ -119,27 +116,15 @@ class CoreEngineLifecycleTest {
             return 1;
         }
 
-        @Override
-        public IAEGenericStack web$copy() {
-            return this;
-        }
     }
 
     private static final class TestCpu implements ICraftingCPUCluster {
 
-        public StableKey web$getKey() {
+        public @NotNull StableKey web$getKey() {
             return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         }
 
         private final IAEGenericStack output = new TestStack();
-
-        @Override
-        public void web$setInternalID(int id) {}
-
-        @Override
-        public boolean web$hasCustomName() {
-            return false;
-        }
 
         @Override
         public String web$getName() {

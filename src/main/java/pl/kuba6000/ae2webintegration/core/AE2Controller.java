@@ -5,13 +5,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -78,30 +76,20 @@ public class AE2Controller {
     public static PlayerIdentity AEControllerProfile;
 
     static {
-        try {
-            AEControllerUUID = UUID.nameUUIDFromBytes("AE2-WEB-INTEGRATION-AE2CONTROLLER".getBytes("UTF-8"));
-            AEControllerProfile = new PlayerIdentity(AEControllerUUID, "AE2CONTROLLER");
-        } catch (UnsupportedEncodingException e) {
-            throw new RuntimeException(e);
-        }
+        AEControllerUUID = UUID.nameUUIDFromBytes("AE2-WEB-INTEGRATION-AE2CONTROLLER".getBytes(StandardCharsets.UTF_8));
+        AEControllerProfile = new PlayerIdentity(AEControllerUUID, "AE2CONTROLLER");
     }
 
     public static class RequestContext {
 
-        private final HttpExchange exchange;
         private final Map<String, String> getParams;
         private final WebPrincipal principal;
 
         public RequestContext(HttpExchange exchange, WebPrincipal principal) {
-            this.exchange = exchange;
             this.getParams = HTTPUtils.parseQueryString(
                 exchange.getRequestURI()
-                    .getQuery());
+                    .getRawQuery());
             this.principal = principal;
-        }
-
-        public HttpExchange getExchange() {
-            return exchange;
         }
 
         public Map<String, String> getGetParams() {
@@ -127,9 +115,16 @@ public class AE2Controller {
     static final BlockingQueue<IServerThreadTask> requests = new ArrayBlockingQueue<>(SERVER_THREAD_QUEUE_CAPACITY);
 
     private static final long AUTH_LOOKUP_TIMEOUT_SECONDS = 2L;
+    private static final long REQUEST_TIMEOUT_SECONDS = 10L;
+    private static final long SESSION_SECONDS = TimeUnit.HOURS.toSeconds(1);
+    private static final long REMEMBER_ME_SESSION_SECONDS = TimeUnit.DAYS.toSeconds(7);
+    private static final int RATE_LIMIT_WINDOW_MILLIS = (int) TimeUnit.MINUTES.toMillis(1);
+    private static final int SESSION_TOKEN_LENGTH = 200;
+    private static final int CONFIRMATION_TOKEN_LENGTH = 50;
 
     private static final class ServerTaskUnavailableException extends Exception {
 
+        @SuppressWarnings("MissingSerialAnnotation") // @Serial is unavailable on Java 8.
         private static final long serialVersionUID = 1L;
 
         private final String status;
@@ -164,12 +159,14 @@ public class AE2Controller {
 
     // Rebuilt in startHTTPServer() so /reload picks up config changes, and so two concurrent first
     // requests cannot race to create two limiters with split counters.
-    private static volatile RateLimiter rateLimiter = new RateLimiter(20, 60 * 1000);
+    private static volatile RateLimiter rateLimiter = new RateLimiter(
+        Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(),
+        RATE_LIMIT_WINDOW_MILLIS);
     private static volatile ClientAddressResolver clientAddressResolver = ClientAddressResolver.fromConfig("");
 
     /**
      * The address to treat this request as coming from. Behind a reverse proxy the TCP peer is always the
-     * proxy, so every decision about who the caller is - the localhost trust check and rate limiting
+     * proxy, so every decision about the caller's identity - the localhost trust check and rate limiting
      * alike - has to go through here, or the two would disagree.
      */
     static InetAddress resolveClientAddress(HttpExchange t) {
@@ -255,7 +252,9 @@ public class AE2Controller {
                 throw new IllegalStateException("HTTP server is already running");
             }
 
-            rateLimiter = new RateLimiter(Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(), 60 * 1000);
+            rateLimiter = new RateLimiter(
+                Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(),
+                RATE_LIMIT_WINDOW_MILLIS);
             clientAddressResolver = ClientAddressResolver.fromConfig(Config.TRUSTED_PROXIES());
             ExecutorService newServerThread = createHTTPExecutor();
             HttpServer newServer = null;
@@ -321,7 +320,7 @@ public class AE2Controller {
             HTTP_MAX_THREADS,
             HTTP_KEEP_ALIVE_SECONDS,
             TimeUnit.SECONDS,
-            new ArrayBlockingQueue<Runnable>(HTTP_QUEUE_CAPACITY)) {
+            new ArrayBlockingQueue<>(HTTP_QUEUE_CAPACITY)) {
 
             @Override
             protected void afterExecute(Runnable r, Throwable t) {
@@ -339,6 +338,8 @@ public class AE2Controller {
         try {
             if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
                 executor.shutdownNow();
+                // The final bounded wait is best-effort; shutdownNow has already requested interruption.
+                // noinspection ResultOfMethodCallIgnored
                 executor.awaitTermination(1, TimeUnit.SECONDS);
             }
         } catch (InterruptedException e) {
@@ -440,18 +441,6 @@ public class AE2Controller {
         return "authenticationToken=" + token + "; Max-Age=" + maxAgeSeconds + "; HttpOnly; SameSite=Lax";
     }
 
-    private static String generateToken() {
-        return generateToken(200);
-    }
-
-    private static String generateToken(int limit) {
-        return new SecureRandom().ints(48, 122 + 1)
-            .filter(i -> (i <= 57 || i >= 65) && (i <= 90 || i >= 97))
-            .limit(limit)
-            .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
-            .toString();
-    }
-
     private static LoginResult authenticateLogin(String requestedUsername, String password) {
         if (requestedUsername.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
             if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD()
@@ -539,7 +528,7 @@ public class AE2Controller {
                         if (System.currentTimeMillis() < validity) {
                             Map<String, String> GET_PARAMS = HTTPUtils.parseQueryString(
                                 t.getRequestURI()
-                                    .getQuery());
+                                    .getRawQuery());
                             if (GET_PARAMS.containsKey("logout")) {
                                 validTokens.remove(token); // Invalidate token on logout
                                 GridAccessSessions.invalidate(session.principal);
@@ -547,7 +536,7 @@ public class AE2Controller {
                                     .add("Set-Cookie", sessionCookie(token, -1));
                                 t.getResponseHeaders()
                                     .add("Location", ".");
-                                t.sendResponseHeaders(302, -1);
+                                t.sendResponseHeaders(302, -1); // NOPMD - HTTP status code.
                                 return AuthCheckResult.RESPONSE_SENT; // Logout successful
                             }
                             requestContext.set(new RequestContext(t, session.principal));
@@ -586,11 +575,11 @@ public class AE2Controller {
                 if (!registration.succeeded()) {
                     t.getResponseHeaders()
                         .add("Location", "?" + registration.error);
-                    t.sendResponseHeaders(302, -1);
+                    t.sendResponseHeaders(302, -1); // NOPMD - HTTP status code.
                     return AuthCheckResult.RESPONSE_SENT;
                 }
 
-                String confirmationToken = generateToken(50);
+                String confirmationToken = PasswordHelper.generateToken(CONFIRMATION_TOKEN_LENGTH);
                 Pair<String, String> pending = Pair.of(confirmationToken, registration.passwordHash);
                 if (!publishRegistration(requestLifecycleGeneration, registration.playerUuid, pending)) {
                     sendServerStopping(t);
@@ -598,7 +587,7 @@ public class AE2Controller {
                 }
                 t.getResponseHeaders()
                     .add("Location", "?confirmregistration&token=" + confirmationToken);
-                t.sendResponseHeaders(302, -1);
+                t.sendResponseHeaders(302, -1); // NOPMD - HTTP status code.
                 return AuthCheckResult.RESPONSE_SENT; // Registration initiated
             }
 
@@ -607,13 +596,15 @@ public class AE2Controller {
                 if (!login.succeeded()) {
                     t.getResponseHeaders()
                         .add("Location", "?" + login.error);
-                    t.sendResponseHeaders(302, -1);
+                    t.sendResponseHeaders(302, -1); // NOPMD - HTTP status code.
                     return AuthCheckResult.RESPONSE_SENT;
                 }
                 boolean rememberMe = postData.containsKey("remember");
-                String token = generateToken();
-                long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
-                AuthSession session = new AuthSession(System.currentTimeMillis() + validFor * 1000L, login.principal);
+                String token = PasswordHelper.generateToken(SESSION_TOKEN_LENGTH);
+                long validFor = rememberMe ? REMEMBER_ME_SESSION_SECONDS : SESSION_SECONDS;
+                AuthSession session = new AuthSession(
+                    System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(validFor),
+                    login.principal);
                 if (!publishToken(requestLifecycleGeneration, token, session)) {
                     sendServerStopping(t);
                     return AuthCheckResult.RESPONSE_SENT;
@@ -622,7 +613,7 @@ public class AE2Controller {
                     .add("Set-Cookie", sessionCookie(token, validFor));
                 t.getResponseHeaders()
                     .add("Location", ".");
-                t.sendResponseHeaders(302, -1);
+                t.sendResponseHeaders(302, -1); // NOPMD - HTTP status code.
                 return AuthCheckResult.RESPONSE_SENT;
             }
         }
@@ -635,7 +626,7 @@ public class AE2Controller {
             byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
             t.getResponseHeaders()
                 .add("Content-Type", "text/plain");
-            t.sendResponseHeaders(429, raw_response.length); // Too Many Requests
+            t.sendResponseHeaders(429, raw_response.length); // NOPMD - HTTP Too Many Requests.
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
             os.close();
@@ -649,7 +640,7 @@ public class AE2Controller {
                 .add("Access-Control-Allow-Methods", "GET, OPTIONS");
             t.getResponseHeaders()
                 .add("Access-Control-Allow-Headers", "Content-Type,Authorization");
-            t.sendResponseHeaders(204, -1);
+            t.sendResponseHeaders(204, -1); // NOPMD - HTTP status code.
             return true;
         }
         AuthCheckResult authResult = checkAuth(t);
@@ -657,7 +648,7 @@ public class AE2Controller {
             return true;
         }
         if (authResult == AuthCheckResult.UNAUTHENTICATED) {
-            t.sendResponseHeaders(401, -1);
+            t.sendResponseHeaders(401, -1); // NOPMD - HTTP status code.
             return true;
         }
         return false;
@@ -680,6 +671,7 @@ public class AE2Controller {
         return null;
     }
 
+    @SuppressWarnings("ResultOfMethodCallIgnored") // The task may already be dequeued; failIfPending handles that race.
     private static UUID findOnlinePlayerOnServerThread(String username) throws ServerTaskUnavailableException {
         OnlinePlayerLookupTask task = new OnlinePlayerLookupTask(username);
         String unavailableStatus = enqueueServerThreadTask(task);
@@ -707,12 +699,13 @@ public class AE2Controller {
         }
     }
 
+    @SuppressWarnings("ResultOfMethodCallIgnored") // Removal is best-effort; the pending result is failed either way.
     private static boolean sendRequest(ISyncedRequest request) {
         if (enqueueServerThreadTask(request) != null) {
             return true;
         }
         try {
-            request.awaitCompletion(10L, TimeUnit.SECONDS);
+            request.awaitCompletion(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             requests.remove(request);
             request.failIfPending("TIMEOUT");
@@ -757,7 +750,7 @@ public class AE2Controller {
 
             byte[] raw_response = syncedRequest.getJSON()
                 .getBytes(StandardCharsets.UTF_8);
-            t.sendResponseHeaders(serviceUnavailable ? 503 : 200, raw_response.length);
+            t.sendResponseHeaders(serviceUnavailable ? 503 : 200, raw_response.length); // NOPMD - HTTP status code.
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
             os.close();
@@ -794,7 +787,7 @@ public class AE2Controller {
 
             byte[] raw_response = asyncRequest.getJSON()
                 .getBytes(StandardCharsets.UTF_8);
-            t.sendResponseHeaders(200, raw_response.length);
+            t.sendResponseHeaders(200, raw_response.length); // NOPMD - HTTP status code.
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
             os.close();
@@ -812,7 +805,7 @@ public class AE2Controller {
                 byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
                 t.getResponseHeaders()
                     .add("Content-Type", "text/plain");
-                t.sendResponseHeaders(429, raw_response.length); // Too Many Requests
+                t.sendResponseHeaders(429, raw_response.length); // NOPMD - HTTP Too Many Requests.
                 OutputStream os = t.getResponseBody();
                 os.write(raw_response);
                 os.close();
@@ -823,7 +816,7 @@ public class AE2Controller {
                 String postRaw = readBody(t);
                 if (postRaw == null) {
                     byte[] raw_response = "requesttoolarge".getBytes(StandardCharsets.UTF_8);
-                    t.sendResponseHeaders(400, raw_response.length);
+                    t.sendResponseHeaders(400, raw_response.length); // NOPMD - HTTP status code.
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
                     os.close();
@@ -841,21 +834,21 @@ public class AE2Controller {
                     }
                     if (!registration.succeeded()) {
                         byte[] raw_response = registration.error.getBytes(StandardCharsets.UTF_8);
-                        t.sendResponseHeaders(400, raw_response.length);
+                        t.sendResponseHeaders(400, raw_response.length); // NOPMD - HTTP status code.
                         OutputStream os = t.getResponseBody();
                         os.write(raw_response);
                         os.close();
                         return;
                     }
 
-                    String confirmationToken = generateToken(50);
+                    String confirmationToken = PasswordHelper.generateToken(CONFIRMATION_TOKEN_LENGTH);
                     Pair<String, String> pending = Pair.of(confirmationToken, registration.passwordHash);
                     if (!publishRegistration(requestLifecycleGeneration, registration.playerUuid, pending)) {
                         sendServerStopping(t);
                         return;
                     }
                     byte[] raw_response = confirmationToken.getBytes(StandardCharsets.UTF_8);
-                    t.sendResponseHeaders(200, raw_response.length);
+                    t.sendResponseHeaders(200, raw_response.length); // NOPMD - HTTP status code.
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
                     os.close();
@@ -866,17 +859,17 @@ public class AE2Controller {
                     LoginResult login = authenticateLogin(postData.get("username"), postData.get("password"));
                     if (!login.succeeded()) {
                         byte[] raw_response = login.error.getBytes(StandardCharsets.UTF_8);
-                        t.sendResponseHeaders(400, raw_response.length);
+                        t.sendResponseHeaders(400, raw_response.length); // NOPMD - HTTP status code.
                         OutputStream os = t.getResponseBody();
                         os.write(raw_response);
                         os.close();
                         return;
                     }
                     boolean rememberMe = postData.containsKey("remember");
-                    String token = generateToken();
-                    long validFor = rememberMe ? 604_800L : 3600L; // 1 week or 1 hour
+                    String token = PasswordHelper.generateToken(SESSION_TOKEN_LENGTH);
+                    long validFor = rememberMe ? REMEMBER_ME_SESSION_SECONDS : SESSION_SECONDS;
                     AuthSession session = new AuthSession(
-                        System.currentTimeMillis() + validFor * 1000L,
+                        System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(validFor),
                         login.principal);
                     if (!publishToken(requestLifecycleGeneration, token, session)) {
                         sendServerStopping(t);
@@ -891,7 +884,7 @@ public class AE2Controller {
                         Config.CHECK_FOR_UPDATES() && CoreEngine.getAvailableUpdate() != null);
                     byte[] raw_response = json.toString()
                         .getBytes(StandardCharsets.UTF_8);
-                    t.sendResponseHeaders(200, raw_response.length);
+                    t.sendResponseHeaders(200, raw_response.length); // NOPMD - HTTP status code.
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
                     os.close();
@@ -901,7 +894,7 @@ public class AE2Controller {
 
             Map<String, String> GET_PARAMS = HTTPUtils.parseQueryString(
                 t.getRequestURI()
-                    .getQuery());
+                    .getRawQuery());
 
             if (GET_PARAMS.containsKey("revoke")) {
                 List<String> auth = t.getRequestHeaders()
@@ -913,12 +906,12 @@ public class AE2Controller {
                     if (revoked != null) {
                         GridAccessSessions.invalidate(revoked.principal);
                     }
-                    t.sendResponseHeaders(200, -1);
+                    t.sendResponseHeaders(200, -1); // NOPMD - HTTP status code.
                     return;
                 }
             }
 
-            t.sendResponseHeaders(400, -1);
+            t.sendResponseHeaders(400, -1); // NOPMD - HTTP status code.
         }
 
     }
@@ -953,7 +946,7 @@ public class AE2Controller {
 
     private static void sendServerUnavailable(HttpExchange exchange, String status) throws IOException {
         byte[] response = status.getBytes(StandardCharsets.UTF_8);
-        exchange.sendResponseHeaders(503, response.length);
+        exchange.sendResponseHeaders(503, response.length); // NOPMD - HTTP status code.
         try (OutputStream output = exchange.getResponseBody()) {
             output.write(response);
         }
@@ -969,7 +962,7 @@ public class AE2Controller {
                 byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
                 t.getResponseHeaders()
                     .add("Content-Type", "text/plain");
-                t.sendResponseHeaders(429, raw_response.length); // Too Many Requests
+                t.sendResponseHeaders(429, raw_response.length); // NOPMD - HTTP Too Many Requests.
                 OutputStream os = t.getResponseBody();
                 os.write(raw_response);
                 os.close();
@@ -986,7 +979,7 @@ public class AE2Controller {
                     if (is == null) return;
 
                     byte[] raw_response = IOUtils.toByteArray(is);
-                    t.sendResponseHeaders(200, raw_response.length);
+                    t.sendResponseHeaders(200, raw_response.length); // NOPMD - HTTP status code.
                     OutputStream os = t.getResponseBody();
                     os.write(raw_response);
                     os.close();
@@ -1005,7 +998,7 @@ public class AE2Controller {
 
                 String response = "<h1>Invalid url! (ERROR 404)</h1>";
                 byte[] raw_response = response.getBytes(StandardCharsets.UTF_8);
-                t.sendResponseHeaders(404, raw_response.length);
+                t.sendResponseHeaders(404, raw_response.length); // NOPMD - HTTP status code.
                 OutputStream os = t.getResponseBody();
                 os.write(raw_response);
                 os.close();
@@ -1043,7 +1036,7 @@ public class AE2Controller {
             byte[] raw_response = response.getBytes(StandardCharsets.UTF_8);
             t.getResponseHeaders()
                 .set("Content-Type", "text/html; charset=UTF-8");
-            t.sendResponseHeaders(200, raw_response.length);
+            t.sendResponseHeaders(200, raw_response.length); // NOPMD - HTTP status code.
             OutputStream os = t.getResponseBody();
             os.write(raw_response);
             os.close();

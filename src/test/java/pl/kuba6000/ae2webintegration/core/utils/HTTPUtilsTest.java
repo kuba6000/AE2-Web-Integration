@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
  * The only parser standing between every endpoint and whatever a client chooses to send, so its job is
  * as much "never throw" as "decode correctly".
  */
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class HTTPUtilsTest {
 
     @Test
@@ -50,6 +51,7 @@ class HTTPUtilsTest {
     }
 
     @Test
+    @SuppressWarnings("UnnecessaryUnicodeEscape") // Keep the decoded code points explicit beside the URI escapes.
     void percentEscapesDecodeAsUtf8() {
         // Escapes rather than literals: the assertion is about byte-level decoding, and it should not
         // depend on how this file happens to be read.

@@ -18,6 +18,7 @@ public class GetCPUList extends ISyncedRequest {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
+    @SuppressWarnings("unused") // Gson reads the fields reflectively.
     private static class JSON_CpuInfo {
 
         public String name;
@@ -49,11 +50,6 @@ public class GetCPUList extends ISyncedRequest {
     }
 
     @Override
-    boolean init(Map<String, String> getParams) {
-        return true;
-    }
-
-    @Override
     void handle(IAEGrid grid) {
         if (grid == null) {
             deny("GRID_NOT_FOUND");
@@ -68,10 +64,12 @@ public class GetCPUList extends ISyncedRequest {
             cpuInfo.availableStorage = cluster.web$getAvailableStorage();
             cpuInfo.usedStorage = cluster.web$getUsedStorage();
             cpuInfo.coProcessors = cluster.web$getCoProcessors();
-            if (cpuInfo.isBusy = cluster.web$isBusy()) {
+            cpuInfo.isBusy = cluster.web$isBusy();
+            if (cpuInfo.isBusy) {
                 cpuInfo.finalOutput = JSON_Stack.capture(grid, cluster.web$getFinalOutput());
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cluster);
-                if (cpuInfo.hasTrackingInfo = trackingInfo != null) {
+                if (trackingInfo != null) {
+                    cpuInfo.hasTrackingInfo = true;
                     cpuInfo.timeStarted = trackingInfo.timeStarted;
                 }
             }

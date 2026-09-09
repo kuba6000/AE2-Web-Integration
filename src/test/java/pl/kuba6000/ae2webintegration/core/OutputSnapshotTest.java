@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -31,6 +32,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
+@SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class OutputSnapshotTest {
 
     @BeforeEach
@@ -137,27 +139,16 @@ class OutputSnapshotTest {
         ICraftingCPUCluster cpu = (ICraftingCPUCluster) Proxy.newProxyInstance(
             getClass().getClassLoader(),
             new Class<?>[] { ICraftingCPUCluster.class },
-            (proxy, method, args) -> {
-                switch (method.getName()) {
-                    case "web$getFinalOutput":
-                        return output;
-                    case "web$getKey":
-                        return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
-                    case "web$getName":
-                        return "cpu";
-                    case "web$isBusy":
-                        return true;
-                    case "web$getAvailableStorage":
-                        return 64L;
-                    case "web$getUsedStorage":
-                        return 16L;
-                    case "web$getCoProcessors":
-                        return 1L;
-                    case "web$getAllItems":
-                        return null;
-                    default:
-                        throw new AssertionError("Unexpected CPU operation: " + method.getName());
-                }
+            (proxy, method, args) -> switch (method.getName()) {
+                case "web$getFinalOutput" -> output;
+                case "web$getKey" -> StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+                case "web$getName" -> "cpu";
+                case "web$isBusy" -> true;
+                case "web$getAvailableStorage" -> 64L;
+                case "web$getUsedStorage" -> 16L;
+                case "web$getCoProcessors" -> 1L;
+                case "web$getAllItems" -> null;
+                default -> throw new AssertionError("Unexpected CPU operation: " + method.getName());
             });
         IAECraftingGrid crafting = (IAECraftingGrid) Proxy.newProxyInstance(
             getClass().getClassLoader(),
@@ -230,12 +221,12 @@ class OutputSnapshotTest {
                     .equals("web$getFinalOutput")) return output.get();
                 throw new AssertionError("Unexpected native CPU call");
             });
-        AE2JobTracker.addJob(cpu, null, TestGridFixtures.grid(gridId), false);
+        AE2JobTracker.addJob(cpu, TestGridFixtures.grid(gridId), false);
         Object initial = AE2JobTracker.findActiveJob(cpu).finalOutput;
         output.get().unavailable = true;
         output.get().key.unavailable = true;
         output.set(new Stack(new Resource(), 9));
-        AE2JobTracker.addJob(cpu, null, TestGridFixtures.grid(gridId), true);
+        AE2JobTracker.addJob(cpu, TestGridFixtures.grid(gridId), true);
         Object merged = AE2JobTracker.findActiveJob(cpu).finalOutput;
         output.get().unavailable = true;
         output.get().key.unavailable = true;
@@ -269,12 +260,12 @@ class OutputSnapshotTest {
             if (unavailable) throw new AssertionError("Native access after capture");
         }
 
-        public String web$getItemID() {
+        public @NotNull String web$getItemID() {
             available();
             return "example:resource:7";
         }
 
-        public String web$getDisplayName() {
+        public @NotNull String web$getDisplayName() {
             available();
             if (brokenName) throw new IllegalStateException("Broken native name");
             return "Resource";
@@ -284,18 +275,14 @@ class OutputSnapshotTest {
             throw new AssertionError("Snapshot must not query recipes");
         }
 
-        public boolean web$isSameType(IAEKey key) {
-            return equals(key);
-        }
-
-        public StableKey web$getKey() {
+        public @NotNull StableKey web$getKey() {
             available();
             if (brokenIdentity) throw new IllegalStateException("Broken native codec");
             if (unsupportedIdentity) throw new UnsupportedOperationException("Unsupported native identity");
             return StableKey.create(sink -> sink.putBytes("resource".getBytes(StandardCharsets.UTF_8)));
         }
 
-        public IAEKey web$copyIdentity() {
+        public @NotNull IAEKey web$copyIdentity() {
             available();
             Resource copy = new Resource();
             copy.brokenIdentity = brokenIdentity;
@@ -330,7 +317,7 @@ class OutputSnapshotTest {
             if (unavailable) throw new AssertionError("Native stack access after capture");
         }
 
-        public IAEKey web$what() {
+        public @NotNull IAEKey web$what() {
             available();
             return key;
         }
@@ -338,10 +325,6 @@ class OutputSnapshotTest {
         public long web$amount() {
             available();
             return quantity;
-        }
-
-        public IAEGenericStack web$copy() {
-            throw new AssertionError("Snapshot must not retain native stack");
         }
 
         @Override

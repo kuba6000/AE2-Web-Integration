@@ -61,7 +61,7 @@ public final class GridAccessSessions {
                 playerId = ae.web$getPlayerData()
                     .web$getPlayerId(principal.getPlayerIdentity());
             } catch (Exception e) {
-                LOG.error("Failed to resolve the AE2 player ID for web user " + principal.getUsername(), e);
+                LOG.error("Failed to resolve the AE2 player ID for web user {}", principal.getUsername(), e);
             }
             if (playerId < 0) {
                 return new GridAccess(GridAccess.UNRESOLVED_PLAYER_ID, new HashSet<>(), nowMillis);

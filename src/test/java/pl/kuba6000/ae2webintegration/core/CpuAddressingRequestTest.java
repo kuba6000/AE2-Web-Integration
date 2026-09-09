@@ -19,6 +19,7 @@ import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.config.Property;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,6 +40,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
+@SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class CpuAddressingRequestTest {
 
     private static final long GRID = 991234;
@@ -365,14 +367,8 @@ class CpuAddressingRequestTest {
             this.storage = storage;
         }
 
-        public StableKey web$getKey() {
+        public @NotNull StableKey web$getKey() {
             return key;
-        }
-
-        public void web$setInternalID(int id) {}
-
-        public boolean web$hasCustomName() {
-            return true;
         }
 
         public String web$getName() {

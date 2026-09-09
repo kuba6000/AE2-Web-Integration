@@ -45,15 +45,17 @@ public class GSONUtils {
      * Serializes to a sibling temporary file, forces it to disk, then renames it over the target.
      * <p>
      * Writing straight to the target truncates it first, so an interruption anywhere in the middle leaves
-     * a half-written file behind - and for the account store that means every password gone. Renaming is
-     * atomic, so a reader sees either the previous file or the complete new one, never a fragment.
+     * a half-written file behind - and for the account store that means every password gone. An atomic
+     * rename preserves the old or complete new file. When the filesystem does not support it, the
+     * fallback replaces the file without an atomicity guarantee.
      *
-     * @throws IOException if the file could not be written; the previous contents are left untouched.
+     * @throws IOException if writing or moving fails. Failures before the move leave the target untouched;
+     *                     a failed non-atomic replacement may affect the target.
      */
     public static void writeAtomically(File target, Object value) throws IOException {
         File directory = target.getParentFile();
         if (directory != null) {
-            directory.mkdirs();
+            Files.createDirectories(directory.toPath());
         }
         File temporary = new File(target.getPath() + ".tmp");
         try {
@@ -76,6 +78,7 @@ public class GSONUtils {
             }
         } finally {
             // Nothing useful to do if this fails; the stale temp file is harmless.
+            // noinspection ResultOfMethodCallIgnored
             temporary.delete();
         }
     }

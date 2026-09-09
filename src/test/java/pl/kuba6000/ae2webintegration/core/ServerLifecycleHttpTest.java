@@ -44,6 +44,7 @@ import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class ServerLifecycleHttpTest {
 
     private static final class Response {
@@ -205,6 +206,8 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    // Java 8 HttpExchange is not AutoCloseable; the fake's close() is a no-op.
+    @SuppressWarnings({ "BusyWait", "resource" }) // Queue polling is bounded by a deadline.
     void pendingRegistrationLookupIsRejectedWhenTheServerStops() throws Exception {
         BlockingPlayerLookup platform = new BlockingPlayerLookup(
             UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
@@ -238,6 +241,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    @SuppressWarnings("CharsetObjectCanBeUsed") // The Charset overload requires Java 10; tests also target Java 8.
     void registrationLookupTimeoutReturnsServiceUnavailableInsteadOfNotOnline() throws Exception {
         AtomicInteger playerListLookups = new AtomicInteger();
         AE2Controller.serverPlatform = new IServerPlatform() {
@@ -265,6 +269,8 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    // Java 8 has neither the Charset overload nor AutoCloseable HttpExchange; the fake close() is a no-op.
+    @SuppressWarnings({ "CharsetObjectCanBeUsed", "resource" })
     void registrationFailsFastWhenTheServerThreadQueueIsFull() throws Exception {
         AE2Controller.startHTTPServer();
         fillServerThreadQueue();
@@ -291,6 +297,8 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    // Keep Java 8 charset/HttpExchange APIs; the fake close() is a no-op and queue polling has a deadline.
+    @SuppressWarnings({ "BusyWait", "CharsetObjectCanBeUsed", "resource" })
     void registrationReportsNotOnlineOnlyAfterTheServerThreadChecksTheLivePlayerList() throws Exception {
         AtomicInteger playerListLookups = new AtomicInteger();
         AE2Controller.serverPlatform = new IServerPlatform() {
@@ -338,6 +346,8 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    // Java 8 HttpExchange is not AutoCloseable; the fake's close() is a no-op.
+    @SuppressWarnings({ "BusyWait", "resource" }) // Queue polling is bounded by a deadline.
     void registrationFormPreservesTheNotOnlineRedirectAfterTheServerThreadLookup() throws Exception {
         AtomicInteger playerListLookups = new AtomicInteger();
         AE2Controller.serverPlatform = new IServerPlatform() {
@@ -387,6 +397,8 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    // Java 8 has neither the Charset overload nor AutoCloseable HttpExchange; the fake close() is a no-op.
+    @SuppressWarnings({ "CharsetObjectCanBeUsed", "resource" })
     void publicLoginUsesStoredIdentityWithoutConsultingServerState() throws Exception {
         UUID playerUuid = UUID.fromString("11111111-2222-3333-4444-555555555555");
         BlockingPlayerLookup platform = new BlockingPlayerLookup(playerUuid);
@@ -478,10 +490,6 @@ class ServerLifecycleHttpTest {
                 return playerUuid.equals(identity.uuid) ? 42 : -1;
             }
 
-            @Override
-            public PlayerIdentity web$getPlayerProfile(int playerId) {
-                throw new AssertionError("authenticated HTTP must not read an AE2 profile");
-            }
         };
         CoreDataTestFixture.reset();
         assertTrue(
@@ -531,6 +539,7 @@ class ServerLifecycleHttpTest {
             .getAsString();
     }
 
+    @SuppressWarnings("BusyWait") // Wait for the request to reach the tick queue, bounded by a deadline.
     private Response performSyncedRequest(String token) throws Exception {
         ExecutorService client = Executors.newSingleThreadExecutor();
         try {
@@ -563,6 +572,7 @@ class ServerLifecycleHttpTest {
         return connection;
     }
 
+    @SuppressWarnings("CharsetObjectCanBeUsed") // The Charset overload requires Java 10; tests also target Java 8.
     private static Response read(HttpURLConnection connection) throws IOException {
         int status = connection.getResponseCode();
         InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
@@ -575,7 +585,7 @@ class ServerLifecycleHttpTest {
             while ((read = input.read(buffer)) >= 0) {
                 output.write(buffer, 0, read);
             }
-            return new Response(status, new String(output.toByteArray(), StandardCharsets.UTF_8));
+            return new Response(status, output.toString(StandardCharsets.UTF_8.name()));
         }
     }
 

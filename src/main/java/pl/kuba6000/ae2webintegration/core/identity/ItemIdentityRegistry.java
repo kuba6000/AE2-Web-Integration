@@ -123,6 +123,7 @@ public final class ItemIdentityRegistry {
     /** An observed conflict must never silently select either resource. */
     public static final class Ambiguous extends IllegalArgumentException {
 
+        @SuppressWarnings("MissingSerialAnnotation") // @Serial is unavailable on Java 8.
         private static final long serialVersionUID = 1L;
 
         private Ambiguous() {

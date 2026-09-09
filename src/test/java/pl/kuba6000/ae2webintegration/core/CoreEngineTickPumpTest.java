@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -23,6 +24,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
  * server tick event. An exception escaping it is not a failed request, it is a stopped server: Forge's
  * EventBus rethrows after notifying its handler, and NeoForge lets it reach MinecraftServer.tickServer.
  */
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class CoreEngineTickPumpTest {
 
     /** Records that it ran, then does whatever the test told it to. Answers OK by default. */
@@ -66,7 +68,7 @@ class CoreEngineTickPumpTest {
 
     private TestRequest queue(String name, Consumer<TestRequest> body) {
         TestRequest request = new TestRequest(ran, name, body);
-        AE2Controller.requests.offer(request);
+        assertTrue(AE2Controller.requests.offer(request));
         return request;
     }
 
@@ -85,7 +87,7 @@ class CoreEngineTickPumpTest {
     void aThrowingHandlerDoesNotPropagateOutOfTheTick() {
         queue("boom", r -> { throw new IllegalStateException("handler blew up"); });
         assertDoesNotThrow(() -> CoreEngine.drainRequests(clock(0L)));
-        assertEquals(Arrays.asList("boom"), ran);
+        assertEquals(Collections.singletonList("boom"), ran);
     }
 
     @Test
@@ -130,7 +132,7 @@ class CoreEngineTickPumpTest {
         queue("c", null);
         // The entry reading sets the deadline; the reading taken after the first request is past it.
         CoreEngine.drainRequests(clock(0L, CoreEngine.DRAIN_BUDGET_NANOS + 1));
-        assertEquals(Arrays.asList("a"), ran);
+        assertEquals(Collections.singletonList("a"), ran);
         assertEquals(2, AE2Controller.requests.size());
 
         CoreEngine.drainRequests(clock(0L));
@@ -144,7 +146,7 @@ class CoreEngineTickPumpTest {
         queue("a", null);
         queue("b", null);
         CoreEngine.drainRequests(clock(Long.MAX_VALUE - 1));
-        assertEquals(Arrays.asList("a"), ran);
+        assertEquals(Collections.singletonList("a"), ran);
         assertFalse(AE2Controller.requests.isEmpty());
     }
 
@@ -172,6 +174,6 @@ class CoreEngineTickPumpTest {
 
         CoreEngine.onServerTick();
 
-        assertEquals(Arrays.asList("request"), ran);
+        assertEquals(Collections.singletonList("request"), ran);
     }
 }

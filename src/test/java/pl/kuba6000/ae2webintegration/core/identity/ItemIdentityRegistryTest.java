@@ -5,22 +5,25 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
+@SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class ItemIdentityRegistryTest {
 
     @Test
-    void immutableNativeIdentityIsHashedOnlyOnceOnAdmission() throws Exception {
+    void immutableNativeIdentityIsHashedOnlyOnceOnAdmission() {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid grid = grid();
         Resource immutable = new Resource("stone", false) {
 
             @Override
-            public IAEKey web$copyIdentity() {
+            public @NotNull IAEKey web$copyIdentity() {
                 return this;
             }
         };
@@ -31,13 +34,14 @@ class ItemIdentityRegistryTest {
     }
 
     @Test
-    void equivalentResourcesShareOneDetachedIdentityAcrossGrids() throws Exception {
+    void equivalentResourcesShareOneDetachedIdentityAcrossGrids() {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid firstGrid = grid();
         IAEGrid secondGrid = grid();
         Resource first = new Resource("iron", true);
         StableKey key = registry.remember(firstGrid, first);
         IAEKey copy = registry.resolve(key);
+        assertNotNull(copy);
         Resource nextPoll = new Resource("iron", false);
         assertEquals(key, registry.remember(secondGrid, nextPoll));
         assertSame(copy, registry.resolve(key));
@@ -78,7 +82,7 @@ class ItemIdentityRegistryTest {
     }
 
     @Test
-    void unfinishedListingKeepsThePreviouslyPublishedResources() throws Exception {
+    void unfinishedListingKeepsThePreviouslyPublishedResources() {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid grid = grid();
         StableKey iron = registry.remember(grid, new Resource("iron", true));
@@ -101,7 +105,7 @@ class ItemIdentityRegistryTest {
     }
 
     @Test
-    void gridAndRegistryClearDoNotChangeDeterministicIds() throws Exception {
+    void gridAndRegistryClearDoNotChangeDeterministicIds() {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid grid = grid();
         StableKey key = registry.remember(grid, new Resource("iron", true));
@@ -111,7 +115,7 @@ class ItemIdentityRegistryTest {
     }
 
     @Test
-    void observedConflictCannotBeReusedThroughEitherGridOrTheWarmIndex() throws Exception {
+    void observedConflictCannotBeReusedThroughEitherGridOrTheWarmIndex() {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid first = grid();
         IAEGrid second = grid();
@@ -131,7 +135,7 @@ class ItemIdentityRegistryTest {
     }
 
     @Test
-    void completedListingCannotBeReusedToRestoreAnObsoleteSnapshot() throws Exception {
+    void completedListingCannotBeReusedToRestoreAnObsoleteSnapshot() {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid grid = grid();
         ItemIdentityRegistry.Listing listing = registry.beginListing(grid);
@@ -141,14 +145,15 @@ class ItemIdentityRegistryTest {
         assertThrows(IllegalStateException.class, () -> listing.remember(new Resource("gold", true)));
     }
 
-    private static WeakReference<IAEGrid> rememberTemporaryGrid(ItemIdentityRegistry registry) throws Exception {
+    private static WeakReference<IAEGrid> rememberTemporaryGrid(ItemIdentityRegistry registry) {
         IAEGrid grid = grid();
         registry.remember(grid, new Resource("iron", true));
         return new WeakReference<>(grid);
     }
 
+    @SuppressWarnings("BusyWait") // GC has no completion callback; polling is bounded by the deadline.
     private static void awaitCollected(WeakReference<?> reference, Runnable maintenance) throws Exception {
-        long deadline = System.nanoTime() + 5_000_000_000L;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (reference.get() != null && System.nanoTime() < deadline) {
             System.gc();
             maintenance.run();
@@ -161,12 +166,11 @@ class ItemIdentityRegistryTest {
         return (IAEGrid) Proxy.newProxyInstance(
             IAEGrid.class.getClassLoader(),
             new Class<?>[] { IAEGrid.class },
-            (proxy, method, args) -> {
-                if (method.getName()
-                    .equals("hashCode")) return System.identityHashCode(proxy);
-                if (method.getName()
-                    .equals("equals")) return proxy == args[0];
-                return null;
+            (proxy, method, args) -> switch (method.getName()) {
+                case "hashCode" -> System.identityHashCode(proxy);
+                case "equals" -> proxy == args[0];
+                case "toString" -> "TestGrid@" + Integer.toHexString(System.identityHashCode(proxy));
+                default -> null;
             });
     }
 
@@ -188,34 +192,29 @@ class ItemIdentityRegistryTest {
         }
 
         @Override
-        public StableKey web$getKey() {
+        public @NotNull StableKey web$getKey() {
             encodings++;
             return StableKey.create(sink -> sink.putBytes(encodedName.getBytes(StandardCharsets.UTF_8)));
         }
 
         @Override
-        public IAEKey web$copyIdentity() {
+        public @NotNull IAEKey web$copyIdentity() {
             return new Resource(name, false, encodedName);
         }
 
         @Override
-        public String web$getItemID() {
+        public @NotNull String web$getItemID() {
             return name;
         }
 
         @Override
-        public String web$getDisplayName() {
+        public @NotNull String web$getDisplayName() {
             return name;
         }
 
         @Override
         public boolean web$isCraftable(IAEGrid grid) {
             return craftable;
-        }
-
-        @Override
-        public boolean web$isSameType(IAEKey other) {
-            return equals(other);
         }
 
         @Override

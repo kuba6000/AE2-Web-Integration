@@ -22,6 +22,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
+@SuppressWarnings("UnstableApiUsage")
 public class GridData {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
@@ -43,7 +44,7 @@ public class GridData {
     public AE2JobTracker trackingInfo = new AE2JobTracker();
 
     @GSONUtils.SkipGSON
-    private CraftingPlanRegistry craftingPlans = new CraftingPlanRegistry(System::nanoTime);
+    private final CraftingPlanRegistry craftingPlans = new CraftingPlanRegistry(System::nanoTime);
 
     public int addJob(Future<IAECraftingJob> job) {
         return craftingPlans.add(job);
@@ -53,12 +54,12 @@ public class GridData {
         return craftingPlans.find(jobId);
     }
 
-    public boolean removeJob(int jobId) {
-        return craftingPlans.remove(jobId);
+    public void removeJob(int jobId) {
+        craftingPlans.remove(jobId);
     }
 
-    public boolean cancelJob(int jobId) {
-        return craftingPlans.cancel(jobId);
+    public void cancelJob(int jobId) {
+        craftingPlans.cancel(jobId);
     }
 
     public static synchronized void clearRuntimeState() {
@@ -143,7 +144,7 @@ public class GridData {
             gridDataMap = loaded;
         } catch (Exception e) {
             // As in CoreData: a failed read must not overwrite the file it failed on.
-            LOG.error("Failed to load grid data from file: " + file.getAbsolutePath(), e);
+            LOG.error("Failed to load grid data from file: {}", file.getAbsolutePath(), e);
         }
     }
 }

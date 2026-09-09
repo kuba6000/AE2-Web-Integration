@@ -22,12 +22,12 @@ public class StartupHandler {
             return;
         }
         LOG.warn(
-            "The admin password is empty, so anyone who can reach the web interface on port " + Config.AE_PORT()
-                + " has admin access."
+            "The admin password is empty, so anyone who can reach the web interface on port {} has admin access."
                 + " That bypasses AE2 grid permissions on every network on this server, including ordering and"
                 + " cancelling crafting jobs."
                 + " Set 'password' in the config to require a login."
-                + " (Access from localhost is controlled separately by 'allow_no_password_on_localhost'.)");
+                + " (Access from localhost is controlled separately by 'allow_no_password_on_localhost'.)",
+            Config.AE_PORT());
     }
 
     public static void handleDiscordIntegration() {
@@ -38,12 +38,10 @@ public class StartupHandler {
                 new DiscordManager.DiscordEmbed("AE2 Web Integration", "Discord integration started!"));
         } else if (Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
             .isEmpty()) {
-                DiscordManager.postMessageNonBlocking(
-                    new DiscordManager.DiscordEmbed(
-                        "AE2 Web Integration",
-                        "Warning!\nDiscord integration webhook is set in the config,"
-                            + " but the public mode is enabled!\nDiscord integration will be disabled!",
-                        15548997));
+                DiscordManager.postMessageNonBlocking(new DiscordManager.DiscordEmbed("AE2 Web Integration", """
+                    Warning!
+                    Discord integration webhook is set in the config, but the public mode is enabled!
+                    Discord integration will be disabled!""", DiscordManager.COLOR_RED));
             }
     }
 }

@@ -15,6 +15,4 @@ public interface IAEGrid {
 
     IAESecurityGrid web$getSecurityGrid();
 
-    Object web$getPlayerSource();
-
 }

@@ -28,6 +28,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 /** Tests for {@link CommandProcessor} static methods. */
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class CommandProcessorTest {
 
     private static final UUID TEST_UUID = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
@@ -213,18 +214,7 @@ class CommandProcessorTest {
 
         @Override
         public IAEPlayerData web$getPlayerData() {
-            return new IAEPlayerData() {
-
-                @Override
-                public PlayerIdentity web$getPlayerProfile(int playerId) {
-                    return null;
-                }
-
-                @Override
-                public int web$getPlayerId(PlayerIdentity identity) {
-                    return playerId;
-                }
-            };
+            return identity -> playerId;
         }
     }
 }

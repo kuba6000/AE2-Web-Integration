@@ -9,9 +9,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 
+@SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class StableIdentityTextTest {
 
     @Test
+    @SuppressWarnings("UnnecessaryUnicodeEscape") // Keep the exact code points visible in this encoding vector.
     void textUsesByteLengthAndStandardUtf8IncludingNulAndSupplementaryCharacters() {
         Hasher sink = Hashing.sha256()
             .newHasher();

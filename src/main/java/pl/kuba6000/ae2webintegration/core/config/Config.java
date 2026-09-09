@@ -1,6 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.config;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 
 public class Config {
 
@@ -64,10 +67,13 @@ public class Config {
     // --- Directory / file setup ---
 
     public static void init(File configDirectory) {
-        Config.configDirectory = new File(configDirectory, "ae2webintegration");
-        if (!Config.configDirectory.exists()) {
-            Config.configDirectory.mkdirs();
+        File directory = new File(configDirectory, "ae2webintegration");
+        try {
+            Files.createDirectories(directory.toPath());
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not create configuration directory: " + directory, e);
         }
+        Config.configDirectory = directory;
     }
 
     public static File getConfigDirectory() {

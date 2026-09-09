@@ -27,8 +27,7 @@ public class DimensionalCoords {
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof DimensionalCoords)) return false;
-        DimensionalCoords coords = (DimensionalCoords) obj;
+        if (!(obj instanceof DimensionalCoords coords)) return false;
         return Objects.equals(coords.dimid, dimid) && coords.x == x && coords.y == y && coords.z == z;
     }
 }

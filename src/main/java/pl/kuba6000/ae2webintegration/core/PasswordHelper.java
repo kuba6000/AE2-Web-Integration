@@ -11,14 +11,16 @@ import javax.crypto.spec.PBEKeySpec;
 public class PasswordHelper {
 
     private static final int ITERATIONS = 65536;
-    private static final int HASH_LENGTH = 512; // Length of the hash in bytes
+    private static final int HASH_LENGTH_BITS = 512;
+    private static final int SALT_BYTES = 16;
+    private static final int DEFAULT_PASSWORD_LENGTH = 16;
 
     public static String generateStrongPasswordHash(String password)
         throws NoSuchAlgorithmException, InvalidKeySpecException {
         char[] chars = password.toCharArray();
         byte[] salt = getSalt();
 
-        PBEKeySpec spec = new PBEKeySpec(chars, salt, ITERATIONS, HASH_LENGTH);
+        PBEKeySpec spec = new PBEKeySpec(chars, salt, ITERATIONS, HASH_LENGTH_BITS);
         SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
 
         byte[] hash = skf.generateSecret(spec)
@@ -28,12 +30,13 @@ public class PasswordHelper {
 
     private static byte[] getSalt() throws NoSuchAlgorithmException {
         SecureRandom sr = SecureRandom.getInstance("SHA1PRNG");
-        byte[] salt = new byte[16];
+        byte[] salt = new byte[SALT_BYTES];
         sr.nextBytes(salt);
         return salt;
     }
 
-    private static String toHex(byte[] array) throws NoSuchAlgorithmException {
+    @SuppressWarnings("PMD.AvoidMagicNumbers") // Hexadecimal encoding uses radix 16.
+    private static String toHex(byte[] array) {
         BigInteger bi = new BigInteger(1, array);
         String hex = bi.toString(16);
 
@@ -53,7 +56,8 @@ public class PasswordHelper {
         byte[] salt = fromHex(parts[1]);
         byte[] hash = fromHex(parts[2]);
 
-        PBEKeySpec spec = new PBEKeySpec(originalPassword.toCharArray(), salt, iterations, hash.length * 8);
+        // Key length is in bits.
+        PBEKeySpec spec = new PBEKeySpec(originalPassword.toCharArray(), salt, iterations, hash.length * 8); // NOPMD
         SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
         byte[] testHash = skf.generateSecret(spec)
             .getEncoded();
@@ -65,7 +69,8 @@ public class PasswordHelper {
         return diff == 0;
     }
 
-    private static byte[] fromHex(String hex) throws NoSuchAlgorithmException {
+    @SuppressWarnings("PMD.AvoidMagicNumbers") // Hexadecimal decoding uses radix 16.
+    private static byte[] fromHex(String hex) {
         byte[] bytes = new byte[hex.length() / 2];
         for (int i = 0; i < bytes.length; i++) {
             bytes[i] = (byte) Integer.parseInt(hex.substring(2 * i, 2 * i + 2), 16);
@@ -83,9 +88,14 @@ public class PasswordHelper {
      * file as the admin password, and java.util.Random derives its 48-bit seed from the clock.
      */
     public static String generateDefaultPassword() {
-        return new SecureRandom().ints(48, 122 + 1)
-            .filter(i -> (i <= 57 || i >= 65) && (i <= 90 || i >= 97))
-            .limit(16)
+        return generateToken(DEFAULT_PASSWORD_LENGTH);
+    }
+
+    /** Generates a cryptographically random ASCII alphanumeric token of the requested length. */
+    public static String generateToken(int length) {
+        return new SecureRandom().ints('0', 'z' + 1)
+            .filter(i -> (i <= '9' || i >= 'A') && (i <= 'Z' || i >= 'a'))
+            .limit(length)
             .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
             .toString();
     }
