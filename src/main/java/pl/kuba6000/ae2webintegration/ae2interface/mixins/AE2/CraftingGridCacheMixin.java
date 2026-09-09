@@ -29,14 +29,12 @@ import appeng.api.storage.data.IAEStack;
 import appeng.api.util.IInterfaceViewable;
 import appeng.me.cache.CraftingGridCache;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = CraftingGridCache.class, remap = false)
 public class CraftingGridCacheMixin implements ICraftingMediumTracker {
@@ -87,12 +85,7 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
         if (link != null) { // job started successfully
             boolean isMachine = e != null || list.isMachine();
             IAEMixinCallbacks.getInstance()
-                .jobStarted(
-                    (ICraftingCPUCluster) (Object) instance,
-                    (IAECraftingGrid) this,
-                    (IAEGrid) grid,
-                    isMerging,
-                    !isMachine);
+                .jobStarted((ICraftingCPUCluster) (Object) instance, (IAEGrid) grid, isMerging, !isMachine);
         }
         return link;
     }
@@ -131,12 +124,8 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
     // --- ICraftingMediumTracker ---
 
     @Override
-    public IPatternProviderViewable web$getViewableForCraftingMedium(ICraftingMediumKey medium) {
-        return (IPatternProviderViewable) web$mediumToViewable.get((ICraftingMedium) medium);
+    public IPatternProviderViewable web$getViewableForCraftingMedium(ICraftingMedium medium) {
+        return (IPatternProviderViewable) web$mediumToViewable.get(medium);
     }
 
-    // This overrides the default from AECraftingGridMixin (interface mixin on ICraftingGrid)
-    public ICraftingMediumTracker web$getCraftingProviders() {
-        return (ICraftingMediumTracker) this;
-    }
 }

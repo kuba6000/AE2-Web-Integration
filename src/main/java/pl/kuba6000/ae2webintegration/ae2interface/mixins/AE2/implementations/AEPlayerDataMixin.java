@@ -12,11 +12,11 @@ import com.mojang.authlib.GameProfile;
 
 import appeng.core.worlddata.IWorldPlayerMapping;
 import cpw.mods.fml.common.FMLCommonHandler;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IPlayerProfileLookup;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 
 @Mixin(targets = "appeng.core.worlddata.PlayerData", remap = false)
-public class AEPlayerDataMixin implements IAEPlayerData {
+public class AEPlayerDataMixin implements IPlayerProfileLookup {
 
     @Shadow
     @Final
@@ -32,11 +32,6 @@ public class AEPlayerDataMixin implements IAEPlayerData {
         Optional<UUID> maybe = playerMapping.get(playerId);
         if (!maybe.isPresent()) return null;
         UUID uuid = maybe.get();
-        // for (final EntityPlayer player : CommonHelper.proxy.getPlayers()) {
-        // if (player.getUniqueID().equals(uuid)) {
-        // return player.getGameProfile();
-        // }
-        // }
         GameProfile p = FMLCommonHandler.instance()
             .getMinecraftServerInstance()
             .func_152358_ax()

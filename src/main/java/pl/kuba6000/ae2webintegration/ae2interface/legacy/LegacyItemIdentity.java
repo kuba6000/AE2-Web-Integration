@@ -15,6 +15,7 @@ import net.minecraft.nbt.NBTTagFloat;
 import net.minecraft.nbt.NBTTagIntArray;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.nbt.NBTTagString;
+import net.minecraftforge.common.util.Constants.NBT;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -30,6 +31,7 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 /** Canonical native identity only; amounts, crafting flags and display data never enter these bytes. */
+@SuppressWarnings("UnstableApiUsage")
 public final class LegacyItemIdentity {
 
     private static final int MAX_DEPTH = 64;
@@ -38,8 +40,7 @@ public final class LegacyItemIdentity {
     private LegacyItemIdentity() {}
 
     public static @NotNull StableKey encode(@NotNull IAEStack<?> stack) {
-        if (stack instanceof AEItemStack) {
-            AEItemStack item = (AEItemStack) stack;
+        if (stack instanceof AEItemStack item) {
             return encode(
                 "item",
                 GameData.getItemRegistry()
@@ -47,8 +48,7 @@ public final class LegacyItemIdentity {
                 item.getItemDamage(),
                 (NBTTagCompound) item.getTagCompound());
         }
-        if (stack instanceof AEFluidStack) {
-            AEFluidStack fluid = (AEFluidStack) stack;
+        if (stack instanceof AEFluidStack fluid) {
             return encode(
                 "fluid",
                 fluid.getFluid()
@@ -107,19 +107,19 @@ public final class LegacyItemIdentity {
             int type = tag.getId();
             if (includeType) output.writeByte(type);
             switch (type) {
-                case 1:
+                case NBT.TAG_BYTE:
                     output.writeByte(((NBTPrimitive) tag).func_150290_f());
                     break;
-                case 2:
+                case NBT.TAG_SHORT:
                     output.writeShort(((NBTPrimitive) tag).func_150289_e());
                     break;
-                case 3:
+                case NBT.TAG_INT:
                     output.writeInt(((NBTPrimitive) tag).func_150287_d());
                     break;
-                case 4:
+                case NBT.TAG_LONG:
                     output.writeLong(((NBTPrimitive) tag).func_150291_c());
                     break;
-                case 5:
+                case NBT.TAG_FLOAT:
                     float floatValue = ((NBTPrimitive) tag).func_150288_h();
                     if (Float.isNaN(floatValue)) throw new UnsupportedOperationException("NaN identity");
                     if (!normalizeZero && Float.floatToRawIntBits(floatValue) == Integer.MIN_VALUE) {
@@ -127,7 +127,7 @@ public final class LegacyItemIdentity {
                     }
                     output.writeFloat(floatValue == 0 ? 0 : floatValue);
                     break;
-                case 6:
+                case NBT.TAG_DOUBLE:
                     double doubleValue = ((NBTPrimitive) tag).func_150286_g();
                     if (Double.isNaN(doubleValue)) throw new UnsupportedOperationException("NaN identity");
                     if (!normalizeZero && Double.doubleToRawLongBits(doubleValue) == Long.MIN_VALUE) {
@@ -135,30 +135,31 @@ public final class LegacyItemIdentity {
                     }
                     output.writeDouble(doubleValue == 0 ? 0 : doubleValue);
                     break;
-                case 7:
+                case NBT.TAG_BYTE_ARRAY:
                     byte[] byteArray = ((NBTTagByteArray) tag).func_150292_c();
                     output.writeInt(byteArray.length);
                     output.write(byteArray);
                     break;
-                case 8:
+                case NBT.TAG_STRING:
                     StableKey.writeText(sink, ((NBTTagString) tag).func_150285_a_());
                     break;
-                case 9:
+                case NBT.TAG_LIST:
                     NBTTagList list = (NBTTagList) tag;
                     int length = list.tagCount();
                     checkChildren(length);
                     // GTNH's AE2 intern equality ignores the retained type of an empty item list.
-                    int elementType = length == 0 && !normalizeZero ? 0 : list.func_150303_d();
-                    if (elementType < 0 || elementType > 11 || elementType == 0 && length != 0) {
+                    int elementType = length == 0 && !normalizeZero ? NBT.TAG_END : list.func_150303_d();
+                    if (elementType < NBT.TAG_END || elementType > NBT.TAG_INT_ARRAY
+                        || elementType == NBT.TAG_END && length != 0) {
                         throw new UnsupportedOperationException("Invalid NBT list type");
                     }
                     output.writeByte(elementType);
                     output.writeInt(length);
                     if (length == 0) break;
-                    if (elementType == 5 || elementType == 6
-                        || elementType == 8
-                        || elementType == 10
-                        || elementType == 11) {
+                    if (elementType == NBT.TAG_FLOAT || elementType == NBT.TAG_DOUBLE
+                        || elementType == NBT.TAG_STRING
+                        || elementType == NBT.TAG_COMPOUND
+                        || elementType == NBT.TAG_INT_ARRAY) {
                         for (int index = 0; index < length; index++) {
                             write(publicListElement(list, index, elementType), depth + 1, false, owned);
                         }
@@ -176,7 +177,7 @@ public final class LegacyItemIdentity {
                         }
                     }
                     break;
-                case 10:
+                case NBT.TAG_COMPOUND:
                     NBTTagCompound compound = (NBTTagCompound) tag;
                     Set<String> keys = compound.func_150296_c();
                     checkChildren(keys.size());
@@ -188,7 +189,7 @@ public final class LegacyItemIdentity {
                         write(compound.getTag(name), depth + 1, true, owned);
                     }
                     break;
-                case 11:
+                case NBT.TAG_INT_ARRAY:
                     int[] intArray = ((NBTTagIntArray) tag).func_150302_c();
                     output.writeInt(intArray.length);
                     for (int value : intArray) output.writeInt(value);
@@ -200,20 +201,14 @@ public final class LegacyItemIdentity {
         }
 
         private static NBTBase publicListElement(NBTTagList list, int index, int type) {
-            switch (type) {
-                case 5:
-                    return new NBTTagFloat(list.func_150308_e(index));
-                case 6:
-                    return new NBTTagDouble(list.func_150309_d(index));
-                case 8:
-                    return new NBTTagString(list.getStringTagAt(index));
-                case 10:
-                    return list.getCompoundTagAt(index);
-                case 11:
-                    return new NBTTagIntArray(list.func_150306_c(index));
-                default:
-                    throw new IllegalArgumentException("NBT list type has no public getter");
-            }
+            return switch (type) {
+                case NBT.TAG_FLOAT -> new NBTTagFloat(list.func_150308_e(index));
+                case NBT.TAG_DOUBLE -> new NBTTagDouble(list.func_150309_d(index));
+                case NBT.TAG_STRING -> new NBTTagString(list.getStringTagAt(index));
+                case NBT.TAG_COMPOUND -> list.getCompoundTagAt(index);
+                case NBT.TAG_INT_ARRAY -> new NBTTagIntArray(list.func_150306_c(index));
+                default -> throw new IllegalArgumentException("NBT list type has no public getter");
+            };
         }
 
         private void checkChildren(int count) {

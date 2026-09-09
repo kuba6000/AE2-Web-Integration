@@ -23,14 +23,14 @@ import pl.kuba6000.ae2webintegration.core.commands.CommandBootstrap;
 
 public class CommonProxy {
 
-    // preInit "Run before anything else. Read your config, create blocks, items, etc, and register them with the
+    // preInit "Run before anything else. Read your config, create blocks, items, etc., and register them with the
     // GameRegistry." (Remove if not needed)
     public void preInit(FMLPreInitializationEvent event) {
         Config.init(event.getModConfigurationDirectory());
         Config.synchronizeConfiguration();
         CoreEngine.init(new Platform(event.getModConfigurationDirectory()), Tags.VERSION, "-forge-1.7.10");
 
-        AE2WebIntegration.LOG.info("AE2WebIntegration loading at version " + CoreEngine.getModVersion());
+        AE2WebIntegration.LOG.info("AE2WebIntegration loading at version {}", CoreEngine.getModVersion());
 
         FMLEventHandler eventHandler = new FMLEventHandler();
         FMLCommonHandler.instance()

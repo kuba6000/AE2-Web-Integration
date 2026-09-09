@@ -38,8 +38,7 @@ public final class StorageMonitorableStackList implements IStackList {
 
             private final Iterator<IAEStackType<?>> types = AEStackTypeRegistry.getSortedTypes()
                 .iterator();
-            private Iterator<?> stacks = Collections.emptyList()
-                .iterator();
+            private Iterator<?> stacks = Collections.emptyIterator();
             private IAEGenericStack prepared;
 
             @Override
@@ -59,8 +58,7 @@ public final class StorageMonitorableStackList implements IStackList {
                         return false;
                     }
                     IMEMonitor<?> monitor = storage.getMEMonitor(types.next());
-                    stacks = monitor == null ? Collections.emptyList()
-                        .iterator()
+                    stacks = monitor == null ? Collections.emptyIterator()
                         : monitor.getStorageList()
                             .iterator();
                 }

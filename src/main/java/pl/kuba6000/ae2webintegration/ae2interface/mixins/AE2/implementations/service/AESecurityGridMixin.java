@@ -6,12 +6,13 @@ import java.util.HashMap;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 
 import appeng.api.config.SecurityPermissions;
 import appeng.core.worlddata.WorldData;
 import appeng.me.cache.SecurityCache;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IPlayerProfileLookup;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 
 @Mixin(value = SecurityCache.class, remap = false)
@@ -31,14 +32,14 @@ public class AESecurityGridMixin implements IAESecurityGrid {
         return ((SecurityCache) (Object) this).getSecurityKey();
     }
 
-    @Override
-    public int web$getOwner() {
+    @Unique
+    private int web$getOwner() {
         return ((SecurityCache) (Object) this).getOwner();
     }
 
     @Override
     public PlayerIdentity web$getOwnerProfile() {
-        IAEPlayerData playerData = (IAEPlayerData) WorldData.instance()
+        IPlayerProfileLookup playerData = (IPlayerProfileLookup) WorldData.instance()
             .playerData();
         return playerData.web$getPlayerProfile(web$getOwner());
     }

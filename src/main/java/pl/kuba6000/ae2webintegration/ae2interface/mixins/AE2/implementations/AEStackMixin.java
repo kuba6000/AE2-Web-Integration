@@ -23,12 +23,12 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
     }
 
     @Override
-    default IAEKey web$copyIdentity() {
+    default @NotNull IAEKey web$copyIdentity() {
         return LegacyItemIdentity.copy(this);
     }
 
     @Override
-    default String web$getItemID() {
+    default @NotNull String web$getItemID() {
         if (this instanceof IAEItemStack) {
             return GameData.getItemRegistry()
                 .getNameForObject(((IAEItemStack) this).getItem()) + ":"
@@ -43,12 +43,12 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
     }
 
     @Override
-    default String web$getDisplayName() {
+    default @NotNull String web$getDisplayName() {
         return getDisplayName();
     }
 
     @Override
-    default IAEKey web$what() {
+    default @NotNull IAEKey web$what() {
         return (IAEKey) this;
     }
 
@@ -58,24 +58,8 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
     }
 
     @Override
-    default IAEGenericStack web$copy() {
-        return (IAEGenericStack) copy();
-    }
-
-    @Override
     default boolean web$isCraftable(IAEGrid grid) {
         return isCraftable();
     }
 
-    @Override
-    default boolean web$isSameType(IAEKey other) {
-        if (!(other instanceof IAEStack)) {
-            return false;
-        }
-        IAEStack otherStack = (IAEStack) (Object) other;
-        if (getStackType() != otherStack.getStackType()) {
-            return false;
-        }
-        return isSameType(otherStack);
-    }
 }

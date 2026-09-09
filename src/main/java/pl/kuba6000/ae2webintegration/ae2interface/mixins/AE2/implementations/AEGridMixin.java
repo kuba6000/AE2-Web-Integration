@@ -15,10 +15,12 @@ import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.pathing.IPathingGrid;
 import appeng.api.networking.security.IActionHost;
 import appeng.api.networking.security.ISecurityGrid;
+import appeng.api.networking.security.PlayerSource;
 import appeng.api.networking.storage.IStorageGrid;
 import appeng.me.Grid;
 import appeng.parts.reporting.AbstractPartTerminal;
 import cpw.mods.fml.common.FMLCommonHandler;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingFakePlayer;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
@@ -30,7 +32,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = Grid.class, remap = false)
-public abstract class AEGridMixin implements IAEGrid, PlayerSourceLifecycle {
+public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, PlayerSourceLifecycle {
 
     @Override
     public IAECraftingGrid web$getCraftingGrid() {
@@ -59,7 +61,7 @@ public abstract class AEGridMixin implements IAEGrid, PlayerSourceLifecycle {
     private ChatCapturingPlayerSource web$cachedPlayerSource = null;
 
     @Override
-    public Object web$getPlayerSource() {
+    public PlayerSource web$getPlayerSource() {
         Grid internalGrid = (Grid) (Object) this;
         IMachineSet terminals = null;
         if (web$lastUsedMachineClass != null) terminals = internalGrid.getMachines(web$lastUsedMachineClass);
@@ -77,7 +79,6 @@ public abstract class AEGridMixin implements IAEGrid, PlayerSourceLifecycle {
         IActionHost actionHost;
         World world;
         if (web$lastUsedMachineClass == null || terminals.isEmpty()) {
-            // throw new RuntimeException("There is no terminal in the AE system");
             actionHost = null;
             world = FMLCommonHandler.instance()
                 .getMinecraftServerInstance()

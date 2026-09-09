@@ -15,42 +15,42 @@ import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
-import appeng.api.networking.security.BaseActionSource;
 import appeng.api.networking.security.PlayerSource;
 import appeng.api.storage.data.IAEStack;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @Mixin(value = ICraftingGrid.class)
 public interface AECraftingGridMixin extends IAECraftingGrid {
 
     @Override
-    public default int web$getCPUCount() {
+    default int web$getCPUCount() {
         return ((ICraftingGrid) (Object) this).getCpus()
             .size();
     }
 
     @Override
-    public default Set<ICraftingCPUCluster> web$getCPUs() {
+    default Set<ICraftingCPUCluster> web$getCPUs() {
         final ImmutableSet<ICraftingCPU> aecpus = ((ICraftingGrid) (Object) this).getCpus();
         final Set<ICraftingCPUCluster> cpus = new LinkedHashSet<>(aecpus.size());
         int i = 1;
         for (ICraftingCPU cpu : aecpus) {
             cpus.add((ICraftingCPUCluster) cpu);
-            ((ICraftingCPUCluster) cpu).web$setInternalID(i++);
+            ((ICraftingCPUNameIndex) cpu).web$setInternalID(i++);
         }
         return cpus;
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    public default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
-        PlayerSource actionSrc = (PlayerSource) grid.web$getPlayerSource();
+    default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
+        PlayerSource actionSrc = ((IGridPlayerSource) grid).web$getPlayerSource();
         IAEStack<?> aeStack = ((IAEStack<?>) (Object) stack).copy();
         aeStack.setStackSize(amount);
         final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
@@ -59,12 +59,12 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     }
 
     @Override
-    public default String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
+    default String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
         IAEGrid grid) {
-        ChatCapturingPlayerSource source = (ChatCapturingPlayerSource) grid.web$getPlayerSource();
+        ChatCapturingPlayerSource source = (ChatCapturingPlayerSource) ((IGridPlayerSource) grid).web$getPlayerSource();
         source.clearLastMessage();
         ICraftingLink link = ((ICraftingGrid) (Object) this)
-            .submitJob((ICraftingJob) job, null, (ICraftingCPU) target, prioritizePower, (BaseActionSource) source);
+            .submitJob((ICraftingJob) job, null, (ICraftingCPU) target, prioritizePower, source);
         String msg = source.takeLastMessage();
         if (link != null) return null;
         // A null return means "submitted" to the caller, so never report success when AE2 refused the
@@ -73,12 +73,7 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
     }
 
     @Override
-    public default ICraftingMediumTracker web$getCraftingProviders() {
-        throw new UnsupportedOperationException("Use on CraftingGridCache implementation");
-    }
-
-    @Override
-    public default Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter) {
+    default Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter) {
         return Collections.emptySet();
     }
 }

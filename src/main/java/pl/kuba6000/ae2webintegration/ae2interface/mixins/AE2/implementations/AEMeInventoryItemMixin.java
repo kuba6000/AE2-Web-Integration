@@ -3,26 +3,23 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.config.Actionable;
-import appeng.api.networking.security.BaseActionSource;
 import appeng.api.storage.IMEInventory;
 import appeng.api.storage.data.IAEStack;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IMeInventoryExtraction;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 
 @Mixin(value = IMEInventory.class)
-public interface AEMeInventoryItemMixin extends IAEMeInventoryItem {
+public interface AEMeInventoryItemMixin extends IMeInventoryExtraction {
 
     @Override
     @SuppressWarnings("unchecked")
-    default long web$extractItems(IAEKey key, long amount, AEActionable mode, IAEGrid grid) {
+    default long web$extractItems(IAEKey key, long amount, Actionable mode, IAEGrid grid) {
         IAEStack<?> template = ((IAEStack<?>) (Object) key).copy();
         template.setStackSize(amount);
-        IAEStack<?> extracted = ((IMEInventory) (Object) this).extractItems(
-            template,
-            mode == AEActionable.MODULATE ? Actionable.MODULATE : Actionable.SIMULATE,
-            (BaseActionSource) grid.web$getPlayerSource());
+        IAEStack<?> extracted = ((IMEInventory) (Object) this)
+            .extractItems(template, mode, ((IGridPlayerSource) grid).web$getPlayerSource());
         return extracted == null ? 0 : extracted.getStackSize();
     }
 

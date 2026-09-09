@@ -11,12 +11,12 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 public interface PatternProviderViewableMixin extends IPatternProviderViewable {
 
     @Override
-    public default String web$getName() {
+    default String web$getName() {
         return ((IInterfaceViewable) (Object) this).getName();
     }
 
     @Override
-    public default DimensionalCoords web$getLocation() {
+    default DimensionalCoords web$getLocation() {
         DimensionalCoord coord = ((IInterfaceViewable) (Object) this).getLocation();
         return new DimensionalCoords(coord.getDimension(), coord.x, coord.y, coord.z);
     }

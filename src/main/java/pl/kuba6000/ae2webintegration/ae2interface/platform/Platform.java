@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.platform;
 
 import java.io.File;
-import java.util.List;
 import java.util.UUID;
 
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -19,7 +18,7 @@ public class Platform implements IServerPlatform {
 
     @Override
     public UUID getOnlinePlayerUUID(String username) {
-        for (EntityPlayerMP entityPlayerMP : (List<EntityPlayerMP>) FMLCommonHandler.instance()
+        for (EntityPlayerMP entityPlayerMP : FMLCommonHandler.instance()
             .getMinecraftServerInstance()
             .getConfigurationManager().playerEntityList) {
             if (entityPlayerMP.getCommandSenderName()

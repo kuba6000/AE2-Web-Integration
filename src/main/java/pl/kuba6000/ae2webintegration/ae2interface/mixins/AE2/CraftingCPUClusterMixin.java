@@ -14,11 +14,11 @@ import appeng.api.networking.crafting.ICraftingMedium;
 import appeng.api.networking.crafting.ICraftingPatternDetails;
 import appeng.api.storage.data.IAEStack;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
@@ -55,9 +55,8 @@ public class CraftingCPUClusterMixin {
     private boolean ae2webintegration$pushPattern(ICraftingMedium medium, ICraftingPatternDetails details,
         InventoryCrafting ic) {
         if (medium.pushPattern(details, ic)) {
-            IPatternProviderViewable viewable = ((IAEGrid) getGrid()).web$getCraftingGrid()
-                .web$getCraftingProviders()
-                .web$getViewableForCraftingMedium((ICraftingMediumKey) medium);
+            IPatternProviderViewable viewable = ((ICraftingMediumTracker) ((IAEGrid) getGrid()).web$getCraftingGrid())
+                .web$getViewableForCraftingMedium(medium);
             IAEMixinCallbacks.getInstance()
                 .pushedPattern((ICraftingCPUCluster) this, viewable, (IAECraftingPatternDetails) details);
             return true;
