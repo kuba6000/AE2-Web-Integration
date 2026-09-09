@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
-import com.mojang.authlib.GameProfile;
+import java.util.UUID;
 
 import pl.kuba6000.ae2webintegration.core.AEWebAPI;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
@@ -11,7 +11,7 @@ public interface IAEWebInterface {
         return AEWebAPI.INSTANCE;
     }
 
-    GameProfile getAEWebGameProfile();
+    UUID getAEWebUUID();
 
     void initAEInterface(IAE ae);
 

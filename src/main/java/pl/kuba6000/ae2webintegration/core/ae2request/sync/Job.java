@@ -5,20 +5,25 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import net.minecraft.util.IChatComponent;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEActionable;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 public class Job extends ISyncedRequest {
+
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
     private static class JSON_JobData {
 
@@ -47,7 +52,7 @@ public class Job extends ISyncedRequest {
 
     private ERequestType type = null;
     private int jobID;
-    private String cpuName;
+    private @Nullable StableKey cpuId;
 
     @Override
     boolean init(Map<String, String> getParams) {
@@ -55,11 +60,23 @@ public class Job extends ISyncedRequest {
             noParam("id");
             return false;
         }
-        this.jobID = Integer.parseInt(getParams.get("id"));
+        Integer parsedJobID = HTTPUtils.parseInt(getParams.get("id"));
+        if (parsedJobID == null) {
+            deny("BAD_PARAM");
+            return false;
+        }
+        this.jobID = parsedJobID;
         if (getParams.containsKey("cancel")) this.type = ERequestType.CANCEL;
         else if (getParams.containsKey("submit")) {
             this.type = ERequestType.SUBMIT;
-            if (getParams.containsKey("cpu")) this.cpuName = getParams.get("cpu");
+            if (getParams.containsKey("cpu")) {
+                try {
+                    this.cpuId = StableKey.parse(getParams.get("cpu"));
+                } catch (IllegalArgumentException e) {
+                    deny("CPU_NOT_FOUND");
+                    return false;
+                }
+            }
         } else this.type = ERequestType.CHECK;
         return true;
     }
@@ -70,7 +87,7 @@ public class Job extends ISyncedRequest {
             deny("GRID_NOT_FOUND");
             return;
         }
-        Future<IAECraftingJob> job = gridData.jobs.get(jobID);
+        Future<IAECraftingJob> job = gridData.getJob(jobID);
         if (job == null) {
             deny("INVALID_ID");
             return;
@@ -81,43 +98,28 @@ public class Job extends ISyncedRequest {
                 try {
                     IAECraftingJob craftingJob = job.get();
                     IAEStorageGrid storageGrid = grid.web$getStorageGrid();
-                    IAEMeInventoryItem items = storageGrid.web$getItemInventory();
+                    IAEMeInventoryItem inventory = storageGrid.web$getInventory();
                     jobData.isSimulating = craftingJob.web$isSimulation();
                     jobData.bytesTotal = craftingJob.web$getByteTotal();
-                    IItemList plan;
-                    craftingJob.web$populatePlan(plan = AE2Controller.AE2Interface.web$createItemList());
+                    ICraftingPlanSummary summary = craftingJob.web$generateSummary(grid);
                     jobData.plan = new ArrayList<>();
-                    for (IItemStack stack : plan) {
+                    for (ICraftingPlanSummaryEntry entry : summary.web$getEntries()) {
+                        IAEKey key = entry.web$getWhat();
                         JSON_JobData.JobItem jobItem = new JSON_JobData.JobItem();
-                        jobItem.itemid = stack.web$getItemID();
-                        jobItem.itemname = stack.web$getDisplayName();
-                        jobItem.requested = stack.web$getCountRequestable();
-                        jobItem.steps = stack.web$getCountRequestableCrafts();
-                        if (jobData.isSimulating) {
-                            IItemStack toExtract = stack.web$copy();
-                            toExtract.web$reset();
-                            toExtract.web$setStackSize(stack.web$getStackSize());
-                            IItemStack missing = toExtract.web$copy();
-                            toExtract = items.web$extractItems(toExtract, AEActionable.SIMULATE, grid);
-                            if (toExtract == null) {
-                                toExtract = missing.web$copy();
-                                toExtract.web$setStackSize(0);
-                            }
-                            jobItem.stored = toExtract.web$getStackSize();
-                            jobItem.missing = missing.web$getStackSize() - toExtract.web$getStackSize();
-                        } else {
-                            jobItem.stored = stack.web$getStackSize();
-                            jobItem.missing = 0;
-                        }
+                        jobItem.itemid = key.web$getItemID();
+                        jobItem.itemname = key.web$getDisplayName();
+                        jobItem.requested = entry.web$getCraftAmount();
+                        jobItem.steps = entry.web$getCraftSteps();
+                        jobItem.stored = entry.web$getStoredAmount();
+                        jobItem.missing = entry.web$getMissingAmount();
                         if (jobItem.missing == 0 && jobItem.requested == 0 && jobItem.stored > 0) {
-                            IItemStack realStack = items.web$getAvailableItem(stack);
-                            long available = 0L;
-                            if (realStack != null) available = realStack.web$getStackSize();
-                            if (available > 0L) jobItem.usedPercent = (double) jobItem.stored / (double) available;
+                            long available = inventory.web$getAvailable(key, grid);
+                            if (available > 0L) {
+                                jobItem.usedPercent = (double) jobItem.stored / (double) available;
+                            }
                         }
                         jobData.plan.add(jobItem);
                     }
-                    // TODO Move sorting to javascript!
                     jobData.plan.sort((i1, i2) -> {
                         if (i1.missing > 0 && i2.missing > 0) return Long.compare(i2.missing, i1.missing);
                         else if (i1.missing > 0 && i2.missing == 0) return -1;
@@ -128,16 +130,14 @@ public class Job extends ISyncedRequest {
                         return Long.compare(i2.stored, i1.stored);
                     });
                 } catch (InterruptedException | ExecutionException e) {
-                    e.printStackTrace();
+                    LOG.error("Failed to read crafting job", e);
                     deny("INTERNAL_ERROR");
                     return;
                 }
             }
-            setData(jobData);
-            done();
+            succeed(jobData);
         } else if (type == ERequestType.CANCEL) {
-            job.cancel(true);
-            gridData.jobs.remove(this.jobID);
+            gridData.cancelJob(this.jobID);
             done();
         } else if (type == ERequestType.SUBMIT) {
             IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
@@ -145,23 +145,23 @@ public class Job extends ISyncedRequest {
                 try {
                     IAECraftingJob craftingJob = job.get();
                     ICraftingCPUCluster target = null;
-                    if (cpuName != null) {
-                        target = GetCPUList.getCPUList(craftingGrid)
-                            .get(cpuName);
+                    if (cpuId != null) {
+                        Map<StableKey, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
+                        target = cpus.get(cpuId);
                         if (target == null) {
                             deny("CPU_NOT_FOUND");
                             return;
                         }
                     }
-                    IChatComponent error = craftingGrid.web$submitJob(craftingJob, target, true, grid);
+                    String error = craftingGrid.web$submitJob(craftingJob, target, true, grid);
                     if (error != null) {
-                        deny("FAIL");
-                        setData(error.getUnformattedTextForChat());
+                        deny("FAIL", error);
                     } else {
+                        gridData.removeJob(this.jobID);
                         done();
                     }
                 } catch (InterruptedException | ExecutionException e) {
-                    e.printStackTrace();
+                    LOG.error("Failed to submit crafting job", e);
                     deny("INTERNAL_ERROR");
                 }
             } else {

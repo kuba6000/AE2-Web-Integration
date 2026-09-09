@@ -4,7 +4,9 @@ public interface IAE {
 
     Iterable<IAEGrid> web$getGrids();
 
-    IItemList web$createItemList();
+    IStackList web$createStackList();
+
+    IAEGenericStack web$stackOf(IAEKey key, long amount);
 
     IAEPlayerData web$getPlayerData();
 

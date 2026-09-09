@@ -1,36 +1,34 @@
 package pl.kuba6000.ae2webintegration.core.notification.destination.ntfy;
 
-import static pl.kuba6000.ae2webintegration.core.AE2WebIntegration.MODID;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 
 import javax.net.ssl.HttpsURLConnection;
 
-import org.apache.commons.codec.binary.Base64;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.google.gson.JsonObject;
 
-import pl.kuba6000.ae2webintegration.core.Config;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.ErrorMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
-import scala.Console;
 
 public class NtfyDestination implements INotificationDestination {
 
-    private static final Logger LOG = LogManager.getLogger(MODID + " - NTFY INTEGRATION");
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration" + " - NTFY INTEGRATION");
 
     @Override
     public boolean isUsable() {
-        return !Config.NTFY_HOST.isEmpty();
+        return !Config.NTFY_HOST()
+            .isEmpty();
     }
 
     @Override
@@ -40,41 +38,43 @@ public class NtfyDestination implements INotificationDestination {
 
     @Override
     public void sendNotification(IMessage message) {
-        if (Config.NTFY_HOST.isEmpty()) return;
+        if (Config.NTFY_HOST()
+            .isEmpty()) return;
 
         NtfyPayload payload = null;
-        if (message instanceof CraftingMessage craftingMessage) {
+        if (message instanceof CraftingMessage) {
+            CraftingMessage craftingMessage = (CraftingMessage) message;
             List<String> tags = new ArrayList<>();
-            if (craftingMessage.wasCancelled()) tags.add("x");
+            if (craftingMessage.isWasCancelled()) tags.add("x");
             else tags.add("heavy_check_mark");
 
             payload = new NtfyPayload(
-                "AE2 Job Tracker [ Grid " + craftingMessage.grid() + " ][ " + craftingMessage.cpuName() + " ]",
-                "Crafting for `" + craftingMessage.outputItemName()
+                "AE2 Job Tracker [ Grid " + craftingMessage.getGrid() + " ][ " + craftingMessage.getCpuName() + " ]",
+                "Crafting for `" + craftingMessage.getOutputItemName()
                     + " x"
-                    + craftingMessage.outputItemAmount()
+                    + craftingMessage.getOutputItemAmount()
                     + "` "
-                    + (craftingMessage.wasCancelled() ? "cancelled" : "completed")
+                    + (craftingMessage.isWasCancelled() ? "cancelled" : "completed")
                     + "!\nIt took "
-                    + craftingMessage.duration()
-                    + "s",
+                    + craftingMessage.getDurationString(),
                 3,
                 tags);
-        } else if (message instanceof ErrorMessage errorMessage) {
-            ErrorMessage.Severity severity = errorMessage.severity();
+        } else if (message instanceof ErrorMessage) {
+            ErrorMessage errorMessage = (ErrorMessage) message;
+            ErrorMessage.Severity severity = errorMessage.getSeverity();
             List<String> tags = new ArrayList<>();
             int priority = 3;
             switch (severity) {
-                case ERROR -> {
+                case ERROR:
                     priority = 5;
                     tags.add("rotating_light");
-                }
-                case WARNING -> {
+                    break;
+                case WARNING:
                     priority = 4;
                     tags.add("warning");
-                }
+                    break;
             };
-            payload = new NtfyPayload(errorMessage.title(), errorMessage.description(), priority, tags);
+            payload = new NtfyPayload(errorMessage.getTitle(), errorMessage.getDescription(), priority, tags);
         }
 
         if (payload == null) return;
@@ -82,13 +82,14 @@ public class NtfyDestination implements INotificationDestination {
 
         URL url = null;
         try {
-            url = new URL(Config.NTFY_HOST);
-            String username = Config.NTFY_USER;
-            String password = Config.NTFY_PASSWORD;
+            url = new URL(Config.NTFY_HOST());
+            String username = Config.NTFY_USER();
+            String password = Config.NTFY_PASSWORD();
 
             HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
             String auth = username + ":" + password;
-            byte[] encodedAuth = Base64.encodeBase64(auth.getBytes(StandardCharsets.UTF_8));
+            byte[] encodedAuth = Base64.getEncoder()
+                .encode(auth.getBytes(StandardCharsets.UTF_8));
             String authHeaderValue = "Basic " + new String(encodedAuth);
             connection.setRequestProperty("Authorization", authHeaderValue);
             connection.addRequestProperty("Content-Type", "application/json");
@@ -96,16 +97,15 @@ public class NtfyDestination implements INotificationDestination {
             connection.setDoOutput(true);
             connection.setRequestMethod("PUT");
 
-            Console.println(json.toString());
-            Console.println(url);
-            Console.println(authHeaderValue);
+            System.out.println(json.toString());
+            System.out.println(url);
+            System.out.println(authHeaderValue);
 
-            OutputStream stream = connection.getOutputStream();
-            stream.write(
-                json.toString()
-                    .getBytes());
-            stream.flush();
-            stream.close();
+            try (OutputStream stream = connection.getOutputStream()) {
+                stream.write(
+                    json.toString()
+                        .getBytes(StandardCharsets.UTF_8));
+            }
 
             int code;
             if ((code = connection.getResponseCode()) != 200 && code != 204) {

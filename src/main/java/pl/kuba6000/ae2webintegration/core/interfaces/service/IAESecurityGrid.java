@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.interfaces.service;
 
-import com.mojang.authlib.GameProfile;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
 public interface IAESecurityGrid {
 
@@ -10,7 +10,7 @@ public interface IAESecurityGrid {
 
     int web$getOwner();
 
-    GameProfile web$getOwnerProfile();
+    PlayerIdentity web$getOwnerProfile();
 
     boolean web$hasPermissions(int playerId);
 

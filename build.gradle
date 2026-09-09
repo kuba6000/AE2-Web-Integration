@@ -1,4 +1,83 @@
-
 plugins {
-    id 'com.gtnewhorizons.gtnhconvention'
+    id 'java-library'
+    // Deliberately no version: when this module is included as a submodule of an integration branch that
+    // branch already has spotless on the classpath (7.0.2 on modern, 6.24.0 on legacy) and Gradle rejects
+    // a version request in that case. Standalone builds get the version from settings.gradle.
+    id 'com.diffplug.spotless' apply false
+}
+
+// Core owns its formatting: run `./gradlew spotlessApply` from inside core/.
+//
+// The rules are the shared GTNH config, vendored here the same way the modern integration branches vendor
+// it, so the whole project formats identically. Applied only when core is the root project: the branches
+// pin different engine versions (modern eclipse 4.31, legacy 4.19 via Blowdryer), so letting a parent
+// build format this submodule would rewrite it back and forth depending on which worktree it sits in.
+if (project == rootProject) {
+    apply plugin: 'com.diffplug.spotless'
+
+    spotless {
+        encoding 'UTF-8'
+
+        java {
+            target 'src/main/java/**/*.java', 'src/test/java/**/*.java'
+
+            def orderFile = project.file('spotless/spotless.importorder')
+            def formatFile = project.file('spotless/spotless.eclipseformat.xml')
+
+            toggleOffOn()
+            importOrderFile(orderFile)
+            removeUnusedImports('cleanthat-javaparser-unnecessaryimport')
+            endWithNewline()
+            eclipse('4.31').configFile(formatFile)
+        }
+    }
+}
+
+group = 'pl.kuba6000.ae2webintegration'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compileOnlyApi 'org.jetbrains:annotations:26.0.2'
+    implementation 'com.google.code.gson:gson:2.8.9'
+    implementation 'com.google.guava:guava:21.0'
+    implementation 'commons-io:commons-io:2.5'
+    implementation 'org.apache.commons:commons-lang3:3.5'
+    implementation 'club.minnced:discord-webhooks:0.8.2'
+    // Log4j is provided by Minecraft at runtime — implementation for standalone core tests
+    implementation 'org.apache.logging.log4j:log4j-api:2.17.2'
+    implementation 'org.apache.logging.log4j:log4j-core:2.17.2'
+    // Testing
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+// Without this javac reads sources in the platform default encoding, so a non-ASCII literal compiles
+// differently depending on the machine that built it.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+// This submodule is pure Java (no Minecraft/Forge references).
+// Mark outgoing artifacts as already deobfuscated so RFG does not
+// attempt to run DependencyDeobfuscationTransform on this jar.
+configurations.configureEach {
+    if (canBeConsumed) {
+        outgoing.attributes.attribute(
+            org.gradle.api.attributes.Attribute.of('rfgDeobfuscatorTransformed', Boolean),
+            true
+        )
+    }
 }

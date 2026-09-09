@@ -4,14 +4,19 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.jetbrains.annotations.NotNull;
+
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.api.JSON_CompactedItem;
+import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 public class GetCPU extends ISyncedRequest {
 
@@ -19,14 +24,16 @@ public class GetCPU extends ISyncedRequest {
 
         public long size;
         public boolean isBusy;
-        public IItemStack finalOutput;
+        public JSON_Stack finalOutput;
         public ArrayList<JSON_CompactedItem> items;
         public boolean hasTrackingInfo = false;
         public long timeStarted = 0L;
         public long timeElapsed = 0L;
     }
 
-    String cpuName = null;
+    // Assigned by successful init() before the request is submitted.
+    @SuppressWarnings("NotNullFieldNotInitialized")
+    private @NotNull StableKey cpuId;
 
     @Override
     boolean init(Map<String, String> getParams) {
@@ -34,7 +41,12 @@ public class GetCPU extends ISyncedRequest {
             noParam("cpu");
             return false;
         }
-        cpuName = getParams.get("cpu");
+        try {
+            cpuId = StableKey.parse(getParams.get("cpu"));
+        } catch (IllegalArgumentException e) {
+            deny("CPU_NOT_FOUND");
+            return false;
+        }
         return true;
     }
 
@@ -46,8 +58,8 @@ public class GetCPU extends ISyncedRequest {
         }
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
 
-        ICraftingCPUCluster cpu = GetCPUList.getCPUList(craftingGrid)
-            .get(cpuName);
+        Map<StableKey, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
+        ICraftingCPUCluster cpu = cpus.get(cpuId);
         if (cpu == null) {
             deny("CPU_NOT_FOUND");
             return;
@@ -57,49 +69,42 @@ public class GetCPU extends ISyncedRequest {
         clusterData.size = cpu.web$getAvailableStorage();
         clusterData.isBusy = cpu.web$isBusy();
         if (clusterData.isBusy) {
-            clusterData.finalOutput = cpu.web$getFinalOutput();
-            AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.trackingInfoMap.get(cpu);
+            clusterData.finalOutput = JSON_Stack.capture(grid, cpu.web$getFinalOutput());
+            AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cpu);
             clusterData.hasTrackingInfo = trackingInfo != null;
 
             HashMap<JSON_CompactedItem, JSON_CompactedItem> prep = new HashMap<>();
-            IItemList items = AE2Controller.AE2Interface.web$createItemList();
-            cpu.web$getActiveItems(items);
-            for (IItemStack itemStack : items) {
-                JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).active += itemStack.web$getStackSize();
-            }
-            items = AE2Controller.AE2Interface.web$createItemList();
-            cpu.web$getPendingItems(items);
-            for (IItemStack itemStack : items) {
-                JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).pending += itemStack.web$getStackSize();
-            }
-            items = AE2Controller.AE2Interface.web$createItemList();
-            cpu.web$getStorageItems(items);
-            for (IItemStack itemStack : items) {
-                JSON_CompactedItem compactedItem = JSON_CompactedItem.create(itemStack);
-                prep.computeIfAbsent(compactedItem, k -> compactedItem).stored += itemStack.web$getStackSize();
+            IStackList allItems = AE2Controller.AE2Interface.web$createStackList();
+            cpu.web$getAllItems(allItems);
+            for (IAEGenericStack stack : allItems.web$stacks()) {
+                IAEKey key = stack.web$what();
+                JSON_CompactedItem compactedItem = JSON_CompactedItem.create(key);
+                JSON_CompactedItem merged = prep.computeIfAbsent(compactedItem, k -> compactedItem);
+                merged.active += cpu.web$getActiveItems(key);
+                merged.pending += cpu.web$getPendingItems(key);
+                merged.stored += cpu.web$getStorageItems(key);
             }
 
             if (clusterData.hasTrackingInfo) {
                 clusterData.timeStarted = trackingInfo.timeStarted;
                 clusterData.timeElapsed = (System.currentTimeMillis()) - clusterData.timeStarted;
-                for (IItemStack stack : trackingInfo.timeSpentOn.keySet()) {
-                    JSON_CompactedItem compactedItem = JSON_CompactedItem.create(stack);
+                for (IAEKey key : trackingInfo.timeSpentOn.keySet()) {
+                    JSON_CompactedItem compactedItem = JSON_CompactedItem.create(key);
                     JSON_CompactedItem finalCompactedItem = compactedItem;
                     compactedItem = prep.computeIfAbsent(compactedItem, k -> finalCompactedItem);
-                    compactedItem.timeSpentCrafting += trackingInfo.getTimeSpentOn(stack);
-                    compactedItem.craftedTotal += trackingInfo.craftedTotal.getOrDefault(stack, 0L);
-                    compactedItem.shareInCraftingTime += trackingInfo.getShareInCraftingTime(stack);
-                    compactedItem.shareInCraftingTimeCombined = Math
-                        .min(((double) compactedItem.timeSpentCrafting) / (double) clusterData.timeElapsed, 1d);
-                    compactedItem.craftsPerSec = (double) compactedItem.craftedTotal
-                        / (compactedItem.timeSpentCrafting / 1000d);
+                    compactedItem.timeSpentCrafting += trackingInfo.getTimeSpentOn(key);
+                    compactedItem.craftedTotal += trackingInfo.craftedTotal.getOrDefault(key, 0L);
+                    compactedItem.shareInCraftingTime += trackingInfo.getShareInCraftingTime(key);
+                    compactedItem.shareInCraftingTimeCombined = clusterData.timeElapsed > 0
+                        ? Math.min(((double) compactedItem.timeSpentCrafting) / (double) clusterData.timeElapsed, 1d)
+                        : 0d;
+                    compactedItem.craftsPerSec = compactedItem.timeSpentCrafting > 0
+                        ? (double) compactedItem.craftedTotal / (compactedItem.timeSpentCrafting / 1000d)
+                        : 0d;
                 }
             }
 
             clusterData.items = new ArrayList<>(prep.values());
-            // TODO Move sorting to javascript!
             clusterData.items.sort((i1, i2) -> {
                 if (i1.active > 0 && i2.active > 0) return Long.compare(i2.active, i1.active);
                 else if (i1.active > 0 && i2.active == 0) return -1;
@@ -112,8 +117,7 @@ public class GetCPU extends ISyncedRequest {
 
         }
 
-        setData(clusterData);
-        done();
+        succeed(clusterData);
     }
 
 }

@@ -1,39 +1,51 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
-import static pl.kuba6000.ae2webintegration.core.AE2Controller.hashcodeToAEItemStack;
+import static pl.kuba6000.ae2webintegration.core.AE2Controller.itemIdentities;
 
 import java.util.Map;
 import java.util.concurrent.Future;
 
 import com.google.gson.JsonObject;
 
+import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemList;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 public class Order extends ISyncedRequest {
 
-    private IItemStack item;
+    private StableKey requestedKey;
+    private long quantity;
 
     @Override
     boolean init(Map<String, String> getParams) {
-        if (!getParams.containsKey("item") || !getParams.containsKey("quantity")) {
-            noParam("item", "quantity");
+        if (!getParams.containsKey("itemKey") || !getParams.containsKey("quantity")) {
+            noParam("itemKey", "quantity");
             return false;
         }
-        int hash = Integer.parseInt(getParams.get("item"));
-        int quantity = Integer.parseInt(getParams.get("quantity"));
-        this.item = hashcodeToAEItemStack.get(hash);
-        if (this.item == null || !this.item.web$isCraftable()) {
-            deny("ITEM_NOT_FOUND");
+        try {
+            requestedKey = StableKey.parse(getParams.get("itemKey"));
+        } catch (IllegalArgumentException e) {
+            deny("BAD_PARAM");
             return false;
         }
-        this.item = this.item.web$copy();
-        this.item.web$setStackSize(quantity);
+        Long parsedQuantity = HTTPUtils.parseLong(getParams.get("quantity"));
+        if (parsedQuantity == null) {
+            deny("BAD_PARAM");
+            return false;
+        }
+        if (parsedQuantity <= 0) {
+            // Verified that every platform's AE2 takes a long here, so there is no ceiling to enforce;
+            // zero or negative is the only unambiguously invalid amount. A negative stack size has its
+            // own meaning inside AE2, so passing one through would be undefined rather than merely odd.
+            deny("INVALID_QUANTITY");
+            return false;
+        }
+        this.quantity = parsedQuantity;
         return true;
     }
 
@@ -43,7 +55,22 @@ public class Order extends ISyncedRequest {
             deny("GRID_NOT_FOUND");
             return;
         }
+        IAEKey itemKey;
+        try {
+            itemKey = itemIdentities.resolve(requestedKey);
+        } catch (ItemIdentityRegistry.Ambiguous e) {
+            deny("AMBIGUOUS_ITEM_KEY");
+            return;
+        }
+        if (itemKey == null) {
+            deny("ITEM_IDENTITY_UNKNOWN");
+            return;
+        }
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
+        if (!craftingGrid.web$isCurrentlyCraftable(itemKey)) {
+            deny("ITEM_NOT_FOUND");
+            return;
+        }
         boolean allBusy = true;
         for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
             if (!cpu.web$isBusy()) {
@@ -52,25 +79,12 @@ public class Order extends ISyncedRequest {
             }
         }
         if (!allBusy) {
-            IAEStorageGrid storageGrid = grid.web$getStorageGrid();
-            final IItemList itemList = storageGrid.web$getItemStorageList();
-            IItemStack realItem = itemList.web$findPrecise(this.item);
-            if (realItem != null && realItem.web$isCraftable()) {
-                Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, this.item);
+            Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, itemKey, quantity);
 
-                int jobID = gridData.addJob(job);
-                JsonObject jobData = new JsonObject();
-                jobData.addProperty("jobID", jobID);
-                if (gridData.jobs.size() > 3) {
-                    int toDeleteBelowAndEqual = jobID - 3;
-                    gridData.jobs.entrySet()
-                        .removeIf(integerFutureEntry -> integerFutureEntry.getKey() <= toDeleteBelowAndEqual);
-                }
-                setData(jobData);
-                done();
-            } else {
-                deny("ITEM_NOT_FOUND");
-            }
+            int jobID = gridData.addJob(job);
+            JsonObject jobData = new JsonObject();
+            jobData.addProperty("jobID", jobID);
+            succeed(jobData);
         } else {
             deny("ALL_CPU_BUSY");
         }

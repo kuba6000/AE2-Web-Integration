@@ -3,7 +3,7 @@ package pl.kuba6000.ae2webintegration.core.notification.destination.discord;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
-import pl.kuba6000.ae2webintegration.core.Config;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationPayload;
 
 public class DiscordPayload implements INotificationPayload {
@@ -24,7 +24,7 @@ public class DiscordPayload implements INotificationPayload {
 
     @Override
     public JsonObject serializePayload() {
-        String roleID = Config.DISCORD_ROLE_ID;
+        String roleID = Config.DISCORD_ROLE_ID();
 
         JsonObject json = new JsonObject();
         json.addProperty("username", "AE2 Web Integration");

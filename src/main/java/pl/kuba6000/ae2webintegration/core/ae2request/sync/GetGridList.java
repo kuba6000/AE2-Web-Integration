@@ -2,13 +2,11 @@ package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
 import java.util.ArrayList;
 
-import com.mojang.authlib.GameProfile;
-
 import pl.kuba6000.ae2webintegration.core.GridData;
-import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.GridFilter;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 
 public class GetGridList extends ISyncedRequest {
@@ -34,13 +32,8 @@ public class GetGridList extends ISyncedRequest {
     public void handle(IAE ae) {
         ArrayList<JSON_GridData> grids = new ArrayList<>();
         for (IAEGrid grid : ae.web$getGrids()) {
-            IAEPathingGrid pathing = grid.web$getPathingGrid();
-            if (pathing == null || pathing.web$isNetworkBooting()
-                || pathing.web$getControllerState() != AEControllerState.CONTROLLER_ONLINE) {
-                continue;
-            }
-            IAESecurityGrid security = grid.web$getSecurityGrid();
-            if (security == null || !security.web$isAvailable() || security.web$getSecurityKey() == -1) {
+            IAESecurityGrid security = GridFilter.usableSecurity(grid);
+            if (security == null || security.web$getSecurityKey() == -1) {
                 if (context.isAdmin()) {
                     grids.add(
                         new JSON_GridData(
@@ -53,18 +46,23 @@ public class GetGridList extends ISyncedRequest {
                 }
                 continue;
             }
-            if (!context.isAdmin() && !security.web$hasPermissions(context.getUserID())) {
+            long securityKey = security.web$getSecurityKey();
+            if (!access.canAccess(securityKey)) {
                 continue;
             }
-            GameProfile gameProfile = security.web$getOwnerProfile();
-            GridData gridData = GridData.get(security.web$getSecurityKey());
+            boolean hasPermissions = access.hasResolvedPlayerId() && security.web$hasPermissions(access.getPlayerId());
+            if (!context.isAdmin() && !hasPermissions) {
+                continue;
+            }
+            PlayerIdentity ownerIdentity = security.web$getOwnerProfile();
+            GridData gridData = GridData.getOrCreate(securityKey);
             grids.add(
                 new JSON_GridData(
-                    security.web$getSecurityKey(),
+                    securityKey,
                     grid.web$getCraftingGrid()
                         .web$getCPUCount(),
-                    gameProfile == null ? "N/A" : gameProfile.getName(),
-                    security.web$hasPermissions(context.getUserID()),
+                    ownerIdentity == null ? "N/A" : ownerIdentity.name,
+                    hasPermissions,
                     gridData.isTracked));
         }
         grids.sort((d1, d2) -> {
@@ -84,7 +82,6 @@ public class GetGridList extends ISyncedRequest {
                 return Integer.compare(d2.cpuCount, d1.cpuCount); // sort by cpu count if all else is equal
             }
         });
-        setData(grids);
-        done();
+        succeed(grids);
     }
 }

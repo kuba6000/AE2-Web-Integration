@@ -3,9 +3,19 @@ package pl.kuba6000.ae2webintegration.core.ae2request.async;
 import java.util.Map;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.GridAccess;
+import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
+import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
+/**
+ * Requests served directly on the HTTP worker thread, without a hop through the server tick.
+ * <p>
+ * They only ever touch stored {@link GridData}, never live AE2 state, which is what keeps them off the
+ * server thread. Authorization therefore cannot be evaluated here - it is read from
+ * {@link GridAccessSessions}, which the server thread keeps up to date during synced requests.
+ */
 public abstract class IAsyncRequest extends IRequest {
 
     protected AE2Controller.RequestContext context = null;
@@ -19,10 +29,31 @@ public abstract class IAsyncRequest extends IRequest {
         this.context = context;
         String gridstr = context.getGetParams()
             .get("grid");
-        if (gridstr == null || gridstr.isEmpty()) gridKey = -1;
-        else gridKey = Long.parseLong(gridstr);
+        if (gridstr == null || gridstr.isEmpty()) {
+            gridKey = -1;
+        } else {
+            Long parsed = HTTPUtils.parseLong(gridstr);
+            if (parsed == null) {
+                deny("BAD_PARAM");
+                return;
+            }
+            gridKey = parsed;
+        }
         if (gridKey != -1) {
-            grid = GridData.get(gridKey);
+            GridAccess access = GridAccessSessions.get(context.getPrincipal());
+            if (access == null || access.isStale(System.currentTimeMillis())) {
+                // Distinct from NO_PERMISSIONS so the client can re-fetch the grid list and retry instead
+                // of reporting a permission error.
+                deny("REFRESH_REQUIRED");
+                return;
+            }
+            if (!access.canAccess(gridKey)) {
+                deny("NO_PERMISSIONS");
+                return;
+            }
+            // Lookup, not create: a handler that stores something asks for the entry itself, so a plain
+            // read can no longer leave a phantom grid behind in griddata.json.
+            grid = GridData.find(gridKey);
         }
         handle(context.getGetParams());
     }

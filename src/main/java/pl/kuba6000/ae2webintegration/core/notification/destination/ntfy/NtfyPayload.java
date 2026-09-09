@@ -7,7 +7,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
-import pl.kuba6000.ae2webintegration.core.Config;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationPayload;
 
 public class NtfyPayload implements INotificationPayload {
@@ -34,7 +34,7 @@ public class NtfyPayload implements INotificationPayload {
 
     @Override
     public JsonObject serializePayload() {
-        String topic = Config.NTFY_TOPIC;
+        String topic = Config.NTFY_TOPIC();
 
         JsonObject json = new JsonObject();
         json.addProperty("topic", topic);
@@ -46,8 +46,9 @@ public class NtfyPayload implements INotificationPayload {
         json.add("tags", tagsArray);
 
         json.addProperty("priority", this.priority);
-        if (!Config.AE_FULL_DOMAIN.isEmpty()) {
-            json.addProperty("click", Config.AE_FULL_DOMAIN);
+        if (!Config.AE_FULL_DOMAIN()
+            .isEmpty()) {
+            json.addProperty("click", Config.AE_FULL_DOMAIN());
         }
 
         return json;

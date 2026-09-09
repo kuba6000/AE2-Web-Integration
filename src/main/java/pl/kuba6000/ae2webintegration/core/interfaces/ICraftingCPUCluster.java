@@ -1,6 +1,14 @@
 package pl.kuba6000.ae2webintegration.core.interfaces;
 
+import org.jetbrains.annotations.NotNull;
+
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+
 public interface ICraftingCPUCluster {
+
+    /** Stable address within a saved world, independent of display name and current crafting job. */
+    @NotNull
+    StableKey web$getKey();
 
     void web$setInternalID(int id);
 
@@ -18,14 +26,16 @@ public interface ICraftingCPUCluster {
 
     void web$cancel();
 
-    IItemStack web$getFinalOutput();
+    IAEGenericStack web$getFinalOutput();
 
-    void web$getActiveItems(IItemList list);
+    long web$getActiveItems(IAEKey key);
 
-    void web$getPendingItems(IItemList list);
+    long web$getPendingItems(IAEKey key);
 
-    void web$getStorageItems(IItemList list);
+    long web$getStorageItems(IAEKey key);
 
-    IItemList web$getWaitingFor();
+    void web$getAllItems(IStackList list);
+
+    IStackList web$getWaitingFor();
 
 }

@@ -1,5 +1,18 @@
 <?php
 
+    // Lax matches what browsers already apply to a cookie with no SameSite, so this mainly covers older
+    // ones. It stops an image tag or a cross-site fetch carrying the session, but not a top-level
+    // navigation - and the endpoints behind this proxy are state-changing GETs, so the real fix is to
+    // move them to POST. PHP's positional setcookie() has no SameSite parameter; the options array does.
+    function cookieOptions($expires, $httpOnly) {
+        return [
+            'expires' => $expires,
+            'path' => '/',
+            'httponly' => $httpOnly,
+            'samesite' => 'Lax',
+        ];
+    }
+
     // AE2 Web Terminal url
     $AE2_SERVER_HOST = "http://localhost:2324/";
     // Is the public mode enabled on the server
@@ -50,10 +63,10 @@
             elseif ($httpcode == 200){
                 $json = json_decode($return, true);
                 $validity = $remember ? (time() + (604_800)) : (time() + (3600));
-                setcookie("authenticationToken", $json['token'], $validity, "", "", false, true);
-                setcookie("username", $json['username'], $validity);
-                setcookie("isAdmin", $json['isAdmin'] ? '1' : '0', $validity);
-                setcookie("isOutdated", $json['isOutdated'] ? '1' : '0', $validity);
+                setcookie("authenticationToken", $json['token'], cookieOptions($validity, true));
+                setcookie("username", $json['username'], cookieOptions($validity, false));
+                setcookie("isAdmin", $json['isAdmin'] ? '1' : '0', cookieOptions($validity, false));
+                setcookie("isOutdated", $json['isOutdated'] ? '1' : '0', cookieOptions($validity, false));
                 header("Location: .");
                 exit;
             }
@@ -75,10 +88,10 @@
         $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         $validity = (time() - 3600);
-        setcookie("authenticationToken", "", $validity, "", "", false, true);
-        setcookie("username", "", $validity);
-        setcookie("isAdmin", '', $validity);
-        setcookie("isOutdated", '', $validity);
+        setcookie("authenticationToken", "", cookieOptions($validity, true));
+        setcookie("username", "", cookieOptions($validity, false));
+        setcookie("isAdmin", '', cookieOptions($validity, false));
+        setcookie("isOutdated", '', cookieOptions($validity, false));
         header("Location: .");
         exit;
     }
@@ -102,10 +115,10 @@
 
         if ($httpcode == 401) {
             $validity = (time() - 3600);
-            setcookie("authenticationToken", $validity, time() - 3600, "", "", false, true);
-            setcookie("username", "", $validity);
-            setcookie("isAdmin", '', $validity);
-            setcookie("isOutdated", '', $validity);
+            setcookie("authenticationToken", "", cookieOptions(time() - 3600, true));
+            setcookie("username", "", cookieOptions($validity, false));
+            setcookie("isAdmin", '', cookieOptions($validity, false));
+            setcookie("isOutdated", '', cookieOptions($validity, false));
             header("Location: .");
             exit;
         }
@@ -157,7 +170,7 @@
                 <input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">  <label for="thisgridbydefault">Select this grid by default</label> <br>
                 <input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);"> <label for="trackthisgrid">Enable tracking for this grid (track jobs)</label> <br>
             </section>
-            <span class='note' style="flex: 0 0 100%; margin-top: 10px;">To be able to select a grid, there must be security terminal available and you have to be owner or have every permission enabled in the bio card</span>
+            <span class='note' style="flex: 0 0 100%; margin-top: 10px;">To select a grid, the network must be exposed for web access. On newer versions, place a Wireless Access Point on the network. On older versions, use a Security Terminal and grant the required permissions.</span>
         </section>
     </section>
 </section>
@@ -251,7 +264,7 @@
     globalItemList = {};
     globalCPUList = {};
     currentWindow = 0; // 0 - main, 1 - CPU, 2 - Order screen, 3 - History window
-    selectedCPU = 0;
+    selectedCPU = "";
     filteringOptions = {
         searchString: "",
         storedCraftable: 2, // 0 - stored, 1 - craftable, 2 - both
@@ -285,7 +298,7 @@
 
     currentJob = {
         id: -1,
-        itemHash: -1,
+        itemKey: null,
         bytesTotal: -1,
     }
     function searchStringChanged(el){
@@ -392,14 +405,12 @@
     function onTrackThisGridChange(el) {
         if (selectedGrid == -1) return;
         let trackThisGrid = el.checked;
-        $.getJSON('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
-            if(data.status !== "OK"){
-                showAlert(data.status + ": " + data.data);
-                return;
-            }
+        getJSONWithGridRefresh('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
             data = data.data;
             el.checked = data['isTracked'];
             updateGridList();
+        }, function(data) {
+            showAlert(data.status + ": " + data.data);
         });
     }
     function refreshTerminal() {
@@ -464,7 +475,7 @@
         cookie = getCookie("showItemID");
         if (cookie != "")
             settings.showItemID = Number(cookie) == 1;
-            cookie = getCookie("showItemIcon");
+        cookie = getCookie("showItemIcon");
         if (cookie != "")
             settings.showItemIcon = Number(cookie) == 1;
         document.getElementById('sortByButton').innerHTML = sortByDisplay[sortingOptions.sortBy];
@@ -592,14 +603,19 @@
             html += (allowNewLines ? "<br>" : "") + " " + itemObject['itemid'];
         return html;
     }
+    function escapeCPUText(value) {
+        return String(value).replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[character]);
+    }
     function displayCPUList(){
         let html = "";
         for (let key in globalCPUList){
             let cluster = globalCPUList[key];
-            html += "<button onclick='selectCPU(this);' name='" + key + "' ";
+            html += "<button onclick='selectCPU(this);' name='" + escapeCPUText(key) + "' ";
             if (selectedCPU == key)
                 html += "class='selected'";
-            html += ">" + key;
+            html += ">" + escapeCPUText(cluster.name);
             if (cluster['finalOutput'])
                 html += " - " + formatItemName(cluster['finalOutput'], false) + " x" + cluster['finalOutput']['quantity'];
             html += "</button>";
@@ -609,23 +625,35 @@
     function displayCPUDetails(){
         if (selectedGrid == -1)
             return;
-        if (Object.keys(globalCPUList).length == 0) return;
-        let message = "Asking for " + selectedCPU + "...";
+        if (!globalCPUList[selectedCPU]) {
+            document.getElementById("terminalCPUHeaderText").textContent = 'Select a crafting CPU.';
+            document.getElementById("terminalcontent").innerHTML = '';
+            document.getElementById("cancelJobOnCPUButton").style.display = 'none';
+            return;
+        }
+        const cpuId = selectedCPU;
+        const gridId = selectedGrid;
+        let message = "Asking for " + escapeCPUText(globalCPUList[cpuId].name) + "...";
         pushLoadingScreen(message);
-        $.getJSON('get?grid=' + selectedGrid + '&cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        $.getJSON('get?grid=' + gridId + '&cpu=' + encodeURIComponent(cpuId).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+            if (selectedCPU !== cpuId || selectedGrid !== gridId || !globalCPUList[cpuId]) {
+                popLoadingScreen(message);
+                return;
+            }
             console.log(data);
             if (data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 popLoadingScreen(message);
+                if (data.status === "CPU_NOT_FOUND") updateCPUList();
                 return;
             }
             data = data.data;
             let html = "";
             if (data['finalOutput'])
                 document.getElementById("terminalCPUHeaderText").innerHTML =
-                    selectedCPU + ": Crafting " + formatItemName(data['finalOutput'], false) + " x" + data['finalOutput']['quantity'];
+                    escapeCPUText(globalCPUList[cpuId].name) + ": Crafting " + formatItemName(data['finalOutput'], false) + " x" + data['finalOutput']['quantity'];
             else
-                document.getElementById("terminalCPUHeaderText").innerHTML = selectedCPU + ": Idle";
+                document.getElementById("terminalCPUHeaderText").innerHTML = escapeCPUText(globalCPUList[cpuId].name) + ": Idle";
             let hasTrackingInfo = data['hasTrackingInfo'];
             if (data['items'] && data['items'].length > 0) {
                 document.getElementById("cancelJobOnCPUButton").style.display = 'block';
@@ -670,20 +698,28 @@
         if (selectedGrid == -1){
             return;
         }
-        $.getJSON('list?grid=' + selectedGrid, function(data) {
+        const gridId = selectedGrid;
+        $.getJSON('list?grid=' + gridId, function(data) {
+            if (selectedGrid !== gridId) return;
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 return;
             }
             data = data.data;
-            clusters = data;
-            globalCPUList = clusters;
-            if (!globalCPUList[selectedCPU])
-                selectedCPU = Object.keys(globalCPUList)[0];
+            globalCPUList = data;
+            if (selectedCPU && !globalCPUList[selectedCPU]) {
+                selectedCPU = null;
+                document.getElementById("cancelJobOnCPUButton").style.display = 'none';
+                document.getElementById("terminalCPUHeaderText").textContent = 'Select a crafting CPU.';
+                if (currentWindow === 1) document.getElementById("terminalcontent").innerHTML = '';
+            } else if (selectedCPU === "") {
+                selectedCPU = Object.keys(globalCPUList)[0] || "";
+            }
             displayCPUList();
+            if (currentWindow === 2) updateCPUListForJob();
         });
     }
-    function updateGridList(){
+    function updateGridList(onDone){
         $.getJSON('grids', function(data) {
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
@@ -711,11 +747,41 @@
                 document.getElementById('gridselection').size = data.length;
             else
                 document.getElementById('gridselection').size = 2;
+            if (onDone)
+                onDone();
         });
     }
     updateGridList();
+    // The async endpoints (trackinghistory / gettracking / gridsettings) authorize against a per-user
+    // access set that the server rebuilds during synced requests. After a long idle period it expires and
+    // the server answers REFRESH_REQUIRED instead of serving the request. Asking for the grid list rebuilds
+    // that set, so retry once before bothering the user with an error.
+    function getJSONWithGridRefresh(url, onSuccess, onFailure){
+        $.getJSON(url, function(data){
+            if (data.status === "REFRESH_REQUIRED"){
+                updateGridList(function(){
+                    $.getJSON(url, function(retried){
+                        if (retried.status !== "OK"){
+                            onFailure(retried);
+                            return;
+                        }
+                        onSuccess(retried);
+                    });
+                });
+                return;
+            }
+            if (data.status !== "OK"){
+                onFailure(data);
+                return;
+            }
+            onSuccess(data);
+        });
+    }
     function selectedGridChanged(el){
         selectedGrid = Number(el.value);
+        selectedCPU = "";
+        cpuForJob = "";
+        globalCPUList = {};
         document.getElementById('thisgridbydefault').disabled = false;
         document.getElementById('trackthisgrid').disabled = false;
         if (settings.defaultGrid != -1 && settings.defaultGrid == selectedGrid) {
@@ -730,33 +796,36 @@
         updateGridList();
     }
     function isValidCPUForOrder(cluster) {
-        if (!cluster['finalOutput']) return true;
-        if (currentJob.itemHash != cluster['finalOutput']['hashcode']) return false;
+        if (currentJob.bytesTotal < 0) return false;
+        // An idle CPU still has to hold the whole plan. Only the merge case used to be measured, so a
+        // too-small idle CPU passed here and AE2 refused the job afterwards without saying anything.
+        // isBusy is the flag the server actually reports; finalOutput is only filled in when busy.
+        if (!cluster['isBusy']) return cluster['availableStorage'] >= currentJob.bytesTotal;
+        if (!cluster['finalOutput']) return false;
+        if (!isUsableItemKey(currentJob.itemKey) || !isUsableItemKey(cluster['finalOutput']['itemKey'])
+            || currentJob.itemKey !== cluster['finalOutput']['itemKey']) return false;
         if (cluster['usedStorage'] == -1) return false;
         return cluster['availableStorage'] >= cluster['usedStorage'] + currentJob.bytesTotal;
     }
     function updateCPUListForJob() {
+        if (currentJob.bytesTotal < 0) return;
         let html = "";
+        // Empty means a new plan may select a default; null requires a new user choice after invalidation.
+        if (cpuForJob && (!globalCPUList[cpuForJob] || !isValidCPUForOrder(globalCPUList[cpuForJob])))
+            cpuForJob = null;
         for (let key in globalCPUList){
             let cluster = globalCPUList[key];
-            html += "<button onclick='selectCPUForJob(this);' name='" + key + "' class='";
-            if (cluster['finalOutput'])
-            {
-                if (cluster['usedStorage'] != -1 && currentJob.itemHash == cluster['finalOutput']['hashcode'] && cluster['availableStorage'] >= cluster['usedStorage'] + currentJob.bytesTotal){
-                    html += "mergable";
-                    if (!globalCPUList[cpuForJob])
-                        cpuForJob = key;
-                }
-                else
-                    html += "invalid";
-            }
-            else {
-                if (!globalCPUList[cpuForJob])
-                    cpuForJob = key;
-            }
+            let valid = isValidCPUForOrder(cluster);
+            if (valid && cpuForJob === "")
+                cpuForJob = key;
+            html += "<button onclick='selectCPUForJob(this);' name='" + escapeCPUText(key) + "' class='";
+            if (!valid)
+                html += "invalid";
+            else if (cluster['isBusy'])
+                html += "mergable";
             if (cpuForJob == key)
                 html += " selected";
-            html += "'>" + key;
+            html += "'>" + escapeCPUText(cluster.name);
             if (cluster['finalOutput'])
                 html += " - " + formatItemName(cluster['finalOutput'], false) + " x" + cluster['finalOutput']['quantity'];
             if (cluster['usedStorage'] && cluster['usedStorage'] != -1){
@@ -778,6 +847,7 @@
         updateCPUListForJob();
     }
     function selectCPU(el) {
+        if (!globalCPUList[el.name]) return;
         selectedCPU = el.name;
         displayCPUList();
         displayCPUDetails();
@@ -814,17 +884,24 @@
                 continue;
             let imgSrc = getIcon(item);
             if (imgSrc === null){
-                itemsNoIcon.push(item);
+                if (isUsableItemKey(item['itemKey'])) itemsNoIcon.push(item);
                 imgSrc = '';
             }
             else {
                 imgSrc = "data:image/png;base64," + imgSrc;
             }
+            let orderAction = '';
+            if (item['craftable']) {
+                if (isUsableItemKey(item['itemKey']))
+                    orderAction = '<br><button onclick="beginOrderingItem(\'' + item['itemKey'] + '\');">order</button>';
+                else
+                    orderAction = '<br><span>Ordering unavailable</span>';
+            }
             if (settings.showItemIcon){
-                html += "<td class='storage'>" + formatItemName(item) + "<img src='" + imgSrc + "' /><br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+                html += "<td class='storage'>" + formatItemName(item) + "<img src='" + imgSrc + "' /><br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
             }
             else {
-                html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + (item['craftable'] ? '<br><button onclick="beginOrderingItem(' + item['hashcode'] + ');">order</button>' : '') + "</td>";
+                html += "<td class='storage'>" + formatItemName(item) + "<br>Stored: " + formatNumber(item['quantity']) + orderAction + "</td>";
             }
             grid_i++;
             if(grid_i == grid_i_max){
@@ -861,13 +938,8 @@
             return;
         let message = "Asking for tracking history list...";
         pushLoadingScreen(message);
-        $.getJSON('trackinghistory?grid=' + selectedGrid, function(data){
+        getJSONWithGridRefresh('trackinghistory?grid=' + selectedGrid, function(data){
             console.log(data);
-            if(data.status !== "OK"){
-                showAlert(data.status + ": " + data.data);
-                popLoadingScreen(message);
-                return;
-            }
             data = data.data;
             let html = "<table>";
             for (let i = 0; i < data.length; i++){
@@ -887,6 +959,9 @@
             document.getElementById("terminalHistoryHeaderText").innerHTML = "Tracking history";
             document.getElementById("terminalHistoryHeaderRefresh").innerHTML = "Refresh";
             document.getElementById("terminalHistoryDetails").innerHTML = "...";
+            popLoadingScreen(message);
+        }, function(data){
+            showAlert(data.status + ": " + data.data);
             popLoadingScreen(message);
         });
     }
@@ -1063,13 +1138,8 @@
         isInterfaceChartInitialized = false;
         isItemChartInitialized = false;
         pushLoadingScreen(message);
-        $.getJSON('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
+        getJSONWithGridRefresh('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
             console.log(data);
-            if(data.status !== "OK"){
-                showAlert(data.status + ": " + data.data);
-                popLoadingScreen(message);
-                return;
-            }
             data = data.data;
 
             let html = "<button onclick='showInterfaceShare();' id='toggleInterfaceShare' style='width: 90%; font-size: 110%; margin: 10px 5%;'>Show interface usage chart</button><canvas id='interfaceShareChart' style='width:100%;max-width:100%;display:none;'></canvas>";
@@ -1116,27 +1186,46 @@
             interfaceShareData = data['interfaceShare'];
 
             popLoadingScreen(message);
+        }, function(data){
+            showAlert(data.status + ": " + data.data);
+            popLoadingScreen(message);
         });
     }
-    function beginOrderingItem(hashcode){
+    function isUsableItemKey(itemKey) {
+        // The last Base64URL character contains only two data bits for a 128-bit key.
+        return typeof itemKey === 'string' && /^[A-Za-z0-9_-]{21}[AQgw]$/.test(itemKey);
+    }
+    function beginOrderingItem(itemKey){
         if (selectedGrid == -1)
             return;
-        console.log(hashcode);
+        if (!isUsableItemKey(itemKey)) {
+            showAlert("Item details are unavailable. Refresh the item list before ordering.");
+            return;
+        }
         let answer = window.prompt("How much to order?", "1");
         if (answer === null) // cancelled
             return;
         let quantity = Number(answer);
-        if (quantity == null || quantity == NaN || quantity <= 0 || quantity > Math.pow(2,31)-1){
+        // Number.isInteger rejects NaN, fractions and Infinity in one go. The old check compared against
+        // NaN with ==, which is always false, so anything non-numeric slipped through and was sent to the
+        // server as the literal "NaN".
+        // The ceiling is JavaScript's own, not the server's: it accepts a long, but a Number cannot hold
+        // an exact integer past MAX_SAFE_INTEGER, so a bigger figure would quietly become a different one.
+        if (!Number.isInteger(quantity) || quantity <= 0 || quantity > Number.MAX_SAFE_INTEGER){
+            showAlert("Enter a whole number between 1 and " + Number.MAX_SAFE_INTEGER + ".");
             return;
         }
         else {
             document.getElementById('terminalCPUListForJob').innerHTML = "...";
             let message = "Sending order...";
             pushLoadingScreen(message);
-            $.getJSON('order?grid=' + selectedGrid + '&item=' + hashcode + "&quantity=" + quantity, function(data){
+            $.getJSON('order?grid=' + selectedGrid + '&itemKey=' + encodeURIComponent(itemKey) + "&quantity=" + quantity, function(data){
                 console.log(data);
                 if(data.status !== "OK"){
-                    showAlert(data.status + ": " + data.data);
+                    if (data.status === "ITEM_IDENTITY_UNKNOWN")
+                        showAlert("Item details expired. Refresh the item list and place the order again.");
+                    else
+                        showAlert(data.status + ": " + data.data);
                     popLoadingScreen(message);
                     return;
                 }
@@ -1147,13 +1236,17 @@
                     document.getElementById("terminalJobHeaderText").innerHTML = "Calculating, please wait...";
                     cpuForJob = "";
                     currentJob.id = data['jobID'];
-                    currentJob.itemHash = hashcode;
+                    currentJob.bytesTotal = -1;
+                    currentJob.itemKey = itemKey;
                     setTimeout(updateCraftingPlan, 1000);
                 }
                 else{
                     //setCurrentScreen(0);
                 }
                 popLoadingScreen(message);
+            }).fail(function() {
+                popLoadingScreen(message);
+                showAlert("The order response was lost. Check the crafting jobs before placing another order.");
             });
         }
     }
@@ -1245,11 +1338,23 @@
         if (currentWindow != 2){
             return;
         }
+        // The selection is only as fresh as the last CPU list, and nothing validated it here before.
+        let cpu = globalCPUList[cpuForJob];
+        if (!cpu || !isValidCPUForOrder(cpu)){
+            showAlert("Select a crafting CPU large enough for this plan.");
+            return;
+        }
         let message = "Submitting job...";
         pushLoadingScreen(message);
         $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&submit" + "&cpu=" + encodeURIComponent(cpuForJob).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
             if (data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
+                if (data.status === "CPU_NOT_FOUND") {
+                    cpuForJob = null;
+                    popLoadingScreen(message);
+                    updateCPUList();
+                    return;
+                }
             }
             popLoadingScreen(message);
             setCurrentScreen(0);
@@ -1260,12 +1365,13 @@
     function cancelJobOnCPU(selectedCPU){
         if (selectedGrid == -1)
             return;
-        if (selectedCPU == ""){
+        if (!selectedCPU || !globalCPUList[selectedCPU]){
             return;
         }
         let message = "Cancelling job...";
         pushLoadingScreen(message);
         $.getJSON('cancelcpu?grid=' + selectedGrid + '&cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+            if (data.status !== "OK") showAlert(data.status + ": " + data.data);
             updateCPUList();
             refreshTerminal();
             popLoadingScreen(message);
@@ -1273,7 +1379,8 @@
     }
 
     function getIcon(item) {
-        let data = localStorage.getItem("itemIcon" + item['hashcode']);
+        if (!isUsableItemKey(item['itemKey'])) return null;
+        let data = localStorage.getItem("itemIcon" + item['itemKey']);
         if (data === null)
             return null;
         return data;
@@ -1282,7 +1389,7 @@
     function fetchIcons(items) {
         let par = '';
         for(let i = 0; i < items.length; i++){
-            par += items[i]['hashcode'] + ',';
+            par += items[i]['itemKey'] + ',';
         }
         $.getJSON('icon?items=' + par, function(data){
             if (data.status !== "OK"){
@@ -1293,7 +1400,7 @@
             console.log(data);
             let items = data;
             for(let i = 0; i < items.length; i++){
-                localStorage.setItem("itemIcon" + items[i]['hashcode'], items[i]['pngData']);
+                localStorage.setItem("itemIcon" + items[i]['itemKey'], items[i]['pngData']);
             }
             refreshDisplay();
         });

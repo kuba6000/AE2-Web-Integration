@@ -5,9 +5,10 @@ import java.util.HashSet;
 import java.util.Map;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.jetbrains.annotations.NotNull;
 
-import pl.kuba6000.ae2webintegration.core.AE2JobTracker;
-import pl.kuba6000.ae2webintegration.core.interfaces.IItemStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 public class JSON_CompactedJobTrackingInfo {
 
@@ -35,7 +36,7 @@ public class JSON_CompactedJobTrackingInfo {
         public ArrayList<timingClass> timings = new ArrayList<>();
     }
 
-    public IItemStack finalOutput;
+    public @NotNull JSON_Stack finalOutput;
     public long timeStarted;
     public long timeDone;
     public boolean wasCancelled;
@@ -59,18 +60,20 @@ public class JSON_CompactedJobTrackingInfo {
         this.timeDone = info.timeDone;
         long elapsed = this.timeDone - this.timeStarted;
         this.wasCancelled = info.wasCancelled;
-        for (Map.Entry<IItemStack, Long> entry : info.timeSpentOn.entrySet()) {
-            IItemStack stack = entry.getKey();
+        for (Map.Entry<IAEKey, Long> entry : info.timeSpentOn.entrySet()) {
+            IAEKey key = entry.getKey();
             long spent = entry.getValue();
             CompactedTrackingGSONItem item = new CompactedTrackingGSONItem();
-            item.itemid = stack.web$getItemID();
-            item.itemname = stack.web$getDisplayName();
+            item.itemid = key.web$getItemID();
+            item.itemname = key.web$getDisplayName();
             item.timeSpentOn = spent;
-            item.craftedTotal = info.craftedTotal.get(stack);
-            item.shareInCraftingTime = info.getShareInCraftingTime(stack);
-            item.shareInCraftingTimeCombined = Math.min(((double) item.timeSpentOn) / (double) elapsed, 1d);
-            item.craftsPerSec = (double) item.craftedTotal / (item.timeSpentOn / 1000d);
-            for (Pair<Long, Long> longLongPair : info.itemShare.get(stack)) {
+            item.craftedTotal = info.craftedTotal.get(key);
+            item.shareInCraftingTime = info.getShareInCraftingTime(key);
+            item.shareInCraftingTimeCombined = elapsed > 0
+                ? Math.min(((double) item.timeSpentOn) / (double) elapsed, 1d)
+                : 0d;
+            item.craftsPerSec = item.timeSpentOn > 0 ? (double) item.craftedTotal / (item.timeSpentOn / 1000d) : 0d;
+            for (Pair<Long, Long> longLongPair : info.itemShare.get(key)) {
                 item.timings.add(new timingClass(longLongPair.getKey(), longLongPair.getValue()));
             }
             items.add(item);
