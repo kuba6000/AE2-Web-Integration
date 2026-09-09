@@ -1,6 +1,5 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import java.math.BigInteger;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
@@ -8,12 +7,17 @@ import java.security.spec.InvalidKeySpecException;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
+import com.google.common.base.Ascii;
+import com.google.common.io.BaseEncoding;
+
 public class PasswordHelper {
 
     private static final int ITERATIONS = 65536;
     private static final int HASH_LENGTH_BITS = 512;
     private static final int SALT_BYTES = 16;
     private static final int DEFAULT_PASSWORD_LENGTH = 16;
+    private static final BaseEncoding HEX = BaseEncoding.base16()
+        .lowerCase();
 
     public static String generateStrongPasswordHash(String password)
         throws NoSuchAlgorithmException, InvalidKeySpecException {
@@ -25,7 +29,7 @@ public class PasswordHelper {
 
         byte[] hash = skf.generateSecret(spec)
             .getEncoded();
-        return ITERATIONS + ":" + toHex(salt) + ":" + toHex(hash);
+        return ITERATIONS + ":" + HEX.encode(salt) + ":" + HEX.encode(hash);
     }
 
     private static byte[] getSalt() throws NoSuchAlgorithmException {
@@ -35,29 +39,16 @@ public class PasswordHelper {
         return salt;
     }
 
-    @SuppressWarnings("PMD.AvoidMagicNumbers") // Hexadecimal encoding uses radix 16.
-    private static String toHex(byte[] array) {
-        BigInteger bi = new BigInteger(1, array);
-        String hex = bi.toString(16);
-
-        int paddingLength = (array.length * 2) - hex.length();
-        if (paddingLength > 0) {
-            return String.format("%0" + paddingLength + "d", 0) + hex;
-        } else {
-            return hex;
-        }
-    }
-
     public static boolean validatePassword(String originalPassword, String storedPassword)
         throws NoSuchAlgorithmException, InvalidKeySpecException {
         String[] parts = storedPassword.split(":");
         int iterations = Integer.parseInt(parts[0]);
 
-        byte[] salt = fromHex(parts[1]);
-        byte[] hash = fromHex(parts[2]);
+        byte[] salt = HEX.decode(Ascii.toLowerCase(parts[1]));
+        byte[] hash = HEX.decode(Ascii.toLowerCase(parts[2]));
 
         // Key length is in bits.
-        PBEKeySpec spec = new PBEKeySpec(originalPassword.toCharArray(), salt, iterations, hash.length * 8); // NOPMD
+        PBEKeySpec spec = new PBEKeySpec(originalPassword.toCharArray(), salt, iterations, hash.length * Byte.SIZE);
         SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
         byte[] testHash = skf.generateSecret(spec)
             .getEncoded();
@@ -67,15 +58,6 @@ public class PasswordHelper {
             diff |= hash[i] ^ testHash[i];
         }
         return diff == 0;
-    }
-
-    @SuppressWarnings("PMD.AvoidMagicNumbers") // Hexadecimal decoding uses radix 16.
-    private static byte[] fromHex(String hex) {
-        byte[] bytes = new byte[hex.length() / 2];
-        for (int i = 0; i < bytes.length; i++) {
-            bytes[i] = (byte) Integer.parseInt(hex.substring(2 * i, 2 * i + 2), 16);
-        }
-        return bytes;
     }
 
     /**

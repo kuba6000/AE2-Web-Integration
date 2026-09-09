@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -271,7 +272,7 @@ final class TestGridFixtures {
 
         @Override
         public int getResponseCode() {
-            return 200;
+            return HttpURLConnection.HTTP_OK;
         }
 
         @Override

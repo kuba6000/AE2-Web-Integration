@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -99,9 +100,9 @@ public class GetCPU extends ISyncedRequest {
                     compactedItem.shareInCraftingTimeCombined = clusterData.timeElapsed > 0
                         ? Math.min(((double) compactedItem.timeSpentCrafting) / (double) clusterData.timeElapsed, 1d)
                         : 0d;
-                    // Milliseconds to fractional seconds.
                     compactedItem.craftsPerSec = compactedItem.timeSpentCrafting > 0
-                        ? (double) compactedItem.craftedTotal / (compactedItem.timeSpentCrafting / 1000d) // NOPMD
+                        ? (double) compactedItem.craftedTotal
+                            / (compactedItem.timeSpentCrafting / (double) TimeUnit.SECONDS.toMillis(1))
                         : 0d;
                 }
             }

@@ -2,10 +2,12 @@ package pl.kuba6000.ae2webintegration.core.discord;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -43,18 +45,16 @@ public class DiscordManager extends Thread {
         toPush.offer(message);
     }
 
-    @SuppressWarnings("PMD.AvoidMagicNumbers") // Standard conversions between milliseconds, seconds, minutes, hours and
-                                               // days.
     public static String formatDuration(long durationMillis) {
         if (durationMillis < FRACTIONAL_SECONDS_THRESHOLD_MILLIS) {
-            return durationMillis / 1000d + "s";
+            return durationMillis / (double) TimeUnit.SECONDS.toMillis(1) + "s";
         }
 
-        long totalSeconds = Math.round(durationMillis / 1000d);
-        long days = totalSeconds / 86400L;
-        long hours = totalSeconds % 86400L / 3600L;
-        long minutes = totalSeconds % 3600L / 60L;
-        long seconds = totalSeconds % 60L;
+        long totalSeconds = Math.round(durationMillis / (double) TimeUnit.SECONDS.toMillis(1));
+        long days = TimeUnit.SECONDS.toDays(totalSeconds);
+        long hours = TimeUnit.SECONDS.toHours(totalSeconds % TimeUnit.DAYS.toSeconds(1));
+        long minutes = TimeUnit.SECONDS.toMinutes(totalSeconds % TimeUnit.HOURS.toSeconds(1));
+        long seconds = totalSeconds % TimeUnit.MINUTES.toSeconds(1);
 
         if (days > 0L) return days + "d " + hours + "h " + minutes + "m " + seconds + "s";
         if (hours > 0L) return hours + "h " + minutes + "m " + seconds + "s";
@@ -63,8 +63,7 @@ public class DiscordManager extends Thread {
     }
 
     public static boolean shouldPostCraftingNotification(long durationMillis, long craftedAmount) {
-        // Seconds to milliseconds.
-        long minimumDurationMillis = Config.DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS() * 1000L; // NOPMD
+        long minimumDurationMillis = TimeUnit.SECONDS.toMillis(Config.DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS());
         return durationMillis >= minimumDurationMillis && craftedAmount >= Config.DISCORD_MINIMUM_CRAFTING_AMOUNT();
     }
 
@@ -126,7 +125,8 @@ public class DiscordManager extends Thread {
             }
 
             int code;
-            if ((code = connection.getResponseCode()) != 200 && code != 204) { // NOPMD - HTTP OK and No Content.
+            if ((code = connection.getResponseCode()) != HttpURLConnection.HTTP_OK
+                && code != HttpURLConnection.HTTP_NO_CONTENT) {
                 LOG.error("Error, response code: {}", code);
             }
         } catch (IOException | IllegalArgumentException e) {

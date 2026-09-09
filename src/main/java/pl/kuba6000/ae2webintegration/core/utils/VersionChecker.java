@@ -71,7 +71,7 @@ public class VersionChecker {
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(5000);
             conn.setRequestProperty("User-Agent", "AE2-Web-Integration");
-            if (conn.getResponseCode() == 200) {
+            if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
                 try (BufferedReader buf = new BufferedReader(
                     new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
                     JsonElement element = new JsonParser().parse(buf);

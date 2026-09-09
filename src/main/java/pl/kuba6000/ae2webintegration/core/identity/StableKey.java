@@ -8,6 +8,7 @@ import java.util.function.Consumer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.google.common.base.Utf8;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
@@ -61,30 +62,9 @@ public final class StableKey {
 
     /** Big-endian length-prefixed strict UTF-8, independent of native modified-UTF serializers. */
     public static void writeText(@NotNull PrimitiveSink output, @NotNull String value) {
-        int length = utf8Length(value);
+        int length = Utf8.encodedLength(value);
         output.putInt(Integer.reverseBytes(length));
         output.putString(value, StandardCharsets.UTF_8);
-    }
-
-    // UTF-8 uses 1/2/3 bytes below U+0080/U+0800/U+10000; a surrogate pair needs 4 bytes.
-    @SuppressWarnings("PMD.AvoidMagicNumbers")
-    private static int utf8Length(@NotNull String value) {
-        long length = 0;
-        for (int i = 0; i < value.length(); i++) {
-            char character = value.charAt(i);
-            if (Character.isHighSurrogate(character)) {
-                if (++i == value.length() || !Character.isLowSurrogate(value.charAt(i))) {
-                    throw new IllegalArgumentException("Malformed Unicode in canonical identity");
-                }
-                length += 4;
-            } else if (Character.isLowSurrogate(character)) {
-                throw new IllegalArgumentException("Malformed Unicode in canonical identity");
-            } else {
-                length += character < 0x80 ? 1 : character < 0x800 ? 2 : 3;
-            }
-        }
-        if (length > Integer.MAX_VALUE) throw new IllegalArgumentException("Identity text is too long");
-        return (int) length;
     }
 
     @Override
