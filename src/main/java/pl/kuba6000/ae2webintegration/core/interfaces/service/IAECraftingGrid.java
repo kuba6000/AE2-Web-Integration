@@ -8,7 +8,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 
 public interface IAECraftingGrid {
 
@@ -22,8 +21,6 @@ public interface IAECraftingGrid {
     Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey key, long amount);
 
     String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower, IAEGrid grid);
-
-    ICraftingMediumTracker web$getCraftingProviders();
 
     Set<IAEKey> web$getCraftables(Function<IAEKey, Boolean> filter);
 

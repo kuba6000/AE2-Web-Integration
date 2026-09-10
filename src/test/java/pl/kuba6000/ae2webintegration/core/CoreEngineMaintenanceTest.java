@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class CoreEngineMaintenanceTest {
 
     private static final long GRID_KEY = 900_301L;

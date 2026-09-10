@@ -8,16 +8,16 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class CraftingPlanRegistryTest {
 
     private static final class CompletedRecordingFuture implements Future<IAECraftingJob> {
@@ -41,13 +41,12 @@ class CraftingPlanRegistryTest {
         }
 
         @Override
-        public IAECraftingJob get() throws InterruptedException, ExecutionException {
+        public IAECraftingJob get() {
             return null;
         }
 
         @Override
-        public IAECraftingJob get(long timeout, TimeUnit unit)
-            throws InterruptedException, ExecutionException, TimeoutException {
+        public IAECraftingJob get(long timeout, @NotNull TimeUnit unit) {
             return null;
         }
     }

@@ -3,7 +3,7 @@ package pl.kuba6000.ae2webintegration.core.api;
 /**
  * Platform-agnostic config builder. Interface layer provides a real implementation
  * wrapping NeoForge/Forge ModConfigSpec.Builder (or equivalent).
- *
+ * <p>
  * Core uses this solely inside {@code ConfigBootstrap.init(IConfigBuilder)} to
  * define all config keys and obtain their {@link IConfigValue} handles.
  */

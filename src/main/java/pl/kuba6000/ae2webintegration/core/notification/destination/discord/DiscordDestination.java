@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.notification.destination.discord;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
@@ -22,6 +23,13 @@ public class DiscordDestination implements INotificationDestination {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration" + " - DISCORD INTEGRATION");
 
+    public static final int COLOR_TURQUOISE = 0x1ABC9C;
+    public static final int COLOR_RED = 0xED4245;
+    public static final int COLOR_GREEN = 0x57F287;
+    public static final int COLOR_YELLOW = 0xEDEA42;
+
+    private static final int WEBHOOK_TIMEOUT_MILLIS = 10_000;
+
     @Override
     public boolean isUsable() {
         return !Config.DISCORD_WEBHOOK()
@@ -35,6 +43,9 @@ public class DiscordDestination implements INotificationDestination {
 
     @Override
     public void sendNotification(IMessage message) {
+        String webhook = Config.DISCORD_WEBHOOK();
+        if (webhook.isEmpty()) return;
+
         DiscordPayload payload = null;
         if (message instanceof CraftingMessage) {
             CraftingMessage craftingMessage = (CraftingMessage) message;
@@ -47,17 +58,17 @@ public class DiscordDestination implements INotificationDestination {
                     + (craftingMessage.isWasCancelled() ? "cancelled" : "completed")
                     + "!\nIt took "
                     + craftingMessage.getDurationString(),
-                craftingMessage.isWasCancelled() ? 15548997 : 5763719);
+                craftingMessage.isWasCancelled() ? COLOR_RED : COLOR_GREEN);
         } else if (message instanceof ErrorMessage) {
             ErrorMessage errorMessage = (ErrorMessage) message;
             ErrorMessage.Severity severity = errorMessage.getSeverity();
             int color = 0;
             switch (severity) {
                 case ERROR:
-                    color = 15548997;
+                    color = COLOR_RED;
                     break;
                 case WARNING:
-                    color = 15592002;
+                    color = COLOR_YELLOW;
                     break;
             };
             if (color != 0) {
@@ -70,11 +81,18 @@ public class DiscordDestination implements INotificationDestination {
         if (payload == null) return;
         JsonObject json = payload.serializePayload();
 
-        URL url = null;
+        HttpsURLConnection connection = null;
         try {
-            url = new URL(Config.DISCORD_WEBHOOK());
+            URL url = new URL(webhook);
 
-            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+            if (!"https".equalsIgnoreCase(url.getProtocol())) {
+                LOG.error("Discord webhook URL must use HTTPS");
+                return;
+            }
+
+            connection = (HttpsURLConnection) url.openConnection();
+            connection.setConnectTimeout(WEBHOOK_TIMEOUT_MILLIS);
+            connection.setReadTimeout(WEBHOOK_TIMEOUT_MILLIS);
             connection.addRequestProperty("Content-Type", "application/json");
             connection.addRequestProperty("User-Agent", "AE2-Web-Integration");
             connection.setDoOutput(true);
@@ -87,11 +105,18 @@ public class DiscordDestination implements INotificationDestination {
             }
 
             int code;
-            if ((code = connection.getResponseCode()) != 200 && code != 204) {
+            if ((code = connection.getResponseCode()) != HttpURLConnection.HTTP_OK
+                && code != HttpURLConnection.HTTP_NO_CONTENT) {
                 LOG.error("Error, response code: {}", code);
             }
-        } catch (IOException e) {
-            // throw new RuntimeException(e);
+        } catch (IOException | IllegalArgumentException e) {
+            // Exception messages may contain the webhook URL, including its secret token.
+            LOG.error(
+                "Discord webhook request failed ({})",
+                e.getClass()
+                    .getSimpleName());
+        } finally {
+            if (connection != null) connection.disconnect();
         }
     }
 }

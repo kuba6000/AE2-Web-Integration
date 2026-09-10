@@ -83,8 +83,9 @@ public class CoreEngine {
                 // server. A runaway handler ending in StackOverflowError should not cost the world, and an
                 // OutOfMemoryError resurfaces at the next allocation regardless.
                 LOG.error(
-                    "Server-thread task " + task.getClass()
-                        .getSimpleName() + " failed",
+                    "Server-thread task {} failed",
+                    task.getClass()
+                        .getSimpleName(),
                     t);
                 task.failIfPending("INTERNAL_ERROR");
             }

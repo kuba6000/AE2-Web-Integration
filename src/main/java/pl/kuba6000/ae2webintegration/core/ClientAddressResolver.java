@@ -16,6 +16,7 @@ import com.google.common.net.InetAddresses;
  * direct peer is a configured trusted proxy. That condition is the entire safety mechanism - do not
  * relax it.
  */
+@SuppressWarnings("UnstableApiUsage")
 public final class ClientAddressResolver {
 
     /** A configured trusted entry: an address plus how many leading bits of it are significant. */
@@ -34,17 +35,17 @@ public final class ClientAddressResolver {
             if (candidate.length != address.length) {
                 return false;
             }
-            int fullBytes = prefixBits / 8;
+            int fullBytes = prefixBits / Byte.SIZE;
             for (int i = 0; i < fullBytes; i++) {
                 if (candidate[i] != address[i]) {
                     return false;
                 }
             }
-            int remainingBits = prefixBits % 8;
+            int remainingBits = prefixBits % Byte.SIZE;
             if (remainingBits == 0) {
                 return true;
             }
-            int mask = 0xFF << (8 - remainingBits);
+            int mask = 0xFF << (Byte.SIZE - remainingBits); // NOPMD - Unsigned byte mask for the CIDR prefix.
             return (candidate[fullBytes] & mask) == (address[fullBytes] & mask);
         }
     }
@@ -95,7 +96,7 @@ public final class ClientAddressResolver {
         if (address == null) {
             return null;
         }
-        int maxBits = address.length * 8;
+        int maxBits = address.length * Byte.SIZE;
         if (prefixBits < 0) {
             prefixBits = maxBits;
         } else if (prefixBits > maxBits) {
@@ -136,12 +137,12 @@ public final class ClientAddressResolver {
      * nothing extra either - anything running on this host can already reach us over loopback.
      */
     private static boolean isSameMachine(InetAddress peer, InetAddress localAddress) {
-        return peer.isLoopbackAddress() || (localAddress != null && peer.equals(localAddress));
+        return peer.isLoopbackAddress() || peer.equals(localAddress);
     }
 
     /**
      * @param peer         the address the TCP connection actually came from
-     * @param localAddress the address the connection arrived on, or {@code null} if unknown
+     * @param localAddress the local destination address, or {@code null} if unknown
      * @param forwardedFor {@code X-Forwarded-For} header values, or {@code null}
      * @param realIp       {@code X-Real-IP} header values, or {@code null}
      * @return the address to treat as the client. Falls back to {@code peer} whenever the headers cannot

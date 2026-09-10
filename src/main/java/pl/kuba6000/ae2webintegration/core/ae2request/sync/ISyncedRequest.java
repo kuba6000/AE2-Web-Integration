@@ -80,8 +80,4 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
         handle(ae);
     }
 
-    @Override
-    public void handle(AE2Controller.RequestContext context) {
-        throw new IllegalArgumentException("ONLY SYNCED");
-    }
 }

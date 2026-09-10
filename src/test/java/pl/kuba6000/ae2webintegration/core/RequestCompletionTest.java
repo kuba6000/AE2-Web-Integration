@@ -18,6 +18,7 @@ import com.google.gson.JsonObject;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class RequestCompletionTest {
 
     private static final class TestRequest extends ISyncedRequest {

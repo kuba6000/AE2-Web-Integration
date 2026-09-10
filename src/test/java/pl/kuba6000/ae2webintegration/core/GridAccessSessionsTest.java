@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import pl.kuba6000.ae2webintegration.core.TestGridFixtures.TestGrid;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class GridAccessSessionsTest {
 
     private static final long T0 = 1_000_000L;

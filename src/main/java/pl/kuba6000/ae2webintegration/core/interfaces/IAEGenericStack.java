@@ -9,6 +9,4 @@ public interface IAEGenericStack {
 
     long web$amount();
 
-    IAEGenericStack web$copy();
-
 }

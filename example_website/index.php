@@ -160,7 +160,7 @@
     <button class='collapsible' id='currentgrid'>No grid selected</button>
     <section style='display: none;'>
         <section style='display: flex; flex-direction: row; flex-wrap: wrap;'>
-            <select id="gridselection" size="5" style="margin-right: 10px; overflow-y: auto;" onchange="selectedGridChanged(this);">
+            <select id="gridselection" aria-label="Select a grid" size="5" style="margin-right: 10px; overflow-y: auto;" onchange="selectedGridChanged(this);">
                 <!-- <option value="1">Grid 1 owned</option>
                 <option value="2">Grid 2 owned</option>
                 <option value="3">Grid 3 owned</option>
@@ -200,7 +200,7 @@
     <section id="terminalwindow">
         <section id="terminalheader">
             <section id="terminalTerminalHeader">
-                Terminal <input type="text" id="searchtext" placeholder="Search string" onkeyup="searchStringChanged(this);">
+                Terminal <input type="text" id="searchtext" aria-label="Search terminal items" placeholder="Search string" onkeyup="searchStringChanged(this);">
                 <button onclick='openCraftingStatus();'>Crafting</button>
                 <button onclick='openCraftingHistory();'>Crafting History</button>
                 <button onclick='refreshTerminal();'>Refresh</button>

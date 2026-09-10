@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import com.google.gson.Gson;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class DimensionalCoordsTest {
 
     @Test

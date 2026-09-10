@@ -1,8 +1,10 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +19,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.sync.Order;
  * {@code ISyncedRequest.init} is called at {@code AE2Controller:488} with no try/catch around it, so a
  * parameter that fails to parse must be answered, never thrown.
  */
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class RequestParameterValidationTest {
 
     private static final long GRID = 10L;
@@ -41,6 +44,19 @@ class RequestParameterValidationTest {
     private static String runSynced(ISyncedRequest request, String query) {
         request.init(TestGridFixtures.context(ME, query));
         return request.getJSON();
+    }
+
+    @Test
+    void queryValuesAreDecodedOnceWithoutCreatingAdditionalParameters() {
+        Map<String, String> params = TestGridFixtures
+            .context(ME, "name=cell%26track%3D1&literalPlus=%2B&percent=%2526&space=two+words")
+            .getGetParams();
+
+        assertEquals(4, params.size());
+        assertEquals("cell&track=1", params.get("name"));
+        assertEquals("+", params.get("literalPlus"));
+        assertEquals("%26", params.get("percent"));
+        assertEquals("two words", params.get("space"));
     }
 
     // --- Order ---

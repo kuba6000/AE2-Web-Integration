@@ -10,10 +10,6 @@ public interface ICraftingCPUCluster {
     @NotNull
     StableKey web$getKey();
 
-    void web$setInternalID(int id);
-
-    boolean web$hasCustomName();
-
     String web$getName();
 
     long web$getAvailableStorage();

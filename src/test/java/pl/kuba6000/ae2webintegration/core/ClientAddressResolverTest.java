@@ -29,7 +29,7 @@ class ClientAddressResolverTest {
     private static final InetAddress PROXY = addr("127.0.0.1");
     private static final InetAddress CLIENT = addr("203.0.113.7");
     private static final InetAddress OUTSIDER = addr("198.51.100.4");
-    /** The address connections arrive on; distinct from every peer below unless a test says otherwise. */
+    /** The local destination address; distinct from every peer below unless a test says otherwise. */
     private static final InetAddress LOCAL = addr("10.9.9.9");
 
     // --- nothing is trusted by default ---

@@ -16,7 +16,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
@@ -106,11 +105,6 @@ class CraftingPlanRequestLifecycleTest {
         public String web$submitJob(IAECraftingJob job, ICraftingCPUCluster target, boolean prioritizePower,
             IAEGrid grid) {
             return submitResult;
-        }
-
-        @Override
-        public ICraftingMediumTracker web$getCraftingProviders() {
-            throw new UnsupportedOperationException();
         }
 
         @Override

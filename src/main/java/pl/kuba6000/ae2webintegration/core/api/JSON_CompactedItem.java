@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.api;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
+@SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class JSON_CompactedItem {
 
     @GSONUtils.SkipGSON

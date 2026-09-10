@@ -38,19 +38,40 @@ version = '1.0-SNAPSHOT'
 
 repositories {
     mavenCentral()
+    maven {
+        url = 'https://files.prismlauncher.org/maven/'
+        content {
+            includeVersion 'org.apache.logging.log4j', 'log4j-api', '2.0-beta9-fixed'
+        }
+        // Prism publishes the patched Minecraft library without a POM, as used by RetroFuturaGradle.
+        metadataSources {
+            artifact()
+        }
+    }
+    maven {
+        url = 'https://nexus.gtnewhorizons.com/repository/public/'
+        content {
+            includeGroup 'com.github.bsideup.jabel'
+        }
+    }
 }
 
 dependencies {
+    annotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
+    testAnnotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
+
     compileOnlyApi 'org.jetbrains:annotations:26.0.2'
     implementation 'com.google.code.gson:gson:2.8.9'
     implementation 'com.google.guava:guava:21.0'
     implementation 'commons-io:commons-io:2.5'
     implementation 'org.apache.commons:commons-lang3:3.5'
     implementation 'club.minnced:discord-webhooks:0.8.2'
-    // Log4j is provided by Minecraft at runtime — implementation for standalone core tests
-    implementation 'org.apache.logging.log4j:log4j-api:2.17.2'
-    implementation 'org.apache.logging.log4j:log4j-core:2.17.2'
+    // Compile against the oldest supported Logger API, matching the patched 1.7.10 dependency.
+    // Minecraft supplies Log4j at runtime; do not publish or bundle this dependency.
+    compileOnly 'org.apache.logging.log4j:log4j-api:2.0-beta9-fixed'
     // Testing
+    testImplementation 'org.apache.logging.log4j:log4j-api:2.17.2'
+    testImplementation 'org.apache.logging.log4j:log4j-core:2.17.2'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
@@ -60,7 +81,10 @@ test {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+    sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
@@ -68,6 +92,8 @@ java {
 // differently depending on the machine that built it.
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    // Jabel enables newer syntax; --release keeps both JDK API usage and bytecode at Java 8.
+    options.release = 8
 }
 
 // This submodule is pure Java (no Minecraft/Forge references).

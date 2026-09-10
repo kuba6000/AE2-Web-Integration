@@ -27,6 +27,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class CoreDataTest {
 
     private static final UUID REGISTERED_UUID = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
@@ -37,7 +38,7 @@ class CoreDataTest {
     File configRoot;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         Config.init(configRoot);
         AE2Controller.serverPlatform = new TestPlatform(configRoot);
         AE2Controller.AE2Interface = new TestAE(42, false);
@@ -62,7 +63,7 @@ class CoreDataTest {
     // --- persistence: a bad file must never cost anyone their account ---
 
     @Test
-    void verifyPasswordReturnsFalseForAKnownPlayerWithNoStoredPassword() throws Exception {
+    void verifyPasswordReturnsFalseForAKnownPlayerWithNoStoredPassword() {
         CoreData.setPassword(REGISTERED_PLAYER, "hash");
         CoreData.Account account = CoreData.getAccount("Player");
         CoreData.setPassword(REGISTERED_PLAYER, "");
@@ -197,13 +198,16 @@ class CoreDataTest {
         return new File(configRoot, "ae2webintegration/webdata.json");
     }
 
+    @SuppressWarnings("ReadWriteStringCanBeUsed") // Files.writeString requires Java 11; tests also target Java 8.
     private void writeDataFile(String content) throws Exception {
         File file = dataFile();
-        file.getParentFile()
-            .mkdirs();
+        Files.createDirectories(
+            file.getParentFile()
+                .toPath());
         Files.write(file.toPath(), content.getBytes(StandardCharsets.UTF_8));
     }
 
+    @SuppressWarnings("ReadWriteStringCanBeUsed") // Files.readString requires Java 11; tests also target Java 8.
     private String readDataFile() throws Exception {
         return new String(Files.readAllBytes(dataFile().toPath()), StandardCharsets.UTF_8);
     }
@@ -254,23 +258,14 @@ class CoreDataTest {
 
         @Override
         public IAEPlayerData web$getPlayerData() {
-            return new IAEPlayerData() {
-
-                @Override
-                public PlayerIdentity web$getPlayerProfile(int playerId) {
-                    return null;
+            return identity -> {
+                if (throwOnPlayerLookup) {
+                    throw new IllegalStateException("player lookup failed");
                 }
-
-                @Override
-                public int web$getPlayerId(PlayerIdentity identity) {
-                    if (throwOnPlayerLookup) {
-                        throw new IllegalStateException("player lookup failed");
-                    }
-                    if (REGISTERED_UUID.equals(identity.uuid)) {
-                        return playerId;
-                    }
-                    return OTHER_UUID.equals(identity.uuid) ? 43 : -1;
+                if (REGISTERED_UUID.equals(identity.uuid)) {
+                    return playerId;
                 }
+                return OTHER_UUID.equals(identity.uuid) ? 43 : -1;
             };
         }
     }

@@ -6,6 +6,8 @@ import com.google.gson.JsonObject;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationPayload;
 
+import static pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination.COLOR_TURQUOISE;
+
 public class DiscordPayload implements INotificationPayload {
 
     String title;
@@ -19,7 +21,7 @@ public class DiscordPayload implements INotificationPayload {
     }
 
     public DiscordPayload(String title, String description) {
-        this(title, description, 1752220);
+        this(title, description, COLOR_TURQUOISE);
     }
 
     @Override

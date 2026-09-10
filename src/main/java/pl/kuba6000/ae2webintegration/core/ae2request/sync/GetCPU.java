@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -20,6 +21,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 public class GetCPU extends ISyncedRequest {
 
+    @SuppressWarnings("unused") // Gson reads the fields reflectively.
     private static class JSON_ClusterData {
 
         public long size;
@@ -99,7 +101,8 @@ public class GetCPU extends ISyncedRequest {
                         ? Math.min(((double) compactedItem.timeSpentCrafting) / (double) clusterData.timeElapsed, 1d)
                         : 0d;
                     compactedItem.craftsPerSec = compactedItem.timeSpentCrafting > 0
-                        ? (double) compactedItem.craftedTotal / (compactedItem.timeSpentCrafting / 1000d)
+                        ? (double) compactedItem.craftedTotal
+                            / (compactedItem.timeSpentCrafting / (double) TimeUnit.SECONDS.toMillis(1))
                         : 0d;
                 }
             }

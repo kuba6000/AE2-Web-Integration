@@ -1,6 +1,5 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import java.math.BigInteger;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
@@ -8,41 +7,36 @@ import java.security.spec.InvalidKeySpecException;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
+import com.google.common.base.Ascii;
+import com.google.common.io.BaseEncoding;
+
 public class PasswordHelper {
 
     private static final int ITERATIONS = 65536;
-    private static final int HASH_LENGTH = 512; // Length of the hash in bytes
+    private static final int HASH_LENGTH_BITS = 512;
+    private static final int SALT_BYTES = 16;
+    private static final int DEFAULT_PASSWORD_LENGTH = 16;
+    private static final BaseEncoding HEX = BaseEncoding.base16()
+        .lowerCase();
 
     public static String generateStrongPasswordHash(String password)
         throws NoSuchAlgorithmException, InvalidKeySpecException {
         char[] chars = password.toCharArray();
         byte[] salt = getSalt();
 
-        PBEKeySpec spec = new PBEKeySpec(chars, salt, ITERATIONS, HASH_LENGTH);
+        PBEKeySpec spec = new PBEKeySpec(chars, salt, ITERATIONS, HASH_LENGTH_BITS);
         SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
 
         byte[] hash = skf.generateSecret(spec)
             .getEncoded();
-        return ITERATIONS + ":" + toHex(salt) + ":" + toHex(hash);
+        return ITERATIONS + ":" + HEX.encode(salt) + ":" + HEX.encode(hash);
     }
 
     private static byte[] getSalt() throws NoSuchAlgorithmException {
         SecureRandom sr = SecureRandom.getInstance("SHA1PRNG");
-        byte[] salt = new byte[16];
+        byte[] salt = new byte[SALT_BYTES];
         sr.nextBytes(salt);
         return salt;
-    }
-
-    private static String toHex(byte[] array) throws NoSuchAlgorithmException {
-        BigInteger bi = new BigInteger(1, array);
-        String hex = bi.toString(16);
-
-        int paddingLength = (array.length * 2) - hex.length();
-        if (paddingLength > 0) {
-            return String.format("%0" + paddingLength + "d", 0) + hex;
-        } else {
-            return hex;
-        }
     }
 
     public static boolean validatePassword(String originalPassword, String storedPassword)
@@ -50,10 +44,11 @@ public class PasswordHelper {
         String[] parts = storedPassword.split(":");
         int iterations = Integer.parseInt(parts[0]);
 
-        byte[] salt = fromHex(parts[1]);
-        byte[] hash = fromHex(parts[2]);
+        byte[] salt = HEX.decode(Ascii.toLowerCase(parts[1]));
+        byte[] hash = HEX.decode(Ascii.toLowerCase(parts[2]));
 
-        PBEKeySpec spec = new PBEKeySpec(originalPassword.toCharArray(), salt, iterations, hash.length * 8);
+        // Key length is in bits.
+        PBEKeySpec spec = new PBEKeySpec(originalPassword.toCharArray(), salt, iterations, hash.length * Byte.SIZE);
         SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
         byte[] testHash = skf.generateSecret(spec)
             .getEncoded();
@@ -63,14 +58,6 @@ public class PasswordHelper {
             diff |= hash[i] ^ testHash[i];
         }
         return diff == 0;
-    }
-
-    private static byte[] fromHex(String hex) throws NoSuchAlgorithmException {
-        byte[] bytes = new byte[hex.length() / 2];
-        for (int i = 0; i < bytes.length; i++) {
-            bytes[i] = (byte) Integer.parseInt(hex.substring(2 * i, 2 * i + 2), 16);
-        }
-        return bytes;
     }
 
     /**
@@ -83,9 +70,14 @@ public class PasswordHelper {
      * file as the admin password, and java.util.Random derives its 48-bit seed from the clock.
      */
     public static String generateDefaultPassword() {
-        return new SecureRandom().ints(48, 122 + 1)
-            .filter(i -> (i <= 57 || i >= 65) && (i <= 90 || i >= 97))
-            .limit(16)
+        return generateToken(DEFAULT_PASSWORD_LENGTH);
+    }
+
+    /** Generates a cryptographically random ASCII alphanumeric token of the requested length. */
+    public static String generateToken(int length) {
+        return new SecureRandom().ints('0', 'z' + 1)
+            .filter(i -> (i <= '9' || i >= 'A') && (i <= 'Z' || i >= 'a'))
+            .limit(length)
             .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
             .toString();
     }

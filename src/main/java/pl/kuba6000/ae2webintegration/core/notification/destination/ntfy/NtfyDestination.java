@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.notification.destination.ntfy;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -24,6 +25,8 @@ import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 public class NtfyDestination implements INotificationDestination {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration" + " - NTFY INTEGRATION");
+
+    private static final int WEBHOOK_TIMEOUT_MILLIS = 10_000;
 
     @Override
     public boolean isUsable() {
@@ -88,13 +91,15 @@ public class NtfyDestination implements INotificationDestination {
         if (payload == null) return;
         JsonObject json = payload.serializePayload();
 
-        URL url = null;
+        HttpsURLConnection connection = null;
         try {
-            url = new URL(Config.NTFY_HOST());
+            URL url = new URL(Config.NTFY_HOST());
             String username = Config.NTFY_USER();
             String password = Config.NTFY_PASSWORD();
 
-            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+            connection = (HttpsURLConnection) url.openConnection();
+            connection.setConnectTimeout(WEBHOOK_TIMEOUT_MILLIS);
+            connection.setReadTimeout(WEBHOOK_TIMEOUT_MILLIS);
             if (!username.isEmpty() && !password.isEmpty()) {
                 String auth = username + ":" + password;
                 byte[] encodedAuth = Base64.getEncoder()
@@ -114,11 +119,18 @@ public class NtfyDestination implements INotificationDestination {
             }
 
             int code;
-            if ((code = connection.getResponseCode()) != 200 && code != 204) {
+            if ((code = connection.getResponseCode()) != HttpURLConnection.HTTP_OK
+                && code != HttpURLConnection.HTTP_NO_CONTENT) {
                 LOG.error("Error, response code: {}", code);
             }
-        } catch (IOException e) {
-            // throw new RuntimeException(e);
+        } catch (IOException | IllegalArgumentException e) {
+            // Exception messages may contain the webhook URL, including its secret token.
+            LOG.error(
+                "Ntfy request failed ({})",
+                e.getClass()
+                    .getSimpleName());
+        } finally {
+            if (connection != null) connection.disconnect();
         }
     }
 }

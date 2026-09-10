@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -33,6 +34,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
  * Shared fakes for grid/authorization tests. Deliberately one copy rather than the per-test-class
  * duplication used elsewhere in this source set - these fakes are used by three test classes.
  */
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 final class TestGridFixtures {
 
     private TestGridFixtures() {}
@@ -137,11 +139,6 @@ final class TestGridFixtures {
             return securityGridPresent ? this : null;
         }
 
-        @Override
-        public Object web$getPlayerSource() {
-            return null;
-        }
-
         // --- IAEPathingGrid ---
         @Override
         public boolean web$isNetworkBooting() {
@@ -162,11 +159,6 @@ final class TestGridFixtures {
         @Override
         public long web$getSecurityKey() {
             return securityKey;
-        }
-
-        @Override
-        public int web$getOwner() {
-            return OWNER_ID;
         }
 
         @Override
@@ -209,13 +201,8 @@ final class TestGridFixtures {
         }
 
         @Override
-        public PlayerIdentity web$getPlayerProfile(int playerId) {
-            return playerIdentity(playerId);
-        }
-
-        @Override
         public int web$getPlayerId(PlayerIdentity identity) {
-            if (identity != null && identity.name != null && identity.name.startsWith("Player")) {
+            if (identity != null && identity.name.startsWith("Player")) {
                 try {
                     return Integer.parseInt(identity.name.substring("Player".length()));
                 } catch (NumberFormatException ignored) {
@@ -285,7 +272,7 @@ final class TestGridFixtures {
 
         @Override
         public int getResponseCode() {
-            return 200;
+            return HttpURLConnection.HTTP_OK;
         }
 
         @Override

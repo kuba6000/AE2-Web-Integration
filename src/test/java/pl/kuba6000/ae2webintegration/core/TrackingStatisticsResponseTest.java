@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Proxy;
@@ -28,6 +29,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class TrackingStatisticsResponseTest {
 
     private static final long GRID = 990_581L;
@@ -56,8 +58,9 @@ class TrackingStatisticsResponseTest {
         double expectedShare, double expectedRate) {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(GRID);
         OutputSnapshotTest.Resource key = new OutputSnapshotTest.Resource();
-        AE2JobTracker.JobTrackingInfo info = new AE2JobTracker.JobTrackingInfo(
-            JSON_Stack.capture(grid, new OutputSnapshotTest.Stack(key, 10)));
+        JSON_Stack output = JSON_Stack.capture(grid, new OutputSnapshotTest.Stack(key, 10));
+        assertNotNull(output);
+        AE2JobTracker.JobTrackingInfo info = new AE2JobTracker.JobTrackingInfo(output);
         // Completed measurement records, including legitimate sub-millisecond intervals rounded to zero.
         info.timeStarted = 1000;
         info.timeDone = 1000 + elapsed;
@@ -114,23 +117,14 @@ class TrackingStatisticsResponseTest {
         ICraftingCPUCluster cpu = (ICraftingCPUCluster) Proxy.newProxyInstance(
             getClass().getClassLoader(),
             new Class<?>[] { ICraftingCPUCluster.class },
-            (proxy, method, args) -> {
-                switch (method.getName()) {
-                    case "web$getFinalOutput":
-                        return output;
-                    case "web$getKey":
-                        return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
-                    case "web$getName":
-                        return "cpu";
-                    case "web$isBusy":
-                        return true;
-                    case "web$getAvailableStorage":
-                        return 64L;
-                    case "web$getAllItems":
-                        return null;
-                    default:
-                        throw new AssertionError("Unexpected CPU call: " + method.getName());
-                }
+            (proxy, method, args) -> switch (method.getName()) {
+                case "web$getFinalOutput" -> output;
+                case "web$getKey" -> StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+                case "web$getName" -> "cpu";
+                case "web$isBusy" -> true;
+                case "web$getAvailableStorage" -> 64L;
+                case "web$getAllItems" -> null;
+                default -> throw new AssertionError("Unexpected CPU call: " + method.getName());
             });
         IAECraftingGrid crafting = (IAECraftingGrid) Proxy.newProxyInstance(
             getClass().getClassLoader(),
@@ -159,7 +153,7 @@ class TrackingStatisticsResponseTest {
             }
         };
         GridData.getOrCreate(GRID).isTracked = true;
-        AE2JobTracker.addJob(cpu, crafting, grid, false);
+        AE2JobTracker.addJob(cpu, grid, false);
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
         info.timeStarted = System.currentTimeMillis() + (clockMovedBack ? 60_000 : -60_000);
         // One already measured stage of a still-active job; its duration may legitimately be zero.

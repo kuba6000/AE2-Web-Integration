@@ -20,6 +20,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
  * Before the fix, {@code IAsyncRequest} resolved {@code GridData} straight from the {@code grid} query
  * parameter, so any authenticated user could read or modify any network's tracking data.
  */
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class AsyncRequestAuthorizationTest {
 
     private static final long MY_GRID = 10L;

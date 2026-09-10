@@ -10,6 +10,7 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class GridAccessTest {
 
     private static final long T0 = 1_000_000L;
@@ -50,6 +51,7 @@ class GridAccessTest {
     }
 
     @Test
+    @SuppressWarnings("DataFlowIssue") // The mutation below must throw to prove the snapshot is immutable.
     void keySetIsAnImmutableCopy() {
         Set<Long> source = new HashSet<>();
         source.add(10L);

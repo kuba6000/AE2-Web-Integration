@@ -44,6 +44,7 @@ import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 
+@SuppressWarnings("PMD.AvoidMagicNumbers")
 class ServerLifecycleHttpTest {
 
     private static final class Response {
@@ -186,7 +187,7 @@ class ServerLifecycleHttpTest {
         AE2Controller.startHTTPServer();
         String token = login();
         Response firstWorld = performSyncedRequest(token);
-        assertEquals(200, firstWorld.status);
+        assertEquals(HttpURLConnection.HTTP_OK, firstWorld.status);
         assertTrue(firstWorld.body.contains("\"status\":\"OK\""));
 
         CoreEngine.onServerStopping();
@@ -196,15 +197,20 @@ class ServerLifecycleHttpTest {
         AE2Controller.startHTTPServer();
 
         Response secondWorld = get("/grids", token);
-        assertEquals(401, secondWorld.status, "a token issued for the old world must no longer authorize");
+        assertEquals(
+            HttpURLConnection.HTTP_UNAUTHORIZED,
+            secondWorld.status,
+            "a token issued for the old world must no longer authorize");
 
         String secondWorldToken = login();
         Response secondWorldAuthorized = performSyncedRequest(secondWorldToken);
-        assertEquals(200, secondWorldAuthorized.status);
+        assertEquals(HttpURLConnection.HTTP_OK, secondWorldAuthorized.status);
         assertTrue(secondWorldAuthorized.body.contains("\"status\":\"OK\""));
     }
 
     @Test
+    // Java 8 HttpExchange is not AutoCloseable; the fake's close() is a no-op.
+    @SuppressWarnings({ "BusyWait", "resource" }) // Queue polling is bounded by a deadline.
     void pendingRegistrationLookupIsRejectedWhenTheServerStops() throws Exception {
         BlockingPlayerLookup platform = new BlockingPlayerLookup(
             UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
@@ -229,7 +235,10 @@ class ServerLifecycleHttpTest {
             CoreEngine.onServerStopping();
             oldRequest.get(5, TimeUnit.SECONDS);
 
-            assertEquals(503, exchange.responseCode, "stopping must release a worker waiting for PlayerList");
+            assertEquals(
+                HttpURLConnection.HTTP_UNAVAILABLE,
+                exchange.responseCode,
+                "stopping must release a worker waiting for PlayerList");
             assertEquals(1L, platform.entered.getCount(), "shutdown must not touch live PlayerList state");
         } finally {
             platform.release.countDown();
@@ -238,6 +247,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    @SuppressWarnings("CharsetObjectCanBeUsed") // The Charset overload requires Java 10; tests also target Java 8.
     void registrationLookupTimeoutReturnsServiceUnavailableInsteadOfNotOnline() throws Exception {
         AtomicInteger playerListLookups = new AtomicInteger();
         AE2Controller.serverPlatform = new IServerPlatform() {
@@ -258,13 +268,15 @@ class ServerLifecycleHttpTest {
 
         new AE2Controller.AuthHandler().handle(exchange);
 
-        assertEquals(503, exchange.responseCode);
+        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, exchange.responseCode);
         assertEquals("SERVER_BUSY", exchange.responseBody.toString(StandardCharsets.UTF_8.name()));
         assertEquals(0, playerListLookups.get(), "a timed-out queued lookup must not run later");
         assertTrue(AE2Controller.requests.isEmpty());
     }
 
     @Test
+    // Java 8 has neither the Charset overload nor AutoCloseable HttpExchange; the fake close() is a no-op.
+    @SuppressWarnings({ "CharsetObjectCanBeUsed", "resource" })
     void registrationFailsFastWhenTheServerThreadQueueIsFull() throws Exception {
         AE2Controller.startHTTPServer();
         fillServerThreadQueue();
@@ -272,7 +284,7 @@ class ServerLifecycleHttpTest {
 
         assertTimeout(Duration.ofSeconds(1), () -> new AE2Controller.AuthHandler().handle(exchange));
 
-        assertEquals(503, exchange.responseCode);
+        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, exchange.responseCode);
         assertEquals("SERVER_BUSY", exchange.responseBody.toString(StandardCharsets.UTF_8.name()));
         assertEquals(32, AE2Controller.requests.size());
     }
@@ -285,12 +297,14 @@ class ServerLifecycleHttpTest {
 
         Response response = get("/grids", token);
 
-        assertEquals(503, response.status);
+        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, response.status);
         assertTrue(response.body.contains("\"status\":\"SERVER_BUSY\""));
         assertEquals(32, AE2Controller.requests.size());
     }
 
     @Test
+    // Keep Java 8 charset/HttpExchange APIs; the fake close() is a no-op and queue polling has a deadline.
+    @SuppressWarnings({ "BusyWait", "CharsetObjectCanBeUsed", "resource" })
     void registrationReportsNotOnlineOnlyAfterTheServerThreadChecksTheLivePlayerList() throws Exception {
         AtomicInteger playerListLookups = new AtomicInteger();
         AE2Controller.serverPlatform = new IServerPlatform() {
@@ -330,7 +344,7 @@ class ServerLifecycleHttpTest {
             request.get(2, TimeUnit.SECONDS);
 
             assertEquals(1, playerListLookups.get());
-            assertEquals(400, exchange.responseCode);
+            assertEquals(HttpURLConnection.HTTP_BAD_REQUEST, exchange.responseCode);
             assertEquals("notonline", exchange.responseBody.toString(StandardCharsets.UTF_8.name()));
         } finally {
             httpWorker.shutdownNow();
@@ -338,6 +352,8 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    // Java 8 HttpExchange is not AutoCloseable; the fake's close() is a no-op.
+    @SuppressWarnings({ "BusyWait", "resource" }) // Queue polling is bounded by a deadline.
     void registrationFormPreservesTheNotOnlineRedirectAfterTheServerThreadLookup() throws Exception {
         AtomicInteger playerListLookups = new AtomicInteger();
         AE2Controller.serverPlatform = new IServerPlatform() {
@@ -376,7 +392,7 @@ class ServerLifecycleHttpTest {
             request.get(2, TimeUnit.SECONDS);
 
             assertEquals(1, playerListLookups.get());
-            assertEquals(302, exchange.responseCode);
+            assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, exchange.responseCode);
             assertEquals(
                 "?notonline",
                 exchange.getResponseHeaders()
@@ -387,6 +403,8 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    // Java 8 has neither the Charset overload nor AutoCloseable HttpExchange; the fake close() is a no-op.
+    @SuppressWarnings({ "CharsetObjectCanBeUsed", "resource" })
     void publicLoginUsesStoredIdentityWithoutConsultingServerState() throws Exception {
         UUID playerUuid = UUID.fromString("11111111-2222-3333-4444-555555555555");
         BlockingPlayerLookup platform = new BlockingPlayerLookup(playerUuid);
@@ -420,7 +438,7 @@ class ServerLifecycleHttpTest {
             });
             oldRequest.get(2, TimeUnit.SECONDS);
 
-            assertEquals(200, exchange.responseCode);
+            assertEquals(HttpURLConnection.HTTP_OK, exchange.responseCode);
             JsonObject response = new Gson()
                 .fromJson(exchange.responseBody.toString(StandardCharsets.UTF_8.name()), JsonObject.class);
             assertFalse(
@@ -461,9 +479,9 @@ class ServerLifecycleHttpTest {
         String token = login("Player", "player-password");
 
         assertEquals(0, aePlayerLookups.get(), "login must remain independent of the server tick");
-        assertEquals(200, performSyncedRequest(token).status);
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status);
         assertEquals(1, aePlayerLookups.get());
-        assertEquals(200, performSyncedRequest(token).status);
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status);
         assertEquals(2, aePlayerLookups.get(), "each synced request must publish access from current AE2 state");
     }
 
@@ -478,10 +496,6 @@ class ServerLifecycleHttpTest {
                 return playerUuid.equals(identity.uuid) ? 42 : -1;
             }
 
-            @Override
-            public PlayerIdentity web$getPlayerProfile(int playerId) {
-                throw new AssertionError("authenticated HTTP must not read an AE2 profile");
-            }
         };
         CoreDataTestFixture.reset();
         assertTrue(
@@ -493,7 +507,7 @@ class ServerLifecycleHttpTest {
         String token = login("canonicalplayer", "player-password");
         Response page = get("/", token);
 
-        assertEquals(200, page.status);
+        assertEquals(HttpURLConnection.HTTP_OK, page.status);
         assertTrue(page.body.contains("CanonicalPlayer"));
     }
 
@@ -525,12 +539,13 @@ class ServerLifecycleHttpTest {
             output.write(body);
         }
         Response response = read(connection);
-        assertEquals(200, response.status);
+        assertEquals(HttpURLConnection.HTTP_OK, response.status);
         JsonObject json = new Gson().fromJson(response.body, JsonObject.class);
         return json.get("token")
             .getAsString();
     }
 
+    @SuppressWarnings("BusyWait") // Wait for the request to reach the tick queue, bounded by a deadline.
     private Response performSyncedRequest(String token) throws Exception {
         ExecutorService client = Executors.newSingleThreadExecutor();
         try {
@@ -563,9 +578,11 @@ class ServerLifecycleHttpTest {
         return connection;
     }
 
+    @SuppressWarnings("CharsetObjectCanBeUsed") // The Charset overload requires Java 10; tests also target Java 8.
     private static Response read(HttpURLConnection connection) throws IOException {
         int status = connection.getResponseCode();
-        InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+        InputStream stream = status >= HttpURLConnection.HTTP_BAD_REQUEST ? connection.getErrorStream()
+            : connection.getInputStream();
         if (stream == null) {
             return new Response(status, "");
         }
@@ -575,7 +592,7 @@ class ServerLifecycleHttpTest {
             while ((read = input.read(buffer)) >= 0) {
                 output.write(buffer, 0, read);
             }
-            return new Response(status, new String(output.toByteArray(), StandardCharsets.UTF_8));
+            return new Response(status, output.toString(StandardCharsets.UTF_8.name()));
         }
     }
 

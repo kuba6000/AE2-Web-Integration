@@ -23,6 +23,4 @@ public interface IAEKey {
 
     boolean web$isCraftable(IAEGrid grid);
 
-    boolean web$isSameType(IAEKey other);
-
 }

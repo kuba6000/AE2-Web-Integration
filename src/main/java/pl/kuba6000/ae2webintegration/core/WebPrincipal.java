@@ -24,6 +24,7 @@ public final class WebPrincipal {
     private static final WebPrincipal LOCALHOST = new WebPrincipal(Kind.LOCALHOST, null, "localhost");
 
     private final @NotNull Kind kind;
+    // PLAYER principals are constructed only by forPlayer, which always supplies an identity.
     private final @Nullable PlayerIdentity playerIdentity;
     private final @NotNull String username;
 
@@ -58,14 +59,14 @@ public final class WebPrincipal {
     }
 
     @Override
+    @SuppressWarnings("DataFlowIssue")
     public boolean equals(@Nullable Object object) {
         if (this == object) {
             return true;
         }
-        if (!(object instanceof WebPrincipal)) {
+        if (!(object instanceof WebPrincipal other)) {
             return false;
         }
-        WebPrincipal other = (WebPrincipal) object;
         if (kind != other.kind) {
             return false;
         }
@@ -73,6 +74,7 @@ public final class WebPrincipal {
     }
 
     @Override
+    @SuppressWarnings({ "PMD.AvoidMagicNumbers", "DataFlowIssue" }) // Conventional hash-combining multiplier.
     public int hashCode() {
         return kind == Kind.PLAYER ? 31 * kind.hashCode() + playerIdentity.uuid.hashCode() : kind.hashCode();
     }

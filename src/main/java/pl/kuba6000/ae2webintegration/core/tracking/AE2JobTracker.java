@@ -118,7 +118,7 @@ public class AE2JobTracker {
         nextFreeTrackingInfoID = 1;
     }
 
-    public static void addJob(ICraftingCPUCluster cpuCluster, IAECraftingGrid cache, IAEGrid grid, boolean isMerging) {
+    public static void addJob(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging) {
         GridData gridData = GridData.getOrCreate(grid);
         if (gridData == null || !gridData.isTracked) return;
         JobTrackingInfo info = isMerging ? trackingInfoMap.get(cpuCluster) : null;
@@ -137,8 +137,7 @@ public class AE2JobTracker {
 
     public static void updateCraftingStatus(ICraftingCPUCluster cpu, Object diff) {
         JobTrackingInfo info = trackingInfoMap.get(cpu);
-        if (info == null || !(diff instanceof IAEKey)) return;
-        IAEKey keyDiff = (IAEKey) diff;
+        if (info == null || !(diff instanceof IAEKey keyDiff)) return;
         IStackList waitingFor = cpu.web$getWaitingFor();
         long waitingAmount = waitingFor.web$getAmount(keyDiff);
         if (waitingAmount > 0L) {
