@@ -74,9 +74,9 @@ public class NotificationManager extends Thread {
 
     public static boolean shouldPostCraftingNotification(long durationMillis, long craftedAmount) {
         long minimumDurationMillis = pl.kuba6000.ae2webintegration.core.config.Config
-            .DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS() * 1000L;
+            .NOTIFICATION_MINIMUM_CRAFTING_DURATION_SECONDS() * 1000L;
         return durationMillis >= minimumDurationMillis
-            && craftedAmount >= pl.kuba6000.ae2webintegration.core.config.Config.DISCORD_MINIMUM_CRAFTING_AMOUNT();
+            && craftedAmount >= pl.kuba6000.ae2webintegration.core.config.Config.NOTIFICATION_MINIMUM_CRAFTING_AMOUNT();
     }
 
     private static void postMessage(IMessage message) {

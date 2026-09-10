@@ -12,7 +12,6 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
-import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
 
 class NotificationManagerTest {
 
@@ -21,28 +20,28 @@ class NotificationManagerTest {
 
     @BeforeEach
     void resetConfig() {
-        previousMinimumDuration = ConfigBootstrap.discordMinimumCraftingDurationSecondsValue;
-        previousMinimumAmount = ConfigBootstrap.discordMinimumCraftingAmountValue;
-        ConfigBootstrap.discordMinimumCraftingDurationSecondsValue = () -> 0;
-        ConfigBootstrap.discordMinimumCraftingAmountValue = () -> 0;
+        previousMinimumDuration = ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue;
+        previousMinimumAmount = ConfigBootstrap.notificationMinimumCraftingAmountValue;
+        ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue = () -> 0;
+        ConfigBootstrap.notificationMinimumCraftingAmountValue = () -> 0;
     }
 
     @AfterEach
     void restoreConfig() {
-        ConfigBootstrap.discordMinimumCraftingDurationSecondsValue = previousMinimumDuration;
-        ConfigBootstrap.discordMinimumCraftingAmountValue = previousMinimumAmount;
+        ConfigBootstrap.notificationMinimumCraftingAmountValue = previousMinimumAmount;
+        ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue = previousMinimumDuration;
     }
 
     @ParameterizedTest
     @CsvSource({ "250, 0.25s", "3285, 3.285s", "47000, 47s", "800000, '13m 20s'", "3661000, '1h 1m 1s'",
         "7509000, '2h 5m 9s'", "86400000, '1d 0h 0m 0s'", "183845000, '2d 3h 4m 5s'" })
-    void formatsCraftingDurationForDiscord(long durationMillis, String expected) {
+    void formatsCraftingDuration(long durationMillis, String expected) {
         assertEquals(expected, NotificationManager.formatDuration(durationMillis));
     }
 
     @Test
     void durationThresholdFiltersShortCraftingJobs() {
-        ConfigBootstrap.discordMinimumCraftingDurationSecondsValue = () -> 300;
+        ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue = () -> 300;
 
         assertFalse(NotificationManager.shouldPostCraftingNotification(299_999L, 1L));
         assertTrue(NotificationManager.shouldPostCraftingNotification(300_000L, 1L));
@@ -50,7 +49,7 @@ class NotificationManagerTest {
 
     @Test
     void amountThresholdFiltersSmallCraftingJobs() {
-        ConfigBootstrap.discordMinimumCraftingAmountValue = () -> 1000;
+        ConfigBootstrap.notificationMinimumCraftingAmountValue = () -> 1000;
 
         assertFalse(NotificationManager.shouldPostCraftingNotification(1L, 999L));
         assertTrue(NotificationManager.shouldPostCraftingNotification(1L, 1000L));

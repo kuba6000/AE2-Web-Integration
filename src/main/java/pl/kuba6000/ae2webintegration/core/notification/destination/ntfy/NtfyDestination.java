@@ -27,9 +27,15 @@ public class NtfyDestination implements INotificationDestination {
 
     @Override
     public boolean isUsable() {
-        if (Config.NTFY_HOST().isEmpty()) return false;
-        if (Config.NTFY_TOPIC().isEmpty()) return false;
-        if (Config.NTFY_USER().isEmpty() != Config.NTFY_PASSWORD().isEmpty()) return false;
+        if (Config.NTFY_HOST()
+            .isEmpty()) return false;
+        if (Config.NTFY_TOPIC()
+            .isEmpty()) return false;
+        if (Config.NTFY_USER()
+            .isEmpty()
+            != Config.NTFY_PASSWORD()
+                .isEmpty())
+            return false;
         return true;
     }
 

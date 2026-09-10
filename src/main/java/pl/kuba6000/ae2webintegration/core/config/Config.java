@@ -39,6 +39,15 @@ public class Config {
         return ConfigBootstrap.checkForUpdatesValue.get();
     }
 
+    // Notifications
+    public static int NOTIFICATION_MINIMUM_CRAFTING_DURATION_SECONDS() {
+        return ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue.get();
+    }
+
+    public static int NOTIFICATION_MINIMUM_CRAFTING_AMOUNT() {
+        return ConfigBootstrap.notificationMinimumCraftingAmountValue.get();
+    }
+
     // Discord
     public static String DISCORD_WEBHOOK() {
         return ConfigBootstrap.discordWebhookValue.get();
@@ -46,14 +55,6 @@ public class Config {
 
     public static String DISCORD_ROLE_ID() {
         return ConfigBootstrap.discordRoleIdValue.get();
-    }
-
-    public static int DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS() {
-        return ConfigBootstrap.discordMinimumCraftingDurationSecondsValue.get();
-    }
-
-    public static int DISCORD_MINIMUM_CRAFTING_AMOUNT() {
-        return ConfigBootstrap.discordMinimumCraftingAmountValue.get();
     }
 
     // Ntfy
