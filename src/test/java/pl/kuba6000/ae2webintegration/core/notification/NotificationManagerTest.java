@@ -60,8 +60,8 @@ class NotificationManagerTest {
         ConfigBootstrap.discordWebhookValue = webhook::get;
         ConfigBootstrap.discordRoleIdValue = () -> "";
         BlockingQueue<String> errors = new LinkedBlockingQueue<>();
-        Logger logger = (Logger) LogManager.getLogger("ae2webintegration - DISCORD INTEGRATION");
-        AbstractAppender appender = new AbstractAppender("discord-errors", null, null, false, Property.EMPTY_ARRAY) {
+        Logger logger = (Logger) LogManager.getLogger("ae2webintegration - WEBHOOK INTEGRATION");
+        AbstractAppender appender = new AbstractAppender("webhook-errors", null, null, false, Property.EMPTY_ARRAY) {
 
             @Override
             public void append(LogEvent event) {

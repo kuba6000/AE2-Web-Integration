@@ -7,8 +7,6 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
-import javax.net.ssl.HttpsURLConnection;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -25,11 +23,11 @@ public class WebhookHelper {
         if (payload == null) return;
         JsonObject json = payload.serializePayload();
 
-        HttpsURLConnection connection = null;
+        HttpURLConnection connection = null;
         try {
             URL url = new URL(webhookUrl);
 
-            connection = (HttpsURLConnection) url.openConnection();
+            connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(WEBHOOK_TIMEOUT_MILLIS);
             connection.setReadTimeout(WEBHOOK_TIMEOUT_MILLIS);
             if (!username.isEmpty() && !password.isEmpty()) {
