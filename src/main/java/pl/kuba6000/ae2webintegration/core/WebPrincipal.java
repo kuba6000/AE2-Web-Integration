@@ -59,6 +59,8 @@ public final class WebPrincipal {
     }
 
     @Override
+    // forPlayer() guarantees a non-null identity for PLAYER; IDEA cannot infer this field invariant.
+    // The kind checks below restrict identity access to two PLAYER principals.
     @SuppressWarnings("DataFlowIssue")
     public boolean equals(@Nullable Object object) {
         if (this == object) {
@@ -74,6 +76,8 @@ public final class WebPrincipal {
     }
 
     @Override
+    // forPlayer() guarantees a non-null identity for PLAYER; IDEA cannot infer this field invariant.
+    // Only the PLAYER branch reads the identity.
     @SuppressWarnings({ "PMD.AvoidMagicNumbers", "DataFlowIssue" }) // Conventional hash-combining multiplier.
     public int hashCode() {
         return kind == Kind.PLAYER ? 31 * kind.hashCode() + playerIdentity.uuid.hashCode() : kind.hashCode();
