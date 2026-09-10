@@ -47,21 +47,19 @@ public class DiscordDestination implements INotificationDestination {
         if (webhook.isEmpty()) return;
 
         DiscordPayload payload = null;
-        if (message instanceof CraftingMessage) {
-            CraftingMessage craftingMessage = (CraftingMessage) message;
+        if (message instanceof CraftingMessage craftingMessage) {
             payload = new DiscordPayload(
-                "AE2 Job Tracker [ Grid " + craftingMessage.getGrid() + " ][ " + craftingMessage.getCpuName() + " ]",
-                "Crafting for `" + craftingMessage.getOutputItemName()
+                "AE2 Job Tracker [ Grid " + craftingMessage.grid() + " ][ " + craftingMessage.cpuName() + " ]",
+                "Crafting for `" + craftingMessage.outputItemName()
                     + " x"
-                    + craftingMessage.getOutputItemAmount()
+                    + craftingMessage.outputItemAmount()
                     + "` "
-                    + (craftingMessage.isWasCancelled() ? "cancelled" : "completed")
+                    + (craftingMessage.wasCancelled() ? "cancelled" : "completed")
                     + "!\nIt took "
-                    + craftingMessage.getDurationString(),
-                craftingMessage.isWasCancelled() ? COLOR_RED : COLOR_GREEN);
-        } else if (message instanceof ErrorMessage) {
-            ErrorMessage errorMessage = (ErrorMessage) message;
-            ErrorMessage.Severity severity = errorMessage.getSeverity();
+                    + craftingMessage.durationString(),
+                craftingMessage.wasCancelled() ? COLOR_RED : COLOR_GREEN);
+        } else if (message instanceof ErrorMessage errorMessage) {
+            ErrorMessage.Severity severity = errorMessage.severity();
             int color = 0;
             switch (severity) {
                 case ERROR:
@@ -72,9 +70,9 @@ public class DiscordDestination implements INotificationDestination {
                     break;
             };
             if (color != 0) {
-                payload = new DiscordPayload(errorMessage.getTitle(), errorMessage.getDescription(), color);
+                payload = new DiscordPayload(errorMessage.title(), errorMessage.description(), color);
             } else {
-                payload = new DiscordPayload(errorMessage.getTitle(), errorMessage.getDescription());
+                payload = new DiscordPayload(errorMessage.title(), errorMessage.description());
             }
         }
 

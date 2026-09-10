@@ -53,26 +53,24 @@ public class NtfyDestination implements INotificationDestination {
             .isEmpty()) return;
 
         NtfyPayload payload = null;
-        if (message instanceof CraftingMessage) {
-            CraftingMessage craftingMessage = (CraftingMessage) message;
+        if (message instanceof CraftingMessage craftingMessage) {
             List<String> tags = new ArrayList<>();
-            if (craftingMessage.isWasCancelled()) tags.add("x");
+            if (craftingMessage.wasCancelled()) tags.add("x");
             else tags.add("heavy_check_mark");
 
             payload = new NtfyPayload(
-                "AE2 Job Tracker [ Grid " + craftingMessage.getGrid() + " ][ " + craftingMessage.getCpuName() + " ]",
-                "Crafting for `" + craftingMessage.getOutputItemName()
+                "AE2 Job Tracker [ Grid " + craftingMessage.grid() + " ][ " + craftingMessage.cpuName() + " ]",
+                "Crafting for `" + craftingMessage.outputItemName()
                     + " x"
-                    + craftingMessage.getOutputItemAmount()
+                    + craftingMessage.outputItemAmount()
                     + "` "
-                    + (craftingMessage.isWasCancelled() ? "cancelled" : "completed")
+                    + (craftingMessage.wasCancelled() ? "cancelled" : "completed")
                     + "!\nIt took "
-                    + craftingMessage.getDurationString(),
+                    + craftingMessage.durationString(),
                 3,
                 tags);
-        } else if (message instanceof ErrorMessage) {
-            ErrorMessage errorMessage = (ErrorMessage) message;
-            ErrorMessage.Severity severity = errorMessage.getSeverity();
+        } else if (message instanceof ErrorMessage errorMessage) {
+            ErrorMessage.Severity severity = errorMessage.severity();
             List<String> tags = new ArrayList<>();
             int priority = 3;
             switch (severity) {
@@ -85,7 +83,7 @@ public class NtfyDestination implements INotificationDestination {
                     tags.add("warning");
                     break;
             };
-            payload = new NtfyPayload(errorMessage.getTitle(), errorMessage.getDescription(), priority, tags);
+            payload = new NtfyPayload(errorMessage.title(), errorMessage.description(), priority, tags);
         }
 
         if (payload == null) return;
