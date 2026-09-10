@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core.discord;
+package pl.kuba6000.ae2webintegration.core.notification;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -14,7 +14,7 @@ import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
 import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
 
-class DiscordManagerTest {
+class NotificationManagerTest {
 
     private IConfigValue<Integer> previousMinimumDuration;
     private IConfigValue<Integer> previousMinimumAmount;
