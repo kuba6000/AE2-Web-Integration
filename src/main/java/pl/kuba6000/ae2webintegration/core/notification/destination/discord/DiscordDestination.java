@@ -49,14 +49,10 @@ public class DiscordDestination implements INotificationDestination {
                 craftingMessage.wasCancelled() ? COLOR_RED : COLOR_GREEN);
         } else if (message instanceof ErrorMessage errorMessage) {
             ErrorMessage.Severity severity = errorMessage.severity();
-            int color = 0;
-            switch (severity) {
-                case ERROR:
-                    color = COLOR_RED;
-                    break;
-                case WARNING:
-                    color = COLOR_YELLOW;
-                    break;
+            int color = switch (severity) {
+                case ERROR -> COLOR_RED;
+                case WARNING -> COLOR_YELLOW;
+                default -> 0;
             };
             if (color != 0) {
                 payload = new DiscordPayload(errorMessage.title(), errorMessage.description(), color);
