@@ -43,14 +43,10 @@ public class NotificationManager extends Thread {
                     "Notification integration started!",
                     ErrorMessage.Severity.NONE));
         } else if (Config.AE_PUBLIC_MODE() && (!destinations.isEmpty())) {
-            NotificationManager.postMessageNonBlocking(
-                new ErrorMessage(
-                    "AE2 Web Integration",
-                    """
-                    Warning!
-                    Notifications are enabled in the config, but the public mode is enabled!
-                    Notifications will be disabled!""",
-                    ErrorMessage.Severity.WARNING));
+            NotificationManager.postMessageNonBlocking(new ErrorMessage("AE2 Web Integration", """
+                Warning!
+                Notifications are enabled in the config, but the public mode is enabled!
+                Notifications will be disabled!""", ErrorMessage.Severity.WARNING));
         }
 
         thread = new NotificationManager();
@@ -82,7 +78,8 @@ public class NotificationManager extends Thread {
 
     public static boolean shouldPostCraftingNotification(long durationMillis, long craftedAmount) {
         long minimumDurationMillis = TimeUnit.SECONDS.toMillis(Config.NOTIFICATION_MINIMUM_CRAFTING_DURATION_SECONDS());
-        return durationMillis >= minimumDurationMillis && craftedAmount >= Config.NOTIFICATION_MINIMUM_CRAFTING_AMOUNT();
+        return durationMillis >= minimumDurationMillis
+            && craftedAmount >= Config.NOTIFICATION_MINIMUM_CRAFTING_AMOUNT();
     }
 
     private static void postMessage(IMessage message) {
@@ -92,6 +89,7 @@ public class NotificationManager extends Thread {
             }
         }
     }
+
     @Override
     public void run() {
         while (!isInterrupted()) {

@@ -87,7 +87,8 @@ class NotificationManagerTest {
 
             // No connection should be opened for a protocol Discord webhooks do not support.
             webhook.set("http://127.0.0.1:1/webhook");
-            discordDestination.sendNotification(new ErrorMessage("Second", "Second message", ErrorMessage.Severity.NONE));
+            discordDestination
+                .sendNotification(new ErrorMessage("Second", "Second message", ErrorMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Unsupported protocol must be diagnosed");
 
             webhook.set("https://localhost:65536/webhook");
@@ -95,7 +96,8 @@ class NotificationManagerTest {
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Invalid port must be diagnosed");
 
             webhook.set("another-malformed-webhook");
-            discordDestination.sendNotification(new ErrorMessage("Fourth", "Fourth message", ErrorMessage.Severity.NONE));
+            discordDestination
+                .sendNotification(new ErrorMessage("Fourth", "Fourth message", ErrorMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Worker must continue processing the queue");
             assertNull(workerFailure.get());
         } finally {

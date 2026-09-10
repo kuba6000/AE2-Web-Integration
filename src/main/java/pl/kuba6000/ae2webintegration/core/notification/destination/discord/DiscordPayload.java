@@ -1,12 +1,12 @@
 package pl.kuba6000.ae2webintegration.core.notification.destination.discord;
 
+import static pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination.COLOR_TURQUOISE;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationPayload;
-
-import static pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination.COLOR_TURQUOISE;
 
 public class DiscordPayload implements INotificationPayload {
 
