@@ -25,6 +25,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
+import pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination;
+import pl.kuba6000.ae2webintegration.core.notification.message.ErrorMessage;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class NotificationManagerTest {
@@ -79,20 +81,21 @@ class NotificationManagerTest {
         logger.addAppender(appender);
         worker.start();
         try {
-            NotificationManager.postMessageNonBlocking(new NotificationManager.DiscordEmbed("First", "First message"));
+            DiscordDestination discordDestination = new DiscordDestination();
+            discordDestination.sendNotification(new ErrorMessage("First", "First message", ErrorMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Malformed webhook must be diagnosed");
 
             // No connection should be opened for a protocol Discord webhooks do not support.
             webhook.set("http://127.0.0.1:1/webhook");
-            NotificationManager.postMessageNonBlocking(new NotificationManager.DiscordEmbed("Second", "Second message"));
+            discordDestination.sendNotification(new ErrorMessage("Second", "Second message", ErrorMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Unsupported protocol must be diagnosed");
 
             webhook.set("https://localhost:65536/webhook");
-            NotificationManager.postMessageNonBlocking(new DiscordManager.DiscordEmbed("Third", "Third message"));
+            discordDestination.sendNotification(new ErrorMessage("Third", "Third message", ErrorMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Invalid port must be diagnosed");
 
             webhook.set("another-malformed-webhook");
-            NotificationManager.postMessageNonBlocking(new DiscordManager.DiscordEmbed("Fourth", "Fourth message"));
+            discordDestination.sendNotification(new ErrorMessage("Fourth", "Fourth message", ErrorMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Worker must continue processing the queue");
             assertNull(workerFailure.get());
         } finally {
