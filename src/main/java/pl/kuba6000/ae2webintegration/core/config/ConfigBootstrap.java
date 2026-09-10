@@ -104,7 +104,6 @@ public class ConfigBootstrap {
             "Minimum final output amount required for a Discord notification (0 disables this filter)");
 
         ntfyHostValue = builder.defineString("ntfy_host", "", "ntfy host, empty to disable");
-        // todo: check these in NtfyDestination
         ntfyTopicValue = builder.defineString("ntfy_topic", "ae2", "ntfy topic for notifications");
         ntfyUserValue = builder.defineString("ntfy_user", "", "ntfy username, empty if no authentication is needed");
         ntfyPasswordValue = builder

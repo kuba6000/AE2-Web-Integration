@@ -27,8 +27,10 @@ public class NtfyDestination implements INotificationDestination {
 
     @Override
     public boolean isUsable() {
-        return !Config.NTFY_HOST()
-            .isEmpty();
+        if (Config.NTFY_HOST().isEmpty()) return false;
+        if (Config.NTFY_TOPIC().isEmpty()) return false;
+        if (Config.NTFY_USER().isEmpty() != Config.NTFY_PASSWORD().isEmpty()) return false;
+        return true;
     }
 
     @Override
@@ -87,19 +89,17 @@ public class NtfyDestination implements INotificationDestination {
             String password = Config.NTFY_PASSWORD();
 
             HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-            String auth = username + ":" + password;
-            byte[] encodedAuth = Base64.getEncoder()
-                .encode(auth.getBytes(StandardCharsets.UTF_8));
-            String authHeaderValue = "Basic " + new String(encodedAuth);
-            connection.setRequestProperty("Authorization", authHeaderValue);
+            if (!username.isEmpty() && !password.isEmpty()) {
+                String auth = username + ":" + password;
+                byte[] encodedAuth = Base64.getEncoder()
+                    .encode(auth.getBytes(StandardCharsets.UTF_8));
+                String authHeaderValue = "Basic " + new String(encodedAuth);
+                connection.setRequestProperty("Authorization", authHeaderValue);
+            }
             connection.addRequestProperty("Content-Type", "application/json");
             connection.addRequestProperty("User-Agent", "AE2-Web-Integration");
             connection.setDoOutput(true);
             connection.setRequestMethod("PUT");
-
-            System.out.println(json.toString());
-            System.out.println(url);
-            System.out.println(authHeaderValue);
 
             try (OutputStream stream = connection.getOutputStream()) {
                 stream.write(
