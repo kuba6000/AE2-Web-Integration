@@ -1,8 +1,5 @@
 package pl.kuba6000.ae2webintegration.core.notification.destination.discord;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.WebhookHelper;

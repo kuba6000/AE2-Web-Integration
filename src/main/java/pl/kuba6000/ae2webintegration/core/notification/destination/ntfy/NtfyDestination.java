@@ -3,9 +3,6 @@ package pl.kuba6000.ae2webintegration.core.notification.destination.ntfy;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.WebhookHelper;
@@ -69,7 +66,7 @@ public class NtfyDestination implements INotificationDestination {
                     priority = NtfyPayload.Priority.HIGH;
                     tags.add("warning");
                     break;
-            };
+            }
             payload = new NtfyPayload(errorMessage.title(), errorMessage.description(), priority, tags);
         }
 
