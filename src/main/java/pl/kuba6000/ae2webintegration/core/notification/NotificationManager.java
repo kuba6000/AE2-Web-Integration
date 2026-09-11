@@ -54,6 +54,11 @@ public class NotificationManager extends Thread {
         thread.start();
     }
 
+    public static void shutdown() {
+        thread.interrupt();
+        thread = null;
+    }
+
     @SuppressWarnings("ResultOfMethodCallIgnored") // Enqueue success is not exposed by this fire-and-forget API.
     public static void postMessageNonBlocking(IMessage message) {
         toPush.offer(message);
