@@ -15,8 +15,6 @@ import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 
 public class NtfyDestination implements INotificationDestination {
 
-    private static final Logger LOG = LogManager.getLogger("ae2webintegration" + " - NTFY INTEGRATION");
-
     @Override
     public boolean isUsable() {
         if (Config.NTFY_HOST()

@@ -12,8 +12,6 @@ import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 
 public class DiscordDestination implements INotificationDestination {
 
-    private static final Logger LOG = LogManager.getLogger("ae2webintegration" + " - DISCORD INTEGRATION");
-
     public static final int COLOR_TURQUOISE = 0x1ABC9C;
     public static final int COLOR_RED = 0xED4245;
     public static final int COLOR_GREEN = 0x57F287;

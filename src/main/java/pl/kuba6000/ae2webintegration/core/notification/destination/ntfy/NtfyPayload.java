@@ -12,10 +12,10 @@ import pl.kuba6000.ae2webintegration.core.notification.destination.INotification
 
 public class NtfyPayload implements INotificationPayload {
 
-    String title;
-    String description;
-    int priority;
-    List<String> tags = new ArrayList<>();
+    final String title;
+    final String description;
+    final int priority;
+    final List<String> tags;
 
     public NtfyPayload(String title, String description, int priority, List<String> tags) {
         this.title = title;

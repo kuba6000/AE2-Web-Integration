@@ -10,9 +10,9 @@ import pl.kuba6000.ae2webintegration.core.notification.destination.INotification
 
 public class DiscordPayload implements INotificationPayload {
 
-    String title;
-    String description;
-    int color;
+    final String title;
+    final String description;
+    final int color;
 
     public DiscordPayload(String title, String description, int color) {
         this.title = title;
