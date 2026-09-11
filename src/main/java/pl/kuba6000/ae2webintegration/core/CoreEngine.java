@@ -52,7 +52,7 @@ public class CoreEngine {
         AE2Controller.init();
         StartupHandler.logOpenAdminAccessWarning();
         StartupHandler.logOutdatedWarning();
-        StartupHandler.handleDiscordIntegration();
+        StartupHandler.handleNotificationIntegration();
     }
 
     /**

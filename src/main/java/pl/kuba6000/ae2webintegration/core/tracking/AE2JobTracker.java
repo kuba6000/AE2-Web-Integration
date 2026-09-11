@@ -16,7 +16,6 @@ import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.config.Config;
-import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -26,6 +25,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
+import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
+import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
 
 public class AE2JobTracker {
 
@@ -232,26 +233,20 @@ public class AE2JobTracker {
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         long durationMillis = info.timeDone - info.timeStarted;
         long craftedAmount = info.finalOutput.quantity;
-        if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
-            .isEmpty() && DiscordManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
+        if (!Config.AE_PUBLIC_MODE()
+            && NotificationManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
             IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
             if (securityGrid != null && securityGrid.web$isAvailable()) {
                 IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
-                craftingGrid.web$getCPUs();
-                DiscordManager.postMessageNonBlocking(
-                    new DiscordManager.DiscordEmbed(
-                        "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()
-                            + " ][ "
-                            + cpu.web$getName()
-                            + " ]",
-                        "Crafting for `" + info.finalOutput.itemname
-                            + " x"
-                            + craftedAmount
-                            + "` "
-                            + (info.wasCancelled ? "cancelled" : "completed")
-                            + "!\nIt took "
-                            + DiscordManager.formatDuration(durationMillis),
-                        info.wasCancelled ? DiscordManager.COLOR_RED : DiscordManager.COLOR_GREEN));
+                craftingGrid.web$getCPUs(); // make sure the cpu has id
+                NotificationManager.postMessageNonBlocking(
+                    new CraftingMessage(
+                        securityGrid.web$getSecurityKey(),
+                        cpu.web$getName(),
+                        info.finalOutput.itemname,
+                        craftedAmount,
+                        NotificationManager.formatDuration(durationMillis),
+                        info.wasCancelled));
             }
         }
     }

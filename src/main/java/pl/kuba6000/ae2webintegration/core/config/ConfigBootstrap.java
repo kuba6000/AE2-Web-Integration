@@ -25,12 +25,22 @@ public class ConfigBootstrap {
     public static IConfigValue<Integer> aeMaxRequestsBeforeLoggedInPerMinuteValue = () -> 20;
     public static IConfigValue<Boolean> checkForUpdatesValue = () -> true;
 
+    // --- Notifications ---
+
+    public static IConfigValue<Integer> notificationMinimumCraftingDurationSecondsValue = () -> 0;
+    public static IConfigValue<Integer> notificationMinimumCraftingAmountValue = () -> 0;
+
     // --- Discord ---
 
     public static IConfigValue<String> discordWebhookValue = () -> "";
     public static IConfigValue<String> discordRoleIdValue = () -> "";
-    public static IConfigValue<Integer> discordMinimumCraftingDurationSecondsValue = () -> 0;
-    public static IConfigValue<Integer> discordMinimumCraftingAmountValue = () -> 0;
+
+    // --- ntfy ---
+    public static IConfigValue<String> ntfyHostValue = () -> "";
+    public static IConfigValue<String> ntfyTopicValue = () -> "";
+    public static IConfigValue<String> ntfyUserValue = () -> "";
+    public static IConfigValue<String> ntfyPasswordValue = () -> "";
+    public static IConfigValue<String> aeFullDomainValue = () -> "";
 
     // --- Tracking ---
 
@@ -84,18 +94,29 @@ public class ConfigBootstrap {
             "discord_role_id",
             "",
             "Role id to ping on errors, keep empty to disable pinging (if webhook is empty it will do nothing)");
-        discordMinimumCraftingDurationSecondsValue = builder.defineInt(
-            "discord_minimum_crafting_duration_seconds",
+        notificationMinimumCraftingDurationSecondsValue = builder.defineInt(
+            "notification_minimum_crafting_duration_seconds",
             0,
             0,
             Integer.MAX_VALUE,
-            "Minimum crafting duration in seconds required for a Discord notification (0 disables this filter)");
-        discordMinimumCraftingAmountValue = builder.defineInt(
-            "discord_minimum_crafting_amount",
+            "Minimum crafting duration in seconds required for a notification (0 disables this filter)");
+        notificationMinimumCraftingAmountValue = builder.defineInt(
+            "notification_minimum_crafting_amount",
             0,
             0,
             Integer.MAX_VALUE,
-            "Minimum final output amount required for a Discord notification (0 disables this filter)");
+            "Minimum final output amount required for a notification (0 disables this filter)");
+
+        ntfyHostValue = builder.defineString("ntfy_host", "", "ntfy host, empty to disable");
+        ntfyTopicValue = builder.defineString("ntfy_topic", "ae2", "ntfy topic for notifications");
+        ntfyUserValue = builder.defineString("ntfy_user", "", "ntfy username, empty if no authentication is needed");
+        ntfyPasswordValue = builder
+            .defineString("ntfy_password", "", "ntfy password, empty if no authentication is needed");
+        // todo: remove and replace w/ dynamic url?
+        aeFullDomainValue = builder.defineString(
+            "ae_full_domain",
+            "",
+            "full domain to access ae2webinterface; for use with ntfy notifications");
 
         trackingTrackMachineCraftingValue = builder.defineBoolean(
             "track_machine_crafting",

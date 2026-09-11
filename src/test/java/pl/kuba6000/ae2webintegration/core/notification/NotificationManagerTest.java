@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core.discord;
+package pl.kuba6000.ae2webintegration.core.notification;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -25,9 +25,11 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
+import pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination;
+import pl.kuba6000.ae2webintegration.core.notification.message.ErrorMessage;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
-class DiscordManagerTest {
+class NotificationManagerTest {
 
     private IConfigValue<Integer> previousMinimumDuration;
     private IConfigValue<Integer> previousMinimumAmount;
@@ -36,18 +38,18 @@ class DiscordManagerTest {
 
     @BeforeEach
     void resetConfig() {
-        previousMinimumDuration = ConfigBootstrap.discordMinimumCraftingDurationSecondsValue;
-        previousMinimumAmount = ConfigBootstrap.discordMinimumCraftingAmountValue;
+        previousMinimumDuration = ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue;
+        previousMinimumAmount = ConfigBootstrap.notificationMinimumCraftingAmountValue;
         previousWebhook = ConfigBootstrap.discordWebhookValue;
         previousRole = ConfigBootstrap.discordRoleIdValue;
-        ConfigBootstrap.discordMinimumCraftingDurationSecondsValue = () -> 0;
-        ConfigBootstrap.discordMinimumCraftingAmountValue = () -> 0;
+        ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue = () -> 0;
+        ConfigBootstrap.notificationMinimumCraftingAmountValue = () -> 0;
     }
 
     @AfterEach
     void restoreConfig() {
-        ConfigBootstrap.discordMinimumCraftingDurationSecondsValue = previousMinimumDuration;
-        ConfigBootstrap.discordMinimumCraftingAmountValue = previousMinimumAmount;
+        ConfigBootstrap.notificationMinimumCraftingAmountValue = previousMinimumAmount;
+        ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue = previousMinimumDuration;
         ConfigBootstrap.discordWebhookValue = previousWebhook;
         ConfigBootstrap.discordRoleIdValue = previousRole;
     }
@@ -58,8 +60,8 @@ class DiscordManagerTest {
         ConfigBootstrap.discordWebhookValue = webhook::get;
         ConfigBootstrap.discordRoleIdValue = () -> "";
         BlockingQueue<String> errors = new LinkedBlockingQueue<>();
-        Logger logger = (Logger) LogManager.getLogger("ae2webintegration - DISCORD INTEGRATION");
-        AbstractAppender appender = new AbstractAppender("discord-errors", null, null, false, Property.EMPTY_ARRAY) {
+        Logger logger = (Logger) LogManager.getLogger("ae2webintegration - WEBHOOK INTEGRATION");
+        AbstractAppender appender = new AbstractAppender("webhook-errors", null, null, false, Property.EMPTY_ARRAY) {
 
             @Override
             public void append(LogEvent event) {
@@ -72,27 +74,30 @@ class DiscordManagerTest {
             }
         };
         AtomicReference<Throwable> workerFailure = new AtomicReference<>();
-        DiscordManager worker = new DiscordManager();
+        NotificationManager worker = new NotificationManager();
         worker.setDaemon(true);
         worker.setUncaughtExceptionHandler((thread, error) -> workerFailure.set(error));
         appender.start();
         logger.addAppender(appender);
         worker.start();
         try {
-            DiscordManager.postMessageNonBlocking(new DiscordManager.DiscordEmbed("First", "First message"));
+            DiscordDestination discordDestination = new DiscordDestination();
+            discordDestination.sendNotification(new ErrorMessage("First", "First message", ErrorMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Malformed webhook must be diagnosed");
 
             // No connection should be opened for a protocol Discord webhooks do not support.
             webhook.set("http://127.0.0.1:1/webhook");
-            DiscordManager.postMessageNonBlocking(new DiscordManager.DiscordEmbed("Second", "Second message"));
+            discordDestination
+                .sendNotification(new ErrorMessage("Second", "Second message", ErrorMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Unsupported protocol must be diagnosed");
 
             webhook.set("https://localhost:65536/webhook");
-            DiscordManager.postMessageNonBlocking(new DiscordManager.DiscordEmbed("Third", "Third message"));
+            discordDestination.sendNotification(new ErrorMessage("Third", "Third message", ErrorMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Invalid port must be diagnosed");
 
             webhook.set("another-malformed-webhook");
-            DiscordManager.postMessageNonBlocking(new DiscordManager.DiscordEmbed("Fourth", "Fourth message"));
+            discordDestination
+                .sendNotification(new ErrorMessage("Fourth", "Fourth message", ErrorMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Worker must continue processing the queue");
             assertNull(workerFailure.get());
         } finally {
@@ -108,23 +113,23 @@ class DiscordManagerTest {
     @CsvSource({ "250, 0.25s", "3285, 3.285s", "4999, 4.999s", "5000, 5s", "59499, 59s", "59500, '1m 0s'",
         "3599500, '1h 0m 0s'", "86399500, '1d 0h 0m 0s'", "47000, 47s", "800000, '13m 20s'", "3661000, '1h 1m 1s'",
         "7509000, '2h 5m 9s'", "86400000, '1d 0h 0m 0s'", "183845000, '2d 3h 4m 5s'" })
-    void formatsCraftingDurationForDiscord(long durationMillis, String expected) {
-        assertEquals(expected, DiscordManager.formatDuration(durationMillis));
+    void formatsCraftingDuration(long durationMillis, String expected) {
+        assertEquals(expected, NotificationManager.formatDuration(durationMillis));
     }
 
     @Test
     void durationThresholdFiltersShortCraftingJobs() {
-        ConfigBootstrap.discordMinimumCraftingDurationSecondsValue = () -> 300;
+        ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue = () -> 300;
 
-        assertFalse(DiscordManager.shouldPostCraftingNotification(299_999L, 1L));
-        assertTrue(DiscordManager.shouldPostCraftingNotification(300_000L, 1L));
+        assertFalse(NotificationManager.shouldPostCraftingNotification(299_999L, 1L));
+        assertTrue(NotificationManager.shouldPostCraftingNotification(300_000L, 1L));
     }
 
     @Test
     void amountThresholdFiltersSmallCraftingJobs() {
-        ConfigBootstrap.discordMinimumCraftingAmountValue = () -> 1000;
+        ConfigBootstrap.notificationMinimumCraftingAmountValue = () -> 1000;
 
-        assertFalse(DiscordManager.shouldPostCraftingNotification(1L, 999L));
-        assertTrue(DiscordManager.shouldPostCraftingNotification(1L, 1000L));
+        assertFalse(NotificationManager.shouldPostCraftingNotification(1L, 999L));
+        assertTrue(NotificationManager.shouldPostCraftingNotification(1L, 1000L));
     }
 }

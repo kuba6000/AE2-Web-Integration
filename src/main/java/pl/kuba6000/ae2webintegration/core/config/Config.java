@@ -42,6 +42,15 @@ public class Config {
         return ConfigBootstrap.checkForUpdatesValue.get();
     }
 
+    // Notifications
+    public static int NOTIFICATION_MINIMUM_CRAFTING_DURATION_SECONDS() {
+        return ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue.get();
+    }
+
+    public static int NOTIFICATION_MINIMUM_CRAFTING_AMOUNT() {
+        return ConfigBootstrap.notificationMinimumCraftingAmountValue.get();
+    }
+
     // Discord
     public static String DISCORD_WEBHOOK() {
         return ConfigBootstrap.discordWebhookValue.get();
@@ -51,12 +60,25 @@ public class Config {
         return ConfigBootstrap.discordRoleIdValue.get();
     }
 
-    public static int DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS() {
-        return ConfigBootstrap.discordMinimumCraftingDurationSecondsValue.get();
+    // Ntfy
+    public static String NTFY_HOST() {
+        return ConfigBootstrap.ntfyHostValue.get();
     }
 
-    public static int DISCORD_MINIMUM_CRAFTING_AMOUNT() {
-        return ConfigBootstrap.discordMinimumCraftingAmountValue.get();
+    public static String NTFY_TOPIC() {
+        return ConfigBootstrap.ntfyTopicValue.get();
+    }
+
+    public static String NTFY_USER() {
+        return ConfigBootstrap.ntfyUserValue.get();
+    }
+
+    public static String NTFY_PASSWORD() {
+        return ConfigBootstrap.ntfyPasswordValue.get();
+    }
+
+    public static String AE_FULL_DOMAIN() {
+        return ConfigBootstrap.aeFullDomainValue.get();
     }
 
     // Tracking
