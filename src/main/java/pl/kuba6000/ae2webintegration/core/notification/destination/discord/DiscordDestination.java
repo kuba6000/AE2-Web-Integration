@@ -4,8 +4,8 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.WebhookHelper;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
-import pl.kuba6000.ae2webintegration.core.notification.message.ErrorMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
 
 public class DiscordDestination implements INotificationDestination {
 
@@ -42,17 +42,17 @@ public class DiscordDestination implements INotificationDestination {
                     + "!\nIt took "
                     + craftingMessage.durationString(),
                 craftingMessage.wasCancelled() ? COLOR_RED : COLOR_GREEN);
-        } else if (message instanceof ErrorMessage errorMessage) {
-            ErrorMessage.Severity severity = errorMessage.severity();
+        } else if (message instanceof StatusMessage statusMessage) {
+            StatusMessage.Severity severity = statusMessage.severity();
             int color = switch (severity) {
                 case ERROR -> COLOR_RED;
                 case WARNING -> COLOR_YELLOW;
                 default -> 0;
             };
             if (color != 0) {
-                payload = new DiscordPayload(errorMessage.title(), errorMessage.description(), color);
+                payload = new DiscordPayload(statusMessage.title(), statusMessage.description(), color);
             } else {
-                payload = new DiscordPayload(errorMessage.title(), errorMessage.description());
+                payload = new DiscordPayload(statusMessage.title(), statusMessage.description());
             }
         }
 

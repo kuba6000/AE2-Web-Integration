@@ -7,8 +7,8 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.WebhookHelper;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
-import pl.kuba6000.ae2webintegration.core.notification.message.ErrorMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
 
 public class NtfyDestination implements INotificationDestination {
 
@@ -53,8 +53,8 @@ public class NtfyDestination implements INotificationDestination {
                     + craftingMessage.durationString(),
                 NtfyPayload.Priority.NORMAL,
                 tags);
-        } else if (message instanceof ErrorMessage errorMessage) {
-            ErrorMessage.Severity severity = errorMessage.severity();
+        } else if (message instanceof StatusMessage statusMessage) {
+            StatusMessage.Severity severity = statusMessage.severity();
             List<String> tags = new ArrayList<>();
             NtfyPayload.Priority priority = NtfyPayload.Priority.NORMAL;
             switch (severity) {
@@ -67,7 +67,7 @@ public class NtfyDestination implements INotificationDestination {
                     tags.add("warning");
                     break;
             }
-            payload = new NtfyPayload(errorMessage.title(), errorMessage.description(), priority, tags);
+            payload = new NtfyPayload(statusMessage.title(), statusMessage.description(), priority, tags);
         }
 
         WebhookHelper.sendPayload(Config.NTFY_HOST(), Config.NTFY_USER(), Config.NTFY_PASSWORD(), payload);
