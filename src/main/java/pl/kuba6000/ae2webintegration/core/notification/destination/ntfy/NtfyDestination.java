@@ -54,19 +54,19 @@ public class NtfyDestination implements INotificationDestination {
                     + (craftingMessage.wasCancelled() ? "cancelled" : "completed")
                     + "!\nIt took "
                     + craftingMessage.durationString(),
-                3,
+                NtfyPayload.Priority.NORMAL,
                 tags);
         } else if (message instanceof ErrorMessage errorMessage) {
             ErrorMessage.Severity severity = errorMessage.severity();
             List<String> tags = new ArrayList<>();
-            int priority = 3;
+            NtfyPayload.Priority priority = NtfyPayload.Priority.NORMAL;
             switch (severity) {
                 case ERROR:
-                    priority = 5;
+                    priority = NtfyPayload.Priority.MAX;
                     tags.add("rotating_light");
                     break;
                 case WARNING:
-                    priority = 4;
+                    priority = NtfyPayload.Priority.HIGH;
                     tags.add("warning");
                     break;
             };
