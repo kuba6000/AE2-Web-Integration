@@ -14,8 +14,8 @@ import appeng.api.config.SecurityPermissions;
 import appeng.api.networking.events.MENetworkSecurityChange;
 import appeng.me.cache.SecurityCache;
 import appeng.util.Platform;
-import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.api.IAEWebInterface;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 
 @Mixin(value = SecurityCache.class, remap = false)
 public class SecurityCacheMixin {

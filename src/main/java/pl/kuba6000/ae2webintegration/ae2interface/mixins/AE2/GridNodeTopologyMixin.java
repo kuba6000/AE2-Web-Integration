@@ -8,7 +8,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import appeng.me.GridNode;
 import appeng.util.Platform;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.GridDiscovery;
-import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 
 @Mixin(value = GridNode.class, remap = false)
 public abstract class GridNodeTopologyMixin {
