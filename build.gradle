@@ -58,6 +58,7 @@ repositories {
 
 dependencies {
     compileOnly 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
+    testCompileOnly 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
     annotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
     testAnnotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
 

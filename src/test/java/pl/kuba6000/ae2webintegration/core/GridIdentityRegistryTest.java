@@ -18,6 +18,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")

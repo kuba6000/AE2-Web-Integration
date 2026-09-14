@@ -19,6 +19,8 @@ import pl.kuba6000.ae2webintegration.core.TestGridFixtures.TestGrid;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -88,7 +90,7 @@ class GridAccessSessionsTest extends GridTestScope {
         GridAccess access = GridAccessSessions.compute(TestGridFixtures.ae(grid), OTHER_USER, T0);
         assertFalse(access.canAccess(CoreEngine.GRID_IDENTITIES.getKey(grid)));
         assertTrue(
-            access.getAccessibleGridKeys()
+            access.accessibleGridKeys()
                 .isEmpty());
     }
 
@@ -112,7 +114,7 @@ class GridAccessSessionsTest extends GridTestScope {
             OWNER,
             T0);
         assertTrue(
-            access.getAccessibleGridKeys()
+            access.accessibleGridKeys()
                 .isEmpty());
     }
 
@@ -125,7 +127,7 @@ class GridAccessSessionsTest extends GridTestScope {
             OWNER,
             T0);
         assertTrue(
-            access.getAccessibleGridKeys()
+            access.accessibleGridKeys()
                 .isEmpty());
     }
 
@@ -138,7 +140,7 @@ class GridAccessSessionsTest extends GridTestScope {
                         .withoutPathingGrid()),
                 OWNER,
                 T0)
-                .getAccessibleGridKeys()
+                .accessibleGridKeys()
                 .isEmpty());
     }
 
@@ -151,7 +153,7 @@ class GridAccessSessionsTest extends GridTestScope {
             OWNER,
             T0);
         assertTrue(
-            access.getAccessibleGridKeys()
+            access.accessibleGridKeys()
                 .isEmpty());
     }
 
@@ -234,7 +236,7 @@ class GridAccessSessionsTest extends GridTestScope {
             WebPrincipal.admin(),
             T0);
         assertTrue(
-            access.getAccessibleGridKeys()
+            access.accessibleGridKeys()
                 .isEmpty());
     }
 

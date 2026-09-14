@@ -6,8 +6,8 @@ import java.util.List;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
-import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
-import pl.kuba6000.ae2webintegration.core.api.GridAccessSource;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 

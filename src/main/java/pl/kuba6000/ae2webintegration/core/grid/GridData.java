@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core;
+package pl.kuba6000.ae2webintegration.core.grid;
 
 import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,7 +43,7 @@ public class GridData {
         craftingPlanMaintenanceCursor = null;
     }
 
-    static synchronized boolean evictExpiredCompletedPlans(long nowNanos, int maxGrids) {
+    public static synchronized boolean evictExpiredCompletedPlans(long nowNanos, int maxGrids) {
         if (craftingPlanMaintenanceCursor == null) {
             craftingPlanMaintenanceCursor = gridDataMap.values()
                 .iterator();
@@ -67,7 +67,7 @@ public class GridData {
         return gridDataMap.get(gridKey);
     }
 
-    static void retire(StableKey gridKey) {
+    public static void retire(StableKey gridKey) {
         GridData data = gridDataMap.remove(gridKey);
         if (data == null) return;
         data.craftingPlans.clearForServerStop();

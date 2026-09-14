@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core;
+package pl.kuba6000.ae2webintegration.core.grid;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -15,8 +15,10 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.api.GridAccessSource;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;

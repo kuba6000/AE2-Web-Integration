@@ -10,6 +10,7 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -63,11 +64,11 @@ class GridAccessTest {
         assertFalse(access.canAccess(TestGridFixtures.key(99L)));
         assertEquals(
             1,
-            access.getAccessibleGridKeys()
+            access.accessibleGridKeys()
                 .size());
         assertThrows(
             UnsupportedOperationException.class,
-            () -> access.getAccessibleGridKeys()
+            () -> access.accessibleGridKeys()
                 .add(TestGridFixtures.key(99L)));
     }
 }

@@ -15,6 +15,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.github.bsideup.jabel.Desugar;
+
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
@@ -212,13 +214,8 @@ class CoreDataTest {
         return new String(Files.readAllBytes(dataFile().toPath()), StandardCharsets.UTF_8);
     }
 
-    private static class TestPlatform implements IServerPlatform {
-
-        private final File configDirectory;
-
-        TestPlatform(File configDirectory) {
-            this.configDirectory = configDirectory;
-        }
+    @Desugar
+    private record TestPlatform(File configDirectory) implements IServerPlatform {
 
         @Override
         public UUID getOnlinePlayerUUID(String username) {
@@ -236,15 +233,8 @@ class CoreDataTest {
         }
     }
 
-    private static class TestAE implements IAE {
-
-        private final int playerId;
-        private final boolean throwOnPlayerLookup;
-
-        TestAE(int playerId, boolean throwOnPlayerLookup) {
-            this.playerId = playerId;
-            this.throwOnPlayerLookup = throwOnPlayerLookup;
-        }
+    @Desugar
+    private record TestAE(int playerId, boolean throwOnPlayerLookup) implements IAE {
 
         @Override
         public Iterable<IAEGrid> web$getGrids() {

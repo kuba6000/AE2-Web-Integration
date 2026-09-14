@@ -22,12 +22,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTrackingHistory;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
@@ -588,20 +591,8 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         AE2JobTracker.updateCraftingStatus(cpu, resource);
     }
 
-    private static final class Resource implements IAEKey {
-
-        private final int id;
-        private final int variant;
-
-        Resource(int id, int variant) {
-            this.id = id;
-            this.variant = variant;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof Resource && id == ((Resource) other).id && variant == ((Resource) other).variant;
-        }
+    @Desugar
+    private record Resource(int id, int variant) implements IAEKey {
 
         @Override
         public int hashCode() {

@@ -9,8 +9,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import com.github.bsideup.jabel.Desugar;
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
@@ -51,7 +53,10 @@ class StableKeyGsonTest {
         StableKey key = StableKey.parse(TOKEN);
         String json = "{\"key\":\"" + TOKEN + "\"}";
         assertEquals(JsonParser.parseString(json), gson.toJsonTree(new KeyDto(key)));
-        assertEquals(key, gson.fromJson(json, KeyDto.class).key);
+        assertEquals(
+            key,
+            gson.fromJson(json, KeyDto.class)
+                .key());
     }
 
     @Test
@@ -74,19 +79,16 @@ class StableKeyGsonTest {
         assertEquals("null", gson.toJson(null, StableKey.class));
         assertNull(gson.fromJson("null", StableKey.class));
         assertEquals(JsonParser.parseString("{\"key\":null}"), gson.toJsonTree(new KeyDto(null)));
-        assertNull(gson.fromJson("{\"key\":null}", KeyDto.class).key);
+        assertNull(
+            gson.fromJson("{\"key\":null}", KeyDto.class)
+                .key());
     }
 
-    private static final class KeyDto {
-
-        private final StableKey key;
-
-        private KeyDto(StableKey key) {
-            this.key = key;
-        }
+    @Desugar
+    private record KeyDto(StableKey key) {
 
         @Override
-        public String toString() {
+        public @NotNull String toString() {
             return "existing-key";
         }
     }

@@ -10,8 +10,11 @@ import java.util.function.Function;
 
 import org.junit.jupiter.api.Test;
 
+import com.github.bsideup.jabel.Desugar;
+
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -75,17 +78,12 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         }
     }
 
-    private static final class TestCraftingGrid implements IAECraftingGrid {
+    @Desugar
+    private record TestCraftingGrid(String submitResult) implements IAECraftingGrid {
 
         @Override
         public boolean web$isCurrentlyCraftable(IAEKey key) {
             throw new AssertionError("Existing plan lifecycle must not start another order");
-        }
-
-        private final String submitResult;
-
-        private TestCraftingGrid(String submitResult) {
-            this.submitResult = submitResult;
         }
 
         @Override

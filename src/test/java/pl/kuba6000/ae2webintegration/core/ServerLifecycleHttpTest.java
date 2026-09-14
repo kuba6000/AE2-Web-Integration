@@ -32,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.github.bsideup.jabel.Desugar;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -47,16 +48,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class ServerLifecycleHttpTest {
 
-    private static final class Response {
-
-        private final int status;
-        private final String body;
-
-        private Response(int status, String body) {
-            this.status = status;
-            this.body = body;
-        }
-    }
+    @Desugar
+    private record Response(int status, String body) {}
 
     private static final class BlockingPlayerLookup implements IServerPlatform {
 
@@ -193,8 +186,10 @@ class ServerLifecycleHttpTest {
         AE2Controller.startHTTPServer();
         String token = login();
         Response firstWorld = performSyncedRequest(token);
-        assertEquals(HttpURLConnection.HTTP_OK, firstWorld.status);
-        assertTrue(firstWorld.body.contains("\"status\":\"OK\""));
+        assertEquals(HttpURLConnection.HTTP_OK, firstWorld.status());
+        assertTrue(
+            firstWorld.body()
+                .contains("\"status\":\"OK\""));
 
         CoreEngine.onServerStopping();
         CoreEngine.onServerStopped();
@@ -206,13 +201,15 @@ class ServerLifecycleHttpTest {
         Response secondWorld = get("/grids", token);
         assertEquals(
             HttpURLConnection.HTTP_UNAUTHORIZED,
-            secondWorld.status,
+            secondWorld.status(),
             "a token issued for the old world must no longer authorize");
 
         String secondWorldToken = login();
         Response secondWorldAuthorized = performSyncedRequest(secondWorldToken);
-        assertEquals(HttpURLConnection.HTTP_OK, secondWorldAuthorized.status);
-        assertTrue(secondWorldAuthorized.body.contains("\"status\":\"OK\""));
+        assertEquals(HttpURLConnection.HTTP_OK, secondWorldAuthorized.status());
+        assertTrue(
+            secondWorldAuthorized.body()
+                .contains("\"status\":\"OK\""));
     }
 
     @Test
@@ -313,8 +310,10 @@ class ServerLifecycleHttpTest {
 
         Response response = get("/grids", token);
 
-        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, response.status);
-        assertTrue(response.body.contains("\"status\":\"SERVER_BUSY\""));
+        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, response.status());
+        assertTrue(
+            response.body()
+                .contains("\"status\":\"SERVER_BUSY\""));
         assertEquals(32, AE2Controller.requests.size());
     }
 
@@ -509,9 +508,9 @@ class ServerLifecycleHttpTest {
         String token = login("Player", "player-password");
 
         assertEquals(0, aePlayerLookups.get(), "login must remain independent of the server tick");
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status);
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
         assertEquals(1, aePlayerLookups.get());
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status);
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
         assertEquals(2, aePlayerLookups.get(), "each synced request must publish access from current AE2 state");
     }
 
@@ -538,8 +537,10 @@ class ServerLifecycleHttpTest {
         String token = login("canonicalplayer", "player-password");
         Response page = get("/", token);
 
-        assertEquals(HttpURLConnection.HTTP_OK, page.status);
-        assertTrue(page.body.contains("CanonicalPlayer"));
+        assertEquals(HttpURLConnection.HTTP_OK, page.status());
+        assertTrue(
+            page.body()
+                .contains("CanonicalPlayer"));
     }
 
     private String login() throws IOException {
@@ -570,8 +571,8 @@ class ServerLifecycleHttpTest {
             output.write(body);
         }
         Response response = read(connection);
-        assertEquals(HttpURLConnection.HTTP_OK, response.status);
-        JsonObject json = new Gson().fromJson(response.body, JsonObject.class);
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        JsonObject json = new Gson().fromJson(response.body(), JsonObject.class);
         return json.get("token")
             .getAsString();
     }
