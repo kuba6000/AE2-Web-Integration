@@ -32,6 +32,15 @@ public class Platform implements IServerPlatform {
     }
 
     @Override
+    public File getWorldDirectory() {
+        return FMLCommonHandler.instance()
+            .getMinecraftServerInstance()
+            .getWorld(0)
+            .getSaveHandler()
+            .getWorldDirectory();
+    }
+
+    @Override
     public File getConfigDirectory() {
         return configDir;
     }

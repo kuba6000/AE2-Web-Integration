@@ -1,11 +1,19 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import java.util.List;
+import java.util.Set;
+
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.mojang.authlib.GameProfile;
 
@@ -15,25 +23,55 @@ import appeng.api.networking.IMachineSet;
 import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.pathing.IPathingGrid;
 import appeng.api.networking.security.IActionHost;
-import appeng.api.networking.security.ISecurityGrid;
 import appeng.api.networking.storage.IStorageGrid;
 import appeng.me.Grid;
+import appeng.me.GridNode;
 import appeng.me.helpers.PlayerSource;
 import appeng.parts.reporting.AbstractPartTerminal;
+import appeng.util.Platform;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.GridDiscovery;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingFakePlayer;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
+import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.GridAccessSource;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = Grid.class, remap = false)
 public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, GridWorldAccessor, PlayerSourceLifecycle {
+
+    @Inject(method = { "add(Lappeng/me/GridNode;)V", "remove(Lappeng/me/GridNode;)V" }, at = @At("HEAD"))
+    private void web$membershipChanged(GridNode node, CallbackInfo callback) {
+        if (!Platform.isServer()) return;
+        String kind = GridDiscovery.accessSourceKind(
+            node.getMachine()
+                .getClass());
+        if (kind == null) return;
+        GridAccessSessions.permissionsChanged();
+    }
+
+    @Override
+    public @NotNull Set<DimensionalCoords> web$getControllers() {
+        return GridDiscovery.controllers((Grid) (Object) this);
+    }
+
+    @Override
+    public @NotNull List<GridAccessSource> web$getAccessSources() {
+        return GridDiscovery.accessSources((Grid) (Object) this);
+    }
+
+    @Override
+    public @Nullable PlayerIdentity web$getRepresentativeOwner() {
+        return GridDiscovery.representativeOwner((Grid) (Object) this);
+    }
 
     @Override
     public IAECraftingGrid web$getCraftingGrid() {
@@ -48,11 +86,6 @@ public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, GridWor
     @Override
     public IAEStorageGrid web$getStorageGrid() {
         return ((Grid) (Object) this).getCache(IStorageGrid.class);
-    }
-
-    @Override
-    public IAESecurityGrid web$getSecurityGrid() {
-        return ((Grid) (Object) this).getCache(ISecurityGrid.class);
     }
 
     @Unique
