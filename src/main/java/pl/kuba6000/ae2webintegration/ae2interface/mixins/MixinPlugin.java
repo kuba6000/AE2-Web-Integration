@@ -43,6 +43,8 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
         List<String> mixins = new ArrayList<>(
             Arrays.asList(
+                "AE2.ControllerRemovalMixin",
+                "AE2.GridNodeUpdateMixin",
                 "AE2.CraftingCPULogicMixin",
                 "AE2.ExecutingCraftingJobMixin",
                 "AE2.NetworkCraftingProvidersMixin",

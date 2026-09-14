@@ -21,6 +21,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameInde
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
@@ -37,6 +38,11 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNam
     @Shadow
     @Final
     private AdvCraftingCPUCluster cluster;
+
+    @Override
+    public @Nullable IAEGrid web$getGrid() {
+        return cluster.isDestroyed() ? null : (IAEGrid) cluster.getGrid();
+    }
 
     @Unique
     private @Nullable StableKey web$stableKey;
