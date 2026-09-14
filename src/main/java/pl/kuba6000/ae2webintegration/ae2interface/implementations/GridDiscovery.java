@@ -1,0 +1,156 @@
+package pl.kuba6000.ae2webintegration.ae2interface.implementations;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import appeng.api.config.SecurityPermissions;
+import appeng.api.networking.IGridHost;
+import appeng.api.networking.IGridNode;
+import appeng.api.networking.security.ISecurityGrid;
+import appeng.api.networking.security.ISecurityProvider;
+import appeng.api.util.DimensionalCoord;
+import appeng.core.worlddata.WorldData;
+import appeng.me.Grid;
+import appeng.parts.reporting.AbstractPartTerminal;
+import appeng.tile.networking.TileController;
+import appeng.tile.networking.TileWireless;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IPlayerProfileLookup;
+import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
+
+/** Server-thread discovery using current AE2 node ownership and effective security permissions. */
+public final class GridDiscovery {
+
+    private static final Comparator<IGridNode> CONTROLLER_ORDER = Comparator
+        .comparingInt((IGridNode node) -> node.getWorld().provider.dimensionId)
+        .thenComparingInt(
+            node -> node.getGridBlock()
+                .getLocation().x)
+        .thenComparingInt(
+            node -> node.getGridBlock()
+                .getLocation().y)
+        .thenComparingInt(
+            node -> node.getGridBlock()
+                .getLocation().z);
+
+    private GridDiscovery() {}
+
+    public static @Nullable String accessSourceKind(@NotNull Class<?> machineType) {
+        if (TileController.class.isAssignableFrom(machineType)) return "controller";
+        if (TileWireless.class.isAssignableFrom(machineType)) return "wireless_access_point";
+        if (AbstractPartTerminal.class.isAssignableFrom(machineType)) return "terminal";
+        if (ISecurityProvider.class.isAssignableFrom(machineType)) return "security_terminal";
+        return null;
+    }
+
+    public static @NotNull Set<DimensionalCoords> controllers(@NotNull Grid grid) {
+        Set<DimensionalCoords> controllers = new LinkedHashSet<>();
+        for (Class<? extends IGridHost> machineType : grid.getMachineClasses()) {
+            if (!TileController.class.isAssignableFrom(machineType)) continue;
+            for (IGridNode node : grid.getMachines(machineType)) {
+                controllers.add(position(node));
+            }
+        }
+        return controllers;
+    }
+
+    public static @NotNull List<GridAccessSource> accessSources(@NotNull Grid grid) {
+        List<GridAccessSource> sources = new ArrayList<>();
+        IPlayerProfileLookup players = players();
+        ISecurityGrid security = grid.getCache(ISecurityGrid.class);
+        for (Class<? extends IGridHost> machineType : grid.getMachineClasses()) {
+            String kind = accessSourceKind(machineType);
+            if (kind == null) continue;
+            for (IGridNode node : grid.getMachines(machineType)) {
+                Object machine = node.getMachine();
+                if ("security_terminal".equals(kind)) {
+                    if (security.isAvailable()) {
+                        addSecuritySources(sources, security, (ISecurityProvider) machine, position(node), players);
+                    }
+                    continue;
+                }
+                String side = machine instanceof AbstractPartTerminal terminal ? terminal.getSide()
+                    .name() : null;
+                PlayerIdentity owner = players.web$getPlayerProfile(node.getPlayerID());
+                if (owner != null)
+                    sources.add(GridAccessSource.forPlayer(owner, kind, position(node), side, "node_owner"));
+            }
+        }
+        return sources;
+    }
+
+    private static void addSecuritySources(@NotNull List<GridAccessSource> sources, @NotNull ISecurityGrid security,
+        @NotNull ISecurityProvider provider, @NotNull DimensionalCoords position,
+        @NotNull IPlayerProfileLookup players) {
+        HashMap<Integer, EnumSet<SecurityPermissions>> permissions = new HashMap<>();
+        provider.readPermissions(permissions);
+        Set<UUID> exclusions = new HashSet<>();
+        boolean completeExclusions = true;
+        for (int playerId : permissions.keySet()) {
+            if (playerId < 0) continue;
+            PlayerIdentity player = players.web$getPlayerProfile(playerId);
+            if (hasWebPermissions(security, playerId)) {
+                if (player != null) {
+                    String reason = playerId == security.getOwner() ? "security_owner" : "security_card";
+                    sources.add(GridAccessSource.forPlayer(player, "security_terminal", position, null, reason));
+                }
+            } else if (player != null) exclusions.add(player.uuid);
+            else completeExclusions = false;
+        }
+        // A missing UUID mapping must not silently drop an effective named denial from the default rule.
+        if (completeExclusions && hasWebPermissions(security, -1)) {
+            sources.add(GridAccessSource.forEveryone("security_terminal", position, "security_default", exclusions));
+        }
+    }
+
+    private static boolean hasWebPermissions(@NotNull ISecurityGrid security, int playerId) {
+        return security.hasPermission(playerId, SecurityPermissions.BUILD)
+            && security.hasPermission(playerId, SecurityPermissions.EXTRACT)
+            && security.hasPermission(playerId, SecurityPermissions.INJECT)
+            && security.hasPermission(playerId, SecurityPermissions.CRAFT);
+    }
+
+    public static @Nullable PlayerIdentity representativeOwner(@NotNull Grid grid) {
+        IPlayerProfileLookup players = players();
+        ISecurityGrid security = grid.getCache(ISecurityGrid.class);
+        if (security.isAvailable()) {
+            PlayerIdentity owner = players.web$getPlayerProfile(security.getOwner());
+            if (owner != null) return owner;
+        }
+        IGridNode first = null;
+        PlayerIdentity owner = null;
+        for (Class<? extends IGridHost> machineType : grid.getMachineClasses()) {
+            if (!TileController.class.isAssignableFrom(machineType)) continue;
+            for (IGridNode node : grid.getMachines(machineType)) {
+                PlayerIdentity candidate = players.web$getPlayerProfile(node.getPlayerID());
+                if (candidate != null && (first == null || CONTROLLER_ORDER.compare(node, first) < 0)) {
+                    first = node;
+                    owner = candidate;
+                }
+            }
+        }
+        return owner;
+    }
+
+    private static @NotNull DimensionalCoords position(@NotNull IGridNode node) {
+        DimensionalCoord location = node.getGridBlock()
+            .getLocation();
+        return new DimensionalCoords(node.getWorld().provider.dimensionId, location.x, location.y, location.z);
+    }
+
+    private static @NotNull IPlayerProfileLookup players() {
+        return (IPlayerProfileLookup) WorldData.instance()
+            .playerData();
+    }
+}
