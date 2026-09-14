@@ -170,10 +170,11 @@
                 <input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">  <label for="thisgridbydefault">Select this grid by default</label> <br>
                 <input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);"> <label for="trackthisgrid">Enable tracking for this grid (track jobs)</label> <br>
             </section>
-            <span class='note' style="flex: 0 0 100%; margin-top: 10px;">To select a grid, the network must be exposed for web access. On newer versions, place a Wireless Access Point on the network. On older versions, use a Security Terminal and grant the required permissions.</span>
+            <span class='note' style="flex: 0 0 100%; margin-top: 10px;">Access is granted through a controller, Wireless Access Point or terminal assigned to you, or through supported security permissions. The network must have an online controller.</span>
         </section>
     </section>
 </section>
+<section id="gridaccessdetails" aria-live="polite"></section>
 <section id="terminalcontainer">
     <section id="terminaltypes">
         <section id='terminalOptions'>
@@ -450,7 +451,7 @@
     function initSettings(){
         let cookie = getCookie("defaultGrid");
         if (cookie != "")
-            settings.defaultGrid = Number(cookie);
+            settings.defaultGrid = cookie === '-1' ? -1 : cookie;
         cookie = getCookie("sortBy");
         if (cookie != "")
             sortingOptions.sortBy = Number(cookie);
@@ -728,21 +729,33 @@
             data = data.data;
             console.log(data);
             let gridFound = false;
-            let html = "";
+            const selection = document.getElementById('gridselection');
+            selection.replaceChildren();
             for (let i = 0; i < data.length; i++){
                 let grid = data[i];
                 let str = grid['key'] + " [ Owned by " + grid['owner'] + " ][ CPU count: " + grid['cpuCount'] + " ]" + (settings.defaultGrid != -1 && grid['key'] == settings.defaultGrid ? "[ Default ]" : "") + (grid['isTrackingEnabled'] ? "[ Tracked ]" : "");
-                html += "<option value='" + grid['key'] + "' " + (grid['key'] == -1 ? "disabled" : "") + (selectedGrid != -1 && grid['key'] == selectedGrid ? "selected" : "") + ">Grid " + str + "</option>";
+                const option = document.createElement('option');
+                option.value = grid.key;
+                option.textContent = 'Grid ' + str;
+                option.selected = selectedGrid === grid.key;
+                selection.appendChild(option);
                 if (selectedGrid != -1 && grid['key'] == selectedGrid) {
                     document.getElementById('thisgridbydefault').checked = settings.defaultGrid == selectedGrid;
                     document.getElementById('thisgridbydefault').disabled = false;
                     document.getElementById('trackthisgrid').disabled = false;
                     document.getElementById('trackthisgrid').checked = grid['isTrackingEnabled'];
-                    document.getElementById('currentgrid').innerHTML = "Current grid: " + str;
+                    document.getElementById('currentgrid').textContent = "Current grid: " + str;
                     gridFound = true;
                 }
             }
-            document.getElementById('gridselection').innerHTML = html;
+            if (!gridFound) {
+                selectedGrid = -1;
+                document.getElementById('currentgrid').textContent = 'No grid selected';
+                document.getElementById('thisgridbydefault').disabled = true;
+                document.getElementById('trackthisgrid').disabled = true;
+            }
+            const selected = data.find(grid => grid.key === selectedGrid);
+            showGridAccess(selected ? selected.accessSources : []);
             if (data.length > 1)
                 document.getElementById('gridselection').size = data.length;
             else
@@ -752,6 +765,39 @@
         });
     }
     updateGridList();
+    function showGridAccess(sources) {
+        const container = document.getElementById('gridaccessdetails');
+        container.replaceChildren();
+        if (!sources || sources.length === 0) return;
+        const details = document.createElement('details');
+        const summary = document.createElement('summary');
+        summary.textContent = 'Players with access';
+        details.appendChild(summary);
+        const groups = new Map();
+        for (const source of sources) {
+            const key = source.player ? source.player.uuid : '*';
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(source);
+        }
+        const kinds = {controller: 'Controller', wireless_access_point: 'Wireless Access Point', terminal: 'Terminal', security_terminal: 'Security Terminal'};
+        const reasons = {node_owner: 'block owner', security_owner: 'security owner', security_card: 'security permissions', security_default: 'default security permissions'};
+        for (const entries of groups.values()) {
+            const heading = document.createElement('p');
+            heading.textContent = entries[0].player ? entries[0].player.name + ' (' + entries[0].player.uuid + ')' : 'Default access';
+            details.appendChild(heading);
+            const list = document.createElement('ul');
+            for (const source of entries) {
+                const item = document.createElement('li');
+                const pos = source.position;
+                item.textContent = (kinds[source.kind] || source.kind) + ' — ' + pos.dimid + ' (' + pos.x + ', ' + pos.y + ', ' + pos.z + ')' +
+                    (source.side ? ', side: ' + source.side : '') + ' — ' + (reasons[source.reason] || source.reason);
+                if (source.excludedPlayers && source.excludedPlayers.length) item.textContent += '. Excludes: ' + source.excludedPlayers.join(', ');
+                list.appendChild(item);
+            }
+            details.appendChild(list);
+        }
+        container.appendChild(details);
+    }
     // The async endpoints (trackinghistory / gettracking / gridsettings) authorize against a per-user
     // access set that the server rebuilds during synced requests. After a long idle period it expires and
     // the server answers REFRESH_REQUIRED instead of serving the request. Asking for the grid list rebuilds
@@ -778,7 +824,7 @@
         });
     }
     function selectedGridChanged(el){
-        selectedGrid = Number(el.value);
+        selectedGrid = el.value;
         selectedCPU = "";
         cpuForJob = "";
         globalCPUList = {};

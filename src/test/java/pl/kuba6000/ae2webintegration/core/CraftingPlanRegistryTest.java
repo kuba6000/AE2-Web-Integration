@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")

@@ -32,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.github.bsideup.jabel.Desugar;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -47,16 +48,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class ServerLifecycleHttpTest {
 
-    private static final class Response {
-
-        private final int status;
-        private final String body;
-
-        private Response(int status, String body) {
-            this.status = status;
-            this.body = body;
-        }
-    }
+    @Desugar
+    private record Response(int status, String body) {}
 
     private static final class BlockingPlayerLookup implements IServerPlatform {
 
@@ -76,6 +69,11 @@ class ServerLifecycleHttpTest {
         @Override
         public File getConfigDirectory() {
             return null;
+        }
+
+        @Override
+        public File getWorldDirectory() {
+            throw new AssertionError("This lookup-only fixture has no world lifecycle");
         }
 
         private UUID awaitLookup() {
@@ -184,28 +182,34 @@ class ServerLifecycleHttpTest {
         IAE processInterface = TestGridFixtures.ae();
         AE2Controller.AE2Interface = processInterface;
 
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login();
         Response firstWorld = performSyncedRequest(token);
-        assertEquals(HttpURLConnection.HTTP_OK, firstWorld.status);
-        assertTrue(firstWorld.body.contains("\"status\":\"OK\""));
+        assertEquals(HttpURLConnection.HTTP_OK, firstWorld.status());
+        assertTrue(
+            firstWorld.body()
+                .contains("\"status\":\"OK\""));
 
         CoreEngine.onServerStopping();
         CoreEngine.onServerStopped();
 
         assertSame(processInterface, AE2Controller.AE2Interface);
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
 
         Response secondWorld = get("/grids", token);
         assertEquals(
             HttpURLConnection.HTTP_UNAUTHORIZED,
-            secondWorld.status,
+            secondWorld.status(),
             "a token issued for the old world must no longer authorize");
 
         String secondWorldToken = login();
         Response secondWorldAuthorized = performSyncedRequest(secondWorldToken);
-        assertEquals(HttpURLConnection.HTTP_OK, secondWorldAuthorized.status);
-        assertTrue(secondWorldAuthorized.body.contains("\"status\":\"OK\""));
+        assertEquals(HttpURLConnection.HTTP_OK, secondWorldAuthorized.status());
+        assertTrue(
+            secondWorldAuthorized.body()
+                .contains("\"status\":\"OK\""));
     }
 
     @Test
@@ -215,6 +219,7 @@ class ServerLifecycleHttpTest {
         BlockingPlayerLookup platform = new BlockingPlayerLookup(
             UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
         AE2Controller.serverPlatform = platform;
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange("register=Player&password=test-password");
         ExecutorService oldWorker = Executors.newSingleThreadExecutor();
@@ -262,7 +267,13 @@ class ServerLifecycleHttpTest {
             public File getConfigDirectory() {
                 return tempDirectory;
             }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
         };
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange("register=Player&password=test-password");
 
@@ -278,6 +289,7 @@ class ServerLifecycleHttpTest {
     // Java 8 has neither the Charset overload nor AutoCloseable HttpExchange; the fake close() is a no-op.
     @SuppressWarnings({ "CharsetObjectCanBeUsed", "resource" })
     void registrationFailsFastWhenTheServerThreadQueueIsFull() throws Exception {
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         fillServerThreadQueue();
         PostExchange exchange = new PostExchange("register=Player&password=test-password");
@@ -291,14 +303,17 @@ class ServerLifecycleHttpTest {
 
     @Test
     void syncedRequestReturnsServiceUnavailableWhenTheServerThreadQueueIsFull() throws Exception {
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login();
         fillServerThreadQueue();
 
         Response response = get("/grids", token);
 
-        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, response.status);
-        assertTrue(response.body.contains("\"status\":\"SERVER_BUSY\""));
+        assertEquals(HttpURLConnection.HTTP_UNAVAILABLE, response.status());
+        assertTrue(
+            response.body()
+                .contains("\"status\":\"SERVER_BUSY\""));
         assertEquals(32, AE2Controller.requests.size());
     }
 
@@ -319,8 +334,14 @@ class ServerLifecycleHttpTest {
             public File getConfigDirectory() {
                 return tempDirectory;
             }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
         };
         AE2Controller.AE2Interface = TestGridFixtures.ae();
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange("register=MissingPlayer&password=test-password");
         ExecutorService httpWorker = Executors.newSingleThreadExecutor();
@@ -368,8 +389,14 @@ class ServerLifecycleHttpTest {
             public File getConfigDirectory() {
                 return tempDirectory;
             }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
         };
         AE2Controller.AE2Interface = TestGridFixtures.ae();
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange("register=MissingPlayer&password=test-password");
         ExecutorService httpWorker = Executors.newSingleThreadExecutor();
@@ -425,6 +452,7 @@ class ServerLifecycleHttpTest {
                 new PlayerIdentity(playerUuid, "Player"),
                 PasswordHelper.generateStrongPasswordHash("player-password")));
 
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange("username=Player&password=player-password");
         ExecutorService oldWorker = Executors.newSingleThreadExecutor();
@@ -475,13 +503,14 @@ class ServerLifecycleHttpTest {
             new PlayerIdentity(playerUuid, "Player"),
             PasswordHelper.generateStrongPasswordHash("player-password"));
 
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login("Player", "player-password");
 
         assertEquals(0, aePlayerLookups.get(), "login must remain independent of the server tick");
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status);
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
         assertEquals(1, aePlayerLookups.get());
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status);
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
         assertEquals(2, aePlayerLookups.get(), "each synced request must publish access from current AE2 state");
     }
 
@@ -503,12 +532,15 @@ class ServerLifecycleHttpTest {
                 new PlayerIdentity(playerUuid, "CanonicalPlayer"),
                 PasswordHelper.generateStrongPasswordHash("player-password")));
 
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login("canonicalplayer", "player-password");
         Response page = get("/", token);
 
-        assertEquals(HttpURLConnection.HTTP_OK, page.status);
-        assertTrue(page.body.contains("CanonicalPlayer"));
+        assertEquals(HttpURLConnection.HTTP_OK, page.status());
+        assertTrue(
+            page.body()
+                .contains("CanonicalPlayer"));
     }
 
     private String login() throws IOException {
@@ -539,8 +571,8 @@ class ServerLifecycleHttpTest {
             output.write(body);
         }
         Response response = read(connection);
-        assertEquals(HttpURLConnection.HTTP_OK, response.status);
-        JsonObject json = new Gson().fromJson(response.body, JsonObject.class);
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        JsonObject json = new Gson().fromJson(response.body(), JsonObject.class);
         return json.get("token")
             .getAsString();
     }

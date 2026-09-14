@@ -10,15 +10,18 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class GridAccessTest {
 
     private static final long T0 = 1_000_000L;
 
     private static GridAccess accessTo(long... keys) {
-        Set<Long> set = new HashSet<>();
+        Set<StableKey> set = new HashSet<>();
         for (long key : keys) {
-            set.add(key);
+            set.add(TestGridFixtures.key(key));
         }
         return new GridAccess(42, set, T0);
     }
@@ -26,14 +29,14 @@ class GridAccessTest {
     @Test
     void canAccessOnlyListedGrids() {
         GridAccess access = accessTo(10L, 20L);
-        assertTrue(access.canAccess(10L));
-        assertTrue(access.canAccess(20L));
-        assertFalse(access.canAccess(30L));
+        assertTrue(access.canAccess(TestGridFixtures.key(10L)));
+        assertTrue(access.canAccess(TestGridFixtures.key(20L)));
+        assertFalse(access.canAccess(TestGridFixtures.key(30L)));
     }
 
     @Test
     void emptySetGrantsNothing() {
-        assertFalse(accessTo().canAccess(10L));
+        assertFalse(accessTo().canAccess(TestGridFixtures.key(10L)));
     }
 
     @Test
@@ -53,19 +56,19 @@ class GridAccessTest {
     @Test
     @SuppressWarnings("DataFlowIssue") // The mutation below must throw to prove the snapshot is immutable.
     void keySetIsAnImmutableCopy() {
-        Set<Long> source = new HashSet<>();
-        source.add(10L);
+        Set<StableKey> source = new HashSet<>();
+        source.add(TestGridFixtures.key(10L));
         GridAccess access = new GridAccess(42, source, T0);
 
-        source.add(99L); // mutating the source must not leak into the snapshot
-        assertFalse(access.canAccess(99L));
+        source.add(TestGridFixtures.key(99L)); // mutating the source must not leak into the snapshot
+        assertFalse(access.canAccess(TestGridFixtures.key(99L)));
         assertEquals(
             1,
-            access.getAccessibleGridKeys()
+            access.accessibleGridKeys()
                 .size());
         assertThrows(
             UnsupportedOperationException.class,
-            () -> access.getAccessibleGridKeys()
-                .add(99L));
+            () -> access.accessibleGridKeys()
+                .add(TestGridFixtures.key(99L)));
     }
 }

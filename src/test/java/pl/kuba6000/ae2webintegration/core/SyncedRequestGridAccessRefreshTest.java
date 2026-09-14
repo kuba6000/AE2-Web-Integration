@@ -8,11 +8,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 
-class SyncedRequestGridAccessRefreshTest {
+class SyncedRequestGridAccessRefreshTest extends GridTestScope {
 
-    private static final long NEW_GRID_KEY = 10L;
     private static final WebPrincipal LOCALHOST = WebPrincipal.localhost();
 
     private static final class ProbeRequest extends ISyncedRequest {
@@ -21,8 +23,12 @@ class SyncedRequestGridAccessRefreshTest {
 
         @Override
         public void handle(IAE ae) {
+            StableKey current = CoreEngine.GRID_IDENTITIES.getKey(
+                ae.web$getGrids()
+                    .iterator()
+                    .next());
             sawNewGrid = GridAccessSessions.get(context.getPrincipal())
-                .canAccess(NEW_GRID_KEY);
+                .canAccess(current);
         }
     }
 
@@ -39,7 +45,7 @@ class SyncedRequestGridAccessRefreshTest {
 
         ProbeRequest request = new ProbeRequest();
         request.init(TestGridFixtures.context(LOCALHOST, ""));
-        request.runOnServerThread(TestGridFixtures.ae(TestGridFixtures.grid(NEW_GRID_KEY)));
+        request.runOnServerThread(TestGridFixtures.ae(TestGridFixtures.grid(1L)));
 
         assertTrue(request.sawNewGrid, "a synced request must not observe the previous grid-access snapshot");
     }

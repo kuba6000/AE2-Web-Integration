@@ -1,88 +1,48 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
 import java.util.ArrayList;
+import java.util.List;
 
-import pl.kuba6000.ae2webintegration.core.GridData;
-import pl.kuba6000.ae2webintegration.core.GridFilter;
-import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import com.github.bsideup.jabel.Desugar;
+
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 
 public class GetGridList extends ISyncedRequest {
 
-    @SuppressWarnings("unused") // Gson reads the fields reflectively.
-    private static class JSON_GridData {
+    @Desugar
+    private record JSON_GridData(StableKey key, int cpuCount, String owner, boolean isOwned, boolean isTrackingEnabled,
+        List<GridAccessSource> accessSources) {
 
-        JSON_GridData(long key, int cpuCount, String owner, boolean isOwned, boolean isTrackingEnabled) {
-            this.key = key;
-            this.cpuCount = cpuCount;
-            this.owner = owner;
-            this.isOwned = isOwned;
-            this.isTrackingEnabled = isTrackingEnabled;
+        JSON_GridData(GridAccessSessions.View view, boolean isOwned) {
+            this(
+                view.key(),
+                view.grid()
+                    .web$getCraftingGrid()
+                    .web$getCPUCount(),
+                view.owner() == null ? "N/A" : view.owner().name,
+                isOwned,
+                CoreEngine.GRID_IDENTITIES.isTracked(view.key()),
+                view.sources());
         }
-
-        public long key; // key == -1 -> not attachable
-        public int cpuCount;
-        public String owner;
-        public boolean isOwned;
-        public boolean isTrackingEnabled;
     }
 
     @Override
     public void handle(IAE ae) {
-        ArrayList<JSON_GridData> grids = new ArrayList<>();
-        for (IAEGrid grid : ae.web$getGrids()) {
-            IAESecurityGrid security = GridFilter.usableSecurity(grid);
-            if (security == null || security.web$getSecurityKey() == -1) {
-                if (context.isAdmin()) {
-                    grids.add(
-                        new JSON_GridData(
-                            -1,
-                            grid.web$getCraftingGrid()
-                                .web$getCPUCount(),
-                            "N/A",
-                            false,
-                            false));
-                }
-                continue;
-            }
-            long securityKey = security.web$getSecurityKey();
-            if (!access.canAccess(securityKey)) {
-                continue;
-            }
-            boolean hasPermissions = access.hasResolvedPlayerId() && security.web$hasPermissions(access.getPlayerId());
-            if (!context.isAdmin() && !hasPermissions) {
-                continue;
-            }
-            PlayerIdentity ownerIdentity = security.web$getOwnerProfile();
-            GridData gridData = GridData.getOrCreate(securityKey);
-            grids.add(
-                new JSON_GridData(
-                    securityKey,
-                    grid.web$getCraftingGrid()
-                        .web$getCPUCount(),
-                    ownerIdentity == null ? "N/A" : ownerIdentity.name,
-                    hasPermissions,
-                    gridData.isTracked));
+        ArrayList<JSON_GridData> result = new ArrayList<>();
+        for (GridAccessSessions.View view : grids) {
+            if (!view.allows(context.getPrincipal())) continue;
+            result.add(new JSON_GridData(view, !context.isAdmin()));
         }
-        grids.sort((d1, d2) -> {
-            if (d1.isOwned && !d2.isOwned) {
-                return -1;
-            } else if (!d1.isOwned && d2.isOwned) {
-                return 1;
-            } else if (d1.isTrackingEnabled && !d2.isTrackingEnabled) {
-                return -1;
-            } else if (!d1.isTrackingEnabled && d2.isTrackingEnabled) {
-                return 1;
-            } else if (d1.key == -1 && d2.key != -1) {
-                return 1; // unattached grids go to the end
-            } else if (d1.key != -1 && d2.key == -1) {
-                return -1; // attached grids come first
-            } else {
-                return Integer.compare(d2.cpuCount, d1.cpuCount); // sort by cpu count if all else is equal
-            }
+        result.sort((first, second) -> {
+            int owned = Boolean.compare(second.isOwned(), first.isOwned());
+            if (owned != 0) return owned;
+            int tracked = Boolean.compare(second.isTrackingEnabled(), first.isTrackingEnabled());
+            return tracked != 0 ? tracked : Integer.compare(second.cpuCount(), first.cpuCount());
         });
-        succeed(grids);
+        succeed(result);
     }
 }

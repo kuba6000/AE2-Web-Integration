@@ -3,11 +3,11 @@ package pl.kuba6000.ae2webintegration.core.ae2request.async;
 import java.util.Map;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.GridAccess;
-import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
-import pl.kuba6000.ae2webintegration.core.GridData;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
-import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /**
  * Requests served directly on the HTTP worker thread, without a hop through the server tick.
@@ -18,7 +18,7 @@ import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
  */
 public abstract class IAsyncRequest extends IRequest {
 
-    protected long gridKey = -1;
+    protected StableKey gridKey;
     protected GridData grid = null;
 
     public void handle(Map<String, String> getParams) {}
@@ -27,16 +27,16 @@ public abstract class IAsyncRequest extends IRequest {
         String gridstr = context.getGetParams()
             .get("grid");
         if (gridstr == null || gridstr.isEmpty()) {
-            gridKey = -1;
+            gridKey = null;
         } else {
-            Long parsed = HTTPUtils.parseLong(gridstr);
-            if (parsed == null) {
+            try {
+                gridKey = StableKey.parse(gridstr);
+            } catch (IllegalArgumentException e) {
                 deny("BAD_PARAM");
                 return;
             }
-            gridKey = parsed;
         }
-        if (gridKey != -1) {
+        if (gridKey != null) {
             GridAccess access = GridAccessSessions.get(context.getPrincipal());
             if (access == null || access.isStale(System.currentTimeMillis())) {
                 // Distinct from NO_PERMISSIONS so the client can re-fetch the grid list and retry instead
@@ -49,7 +49,7 @@ public abstract class IAsyncRequest extends IRequest {
                 return;
             }
             // Lookup, not create: a handler that stores something asks for the entry itself, so a plain
-            // read can no longer leave a phantom grid behind in griddata.json.
+            // read does not allocate runtime state for a grid.
             grid = GridData.find(gridKey);
         }
         handle(context.getGetParams());

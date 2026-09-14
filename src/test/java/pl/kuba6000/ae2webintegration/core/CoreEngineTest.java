@@ -8,6 +8,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.github.bsideup.jabel.Desugar;
+
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 
@@ -27,13 +29,8 @@ class CoreEngineTest {
         assertEquals("test-version", CoreEngine.getModVersion());
     }
 
-    private static class TestPlatform implements IServerPlatform {
-
-        private final File configDirectory;
-
-        TestPlatform(File configDirectory) {
-            this.configDirectory = configDirectory;
-        }
+    @Desugar
+    private record TestPlatform(File configDirectory) implements IServerPlatform {
 
         @Override
         public UUID getOnlinePlayerUUID(String username) {
@@ -43,6 +40,11 @@ class CoreEngineTest {
         @Override
         public File getConfigDirectory() {
             return configDirectory;
+        }
+
+        @Override
+        public File getWorldDirectory() {
+            return new File(configDirectory, "test-save");
         }
 
     }
