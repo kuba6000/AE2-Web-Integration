@@ -18,6 +18,7 @@ import appeng.util.item.IAEStackList;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
@@ -41,6 +42,12 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, 
 
     @Unique
     private @Nullable StableKey web$stableKey;
+
+    @Override
+    public @Nullable IAEGrid web$getGrid() {
+        CraftingCPUCluster cluster = (CraftingCPUCluster) (Object) this;
+        return cluster.isDestroyed() ? null : (IAEGrid) cluster.getGrid();
+    }
 
     @Override
     public @NotNull StableKey web$getKey() {
