@@ -26,8 +26,8 @@ import appeng.tile.networking.TileController;
 import appeng.tile.networking.TileWireless;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IPlayerProfileLookup;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.api.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 
 /** Server-thread discovery using current AE2 node ownership and effective security permissions. */
 public final class GridDiscovery {
