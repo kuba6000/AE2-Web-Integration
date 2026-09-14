@@ -20,7 +20,7 @@ import appeng.me.Grid;
 import appeng.parts.AEBasePart;
 import appeng.parts.reporting.AbstractTerminalPart;
 import appeng.parts.reporting.PatternAccessTerminalPart;
-import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
