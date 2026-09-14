@@ -1,21 +1,28 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.TestGridFixtures.TestGrid;
+import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
-class GridAccessSessionsTest {
+class GridAccessSessionsTest extends GridTestScope {
 
     private static final long T0 = 1_000_000L;
     private static final int OTHER_USER_ID = 99;
@@ -30,23 +37,56 @@ class GridAccessSessionsTest {
     }
 
     @Test
+    void permissionChangesRefreshAccessWithoutScanningControllersOrChangingIdentity() {
+        AtomicInteger controllerReads = new AtomicInteger();
+        TestGrid grid = new TestGrid(10L, false, AEControllerState.CONTROLLER_ONLINE, PERMITTED_USER_ID) {
+
+            @Override
+            public @NotNull Set<DimensionalCoords> web$getControllers() {
+                controllerReads.incrementAndGet();
+                return super.web$getControllers();
+            }
+        };
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        TestGridFixtures.TestAE ae = TestGridFixtures.ae(grid);
+        GridAccessSessions.refresh(ae, OWNER, T0);
+        GridAccessSessions.refresh(ae, PERMITTED_USER, T0);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertTrue(
+            GridAccessSessions.get(PERMITTED_USER)
+                .canAccess(key));
+        controllerReads.set(0);
+
+        grid.withoutSources();
+        GridAccessSessions.permissionsChanged();
+
+        assertNull(GridAccessSessions.get(OWNER));
+        assertNull(GridAccessSessions.get(PERMITTED_USER));
+        assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
+        GridAccess current = GridAccessSessions.refresh(ae, PERMITTED_USER, T0 + 1);
+        assertFalse(current.canAccess(key));
+        assertEquals(0, controllerReads.get());
+    }
+
+    @Test
     void computeIncludesGridsTheUserOwns() {
-        GridAccess access = GridAccessSessions.compute(TestGridFixtures.ae(TestGridFixtures.grid(10L)), OWNER, T0);
-        assertTrue(access.canAccess(10L));
+        TestGrid grid = TestGridFixtures.grid(10L);
+        GridAccess access = GridAccessSessions.compute(TestGridFixtures.ae(grid), OWNER, T0);
+        assertTrue(access.canAccess(CoreEngine.GRID_IDENTITIES.getKey(grid)));
     }
 
     @Test
     void computeIncludesGridsTheUserHasPermissionsOn() {
-        GridAccess access = GridAccessSessions
-            .compute(TestGridFixtures.ae(TestGridFixtures.grid(10L, PERMITTED_USER_ID)), PERMITTED_USER, T0);
-        assertTrue(access.canAccess(10L));
+        TestGrid grid = TestGridFixtures.grid(10L, PERMITTED_USER_ID);
+        GridAccess access = GridAccessSessions.compute(TestGridFixtures.ae(grid), PERMITTED_USER, T0);
+        assertTrue(access.canAccess(CoreEngine.GRID_IDENTITIES.getKey(grid)));
     }
 
     @Test
     void computeExcludesGridsTheUserHasNoPermissionsOn() {
-        GridAccess access = GridAccessSessions
-            .compute(TestGridFixtures.ae(TestGridFixtures.grid(10L, PERMITTED_USER_ID)), OTHER_USER, T0);
-        assertFalse(access.canAccess(10L));
+        TestGrid grid = TestGridFixtures.grid(10L, PERMITTED_USER_ID);
+        GridAccess access = GridAccessSessions.compute(TestGridFixtures.ae(grid), OTHER_USER, T0);
+        assertFalse(access.canAccess(CoreEngine.GRID_IDENTITIES.getKey(grid)));
         assertTrue(
             access.getAccessibleGridKeys()
                 .isEmpty());
@@ -57,8 +97,10 @@ class GridAccessSessionsTest {
         TestGrid mine = TestGridFixtures.grid(10L, PERMITTED_USER_ID);
         TestGrid theirs = TestGridFixtures.grid(20L);
         GridAccess access = GridAccessSessions.compute(TestGridFixtures.ae(mine, theirs), PERMITTED_USER, T0);
-        assertTrue(access.canAccess(10L));
-        assertFalse(access.canAccess(20L), "must not see a grid owned by somebody else");
+        assertTrue(access.canAccess(CoreEngine.GRID_IDENTITIES.getKey(mine)));
+        assertFalse(
+            access.canAccess(CoreEngine.GRID_IDENTITIES.getKey(theirs)),
+            "must not see a grid owned by somebody else");
     }
 
     @Test
@@ -69,7 +111,9 @@ class GridAccessSessionsTest {
                     .booting()),
             OWNER,
             T0);
-        assertFalse(access.canAccess(10L));
+        assertTrue(
+            access.getAccessibleGridKeys()
+                .isEmpty());
     }
 
     @Test
@@ -80,43 +124,32 @@ class GridAccessSessionsTest {
                     .noController()),
             OWNER,
             T0);
-        assertFalse(access.canAccess(10L));
+        assertTrue(
+            access.getAccessibleGridKeys()
+                .isEmpty());
     }
 
     @Test
-    void computeExcludesGridWithUnavailableSecurity() {
-        GridAccess access = GridAccessSessions.compute(
-            TestGridFixtures.ae(
-                TestGridFixtures.grid(10L)
-                    .securityUnavailable()),
-            OWNER,
-            T0);
-        assertFalse(access.canAccess(10L));
-    }
-
-    @Test
-    void computeExcludesGridWithMissingServices() {
-        assertFalse(
-            GridAccessSessions.compute(
-                TestGridFixtures.ae(
-                    TestGridFixtures.grid(10L)
-                        .withoutSecurityGrid()),
-                OWNER,
-                T0)
-                .canAccess(10L));
-        assertFalse(
+    void computeRequiresPathingService() {
+        assertTrue(
             GridAccessSessions.compute(
                 TestGridFixtures.ae(
                     TestGridFixtures.grid(10L)
                         .withoutPathingGrid()),
                 OWNER,
                 T0)
-                .canAccess(10L));
+                .getAccessibleGridKeys()
+                .isEmpty());
     }
 
     @Test
-    void computeExcludesUnattachableGridKey() {
-        GridAccess access = GridAccessSessions.compute(TestGridFixtures.ae(TestGridFixtures.grid(-1L)), OWNER, T0);
+    void computeExcludesGridWithoutAccessSources() {
+        GridAccess access = GridAccessSessions.compute(
+            TestGridFixtures.ae(
+                TestGridFixtures.grid(-1L)
+                    .withoutSources()),
+            OWNER,
+            T0);
         assertTrue(
             access.getAccessibleGridKeys()
                 .isEmpty());
@@ -130,8 +163,9 @@ class GridAccessSessionsTest {
     }
 
     @Test
-    void unresolvedAePlayerIdFailsClosed() {
-        TestGridFixtures.TestAE ae = new TestGridFixtures.TestAE(TestGridFixtures.grid(10L, PERMITTED_USER_ID)) {
+    void unresolvedNativePlayerIdStillAllowsUuidOwnership() {
+        TestGrid grid = TestGridFixtures.grid(10L, PERMITTED_USER_ID);
+        TestGridFixtures.TestAE ae = new TestGridFixtures.TestAE(grid) {
 
             @Override
             public int web$getPlayerId(PlayerIdentity identity) {
@@ -142,9 +176,7 @@ class GridAccessSessionsTest {
         GridAccess access = GridAccessSessions.refresh(ae, PERMITTED_USER, T0);
 
         assertFalse(access.hasResolvedPlayerId());
-        assertTrue(
-            access.getAccessibleGridKeys()
-                .isEmpty());
+        assertTrue(access.canAccess(CoreEngine.GRID_IDENTITIES.getKey(grid)));
     }
 
     @Test
@@ -166,29 +198,31 @@ class GridAccessSessionsTest {
         TestGrid grid = TestGridFixtures.grid(10L, PERMITTED_USER_ID);
         TestGridFixtures.TestAE ae = TestGridFixtures.ae(grid);
         GridAccessSessions.refresh(ae, PERMITTED_USER, T0);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertTrue(
             GridAccessSessions.get(PERMITTED_USER)
-                .canAccess(10L));
+                .canAccess(key));
 
         // grid goes offline - the next refresh must drop it
         grid.noController();
         GridAccessSessions.refresh(ae, PERMITTED_USER, T0 + 1L);
         assertFalse(
             GridAccessSessions.get(PERMITTED_USER)
-                .canAccess(10L));
+                .canAccess(key));
     }
 
     @Test
     void anAdminGetsEveryAttachableGridSoTheCheckIsExistenceOnly() {
         TestGrid someoneElses = TestGridFixtures.grid(20L);
-        GridAccess access = GridAccessSessions.compute(
-            TestGridFixtures.ae(TestGridFixtures.grid(10L, PERMITTED_USER_ID), someoneElses),
-            WebPrincipal.admin(),
-            T0);
+        TestGrid mine = TestGridFixtures.grid(10L, PERMITTED_USER_ID);
+        GridAccess access = GridAccessSessions
+            .compute(TestGridFixtures.ae(mine, someoneElses), WebPrincipal.admin(), T0);
 
-        assertTrue(access.canAccess(10L));
-        assertTrue(access.canAccess(20L), "an admin is not permission-checked");
-        assertFalse(access.canAccess(999L), "but a key with no grid behind it is still rejected");
+        assertTrue(access.canAccess(CoreEngine.GRID_IDENTITIES.getKey(mine)));
+        assertTrue(
+            access.canAccess(CoreEngine.GRID_IDENTITIES.getKey(someoneElses)),
+            "an admin is not permission-checked");
+        assertFalse(access.canAccess(TestGridFixtures.key(999L)), "but a key with no grid behind it is still rejected");
     }
 
     @Test
@@ -199,7 +233,9 @@ class GridAccessSessionsTest {
                     .noController()),
             WebPrincipal.admin(),
             T0);
-        assertFalse(access.canAccess(10L));
+        assertTrue(
+            access.getAccessibleGridKeys()
+                .isEmpty());
     }
 
     @Test

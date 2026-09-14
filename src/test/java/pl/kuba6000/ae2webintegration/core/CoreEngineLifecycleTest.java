@@ -2,6 +2,8 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -26,22 +28,43 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
-class CoreEngineLifecycleTest {
+class CoreEngineLifecycleTest extends GridTestScope {
 
-    private static final long GRID_KEY = 900_201L;
+    @Test
+    void serverTickWaitsForControllerValidationBeforeRestoringSavedBindings() throws Exception {
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(900_202L);
+        TestGridFixtures.track(grid);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
+        IAE previous = AE2Controller.AE2Interface;
+        try {
+            AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
+            CoreEngine.onServerTick();
+            assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
+            CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+            assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
+            assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        } finally {
+            AE2Controller.AE2Interface = previous;
+        }
+    }
 
     @Test
     void serverStoppedClearsWorldRuntimeStateButPreservesProcessState() throws Exception {
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(GRID_KEY);
-        GridData gridData = GridData.getOrCreate(GRID_KEY);
-        gridData.isTracked = true;
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(900_201L);
+        TestGridFixtures.track(grid);
+        StableKey gridKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(gridKey);
+        GridData gridData = GridData.getOrCreate(gridKey);
         CompletableFuture<IAECraftingJob> pendingPlan = new CompletableFuture<>();
         int planId = gridData.addJob(pendingPlan);
         ICraftingCPUCluster cpu = new TestCpu();
         AE2JobTracker.addJob(cpu, grid, false);
         gridData.trackingInfo.trackingInfos.put(1, AE2JobTracker.findActiveJob(cpu));
         WebPrincipal principal = TestGridFixtures.principal(42);
-        GridAccessSessions.put(principal, new GridAccess(42, Collections.singleton(GRID_KEY), 0L));
+        GridAccessSessions.put(principal, new GridAccess(42, Collections.singleton(gridKey), 0L));
         AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
         pl.kuba6000.ae2webintegration.core.identity.StableKey itemKey = AE2Controller.itemIdentities.remember(
             grid,
@@ -61,6 +84,11 @@ class CoreEngineLifecycleTest {
             public File getConfigDirectory() {
                 return null;
             }
+
+            @Override
+            public File getWorldDirectory() {
+                return gridSave;
+            }
         };
         AE2Controller.serverPlatform = processPlatform;
         CoreEngine.onServerStopped();
@@ -68,7 +96,12 @@ class CoreEngineLifecycleTest {
 
         assertSame(processInterface, AE2Controller.AE2Interface);
         assertSame(processPlatform, AE2Controller.serverPlatform);
-        assertTrue(gridData.isTracked, "persisted grid settings survive a world switch");
+        assertTrue(
+            new GridIdentityRegistry(new File(gridSave, "ae2webintegration/grid-identities.json")).isTracked(gridKey),
+            "settings remain in the stopped save");
+        assertFalse(
+            CoreEngine.GRID_IDENTITIES.isTracked(gridKey),
+            "the stopped world must not leak tracking into another world");
         assertTrue(AE2Controller.awaitingRegistration.isEmpty());
         assertNull(AE2Controller.itemIdentities.resolve(itemKey));
         assertNull(GridAccessSessions.get(principal));
@@ -119,6 +152,11 @@ class CoreEngineLifecycleTest {
     }
 
     private static final class TestCpu implements ICraftingCPUCluster {
+
+        @Override
+        public pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid web$getGrid() {
+            return null;
+        }
 
         public @NotNull StableKey web$getKey() {
             return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");

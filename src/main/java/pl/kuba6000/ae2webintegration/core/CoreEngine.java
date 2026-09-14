@@ -19,6 +19,8 @@ import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class CoreEngine {
 
+    public static final GridIdentityRegistry GRID_IDENTITIES = new GridIdentityRegistry();
+
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
     /**
@@ -54,10 +56,14 @@ public class CoreEngine {
 
     private static void loadData() {
         CoreData.loadData();
-        GridData.loadData();
     }
 
     public static void onServerStarted() {
+        try {
+            CoreEngine.GRID_IDENTITIES.initialize(AE2Controller.serverPlatform.getWorldDirectory());
+        } catch (java.io.IOException e) {
+            LOG.error("Failed to load grid identities; grid requests remain unavailable", e);
+        }
         serverRunning = true;
         AE2Controller.init();
         StartupHandler.logOpenAdminAccessWarning();
@@ -71,6 +77,7 @@ public class CoreEngine {
      * four copies of an event handler that no test can reach.
      */
     public static void onServerTick() {
+        AE2JobTracker.resolveDeferredJobs();
         drainRequests(System::nanoTime);
         runPlanMaintenance(System.nanoTime());
         maintainVersionChecker();
@@ -177,6 +184,7 @@ public class CoreEngine {
         GridAccessSessions.clear();
         AE2JobTracker.clearActiveJobs();
         GridData.clearRuntimeState();
+        CoreEngine.GRID_IDENTITIES.clear();
         resetPlanMaintenance();
     }
 

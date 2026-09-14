@@ -9,4 +9,7 @@ public interface IServerPlatform {
     UUID getOnlinePlayerUUID(String username);
 
     File getConfigDirectory();
+
+    /** Root of the active server save, available after server startup. */
+    File getWorldDirectory();
 }

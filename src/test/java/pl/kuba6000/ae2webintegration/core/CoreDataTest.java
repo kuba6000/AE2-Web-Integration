@@ -229,6 +229,11 @@ class CoreDataTest {
         public File getConfigDirectory() {
             return configDirectory;
         }
+
+        @Override
+        public File getWorldDirectory() {
+            return new File(configDirectory, "test-save");
+        }
     }
 
     private static class TestAE implements IAE {

@@ -45,5 +45,10 @@ class CoreEngineTest {
             return configDirectory;
         }
 
+        @Override
+        public File getWorldDirectory() {
+            return new File(configDirectory, "test-save");
+        }
+
     }
 }

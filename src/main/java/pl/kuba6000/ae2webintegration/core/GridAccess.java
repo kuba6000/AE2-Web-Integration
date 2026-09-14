@@ -4,6 +4,8 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+
 /**
  * Immutable snapshot of the grids a single web user may access, plus the moment it was computed.
  * <p>
@@ -18,11 +20,11 @@ public final class GridAccess {
     public static final int UNRESOLVED_PLAYER_ID = -1;
 
     private final int playerId;
-    private final Set<Long> accessibleGridKeys;
+    private final Set<StableKey> accessibleGridKeys;
     private final long computedAtMillis;
 
     @SuppressWarnings("Java9CollectionFactory") // Set.copyOf is unavailable on Java 8.
-    public GridAccess(int playerId, Set<Long> accessibleGridKeys, long computedAtMillis) {
+    public GridAccess(int playerId, Set<StableKey> accessibleGridKeys, long computedAtMillis) {
         this.playerId = playerId;
         this.accessibleGridKeys = Collections.unmodifiableSet(new HashSet<>(accessibleGridKeys));
         this.computedAtMillis = computedAtMillis;
@@ -36,7 +38,7 @@ public final class GridAccess {
         return playerId >= 0;
     }
 
-    public boolean canAccess(long gridKey) {
+    public boolean canAccess(StableKey gridKey) {
         return accessibleGridKeys.contains(gridKey);
     }
 
@@ -45,7 +47,7 @@ public final class GridAccess {
         return nowMillis - computedAtMillis >= TTL_MILLIS;
     }
 
-    public Set<Long> getAccessibleGridKeys() {
+    public Set<StableKey> getAccessibleGridKeys() {
         return accessibleGridKeys;
     }
 

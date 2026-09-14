@@ -167,7 +167,7 @@ class CoreEngineTickPumpTest {
     void publicTickStillDrainsARequestWhenPlanMaintenanceIsDue() {
         CoreEngine.onServerStopped();
         for (int i = 0; i <= CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK; i++) {
-            GridData.getOrCreate(910_000L + i)
+            GridData.getOrCreate(TestGridFixtures.key(910_000L + i))
                 .addJob(new CompletableFuture<>());
         }
         queue("request", null);

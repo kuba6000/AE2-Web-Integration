@@ -11,12 +11,13 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class CoreEngineMaintenanceTest {
 
-    private static final long GRID_KEY = 900_301L;
+    private static final StableKey GRID_KEY = TestGridFixtures.key(900_301L);
 
     @Test
     void idleServerMaintenanceEventuallyEvictsAnAbandonedCompletedPlan() {
@@ -37,7 +38,7 @@ class CoreEngineMaintenanceTest {
     @Test
     void maintenanceNeverAgeEvictsAPlanThatIsStillCalculating() {
         CoreEngine.onServerStopped();
-        GridData gridData = GridData.getOrCreate(GRID_KEY + 1);
+        GridData gridData = GridData.getOrCreate(TestGridFixtures.key(900_302L));
         CompletableFuture<IAECraftingJob> pending = new CompletableFuture<>();
         int id = gridData.addJob(pending);
 
@@ -56,7 +57,7 @@ class CoreEngineMaintenanceTest {
         List<Integer> planIds = new ArrayList<>();
         int planCount = CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK + 1;
         for (int i = 0; i < planCount; i++) {
-            GridData gridData = GridData.getOrCreate(GRID_KEY + 100 + i);
+            GridData gridData = GridData.getOrCreate(TestGridFixtures.key(900_401L + i));
             int id = gridData.addJob(CompletableFuture.completedFuture(null));
             gridData.getJob(id);
             grids.add(gridData);

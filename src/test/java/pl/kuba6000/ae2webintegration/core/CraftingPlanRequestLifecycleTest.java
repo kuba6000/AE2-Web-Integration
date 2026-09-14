@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -19,15 +20,15 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
-class CraftingPlanRequestLifecycleTest {
+class CraftingPlanRequestLifecycleTest extends GridTestScope {
 
-    private static final long GRID_KEY = 900_001L;
+    private static final StableKey GRID_KEY = TestGridFixtures.key(900_001L);
 
     @Test
     void aSuccessfullySubmittedPlanCannotBeSubmittedAgain() {
         TestCraftingGrid crafting = new TestCraftingGrid(null);
         TestGrid grid = new TestGrid(GRID_KEY, crafting);
-        GridData gridData = GridData.getOrCreate(GRID_KEY);
+        GridData gridData = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid));
         int id = gridData.addJob(CompletableFuture.completedFuture(new TestCraftingJob()));
 
         assertStatus("OK", submit(grid, id));
@@ -38,7 +39,7 @@ class CraftingPlanRequestLifecycleTest {
     void aFailedSubmissionKeepsThePlanAvailableForRetry() {
         TestCraftingGrid crafting = new TestCraftingGrid("Submission failed");
         TestGrid grid = new TestGrid(GRID_KEY, crafting);
-        int id = GridData.getOrCreate(GRID_KEY)
+        int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
             .addJob(CompletableFuture.completedFuture(new TestCraftingJob()));
 
         assertStatus("FAIL", submit(grid, id));
@@ -47,8 +48,9 @@ class CraftingPlanRequestLifecycleTest {
 
     private static String submit(TestGrid grid, int id) {
         Job request = new Job();
-        request.init(TestGridFixtures.context(-1, "grid=" + GRID_KEY + "&id=" + id + "&submit"));
-        request.handle(TestGridFixtures.ae(grid));
+        request.init(
+            TestGridFixtures.context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id + "&submit"));
+        request.runOnServerThread(TestGridFixtures.ae(grid));
         return request.getJSON();
     }
 
@@ -62,8 +64,8 @@ class CraftingPlanRequestLifecycleTest {
 
         private final IAECraftingGrid crafting;
 
-        private TestGrid(long securityKey, IAECraftingGrid crafting) {
-            super(securityKey, true, false, AEControllerState.CONTROLLER_ONLINE);
+        private TestGrid(StableKey securityKey, IAECraftingGrid crafting) {
+            super(securityKey, false, AEControllerState.CONTROLLER_ONLINE);
             this.crafting = crafting;
         }
 

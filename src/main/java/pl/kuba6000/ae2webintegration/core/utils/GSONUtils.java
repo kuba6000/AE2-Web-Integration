@@ -17,6 +17,13 @@ import java.nio.file.StandardCopyOption;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
+import com.google.gson.TypeAdapter;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
+
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 public class GSONUtils {
 
@@ -39,6 +46,23 @@ public class GSONUtils {
 
     public static final GsonBuilder GSON_BUILDER = new GsonBuilder().addSerializationExclusionStrategy(GSONStrategy)
         .addDeserializationExclusionStrategy(GSONStrategy)
+        .registerTypeAdapter(StableKey.class, new TypeAdapter<StableKey>() {
+
+            @Override
+            public void write(JsonWriter output, StableKey key) throws IOException {
+                output.value(key.toString());
+            }
+
+            @Override
+            public StableKey read(JsonReader input) throws IOException {
+                if (input.peek() != JsonToken.STRING) throw new JsonParseException("Stable key must be a string");
+                try {
+                    return StableKey.parse(input.nextString());
+                } catch (IllegalArgumentException e) {
+                    throw new JsonParseException("Invalid stable key", e);
+                }
+            }
+        }.nullSafe())
         .serializeNulls();
 
     /**

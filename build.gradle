@@ -92,6 +92,8 @@ java {
 // differently depending on the machine that built it.
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    // IDEA imports this task value; its default follows --release rather than java.sourceCompatibility.
+    sourceCompatibility = JavaVersion.VERSION_17
     // Jabel enables newer syntax; --release keeps both JDK API usage and bytecode at Java 8.
     options.release = 8
 }

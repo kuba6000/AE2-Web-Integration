@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /**
  * Regression guard for the missing authorization on the async endpoints (C-01).
@@ -23,8 +24,8 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class AsyncRequestAuthorizationTest {
 
-    private static final long MY_GRID = 10L;
-    private static final long OTHER_GRID = 20L;
+    private static final StableKey MY_GRID = TestGridFixtures.key(10L);
+    private static final StableKey OTHER_GRID = TestGridFixtures.key(20L);
     private static final WebPrincipal ME = TestGridFixtures.principal(42);
     private static final WebPrincipal ADMIN = WebPrincipal.admin();
     private static final WebPrincipal LOCALHOST = WebPrincipal.localhost();
@@ -41,9 +42,9 @@ class AsyncRequestAuthorizationTest {
         }
     }
 
-    private static void grantAccess(WebPrincipal principal, long... keys) {
-        Set<Long> set = new HashSet<>();
-        for (long key : keys) {
+    private static void grantAccess(WebPrincipal principal, StableKey... keys) {
+        Set<StableKey> set = new HashSet<>();
+        for (StableKey key : keys) {
             set.add(key);
         }
         GridAccessSessions
@@ -99,6 +100,16 @@ class AsyncRequestAuthorizationTest {
     }
 
     @Test
+    void permissionChangeRequiresRefreshBeforeAnAsyncHandlerCanUseThePreviousGrant() {
+        grantAccess(ME, MY_GRID);
+        GridAccessSessions.permissionsChanged();
+
+        ProbeRequest request = run(ME, "grid=" + MY_GRID);
+        assertStatus("REFRESH_REQUIRED", request);
+        assertFalse(request.handlerRan);
+    }
+
+    @Test
     void expiredSessionAsksClientToRefresh() {
         GridAccessSessions.put(
             ME,
@@ -116,7 +127,7 @@ class AsyncRequestAuthorizationTest {
     @Test
     void anAdminIsCheckedTooSoAPhantomKeyIsRejected() {
         // Admins are not permission-restricted, but their set still only holds grids that exist, so a
-        // made-up key cannot reach GridData and be written to griddata.json.
+        // made-up key cannot reach GridData or create persisted tracking settings.
         grantAccess(ADMIN, MY_GRID);
 
         assertStatus("NO_PERMISSIONS", run(ADMIN, "grid=" + OTHER_GRID));
@@ -134,7 +145,7 @@ class AsyncRequestAuthorizationTest {
     @Test
     void unauthorizedRequestDoesNotCreateGridData() {
         grantAccess(ME, MY_GRID);
-        long inventedKey = 123456789L;
+        StableKey inventedKey = TestGridFixtures.key(123456789L);
 
         run(ME, "grid=" + inventedKey);
 
@@ -142,7 +153,7 @@ class AsyncRequestAuthorizationTest {
     }
 
     @Test
-    void nonNumericGridParameterIsRejectedInsteadOfThrowing() {
+    void malformedGridTokenIsRejectedInsteadOfThrowing() {
         grantAccess(ME, MY_GRID);
 
         ProbeRequest request = run(ME, "grid=notanumber");

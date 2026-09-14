@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -7,10 +9,12 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+
+import org.jetbrains.annotations.NotNull;
 
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpContext;
@@ -18,7 +22,10 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpPrincipal;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -27,23 +34,50 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 /**
  * Shared fakes for grid/authorization tests. Deliberately one copy rather than the per-test-class
  * duplication used elsewhere in this source set - these fakes are used by three test classes.
  */
-@SuppressWarnings("PMD.AvoidMagicNumbers")
+@SuppressWarnings({ "PMD.AvoidMagicNumbers", "UnstableApiUsage" })
 final class TestGridFixtures {
 
     private TestGridFixtures() {}
 
     static final int OWNER_ID = 7;
 
-    /** An online grid with available security, owned by {@link #OWNER_ID}. */
+    /** An online grid with a controller source owned by {@link #OWNER_ID}. */
     static TestGrid grid(long securityKey, int... alsoPermitted) {
-        return new TestGrid(securityKey, true, false, AEControllerState.CONTROLLER_ONLINE, alsoPermitted);
+        TestGrid grid = new TestGrid(securityKey, false, AEControllerState.CONTROLLER_ONLINE, alsoPermitted);
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        return grid;
+    }
+
+    static StableKey key(long value) {
+        return StableKey.create(sink -> sink.putLong(value));
+    }
+
+    static TestGrid grid(StableKey key, int... alsoPermitted) {
+        TestGrid grid = new TestGrid(key, false, AEControllerState.CONTROLLER_ONLINE, alsoPermitted);
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        return grid;
+    }
+
+    static void track(IAEGrid grid) {
+        try {
+            CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+            StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+            assertNotNull(key);
+            CoreEngine.GRID_IDENTITIES.setTracked(key, true);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
+    static StableKey resolvedKey(IAEGrid grid) {
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        return CoreEngine.GRID_IDENTITIES.getKey(grid);
     }
 
     static TestAE ae(IAEGrid... grids) {
@@ -72,30 +106,31 @@ final class TestGridFixtures {
         return new AE2Controller.RequestContext(new TestExchange(query), principal);
     }
 
-    static class TestGrid implements IAEGrid, IAESecurityGrid, IAEPathingGrid {
+    static class TestGrid implements IAEGrid, IAEPathingGrid {
 
-        private final long securityKey;
-        private boolean securityAvailable;
+        private final DimensionalCoords controllerPosition;
+        private final List<GridAccessSource> sources = new ArrayList<>();
         private boolean booting;
         private AEControllerState controllerState;
-        private final Set<Integer> permitted = new HashSet<>();
-        boolean securityGridPresent = true;
         boolean pathingGridPresent = true;
 
-        TestGrid(long securityKey, boolean securityAvailable, boolean booting, AEControllerState state,
-            int... alsoPermitted) {
-            this.securityKey = securityKey;
-            this.securityAvailable = securityAvailable;
-            this.booting = booting;
-            this.controllerState = state;
-            for (int id : alsoPermitted) {
-                permitted.add(id);
-            }
+        TestGrid(long securityKey, boolean booting, AEControllerState state, int... alsoPermitted) {
+            this(new DimensionalCoords("world", (int) securityKey, 0, 0), booting, state, alsoPermitted);
         }
 
-        TestGrid securityUnavailable() {
-            this.securityAvailable = false;
-            return this;
+        TestGrid(StableKey identity, boolean booting, AEControllerState state, int... alsoPermitted) {
+            this(new DimensionalCoords(identity.toString(), 0, 0, 0), booting, state, alsoPermitted);
+        }
+
+        TestGrid(DimensionalCoords position, boolean booting, AEControllerState state, int... alsoPermitted) {
+            this.controllerPosition = position;
+            this.booting = booting;
+            this.controllerState = state;
+            sources.add(
+                GridAccessSource.forPlayer(playerIdentity(OWNER_ID), "controller", position(), null, "node_owner"));
+            for (int id : alsoPermitted) {
+                sources.add(GridAccessSource.forPlayer(playerIdentity(id), "terminal", position(), null, "node_owner"));
+            }
         }
 
         TestGrid booting() {
@@ -108,14 +143,39 @@ final class TestGridFixtures {
             return this;
         }
 
-        TestGrid withoutSecurityGrid() {
-            this.securityGridPresent = false;
+        TestGrid controllerState(AEControllerState state) {
+            this.controllerState = state;
             return this;
         }
 
         TestGrid withoutPathingGrid() {
             this.pathingGridPresent = false;
             return this;
+        }
+
+        DimensionalCoords position() {
+            return controllerPosition;
+        }
+
+        TestGrid withoutSources() {
+            sources.clear();
+            return this;
+        }
+
+        @Override
+        public @NotNull Set<DimensionalCoords> web$getControllers() {
+            return controllerState == AEControllerState.NO_CONTROLLER ? Collections.emptySet()
+                : Collections.singleton(position());
+        }
+
+        @Override
+        public @NotNull List<GridAccessSource> web$getAccessSources() {
+            return sources;
+        }
+
+        @Override
+        public PlayerIdentity web$getRepresentativeOwner() {
+            return playerIdentity(OWNER_ID);
         }
 
         // --- IAEGrid ---
@@ -134,11 +194,6 @@ final class TestGridFixtures {
             return null;
         }
 
-        @Override
-        public IAESecurityGrid web$getSecurityGrid() {
-            return securityGridPresent ? this : null;
-        }
-
         // --- IAEPathingGrid ---
         @Override
         public boolean web$isNetworkBooting() {
@@ -150,26 +205,6 @@ final class TestGridFixtures {
             return controllerState;
         }
 
-        // --- IAESecurityGrid ---
-        @Override
-        public boolean web$isAvailable() {
-            return securityAvailable;
-        }
-
-        @Override
-        public long web$getSecurityKey() {
-            return securityKey;
-        }
-
-        @Override
-        public PlayerIdentity web$getOwnerProfile() {
-            return new PlayerIdentity(UUID.nameUUIDFromBytes("owner".getBytes()), "Owner");
-        }
-
-        @Override
-        public boolean web$hasPermissions(int playerId) {
-            return playerId == OWNER_ID || permitted.contains(playerId);
-        }
     }
 
     static class TestAE implements IAE, IAEPlayerData {

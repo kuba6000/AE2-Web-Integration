@@ -30,9 +30,9 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
-class TrackingStatisticsResponseTest {
+class TrackingStatisticsResponseTest extends GridTestScope {
 
-    private static final long GRID = 990_581L;
+    private static final StableKey GRID = TestGridFixtures.key(990_581L);
 
     private static final IStackList EMPTY_ITEMS = new IStackList() {
 
@@ -136,7 +136,6 @@ class TrackingStatisticsResponseTest {
             });
         TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
             GRID,
-            true,
             false,
             AEControllerState.CONTROLLER_ONLINE) {
 
@@ -152,7 +151,7 @@ class TrackingStatisticsResponseTest {
                 return EMPTY_ITEMS;
             }
         };
-        GridData.getOrCreate(GRID).isTracked = true;
+        TestGridFixtures.track(grid);
         AE2JobTracker.addJob(cpu, grid, false);
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
         info.timeStarted = System.currentTimeMillis() + (clockMovedBack ? 60_000 : -60_000);
@@ -163,7 +162,11 @@ class TrackingStatisticsResponseTest {
         AE2Controller.AE2Interface = ae;
         try {
             GetCPU request = new GetCPU();
-            assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + GRID + "&cpu=AAAAAAAAAAAAAAAAAAAAAA")));
+            assertTrue(
+                request.init(
+                    TestGridFixtures.context(
+                        -1,
+                        "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&cpu=AAAAAAAAAAAAAAAAAAAAAA")));
             request.runOnServerThread(ae);
             JsonObject response = JsonParser.parseString(request.getJSON())
                 .getAsJsonObject();

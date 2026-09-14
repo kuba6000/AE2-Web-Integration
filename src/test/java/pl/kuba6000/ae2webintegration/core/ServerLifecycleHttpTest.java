@@ -78,6 +78,11 @@ class ServerLifecycleHttpTest {
             return null;
         }
 
+        @Override
+        public File getWorldDirectory() {
+            throw new AssertionError("This lookup-only fixture has no world lifecycle");
+        }
+
         private UUID awaitLookup() {
             entered.countDown();
             try {
@@ -184,6 +189,7 @@ class ServerLifecycleHttpTest {
         IAE processInterface = TestGridFixtures.ae();
         AE2Controller.AE2Interface = processInterface;
 
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login();
         Response firstWorld = performSyncedRequest(token);
@@ -194,6 +200,7 @@ class ServerLifecycleHttpTest {
         CoreEngine.onServerStopped();
 
         assertSame(processInterface, AE2Controller.AE2Interface);
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
 
         Response secondWorld = get("/grids", token);
@@ -215,6 +222,7 @@ class ServerLifecycleHttpTest {
         BlockingPlayerLookup platform = new BlockingPlayerLookup(
             UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
         AE2Controller.serverPlatform = platform;
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange("register=Player&password=test-password");
         ExecutorService oldWorker = Executors.newSingleThreadExecutor();
@@ -262,7 +270,13 @@ class ServerLifecycleHttpTest {
             public File getConfigDirectory() {
                 return tempDirectory;
             }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
         };
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange("register=Player&password=test-password");
 
@@ -278,6 +292,7 @@ class ServerLifecycleHttpTest {
     // Java 8 has neither the Charset overload nor AutoCloseable HttpExchange; the fake close() is a no-op.
     @SuppressWarnings({ "CharsetObjectCanBeUsed", "resource" })
     void registrationFailsFastWhenTheServerThreadQueueIsFull() throws Exception {
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         fillServerThreadQueue();
         PostExchange exchange = new PostExchange("register=Player&password=test-password");
@@ -291,6 +306,7 @@ class ServerLifecycleHttpTest {
 
     @Test
     void syncedRequestReturnsServiceUnavailableWhenTheServerThreadQueueIsFull() throws Exception {
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login();
         fillServerThreadQueue();
@@ -319,8 +335,14 @@ class ServerLifecycleHttpTest {
             public File getConfigDirectory() {
                 return tempDirectory;
             }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
         };
         AE2Controller.AE2Interface = TestGridFixtures.ae();
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange("register=MissingPlayer&password=test-password");
         ExecutorService httpWorker = Executors.newSingleThreadExecutor();
@@ -368,8 +390,14 @@ class ServerLifecycleHttpTest {
             public File getConfigDirectory() {
                 return tempDirectory;
             }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
         };
         AE2Controller.AE2Interface = TestGridFixtures.ae();
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange("register=MissingPlayer&password=test-password");
         ExecutorService httpWorker = Executors.newSingleThreadExecutor();
@@ -425,6 +453,7 @@ class ServerLifecycleHttpTest {
                 new PlayerIdentity(playerUuid, "Player"),
                 PasswordHelper.generateStrongPasswordHash("player-password")));
 
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         PostExchange exchange = new PostExchange("username=Player&password=player-password");
         ExecutorService oldWorker = Executors.newSingleThreadExecutor();
@@ -475,6 +504,7 @@ class ServerLifecycleHttpTest {
             new PlayerIdentity(playerUuid, "Player"),
             PasswordHelper.generateStrongPasswordHash("player-password"));
 
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login("Player", "player-password");
 
@@ -503,6 +533,7 @@ class ServerLifecycleHttpTest {
                 new PlayerIdentity(playerUuid, "CanonicalPlayer"),
                 PasswordHelper.generateStrongPasswordHash("player-password")));
 
+        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login("canonicalplayer", "player-password");
         Response page = get("/", token);
