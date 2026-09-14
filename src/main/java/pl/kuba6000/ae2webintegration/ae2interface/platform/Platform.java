@@ -6,15 +6,12 @@ import java.util.UUID;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 
+import com.github.bsideup.jabel.Desugar;
+
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
-public class Platform implements IServerPlatform {
-
-    private final File configDir;
-
-    public Platform(File configDir) {
-        this.configDir = configDir;
-    }
+@Desugar
+public record Platform(File configDir) implements IServerPlatform {
 
     @Override
     public UUID getOnlinePlayerUUID(String username) {
@@ -29,6 +26,15 @@ public class Platform implements IServerPlatform {
             }
         }
         return null;
+    }
+
+    @Override
+    public File getWorldDirectory() {
+        return FMLCommonHandler.instance()
+            .getMinecraftServerInstance()
+            .getWorld(0)
+            .getSaveHandler()
+            .getWorldDirectory();
     }
 
     @Override

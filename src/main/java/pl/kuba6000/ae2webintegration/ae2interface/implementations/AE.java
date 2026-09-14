@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
-import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.List;
 
 import net.minecraft.world.World;
 
@@ -28,31 +29,14 @@ public class AE implements IAE {
         return instance;
     }
 
-    static class AEGridIterable implements Iterable<IAEGrid> {
-
-        @Override
-        public @NotNull Iterator<IAEGrid> iterator() {
-            return new Iterator<>() {
-
-                private final Iterator<Grid> iterator = TickHandler.INSTANCE.getGridList()
-                    .iterator();
-
-                @Override
-                public boolean hasNext() {
-                    return iterator.hasNext();
-                }
-
-                @Override
-                public IAEGrid next() {
-                    return (IAEGrid) iterator.next();
-                }
-            };
-        }
-    }
-
     @Override
-    public Iterable<IAEGrid> web$getGrids() {
-        return new AEGridIterable();
+    public @NotNull List<IAEGrid> web$getGrids() {
+        List<IAEGrid> grids = new ArrayList<>();
+        for (Grid grid : TickHandler.INSTANCE.getGridList()) {
+            if (!grid.getNodes()
+                .isEmpty()) grids.add((IAEGrid) grid);
+        }
+        return grids;
     }
 
     public void clearPlayerSources(World world) {
