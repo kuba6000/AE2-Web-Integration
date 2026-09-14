@@ -1,41 +1,170 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
-import java.util.Objects;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import net.minecraft.core.GlobalPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import com.google.common.collect.MultimapBuilder;
-import com.google.common.collect.SetMultimap;
 import com.mojang.authlib.GameProfile;
 
-import appeng.api.features.IPlayerRegistry;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.security.IActionHost;
+import appeng.blockentity.networking.ControllerBlockEntity;
 import appeng.blockentity.networking.WirelessAccessPointBlockEntity;
 import appeng.me.Grid;
+import appeng.me.GridNode;
 import appeng.me.helpers.PlayerSource;
+import appeng.parts.AEBasePart;
 import appeng.parts.reporting.AbstractTerminalPart;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
+import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = Grid.class, remap = false)
-public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, IAESecurityGrid {
+public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource {
+
+    @Inject(method = "add", at = @At("HEAD"))
+    private void web$nodeAdded(GridNode node, @Nullable CompoundTag savedData, CallbackInfo ci) {
+        AE.sourcePermissionsChanged(node);
+    }
+
+    @Inject(method = "remove", at = @At("HEAD"))
+    private void web$nodeRemoved(GridNode node, CallbackInfo ci) {
+        AE.sourcePermissionsChanged(node);
+    }
+
+    @Override
+    public @NotNull Set<DimensionalCoords> web$getControllers() {
+        Set<DimensionalCoords> controllers = new LinkedHashSet<>();
+        Grid grid = (Grid) (Object) this;
+        for (Class<?> machine : grid.getMachineClasses()) {
+            if (ControllerBlockEntity.class.isAssignableFrom(machine)) {
+                for (IGridNode node : grid.getMachineNodes(machine)) {
+                    BlockPos position = ((ControllerBlockEntity) node.getOwner()).getBlockPos();
+                    controllers.add(
+                        new DimensionalCoords(
+                            node.getLevel()
+                                .dimension()
+                                .location()
+                                .toString(),
+                            position.getX(),
+                            position.getY(),
+                            position.getZ()));
+                }
+            }
+        }
+        return controllers;
+    }
+
+    @Override
+    public @NotNull List<GridAccessSource> web$getAccessSources() {
+        List<GridAccessSource> sources = new ArrayList<>();
+        Grid grid = (Grid) (Object) this;
+        for (Class<?> machine : grid.getMachineClasses()) {
+            if (AE.accessSourceKind(machine) == null) continue;
+            for (IGridNode node : grid.getMachineNodes(machine)) {
+                String kind = AE.accessSourceKind(node);
+                if (kind == null) continue;
+                PlayerIdentity owner = web$profile(node.getOwningPlayerProfileId());
+                if (owner == null) continue;
+                Object source = node.getOwner();
+                BlockPos position;
+                String side = null;
+                if (source instanceof AEBasePart part) {
+                    position = part.getBlockEntity()
+                        .getBlockPos();
+                    side = part.getSide()
+                        .getName();
+                } else if (source instanceof ControllerBlockEntity controller) {
+                    position = controller.getBlockPos();
+                } else {
+                    position = ((WirelessAccessPointBlockEntity) source).getBlockPos();
+                }
+                sources.add(
+                    GridAccessSource.forPlayer(
+                        owner,
+                        kind,
+                        new DimensionalCoords(
+                            node.getLevel()
+                                .dimension()
+                                .location()
+                                .toString(),
+                            position.getX(),
+                            position.getY(),
+                            position.getZ()),
+                        side,
+                        "node_owner"));
+            }
+        }
+        return sources;
+    }
+
+    @Override
+    public @Nullable PlayerIdentity web$getRepresentativeOwner() {
+        List<IGridNode> controllers = new ArrayList<>();
+        Grid grid = (Grid) (Object) this;
+        for (Class<?> machine : grid.getMachineClasses()) {
+            if (ControllerBlockEntity.class.isAssignableFrom(machine)) {
+                for (IGridNode node : grid.getMachineNodes(machine)) {
+                    controllers.add(node);
+                }
+            }
+        }
+        controllers.sort(
+            Comparator.comparing(
+                (IGridNode node) -> node.getLevel()
+                    .dimension()
+                    .location()
+                    .toString())
+                .thenComparingInt(
+                    node -> ((ControllerBlockEntity) node.getOwner()).getBlockPos()
+                        .getX())
+                .thenComparingInt(
+                    node -> ((ControllerBlockEntity) node.getOwner()).getBlockPos()
+                        .getY())
+                .thenComparingInt(
+                    node -> ((ControllerBlockEntity) node.getOwner()).getBlockPos()
+                        .getZ()));
+        for (IGridNode controller : controllers) {
+            PlayerIdentity owner = web$profile(controller.getOwningPlayerProfileId());
+            if (owner != null) return owner;
+        }
+        return null;
+    }
+
+    @Unique
+    private static @Nullable PlayerIdentity web$profile(@Nullable UUID uuid) {
+        if (uuid == null) return null;
+        var profileCache = ServerLifecycleHooks.getCurrentServer()
+            .getProfileCache();
+        GameProfile profile = profileCache == null ? null
+            : profileCache.get(uuid)
+                .orElse(null);
+        return new PlayerIdentity(uuid, profile == null ? uuid.toString() : profile.getName());
+    }
 
     @Override
     public IAECraftingGrid web$getCraftingGrid() {
@@ -50,11 +179,6 @@ public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, IAESecu
     @Override
     public IAEStorageGrid web$getStorageGrid() {
         return (IAEStorageGrid) ((Grid) (Object) this).getStorageService();
-    }
-
-    @Override
-    public IAESecurityGrid web$getSecurityGrid() {
-        return (IAESecurityGrid) this;
     }
 
     @Unique
@@ -102,122 +226,4 @@ public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, IAESecu
             actionHost);
     }
 
-    @Unique
-    private final SetMultimap<Integer, IGridNode> web$ownerTracker = MultimapBuilder.hashKeys()
-        .hashSetValues()
-        .build();
-
-    @Unique
-    private int web$hashKey = -1;
-
-    @Unique
-    private void web$updateHashKey() {
-        if (web$ownerTracker.isEmpty()) {
-            web$hashKey = -1;
-        } else {
-            web$hashKey = web$ownerTracker.values()
-                .stream()
-                .map(g -> {
-                    GlobalPos pos = ((WirelessAccessPointBlockEntity) g.getOwner()).getGlobalPos();
-                    return Objects.hash(
-                        pos.dimension()
-                            .registry(),
-                        pos.dimension()
-                            .location(),
-                        pos.pos());
-                })
-                .sorted()
-                .findFirst()
-                .orElse(-1);
-        }
-    }
-
-    @Unique
-    private static final Class<?> WIRELESS_ACCESS_POINT_MACHINE_CLASS = WirelessAccessPointBlockEntity.class;
-
-    @Redirect(
-        method = "add",
-        at = @At(
-            value = "INVOKE",
-            target = "Lcom/google/common/collect/SetMultimap;put(Ljava/lang/Object;Ljava/lang/Object;)Z"))
-    private boolean ae2webintegration$trackOwnerAddition(SetMultimap<Class<?>, IGridNode> instance, Object clazz,
-        Object gridNode) {
-        boolean result = instance.put((Class<?>) clazz, (IGridNode) gridNode);
-        if (clazz == WIRELESS_ACCESS_POINT_MACHINE_CLASS) {
-            int owner = ((IGridNode) gridNode).getOwningPlayerId();
-            if (owner != -1) {
-                web$ownerTracker.put(owner, (IGridNode) gridNode);
-                GlobalPos pos = ((WirelessAccessPointBlockEntity) ((IGridNode) gridNode).getOwner()).getGlobalPos();
-                int hash = Objects.hash(
-                    pos.dimension()
-                        .registry(),
-                    pos.dimension()
-                        .location(),
-                    pos.pos());
-                if (web$hashKey > hash || web$hashKey == -1) {
-                    web$hashKey = hash;
-                }
-            }
-        }
-        return result;
-    }
-
-    @Redirect(
-        method = "remove",
-        at = @At(
-            value = "INVOKE",
-            target = "Lcom/google/common/collect/SetMultimap;remove(Ljava/lang/Object;Ljava/lang/Object;)Z"))
-    private boolean ae2webintegration$trackOwnerRemoval(SetMultimap<Class<?>, IGridNode> instance, Object clazz,
-        Object gridNode) {
-        boolean result = instance.remove((Class<?>) clazz, (IGridNode) gridNode);
-        if (clazz == WIRELESS_ACCESS_POINT_MACHINE_CLASS) {
-            int owner = ((IGridNode) gridNode).getOwningPlayerId();
-            if (owner != -1) {
-                web$ownerTracker.remove(owner, (IGridNode) gridNode);
-                web$updateHashKey();
-            }
-        }
-        return result;
-    }
-
-    @Override
-    public boolean web$isAvailable() {
-        return !web$ownerTracker.isEmpty();
-    }
-
-    @Override
-    public long web$getSecurityKey() {
-        return web$hashKey;
-    }
-
-    @Unique
-    private int web$getOwner() {
-        return web$ownerTracker.keySet()
-            .stream()
-            .sorted()
-            .findFirst()
-            .orElse(-1);
-    }
-
-    @Override
-    public PlayerIdentity web$getOwnerProfile() {
-        UUID profileID = IPlayerRegistry.getMapping(ServerLifecycleHooks.getCurrentServer())
-            .getProfileId(web$getOwner());
-        if (profileID == null) {
-            return null;
-        }
-        GameProfile profile = ServerLifecycleHooks.getCurrentServer()
-            .getProfileCache()
-            .get(profileID)
-            .orElse(null);
-        if (profile == null) {
-            return new PlayerIdentity(profileID, profileID.toString());
-        }
-        return new PlayerIdentity(profile.getId(), profile.getName());
-    }
-
-    @Override
-    public boolean web$hasPermissions(int playerId) {
-        return web$ownerTracker.containsKey(playerId);
-    }
 }
