@@ -16,6 +16,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameInde
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
@@ -23,6 +24,12 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 @Mixin(value = CraftingCPUCluster.class, remap = false)
 @SuppressWarnings("UnstableApiUsage")
 public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICraftingCPUNameIndex {
+
+    @Override
+    public @Nullable IAEGrid web$getGrid() {
+        CraftingCPUCluster cluster = (CraftingCPUCluster) (Object) this;
+        return cluster.isDestroyed() ? null : (IAEGrid) cluster.getGrid();
+    }
 
     @Unique
     private @Nullable StableKey web$stableKey;
