@@ -52,8 +52,9 @@ public final class RequestInputs {
             }
         }
         if (!hasBody && context.getBody() != null
-            && context.getBody()
-                .size() != 0) {
+            && !context.getBody()
+                .entrySet()
+                .isEmpty()) {
             throw new IllegalArgumentException("This endpoint has no request body");
         }
     }
@@ -83,7 +84,8 @@ public final class RequestInputs {
             if (!Modifier.isStatic(field.getModifiers()) && !Modifier.isTransient(field.getModifiers()))
                 fields.put(field.getName(), field);
         }
-        for (String supplied : body.keySet()) {
+        for (Map.Entry<String, JsonElement> member : body.entrySet()) {
+            String supplied = member.getKey();
             if (!fields.containsKey(supplied)) throw new IllegalArgumentException("Unknown JSON member: " + supplied);
         }
         for (Field field : fields.values()) {

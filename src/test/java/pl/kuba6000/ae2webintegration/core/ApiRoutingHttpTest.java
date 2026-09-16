@@ -17,8 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
@@ -211,8 +211,7 @@ class ApiRoutingHttpTest {
     private record Reply(int status, String body) {
 
         JsonObject json() {
-            return JsonParser.parseString(body)
-                .getAsJsonObject();
+            return new Gson().fromJson(body, JsonObject.class);
         }
     }
 }
