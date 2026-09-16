@@ -104,7 +104,7 @@ public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource {
                     position = ((WirelessAccessPointBlockEntity) source).getBlockPos();
                 }
                 sources.add(
-                    GridAccessSource.forPlayer(
+                    new GridAccessSource(
                         owner,
                         kind,
                         new DimensionalCoords(
