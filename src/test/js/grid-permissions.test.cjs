@@ -15,10 +15,10 @@ for (const page of ['../../main/resources/assets/webpage.html', '../../../exampl
         Object.assign(container, element('div'));
         const source = (uuid, name, kind) => ({player: {uuid, name}, kind,
             position: {dimid: 'world', x: 1, y: 2, z: 3}, reason: 'node_owner'});
-        context.showGridAccess([
-            [source('anna-id', 'Anna', 'controller'), source('anna-id', 'Anna', 'terminal')],
-            [source('piotr-id', 'Piotr', 'wireless_access_point')]
-        ]);
+        context.showGridAccess({
+            'anna-id': [source('anna-id', 'Anna', 'controller'), source('anna-id', 'Anna', 'terminal')],
+            'piotr-id': [source('piotr-id', 'Piotr', 'wireless_access_point')]
+        });
         const details = container.children[0];
         const headings = details.children.filter(child => child.tag === 'p');
         assert.equal(headings.length, 2);
@@ -26,7 +26,7 @@ for (const page of ['../../main/resources/assets/webpage.html', '../../../exampl
         assert.ok(headings[1].textContent.includes('Piotr'));
         const lists = details.children.filter(child => child.tag === 'ul');
         assert.deepEqual(lists.map(list => list.children.length), [2, 1]);
-        context.showGridAccess([]);
+        context.showGridAccess({});
         assert.equal(container.children.length, 0);
     });
 }

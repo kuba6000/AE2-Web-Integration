@@ -1,8 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -18,10 +19,10 @@ public class GetGridList extends ISyncedRequest {
 
     @Desugar
     private record JSON_GridData(StableKey key, int cpuCount, String owner, boolean isOwned, boolean isTrackingEnabled,
-        Collection<List<GridAccessSource>> accessSources) {
+        Map<UUID, List<GridAccessSource>> accessSources) {
 
         JSON_GridData(GridAccess.View view, boolean isOwned, @Nullable PlayerIdentity owner,
-            Collection<List<GridAccessSource>> sources) {
+            Map<UUID, List<GridAccessSource>> sources) {
             this(
                 view.key(),
                 view.grid()
@@ -46,8 +47,7 @@ public class GetGridList extends ISyncedRequest {
                     view.grid()
                         .web$getRepresentativeOwner(),
                     view.grid()
-                        .web$getPermissions()
-                        .values()));
+                        .web$getPermissions()));
         }
         result.sort((first, second) -> {
             int owned = Boolean.compare(second.isOwned(), first.isOwned());

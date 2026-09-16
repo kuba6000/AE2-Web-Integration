@@ -1146,7 +1146,7 @@
                 document.getElementById('trackthisgrid').disabled = true;
             }
             const selected = data.find(grid => grid.key === selectedGrid);
-            showGridAccess(selected ? selected.accessSources : []);
+            showGridAccess(selected ? selected.accessSources : {});
             if (data.length > 1)
                 document.getElementById('gridselection').size = data.length;
             else
@@ -1159,16 +1159,17 @@
     function showGridAccess(groups) {
         const container = document.getElementById('gridaccessdetails');
         container.replaceChildren();
-        if (!groups || groups.length === 0) return;
+        const players = Object.entries(groups || {});
+        if (players.length === 0) return;
         const details = document.createElement('details');
         const summary = document.createElement('summary');
         summary.textContent = 'Players with access';
         details.appendChild(summary);
         const kinds = {controller: 'Controller', wireless_access_point: 'Wireless Access Point', terminal: 'Terminal', security_terminal: 'Security Terminal'};
         const reasons = {node_owner: 'block owner', security_owner: 'security owner', security_card: 'security permissions'};
-        for (const entries of groups) {
+        for (const [uuid, entries] of players) {
             const heading = document.createElement('p');
-            heading.textContent = entries[0].player.name + ' (' + entries[0].player.uuid + ')';
+            heading.textContent = entries[0].player.name + ' (' + uuid + ')';
             details.appendChild(heading);
             const list = document.createElement('ul');
             for (const source of entries) {
