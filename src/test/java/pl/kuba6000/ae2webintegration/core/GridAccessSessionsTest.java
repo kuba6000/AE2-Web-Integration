@@ -165,23 +165,6 @@ class GridAccessSessionsTest extends GridTestScope {
     }
 
     @Test
-    void unresolvedNativePlayerIdStillAllowsUuidOwnership() {
-        TestGrid grid = TestGridFixtures.grid(10L, PERMITTED_USER_ID);
-        TestGridFixtures.TestAE ae = new TestGridFixtures.TestAE(grid) {
-
-            @Override
-            public int web$getPlayerId(PlayerIdentity identity) {
-                return -1;
-            }
-        };
-
-        GridAccess access = GridAccessSessions.refresh(ae, PERMITTED_USER, T0);
-
-        assertFalse(access.hasResolvedPlayerId());
-        assertTrue(access.canAccess(CoreEngine.GRID_IDENTITIES.getKey(grid)));
-    }
-
-    @Test
     void aCanonicalNameChangeReusesTheUuidScopedAccessEntry() {
         UUID uuid = UUID.fromString("12345678-1234-5678-9abc-def012345678");
         WebPrincipal oldName = WebPrincipal.forPlayer(new PlayerIdentity(uuid, "OldName"));

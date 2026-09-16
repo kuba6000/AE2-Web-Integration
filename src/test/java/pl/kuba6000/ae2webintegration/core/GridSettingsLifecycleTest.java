@@ -30,9 +30,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
         grid = TestGridFixtures.grid(1);
         key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        GridAccessSessions.put(
-            owner,
-            new GridAccess(TestGridFixtures.OWNER_ID, Collections.singleton(key), System.currentTimeMillis()));
+        GridAccessSessions.put(owner, new GridAccess(Collections.singleton(key), System.currentTimeMillis()));
     }
 
     @ParameterizedTest

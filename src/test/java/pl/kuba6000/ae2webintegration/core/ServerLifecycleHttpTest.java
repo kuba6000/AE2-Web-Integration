@@ -435,17 +435,9 @@ class ServerLifecycleHttpTest {
     void publicLoginUsesStoredIdentityWithoutConsultingServerState() throws Exception {
         UUID playerUuid = UUID.fromString("11111111-2222-3333-4444-555555555555");
         BlockingPlayerLookup platform = new BlockingPlayerLookup(playerUuid);
-        AtomicInteger aePlayerLookups = new AtomicInteger();
         AE2Controller.serverPlatform = platform;
         ConfigBootstrap.aePublicModeValue = () -> true;
-        AE2Controller.AE2Interface = new TestGridFixtures.TestAE() {
-
-            @Override
-            public int web$getPlayerId(PlayerIdentity identity) {
-                aePlayerLookups.incrementAndGet();
-                return 42;
-            }
-        };
+        AE2Controller.AE2Interface = null;
         CoreDataTestFixture.reset();
         assertTrue(
             CoreData.setPassword(
@@ -478,7 +470,6 @@ class ServerLifecycleHttpTest {
                 response.get("username")
                     .getAsString());
             assertEquals(1L, platform.entered.getCount(), "login must use the account name stored by CoreData");
-            assertEquals(0, aePlayerLookups.get(), "login must not touch world-scoped AE2 player data");
         } finally {
             platform.release.countDown();
             oldWorker.shutdownNow();
@@ -486,46 +477,10 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void aePlayerIdIsResolvedByEverySyncedRequestWithoutBlockingLogin() throws Exception {
-        UUID playerUuid = UUID.fromString("22222222-3333-4444-5555-666666666666");
-        AtomicInteger aePlayerLookups = new AtomicInteger();
-        ConfigBootstrap.aePublicModeValue = () -> true;
-        AE2Controller.AE2Interface = new TestGridFixtures.TestAE() {
-
-            @Override
-            public int web$getPlayerId(PlayerIdentity identity) {
-                aePlayerLookups.incrementAndGet();
-                return playerUuid.equals(identity.uuid) ? 42 : -1;
-            }
-        };
-        CoreDataTestFixture.reset();
-        CoreData.setPassword(
-            new PlayerIdentity(playerUuid, "Player"),
-            PasswordHelper.generateStrongPasswordHash("player-password"));
-
-        CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
-        AE2Controller.startHTTPServer();
-        String token = login("Player", "player-password");
-
-        assertEquals(0, aePlayerLookups.get(), "login must remain independent of the server tick");
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
-        assertEquals(1, aePlayerLookups.get());
-        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
-        assertEquals(2, aePlayerLookups.get(), "each synced request must publish access from current AE2 state");
-    }
-
-    @Test
     void authenticatedPageUsesTheAccountNameWithoutReadingTheAeProfile() throws Exception {
         UUID playerUuid = UUID.fromString("99999999-8888-7777-6666-555555555555");
         ConfigBootstrap.aePublicModeValue = () -> true;
-        AE2Controller.AE2Interface = new TestGridFixtures.TestAE() {
-
-            @Override
-            public int web$getPlayerId(PlayerIdentity identity) {
-                return playerUuid.equals(identity.uuid) ? 42 : -1;
-            }
-
-        };
+        AE2Controller.AE2Interface = null;
         CoreDataTestFixture.reset();
         assertTrue(
             CoreData.setPassword(

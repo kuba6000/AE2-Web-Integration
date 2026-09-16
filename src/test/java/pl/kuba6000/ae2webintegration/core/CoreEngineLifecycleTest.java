@@ -68,7 +68,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
         AE2JobTracker.addJob(cpu, grid, false);
         gridData.trackingInfo.trackingInfos.put(1, AE2JobTracker.findActiveJob(cpu));
         WebPrincipal principal = TestGridFixtures.principal(42);
-        GridAccessSessions.put(principal, new GridAccess(42, Collections.singleton(gridKey), 0L));
+        GridAccessSessions.put(principal, new GridAccess(Collections.singleton(gridKey), 0L));
         AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
         pl.kuba6000.ae2webintegration.core.identity.StableKey itemKey = AE2Controller.itemIdentities.remember(
             grid,

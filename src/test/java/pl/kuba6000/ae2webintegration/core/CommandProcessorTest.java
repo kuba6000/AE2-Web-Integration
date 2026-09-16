@@ -24,7 +24,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 /** Tests for {@link CommandProcessor} static methods. */
@@ -68,7 +67,7 @@ class CommandProcessorTest {
     void setUp() {
         // Clean registration map before each test
         AE2Controller.awaitingRegistration.clear();
-        AE2Controller.AE2Interface = new TestAE(42);
+        AE2Controller.AE2Interface = new TestAE();
         CoreDataTestFixture.reset();
     }
 
@@ -144,9 +143,9 @@ class CommandProcessorTest {
     }
 
     @Test
-    void testRegisterPlayerDoesNotRequireAWorldScopedAePlayerId() {
+    void testRegisterPlayerDoesNotRequireAeState() {
         String token = "correct-token";
-        AE2Controller.AE2Interface = new TestAE(-1);
+        AE2Controller.AE2Interface = null;
         AE2Controller.awaitingRegistration.put(TEST_UUID, Pair.of(token, "hash"));
 
         CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, token);
@@ -191,12 +190,6 @@ class CommandProcessorTest {
 
     private static class TestAE implements IAE {
 
-        private final int playerId;
-
-        TestAE(int playerId) {
-            this.playerId = playerId;
-        }
-
         @Override
         public Iterable<IAEGrid> web$getGrids() {
             throw new UnsupportedOperationException();
@@ -212,9 +205,5 @@ class CommandProcessorTest {
             throw new UnsupportedOperationException();
         }
 
-        @Override
-        public IAEPlayerData web$getPlayerData() {
-            return identity -> playerId;
-        }
     }
 }

@@ -39,9 +39,7 @@ class SyncedRequestGridAccessRefreshTest extends GridTestScope {
 
     @Test
     void everySyncedRequestPublishesCurrentGridAccessBeforeItsHandlerRuns() {
-        GridAccessSessions.put(
-            LOCALHOST,
-            new GridAccess(GridAccess.UNRESOLVED_PLAYER_ID, Collections.emptySet(), System.currentTimeMillis()));
+        GridAccessSessions.put(LOCALHOST, new GridAccess(Collections.emptySet(), System.currentTimeMillis()));
 
         ProbeRequest request = new ProbeRequest();
         request.init(TestGridFixtures.context(LOCALHOST, ""));

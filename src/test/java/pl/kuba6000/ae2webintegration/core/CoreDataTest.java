@@ -22,12 +22,6 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class CoreDataTest {
@@ -43,7 +37,7 @@ class CoreDataTest {
     void setUp() {
         Config.init(configRoot);
         AE2Controller.serverPlatform = new TestPlatform(configRoot);
-        AE2Controller.AE2Interface = new TestAE(42, false);
+        AE2Controller.AE2Interface = null;
         CoreDataTestFixture.reset();
     }
 
@@ -55,8 +49,8 @@ class CoreDataTest {
     }
 
     @Test
-    void setPasswordCreatesAnAccountWithoutConsultingAePlayerData() {
-        AE2Controller.AE2Interface = new TestAE(42, true);
+    void setPasswordCreatesAnAccountWithoutAeState() {
+        AE2Controller.AE2Interface = null;
 
         assertTrue(CoreData.setPassword(REGISTERED_PLAYER, "hash"));
         assertNotNull(CoreData.getAccount("Player"));
@@ -233,35 +227,4 @@ class CoreDataTest {
         }
     }
 
-    @Desugar
-    private record TestAE(int playerId, boolean throwOnPlayerLookup) implements IAE {
-
-        @Override
-        public Iterable<IAEGrid> web$getGrids() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public IStackList web$createStackList() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public IAEGenericStack web$stackOf(IAEKey key, long amount) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public IAEPlayerData web$getPlayerData() {
-            return identity -> {
-                if (throwOnPlayerLookup) {
-                    throw new IllegalStateException("player lookup failed");
-                }
-                if (REGISTERED_UUID.equals(identity.uuid)) {
-                    return playerId;
-                }
-                return OTHER_UUID.equals(identity.uuid) ? 43 : -1;
-            };
-        }
-    }
 }

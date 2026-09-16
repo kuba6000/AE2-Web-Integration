@@ -50,8 +50,7 @@ class AsyncRequestAuthorizationTest {
         for (StableKey key : keys) {
             set.add(key);
         }
-        GridAccessSessions
-            .put(principal, new GridAccess(GridAccess.UNRESOLVED_PLAYER_ID, set, System.currentTimeMillis()));
+        GridAccessSessions.put(principal, new GridAccess(set, System.currentTimeMillis()));
     }
 
     private static ProbeRequest run(WebPrincipal principal, String query) {
@@ -117,7 +116,6 @@ class AsyncRequestAuthorizationTest {
         GridAccessSessions.put(
             ME,
             new GridAccess(
-                42,
                 new HashSet<>(Collections.singletonList(MY_GRID)),
                 System.currentTimeMillis() - GridAccess.TTL_MILLIS - 1));
 

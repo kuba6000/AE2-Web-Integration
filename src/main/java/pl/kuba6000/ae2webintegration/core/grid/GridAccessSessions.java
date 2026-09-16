@@ -8,8 +8,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -36,7 +34,6 @@ public final class GridAccessSessions {
 
     private GridAccessSessions() {}
 
-    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private static final ConcurrentHashMap<WebPrincipal, GridAccess> sessions = new ConcurrentHashMap<>();
 
     public static GridAccess get(WebPrincipal principal) {
@@ -63,7 +60,7 @@ public final class GridAccessSessions {
     }
 
     /**
-     * Recomputes which grids {@code principal} may access and resolves the current world's AE2 player id.
+     * Recomputes which grids {@code principal} may access.
      * <p>
      * An admin is not permission-checked, so their set is every attachable grid and the check reduces to
      * "does this grid exist" - which is what the synced path has always required of admins too. Without
@@ -73,27 +70,18 @@ public final class GridAccessSessions {
      */
     public static GridAccess compute(IAE ae, WebPrincipal principal, long nowMillis) {
         try {
-            return compute(ae, principal, nowMillis, snapshot(ae));
+            return compute(principal, nowMillis, snapshot(ae));
         } catch (IOException e) {
             throw new IllegalStateException("Failed to prepare grid identities", e);
         }
     }
 
-    public static GridAccess compute(IAE ae, WebPrincipal principal, long nowMillis, List<View> grids) {
-        int playerId = GridAccess.UNRESOLVED_PLAYER_ID;
-        if (!principal.isAdmin()) {
-            try {
-                playerId = ae.web$getPlayerData()
-                    .web$getPlayerId(principal.getPlayerIdentity());
-            } catch (Exception e) {
-                LOG.error("Failed to resolve the AE2 player ID for web user {}", principal.getUsername(), e);
-            }
-        }
+    public static GridAccess compute(WebPrincipal principal, long nowMillis, List<View> grids) {
         Set<StableKey> keys = new HashSet<>();
         for (View grid : grids) {
             if (grid.allows(principal)) keys.add(grid.key());
         }
-        return new GridAccess(playerId, keys, nowMillis);
+        return new GridAccess(keys, nowMillis);
     }
 
     /** Recomputes and publishes the user's access from the live AE2 state on the server thread. */

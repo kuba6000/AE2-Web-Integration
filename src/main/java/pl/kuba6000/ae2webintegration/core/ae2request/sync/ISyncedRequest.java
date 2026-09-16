@@ -71,7 +71,7 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to prepare grid identities", e);
             }
-            access = GridAccessSessions.compute(ae, context.getPrincipal(), System.currentTimeMillis(), grids);
+            access = GridAccessSessions.compute(context.getPrincipal(), System.currentTimeMillis(), grids);
             GridAccessSessions.put(context.getPrincipal(), access);
         }
         handle(ae);

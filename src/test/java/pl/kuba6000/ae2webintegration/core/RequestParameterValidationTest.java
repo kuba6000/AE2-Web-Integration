@@ -34,7 +34,7 @@ class RequestParameterValidationTest extends GridTestScope {
         AE2Controller.AE2Interface = TestGridFixtures.ae();
         Set<StableKey> keys = new HashSet<>();
         keys.add(GRID);
-        GridAccessSessions.put(TestGridFixtures.principal(ME), new GridAccess(ME, keys, System.currentTimeMillis()));
+        GridAccessSessions.put(TestGridFixtures.principal(ME), new GridAccess(keys, System.currentTimeMillis()));
         AE2Controller.itemIdentities.clear();
     }
 

@@ -17,19 +17,14 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
  * it. The cost of that trade-off is bounded staleness, expressed by {@link #TTL_MILLIS}.
  */
 @Desugar
-public record GridAccess(int playerId, Set<StableKey> accessibleGridKeys, long computedAtMillis) {
+public record GridAccess(Set<StableKey> accessibleGridKeys, long computedAtMillis) {
 
     /** How long a computed access set stays usable before an async request must refuse to trust it. */
     public static final long TTL_MILLIS = TimeUnit.MINUTES.toMillis(5);
-    public static final int UNRESOLVED_PLAYER_ID = -1;
 
     @SuppressWarnings("Java9CollectionFactory") // Set.copyOf is unavailable on Java 8.
     public GridAccess {
         accessibleGridKeys = Collections.unmodifiableSet(new HashSet<>(accessibleGridKeys));
-    }
-
-    public boolean hasResolvedPlayerId() {
-        return playerId >= 0;
     }
 
     public boolean canAccess(StableKey gridKey) {

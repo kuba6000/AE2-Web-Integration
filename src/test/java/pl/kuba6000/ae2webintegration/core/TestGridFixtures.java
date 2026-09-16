@@ -30,7 +30,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
@@ -206,7 +205,7 @@ final class TestGridFixtures {
 
     }
 
-    static class TestAE implements IAE, IAEPlayerData {
+    static class TestAE implements IAE {
 
         private final List<IAEGrid> grids;
 
@@ -229,22 +228,6 @@ final class TestGridFixtures {
             return null;
         }
 
-        @Override
-        public IAEPlayerData web$getPlayerData() {
-            return this;
-        }
-
-        @Override
-        public int web$getPlayerId(PlayerIdentity identity) {
-            if (identity != null && identity.name.startsWith("Player")) {
-                try {
-                    return Integer.parseInt(identity.name.substring("Player".length()));
-                } catch (NumberFormatException ignored) {
-                    return -1;
-                }
-            }
-            return -1;
-        }
     }
 
     /** Minimal {@link HttpExchange} carrying only a query string; everything else is unused by tests. */

@@ -73,7 +73,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
         info.itemShare.put(key, new ArrayList<>(Collections.singletonList(Pair.of(1000L, 1000L + spent))));
         GridData.getOrCreate(GRID).trackingInfo.trackingInfos.put(1, info);
         GridAccessSessions
-            .put(WebPrincipal.admin(), new GridAccess(-1, Collections.singleton(GRID), System.currentTimeMillis()));
+            .put(WebPrincipal.admin(), new GridAccess(Collections.singleton(GRID), System.currentTimeMillis()));
 
         GetTracking request = new GetTracking();
         request.handle(TestGridFixtures.context(-1, "grid=" + GRID + "&id=1"));

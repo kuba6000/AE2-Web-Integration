@@ -285,7 +285,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertNotNull(key);
         CoreEngine.GRID_IDENTITIES.setTracked(key, true);
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
-        GridAccessSessions.put(WebPrincipal.admin(), new GridAccess(-1, Collections.singleton(key), 0));
+        GridAccessSessions.put(WebPrincipal.admin(), new GridAccess(Collections.singleton(key), 0));
         CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertNull(GridAccessSessions.get(WebPrincipal.admin()));
