@@ -159,22 +159,22 @@
 <section id="terminalgrid">
     <button class='collapsible' id='currentgrid'>No grid selected</button>
     <section style='display: none;'>
-        <section style='display: flex; flex-direction: row; flex-wrap: wrap;'>
-            <select id="gridselection" aria-label="Select a grid" size="5" style="margin-right: 10px; overflow-y: auto;" onchange="selectedGridChanged(this);">
+        <section class="grid-options">
+            <select id="gridselection" aria-label="Select a grid" size="5" onchange="selectedGridChanged(this);">
                 <!-- <option value="1">Grid 1 owned</option>
                 <option value="2">Grid 2 owned</option>
                 <option value="3">Grid 3 owned</option>
                 <option value="4">Grid 4 owned</option> -->
             </select>
-            <section>
-                <input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">  <label for="thisgridbydefault">Select this grid by default</label> <br>
-                <input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);"> <label for="trackthisgrid">Enable tracking for this grid (track jobs)</label> <br>
+            <section class="grid-settings">
+                <label><input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">Select this grid by default</label>
+                <label><input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);">Enable crafting tracking</label>
             </section>
-            <span class='note' style="flex: 0 0 100%; margin-top: 10px;">Access is granted through a controller, Wireless Access Point or terminal assigned to you, or through supported security permissions. The network must have an online controller.</span>
+            <span class='note'>Access is granted through a controller, Wireless Access Point or terminal assigned to you, or through supported security permissions. The network must have an online controller.</span>
         </section>
+        <section id="gridaccessdetails" aria-live="polite"></section>
     </section>
 </section>
-<section id="gridaccessdetails" aria-live="polite"></section>
 <section id="terminalcontainer">
     <section id="terminaltypes">
         <section id='terminalOptions'>
@@ -767,28 +767,55 @@
     updateGridList();
     function showGridAccess(groups) {
         const container = document.getElementById('gridaccessdetails');
+        const expanded = container.children.length > 0 && container.children[0].open;
         container.replaceChildren();
-        const players = Object.entries(groups || {});
+        const players = Object.entries(groups || {}).filter(([, entries]) => entries.length > 0);
         if (players.length === 0) return;
         const details = document.createElement('details');
+        details.className = 'grid-access';
+        details.open = expanded;
         const summary = document.createElement('summary');
         summary.textContent = 'Players with access';
+        const count = document.createElement('span');
+        count.className = 'grid-access-count';
+        count.textContent = players.length;
+        summary.appendChild(count);
         details.appendChild(summary);
         const kinds = {controller: 'Controller', wireless_access_point: 'Wireless Access Point', terminal: 'Terminal', security_terminal: 'Security Terminal'};
-        const reasons = {node_owner: 'block owner', security_owner: 'security owner', security_card: 'security permissions'};
+        const reasons = {node_owner: 'Block owner', security_owner: 'Security owner', security_card: 'Security permissions'};
+        function appendText(parent, tag, className, text) {
+            const element = document.createElement(tag);
+            element.className = className;
+            element.textContent = text;
+            parent.appendChild(element);
+        }
         for (const [uuid, entries] of players) {
-            const heading = document.createElement('p');
-            heading.textContent = entries[0].player.name + ' (' + uuid + ')';
-            details.appendChild(heading);
+            const player = document.createElement('section');
+            player.className = 'grid-access-player';
+            const heading = document.createElement('header');
+            heading.className = 'grid-access-heading';
+            appendText(heading, 'strong', 'grid-access-name', entries[0].player.name);
+            appendText(heading, 'span', 'grid-access-uuid', uuid);
+            player.appendChild(heading);
             const list = document.createElement('ul');
+            list.className = 'grid-access-sources';
             for (const source of entries) {
                 const item = document.createElement('li');
+                item.className = 'grid-access-source';
+                const block = document.createElement('div');
+                appendText(block, 'span', 'grid-access-kind', kinds[source.kind] || source.kind);
+                appendText(block, 'span', 'grid-access-reason', reasons[source.reason] || source.reason);
+                const location = document.createElement('div');
                 const pos = source.position;
-                item.textContent = (kinds[source.kind] || source.kind) + ' — ' + pos.dimid + ' (' + pos.x + ', ' + pos.y + ', ' + pos.z + ')' +
-                    (source.side ? ', side: ' + source.side : '') + ' — ' + (reasons[source.reason] || source.reason);
+                appendText(location, 'code', 'grid-access-position', pos.x + ', ' + pos.y + ', ' + pos.z);
+                appendText(location, 'span', 'grid-access-world', 'Dimension: ' + pos.dimid +
+                    (source.side ? ' · Side: ' + source.side : ''));
+                item.appendChild(block);
+                item.appendChild(location);
                 list.appendChild(item);
             }
-            details.appendChild(list);
+            player.appendChild(list);
+            details.appendChild(player);
         }
         container.appendChild(details);
     }
