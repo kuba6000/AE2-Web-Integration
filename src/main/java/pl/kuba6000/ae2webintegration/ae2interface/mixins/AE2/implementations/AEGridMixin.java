@@ -13,6 +13,7 @@ import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.players.GameProfileCache;
 import net.minecraftforge.common.util.FakePlayerFactory;
 import net.minecraftforge.server.ServerLifecycleHooks;
 
@@ -213,7 +214,7 @@ public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, IGridPe
     @Unique
     private static @Nullable PlayerIdentity web$profile(@Nullable UUID uuid) {
         if (uuid == null) return null;
-        var profileCache = ServerLifecycleHooks.getCurrentServer()
+        GameProfileCache profileCache = ServerLifecycleHooks.getCurrentServer()
             .getProfileCache();
         GameProfile profile = profileCache == null ? null
             : profileCache.get(uuid)
