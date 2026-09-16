@@ -67,6 +67,17 @@ class GridListPermissionsTest extends GridTestScope {
             .getAsJsonObject()
             .getAsJsonArray("accessSources");
         assertEquals(2, sources.size());
+        for (var group : sources) {
+            assertEquals(
+                1,
+                group.getAsJsonArray()
+                    .size());
+            assertTrue(
+                group.getAsJsonArray()
+                    .get(0)
+                    .getAsJsonObject()
+                    .has("player"));
+        }
         assertTrue(
             sources.toString()
                 .contains(TestGridFixtures.playerIdentity(42).uuid.toString()));

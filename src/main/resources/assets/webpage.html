@@ -1156,23 +1156,17 @@
         });
     }
     updateGridList();
-    function showGridAccess(sources) {
+    function showGridAccess(groups) {
         const container = document.getElementById('gridaccessdetails');
         container.replaceChildren();
-        if (!sources || sources.length === 0) return;
+        if (!groups || groups.length === 0) return;
         const details = document.createElement('details');
         const summary = document.createElement('summary');
         summary.textContent = 'Players with access';
         details.appendChild(summary);
-        const groups = new Map();
-        for (const source of sources) {
-            const key = source.player.uuid;
-            if (!groups.has(key)) groups.set(key, []);
-            groups.get(key).push(source);
-        }
         const kinds = {controller: 'Controller', wireless_access_point: 'Wireless Access Point', terminal: 'Terminal', security_terminal: 'Security Terminal'};
         const reasons = {node_owner: 'block owner', security_owner: 'security owner', security_card: 'security permissions'};
-        for (const entries of groups.values()) {
+        for (const entries of groups) {
             const heading = document.createElement('p');
             heading.textContent = entries[0].player.name + ' (' + entries[0].player.uuid + ')';
             details.appendChild(heading);
