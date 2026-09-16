@@ -149,7 +149,9 @@ public class AE2JobTracker {
             StableKey key = grid == null ? null : CoreEngine.GRID_IDENTITIES.getKey(grid);
             if (key == null && grid != null) continue;
             iterator.remove();
-            if (key != null && CoreEngine.GRID_IDENTITIES.isTracked(key)) {
+            var data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            if (data != null && data.getSettings()
+                .isTracked()) {
                 if (info.isDone) publishCompletion(info, key, deferred.notificationName());
             } else if (!info.isDone && cpu != null) {
                 trackingInfoMap.remove(cpu, info);
@@ -169,7 +171,9 @@ public class AE2JobTracker {
         boolean unresolved = false;
         if (!isMerging) {
             StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
-            if (key != null && !CoreEngine.GRID_IDENTITIES.isTracked(key)) return;
+            var data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            if (key != null && (data == null || !data.getSettings()
+                .isTracked())) return;
             unresolved = key == null;
         }
         JSON_Stack finalOutput = JSON_Stack.capture(grid, cpuCluster.web$getFinalOutput());
@@ -275,7 +279,9 @@ public class AE2JobTracker {
         }
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         if (key != null) {
-            if (CoreEngine.GRID_IDENTITIES.isTracked(key)) publishCompletion(info, key, notificationName);
+            var data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            if (data != null && data.getSettings()
+                .isTracked()) publishCompletion(info, key, notificationName);
         } else {
             deferredJobs.put(info, new DeferredJob(cpu, grid, notificationName));
         }

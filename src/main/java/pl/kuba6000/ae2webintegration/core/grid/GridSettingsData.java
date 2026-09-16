@@ -1,16 +1,50 @@
 package pl.kuba6000.ae2webintegration.core.grid;
 
-import com.github.bsideup.jabel.Desugar;
+import org.jetbrains.annotations.NotNull;
 
-/** Persisted grid configuration, independent of native identity and runtime crafting state. */
-@Desugar
-public record GridSettingsData(boolean isTracked) {
+/** Mutable configuration owned by one retained grid identity. */
+@SuppressWarnings("SynchronizeOnNonFinalField") // Bound to the registry before publication; never rebound while in use.
+public final class GridSettingsData {
 
-    public GridSettingsData() {
-        this(false);
+    private boolean isTracked;
+    private transient boolean dirty;
+    private transient @NotNull Object lock = this;
+
+    /** Bound before publication; getters, edits and persistence then share the registry monitor. */
+    void attachLock(@NotNull Object lock) {
+        this.lock = lock;
+    }
+
+    public boolean isTracked() {
+        synchronized (lock) {
+            return isTracked;
+        }
+    }
+
+    public void setTracked(boolean value) {
+        synchronized (lock) {
+            if (isTracked == value) return;
+            isTracked = value;
+            dirty = true;
+        }
     }
 
     public boolean isDefault() {
-        return !isTracked;
+        synchronized (lock) {
+            return !isTracked;
+        }
+    }
+
+    public boolean isDirty() {
+        synchronized (lock) {
+            return dirty;
+        }
+    }
+
+    /** Called by persistence only after this object's values have been written successfully. */
+    public void markSaved() {
+        synchronized (lock) {
+            dirty = false;
+        }
     }
 }

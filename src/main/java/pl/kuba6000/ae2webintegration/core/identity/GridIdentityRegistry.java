@@ -21,13 +21,13 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import com.github.bsideup.jabel.Desugar;
 import com.google.common.collect.MapMaker;
 import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
@@ -41,9 +41,8 @@ public final class GridIdentityRegistry {
     private final WeakHashMap<IAEGrid, StableKey> keys = new WeakHashMap<>();
     private final Map<StableKey, IAEGrid> grids = new MapMaker().weakValues()
         .makeMap();
-    private Map<StableKey, GridRecord> records = new HashMap<>();
+    private Map<StableKey, GridPersistentData> records = new HashMap<>();
     private final Map<DimensionalCoords, StableKey> knownPositions = new HashMap<>();
-    private static final GridSettingsData DEFAULT_SETTINGS = new GridSettingsData();
 
     /** Inactive until the server opens a save. */
     public GridIdentityRegistry() {}
@@ -117,10 +116,18 @@ public final class GridIdentityRegistry {
             } while (records.containsKey(selected));
         }
 
-        Map<StableKey, GridRecord> next = new HashMap<>(records);
+        Map<StableKey, GridPersistentData> next = new HashMap<>(records);
         for (StableKey key : previous) next.remove(key);
         // The first validated split component keeps the old key and claims only its current controllers.
-        next.put(selected, new GridRecord(controllers, getSettings(selected)));
+        GridPersistentData current = records.get(selected);
+        GridPersistentData data;
+        if (current == null) {
+            data = new GridPersistentData(controllers, new GridSettingsData());
+            data.attachLock(this);
+        } else {
+            data = current.withControllers(controllers);
+        }
+        next.put(selected, data);
         try {
             publish(next);
             StableKey oldKey = keys.put(grid, selected);
@@ -155,14 +162,14 @@ public final class GridIdentityRegistry {
         File file = storageFile();
         if (Files.notExists(file.toPath())) return;
         try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
-            Map<StableKey, GridRecord> stored = GSONUtils.GSON_BUILDER.create()
-                .fromJson(reader, new TypeToken<Map<StableKey, GridRecord>>() {}.getType());
+            Map<StableKey, GridPersistentData> stored = GSONUtils.GSON_BUILDER.create()
+                .fromJson(reader, new TypeToken<Map<StableKey, GridPersistentData>>() {}.getType());
             if (stored == null) throw new IOException("Empty grid identity file: " + file);
-            for (Map.Entry<StableKey, GridRecord> entry : stored.entrySet()) {
-                GridRecord record = entry.getValue();
-                if (record == null || record.controllers() == null || record.settings() == null)
-                    throw new IOException("Incomplete grid identity record: " + entry.getKey());
-                for (DimensionalCoords position : record.controllers()) knownPositions.put(position, entry.getKey());
+            for (Map.Entry<StableKey, GridPersistentData> entry : stored.entrySet()) {
+                GridPersistentData record = entry.getValue();
+                if (record == null) throw new IOException("Incomplete grid identity record: " + entry.getKey());
+                record.attachLock(this);
+                for (DimensionalCoords position : record.getControllers()) knownPositions.put(position, entry.getKey());
             }
             records = stored;
         } catch (RuntimeException e) {
@@ -171,29 +178,32 @@ public final class GridIdentityRegistry {
     }
 
     private boolean preferIdentity(StableKey contender, StableKey winner) {
-        if (getSettings(contender).isDefault() != getSettings(winner).isDefault())
-            return !getSettings(contender).isDefault();
+        boolean contenderDefault = records.get(contender)
+            .getSettings()
+            .isDefault();
+        boolean winnerDefault = records.get(winner)
+            .getSettings()
+            .isDefault();
+        if (contenderDefault != winnerDefault) return !contenderDefault;
         return contender.toString()
             .compareTo(winner.toString()) < 0;
     }
 
-    public synchronized boolean isTracked(@NotNull StableKey key) {
-        return file != null && getSettings(key).isTracked();
+    /** Retained data is available even while unloaded; unknown or closed-save identities return null. */
+    public synchronized @Nullable GridPersistentData getPersistentData(@NotNull StableKey key) {
+        return records.get(key);
     }
 
-    public synchronized @NotNull GridSettingsData getSettings(@NotNull StableKey key) {
+    /** Flushes edited settings without replacing their objects or rebuilding controller indexes. */
+    public synchronized void saveIfDirty() throws IOException {
         checkState(file != null, "Grid identities are not initialized for this save");
-        GridRecord record = records.get(key);
-        return record == null ? DEFAULT_SETTINGS : record.settings();
-    }
-
-    public synchronized void setSettings(@NotNull StableKey key, @NotNull GridSettingsData value) throws IOException {
-        checkState(file != null, "Grid identities are not initialized for this save");
-        GridRecord current = records.get(key);
-        if (current == null) throw new IllegalArgumentException("Unknown grid identity");
-        Map<StableKey, GridRecord> next = new HashMap<>(records);
-        next.put(key, new GridRecord(current.controllers(), value));
-        publish(next);
+        for (GridPersistentData data : records.values()) {
+            if (data.getSettings()
+                .isDirty()) {
+                writeRecords(records);
+                return;
+            }
+        }
     }
 
     /** Resolves only a retained association, without discovering native grids. */
@@ -206,36 +216,39 @@ public final class GridIdentityRegistry {
         return records.containsKey(key);
     }
 
-    /** Updates a known identity; unknown keys cannot create phantom persisted grids. */
-    public synchronized void setTracked(@NotNull StableKey key, boolean value) throws IOException {
-        setSettings(key, new GridSettingsData(value));
-    }
-
     /** Positive block destruction only; unload and missing observations must not call this method. */
     public synchronized void removeController(@NotNull DimensionalCoords position) throws IOException {
         StableKey key = knownPositions.get(position);
         if (key == null) return;
-        Map<StableKey, GridRecord> next = new HashMap<>(records);
-        GridRecord current = records.get(key);
-        Set<DimensionalCoords> remaining = new LinkedHashSet<>(current.controllers());
+        Map<StableKey, GridPersistentData> next = new HashMap<>(records);
+        GridPersistentData current = records.get(key);
+        Set<DimensionalCoords> remaining = new LinkedHashSet<>(current.getControllers());
         remaining.remove(position);
         if (remaining.isEmpty()) next.remove(key);
-        else next.put(key, new GridRecord(remaining, current.settings()));
+        else next.put(key, current.withControllers(remaining));
         publish(next);
     }
 
-    private void publish(Map<StableKey, GridRecord> next) throws IOException {
-        if (next.equals(records)) return;
-        Map<StableKey, GridRecord> ordered = new TreeMap<>(Comparator.comparing(StableKey::toString));
-        ordered.putAll(next);
-        GSONUtils.writeAtomically(storageFile(), ordered);
+    private void publish(Map<StableKey, GridPersistentData> next) throws IOException {
+        if (next.equals(records)) {
+            saveIfDirty();
+            return;
+        }
+        writeRecords(next);
         records = next;
         knownPositions.clear();
         records.forEach(
-            (key, record) -> record.controllers()
+            (key, data) -> data.getControllers()
                 .forEach(position -> knownPositions.put(position, key)));
     }
 
-    @Desugar
-    private record GridRecord(Set<DimensionalCoords> controllers, GridSettingsData settings) {}
+    private void writeRecords(Map<StableKey, GridPersistentData> data) throws IOException {
+        Map<StableKey, GridPersistentData> ordered = new TreeMap<>(Comparator.comparing(StableKey::toString));
+        ordered.putAll(data);
+        GSONUtils.writeAtomically(storageFile(), ordered);
+        data.values()
+            .forEach(
+                record -> record.getSettings()
+                    .markSaved());
+    }
 }

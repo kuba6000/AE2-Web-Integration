@@ -37,17 +37,18 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertThrows(java.io.IOException.class, () -> CoreEngine.GRID_IDENTITIES.initialize(invalidSave));
         assertFalse(CoreEngine.GRID_IDENTITIES.isInitialized());
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
-        assertFalse(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
-        assertThrows(IllegalStateException.class, () -> CoreEngine.GRID_IDENTITIES.setTracked(key, false));
+        assertNull(CoreEngine.GRID_IDENTITIES.getPersistentData(key));
+        assertThrows(IllegalStateException.class, CoreEngine.GRID_IDENTITIES::saveIfDirty);
         assertArrayEquals(invalid, java.nio.file.Files.readAllBytes(invalidFile));
 
         CoreEngine.GRID_IDENTITIES.initialize(gridSave);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         GridAccess.list(TestGridFixtures.ae(grid));
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
-        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
     }
 
     @Test
@@ -55,7 +56,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(83);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        CoreEngine.GRID_IDENTITIES.setTracked(key, true);
+        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, key, true);
         grid.controllerState(AEControllerState.CONTROLLER_CONFLICT);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
 
@@ -63,7 +64,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertTrue(
             GridAccess.list(TestGridFixtures.ae(grid))
                 .isEmpty());
-        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
 
         grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
@@ -93,7 +94,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         grid.booting();
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
-        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
 
         DimensionalCoords removed = new DimensionalCoords("world", 81, 0, 0);
         controllers.remove(removed);
@@ -103,7 +104,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
-        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
     }
 
     @Test
@@ -158,7 +159,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertArrayEquals(saved, java.nio.file.Files.readAllBytes(file));
-        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
 
         grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
         assertEquals(
@@ -194,8 +195,8 @@ class GridIdentityLifecycleTest extends GridTestScope {
         StableKey secondKey = CoreEngine.GRID_IDENTITIES.getKey(second);
         assertNotNull(secondKey);
         assertNotEquals(original, secondKey);
-        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(original));
-        assertFalse(CoreEngine.GRID_IDENTITIES.isTracked(secondKey));
+        assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, original));
+        assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, secondKey));
         assertEquals(
             1,
             GridAccess.list(TestGridFixtures.ae(first, second))
@@ -251,7 +252,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
             GridAccess.list(TestGridFixtures.ae(grid))
                 .get(0)
                 .key());
-        assertFalse(CoreEngine.GRID_IDENTITIES.isTracked(view.key()));
+        assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, view.key()));
         grid.withoutSources();
         assertFalse(view.allows(TestGridFixtures.principal(42)), "authorization reads current sources");
         assertFalse(
@@ -286,19 +287,19 @@ class GridIdentityLifecycleTest extends GridTestScope {
         GridAccess.list(TestGridFixtures.ae(grid));
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        CoreEngine.GRID_IDENTITIES.setTracked(key, true);
+        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, key, true);
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
         CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertNull(CoreEngine.GRID_IDENTITIES.getGrid(key));
-        assertFalse(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
         assertNotEquals(
             key,
             GridAccess.list(TestGridFixtures.ae(TestGridFixtures.grid(1)))
                 .get(0)
                 .key());
         assertFalse(
-            CoreEngine.GRID_IDENTITIES.isTracked(key),
+            TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key),
             "rebuilding the removed last controller cannot revive old settings");
     }
 
@@ -311,9 +312,9 @@ class GridIdentityLifecycleTest extends GridTestScope {
         CoreEngine.GRID_IDENTITIES.clear();
         CoreEngine.GRID_IDENTITIES.initialize(new File(gridSave, "other-save"));
         GridAccess.list(TestGridFixtures.ae(grid));
-        assertFalse(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
         CoreEngine.GRID_IDENTITIES.initialize(gridSave);
-        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         GridAccess.list(TestGridFixtures.ae(grid));

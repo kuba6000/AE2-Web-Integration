@@ -166,7 +166,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
 
     @Test
     void unresolvedJobsAreDiscardedWhenTheirCurrentGridResolvesUntracked() throws Exception {
-        CoreEngine.GRID_IDENTITIES.setTracked(gridKey, false);
+        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, gridKey, false);
         EqualCpu known = new EqualCpu();
         AE2JobTracker.addJob(known, grid, false);
         assertNull(AE2JobTracker.findActiveJob(known));
@@ -183,7 +183,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         AE2JobTracker.resolveDeferredJobs();
         assertNull(AE2JobTracker.findActiveJob(active));
-        CoreEngine.GRID_IDENTITIES.setTracked(gridKey, true);
+        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, gridKey, true);
         AE2JobTracker.resolveDeferredJobs();
         assertTrue(GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.isEmpty());
     }
@@ -278,11 +278,11 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         GridAccess.list(TestGridFixtures.ae(grid, other));
         StableKey losingKey = CoreEngine.GRID_IDENTITIES.getKey(other);
         assertNotNull(losingKey);
-        CoreEngine.GRID_IDENTITIES.setTracked(losingKey, true);
+        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, losingKey, true);
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, other, false);
         AE2JobTracker.completeCrafting(other, cpu);
-        CoreEngine.GRID_IDENTITIES.setTracked(losingKey, false);
+        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, losingKey, false);
         CompletableFuture<IAECraftingJob> losingPlan = new CompletableFuture<>();
         int losingId = GridData.getOrCreate(losingKey)
             .addJob(losingPlan);

@@ -46,7 +46,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
             assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
             CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
             assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
-            assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+            assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
         } finally {
             AE2Controller.AE2Interface = previous;
         }
@@ -96,10 +96,12 @@ class CoreEngineLifecycleTest extends GridTestScope {
         assertSame(processInterface, AE2Controller.AE2Interface);
         assertSame(processPlatform, AE2Controller.serverPlatform);
         assertTrue(
-            new GridIdentityRegistry(new File(gridSave, "ae2webintegration/grid-identities.json")).isTracked(gridKey),
+            TestGridFixtures.isTracked(
+                new GridIdentityRegistry(new File(gridSave, "ae2webintegration/grid-identities.json")),
+                gridKey),
             "settings remain in the stopped save");
         assertFalse(
-            CoreEngine.GRID_IDENTITIES.isTracked(gridKey),
+            TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, gridKey),
             "the stopped world must not leak tracking into another world");
         assertTrue(AE2Controller.awaitingRegistration.isEmpty());
         assertNull(AE2Controller.itemIdentities.resolve(itemKey));

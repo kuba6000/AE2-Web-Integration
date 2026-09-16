@@ -18,7 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -35,7 +35,7 @@ class GridIdentityRegistryTest {
         GridIdentityRegistry registry = new GridIdentityRegistry(file);
         StableKey key = resolve(registry, controller(2), controller(1));
         assertTrue(file.isFile());
-        assertFalse(registry.isTracked(key));
+        assertFalse(TestGridFixtures.isTracked(registry, key));
         registry.removeController(controller(1));
         GridIdentityRegistry restarted = new GridIdentityRegistry(file);
         assertEquals(key, resolve(restarted, controller(3), controller(2)));
@@ -53,8 +53,8 @@ class GridIdentityRegistryTest {
         StableKey firstKey = resolve(first, controller(1));
         StableKey secondKey = resolve(second, controller(1));
         assertNotEquals(firstKey, secondKey);
-        first.setTracked(firstKey, true);
-        assertFalse(second.isTracked(secondKey));
+        TestGridFixtures.setTracked(first, firstKey, true);
+        assertFalse(TestGridFixtures.isTracked(second, secondKey));
     }
 
     @Test
@@ -63,7 +63,7 @@ class GridIdentityRegistryTest {
             .toFile();
         GridIdentityRegistry registry = new GridIdentityRegistry(file);
         StableKey original = resolve(registry, controller(1), controller(2), controller(3));
-        registry.setTracked(original, true);
+        TestGridFixtures.setTracked(registry, original, true);
         ControllerGrid first = new ControllerGrid(controller(1));
         ControllerGrid later = new ControllerGrid(controller(2), controller(3));
         registry.controllerValidated(first);
@@ -72,8 +72,8 @@ class GridIdentityRegistryTest {
         StableKey fresh = registry.getKey(later);
         assertNotNull(fresh);
         assertNotEquals(original, fresh);
-        assertTrue(registry.isTracked(original));
-        assertFalse(registry.isTracked(fresh));
+        assertTrue(TestGridFixtures.isTracked(registry, original));
+        assertFalse(TestGridFixtures.isTracked(registry, fresh));
         GridIdentityRegistry restarted = new GridIdentityRegistry(file);
         restarted.controllerValidated(later);
         restarted.controllerValidated(first);
@@ -88,12 +88,12 @@ class GridIdentityRegistryTest {
         GridIdentityRegistry registry = new GridIdentityRegistry(file);
         StableKey untracked = resolve(registry, controller(1));
         StableKey tracked = resolve(registry, controller(2));
-        registry.setTracked(tracked, true);
+        TestGridFixtures.setTracked(registry, tracked, true);
         assertEquals(tracked, resolve(registry, controller(1), controller(2)));
         assertFalse(registry.containsIdentity(untracked));
         GridIdentityRegistry restarted = new GridIdentityRegistry(file);
         assertEquals(tracked, restarted.findIdentity(controller(1)));
-        assertEquals(new GridSettingsData(true), restarted.getSettings(tracked));
+        assertTrue(TestGridFixtures.isTracked(restarted, tracked));
     }
 
     @Test
@@ -128,8 +128,8 @@ class GridIdentityRegistryTest {
         assertNotNull(firstKey);
         StableKey secondKey = registry.getKey(second);
         assertNotNull(secondKey);
-        registry.setTracked(firstKey, true);
-        registry.setTracked(secondKey, true);
+        TestGridFixtures.setTracked(registry, firstKey, true);
+        TestGridFixtures.setTracked(registry, secondKey, true);
         byte[] before = Files.readAllBytes(file);
 
         first.controllers.add(controller(2));
@@ -139,8 +139,8 @@ class GridIdentityRegistryTest {
         assertArrayEquals(before, Files.readAllBytes(file));
         assertEquals(firstKey, registry.findIdentity(controller(1)));
         assertEquals(secondKey, registry.findIdentity(controller(2)));
-        assertTrue(registry.isTracked(firstKey));
-        assertTrue(registry.isTracked(secondKey));
+        assertTrue(TestGridFixtures.isTracked(registry, firstKey));
+        assertTrue(TestGridFixtures.isTracked(registry, secondKey));
         assertNull(registry.getKey(first));
 
         first.controllers.remove(controller(2));
@@ -163,7 +163,7 @@ class GridIdentityRegistryTest {
         registry.controllerValidated(grid);
         StableKey key = registry.getKey(grid);
         assertNotNull(key);
-        registry.setTracked(key, true);
+        TestGridFixtures.setTracked(registry, key, true);
         registry.controllerRemoved(controller(1));
         assertTrue(registry.containsIdentity(key));
         assertEquals(key, registry.findIdentity(controller(2)));
@@ -179,13 +179,13 @@ class GridIdentityRegistryTest {
             .toFile();
         GridIdentityRegistry registry = new GridIdentityRegistry(file);
         StableKey absent = resolve(registry, controller(1));
-        registry.setTracked(absent, true);
+        TestGridFixtures.setTracked(registry, absent, true);
         ControllerGrid present = new ControllerGrid(controller(2));
         assertNull(registry.getKey(present));
         registry.controllerValidated(present);
         present.mayReadControllers = false;
         assertNotNull(registry.getKey(present));
-        assertTrue(new GridIdentityRegistry(file).isTracked(absent));
+        assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file), absent));
         assertEquals(absent, new GridIdentityRegistry(file).findIdentity(controller(1)));
     }
 
@@ -194,24 +194,26 @@ class GridIdentityRegistryTest {
         Path file = directory.resolve("unchanged.json");
         GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
         StableKey key = resolve(registry, controller(1));
-        registry.setSettings(key, new GridSettingsData(true));
-        registry.setSettings(key, new GridSettingsData());
+        TestGridFixtures.setTracked(registry, key, true);
+        TestGridFixtures.setTracked(registry, key, false);
         assertEquals(key, new GridIdentityRegistry(file.toFile()).findIdentity(controller(1)));
-        assertFalse(new GridIdentityRegistry(file.toFile()).isTracked(key));
+        assertFalse(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
         Files.setLastModifiedTime(file, FileTime.fromMillis(1000000000000L));
         FileTime before = Files.getLastModifiedTime(file);
-        registry.setTracked(key, false);
+        TestGridFixtures.setTracked(registry, key, false);
         resolve(registry, controller(1));
         registry.removeController(controller(99));
         assertEquals(before, Files.getLastModifiedTime(file));
-        assertThrows(IllegalArgumentException.class, () -> registry.setTracked(StableKey.random(), true));
+        assertNull(registry.getPersistentData(StableKey.random()));
     }
 
     @Test
-    void failedWritesDoNotPublishSettingsMembershipOrRemoval() throws Exception {
+    void failedWritesKeepSettingsDirtyWithoutPublishingMembershipOrRemoval() throws Exception {
         Path file = directory.resolve("failure.json");
         GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
         StableKey key = resolve(registry, controller(1));
+        GridPersistentData data = registry.getPersistentData(key);
+        assertNotNull(data);
         byte[] original = Files.readAllBytes(file);
         Path backup = directory.resolve("saved.json");
         Files.move(file, backup);
@@ -219,7 +221,7 @@ class GridIdentityRegistryTest {
         Path blocker = file.resolve("unrelated-file");
         Files.write(blocker, new byte[] { 1 });
         for (int operation = 0; operation < 3; operation++) {
-            if (operation == 0) assertThrows(IOException.class, () -> registry.setTracked(key, true));
+            if (operation == 0) assertThrows(IOException.class, () -> TestGridFixtures.setTracked(registry, key, true));
             else if (operation == 1) {
                 ControllerGrid changed = new ControllerGrid(controller(1), controller(2));
                 registry.controllerValidated(changed);
@@ -227,14 +229,26 @@ class GridIdentityRegistryTest {
             } else assertThrows(IOException.class, () -> registry.removeController(controller(1)));
             assertEquals(key, registry.findIdentity(controller(1)));
             assertNull(registry.findIdentity(controller(2)));
-            assertFalse(registry.isTracked(key));
+            assertTrue(
+                data.getSettings()
+                    .isTracked());
+            assertTrue(
+                data.getSettings()
+                    .isDirty());
             assertArrayEquals(original, Files.readAllBytes(backup));
             assertArrayEquals(new byte[] { 1 }, Files.readAllBytes(blocker));
         }
         Files.delete(blocker);
         Files.delete(file);
         Files.move(backup, file);
-        assertEquals(key, new GridIdentityRegistry(file.toFile()).findIdentity(controller(1)));
+        GridIdentityRegistry saved = new GridIdentityRegistry(file.toFile());
+        assertEquals(key, saved.findIdentity(controller(1)));
+        assertFalse(TestGridFixtures.isTracked(saved, key));
+        registry.saveIfDirty();
+        assertFalse(
+            data.getSettings()
+                .isDirty());
+        assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
     }
 
     @Test
@@ -273,9 +287,13 @@ class GridIdentityRegistryTest {
         Files.write(file, json.getBytes(StandardCharsets.UTF_8));
         GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
         assertEquals(key, registry.findIdentity(controller(1)));
-        assertEquals(new GridSettingsData(), registry.getSettings(key));
-        registry.setTracked(key, true);
-        assertTrue(new GridIdentityRegistry(file.toFile()).isTracked(key));
+        GridPersistentData data = registry.getPersistentData(key);
+        assertNotNull(data);
+        assertTrue(
+            data.getSettings()
+                .isDefault());
+        TestGridFixtures.setTracked(registry, key, true);
+        assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
     }
 
     private static StableKey resolve(GridIdentityRegistry registry, DimensionalCoords... positions) {

@@ -13,19 +13,26 @@ public class GridSettings extends IAsyncRequest {
             deny("GRID_NOT_FOUND");
             return;
         }
-        try {
-            if (getParams.containsKey("track")) {
-                CoreEngine.GRID_IDENTITIES.setTracked(
-                    gridKey,
-                    getParams.get("track")
-                        .equals("1"));
+        var registry = CoreEngine.GRID_IDENTITIES;
+        synchronized (registry) {
+            var data = registry.getPersistentData(gridKey);
+            if (data == null) {
+                deny("GRID_NOT_FOUND");
+                return;
             }
-            succeed(CoreEngine.GRID_IDENTITIES.getSettings(gridKey));
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            // The grid or save may disappear after the HTTP worker checks current authorization.
-            deny("GRID_NOT_FOUND");
-        } catch (IOException e) {
-            deny("INTERNAL_ERROR");
+            var settings = data.getSettings();
+            try {
+                if (getParams.containsKey("track")) {
+                    settings.setTracked(
+                        getParams.get("track")
+                            .equals("1"));
+                    registry.saveIfDirty();
+                }
+                // Completion serializes under the same monitor used by settings mutations and file writes.
+                succeed(settings);
+            } catch (IOException e) {
+                deny("INTERNAL_ERROR");
+            }
         }
     }
 }

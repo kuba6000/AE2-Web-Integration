@@ -64,9 +64,9 @@ class GridAccessTest extends GridTestScope {
         var grid = TestGridFixtures.grid(1);
         var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        CoreEngine.GRID_IDENTITIES.setTracked(key, true);
+        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, key, true);
         CoreEngine.GRID_IDENTITIES.initialize(gridSave);
-        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
         assertNull(CoreEngine.GRID_IDENTITIES.getGrid(key));
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         assertSame(grid, CoreEngine.GRID_IDENTITIES.getGrid(key));

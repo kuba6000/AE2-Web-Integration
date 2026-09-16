@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +14,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.async.GridSettings;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
@@ -53,7 +56,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
             response.getAsJsonObject("data")
                 .get("isTracked")
                 .getAsBoolean());
-        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
 
         GridSettings next = new GridSettings();
         next.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=0"));
@@ -61,21 +64,43 @@ class GridSettingsLifecycleTest extends GridTestScope {
             "NO_PERMISSIONS",
             response(next).get("status")
                 .getAsString());
-        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
     }
 
     @Test
-    void failedPersistenceStillReturnsInternalError() throws Exception {
-        Files.createDirectory(
-            gridSave.toPath()
-                .resolve("ae2webintegration/grid-identities.json.tmp"));
+    void failedPersistenceReturnsInternalErrorAndRetainsSettingsForRetry() throws Exception {
+        Path file = gridSave.toPath()
+            .resolve("ae2webintegration/grid-identities.json");
+        Path blocker = gridSave.toPath()
+            .resolve("ae2webintegration/grid-identities.json.tmp");
+        Files.createDirectory(blocker);
         GridSettings request = new GridSettings();
         request.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=1"));
         assertEquals(
             "INTERNAL_ERROR",
             response(request).get("status")
                 .getAsString());
-        assertFalse(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        assertTrue(
+            data.getSettings()
+                .isTracked());
+        assertTrue(
+            data.getSettings()
+                .isDirty());
+        assertFalse(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
+
+        Files.deleteIfExists(blocker);
+        GridSettings retry = new GridSettings();
+        retry.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=1"));
+        assertEquals(
+            "OK",
+            response(retry).get("status")
+                .getAsString());
+        assertFalse(
+            data.getSettings()
+                .isDirty());
+        assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
     }
 
     private JsonObject requestAfter(Runnable event, boolean write) {

@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -27,6 +28,8 @@ import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -65,12 +68,30 @@ final class TestGridFixtures {
         return grid;
     }
 
+    static boolean isTracked(GridIdentityRegistry registry, StableKey key) {
+        GridPersistentData data = registry.getPersistentData(key);
+        return data != null && data.getSettings()
+            .isTracked();
+    }
+
+    @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter") // The registry is the shared persistence
+                                                                         // monitor.
+    static void setTracked(GridIdentityRegistry registry, StableKey key, boolean tracked) throws IOException {
+        synchronized (registry) {
+            GridPersistentData data = registry.getPersistentData(key);
+            assertNotNull(data);
+            data.getSettings()
+                .setTracked(tracked);
+            registry.saveIfDirty();
+        }
+    }
+
     static void track(IAEGrid grid) {
         try {
             CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
             StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
             assertNotNull(key);
-            CoreEngine.GRID_IDENTITIES.setTracked(key, true);
+            TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, key, true);
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
         }
