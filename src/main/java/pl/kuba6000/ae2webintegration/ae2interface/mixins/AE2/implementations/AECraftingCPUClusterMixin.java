@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
 import org.jetbrains.annotations.NotNull;
@@ -31,7 +32,7 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICrafting
     public @NotNull StableKey web$getKey() {
         if (web$stableKey == null) {
             CraftingCPUCluster cluster = (CraftingCPUCluster) (Object) this;
-            var position = cluster.getBoundsMin();
+            BlockPos position = cluster.getBoundsMin();
             web$stableKey = StableKey.create(sink -> {
                 StableKey.writeText(
                     sink,
