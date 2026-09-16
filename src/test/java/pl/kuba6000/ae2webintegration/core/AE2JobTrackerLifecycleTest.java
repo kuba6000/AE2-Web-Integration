@@ -29,7 +29,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTrackingHistory;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
@@ -275,7 +275,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
     @Test
     void mergeRetiresLosingPlansAndHistoryWithoutDiscardingTheWinningPlan() throws Exception {
         TestGridFixtures.TestGrid other = TestGridFixtures.grid(900_102L);
-        GridAccessSessions.snapshot(TestGridFixtures.ae(grid, other));
+        GridAccess.list(TestGridFixtures.ae(grid, other));
         StableKey losingKey = CoreEngine.GRID_IDENTITIES.getKey(other);
         assertNotNull(losingKey);
         CoreEngine.GRID_IDENTITIES.setTracked(losingKey, true);
@@ -303,7 +303,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         };
 
         CoreEngine.GRID_IDENTITIES.controllerValidated(merged);
-        GridAccessSessions.snapshot(TestGridFixtures.ae(merged));
+        GridAccess.list(TestGridFixtures.ae(merged));
         assertEquals(gridKey, CoreEngine.GRID_IDENTITIES.getKey(merged));
         assertTrue(losingPlan.isCancelled());
         assertSame(
@@ -314,8 +314,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         TestGridFixtures.TestAE split = TestGridFixtures.ae(grid, other);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         CoreEngine.GRID_IDENTITIES.controllerValidated(other);
-        GridAccessSessions
-            .refresh(split, TestGridFixtures.principal(TestGridFixtures.OWNER_ID), System.currentTimeMillis());
+        GridAccess.list(split);
         StableKey splitKey = CoreEngine.GRID_IDENTITIES.getKey(other);
         assertNotNull(splitKey);
         assertNotEquals(losingKey, splitKey);
@@ -344,7 +343,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
         TestGridFixtures.TestGrid replacement = TestGridFixtures.grid(900_101L, 42);
         TestGridFixtures.TestAE ae = TestGridFixtures.ae(replacement);
-        GridAccessSessions.refresh(ae, TestGridFixtures.principal(42), System.currentTimeMillis());
+
         StableKey replacementKey = CoreEngine.GRID_IDENTITIES.getKey(replacement);
         assertNotNull(replacementKey);
         assertNotEquals(gridKey, replacementKey);
@@ -379,7 +378,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
     @Test
     void unrelatedAndUnknownControllerRemovalPreservesActiveCompletion() throws Exception {
         TestGridFixtures.TestGrid other = TestGridFixtures.grid(900_102L);
-        GridAccessSessions.snapshot(TestGridFixtures.ae(grid, other));
+        GridAccess.list(TestGridFixtures.ae(grid, other));
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, grid, false);
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);

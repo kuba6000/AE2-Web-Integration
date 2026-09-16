@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 
 /**
  * The tick pump is the only place anything HTTP-originated touches live AE2 state, and it runs inside the
@@ -42,7 +41,7 @@ class CoreEngineTickPumpTest {
         }
 
         @Override
-        public void handle(IAE ae) {
+        public void handle() {
             log.add(name);
             if (body == null) {
                 done();

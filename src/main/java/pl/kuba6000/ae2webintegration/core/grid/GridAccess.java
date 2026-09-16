@@ -1,39 +1,54 @@
 package pl.kuba6000.ae2webintegration.core.grid;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.WebPrincipal;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 
-/**
- * Immutable snapshot of the grids a single web user may access, plus the moment it was computed.
- * <p>
- * Async request handlers run off the Minecraft server thread and therefore cannot read live AE2 security
- * state. Instead, the server thread computes this set during a synced request and the async handlers read
- * it. The cost of that trade-off is bounded staleness, expressed by {@link #TTL_MILLIS}.
- */
-@Desugar
-public record GridAccess(Set<StableKey> accessibleGridKeys, long computedAtMillis) {
+/** Access checks read the grid's live permission registry, never a per-user grant cache. */
+public final class GridAccess {
 
-    /** How long a computed access set stays usable before an async request must refuse to trust it. */
-    public static final long TTL_MILLIS = TimeUnit.MINUTES.toMillis(5);
+    private GridAccess() {}
 
-    @SuppressWarnings("Java9CollectionFactory") // Set.copyOf is unavailable on Java 8.
-    public GridAccess {
-        accessibleGridKeys = Collections.unmodifiableSet(new HashSet<>(accessibleGridKeys));
+    public static boolean allows(@Nullable IAEGrid grid, @NotNull WebPrincipal principal) {
+        if (grid == null) return false;
+        if (principal.isAdmin()) return true;
+        PlayerIdentity player = principal.getPlayerIdentity();
+        return player != null && grid.web$hasAccess(player.uuid);
     }
 
-    public boolean canAccess(StableKey gridKey) {
-        return accessibleGridKeys.contains(gridKey);
+    /** Server thread only: resolves currently usable grids without reading their permission maps. */
+    public static @NotNull List<View> list(@NotNull IAE ae) throws IOException {
+        GridIdentityRegistry registry = CoreEngine.GRID_IDENTITIES;
+        synchronized (registry) {
+            if (!registry.isInitialized()) throw new IOException("Grid identities are not initialized for this save");
+            List<View> result = new ArrayList<>();
+            for (IAEGrid grid : ae.web$getGrids()) {
+                StableKey key = registry.getKey(grid);
+                if (key != null && GridFilter.isUsable(grid)) result.add(new View(grid, key));
+            }
+            return result;
+        }
     }
 
-    /** Past this point the set must not be trusted; the caller should ask the client to refresh. */
-    public boolean isStale(long nowMillis) {
-        return nowMillis - computedAtMillis >= TTL_MILLIS;
-    }
+    /** Used only while executing a request on the server thread. */
+    @Desugar
+    public record View(@NotNull IAEGrid grid, @NotNull StableKey key) {
 
+        public boolean allows(@NotNull WebPrincipal principal) {
+            return GridAccess.allows(grid, principal);
+        }
+    }
 }

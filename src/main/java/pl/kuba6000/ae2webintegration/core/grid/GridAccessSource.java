@@ -1,7 +1,5 @@
 package pl.kuba6000.ae2webintegration.core.grid;
 
-import java.util.UUID;
-
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -13,9 +11,4 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 /** Detached explanation of a current grant to a specific player. */
 @Desugar
 public record GridAccessSource(@NotNull PlayerIdentity player, @NotNull String kind,
-    @NotNull DimensionalCoords position, @Nullable String side, @NotNull String reason) {
-
-    public boolean allows(@NotNull UUID playerId) {
-        return player.uuid.equals(playerId);
-    }
-}
+    @NotNull DimensionalCoords position, @Nullable String side, @NotNull String reason) {}

@@ -1,74 +1,74 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
-import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
-class GridAccessTest {
+class GridAccessTest extends GridTestScope {
 
-    private static final long T0 = 1_000_000L;
-
-    private static GridAccess accessTo(long... keys) {
-        Set<StableKey> set = new HashSet<>();
-        for (long key : keys) {
-            set.add(TestGridFixtures.key(key));
-        }
-        return new GridAccess(set, T0);
+    @Test
+    void currentSourcesGrantOnlyTheirPlayersAndAdminBypassesSources() throws Exception {
+        var grid = TestGridFixtures.grid(1, 42);
+        var view = GridAccess.list(TestGridFixtures.ae(grid))
+            .get(0);
+        assertTrue(view.allows(TestGridFixtures.principal(42)));
+        assertTrue(view.allows(TestGridFixtures.principal(TestGridFixtures.OWNER_ID)));
+        assertFalse(view.allows(TestGridFixtures.principal(99)));
+        grid.withoutSources();
+        assertFalse(view.allows(TestGridFixtures.principal(42)));
+        assertTrue(view.allows(WebPrincipal.admin()));
+        assertTrue(view.allows(WebPrincipal.localhost()));
+        assertFalse(GridAccess.allows(null, WebPrincipal.admin()));
     }
 
     @Test
-    void canAccessOnlyListedGrids() {
-        GridAccess access = accessTo(10L, 20L);
-        assertTrue(access.canAccess(TestGridFixtures.key(10L)));
-        assertTrue(access.canAccess(TestGridFixtures.key(20L)));
-        assertFalse(access.canAccess(TestGridFixtures.key(30L)));
+    void listingRequiresValidatedUsableIdentity() throws Exception {
+        var online = TestGridFixtures.grid(1);
+        var booting = TestGridFixtures.grid(2)
+            .booting();
+        var conflicted = TestGridFixtures.grid(3)
+            .controllerState(AEControllerState.CONTROLLER_CONFLICT);
+        var noController = TestGridFixtures.grid(4)
+            .noController();
+        var noPathing = TestGridFixtures.grid(5)
+            .withoutPathingGrid();
+        List<GridAccess.View> views = GridAccess
+            .list(TestGridFixtures.ae(online, booting, conflicted, noController, noPathing));
+        assertEquals(1, views.size());
+        assertSame(
+            online,
+            views.get(0)
+                .grid());
     }
 
     @Test
-    void emptySetGrantsNothing() {
-        assertFalse(accessTo().canAccess(TestGridFixtures.key(10L)));
+    void reverseBindingFollowsRebuiltGridAndRetiresWithLastController() {
+        var oldGrid = TestGridFixtures.grid(1);
+        var key = CoreEngine.GRID_IDENTITIES.getKey(oldGrid);
+        assertNotNull(key);
+        var replacement = TestGridFixtures.grid(1);
+        assertSame(replacement, CoreEngine.GRID_IDENTITIES.getGrid(key));
+        assertNull(CoreEngine.GRID_IDENTITIES.getKey(oldGrid));
+        CoreEngine.GRID_IDENTITIES.controllerRemoved(replacement.position());
+        assertNull(CoreEngine.GRID_IDENTITIES.getGrid(key));
     }
 
     @Test
-    void isNotStaleBeforeTtlElapses() {
-        GridAccess access = accessTo(10L);
-        assertFalse(access.isStale(T0));
-        assertFalse(access.isStale(T0 + GridAccess.TTL_MILLIS - 1));
-    }
-
-    @Test
-    void isStaleOnceTtlElapses() {
-        GridAccess access = accessTo(10L);
-        assertTrue(access.isStale(T0 + GridAccess.TTL_MILLIS));
-        assertTrue(access.isStale(T0 + GridAccess.TTL_MILLIS * 2));
-    }
-
-    @Test
-    @SuppressWarnings("DataFlowIssue") // The mutation below must throw to prove the snapshot is immutable.
-    void keySetIsAnImmutableCopy() {
-        Set<StableKey> source = new HashSet<>();
-        source.add(TestGridFixtures.key(10L));
-        GridAccess access = new GridAccess(source, T0);
-
-        source.add(TestGridFixtures.key(99L)); // mutating the source must not leak into the snapshot
-        assertFalse(access.canAccess(TestGridFixtures.key(99L)));
-        assertEquals(
-            1,
-            access.accessibleGridKeys()
-                .size());
-        assertThrows(
-            UnsupportedOperationException.class,
-            () -> access.accessibleGridKeys()
-                .add(TestGridFixtures.key(99L)));
+    void retainedSettingsDoNotAuthorizeBeforeGridIsLoadedAgain() throws Exception {
+        var grid = TestGridFixtures.grid(1);
+        var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        CoreEngine.GRID_IDENTITIES.setTracked(key, true);
+        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertNull(CoreEngine.GRID_IDENTITIES.getGrid(key));
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        assertSame(grid, CoreEngine.GRID_IDENTITIES.getGrid(key));
     }
 }

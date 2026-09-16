@@ -22,7 +22,7 @@ public class GridSettings extends IAsyncRequest {
             }
             succeed(CoreEngine.GRID_IDENTITIES.getSettings(gridKey));
         } catch (IllegalArgumentException | IllegalStateException e) {
-            // The grid or save may disappear after the HTTP worker checks cached authorization.
+            // The grid or save may disappear after the HTTP worker checks current authorization.
             deny("GRID_NOT_FOUND");
         } catch (IOException e) {
             deny("INTERNAL_ERROR");

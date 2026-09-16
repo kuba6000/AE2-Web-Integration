@@ -10,7 +10,9 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -108,7 +110,7 @@ final class TestGridFixtures {
     static class TestGrid implements IAEGrid, IAEPathingGrid {
 
         private final DimensionalCoords controllerPosition;
-        private final List<GridAccessSource> sources = new ArrayList<>();
+        private final Map<UUID, List<GridAccessSource>> sources = new HashMap<>();
         private boolean booting;
         private AEControllerState controllerState;
         boolean pathingGridPresent = true;
@@ -125,9 +127,14 @@ final class TestGridFixtures {
             this.controllerPosition = position;
             this.booting = booting;
             this.controllerState = state;
-            sources.add(new GridAccessSource(playerIdentity(OWNER_ID), "controller", position(), null, "node_owner"));
+            sources.put(
+                playerIdentity(OWNER_ID).uuid,
+                new ArrayList<>(
+                    Collections.singletonList(
+                        new GridAccessSource(playerIdentity(OWNER_ID), "controller", position(), null, "node_owner"))));
             for (int id : alsoPermitted) {
-                sources.add(new GridAccessSource(playerIdentity(id), "terminal", position(), null, "node_owner"));
+                sources.computeIfAbsent(playerIdentity(id).uuid, ignored -> new ArrayList<>())
+                    .add(new GridAccessSource(playerIdentity(id), "terminal", position(), null, "node_owner"));
             }
         }
 
@@ -167,8 +174,14 @@ final class TestGridFixtures {
         }
 
         @Override
-        public @NotNull List<GridAccessSource> web$getAccessSources() {
+        public @NotNull Map<UUID, List<GridAccessSource>> web$getPermissions() {
             return sources;
+        }
+
+        @Override
+        public boolean web$hasAccess(@NotNull UUID playerId) {
+            return sources.containsKey(playerId) && !sources.get(playerId)
+                .isEmpty();
         }
 
         @Override

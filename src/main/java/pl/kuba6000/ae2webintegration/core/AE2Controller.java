@@ -50,7 +50,6 @@ import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
@@ -507,9 +506,7 @@ public class AE2Controller {
                     requestContext.set(new RequestContext(t, session.principal));
                     return AuthCheckResult.AUTHENTICATED; // Token is valid
                 } else {
-                    if (validTokens.remove(token, session)) {
-                        GridAccessSessions.invalidate(session.principal);
-                    }
+                    validTokens.remove(token, session);
                     return AuthCheckResult.UNAUTHENTICATED; // Token expired
                 }
             } else {
@@ -533,7 +530,6 @@ public class AE2Controller {
                                     .getRawQuery());
                             if (GET_PARAMS.containsKey("logout")) {
                                 validTokens.remove(token); // Invalidate token on logout
-                                GridAccessSessions.invalidate(session.principal);
                                 t.getResponseHeaders()
                                     .add("Set-Cookie", sessionCookie(token, -1));
                                 t.getResponseHeaders()
@@ -544,9 +540,7 @@ public class AE2Controller {
                             requestContext.set(new RequestContext(t, session.principal));
                             return AuthCheckResult.AUTHENTICATED; // Token is valid
                         } else {
-                            if (validTokens.remove(token, session)) {
-                                GridAccessSessions.invalidate(session.principal);
-                            }
+                            validTokens.remove(token, session);
                             t.getResponseHeaders()
                                 .add("Set-Cookie", sessionCookie(token, -1));
                             return AuthCheckResult.UNAUTHENTICATED; // Token expired
@@ -906,10 +900,7 @@ public class AE2Controller {
                 if (auth != null && !auth.isEmpty()) {
                     String token = auth.get(0);
                     token = token.replace("Bearer ", "");
-                    AuthSession revoked = validTokens.remove(token);
-                    if (revoked != null) {
-                        GridAccessSessions.invalidate(revoked.principal);
-                    }
+                    validTokens.remove(token);
                     t.sendResponseHeaders(HttpURLConnection.HTTP_OK, -1);
                     return;
                 }

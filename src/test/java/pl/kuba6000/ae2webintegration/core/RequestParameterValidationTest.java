@@ -3,9 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,8 +12,6 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTracking;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Order;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /**
@@ -25,16 +21,14 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class RequestParameterValidationTest extends GridTestScope {
 
-    private static final StableKey GRID = TestGridFixtures.key(10L);
+    private StableKey GRID;
     private static final int ME = 42;
 
     @BeforeEach
     void setUp() {
-        GridAccessSessions.clear();
-        AE2Controller.AE2Interface = TestGridFixtures.ae();
-        Set<StableKey> keys = new HashSet<>();
-        keys.add(GRID);
-        GridAccessSessions.put(TestGridFixtures.principal(ME), new GridAccess(keys, System.currentTimeMillis()));
+        var liveGrid = TestGridFixtures.grid(10L, ME);
+        AE2Controller.AE2Interface = TestGridFixtures.ae(liveGrid);
+        GRID = CoreEngine.GRID_IDENTITIES.getKey(liveGrid);
         AE2Controller.itemIdentities.clear();
     }
 

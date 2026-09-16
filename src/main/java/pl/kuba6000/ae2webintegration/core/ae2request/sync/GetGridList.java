@@ -1,41 +1,55 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.sync;
 
 import java.util.ArrayList;
-import java.util.List;
+
+import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 
 public class GetGridList extends ISyncedRequest {
 
     @Desugar
     private record JSON_GridData(StableKey key, int cpuCount, String owner, boolean isOwned, boolean isTrackingEnabled,
-        List<GridAccessSource> accessSources) {
+        JsonArray accessSources) {
 
-        JSON_GridData(GridAccessSessions.View view, boolean isOwned) {
+        JSON_GridData(GridAccess.View view, boolean isOwned, @Nullable PlayerIdentity owner, JsonArray sources) {
             this(
                 view.key(),
                 view.grid()
                     .web$getCraftingGrid()
                     .web$getCPUCount(),
-                view.owner() == null ? "N/A" : view.owner().name,
+                owner == null ? "N/A" : owner.name,
                 isOwned,
                 CoreEngine.GRID_IDENTITIES.isTracked(view.key()),
-                view.sources());
+                sources);
         }
     }
 
     @Override
-    public void handle(IAE ae) {
+    public void handle() {
         ArrayList<JSON_GridData> result = new ArrayList<>();
-        for (GridAccessSessions.View view : grids) {
+        Gson gson = JSONBuilder.create();
+        for (GridAccess.View view : grids) {
             if (!view.allows(context.getPrincipal())) continue;
-            result.add(new JSON_GridData(view, !context.isAdmin()));
+            JsonArray sources = new JsonArray();
+            view.grid()
+                .web$getPermissions()
+                .values()
+                .forEach(entries -> entries.forEach(source -> sources.add(gson.toJsonTree(source))));
+            result.add(
+                new JSON_GridData(
+                    view,
+                    !context.isAdmin(),
+                    view.grid()
+                        .web$getRepresentativeOwner(),
+                    sources));
         }
         result.sort((first, second) -> {
             int owned = Boolean.compare(second.isOwned(), first.isOwned());
@@ -43,6 +57,7 @@ public class GetGridList extends ISyncedRequest {
             int tracked = Boolean.compare(second.isTrackingEnabled(), first.isTrackingEnabled());
             return tracked != 0 ? tracked : Integer.compare(second.cpuCount(), first.cpuCount());
         });
+        // Permission sources are already detached JSON; no live map or lists reach the HTTP worker.
         succeed(result);
     }
 }

@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
-import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -18,8 +17,6 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -67,8 +64,6 @@ class CoreEngineLifecycleTest extends GridTestScope {
         ICraftingCPUCluster cpu = new TestCpu();
         AE2JobTracker.addJob(cpu, grid, false);
         gridData.trackingInfo.trackingInfos.put(1, AE2JobTracker.findActiveJob(cpu));
-        WebPrincipal principal = TestGridFixtures.principal(42);
-        GridAccessSessions.put(principal, new GridAccess(Collections.singleton(gridKey), 0L));
         AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
         pl.kuba6000.ae2webintegration.core.identity.StableKey itemKey = AE2Controller.itemIdentities.remember(
             grid,
@@ -108,7 +103,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
             "the stopped world must not leak tracking into another world");
         assertTrue(AE2Controller.awaitingRegistration.isEmpty());
         assertNull(AE2Controller.itemIdentities.resolve(itemKey));
-        assertNull(GridAccessSessions.get(principal));
+        assertNull(CoreEngine.GRID_IDENTITIES.getGrid(gridKey));
         assertNull(AE2JobTracker.findActiveJob(cpu));
         assertTrue(gridData.trackingInfo.trackingInfos.isEmpty());
         assertNull(gridData.getJob(planId));

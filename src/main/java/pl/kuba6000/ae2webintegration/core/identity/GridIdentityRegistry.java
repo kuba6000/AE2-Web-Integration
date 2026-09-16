@@ -22,11 +22,11 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.common.collect.MapMaker;
 import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -39,6 +39,8 @@ public final class GridIdentityRegistry {
     private @Nullable File file;
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private final WeakHashMap<IAEGrid, StableKey> keys = new WeakHashMap<>();
+    private final Map<StableKey, IAEGrid> grids = new MapMaker().weakValues()
+        .makeMap();
     private Map<StableKey, GridRecord> records = new HashMap<>();
     private final Map<DimensionalCoords, StableKey> knownPositions = new HashMap<>();
     private static final GridSettingsData DEFAULT_SETTINGS = new GridSettingsData();
@@ -62,7 +64,7 @@ public final class GridIdentityRegistry {
         records.clear();
         knownPositions.clear();
         keys.clear();
-        GridAccessSessions.clear();
+        grids.clear();
     }
 
     private File storageFile() {
@@ -81,7 +83,14 @@ public final class GridIdentityRegistry {
         IAEPathingGrid pathing = grid.web$getPathingGrid();
         if (pathing == null || pathing.web$getControllerState() != AEControllerState.CONTROLLER_ONLINE) return null;
         StableKey key = keys.get(grid);
-        return records.containsKey(key) ? key : null;
+        return records.containsKey(key) && grids.get(key) == grid ? key : null;
+    }
+
+    /** Thread-safe reverse lookup; reads bindings only, never native grid state. */
+    public synchronized @Nullable IAEGrid getGrid(@NotNull StableKey key) {
+        if (!records.containsKey(key)) return null;
+        IAEGrid grid = grids.get(key);
+        return grid != null && key.equals(keys.get(grid)) ? grid : null;
     }
 
     public synchronized boolean isInitialized() {
@@ -114,9 +123,16 @@ public final class GridIdentityRegistry {
         next.put(selected, new GridRecord(controllers, getSettings(selected)));
         try {
             publish(next);
-            keys.put(grid, selected);
-            for (StableKey key : previous) if (!key.equals(selected)) GridData.retire(key);
-            GridAccessSessions.clear();
+            StableKey oldKey = keys.put(grid, selected);
+            if (oldKey != null && !oldKey.equals(selected) && grids.get(oldKey) == grid) grids.remove(oldKey);
+            grids.put(selected, grid);
+            for (StableKey key : previous) {
+                if (!key.equals(selected)) {
+                    grids.remove(key);
+                    GridData.retire(key);
+                }
+            }
+
         } catch (IOException e) {
             LOG.error("Failed to persist validated grid identity", e);
         }
@@ -132,8 +148,6 @@ public final class GridIdentityRegistry {
             if (!containsIdentity(affected)) GridData.retire(affected);
         } catch (IOException e) {
             LOG.error("Failed to persist removed controller", e);
-        } finally {
-            GridAccessSessions.clear();
         }
     }
 

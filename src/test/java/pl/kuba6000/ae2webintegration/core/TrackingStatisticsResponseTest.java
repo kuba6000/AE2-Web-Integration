@@ -20,8 +20,6 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTracking;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPU;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
@@ -51,7 +49,6 @@ class TrackingStatisticsResponseTest extends GridTestScope {
     @AfterEach
     void tearDown() {
         GridData.getOrCreate(GRID).trackingInfo.clearHistory();
-        GridAccessSessions.clear();
         AE2JobTracker.clearActiveJobs();
     }
 
@@ -71,12 +68,11 @@ class TrackingStatisticsResponseTest extends GridTestScope {
         info.timeSpentOn.put(key, spent);
         info.craftedTotal.put(key, crafted);
         info.itemShare.put(key, new ArrayList<>(Collections.singletonList(Pair.of(1000L, 1000L + spent))));
-        GridData.getOrCreate(GRID).trackingInfo.trackingInfos.put(1, info);
-        GridAccessSessions
-            .put(WebPrincipal.admin(), new GridAccess(Collections.singleton(GRID), System.currentTimeMillis()));
+        StableKey actualKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        GridData.getOrCreate(actualKey).trackingInfo.trackingInfos.put(1, info);
 
         GetTracking request = new GetTracking();
-        request.handle(TestGridFixtures.context(-1, "grid=" + GRID + "&id=1"));
+        request.handle(TestGridFixtures.context(-1, "grid=" + actualKey + "&id=1"));
         JsonObject response = JsonParser.parseString(request.getJSON())
             .getAsJsonObject();
         assertEquals(

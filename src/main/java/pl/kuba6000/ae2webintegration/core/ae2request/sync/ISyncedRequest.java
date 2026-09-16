@@ -9,7 +9,6 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.IServerThreadTask;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
@@ -19,10 +18,9 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
 
     protected AE2Controller.RequestContext context = null;
     protected StableKey gridKey;
-    protected List<GridAccessSessions.View> grids = Collections.emptyList();
+    protected List<GridAccess.View> grids = Collections.emptyList();
     protected IAEGrid grid = null;
     protected GridData gridData = null;
-    protected GridAccess access = null;
 
     boolean init(Map<String, String> getParams) {
         return true;
@@ -47,9 +45,9 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
 
     void handle(IAEGrid grid) {}
 
-    public void handle(IAE ae) {
+    public void handle() {
         if (gridKey != null) {
-            for (GridAccessSessions.View candidate : grids) {
+            for (GridAccess.View candidate : grids) {
                 if (!gridKey.equals(candidate.key())) continue;
                 if (!candidate.allows(context.getPrincipal())) {
                     deny("NO_PERMISSIONS");
@@ -67,14 +65,12 @@ public abstract class ISyncedRequest extends IRequest implements IServerThreadTa
     public final void runOnServerThread(IAE ae) {
         if (context != null) {
             try {
-                grids = GridAccessSessions.snapshot(ae);
+                grids = GridAccess.list(ae);
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to prepare grid identities", e);
             }
-            access = GridAccessSessions.compute(context.getPrincipal(), System.currentTimeMillis(), grids);
-            GridAccessSessions.put(context.getPrincipal(), access);
         }
-        handle(ae);
+        handle();
     }
 
 }

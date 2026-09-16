@@ -13,7 +13,6 @@ import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
@@ -175,7 +174,7 @@ public class CoreEngine {
         stopVersionChecker();
         AE2Controller.stopHTTPServer();
         // Authorization must not survive into the next world loaded in this JVM.
-        GridAccessSessions.clear();
+        GRID_IDENTITIES.clear();
     }
 
     public static synchronized void onServerStopped() {
@@ -184,7 +183,6 @@ public class CoreEngine {
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.
         AE2Controller.stopHTTPServer();
         AE2Controller.clearWorldState();
-        GridAccessSessions.clear();
         AE2JobTracker.clearActiveJobs();
         GridData.clearRuntimeState();
         CoreEngine.GRID_IDENTITIES.clear();

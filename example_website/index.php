@@ -406,7 +406,7 @@
     function onTrackThisGridChange(el) {
         if (selectedGrid == -1) return;
         let trackThisGrid = el.checked;
-        getJSONWithGridRefresh('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
+        getJSONChecked('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
             data = data.data;
             el.checked = data['isTracked'];
             updateGridList();
@@ -797,24 +797,8 @@
         }
         container.appendChild(details);
     }
-    // The async endpoints (trackinghistory / gettracking / gridsettings) authorize against a per-user
-    // access set that the server rebuilds during synced requests. After a long idle period it expires and
-    // the server answers REFRESH_REQUIRED instead of serving the request. Asking for the grid list rebuilds
-    // that set, so retry once before bothering the user with an error.
-    function getJSONWithGridRefresh(url, onSuccess, onFailure){
+    function getJSONChecked(url, onSuccess, onFailure){
         $.getJSON(url, function(data){
-            if (data.status === "REFRESH_REQUIRED"){
-                updateGridList(function(){
-                    $.getJSON(url, function(retried){
-                        if (retried.status !== "OK"){
-                            onFailure(retried);
-                            return;
-                        }
-                        onSuccess(retried);
-                    });
-                });
-                return;
-            }
             if (data.status !== "OK"){
                 onFailure(data);
                 return;
@@ -983,7 +967,7 @@
             return;
         let message = "Asking for tracking history list...";
         pushLoadingScreen(message);
-        getJSONWithGridRefresh('trackinghistory?grid=' + selectedGrid, function(data){
+        getJSONChecked('trackinghistory?grid=' + selectedGrid, function(data){
             console.log(data);
             data = data.data;
             let html = "<table>";
@@ -1183,7 +1167,7 @@
         isInterfaceChartInitialized = false;
         isItemChartInitialized = false;
         pushLoadingScreen(message);
-        getJSONWithGridRefresh('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
+        getJSONChecked('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
             console.log(data);
             data = data.data;
 

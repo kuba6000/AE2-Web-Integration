@@ -3,7 +3,6 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Files;
-import java.util.Collections;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -14,8 +13,6 @@ import org.junit.jupiter.params.provider.CsvSource;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.async.GridSettings;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
@@ -30,7 +27,6 @@ class GridSettingsLifecycleTest extends GridTestScope {
         grid = TestGridFixtures.grid(1);
         key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        GridAccessSessions.put(owner, new GridAccess(Collections.singleton(key), System.currentTimeMillis()));
     }
 
     @ParameterizedTest
@@ -48,7 +44,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
 
     @Test
     void authorizedWriteMayFinishAfterPermissionInvalidation() {
-        JsonObject response = requestAfter(GridAccessSessions::permissionsChanged, true);
+        JsonObject response = requestAfter(grid::withoutSources, true);
         assertEquals(
             "OK",
             response.get("status")
@@ -58,12 +54,11 @@ class GridSettingsLifecycleTest extends GridTestScope {
                 .get("isTracked")
                 .getAsBoolean());
         assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
-        assertNull(GridAccessSessions.get(owner));
 
         GridSettings next = new GridSettings();
         next.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=0"));
         assertEquals(
-            "REFRESH_REQUIRED",
+            "NO_PERMISSIONS",
             response(next).get("status")
                 .getAsString());
         assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));

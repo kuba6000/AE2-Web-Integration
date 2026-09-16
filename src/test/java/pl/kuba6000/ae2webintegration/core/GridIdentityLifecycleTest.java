@@ -3,7 +3,6 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -16,7 +15,6 @@ import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
@@ -47,7 +45,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
 
         CoreEngine.GRID_IDENTITIES.initialize(gridSave);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        GridAccessSessions.snapshot(TestGridFixtures.ae(grid));
+        GridAccess.list(TestGridFixtures.ae(grid));
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
     }
@@ -63,7 +61,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
 
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertTrue(
-            GridAccessSessions.snapshot(TestGridFixtures.ae(grid))
+            GridAccess.list(TestGridFixtures.ae(grid))
                 .isEmpty());
         assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
 
@@ -72,7 +70,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertEquals(
             key,
-            GridAccessSessions.snapshot(TestGridFixtures.ae(grid))
+            GridAccess.list(TestGridFixtures.ae(grid))
                 .get(0)
                 .key());
     }
@@ -121,7 +119,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         };
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertTrue(
-            GridAccessSessions.snapshot(TestGridFixtures.ae(grid))
+            GridAccess.list(TestGridFixtures.ae(grid))
                 .isEmpty());
         assertEquals(0, reads.get());
         assertFalse(new File(gridSave, "ae2webintegration/grid-identities.json").exists());
@@ -133,7 +131,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertEquals(
             key,
-            GridAccessSessions.snapshot(TestGridFixtures.ae(grid))
+            GridAccess.list(TestGridFixtures.ae(grid))
                 .get(0)
                 .key());
         assertEquals(0, reads.get());
@@ -200,22 +198,22 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertFalse(CoreEngine.GRID_IDENTITIES.isTracked(secondKey));
         assertEquals(
             1,
-            GridAccessSessions.snapshot(TestGridFixtures.ae(first, second))
+            GridAccess.list(TestGridFixtures.ae(first, second))
                 .size());
     }
 
     @Test
     void unobservedDefaultGridKeepsPendingPlanUntilConfirmedRemoval() throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(51);
-        GridAccessSessions.snapshot(TestGridFixtures.ae(grid));
+        GridAccess.list(TestGridFixtures.ae(grid));
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
         CompletableFuture<IAECraftingJob> plan = new CompletableFuture<>();
         int id = GridData.getOrCreate(key)
             .addJob(plan);
 
-        GridAccessSessions.snapshot(TestGridFixtures.ae());
-        GridAccessSessions.snapshot(TestGridFixtures.ae(grid));
+        GridAccess.list(TestGridFixtures.ae());
+        GridAccess.list(TestGridFixtures.ae(grid));
         assertSame(
             plan,
             GridData.getOrCreate(key)
@@ -223,7 +221,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertFalse(plan.isCancelled());
         assertTrue(new File(gridSave, "ae2webintegration/grid-identities.json").exists());
 
-        GridAccessSessions.snapshot(TestGridFixtures.ae());
+        GridAccess.list(TestGridFixtures.ae());
         CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
         assertTrue(plan.isCancelled());
     }
@@ -231,15 +229,16 @@ class GridIdentityLifecycleTest extends GridTestScope {
     @Test
     void snapshotExplainsCurrentOwnershipOfTheValidatedIdentity() throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
-        List<GridAccessSessions.View> views = GridAccessSessions.snapshot(TestGridFixtures.ae(grid));
+        List<GridAccess.View> views = GridAccess.list(TestGridFixtures.ae(grid));
         assertEquals(1, views.size());
-        GridAccessSessions.View view = views.get(0);
+        GridAccess.View view = views.get(0);
         assertSame(grid, view.grid());
         assertNotNull(view.key());
         assertEquals(view.key(), CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertEquals(
             2,
-            view.sources()
+            view.grid()
+                .web$getPermissions()
                 .size());
         assertTrue(view.allows(TestGridFixtures.principal(42)));
         assertTrue(view.allows(TestGridFixtures.principal(TestGridFixtures.OWNER_ID)));
@@ -249,14 +248,14 @@ class GridIdentityLifecycleTest extends GridTestScope {
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         assertEquals(
             view.key(),
-            GridAccessSessions.snapshot(TestGridFixtures.ae(grid))
+            GridAccess.list(TestGridFixtures.ae(grid))
                 .get(0)
                 .key());
         assertFalse(CoreEngine.GRID_IDENTITIES.isTracked(view.key()));
         grid.withoutSources();
-        assertTrue(view.allows(TestGridFixtures.principal(42)), "the completed view is a detached snapshot");
+        assertFalse(view.allows(TestGridFixtures.principal(42)), "authorization reads current sources");
         assertFalse(
-            GridAccessSessions.snapshot(TestGridFixtures.ae(grid))
+            GridAccess.list(TestGridFixtures.ae(grid))
                 .get(0)
                 .allows(TestGridFixtures.principal(42)));
     }
@@ -265,14 +264,18 @@ class GridIdentityLifecycleTest extends GridTestScope {
     void presentationOwnerDoesNotGrantAccessAndControllerlessGridIsUnavailable() throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1)
             .withoutSources();
-        GridAccessSessions.View view = GridAccessSessions.snapshot(TestGridFixtures.ae(grid))
+        GridAccess.View view = GridAccess.list(TestGridFixtures.ae(grid))
             .get(0);
-        PlayerIdentity owner = assertInstanceOf(PlayerIdentity.class, view.owner());
+        PlayerIdentity owner = assertInstanceOf(
+            PlayerIdentity.class,
+            view.grid()
+                .web$getRepresentativeOwner());
+        assertNotNull(owner);
         assertFalse(view.allows(WebPrincipal.forPlayer(owner)));
         assertTrue(view.allows(WebPrincipal.admin()));
         grid.noController();
         assertTrue(
-            GridAccessSessions.snapshot(TestGridFixtures.ae(grid))
+            GridAccess.list(TestGridFixtures.ae(grid))
                 .isEmpty());
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
     }
@@ -280,19 +283,18 @@ class GridIdentityLifecycleTest extends GridTestScope {
     @Test
     void physicalControllerRemovalRetiresTheKeyAndRebuildingGetsANewIdentity() throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1);
-        GridAccessSessions.snapshot(TestGridFixtures.ae(grid));
+        GridAccess.list(TestGridFixtures.ae(grid));
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
         CoreEngine.GRID_IDENTITIES.setTracked(key, true);
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
-        GridAccessSessions.put(WebPrincipal.admin(), new GridAccess(Collections.singleton(key), 0));
         CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
-        assertNull(GridAccessSessions.get(WebPrincipal.admin()));
+        assertNull(CoreEngine.GRID_IDENTITIES.getGrid(key));
         assertFalse(CoreEngine.GRID_IDENTITIES.isTracked(key));
         assertNotEquals(
             key,
-            GridAccessSessions.snapshot(TestGridFixtures.ae(TestGridFixtures.grid(1)))
+            GridAccess.list(TestGridFixtures.ae(TestGridFixtures.grid(1)))
                 .get(0)
                 .key());
         assertFalse(
@@ -308,13 +310,13 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertNotNull(key);
         CoreEngine.GRID_IDENTITIES.clear();
         CoreEngine.GRID_IDENTITIES.initialize(new File(gridSave, "other-save"));
-        GridAccessSessions.snapshot(TestGridFixtures.ae(grid));
+        GridAccess.list(TestGridFixtures.ae(grid));
         assertFalse(CoreEngine.GRID_IDENTITIES.isTracked(key));
         CoreEngine.GRID_IDENTITIES.initialize(gridSave);
         assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        GridAccessSessions.snapshot(TestGridFixtures.ae(grid));
+        GridAccess.list(TestGridFixtures.ae(grid));
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
     }
 }

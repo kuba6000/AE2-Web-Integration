@@ -16,20 +16,7 @@ import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 class GridAccessSourceTest {
 
     private final UUID anna = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private final UUID piotr = UUID.fromString("00000000-0000-0000-0000-000000000002");
     private final DimensionalCoords position = new DimensionalCoords("world", 1, 2, 3);
-
-    @Test
-    void ownershipOnlyGrantsItsPlayer() {
-        GridAccessSource source = new GridAccessSource(
-            new PlayerIdentity(anna, "Anna"),
-            "Controller",
-            position,
-            null,
-            "owner");
-        assertTrue(source.allows(anna));
-        assertFalse(source.allows(piotr));
-    }
 
     @Test
     void accessExplanationKeepsItsJsonSchemaAndRoundTripsPermissions() {
@@ -46,8 +33,8 @@ class GridAccessSourceTest {
             + "\"side\":null,\"reason\":\"security_card\"}";
         assertEquals(gson.fromJson(expected, JsonObject.class), gson.toJsonTree(source));
         GridAccessSource restored = gson.fromJson(expected, GridAccessSource.class);
-        assertTrue(restored.allows(anna));
-        assertFalse(restored.allows(piotr));
+        assertEquals(anna, restored.player().uuid);
+        assertEquals("Anna", restored.player().name);
         assertEquals(position, restored.position());
     }
 }
