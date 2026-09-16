@@ -1166,15 +1166,15 @@
         details.appendChild(summary);
         const groups = new Map();
         for (const source of sources) {
-            const key = source.player ? source.player.uuid : '*';
+            const key = source.player.uuid;
             if (!groups.has(key)) groups.set(key, []);
             groups.get(key).push(source);
         }
         const kinds = {controller: 'Controller', wireless_access_point: 'Wireless Access Point', terminal: 'Terminal', security_terminal: 'Security Terminal'};
-        const reasons = {node_owner: 'block owner', security_owner: 'security owner', security_card: 'security permissions', security_default: 'default security permissions'};
+        const reasons = {node_owner: 'block owner', security_owner: 'security owner', security_card: 'security permissions'};
         for (const entries of groups.values()) {
             const heading = document.createElement('p');
-            heading.textContent = entries[0].player ? entries[0].player.name + ' (' + entries[0].player.uuid + ')' : 'Default access';
+            heading.textContent = entries[0].player.name + ' (' + entries[0].player.uuid + ')';
             details.appendChild(heading);
             const list = document.createElement('ul');
             for (const source of entries) {
@@ -1182,7 +1182,6 @@
                 const pos = source.position;
                 item.textContent = (kinds[source.kind] || source.kind) + ' — ' + pos.dimid + ' (' + pos.x + ', ' + pos.y + ', ' + pos.z + ')' +
                     (source.side ? ', side: ' + source.side : '') + ' — ' + (reasons[source.reason] || source.reason);
-                if (source.excludedPlayers && source.excludedPlayers.length) item.textContent += '. Excludes: ' + source.excludedPlayers.join(', ');
                 list.appendChild(item);
             }
             details.appendChild(list);

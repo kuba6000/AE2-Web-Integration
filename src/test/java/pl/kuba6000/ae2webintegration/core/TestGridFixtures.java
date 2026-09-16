@@ -126,10 +126,9 @@ final class TestGridFixtures {
             this.controllerPosition = position;
             this.booting = booting;
             this.controllerState = state;
-            sources.add(
-                GridAccessSource.forPlayer(playerIdentity(OWNER_ID), "controller", position(), null, "node_owner"));
+            sources.add(new GridAccessSource(playerIdentity(OWNER_ID), "controller", position(), null, "node_owner"));
             for (int id : alsoPermitted) {
-                sources.add(GridAccessSource.forPlayer(playerIdentity(id), "terminal", position(), null, "node_owner"));
+                sources.add(new GridAccessSource(playerIdentity(id), "terminal", position(), null, "node_owner"));
             }
         }
 

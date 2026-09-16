@@ -2,9 +2,6 @@ package pl.kuba6000.ae2webintegration.core.api;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -24,43 +21,29 @@ class GridAccessSourceTest {
 
     @Test
     void ownershipOnlyGrantsItsPlayer() {
-        GridAccessSource source = GridAccessSource
-            .forPlayer(new PlayerIdentity(anna, "Anna"), "Controller", position, null, "owner");
+        GridAccessSource source = new GridAccessSource(
+            new PlayerIdentity(anna, "Anna"),
+            "Controller",
+            position,
+            null,
+            "owner");
         assertTrue(source.allows(anna));
         assertFalse(source.allows(piotr));
-    }
-
-    @Test
-    void defaultGrantHonorsNamedExceptions() {
-        GridAccessSource source = GridAccessSource
-            .forEveryone("Security Terminal", position, "permissions", Collections.singleton(piotr));
-        assertTrue(source.allows(anna));
-        assertFalse(source.allows(piotr));
-    }
-
-    @Test
-    void grantKeepsAnImmutableCopyOfItsExceptions() {
-        Set<UUID> exclusions = new HashSet<>(Collections.singleton(piotr));
-        GridAccessSource source = GridAccessSource
-            .forEveryone("security_terminal", position, "security_default", exclusions);
-        exclusions.clear();
-        assertFalse(source.allows(piotr));
-        assertTrue(source.allows(anna));
-        assertThrows(
-            UnsupportedOperationException.class,
-            () -> source.excludedPlayers()
-                .clear());
     }
 
     @Test
     void accessExplanationKeepsItsJsonSchemaAndRoundTripsPermissions() {
         Gson gson = GSONUtils.GSON_BUILDER.create();
-        GridAccessSource source = GridAccessSource
-            .forEveryone("security_terminal", position, "security_default", Collections.singleton(piotr));
-        String expected = "{\"player\":null,\"kind\":\"security_terminal\","
+        GridAccessSource source = new GridAccessSource(
+            new PlayerIdentity(anna, "Anna"),
+            "security_terminal",
+            position,
+            null,
+            "security_card");
+        String expected = "{\"player\":{\"uuid\":\"00000000-0000-0000-0000-000000000001\",\"name\":\"Anna\"},"
+            + "\"kind\":\"security_terminal\","
             + "\"position\":{\"dimid\":\"world\",\"x\":1,\"y\":2,\"z\":3},"
-            + "\"side\":null,\"reason\":\"security_default\","
-            + "\"excludedPlayers\":[\"00000000-0000-0000-0000-000000000002\"]}";
+            + "\"side\":null,\"reason\":\"security_card\"}";
         assertEquals(gson.fromJson(expected, JsonObject.class), gson.toJsonTree(source));
         GridAccessSource restored = gson.fromJson(expected, GridAccessSource.class);
         assertTrue(restored.allows(anna));
