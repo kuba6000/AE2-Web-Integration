@@ -30,8 +30,8 @@ public class DiscordManager extends Thread {
     private static DiscordManager thread;
 
     private static final BlockingQueue<DiscordEmbed> toPush = new LinkedBlockingQueue<>();
-    private static final int WEBHOOK_TIMEOUT_MILLIS = 10_000;
-    private static final long FRACTIONAL_SECONDS_THRESHOLD_MILLIS = 5000L;
+    private static final int WEBHOOK_TIMEOUT_MILLIS = (int) TimeUnit.SECONDS.toMillis(10);
+    private static final long FRACTIONAL_SECONDS_THRESHOLD_MILLIS = TimeUnit.SECONDS.toMillis(5);
 
     public static void init() {
         if (thread != null) return;

@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.grid;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import com.github.bsideup.jabel.Desugar;
 
@@ -19,7 +20,7 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 public record GridAccess(int playerId, Set<StableKey> accessibleGridKeys, long computedAtMillis) {
 
     /** How long a computed access set stays usable before an async request must refuse to trust it. */
-    public static final long TTL_MILLIS = 5L * 60L * 1000L;
+    public static final long TTL_MILLIS = TimeUnit.MINUTES.toMillis(5);
     public static final int UNRESOLVED_PLAYER_ID = -1;
 
     @SuppressWarnings("Java9CollectionFactory") // Set.copyOf is unavailable on Java 8.

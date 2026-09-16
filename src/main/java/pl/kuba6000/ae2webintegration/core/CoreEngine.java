@@ -33,7 +33,7 @@ public class CoreEngine {
      * cost of a request varies by orders of magnitude - {@code /items} on a large network against
      * {@code /gettracking} - so no count can bound the time.
      */
-    static final long DRAIN_BUDGET_NANOS = 5_000_000L;
+    static final long DRAIN_BUDGET_NANOS = TimeUnit.MILLISECONDS.toNanos(5);
     static final long PLAN_SWEEP_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
     static final int PLAN_SWEEP_GRIDS_PER_TICK = 8;
 
