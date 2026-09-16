@@ -58,6 +58,7 @@ repositories {
 
 dependencies {
     compileOnly 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
+    testCompileOnly 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
     annotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
     testAnnotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
 
@@ -92,6 +93,8 @@ java {
 // differently depending on the machine that built it.
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    // IDEA imports this task value; its default follows --release rather than java.sourceCompatibility.
+    sourceCompatibility = JavaVersion.VERSION_17
     // Jabel enables newer syntax; --release keeps both JDK API usage and bytecode at Java 8.
     options.release = 8
 }

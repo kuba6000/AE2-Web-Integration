@@ -23,15 +23,18 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.CancelCPU;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPU;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPUList;
+import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetGridList;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -41,9 +44,24 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
-class CpuAddressingRequestTest {
+class CpuAddressingRequestTest extends GridTestScope {
 
-    private static final long GRID = 991234;
+    private static final StableKey GRID = TestGridFixtures.key(991234);
+
+    @Test
+    void gridListRecordSerializesTheResolvedIdentityAsACanonicalString() {
+        TestGrid grid = new TestGrid(GRID);
+        JsonObject response = request(new GetGridList(), grid, "");
+        assertStatus("OK", response);
+        JsonElement key = response.getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject()
+            .get("key");
+        assertTrue(
+            key.getAsJsonPrimitive()
+                .isString());
+        assertEquals(CoreEngine.GRID_IDENTITIES.getKey(grid), StableKey.parse(key.getAsString()));
+    }
 
     @Test
     void lookupUsesTheFullStableKeyEvenWhenMapHashCodesCollide() {
@@ -214,12 +232,15 @@ class CpuAddressingRequestTest {
             "Main",
             64);
         TestGrid selected = new TestGrid(GRID);
-        TestGrid other = new TestGrid(GRID + 1, remote);
+        TestGrid other = new TestGrid(TestGridFixtures.key(991235), remote);
         for (ISyncedRequest request : new ISyncedRequest[] { new GetCPU(), new CancelCPU(), new Job() }) {
             assertTrue(
                 request.init(
-                    TestGridFixtures.context(-1, "grid=" + GRID + "&cpu=" + remote.id + "&submit&id=" + addPlan())));
-            request.handle(TestGridFixtures.ae(selected, other));
+                    TestGridFixtures.context(
+                        -1,
+                        "grid=" + TestGridFixtures
+                            .resolvedKey(selected) + "&cpu=" + remote.id + "&submit&id=" + addPlan(selected))));
+            request.runOnServerThread(TestGridFixtures.ae(selected, other));
             assertStatus(
                 "CPU_NOT_FOUND",
                 JsonParser.parseString(request.getJSON())
@@ -289,24 +310,24 @@ class CpuAddressingRequestTest {
         }
     }
 
-    private static int addPlan() {
+    private static int addPlan(TestGrid grid) {
         IAECraftingJob plan = (IAECraftingJob) Proxy.newProxyInstance(
             CpuAddressingRequestTest.class.getClassLoader(),
             new Class<?>[] { IAECraftingJob.class },
             (proxy, method, args) -> {
                 throw new AssertionError("Unexpected plan operation");
             });
-        return GridData.getOrCreate(GRID)
+        return GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
             .addJob(CompletableFuture.completedFuture(plan));
     }
 
     private static JsonObject submit(TestGrid grid, String selection) {
-        return request(new Job(), grid, "&id=" + addPlan() + "&submit" + selection);
+        return request(new Job(), grid, "&id=" + addPlan(grid) + "&submit" + selection);
     }
 
     private static JsonObject request(ISyncedRequest request, TestGrid grid, String params) {
-        if (request.init(TestGridFixtures.context(-1, "grid=" + GRID + params))) {
-            request.handle(TestGridFixtures.ae(grid));
+        if (request.init(TestGridFixtures.context(-1, "grid=" + TestGridFixtures.resolvedKey(grid) + params))) {
+            request.runOnServerThread(TestGridFixtures.ae(grid));
         }
         return JsonParser.parseString(request.getJSON())
             .getAsJsonObject();
@@ -326,8 +347,8 @@ class CpuAddressingRequestTest {
         private ICraftingCPUCluster submitted;
         private int submissions;
 
-        TestGrid(long key, TestCpu... cpus) {
-            super(key, true, false, AEControllerState.CONTROLLER_ONLINE);
+        TestGrid(StableKey key, TestCpu... cpus) {
+            super(key, false, AEControllerState.CONTROLLER_ONLINE);
             this.cpus = new LinkedHashSet<>(Arrays.asList(cpus));
         }
 
@@ -338,6 +359,8 @@ class CpuAddressingRequestTest {
                 new Class<?>[] { IAECraftingGrid.class },
                 (proxy, method, args) -> {
                     switch (method.getName()) {
+                        case "web$getCPUCount":
+                            return cpus.size();
                         case "web$getCPUs":
                             return cpus;
                         case "web$submitJob":

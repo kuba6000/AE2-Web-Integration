@@ -159,19 +159,20 @@
 <section id="terminalgrid">
     <button class='collapsible' id='currentgrid'>No grid selected</button>
     <section style='display: none;'>
-        <section style='display: flex; flex-direction: row; flex-wrap: wrap;'>
-            <select id="gridselection" aria-label="Select a grid" size="5" style="margin-right: 10px; overflow-y: auto;" onchange="selectedGridChanged(this);">
+        <section class="grid-options">
+            <select id="gridselection" aria-label="Select a grid" size="5" onchange="selectedGridChanged(this);">
                 <!-- <option value="1">Grid 1 owned</option>
                 <option value="2">Grid 2 owned</option>
                 <option value="3">Grid 3 owned</option>
                 <option value="4">Grid 4 owned</option> -->
             </select>
-            <section>
-                <input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">  <label for="thisgridbydefault">Select this grid by default</label> <br>
-                <input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);"> <label for="trackthisgrid">Enable tracking for this grid (track jobs)</label> <br>
+            <section class="grid-settings">
+                <label><input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">Select this grid by default</label>
+                <label><input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);">Enable crafting tracking</label>
             </section>
-            <span class='note' style="flex: 0 0 100%; margin-top: 10px;">To select a grid, the network must be exposed for web access. On newer versions, place a Wireless Access Point on the network. On older versions, use a Security Terminal and grant the required permissions.</span>
+            <span class='note'>Access is granted through a controller, Wireless Access Point or terminal assigned to you, or through supported security permissions. The network must have an online controller.</span>
         </section>
+        <section id="gridaccessdetails" aria-live="polite"></section>
     </section>
 </section>
 <section id="terminalcontainer">
@@ -405,7 +406,7 @@
     function onTrackThisGridChange(el) {
         if (selectedGrid == -1) return;
         let trackThisGrid = el.checked;
-        getJSONWithGridRefresh('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
+        getJSONChecked('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
             data = data.data;
             el.checked = data['isTracked'];
             updateGridList();
@@ -450,7 +451,7 @@
     function initSettings(){
         let cookie = getCookie("defaultGrid");
         if (cookie != "")
-            settings.defaultGrid = Number(cookie);
+            settings.defaultGrid = cookie === '-1' ? -1 : cookie;
         cookie = getCookie("sortBy");
         if (cookie != "")
             sortingOptions.sortBy = Number(cookie);
@@ -728,21 +729,33 @@
             data = data.data;
             console.log(data);
             let gridFound = false;
-            let html = "";
+            const selection = document.getElementById('gridselection');
+            selection.replaceChildren();
             for (let i = 0; i < data.length; i++){
                 let grid = data[i];
                 let str = grid['key'] + " [ Owned by " + grid['owner'] + " ][ CPU count: " + grid['cpuCount'] + " ]" + (settings.defaultGrid != -1 && grid['key'] == settings.defaultGrid ? "[ Default ]" : "") + (grid['isTrackingEnabled'] ? "[ Tracked ]" : "");
-                html += "<option value='" + grid['key'] + "' " + (grid['key'] == -1 ? "disabled" : "") + (selectedGrid != -1 && grid['key'] == selectedGrid ? "selected" : "") + ">Grid " + str + "</option>";
+                const option = document.createElement('option');
+                option.value = grid.key;
+                option.textContent = 'Grid ' + str;
+                option.selected = selectedGrid === grid.key;
+                selection.appendChild(option);
                 if (selectedGrid != -1 && grid['key'] == selectedGrid) {
                     document.getElementById('thisgridbydefault').checked = settings.defaultGrid == selectedGrid;
                     document.getElementById('thisgridbydefault').disabled = false;
                     document.getElementById('trackthisgrid').disabled = false;
                     document.getElementById('trackthisgrid').checked = grid['isTrackingEnabled'];
-                    document.getElementById('currentgrid').innerHTML = "Current grid: " + str;
+                    document.getElementById('currentgrid').textContent = "Current grid: " + str;
                     gridFound = true;
                 }
             }
-            document.getElementById('gridselection').innerHTML = html;
+            if (!gridFound) {
+                selectedGrid = -1;
+                document.getElementById('currentgrid').textContent = 'No grid selected';
+                document.getElementById('thisgridbydefault').disabled = true;
+                document.getElementById('trackthisgrid').disabled = true;
+            }
+            const selected = data.find(grid => grid.key === selectedGrid);
+            showGridAccess(selected ? selected.accessSources : {});
             if (data.length > 1)
                 document.getElementById('gridselection').size = data.length;
             else
@@ -752,24 +765,62 @@
         });
     }
     updateGridList();
-    // The async endpoints (trackinghistory / gettracking / gridsettings) authorize against a per-user
-    // access set that the server rebuilds during synced requests. After a long idle period it expires and
-    // the server answers REFRESH_REQUIRED instead of serving the request. Asking for the grid list rebuilds
-    // that set, so retry once before bothering the user with an error.
-    function getJSONWithGridRefresh(url, onSuccess, onFailure){
-        $.getJSON(url, function(data){
-            if (data.status === "REFRESH_REQUIRED"){
-                updateGridList(function(){
-                    $.getJSON(url, function(retried){
-                        if (retried.status !== "OK"){
-                            onFailure(retried);
-                            return;
-                        }
-                        onSuccess(retried);
-                    });
-                });
-                return;
+    function showGridAccess(groups) {
+        const container = document.getElementById('gridaccessdetails');
+        const expanded = container.children.length > 0 && container.children[0].open;
+        container.replaceChildren();
+        const players = Object.entries(groups || {}).filter(([, entries]) => entries.length > 0);
+        if (players.length === 0) return;
+        const details = document.createElement('details');
+        details.className = 'grid-access';
+        details.open = expanded;
+        const summary = document.createElement('summary');
+        summary.textContent = 'Players with access';
+        const count = document.createElement('span');
+        count.className = 'grid-access-count';
+        count.textContent = players.length;
+        summary.appendChild(count);
+        details.appendChild(summary);
+        const kinds = {controller: 'Controller', wireless_access_point: 'Wireless Access Point', terminal: 'Terminal', security_terminal: 'Security Terminal'};
+        const reasons = {node_owner: 'Block owner', security_owner: 'Security owner', security_card: 'Security permissions'};
+        function appendText(parent, tag, className, text) {
+            const element = document.createElement(tag);
+            element.className = className;
+            element.textContent = text;
+            parent.appendChild(element);
+        }
+        for (const [uuid, entries] of players) {
+            const player = document.createElement('section');
+            player.className = 'grid-access-player';
+            const heading = document.createElement('header');
+            heading.className = 'grid-access-heading';
+            appendText(heading, 'strong', 'grid-access-name', entries[0].player.name);
+            appendText(heading, 'span', 'grid-access-uuid', uuid);
+            player.appendChild(heading);
+            const list = document.createElement('ul');
+            list.className = 'grid-access-sources';
+            for (const source of entries) {
+                const item = document.createElement('li');
+                item.className = 'grid-access-source';
+                const block = document.createElement('div');
+                appendText(block, 'span', 'grid-access-kind', kinds[source.kind] || source.kind);
+                appendText(block, 'span', 'grid-access-reason', reasons[source.reason] || source.reason);
+                const location = document.createElement('div');
+                const pos = source.position;
+                appendText(location, 'code', 'grid-access-position', pos.x + ', ' + pos.y + ', ' + pos.z);
+                appendText(location, 'span', 'grid-access-world', 'Dimension: ' + pos.dimid +
+                    (source.side ? ' · Side: ' + source.side : ''));
+                item.appendChild(block);
+                item.appendChild(location);
+                list.appendChild(item);
             }
+            player.appendChild(list);
+            details.appendChild(player);
+        }
+        container.appendChild(details);
+    }
+    function getJSONChecked(url, onSuccess, onFailure){
+        $.getJSON(url, function(data){
             if (data.status !== "OK"){
                 onFailure(data);
                 return;
@@ -778,7 +829,7 @@
         });
     }
     function selectedGridChanged(el){
-        selectedGrid = Number(el.value);
+        selectedGrid = el.value;
         selectedCPU = "";
         cpuForJob = "";
         globalCPUList = {};
@@ -938,7 +989,7 @@
             return;
         let message = "Asking for tracking history list...";
         pushLoadingScreen(message);
-        getJSONWithGridRefresh('trackinghistory?grid=' + selectedGrid, function(data){
+        getJSONChecked('trackinghistory?grid=' + selectedGrid, function(data){
             console.log(data);
             data = data.data;
             let html = "<table>";
@@ -1138,7 +1189,7 @@
         isInterfaceChartInitialized = false;
         isItemChartInitialized = false;
         pushLoadingScreen(message);
-        getJSONWithGridRefresh('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
+        getJSONChecked('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
             console.log(data);
             data = data.data;
 

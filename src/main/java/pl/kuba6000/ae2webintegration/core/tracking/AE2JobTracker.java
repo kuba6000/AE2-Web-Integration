@@ -9,14 +9,18 @@ import java.util.concurrent.ConcurrentMap;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.collect.MapMaker;
 
-import pl.kuba6000.ae2webintegration.core.GridData;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -24,8 +28,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAESecurityGrid;
 
 public class AE2JobTracker {
 
@@ -118,10 +120,15 @@ public class AE2JobTracker {
     }
 
     public static void addJob(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging) {
-        GridData gridData = GridData.getOrCreate(grid);
-        if (gridData == null || !gridData.isTracked) return;
+        if (!CoreEngine.GRID_IDENTITIES.isInitialized()) return;
         JobTrackingInfo info = isMerging ? trackingInfoMap.get(cpuCluster) : null;
         if (isMerging && info == null) return;
+        if (!isMerging) {
+            StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+            GridPersistentData data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            if (data == null || !data.getSettings()
+                .isTracked()) return;
+        }
         JSON_Stack finalOutput = JSON_Stack.capture(grid, cpuCluster.web$getFinalOutput());
         if (finalOutput == null) {
             trackingInfoMap.remove(cpuCluster);
@@ -203,11 +210,13 @@ public class AE2JobTracker {
         }
     }
 
-    public static void completeCrafting(IAEGrid grid, ICraftingCPUCluster cpu) {
+    public static void completeCrafting(@Nullable IAEGrid grid, ICraftingCPUCluster cpu) {
         JobTrackingInfo info = trackingInfoMap.remove(cpu);
-        if (info == null) return;
-        GridData gridData = GridData.getOrCreate(grid);
-        if (gridData == null || !gridData.isTracked) return;
+        if (info == null || grid == null) return;
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        GridPersistentData data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        if (data == null || !data.getSettings()
+            .isTracked()) return;
         for (Map.Entry<IAEKey, Long> entry : info.waitingFor.entrySet()) {
             info.craftedTotal.merge(entry.getKey(), entry.getValue(), Long::sum);
         }
@@ -228,35 +237,31 @@ public class AE2JobTracker {
         info.interfaceLookup.clear();
         info.startedWaitingFor.clear();
         info.isDone = true;
-        info.timeDone = System.currentTimeMillis();
+        info.timeDone = now;
+        GridData gridData = GridData.getOrCreate(key);
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         long durationMillis = info.timeDone - info.timeStarted;
         long craftedAmount = info.finalOutput.quantity;
         if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
             .isEmpty() && DiscordManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
-            IAESecurityGrid securityGrid = grid.web$getSecurityGrid();
-            if (securityGrid != null && securityGrid.web$isAvailable()) {
-                IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
-                craftingGrid.web$getCPUs();
-                DiscordManager.postMessageNonBlocking(
-                    new DiscordManager.DiscordEmbed(
-                        "AE2 Job Tracker [ Grid " + securityGrid.web$getSecurityKey()
-                            + " ][ "
-                            + cpu.web$getName()
-                            + " ]",
-                        "Crafting for `" + info.finalOutput.itemname
-                            + " x"
-                            + craftedAmount
-                            + "` "
-                            + (info.wasCancelled ? "cancelled" : "completed")
-                            + "!\nIt took "
-                            + DiscordManager.formatDuration(durationMillis),
-                        info.wasCancelled ? DiscordManager.COLOR_RED : DiscordManager.COLOR_GREEN));
-            }
+            // Native enumeration assigns the fallback CPU display ordinals used by the notification name.
+            grid.web$getCraftingGrid()
+                .web$getCPUs();
+            DiscordManager.postMessageNonBlocking(
+                new DiscordManager.DiscordEmbed(
+                    "AE2 Job Tracker [ Grid " + key + " ][ " + cpu.web$getName() + " ]",
+                    "Crafting for `" + info.finalOutput.itemname
+                        + " x"
+                        + craftedAmount
+                        + "` "
+                        + (info.wasCancelled ? "cancelled" : "completed")
+                        + "!\nIt took "
+                        + DiscordManager.formatDuration(durationMillis),
+                    info.wasCancelled ? DiscordManager.COLOR_RED : DiscordManager.COLOR_GREEN));
         }
     }
 
-    public static void cancelCrafting(IAEGrid grid, ICraftingCPUCluster cpu) {
+    public static void cancelCrafting(@Nullable IAEGrid grid, ICraftingCPUCluster cpu) {
         JobTrackingInfo info = trackingInfoMap.get(cpu);
         if (info == null) return;
         info.wasCancelled = true;

@@ -18,7 +18,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 /** Tests for {@link CommandBootstrap} command tree definition. */
@@ -182,10 +181,6 @@ class CommandBootstrapTest {
             throw new UnsupportedOperationException();
         }
 
-        @Override
-        public IAEPlayerData web$getPlayerData() {
-            return identity -> 42;
-        }
     }
 
     // --- Recording ICommandContext stub ---

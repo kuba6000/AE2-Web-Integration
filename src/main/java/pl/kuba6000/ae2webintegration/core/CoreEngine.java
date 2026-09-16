@@ -13,11 +13,15 @@ import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class CoreEngine {
+
+    public static final GridIdentityRegistry GRID_IDENTITIES = new GridIdentityRegistry();
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
@@ -28,7 +32,7 @@ public class CoreEngine {
      * cost of a request varies by orders of magnitude - {@code /items} on a large network against
      * {@code /gettracking} - so no count can bound the time.
      */
-    static final long DRAIN_BUDGET_NANOS = 5_000_000L;
+    static final long DRAIN_BUDGET_NANOS = TimeUnit.MILLISECONDS.toNanos(5);
     static final long PLAN_SWEEP_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
     static final int PLAN_SWEEP_GRIDS_PER_TICK = 8;
 
@@ -54,10 +58,14 @@ public class CoreEngine {
 
     private static void loadData() {
         CoreData.loadData();
-        GridData.loadData();
     }
 
     public static void onServerStarted() {
+        try {
+            CoreEngine.GRID_IDENTITIES.initialize(AE2Controller.serverPlatform.getWorldDirectory());
+        } catch (java.io.IOException e) {
+            LOG.error("Failed to load grid identities; grid requests remain unavailable", e);
+        }
         serverRunning = true;
         AE2Controller.init();
         StartupHandler.logOpenAdminAccessWarning();
@@ -165,7 +173,7 @@ public class CoreEngine {
         stopVersionChecker();
         AE2Controller.stopHTTPServer();
         // Authorization must not survive into the next world loaded in this JVM.
-        GridAccessSessions.clear();
+        GRID_IDENTITIES.clear();
     }
 
     public static synchronized void onServerStopped() {
@@ -174,9 +182,9 @@ public class CoreEngine {
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.
         AE2Controller.stopHTTPServer();
         AE2Controller.clearWorldState();
-        GridAccessSessions.clear();
         AE2JobTracker.clearActiveJobs();
         GridData.clearRuntimeState();
+        CoreEngine.GRID_IDENTITIES.clear();
         resetPlanMaintenance();
     }
 

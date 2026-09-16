@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.identity;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.function.Consumer;
 
@@ -14,14 +15,15 @@ import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 
-/** Immutable hashed identity; neither a grid membership assertion nor an authorization grant. */
+/** Immutable 128-bit identity; neither a grid membership assertion nor an authorization grant. */
 @SuppressWarnings("UnstableApiUsage")
 public final class StableKey {
 
     public static final int MAX_TOKEN_LENGTH = 22;
 
-    private static final int HASH_BYTES = 16;
+    private static final int KEY_BYTES = 16;
     private static final HashFunction HASH = Hashing.murmur3_128(0);
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final long first;
     private final long second;
@@ -44,6 +46,13 @@ public final class StableKey {
                 .asBytes());
     }
 
+    /** Creates an independent identity. Persist it when it must survive a restart. */
+    public static @NotNull StableKey random() {
+        byte[] bytes = new byte[KEY_BYTES];
+        RANDOM.nextBytes(bytes);
+        return new StableKey(bytes);
+    }
+
     @SuppressWarnings("ConstantValue") // Validate external tokens even when callers violate the annotation contract.
     public static @NotNull StableKey parse(@NotNull String token) {
         if (token == null || token.length() != MAX_TOKEN_LENGTH) {
@@ -51,7 +60,7 @@ public final class StableKey {
         }
         byte[] digest = Base64.getUrlDecoder()
             .decode(token);
-        if (digest.length != HASH_BYTES || !Base64.getUrlEncoder()
+        if (digest.length != KEY_BYTES || !Base64.getUrlEncoder()
             .withoutPadding()
             .encodeToString(digest)
             .equals(token)) {
@@ -71,7 +80,7 @@ public final class StableKey {
     public @NotNull String toString() {
         String result = text;
         if (result == null) {
-            byte[] digest = ByteBuffer.allocate(HASH_BYTES)
+            byte[] digest = ByteBuffer.allocate(KEY_BYTES)
                 .putLong(first)
                 .putLong(second)
                 .array();

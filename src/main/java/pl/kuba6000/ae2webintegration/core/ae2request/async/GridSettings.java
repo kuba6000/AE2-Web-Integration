@@ -1,26 +1,41 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.async;
 
+import java.io.IOException;
 import java.util.Map;
 
-import pl.kuba6000.ae2webintegration.core.GridData;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 
 public class GridSettings extends IAsyncRequest {
 
     @Override
     public void handle(Map<String, String> getParams) {
-        if (gridKey == -1) {
+        if (gridKey == null) {
             deny("GRID_NOT_FOUND");
             return;
         }
-        if (getParams.containsKey("track")) {
-            // Access was already verified against the live grids, so creating the entry here is safe -
-            // this is the one async endpoint that legitimately stores something.
-            GridData stored = GridData.getOrCreate(gridKey);
-            stored.isTracked = getParams.get("track")
-                .equals("1");
-            GridData.saveChanges();
-            grid = stored;
+        GridIdentityRegistry registry = CoreEngine.GRID_IDENTITIES;
+        synchronized (registry) {
+            GridPersistentData data = registry.getPersistentData(gridKey);
+            if (data == null) {
+                deny("GRID_NOT_FOUND");
+                return;
+            }
+            GridSettingsData settings = data.getSettings();
+            try {
+                if (getParams.containsKey("track")) {
+                    settings.setTracked(
+                        getParams.get("track")
+                            .equals("1"));
+                    registry.saveIfDirty();
+                }
+                // Completion serializes under the same monitor used by settings mutations and file writes.
+                succeed(settings);
+            } catch (IOException e) {
+                deny("INTERNAL_ERROR");
+            }
         }
-        succeed(grid != null ? grid : new GridData());
     }
 }

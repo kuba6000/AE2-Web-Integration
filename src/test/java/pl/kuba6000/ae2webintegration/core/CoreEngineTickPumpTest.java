@@ -17,7 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
 
 /**
  * The tick pump is the only place anything HTTP-originated touches live AE2 state, and it runs inside the
@@ -41,7 +41,7 @@ class CoreEngineTickPumpTest {
         }
 
         @Override
-        public void handle(IAE ae) {
+        public void handle() {
             log.add(name);
             if (body == null) {
                 done();
@@ -167,7 +167,7 @@ class CoreEngineTickPumpTest {
     void publicTickStillDrainsARequestWhenPlanMaintenanceIsDue() {
         CoreEngine.onServerStopped();
         for (int i = 0; i <= CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK; i++) {
-            GridData.getOrCreate(910_000L + i)
+            GridData.getOrCreate(TestGridFixtures.key(910_000L + i))
                 .addJob(new CompletableFuture<>());
         }
         queue("request", null);

@@ -24,7 +24,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.*;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
-class ItemIdentityRequestTest {
+class ItemIdentityRequestTest extends GridTestScope {
 
     @Test
     @SuppressWarnings("BusyWait") // Wait for GC to release ownership, bounded by the deadline below.
@@ -155,7 +155,6 @@ class ItemIdentityRequestTest {
     @BeforeEach
     void clear() {
         AE2Controller.itemIdentities.clear();
-        GridAccessSessions.clear();
     }
 
     @Test
@@ -242,8 +241,10 @@ class ItemIdentityRequestTest {
         Grid grid = new Grid(910006, new Resource("iron", 1, true));
         Order request = new Order();
         assertTrue(
-            request
-                .init(TestGridFixtures.context(42, "grid=" + grid.id + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=1")));
+            request.init(
+                TestGridFixtures.context(
+                    42,
+                    "grid=" + TestGridFixtures.resolvedKey(grid) + "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=1")));
         request.runOnServerThread(TestGridFixtures.ae(grid));
         assertEquals(
             "NO_PERMISSIONS",
@@ -307,7 +308,8 @@ class ItemIdentityRequestTest {
             }
         };
         AE2Controller.AE2Interface = ae;
-        if (request.init(TestGridFixtures.context(-1, "grid=" + grid.id + params))) request.runOnServerThread(ae);
+        if (request.init(TestGridFixtures.context(-1, "grid=" + TestGridFixtures.resolvedKey(grid) + params)))
+            request.runOnServerThread(ae);
         return JsonParser.parseString(request.getJSON())
             .getAsJsonObject();
     }
@@ -365,7 +367,6 @@ class ItemIdentityRequestTest {
 
     static final class Grid extends TestGridFixtures.TestGrid implements IAECraftingGrid, IAEStorageGrid {
 
-        final long id;
         final List<IAEGenericStack> rows;
         Set<IAEKey> recipes = Collections.emptySet();
         boolean currentCraftable = true;
@@ -374,8 +375,7 @@ class ItemIdentityRequestTest {
         IAEKey ordered;
 
         Grid(long id, Resource... rows) {
-            super(id, true, false, AEControllerState.CONTROLLER_ONLINE);
-            this.id = id;
+            super(id, false, AEControllerState.CONTROLLER_ONLINE);
             this.rows = new ArrayList<>(Arrays.asList(rows));
         }
 

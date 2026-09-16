@@ -10,6 +10,19 @@ import com.google.gson.Gson;
 class DimensionalCoordsTest {
 
     @Test
+    void orderingUsesDimensionThenXYZAndAgreesWithEquality() {
+        DimensionalCoords first = new DimensionalCoords("a", 1, 2, 3);
+        assertEquals(0, first.compareTo(new DimensionalCoords("a", 1, 2, 3)));
+        assertTrue(first.compareTo(new DimensionalCoords("b", Integer.MIN_VALUE, 0, 0)) < 0);
+        assertTrue(first.compareTo(new DimensionalCoords("a", 2, 0, 0)) < 0);
+        assertTrue(first.compareTo(new DimensionalCoords("a", 1, 3, 0)) < 0);
+        assertTrue(first.compareTo(new DimensionalCoords("a", 1, 2, 4)) < 0);
+        assertTrue(
+            new DimensionalCoords("a", Integer.MIN_VALUE, 0, 0)
+                .compareTo(new DimensionalCoords("a", Integer.MAX_VALUE, 0, 0)) < 0);
+    }
+
+    @Test
     void serializesStringDimensionIdWithoutHashingIt() {
         DimensionalCoords coords = new DimensionalCoords("minecraft:overworld", 1, 2, 3);
 

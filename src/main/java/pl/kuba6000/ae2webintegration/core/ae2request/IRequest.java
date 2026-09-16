@@ -25,13 +25,12 @@ public abstract class IRequest {
         }
     }
 
-    private static final RequestResult PENDING_RESULT = new RequestResult("TIMEOUT", null);
-    private final CompletableFuture<RequestResult> completion = new CompletableFuture<>();
+    private static final String PENDING_RESULT = JSONBuilder.create()
+        .toJson(new RequestResult("TIMEOUT", null));
+    private final CompletableFuture<String> completion = new CompletableFuture<>();
 
     public String getJSON() {
-        RequestResult result = completion.getNow(PENDING_RESULT);
-        return JSONBuilder.create()
-            .toJson(result);
+        return completion.getNow(PENDING_RESULT);
     }
 
     public final void awaitCompletion(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException {
@@ -43,7 +42,7 @@ public abstract class IRequest {
     }
 
     protected final void succeed(Object data) {
-        completion.complete(new RequestResult("OK", data));
+        complete("OK", data);
     }
 
     public final void done() {
@@ -55,7 +54,15 @@ public abstract class IRequest {
     }
 
     protected final void deny(String status, Object data) {
-        completion.complete(new RequestResult(status, data));
+        complete(status, data);
+    }
+
+    /** Serialize on the handler's thread before publishing; no payload reference reaches the HTTP worker. */
+    private void complete(String status, Object data) {
+        if (completion.isDone()) return;
+        String json = JSONBuilder.create()
+            .toJson(new RequestResult(status, data));
+        completion.complete(json);
     }
 
     /**
