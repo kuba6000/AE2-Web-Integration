@@ -1,0 +1,106 @@
+package pl.kuba6000.ae2webintegration.core;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.nio.file.Files;
+import java.util.Collections;
+import java.util.Map;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+
+import com.google.gson.JsonObject;
+
+import pl.kuba6000.ae2webintegration.core.ae2request.async.GridSettings;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
+
+class GridSettingsLifecycleTest extends GridTestScope {
+
+    private final WebPrincipal owner = TestGridFixtures.principal(TestGridFixtures.OWNER_ID);
+    private TestGridFixtures.TestGrid grid;
+    private StableKey key;
+
+    @BeforeEach
+    void grantGridAccess() {
+        grid = TestGridFixtures.grid(1);
+        key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        GridAccessSessions.put(
+            owner,
+            new GridAccess(TestGridFixtures.OWNER_ID, Collections.singleton(key), System.currentTimeMillis()));
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "remove,true", "stop,true", "stop,false" })
+    void unavailableGridAfterAuthorizationReturnsJson(String event, boolean write) {
+        JsonObject response = requestAfter(() -> {
+            if (event.equals("remove")) CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
+            else CoreEngine.GRID_IDENTITIES.clear();
+        }, write);
+        assertEquals(
+            "GRID_NOT_FOUND",
+            response.get("status")
+                .getAsString());
+    }
+
+    @Test
+    void authorizedWriteMayFinishAfterPermissionInvalidation() {
+        JsonObject response = requestAfter(GridAccessSessions::permissionsChanged, true);
+        assertEquals(
+            "OK",
+            response.get("status")
+                .getAsString());
+        assertTrue(
+            response.getAsJsonObject("data")
+                .get("isTracked")
+                .getAsBoolean());
+        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+        assertNull(GridAccessSessions.get(owner));
+
+        GridSettings next = new GridSettings();
+        next.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=0"));
+        assertEquals(
+            "REFRESH_REQUIRED",
+            response(next).get("status")
+                .getAsString());
+        assertTrue(CoreEngine.GRID_IDENTITIES.isTracked(key));
+    }
+
+    @Test
+    void failedPersistenceStillReturnsInternalError() throws Exception {
+        Files.createDirectory(
+            gridSave.toPath()
+                .resolve("ae2webintegration/grid-identities.json.tmp"));
+        GridSettings request = new GridSettings();
+        request.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=1"));
+        assertEquals(
+            "INTERNAL_ERROR",
+            response(request).get("status")
+                .getAsString());
+        assertFalse(CoreEngine.GRID_IDENTITIES.isTracked(key));
+    }
+
+    private JsonObject requestAfter(Runnable event, boolean write) {
+        GridSettings request = new GridSettings() {
+
+            @Override
+            public void handle(Map<String, String> parameters) {
+                // Simulate a lifecycle event after authorization, before the endpoint uses the registry.
+                event.run();
+                super.handle(parameters);
+            }
+        };
+        request.handle(TestGridFixtures.context(owner, "grid=" + key + (write ? "&track=1" : "")));
+        return response(request);
+    }
+
+    private static JsonObject response(GridSettings request) {
+        return GSONUtils.GSON_BUILDER.create()
+            .fromJson(request.getJSON(), JsonObject.class);
+    }
+}
