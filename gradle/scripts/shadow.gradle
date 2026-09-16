@@ -13,8 +13,17 @@ dependencies {
     }
 }
 
+// Shadow 8 unpacks direct JAR inputs. An outer archive keeps Jar-in-Jar dependencies intact.
+def nestedDependencies = tasks.register('nestedDependenciesJar', Zip) {
+    from(tasks.named('jarJar'))
+    archiveExtension = 'jar'
+    archiveClassifier = 'nested-dependencies'
+    destinationDirectory = layout.buildDirectory.dir('intermediates')
+}
+
 tasks.named('shadowJar').configure {
     dependsOn(':core:jar', 'createMinecraftArtifacts')
+    from(nestedDependencies)
     archiveClassifier = 'dev'
     configurations = [project.configurations.coreShadow]
 
