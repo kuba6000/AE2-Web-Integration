@@ -7,12 +7,13 @@ import org.jetbrains.annotations.NotNull;
 public final class GridSettingsData {
 
     private boolean isTracked;
-    private transient boolean dirty;
     private transient @NotNull Object lock = this;
+    private transient @NotNull Runnable onChange = () -> {};
 
     /** Bound before publication; getters, edits and persistence then share the registry monitor. */
-    void attachLock(@NotNull Object lock) {
+    void attach(@NotNull Object lock, @NotNull Runnable onChange) {
         this.lock = lock;
+        this.onChange = onChange;
     }
 
     public boolean isTracked() {
@@ -25,7 +26,7 @@ public final class GridSettingsData {
         synchronized (lock) {
             if (isTracked == value) return;
             isTracked = value;
-            dirty = true;
+            onChange.run();
         }
     }
 
@@ -35,16 +36,4 @@ public final class GridSettingsData {
         }
     }
 
-    public boolean isDirty() {
-        synchronized (lock) {
-            return dirty;
-        }
-    }
-
-    /** Called by persistence only after this object's values have been written successfully. */
-    public void markSaved() {
-        synchronized (lock) {
-            dirty = false;
-        }
-    }
 }

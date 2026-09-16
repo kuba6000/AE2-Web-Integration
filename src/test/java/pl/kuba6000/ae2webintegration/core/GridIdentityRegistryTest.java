@@ -208,7 +208,7 @@ class GridIdentityRegistryTest {
     }
 
     @Test
-    void failedWritesKeepSettingsDirtyWithoutPublishingMembershipOrRemoval() throws Exception {
+    void failedWritesRetainSettingsForRetryWithoutPublishingMembershipOrRemoval() throws Exception {
         Path file = directory.resolve("failure.json");
         GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
         StableKey key = resolve(registry, controller(1));
@@ -232,9 +232,6 @@ class GridIdentityRegistryTest {
             assertTrue(
                 data.getSettings()
                     .isTracked());
-            assertTrue(
-                data.getSettings()
-                    .isDirty());
             assertArrayEquals(original, Files.readAllBytes(backup));
             assertArrayEquals(new byte[] { 1 }, Files.readAllBytes(blocker));
         }
@@ -245,9 +242,6 @@ class GridIdentityRegistryTest {
         assertEquals(key, saved.findIdentity(controller(1)));
         assertFalse(TestGridFixtures.isTracked(saved, key));
         registry.saveIfDirty();
-        assertFalse(
-            data.getSettings()
-                .isDirty());
         assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
     }
 

@@ -37,6 +37,7 @@ import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 public final class GridIdentityRegistry {
 
     private @Nullable File file;
+    private boolean dirty;
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private final WeakHashMap<IAEGrid, StableKey> keys = new WeakHashMap<>();
     private final Map<StableKey, IAEGrid> grids = new MapMaker().weakValues()
@@ -60,6 +61,7 @@ public final class GridIdentityRegistry {
 
     public synchronized void clear() {
         file = null;
+        dirty = false;
         records.clear();
         knownPositions.clear();
         keys.clear();
@@ -123,7 +125,7 @@ public final class GridIdentityRegistry {
         GridPersistentData data;
         if (current == null) {
             data = new GridPersistentData(controllers, new GridSettingsData());
-            data.attachLock(this);
+            bindSettings(selected, data);
         } else {
             data = current.withControllers(controllers);
         }
@@ -168,13 +170,22 @@ public final class GridIdentityRegistry {
             for (Map.Entry<StableKey, GridPersistentData> entry : stored.entrySet()) {
                 GridPersistentData record = entry.getValue();
                 if (record == null) throw new IOException("Incomplete grid identity record: " + entry.getKey());
-                record.attachLock(this);
+                bindSettings(entry.getKey(), record);
                 for (DimensionalCoords position : record.getControllers()) knownPositions.put(position, entry.getKey());
             }
             records = stored;
         } catch (RuntimeException e) {
             throw new IOException("Invalid grid identity file: " + file, e);
         }
+    }
+
+    private void bindSettings(StableKey key, GridPersistentData data) {
+        GridSettingsData settings = data.getSettings();
+        data.attach(this, () -> {
+            // Runs under this registry's monitor; retired or previous-save settings must not dirty the file.
+            GridPersistentData current = records.get(key);
+            if (current != null && current.getSettings() == settings) dirty = true;
+        });
     }
 
     private boolean preferIdentity(StableKey contender, StableKey winner) {
@@ -194,16 +205,10 @@ public final class GridIdentityRegistry {
         return records.get(key);
     }
 
-    /** Flushes edited settings without replacing their objects or rebuilding controller indexes. */
+    /** Flushes the file when retained data changed, without rebuilding controller indexes. */
     public synchronized void saveIfDirty() throws IOException {
         checkState(file != null, "Grid identities are not initialized for this save");
-        for (GridPersistentData data : records.values()) {
-            if (data.getSettings()
-                .isDirty()) {
-                writeRecords(records);
-                return;
-            }
-        }
+        if (dirty) writeRecords(records);
     }
 
     /** Resolves only a retained association, without discovering native grids. */
@@ -246,9 +251,6 @@ public final class GridIdentityRegistry {
         Map<StableKey, GridPersistentData> ordered = new TreeMap<>(Comparator.comparing(StableKey::toString));
         ordered.putAll(data);
         GSONUtils.writeAtomically(storageFile(), ordered);
-        data.values()
-            .forEach(
-                record -> record.getSettings()
-                    .markSaved());
+        dirty = false;
     }
 }

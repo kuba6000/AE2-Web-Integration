@@ -3,6 +3,8 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.attribute.FileTime;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -23,17 +25,15 @@ class GridPersistentDataTest extends GridTestScope {
         var data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
         assertNotNull(data);
         var settings = data.getSettings();
-        assertFalse(settings.isDirty());
         settings.setTracked(false);
-        assertFalse(settings.isDirty());
+        assertSaveDoesNotRewrite(CoreEngine.GRID_IDENTITIES);
         settings.setTracked(true);
-        assertTrue(settings.isDirty());
         CoreEngine.GRID_IDENTITIES.saveIfDirty();
         var current = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
         assertNotNull(current);
         assertSame(settings, current.getSettings());
         assertTrue(settings.isTracked());
-        assertFalse(settings.isDirty());
+        assertSaveDoesNotRewrite(CoreEngine.GRID_IDENTITIES);
     }
 
     @Test
@@ -62,21 +62,18 @@ class GridPersistentDataTest extends GridTestScope {
         var expanded = registry.getPersistentData(key);
         assertNotNull(expanded);
         assertSame(settings, expanded.getSettings());
-        assertFalse(settings.isDirty());
         registry.controllerRemoved(first);
         var reduced = registry.getPersistentData(key);
         assertNotNull(reduced);
         assertSame(settings, reduced.getSettings());
         assertTrue(settings.isTracked());
+        assertSaveDoesNotRewrite(CoreEngine.GRID_IDENTITIES);
         var restarted = new GridIdentityRegistry(new File(gridSave, "ae2webintegration/grid-identities.json"));
         var loaded = restarted.getPersistentData(key);
         assertNotNull(loaded);
         assertTrue(
             loaded.getSettings()
                 .isTracked());
-        assertFalse(
-            loaded.getSettings()
-                .isDirty());
         assertEquals(key, restarted.findIdentity(added));
         assertNull(restarted.findIdentity(first));
     }
@@ -92,9 +89,42 @@ class GridPersistentDataTest extends GridTestScope {
         registry.controllerRemoved(grid.position());
         data.getSettings()
             .setTracked(true);
-        registry.saveIfDirty();
+        assertSaveDoesNotRewrite(registry);
         assertNull(registry.getPersistentData(key));
         var restarted = new GridIdentityRegistry(new File(gridSave, "ae2webintegration/grid-identities.json"));
         assertNull(restarted.getPersistentData(key));
+    }
+
+    @Test
+    void oldSettingsCannotTriggerWritesAfterReopeningTheSave() throws Exception {
+        var registry = CoreEngine.GRID_IDENTITIES;
+        var grid = TestGridFixtures.grid(1);
+        var key = registry.getKey(grid);
+        assertNotNull(key);
+        var previous = registry.getPersistentData(key);
+        assertNotNull(previous);
+        registry.initialize(gridSave);
+        previous.getSettings()
+            .setTracked(true);
+        assertSaveDoesNotRewrite(registry);
+        var current = registry.getPersistentData(key);
+        assertNotNull(current);
+        assertFalse(
+            current.getSettings()
+                .isTracked());
+        current.getSettings()
+            .setTracked(true);
+        registry.saveIfDirty();
+        var restarted = new GridIdentityRegistry(new File(gridSave, "ae2webintegration/grid-identities.json"));
+        assertTrue(TestGridFixtures.isTracked(restarted, key));
+    }
+
+    private void assertSaveDoesNotRewrite(GridIdentityRegistry registry) throws Exception {
+        var file = gridSave.toPath()
+            .resolve("ae2webintegration/grid-identities.json");
+        Files.setLastModifiedTime(file, FileTime.fromMillis(0));
+        var before = Files.getLastModifiedTime(file);
+        registry.saveIfDirty();
+        assertEquals(before, Files.getLastModifiedTime(file));
     }
 }

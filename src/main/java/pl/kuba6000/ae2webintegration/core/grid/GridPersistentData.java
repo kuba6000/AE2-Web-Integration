@@ -34,8 +34,8 @@ public final class GridPersistentData {
 
     /** Also validates required fields after Gson loading, before exposing the record. */
     @SuppressWarnings("ConstantValue") // Gson can bypass the constructor and leave required fields null.
-    public void attachLock(@NotNull Object lock) {
+    public void attach(@NotNull Object lock, @NotNull Runnable onChange) {
         if (controllers == null || settings == null) throw new IllegalArgumentException("Incomplete grid data");
-        settings.attachLock(lock);
+        settings.attach(lock, onChange);
     }
 }

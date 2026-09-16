@@ -85,9 +85,6 @@ class GridSettingsLifecycleTest extends GridTestScope {
         assertTrue(
             data.getSettings()
                 .isTracked());
-        assertTrue(
-            data.getSettings()
-                .isDirty());
         assertFalse(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
 
         Files.deleteIfExists(blocker);
@@ -97,9 +94,6 @@ class GridSettingsLifecycleTest extends GridTestScope {
             "OK",
             response(retry).get("status")
                 .getAsString());
-        assertFalse(
-            data.getSettings()
-                .isDirty());
         assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
     }
 
