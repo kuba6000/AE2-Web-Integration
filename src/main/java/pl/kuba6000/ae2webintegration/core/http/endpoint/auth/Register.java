@@ -19,7 +19,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * 
  * @response 202 {@link Response} Confirmation token issued; registration is still pending.
  * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields. invalidpassword: registration password could not be accepted.
+ *           fields. INVALID_PASSWORD: registration password could not be accepted.
  * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
  *           supported methods.
  * @response 409 {@link ErrorResponse} Player not online.
@@ -33,7 +33,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  *           complete.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
- * @responseExample 409 {"status":"notonline","data":null}
+ * @responseExample 409 {"status":"NOT_ONLINE","data":null}
  * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
  * @responseExample 415 {"status":"UNSUPPORTED_MEDIA_TYPE","data":null}
  * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}

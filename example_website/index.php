@@ -139,7 +139,7 @@
                 }
             } else {
                 $status = $envelope['status'] ?? 'UPSTREAM_UNAVAILABLE';
-                $knownError = in_array($status, ['notonline', 'invalidpassword', 'invaliduser'], true);
+                $knownError = in_array($status, ['NOT_ONLINE', 'INVALID_PASSWORD', 'INVALID_USER'], true);
                 header('Location: ?' . ($knownError ? $status : 'error=' . rawurlencode($status)));
             }
             exit;

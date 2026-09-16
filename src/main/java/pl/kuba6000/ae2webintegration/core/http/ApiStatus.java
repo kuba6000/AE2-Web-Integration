@@ -2,18 +2,13 @@ package pl.kuba6000.ae2webintegration.core.http;
 
 import java.net.HttpURLConnection;
 
-import com.google.gson.annotations.SerializedName;
-
 /** Machine-readable response codes; operation-specific success HTTP statuses remain explicit. */
 public enum ApiStatus {
 
     OK(HttpURLConnection.HTTP_OK),
-    @SerializedName("invaliduser")
-    INVALID_USER(HttpURLConnection.HTTP_UNAUTHORIZED, "invaliduser"),
-    @SerializedName("invalidpassword")
-    INVALID_PASSWORD(HttpURLConnection.HTTP_UNAUTHORIZED, "invalidpassword"),
-    @SerializedName("notonline")
-    NOT_ONLINE(HttpURLConnection.HTTP_CONFLICT, "notonline"),
+    INVALID_USER(HttpURLConnection.HTTP_UNAUTHORIZED),
+    INVALID_PASSWORD(HttpURLConnection.HTTP_UNAUTHORIZED),
+    NOT_ONLINE(HttpURLConnection.HTTP_CONFLICT),
     UNAUTHORIZED(HttpURLConnection.HTTP_UNAUTHORIZED),
     BAD_PARAM(HttpURLConnection.HTTP_BAD_REQUEST),
     INVALID_QUANTITY(HttpURLConnection.HTTP_BAD_REQUEST),
@@ -41,24 +36,13 @@ public enum ApiStatus {
     TIMEOUT(HttpURLConnection.HTTP_UNAVAILABLE);
 
     private final int httpStatus;
-    private final String code;
 
     ApiStatus(int httpStatus) {
         this.httpStatus = httpStatus;
-        this.code = name();
-    }
-
-    ApiStatus(int httpStatus, String code) {
-        this.httpStatus = httpStatus;
-        this.code = code;
     }
 
     public int httpStatus() {
         return httpStatus;
     }
 
-    /** Wire code also used by the existing browser login redirects. */
-    public String code() {
-        return code;
-    }
 }

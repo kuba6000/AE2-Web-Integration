@@ -970,8 +970,8 @@ class OpenApiDocletTest {
     }
 
     @ParameterizedTest
-    @CsvSource({ "invaliduser,true", "invalidpassword,true", "notonline,true", "INVALID_USER,false",
-        "INVALID_PASSWORD,false", "NOT_ONLINE,false" })
+    @CsvSource({ "unauthenticated,true", "denied,true", "offline,true", "UNAUTHENTICATED,false", "DENIED,false",
+        "OFFLINE,false" })
     void enumSchemasAndExamplesUseSerializedWireNames(String status, boolean valid) throws Exception {
         List<Path> sources = fixture("""
             /** Auth operation.
@@ -983,13 +983,13 @@ class OpenApiDocletTest {
             public class Grids {
                 public enum Status {
                     OK,
-                    @com.google.gson.annotations.SerializedName("invaliduser") INVALID_USER,
-                    @com.google.gson.annotations.SerializedName("invalidpassword") INVALID_PASSWORD,
-                    @com.google.gson.annotations.SerializedName("notonline") NOT_ONLINE
+                    @com.google.gson.annotations.SerializedName("unauthenticated") UNAUTHENTICATED,
+                    @com.google.gson.annotations.SerializedName("denied") DENIED,
+                    @com.google.gson.annotations.SerializedName("offline") OFFLINE
                 }
                 /** @example status OK */
                 public record Success(Status status, Void data) {}
-                /** @example status invaliduser */
+                /** @example status unauthenticated */
                 public record Failure(Status status, Void data) {}
             }
             """.formatted(status));
@@ -1019,7 +1019,7 @@ class OpenApiDocletTest {
             .getAsJsonObject("application/json");
         JsonObject schema = dereference(document, error.getAsJsonObject("schema"));
         assertEquals(
-            JsonParser.parseString("[\"OK\",\"invaliduser\",\"invalidpassword\",\"notonline\"]"),
+            JsonParser.parseString("[\"OK\",\"unauthenticated\",\"denied\",\"offline\"]"),
             schema.getAsJsonObject("properties")
                 .getAsJsonObject("status")
                 .getAsJsonArray("enum"));

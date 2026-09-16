@@ -396,7 +396,7 @@ class ServerLifecycleHttpTest {
 
             assertEquals(1, playerListLookups.get());
             assertEquals(HttpURLConnection.HTTP_CONFLICT, exchange.responseCode);
-            assertEquals("notonline", responseStatus(exchange));
+            assertEquals("NOT_ONLINE", responseStatus(exchange));
         } finally {
             httpWorker.shutdownNow();
         }
@@ -451,7 +451,7 @@ class ServerLifecycleHttpTest {
             assertEquals(1, playerListLookups.get());
             assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, exchange.responseCode);
             assertEquals(
-                "?notonline",
+                "?NOT_ONLINE",
                 exchange.getResponseHeaders()
                     .getFirst("Location"));
         } finally {
@@ -654,7 +654,7 @@ class ServerLifecycleHttpTest {
             jsonPost("/api/auth/login", null, "{\"username\":\"admin\",\"password\":\"incorrect\"}"));
         assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, response.status());
         assertEquals(
-            "invalidpassword",
+            "INVALID_PASSWORD",
             new Gson().fromJson(response.body(), JsonObject.class)
                 .get("status")
                 .getAsString());
@@ -664,7 +664,7 @@ class ServerLifecycleHttpTest {
             jsonPost("/api/auth/login", null, "{\"username\":\"MissingPlayer\",\"password\":\"incorrect\"}"));
         assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, missing.status());
         assertEquals(
-            "invaliduser",
+            "INVALID_USER",
             new Gson().fromJson(missing.body(), JsonObject.class)
                 .get("status")
                 .getAsString());

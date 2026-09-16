@@ -32,8 +32,8 @@ import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 class RequestCompletionTest {
 
     @ParameterizedTest
-    @CsvSource({ "GRID_NOT_FOUND,GRID_NOT_FOUND,404", "INVALID_USER,invaliduser,401",
-        "INVALID_PASSWORD,invalidpassword,401", "NOT_ONLINE,notonline,409" })
+    @CsvSource({ "GRID_NOT_FOUND,GRID_NOT_FOUND,404", "INVALID_USER,INVALID_USER,401",
+        "INVALID_PASSWORD,INVALID_PASSWORD,401", "NOT_ONLINE,NOT_ONLINE,409" })
     void typedFailuresPreserveTheirWireCodesAndHttpStatuses(ApiStatus status, String expectedCode, int expectedHttp) {
         TestRequest request = new TestRequest();
         request.deny(status);

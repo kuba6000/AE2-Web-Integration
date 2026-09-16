@@ -22,7 +22,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
  * @response 200 {@link Response} Session created.
  * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
  *           fields.
- * @response 401 {@link ErrorResponse} invaliduser or invalidpassword.
+ * @response 401 {@link ErrorResponse} INVALID_USER or INVALID_PASSWORD.
  * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
  *           supported methods.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
@@ -33,7 +33,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
  *           failure.
  * @response 503 {@link ErrorResponse} SERVER_STOPPING: session publication was interrupted by server shutdown.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
- * @responseExample 401 {"status":"invalidpassword","data":null}
+ * @responseExample 401 {"status":"INVALID_PASSWORD","data":null}
  * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
  * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
  * @responseExample 415 {"status":"UNSUPPORTED_MEDIA_TYPE","data":null}

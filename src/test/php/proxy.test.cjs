@@ -11,9 +11,15 @@ const available = spawnSync(php, ['-v'], { windowsHide: true }).status === 0;
 
 test('PHP proxy preserves explicit credentials and guards cookie mutations', { skip: !available }, async t => {
     const received = [];
+    let authFailure;
     const upstream = http.createServer((request, response) => {
         received.push(request.headers.authorization);
         response.setHeader('Content-Type', 'application/json');
+        if (authFailure) {
+            response.statusCode = authFailure === 'NOT_ONLINE' ? 409 : 401;
+            response.end(JSON.stringify({ status: authFailure, data: null }));
+            return;
+        }
         response.end(JSON.stringify({ status: 'OK', data: null }));
     });
     await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
@@ -69,4 +75,14 @@ test('PHP proxy preserves explicit credentials and guards cookie mutations', { s
         Cookie: 'authenticationToken=cookie-token', 'Content-Type': 'application/json', 'X-AE2-Request': 'true'
     }, body: '{}' })).status, 200);
     assert.equal(received.pop(), 'Bearer cookie-token');
+    for (const status of ['INVALID_USER', 'INVALID_PASSWORD', 'NOT_ONLINE']) {
+        authFailure = status;
+        const response = await fetch(`http://127.0.0.1:${port}/index.php`, {
+            method: 'POST', redirect: 'manual',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: status === 'NOT_ONLINE' ? 'register=ExamplePlayer&password=test' : 'username=ExamplePlayer&password=test'
+        });
+        assert.equal(response.status, 302);
+        assert.equal(response.headers.get('location'), `?${status}`);
+    }
 });

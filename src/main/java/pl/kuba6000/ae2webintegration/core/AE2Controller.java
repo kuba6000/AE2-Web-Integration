@@ -661,7 +661,7 @@ public class AE2Controller {
                 }
                 if (!registration.succeeded()) {
                     t.getResponseHeaders()
-                        .add("Location", "?" + registration.error.code());
+                        .add("Location", "?" + registration.error.name());
                     t.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
                     return AuthCheckResult.RESPONSE_SENT;
                 }
@@ -682,7 +682,7 @@ public class AE2Controller {
                 LoginResult login = authenticateLogin(postData.get("username"), postData.get("password"));
                 if (!login.succeeded()) {
                     t.getResponseHeaders()
-                        .add("Location", "?" + login.error.code());
+                        .add("Location", "?" + login.error.name());
                     t.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
                     return AuthCheckResult.RESPONSE_SENT;
                 }
@@ -801,7 +801,7 @@ public class AE2Controller {
     }
 
     private static void sendServerUnavailable(HttpExchange exchange, ApiStatus status) throws IOException {
-        byte[] response = status.code()
+        byte[] response = status.name()
             .getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(HttpURLConnection.HTTP_UNAVAILABLE, response.length);
         try (OutputStream output = exchange.getResponseBody()) {
