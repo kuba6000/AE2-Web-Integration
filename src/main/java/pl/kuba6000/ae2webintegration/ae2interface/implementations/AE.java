@@ -4,11 +4,8 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.WeakHashMap;
 
-import net.neoforged.neoforge.server.ServerLifecycleHooks;
-
 import org.jetbrains.annotations.Nullable;
 
-import appeng.api.features.IPlayerRegistry;
 import appeng.api.networking.IGridNode;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
@@ -25,7 +22,6 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEPlayerData;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
@@ -76,8 +72,4 @@ public class AE implements IAE {
         return (IAEGenericStack) (Object) new GenericStack((AEKey) key, amount);
     }
 
-    @Override
-    public IAEPlayerData web$getPlayerData() {
-        return (IAEPlayerData) IPlayerRegistry.getMapping(ServerLifecycleHooks.getCurrentServer());
-    }
 }
