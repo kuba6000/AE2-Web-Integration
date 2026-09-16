@@ -8,12 +8,12 @@ public final class GridSettingsData {
 
     private boolean isTracked;
     private transient @NotNull Object lock = this;
-    private transient @NotNull Runnable onChange = () -> {};
+    private transient @NotNull Runnable markDirty = () -> {};
 
     /** Bound before publication; getters, edits and persistence then share the registry monitor. */
-    void attach(@NotNull Object lock, @NotNull Runnable onChange) {
+    void attach(@NotNull Object lock, @NotNull Runnable markDirty) {
         this.lock = lock;
-        this.onChange = onChange;
+        this.markDirty = markDirty;
     }
 
     public boolean isTracked() {
@@ -26,7 +26,7 @@ public final class GridSettingsData {
         synchronized (lock) {
             if (isTracked == value) return;
             isTracked = value;
-            onChange.run();
+            markDirty.run();
         }
     }
 
