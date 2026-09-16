@@ -4,11 +4,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -29,7 +28,7 @@ import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 
-/** Server-thread discovery using current AE2 node ownership and effective security permissions. */
+/** Server-thread discovery using current AE2 node ownership and explicit player security permissions. */
 public final class GridDiscovery {
 
     private static final Comparator<IGridNode> CONTROLLER_ORDER = Comparator
@@ -83,8 +82,7 @@ public final class GridDiscovery {
                 String side = machine instanceof AbstractPartTerminal terminal ? terminal.getSide()
                     .name() : null;
                 PlayerIdentity owner = players.web$getPlayerProfile(node.getPlayerID());
-                if (owner != null)
-                    sources.add(GridAccessSource.forPlayer(owner, kind, position(node), side, "node_owner"));
+                if (owner != null) sources.add(new GridAccessSource(owner, kind, position(node), side, "node_owner"));
             }
         }
         return sources;
@@ -95,30 +93,22 @@ public final class GridDiscovery {
         @NotNull IPlayerProfileLookup players) {
         HashMap<Integer, EnumSet<SecurityPermissions>> permissions = new HashMap<>();
         provider.readPermissions(permissions);
-        Set<UUID> exclusions = new HashSet<>();
-        boolean completeExclusions = true;
-        for (int playerId : permissions.keySet()) {
-            if (playerId < 0) continue;
+        for (Map.Entry<Integer, EnumSet<SecurityPermissions>> entry : permissions.entrySet()) {
+            int playerId = entry.getKey();
+            // Unassigned cards grant no web access, regardless of AE2's default permissions.
+            if (playerId < 0 || !hasWebPermissions(entry.getValue())) continue;
             PlayerIdentity player = players.web$getPlayerProfile(playerId);
-            if (hasWebPermissions(security, playerId)) {
-                if (player != null) {
-                    String reason = playerId == security.getOwner() ? "security_owner" : "security_card";
-                    sources.add(GridAccessSource.forPlayer(player, "security_terminal", position, null, reason));
-                }
-            } else if (player != null) exclusions.add(player.uuid);
-            else completeExclusions = false;
-        }
-        // A missing UUID mapping must not silently drop an effective named denial from the default rule.
-        if (completeExclusions && hasWebPermissions(security, -1)) {
-            sources.add(GridAccessSource.forEveryone("security_terminal", position, "security_default", exclusions));
+            if (player != null) {
+                String reason = playerId == security.getOwner() ? "security_owner" : "security_card";
+                sources.add(new GridAccessSource(player, "security_terminal", position, null, reason));
+            }
         }
     }
 
-    private static boolean hasWebPermissions(@NotNull ISecurityGrid security, int playerId) {
-        return security.hasPermission(playerId, SecurityPermissions.BUILD)
-            && security.hasPermission(playerId, SecurityPermissions.EXTRACT)
-            && security.hasPermission(playerId, SecurityPermissions.INJECT)
-            && security.hasPermission(playerId, SecurityPermissions.CRAFT);
+    private static boolean hasWebPermissions(@NotNull EnumSet<SecurityPermissions> permissions) {
+        return permissions.contains(SecurityPermissions.BUILD) && permissions.contains(SecurityPermissions.EXTRACT)
+            && permissions.contains(SecurityPermissions.INJECT)
+            && permissions.contains(SecurityPermissions.CRAFT);
     }
 
     public static @Nullable PlayerIdentity representativeOwner(@NotNull Grid grid) {
