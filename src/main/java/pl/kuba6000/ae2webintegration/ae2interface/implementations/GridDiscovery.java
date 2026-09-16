@@ -64,45 +64,36 @@ public final class GridDiscovery {
         return controllers;
     }
 
-    public static @NotNull List<GridAccessSource> accessSources(@NotNull Grid grid) {
-        List<GridAccessSource> sources = new ArrayList<>();
-        IPlayerProfileLookup players = players();
-        ISecurityGrid security = grid.getCache(ISecurityGrid.class);
-        for (Class<? extends IGridHost> machineType : grid.getMachineClasses()) {
-            String kind = accessSourceKind(machineType);
-            if (kind == null) continue;
-            for (IGridNode node : grid.getMachines(machineType)) {
-                Object machine = node.getMachine();
-                if ("security_terminal".equals(kind)) {
-                    if (security.isAvailable()) {
-                        addSecuritySources(sources, security, (ISecurityProvider) machine, position(node), players);
-                    }
-                    continue;
-                }
-                String side = machine instanceof AbstractPartTerminal terminal ? terminal.getSide()
-                    .name() : null;
-                PlayerIdentity owner = players.web$getPlayerProfile(node.getPlayerID());
-                if (owner != null) sources.add(new GridAccessSource(owner, kind, position(node), side, "node_owner"));
-            }
-        }
-        return sources;
+    public static @Nullable GridAccessSource ownerSource(@NotNull IGridNode node) {
+        Object machine = node.getMachine();
+        String kind = accessSourceKind(machine.getClass());
+        if (kind == null || machine instanceof ISecurityProvider) return null;
+        PlayerIdentity owner = players().web$getPlayerProfile(node.getPlayerID());
+        if (owner == null) return null;
+        String side = machine instanceof AbstractPartTerminal terminal ? terminal.getSide()
+            .name() : null;
+        return new GridAccessSource(owner, kind, position(node), side, "node_owner");
     }
 
-    private static void addSecuritySources(@NotNull List<GridAccessSource> sources, @NotNull ISecurityGrid security,
-        @NotNull ISecurityProvider provider, @NotNull DimensionalCoords position,
-        @NotNull IPlayerProfileLookup players) {
+    public static @NotNull List<GridAccessSource> securitySources(@NotNull IGridNode node) {
+        List<GridAccessSource> sources = new ArrayList<>();
+        ISecurityProvider provider = (ISecurityProvider) node.getMachine();
+        IPlayerProfileLookup players = players();
         HashMap<Integer, EnumSet<SecurityPermissions>> permissions = new HashMap<>();
         provider.readPermissions(permissions);
+        DimensionalCoords position = position(node);
+        int owner = provider.getOwner();
         for (Map.Entry<Integer, EnumSet<SecurityPermissions>> entry : permissions.entrySet()) {
             int playerId = entry.getKey();
             // Unassigned cards grant no web access, regardless of AE2's default permissions.
             if (playerId < 0 || !hasWebPermissions(entry.getValue())) continue;
             PlayerIdentity player = players.web$getPlayerProfile(playerId);
             if (player != null) {
-                String reason = playerId == security.getOwner() ? "security_owner" : "security_card";
+                String reason = playerId == owner ? "security_owner" : "security_card";
                 sources.add(new GridAccessSource(player, "security_terminal", position, null, reason));
             }
         }
+        return sources;
     }
 
     private static boolean hasWebPermissions(@NotNull EnumSet<SecurityPermissions> permissions) {

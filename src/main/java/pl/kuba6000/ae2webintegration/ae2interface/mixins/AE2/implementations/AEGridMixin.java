@@ -1,7 +1,13 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
@@ -22,6 +28,8 @@ import appeng.api.networking.IMachineSet;
 import appeng.api.networking.crafting.ICraftingGrid;
 import appeng.api.networking.pathing.IPathingGrid;
 import appeng.api.networking.security.IActionHost;
+import appeng.api.networking.security.ISecurityGrid;
+import appeng.api.networking.security.ISecurityProvider;
 import appeng.api.networking.security.PlayerSource;
 import appeng.api.networking.storage.IStorageGrid;
 import appeng.me.Grid;
@@ -29,6 +37,7 @@ import appeng.me.GridNode;
 import appeng.parts.reporting.AbstractPartTerminal;
 import appeng.util.Platform;
 import cpw.mods.fml.common.FMLCommonHandler;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPermissions;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.GridDiscovery;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingFakePlayer;
@@ -37,7 +46,6 @@ import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
@@ -45,26 +53,128 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = Grid.class, remap = false)
-public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, PlayerSourceLifecycle {
+public abstract class AEGridMixin implements IAEGrid, IGridPermissions, IGridPlayerSource, PlayerSourceLifecycle {
 
-    @Inject(method = { "add(Lappeng/me/GridNode;)V", "remove(Lappeng/me/GridNode;)V" }, at = @At("HEAD"))
-    private void web$membershipChanged(GridNode node, CallbackInfo callback) {
+    @Unique
+    private final Object web$permissionLock = new Object();
+
+    @Unique
+    private final Map<UUID, List<GridAccessSource>> web$permissions = new HashMap<>();
+
+    @Unique
+    private final Map<GridNode, @Nullable GridAccessSource> web$ownerSources = new IdentityHashMap<>();
+
+    @Unique
+    private final Map<GridNode, List<GridAccessSource>> web$securitySources = new IdentityHashMap<>();
+
+    @Inject(method = "add(Lappeng/me/GridNode;)V", at = @At("RETURN"))
+    private void web$nodeAdded(GridNode node, CallbackInfo callback) {
         if (!Platform.isServer()) return;
-        String kind = GridDiscovery.accessSourceKind(
+        Grid grid = (Grid) (Object) this;
+        // Cache and gridChanged callbacks can remove or move the node before add returns.
+        if (node.getGrid() != grid || !grid.getMachines(
             node.getMachine()
-                .getClass());
-        if (kind == null) return;
-        GridAccessSessions.permissionsChanged();
+                .getClass())
+            .contains(node)) return;
+        if (node.getMachine() instanceof ISecurityProvider) {
+            web$securitySources.putIfAbsent(node, Collections.emptyList());
+            web$securityChanged();
+        } else if (GridDiscovery.accessSourceKind(
+            node.getMachine()
+                .getClass())
+            != null) {
+                web$ownerSources.putIfAbsent(node, null);
+                web$ownerChanged(node);
+            }
+    }
+
+    @Inject(method = "remove(Lappeng/me/GridNode;)V", at = @At("HEAD"))
+    private void web$nodeRemoved(GridNode node, CallbackInfo callback) {
+        if (!Platform.isServer()) return;
+        synchronized (web$permissionLock) {
+            GridAccessSource owner = web$ownerSources.remove(node);
+            if (owner != null) {
+                web$removeSource(owner);
+            }
+            List<GridAccessSource> security = web$securitySources.remove(node);
+            if (security != null) {
+                for (GridAccessSource source : security) web$removeSource(source);
+            }
+        }
+    }
+
+    @Inject(method = "remove(Lappeng/me/GridNode;)V", at = @At("RETURN"))
+    private void web$securityNodeRemoved(GridNode node, CallbackInfo callback) {
+        if (Platform.isServer() && node.getMachine() instanceof ISecurityProvider) web$securityChanged();
+    }
+
+    @Override
+    public void web$ownerChanged(@NotNull GridNode node) {
+        if (web$securitySources.containsKey(node)) {
+            web$securityChanged();
+            return;
+        }
+        // Destroyed nodes retain myGrid, so only current members can update grants.
+        if (!web$ownerSources.containsKey(node)) return;
+        GridAccessSource source = GridDiscovery.ownerSource(node);
+        synchronized (web$permissionLock) {
+            GridAccessSource previous = web$ownerSources.put(node, source);
+            if (previous != null) {
+                web$removeSource(previous);
+            }
+            if (source != null) {
+                web$addSource(source);
+            }
+        }
+    }
+
+    @Override
+    public void web$securityChanged() {
+        ISecurityGrid security = ((Grid) (Object) this).getCache(ISecurityGrid.class);
+        GridNode provider = security.isAvailable() && web$securitySources.size() == 1 ? web$securitySources.keySet()
+            .iterator()
+            .next() : null;
+        List<GridAccessSource> replacement = provider == null ? Collections.emptyList()
+            : GridDiscovery.securitySources(provider);
+        synchronized (web$permissionLock) {
+            for (Map.Entry<GridNode, List<GridAccessSource>> entry : web$securitySources.entrySet()) {
+                for (GridAccessSource previous : entry.getValue()) web$removeSource(previous);
+                List<GridAccessSource> sources = entry.getKey() == provider ? replacement : Collections.emptyList();
+                entry.setValue(sources);
+                for (GridAccessSource source : sources) web$addSource(source);
+            }
+        }
+    }
+
+    @Unique
+    private void web$addSource(@NotNull GridAccessSource source) {
+        web$permissions.computeIfAbsent(source.player().uuid, player -> new ArrayList<>())
+            .add(source);
+    }
+
+    @Unique
+    private void web$removeSource(@NotNull GridAccessSource source) {
+        UUID player = source.player().uuid;
+        List<GridAccessSource> sources = web$permissions.get(player);
+        sources.remove(source);
+        if (sources.isEmpty()) web$permissions.remove(player);
+    }
+
+    @Override
+    public boolean web$hasAccess(@NotNull UUID player) {
+        synchronized (web$permissionLock) {
+            return web$permissions.containsKey(player);
+        }
+    }
+
+    @Override
+    public @NotNull Map<UUID, List<GridAccessSource>> web$getPermissions() {
+        return web$permissions;
     }
 
     @Override
     public @NotNull Set<DimensionalCoords> web$getControllers() {
         return GridDiscovery.controllers((Grid) (Object) this);
-    }
-
-    @Override
-    public @NotNull List<GridAccessSource> web$getAccessSources() {
-        return GridDiscovery.accessSources((Grid) (Object) this);
     }
 
     @Override
