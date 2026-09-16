@@ -4,12 +4,20 @@ import java.io.File;
 import java.util.UUID;
 
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
 public class Platform implements IServerPlatform {
+
+    @Override
+    public File getWorldDirectory() {
+        return ServerLifecycleHooks.getCurrentServer()
+            .getWorldPath(LevelResource.ROOT)
+            .toFile();
+    }
 
     @Override
     public UUID getOnlinePlayerUUID(String username) {

@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.advanced_ae;
 
 import java.util.UUID;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
 import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPUCluster;
@@ -50,7 +51,7 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNam
                         .putLong(uniqueId.getLeastSignificantBits());
                 } else {
                     // The free-capacity CPU has no UUID and is recreated as available storage changes.
-                    var position = cluster.getBoundsMin();
+                    BlockPos position = cluster.getBoundsMin();
                     StableKey.writeText(
                         sink,
                         cluster.getLevel()

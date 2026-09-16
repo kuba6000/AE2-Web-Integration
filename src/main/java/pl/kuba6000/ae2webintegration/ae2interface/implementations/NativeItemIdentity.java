@@ -1,7 +1,11 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
+import java.util.Map;
+import java.util.Optional;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponentPatch;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
@@ -63,7 +67,7 @@ public final class NativeItemIdentity {
     }
 
     private static void checkPersistent(@NotNull DataComponentPatch patch) {
-        for (var entry : patch.entrySet()) {
+        for (Map.Entry<DataComponentType<?>, Optional<?>> entry : patch.entrySet()) {
             if (entry.getKey()
                 .isTransient()) {
                 throw new UnsupportedOperationException("Transient component cannot be serialized as native identity");
