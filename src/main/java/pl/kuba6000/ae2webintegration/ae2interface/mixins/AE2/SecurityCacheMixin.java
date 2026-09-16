@@ -14,8 +14,8 @@ import appeng.api.config.SecurityPermissions;
 import appeng.api.networking.events.MENetworkSecurityChange;
 import appeng.me.cache.SecurityCache;
 import appeng.util.Platform;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPermissions;
 import pl.kuba6000.ae2webintegration.core.api.IAEWebInterface;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 
 @Mixin(value = SecurityCache.class, remap = false)
 public class SecurityCacheMixin {
@@ -25,7 +25,10 @@ public class SecurityCacheMixin {
 
     @Inject(method = "updatePermissions(Lappeng/api/networking/events/MENetworkSecurityChange;)V", at = @At("RETURN"))
     private void web$permissionsRebuilt(MENetworkSecurityChange event, CallbackInfo callback) {
-        if (Platform.isServer()) GridAccessSessions.permissionsChanged();
+        if (!Platform.isServer()) return;
+        SecurityCache cache = (SecurityCache) (Object) this;
+        web$securityAvailable = cache.isAvailable();
+        ((IGridPermissions) cache.getGrid()).web$securityChanged();
     }
 
     @Inject(method = "onUpdateTick()V", at = @At("RETURN"))
@@ -35,7 +38,7 @@ public class SecurityCacheMixin {
         boolean available = ((SecurityCache) (Object) this).isAvailable();
         if (available != web$securityAvailable) {
             web$securityAvailable = available;
-            GridAccessSessions.permissionsChanged();
+            ((IGridPermissions) ((SecurityCache) (Object) this).getGrid()).web$securityChanged();
         }
     }
 
