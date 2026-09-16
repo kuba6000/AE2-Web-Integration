@@ -1,15 +1,12 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class JSON_CompactedItem {
 
-    @GSONUtils.SkipGSON
-    private final IAEKey internalKey;
-    @GSONUtils.SkipGSON
-    private final int hashcode;
+    private transient final IAEKey internalKey;
+    private transient final int hashcode;
 
     public final String itemid;
     public final String itemname;
