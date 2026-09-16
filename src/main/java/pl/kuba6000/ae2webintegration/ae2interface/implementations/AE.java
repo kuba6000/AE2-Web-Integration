@@ -17,7 +17,6 @@ import appeng.me.Grid;
 import appeng.parts.AEBasePart;
 import appeng.parts.reporting.AbstractTerminalPart;
 import appeng.parts.reporting.PatternAccessTerminalPart;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccessSessions;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -30,10 +29,6 @@ public class AE implements IAE {
     public static WeakHashMap<ICraftingCPUCluster, Integer> cpuInternalIDMap = new WeakHashMap<>();
 
     public static AE instance = new AE();
-
-    public static void sourcePermissionsChanged(IGridNode node) {
-        if (accessSourceKind(node) != null) GridAccessSessions.permissionsChanged();
-    }
 
     public static @Nullable String accessSourceKind(Class<?> ownerType) {
         if (ControllerBlockEntity.class.isAssignableFrom(ownerType)) return "controller";

@@ -2,8 +2,11 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -15,12 +18,15 @@ import net.minecraftforge.server.ServerLifecycleHooks;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.google.common.collect.SetMultimap;
 import com.mojang.authlib.GameProfile;
 
 import appeng.api.networking.IGridNode;
@@ -32,6 +38,7 @@ import appeng.me.GridNode;
 import appeng.me.helpers.PlayerSource;
 import appeng.parts.AEBasePart;
 import appeng.parts.reporting.AbstractTerminalPart;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPermissions;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
@@ -44,16 +51,40 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 @Mixin(value = Grid.class, remap = false)
-public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource {
+public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource, IGridPermissions {
 
-    @Inject(method = "add", at = @At("HEAD"))
+    @Shadow
+    @Final
+    private SetMultimap<Class<?>, IGridNode> machines;
+
+    @Unique
+    private final Object web$permissionsLock = new Object();
+
+    @Unique
+    private final Map<UUID, List<GridAccessSource>> web$permissions = new LinkedHashMap<>();
+
+    // A null value tracks a relevant node whose owner has not been assigned yet.
+    @Unique
+    private final Map<GridNode, @Nullable GridAccessSource> web$nodeSources = new IdentityHashMap<>();
+
+    @Inject(method = "add", at = @At("RETURN"))
     private void web$nodeAdded(GridNode node, @Nullable CompoundTag savedData, CallbackInfo ci) {
-        AE.sourcePermissionsChanged(node);
+        // Native service callbacks can move the node to another grid before add returns.
+        if (AE.accessSourceKind(node) == null || !machines.containsEntry(
+            node.getOwner()
+                .getClass(),
+            node)) return;
+        synchronized (web$permissionsLock) {
+            web$nodeSources.putIfAbsent(node, null);
+        }
+        web$updateNodePermissions(node);
     }
 
     @Inject(method = "remove", at = @At("HEAD"))
     private void web$nodeRemoved(GridNode node, CallbackInfo ci) {
-        AE.sourcePermissionsChanged(node);
+        synchronized (web$permissionsLock) {
+            web$removeSource(web$nodeSources.remove(node));
+        }
     }
 
     @Override
@@ -80,46 +111,70 @@ public abstract class AEGridMixin implements IAEGrid, IGridPlayerSource {
     }
 
     @Override
-    public @NotNull List<GridAccessSource> web$getAccessSources() {
-        List<GridAccessSource> sources = new ArrayList<>();
-        Grid grid = (Grid) (Object) this;
-        for (Class<?> machine : grid.getMachineClasses()) {
-            if (AE.accessSourceKind(machine) == null) continue;
-            for (IGridNode node : grid.getMachineNodes(machine)) {
-                String kind = AE.accessSourceKind(node);
-                if (kind == null) continue;
-                PlayerIdentity owner = web$profile(node.getOwningPlayerProfileId());
-                if (owner == null) continue;
-                Object source = node.getOwner();
-                BlockPos position;
-                String side = null;
-                if (source instanceof AEBasePart part) {
-                    position = part.getBlockEntity()
-                        .getBlockPos();
-                    side = part.getSide()
-                        .getName();
-                } else if (source instanceof ControllerBlockEntity controller) {
-                    position = controller.getBlockPos();
-                } else {
-                    position = ((WirelessAccessPointBlockEntity) source).getBlockPos();
-                }
-                sources.add(
-                    new GridAccessSource(
-                        owner,
-                        kind,
-                        new DimensionalCoords(
-                            node.getLevel()
-                                .dimension()
-                                .location()
-                                .toString(),
-                            position.getX(),
-                            position.getY(),
-                            position.getZ()),
-                        side,
-                        "node_owner"));
+    public @NotNull Map<UUID, List<GridAccessSource>> web$getPermissions() {
+        return web$permissions;
+    }
+
+    @Override
+    public boolean web$hasAccess(@NotNull UUID playerId) {
+        synchronized (web$permissionsLock) {
+            return web$permissions.containsKey(playerId);
+        }
+    }
+
+    @Override
+    public void web$updateNodePermissions(@NotNull GridNode node) {
+        if (!web$nodeSources.containsKey(node)) return;
+        GridAccessSource source = web$source(node);
+        synchronized (web$permissionsLock) {
+            web$removeSource(web$nodeSources.put(node, source));
+            if (source != null) {
+                web$permissions.computeIfAbsent(source.player().uuid, ignored -> new ArrayList<>())
+                    .add(source);
             }
         }
-        return sources;
+    }
+
+    @Unique
+    private void web$removeSource(@Nullable GridAccessSource source) {
+        if (source == null) return;
+        List<GridAccessSource> sources = web$permissions.get(source.player().uuid);
+        sources.remove(source);
+        if (sources.isEmpty()) web$permissions.remove(source.player().uuid);
+    }
+
+    @Unique
+    private static @Nullable GridAccessSource web$source(GridNode node) {
+        String kind = AE.accessSourceKind(node);
+        if (kind == null) return null;
+        PlayerIdentity owner = web$profile(node.getOwningPlayerProfileId());
+        if (owner == null) return null;
+        Object source = node.getOwner();
+        BlockPos position;
+        String side = null;
+        if (source instanceof AEBasePart part) {
+            position = part.getBlockEntity()
+                .getBlockPos();
+            side = part.getSide()
+                .getName();
+        } else if (source instanceof ControllerBlockEntity controller) {
+            position = controller.getBlockPos();
+        } else {
+            position = ((WirelessAccessPointBlockEntity) source).getBlockPos();
+        }
+        return new GridAccessSource(
+            owner,
+            kind,
+            new DimensionalCoords(
+                node.getLevel()
+                    .dimension()
+                    .location()
+                    .toString(),
+                position.getX(),
+                position.getY(),
+                position.getZ()),
+            side,
+            "node_owner");
     }
 
     @Override
