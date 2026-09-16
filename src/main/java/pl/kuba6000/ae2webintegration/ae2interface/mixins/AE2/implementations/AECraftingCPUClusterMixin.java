@@ -13,7 +13,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
 import appeng.api.AEApi;
-import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.CraftingItemList;
 import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
@@ -23,7 +22,6 @@ import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
@@ -38,11 +36,6 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, 
 
     @Shadow
     private World getWorld() {
-        throw new IllegalStateException("Mixin failed to apply");
-    }
-
-    @Shadow
-    private @Nullable IGrid getGrid() {
         throw new IllegalStateException("Mixin failed to apply");
     }
 
@@ -63,12 +56,6 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, 
 
     @Unique
     private @Nullable StableKey web$stableKey;
-
-    @Override
-    public @Nullable IAEGrid web$getGrid() {
-        CraftingCPUCluster cluster = (CraftingCPUCluster) (Object) this;
-        return cluster.isDestroyed() ? null : (IAEGrid) getGrid();
-    }
 
     @Override
     public @NotNull StableKey web$getKey() {
