@@ -19,6 +19,7 @@ import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -124,7 +125,7 @@ public class AE2JobTracker {
         if (isMerging && info == null) return;
         if (!isMerging) {
             StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
-            var data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            GridPersistentData data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
             if (data == null || !data.getSettings()
                 .isTracked()) return;
         }
@@ -213,7 +214,7 @@ public class AE2JobTracker {
         JobTrackingInfo info = trackingInfoMap.remove(cpu);
         if (info == null || grid == null) return;
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
-        var data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        GridPersistentData data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
         if (data == null || !data.getSettings()
             .isTracked()) return;
         for (Map.Entry<IAEKey, Long> entry : info.waitingFor.entrySet()) {

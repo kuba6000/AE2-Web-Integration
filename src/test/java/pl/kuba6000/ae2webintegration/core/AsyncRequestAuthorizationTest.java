@@ -50,8 +50,8 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
 
     @Test
     void currentSourceAuthorizesWithoutARequestCacheAndRevocationIsImmediate() {
-        var grid = TestGridFixtures.grid(1, 42);
-        var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertStatus("OK", run(ME, "grid=" + key));
         grid.withoutSources();
         assertStatus("NO_PERMISSIONS", run(ME, "grid=" + key));
@@ -59,16 +59,16 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
 
     @Test
     void unrelatedPlayerIsDenied() {
-        var grid = TestGridFixtures.grid(1);
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1);
         assertStatus("NO_PERMISSIONS", run(ME, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid)));
     }
 
     @Test
     void administrativeAccessStillRequiresALiveRecognizedGrid() {
-        var grid = TestGridFixtures.grid(1)
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1)
             .withoutSources();
-        var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
-        for (var user : new WebPrincipal[] { WebPrincipal.admin(), WebPrincipal.localhost() }) {
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        for (WebPrincipal user : new WebPrincipal[] { WebPrincipal.admin(), WebPrincipal.localhost() }) {
             assertStatus("OK", run(user, "grid=" + key));
             assertStatus("NO_PERMISSIONS", run(user, "grid=" + TestGridFixtures.key(99)));
         }
@@ -76,16 +76,16 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
 
     @Test
     void retiringTheIdentityDeniesAccessEvenWhileGridIsReferenced() {
-        var grid = TestGridFixtures.grid(1, 42);
-        var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
         assertStatus("NO_PERMISSIONS", run(ME, "grid=" + key));
     }
 
     @Test
     void stoppingTheSaveDeniesAccess() {
-        var grid = TestGridFixtures.grid(1, 42);
-        var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         CoreEngine.GRID_IDENTITIES.clear();
         assertStatus("NO_PERMISSIONS", run(ME, "grid=" + key));
     }
@@ -135,9 +135,9 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
                 return super.web$getPermissions();
             }
         }
-        var grid = new ThreadBoundGrid();
+        ThreadBoundGrid grid = new ThreadBoundGrid();
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         grid.http = true;
         assertStatus("OK", run(ME, "grid=" + key));
     }

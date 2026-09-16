@@ -13,6 +13,7 @@ import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -41,7 +42,7 @@ public class GetGridList extends ISyncedRequest {
         ArrayList<JSON_GridData> result = new ArrayList<>();
         for (GridAccess.View view : grids) {
             if (!view.allows(context.getPrincipal())) continue;
-            var data = CoreEngine.GRID_IDENTITIES.getPersistentData(view.key());
+            GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(view.key());
             if (data == null) continue;
             result.add(
                 new JSON_GridData(

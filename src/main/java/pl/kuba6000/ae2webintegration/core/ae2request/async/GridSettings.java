@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.util.Map;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 
 public class GridSettings extends IAsyncRequest {
 
@@ -13,14 +16,14 @@ public class GridSettings extends IAsyncRequest {
             deny("GRID_NOT_FOUND");
             return;
         }
-        var registry = CoreEngine.GRID_IDENTITIES;
+        GridIdentityRegistry registry = CoreEngine.GRID_IDENTITIES;
         synchronized (registry) {
-            var data = registry.getPersistentData(gridKey);
+            GridPersistentData data = registry.getPersistentData(gridKey);
             if (data == null) {
                 deny("GRID_NOT_FOUND");
                 return;
             }
-            var settings = data.getSettings();
+            GridSettingsData settings = data.getSettings();
             try {
                 if (getParams.containsKey("track")) {
                     settings.setTracked(

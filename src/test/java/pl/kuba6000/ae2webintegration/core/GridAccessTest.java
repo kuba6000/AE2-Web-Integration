@@ -8,14 +8,15 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class GridAccessTest extends GridTestScope {
 
     @Test
     void currentSourcesGrantOnlyTheirPlayersAndAdminBypassesSources() throws Exception {
-        var grid = TestGridFixtures.grid(1, 42);
-        var view = GridAccess.list(TestGridFixtures.ae(grid))
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
+        GridAccess.View view = GridAccess.list(TestGridFixtures.ae(grid))
             .get(0);
         assertTrue(view.allows(TestGridFixtures.principal(42)));
         assertTrue(view.allows(TestGridFixtures.principal(TestGridFixtures.OWNER_ID)));
@@ -29,14 +30,14 @@ class GridAccessTest extends GridTestScope {
 
     @Test
     void listingRequiresValidatedUsableIdentity() throws Exception {
-        var online = TestGridFixtures.grid(1);
-        var booting = TestGridFixtures.grid(2)
+        TestGridFixtures.TestGrid online = TestGridFixtures.grid(1);
+        TestGridFixtures.TestGrid booting = TestGridFixtures.grid(2)
             .booting();
-        var conflicted = TestGridFixtures.grid(3)
+        TestGridFixtures.TestGrid conflicted = TestGridFixtures.grid(3)
             .controllerState(AEControllerState.CONTROLLER_CONFLICT);
-        var noController = TestGridFixtures.grid(4)
+        TestGridFixtures.TestGrid noController = TestGridFixtures.grid(4)
             .noController();
-        var noPathing = TestGridFixtures.grid(5)
+        TestGridFixtures.TestGrid noPathing = TestGridFixtures.grid(5)
             .withoutPathingGrid();
         List<GridAccess.View> views = GridAccess
             .list(TestGridFixtures.ae(online, booting, conflicted, noController, noPathing));
@@ -49,10 +50,10 @@ class GridAccessTest extends GridTestScope {
 
     @Test
     void reverseBindingFollowsRebuiltGridAndRetiresWithLastController() {
-        var oldGrid = TestGridFixtures.grid(1);
-        var key = CoreEngine.GRID_IDENTITIES.getKey(oldGrid);
+        TestGridFixtures.TestGrid oldGrid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(oldGrid);
         assertNotNull(key);
-        var replacement = TestGridFixtures.grid(1);
+        TestGridFixtures.TestGrid replacement = TestGridFixtures.grid(1);
         assertSame(replacement, CoreEngine.GRID_IDENTITIES.getGrid(key));
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(oldGrid));
         CoreEngine.GRID_IDENTITIES.controllerRemoved(replacement.position());
@@ -61,8 +62,8 @@ class GridAccessTest extends GridTestScope {
 
     @Test
     void retainedSettingsDoNotAuthorizeBeforeGridIsLoadedAgain() throws Exception {
-        var grid = TestGridFixtures.grid(1);
-        var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
         TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, key, true);
         CoreEngine.GRID_IDENTITIES.initialize(gridSave);

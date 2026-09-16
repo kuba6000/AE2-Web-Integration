@@ -26,7 +26,7 @@ class RequestParameterValidationTest extends GridTestScope {
 
     @BeforeEach
     void setUp() {
-        var liveGrid = TestGridFixtures.grid(10L, ME);
+        TestGridFixtures.TestGrid liveGrid = TestGridFixtures.grid(10L, ME);
         AE2Controller.AE2Interface = TestGridFixtures.ae(liveGrid);
         GRID = CoreEngine.GRID_IDENTITIES.getKey(liveGrid);
         AE2Controller.itemIdentities.clear();

@@ -23,6 +23,7 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -52,7 +53,7 @@ class CpuAddressingRequestTest extends GridTestScope {
         TestGrid grid = new TestGrid(GRID);
         JsonObject response = request(new GetGridList(), grid, "");
         assertStatus("OK", response);
-        var key = response.getAsJsonArray("data")
+        JsonElement key = response.getAsJsonArray("data")
             .get(0)
             .getAsJsonObject()
             .get("key");

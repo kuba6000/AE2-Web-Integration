@@ -12,11 +12,13 @@ import java.util.concurrent.TimeUnit;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetGridList;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
@@ -26,7 +28,11 @@ class GridListPermissionsTest extends GridTestScope {
     @Test
     void permissionExplanationIsDetachedBeforeHttpReadsTheResponse() throws Exception {
         Thread serverThread = Thread.currentThread();
-        var grid = new TestGridFixtures.TestGrid(1, false, AEControllerState.CONTROLLER_ONLINE, 42) {
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
+            1,
+            false,
+            AEControllerState.CONTROLLER_ONLINE,
+            42) {
 
             @Override
             public @NotNull Map<UUID, List<GridAccessSource>> web$getPermissions() {
@@ -62,17 +68,17 @@ class GridListPermissionsTest extends GridTestScope {
             "OK",
             response.get("status")
                 .getAsString());
-        var sources = response.getAsJsonArray("data")
+        JsonObject sources = response.getAsJsonArray("data")
             .get(0)
             .getAsJsonObject()
             .getAsJsonObject("accessSources");
         assertEquals(2, sources.size());
         for (int playerId : new int[] { TestGridFixtures.OWNER_ID, 42 }) {
-            var player = TestGridFixtures.playerIdentity(playerId);
-            var entries = sources.getAsJsonArray(player.uuid.toString());
+            PlayerIdentity player = TestGridFixtures.playerIdentity(playerId);
+            JsonArray entries = sources.getAsJsonArray(player.uuid.toString());
             assertNotNull(entries);
             assertEquals(1, entries.size());
-            var identity = entries.get(0)
+            JsonObject identity = entries.get(0)
                 .getAsJsonObject()
                 .getAsJsonObject("player");
             assertEquals(

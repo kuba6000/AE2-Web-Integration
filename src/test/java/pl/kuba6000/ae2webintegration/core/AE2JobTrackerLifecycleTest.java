@@ -23,6 +23,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTrackingHistory;
@@ -289,7 +290,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
     private static void assertEmptyHistory(int playerId, StableKey key) {
         GetTrackingHistory request = new GetTrackingHistory();
         request.handle(TestGridFixtures.context(playerId, "grid=" + key));
-        var response = JsonParser.parseString(request.getJSON())
+        JsonObject response = JsonParser.parseString(request.getJSON())
             .getAsJsonObject();
         assertEquals(
             "OK",
