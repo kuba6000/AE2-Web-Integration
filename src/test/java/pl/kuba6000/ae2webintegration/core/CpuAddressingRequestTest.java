@@ -375,11 +375,6 @@ class CpuAddressingRequestTest extends GridTestScope {
 
     private static final class TestCpu implements ICraftingCPUCluster {
 
-        @Override
-        public pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid web$getGrid() {
-            return null;
-        }
-
         final String id;
         final StableKey key;
         String name;

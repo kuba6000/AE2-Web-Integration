@@ -79,7 +79,6 @@ public class CoreEngine {
      * four copies of an event handler that no test can reach.
      */
     public static void onServerTick() {
-        AE2JobTracker.resolveDeferredJobs();
         drainRequests(System::nanoTime);
         runPlanMaintenance(System.nanoTime());
         maintainVersionChecker();

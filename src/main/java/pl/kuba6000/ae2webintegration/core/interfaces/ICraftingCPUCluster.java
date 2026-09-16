@@ -1,15 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.interfaces;
 
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 public interface ICraftingCPUCluster {
-
-    /** Current native grid, or null for a detached CPU; queried only for deferred lifecycle binding. */
-    @Nullable
-    IAEGrid web$getGrid();
 
     /** Stable address within a saved world, independent of display name and current crafting job. */
     @NotNull

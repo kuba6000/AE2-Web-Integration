@@ -1,11 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.tracking;
 
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -14,7 +11,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import com.github.bsideup.jabel.Desugar;
 import com.google.common.collect.MapMaker;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
@@ -105,18 +101,7 @@ public class AE2JobTracker {
 
     private static final ConcurrentMap<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = new MapMaker().weakKeys()
         .makeMap();
-    private static final Map<JobTrackingInfo, DeferredJob> deferredJobs = new IdentityHashMap<>();
     public ConcurrentHashMap<Integer, JobTrackingInfo> trackingInfos = new ConcurrentHashMap<>();
-
-    /** Wait for a validated identity or conflict recovery; locators stay weak. */
-    @Desugar
-    private record DeferredJob(WeakReference<ICraftingCPUCluster> cpu, WeakReference<IAEGrid> callbackGrid,
-        @Nullable String notificationName) {
-
-        private DeferredJob(ICraftingCPUCluster cpu, IAEGrid grid, @Nullable String notificationName) {
-            this(new WeakReference<>(cpu), new WeakReference<>(grid), notificationName);
-        }
-    }
 
     private int nextFreeTrackingInfoID = 1;
 
@@ -126,37 +111,6 @@ public class AE2JobTracker {
 
     public static void clearActiveJobs() {
         trackingInfoMap.clear();
-        deferredJobs.clear();
-    }
-
-    /** Publishes captured job results once the current CPU grid has a usable validated identity. */
-    public static void resolveDeferredJobs() {
-        Iterator<Map.Entry<JobTrackingInfo, DeferredJob>> iterator = deferredJobs.entrySet()
-            .iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<JobTrackingInfo, DeferredJob> entry = iterator.next();
-            JobTrackingInfo info = entry.getKey();
-            DeferredJob deferred = entry.getValue();
-            ICraftingCPUCluster cpu = deferred.cpu()
-                .get();
-            if (!info.isDone && (cpu == null || trackingInfoMap.get(cpu) != info)) {
-                iterator.remove();
-                continue;
-            }
-            IAEGrid grid = cpu == null ? null : cpu.web$getGrid();
-            if (grid == null) grid = deferred.callbackGrid()
-                .get();
-            StableKey key = grid == null ? null : CoreEngine.GRID_IDENTITIES.getKey(grid);
-            if (key == null && grid != null) continue;
-            iterator.remove();
-            var data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
-            if (data != null && data.getSettings()
-                .isTracked()) {
-                if (info.isDone) publishCompletion(info, key, deferred.notificationName());
-            } else if (!info.isDone && cpu != null) {
-                trackingInfoMap.remove(cpu, info);
-            }
-        }
     }
 
     public void clearHistory() {
@@ -168,28 +122,21 @@ public class AE2JobTracker {
         if (!CoreEngine.GRID_IDENTITIES.isInitialized()) return;
         JobTrackingInfo info = isMerging ? trackingInfoMap.get(cpuCluster) : null;
         if (isMerging && info == null) return;
-        boolean unresolved = false;
         if (!isMerging) {
             StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
             var data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
-            if (key != null && (data == null || !data.getSettings()
-                .isTracked())) return;
-            unresolved = key == null;
+            if (data == null || !data.getSettings()
+                .isTracked()) return;
         }
         JSON_Stack finalOutput = JSON_Stack.capture(grid, cpuCluster.web$getFinalOutput());
         if (finalOutput == null) {
-            JobTrackingInfo removed = trackingInfoMap.remove(cpuCluster);
-            if (removed != null) deferredJobs.remove(removed);
+            trackingInfoMap.remove(cpuCluster);
             return;
         }
         if (isMerging) {
             info.finalOutput = finalOutput;
-            if (deferredJobs.containsKey(info)) deferredJobs.put(info, new DeferredJob(cpuCluster, grid, null));
         } else {
-            info = new JobTrackingInfo(finalOutput);
-            JobTrackingInfo previous = trackingInfoMap.put(cpuCluster, info);
-            if (previous != null) deferredJobs.remove(previous);
-            if (unresolved) deferredJobs.put(info, new DeferredJob(cpuCluster, grid, null));
+            trackingInfoMap.put(cpuCluster, new JobTrackingInfo(finalOutput));
         }
     }
 
@@ -262,32 +209,13 @@ public class AE2JobTracker {
         }
     }
 
-    public static void completeCrafting(IAEGrid grid, ICraftingCPUCluster cpu) {
+    public static void completeCrafting(@Nullable IAEGrid grid, ICraftingCPUCluster cpu) {
         JobTrackingInfo info = trackingInfoMap.remove(cpu);
-        if (info == null) return;
-        deferredJobs.remove(info);
-        finishMeasurements(info);
-        String notificationName = null;
-        if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
-            .isEmpty()
-            && DiscordManager
-                .shouldPostCraftingNotification(info.timeDone - info.timeStarted, info.finalOutput.quantity)) {
-            // Native enumeration assigns the fallback CPU display ordinals used by the notification name.
-            grid.web$getCraftingGrid()
-                .web$getCPUs();
-            notificationName = cpu.web$getName();
-        }
+        if (info == null || grid == null) return;
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
-        if (key != null) {
-            var data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
-            if (data != null && data.getSettings()
-                .isTracked()) publishCompletion(info, key, notificationName);
-        } else {
-            deferredJobs.put(info, new DeferredJob(cpu, grid, notificationName));
-        }
-    }
-
-    private static void finishMeasurements(JobTrackingInfo info) {
+        var data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        if (data == null || !data.getSettings()
+            .isTracked()) return;
         for (Map.Entry<IAEKey, Long> entry : info.waitingFor.entrySet()) {
             info.craftedTotal.merge(entry.getKey(), entry.getValue(), Long::sum);
         }
@@ -309,17 +237,18 @@ public class AE2JobTracker {
         info.startedWaitingFor.clear();
         info.isDone = true;
         info.timeDone = now;
-    }
-
-    private static void publishCompletion(JobTrackingInfo info, StableKey key, @Nullable String notificationName) {
         GridData gridData = GridData.getOrCreate(key);
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         long durationMillis = info.timeDone - info.timeStarted;
         long craftedAmount = info.finalOutput.quantity;
-        if (notificationName != null) {
+        if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
+            .isEmpty() && DiscordManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
+            // Native enumeration assigns the fallback CPU display ordinals used by the notification name.
+            grid.web$getCraftingGrid()
+                .web$getCPUs();
             DiscordManager.postMessageNonBlocking(
                 new DiscordManager.DiscordEmbed(
-                    "AE2 Job Tracker [ Grid " + key + " ][ " + notificationName + " ]",
+                    "AE2 Job Tracker [ Grid " + key + " ][ " + cpu.web$getName() + " ]",
                     "Crafting for `" + info.finalOutput.itemname
                         + " x"
                         + craftedAmount
@@ -331,7 +260,7 @@ public class AE2JobTracker {
         }
     }
 
-    public static void cancelCrafting(IAEGrid grid, ICraftingCPUCluster cpu) {
+    public static void cancelCrafting(@Nullable IAEGrid grid, ICraftingCPUCluster cpu) {
         JobTrackingInfo info = trackingInfoMap.get(cpu);
         if (info == null) return;
         info.wasCancelled = true;

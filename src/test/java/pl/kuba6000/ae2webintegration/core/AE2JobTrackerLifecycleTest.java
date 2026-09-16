@@ -82,7 +82,6 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(changing);
         assertNotNull(key);
         EqualCpu cpu = new EqualCpu();
-        cpu.currentGrid = changing;
         AE2JobTracker.addJob(cpu, changing, false);
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
         positions.add(new DimensionalCoords("world", 1, 0, 0));
@@ -105,31 +104,19 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
 
     @ParameterizedTest
     @ValueSource(booleans = { false, true })
-    void conflictCompletionWaitsForAValidControllerCallbackAndPublishesOnce(boolean bindingAlreadyKnown)
-        throws Exception {
+    void completionOrCancellationDuringConflictIsNotPublishedAfterRecovery(boolean cancelled) {
         EqualCpu cpu = new EqualCpu();
-        cpu.currentGrid = grid;
         AE2JobTracker.addJob(cpu, grid, false);
-        AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
-        assertNotNull(info);
-        if (!bindingAlreadyKnown) CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        assertNotNull(AE2JobTracker.findActiveJob(cpu));
         grid.controllerState(AEControllerState.CONTROLLER_CONFLICT);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-
-        AE2JobTracker.completeCrafting(grid, cpu);
-        assertTrue(info.isDone);
-        long completedAt = info.timeDone;
-        AE2JobTracker.resolveDeferredJobs();
-        assertTrue(GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.isEmpty());
-
+        if (cancelled) AE2JobTracker.cancelCrafting(grid, cpu);
+        else AE2JobTracker.completeCrafting(grid, cpu);
+        assertNull(AE2JobTracker.findActiveJob(cpu));
         grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        AE2JobTracker.resolveDeferredJobs();
-        AE2JobTracker.resolveDeferredJobs();
-        assertEquals(gridKey, CoreEngine.GRID_IDENTITIES.getKey(grid));
-        assertEquals(completedAt, info.timeDone);
-        assertSame(info, GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.get(1));
-        assertEquals(1, GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.size());
+        CoreEngine.onServerTick();
+        assertTrue(GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.isEmpty());
     }
 
     @Test
@@ -165,97 +152,36 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
     }
 
     @Test
-    void unresolvedJobsAreDiscardedWhenTheirCurrentGridResolvesUntracked() throws Exception {
-        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, gridKey, false);
-        EqualCpu known = new EqualCpu();
-        AE2JobTracker.addJob(known, grid, false);
-        assertNull(AE2JobTracker.findActiveJob(known));
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
-        EqualCpu active = new EqualCpu();
-        EqualCpu completed = new EqualCpu();
-        AE2JobTracker.addJob(active, grid, false);
-        AE2JobTracker.addJob(completed, grid, false);
-        assertNotNull(AE2JobTracker.findActiveJob(active));
-        AE2JobTracker.completeCrafting(grid, completed);
-
-        AE2JobTracker.resolveDeferredJobs();
-        assertNotNull(AE2JobTracker.findActiveJob(active));
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        AE2JobTracker.resolveDeferredJobs();
-        assertNull(AE2JobTracker.findActiveJob(active));
-        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, gridKey, true);
-        AE2JobTracker.resolveDeferredJobs();
-        assertTrue(GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.isEmpty());
-    }
-
-    @Test
-    void stopCleanupDiscardsProvisionalAndCompletedPendingJobs() throws Exception {
+    void jobsWithoutAValidatedIdentityAreNotTrackedRetroactively() throws Exception {
         CoreEngine.GRID_IDENTITIES.initialize(gridSave);
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, grid, false);
+        assertNull(AE2JobTracker.findActiveJob(cpu));
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        CoreEngine.onServerTick();
         AE2JobTracker.completeCrafting(grid, cpu);
+        assertTrue(GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.isEmpty());
         AE2JobTracker.addJob(cpu, grid, false);
         assertNotNull(AE2JobTracker.findActiveJob(cpu));
-
-        AE2JobTracker.clearActiveJobs();
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        AE2JobTracker.resolveDeferredJobs();
-
-        assertNull(AE2JobTracker.findActiveJob(cpu));
-        assertTrue(GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.isEmpty());
     }
 
-    @Test
-    void startsAndCompletionsBeforeFirstValidationKeepBothJobsFromTheSameCpu() throws Exception {
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
-        EqualCpu cpu = new EqualCpu();
-        AE2JobTracker.addJob(cpu, grid, false);
-        AE2JobTracker.JobTrackingInfo first = AE2JobTracker.findActiveJob(cpu);
-        assertNotNull(first);
-        AE2JobTracker.completeCrafting(grid, cpu);
-        cpu.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
-        AE2JobTracker.addJob(cpu, grid, false);
-        AE2JobTracker.JobTrackingInfo second = AE2JobTracker.findActiveJob(cpu);
-        assertNotNull(second);
-        AE2JobTracker.completeCrafting(grid, cpu);
-        AE2JobTracker.resolveDeferredJobs();
-        assertTrue(GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.isEmpty());
-
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        AE2JobTracker.resolveDeferredJobs();
-
-        assertEquals(2, GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.size());
-        assertTrue(GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.containsValue(first));
-        assertTrue(GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.containsValue(second));
-        assertEquals(5, first.finalOutput.quantity);
-        assertEquals(9, second.finalOutput.quantity);
-    }
-
-    @Test
-    void completionFinalizesBeforeControllerValidationThenPublishesOnceToCurrentGrid() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void completionUsesTheCurrentGridsTrackingSetting(boolean tracked) throws Exception {
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, grid, false);
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
-
-        AE2JobTracker.completeCrafting(grid, cpu);
-
-        assertTrue(info.isDone);
-        long completedAt = info.timeDone;
-        assertNull(AE2JobTracker.findActiveJob(cpu));
-        assertTrue(GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.isEmpty());
+        assertNotNull(info);
         TestGridFixtures.TestGrid destination = TestGridFixtures.grid(900_102L);
-        TestGridFixtures.track(destination);
-        cpu.currentGrid = destination;
         StableKey destinationKey = CoreEngine.GRID_IDENTITIES.getKey(destination);
         assertNotNull(destinationKey);
-        AE2JobTracker.resolveDeferredJobs();
-        AE2JobTracker.resolveDeferredJobs();
-
-        assertEquals(completedAt, info.timeDone);
-        assertSame(info, GridData.getOrCreate(destinationKey).trackingInfo.trackingInfos.get(1));
-        assertEquals(1, GridData.getOrCreate(destinationKey).trackingInfo.trackingInfos.size());
+        TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, destinationKey, tracked);
+        // Native completion hooks pass the CPU's current grid, which can differ from its starting grid.
+        AE2JobTracker.completeCrafting(destination, cpu);
+        assertNull(AE2JobTracker.findActiveJob(cpu));
         assertTrue(GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.isEmpty());
+        if (tracked) assertSame(info, GridData.getOrCreate(destinationKey).trackingInfo.trackingInfos.get(1));
+        else assertTrue(GridData.getOrCreate(destinationKey).trackingInfo.trackingInfos.isEmpty());
     }
 
     @Test
@@ -625,13 +551,6 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
     }
 
     private static final class EqualCpu implements ICraftingCPUCluster {
-
-        private IAEGrid currentGrid;
-
-        @Override
-        public IAEGrid web$getGrid() {
-            return currentGrid;
-        }
 
         public @NotNull StableKey web$getKey() {
             return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
