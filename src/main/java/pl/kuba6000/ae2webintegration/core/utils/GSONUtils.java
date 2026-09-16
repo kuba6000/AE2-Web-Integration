@@ -22,6 +22,20 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 public class GSONUtils {
 
     public static final GsonBuilder GSON_BUILDER = new GsonBuilder()
+        // Old Gson otherwise reflects into java.lang.Void, which modern JVM modules forbid.
+        .registerTypeAdapter(Void.class, new TypeAdapter<Void>() {
+
+            @Override
+            public void write(JsonWriter output, Void value) throws IOException {
+                output.nullValue();
+            }
+
+            @Override
+            public Void read(JsonReader input) throws IOException {
+                input.nextNull();
+                return null;
+            }
+        }.nullSafe())
         .registerTypeAdapter(StableKey.class, new TypeAdapter<StableKey>() {
 
             @Override

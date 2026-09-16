@@ -5,12 +5,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,22 +34,31 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
-import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTracking;
-import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTrackingHistory;
-import pl.kuba6000.ae2webintegration.core.ae2request.async.GridSettings;
-import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.CancelCPU;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPU;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPUList;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetGridList;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetItems;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.Order;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
+import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Login;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Logout;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Register;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.CancelCPU;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPUList;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.CreateCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.DeleteCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.SubmitCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGrids;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTrackingHistory;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
@@ -83,18 +92,49 @@ public class AE2Controller {
 
     public static class RequestContext {
 
-        private final Map<String, String> getParams;
         private final WebPrincipal principal;
+        private final HttpExchange exchange;
+        private final Map<String, String> pathParams;
+        private final JsonObject body;
+        private final long lifecycleGeneration;
 
         public RequestContext(HttpExchange exchange, WebPrincipal principal) {
-            this.getParams = HTTPUtils.parseQueryString(
-                exchange.getRequestURI()
-                    .getRawQuery());
-            this.principal = principal;
+            this(exchange, principal, Collections.emptyMap(), null);
         }
 
-        public Map<String, String> getGetParams() {
-            return getParams;
+        public RequestContext(HttpExchange exchange, WebPrincipal principal, Map<String, String> pathParams,
+            JsonObject body) {
+            this(exchange, principal, pathParams, body, httpLifecycleGeneration.get());
+        }
+
+        private RequestContext(HttpExchange exchange, WebPrincipal principal, Map<String, String> pathParams,
+            JsonObject body, long lifecycleGeneration) {
+            this.principal = principal;
+            this.exchange = exchange;
+            this.pathParams = pathParams;
+            this.body = body;
+            this.lifecycleGeneration = lifecycleGeneration;
+        }
+
+        /** Preserves the request's originating lifecycle while adding authenticated, parsed input. */
+        public RequestContext withInputs(WebPrincipal principal, Map<String, String> pathParams, JsonObject body) {
+            return new RequestContext(exchange, principal, pathParams, body, lifecycleGeneration);
+        }
+
+        public long getLifecycleGeneration() {
+            return lifecycleGeneration;
+        }
+
+        public Map<String, String> getPathParams() {
+            return pathParams;
+        }
+
+        public JsonObject getBody() {
+            return body;
+        }
+
+        public HttpExchange getExchange() {
+            return exchange;
         }
 
         public WebPrincipal getPrincipal() {
@@ -128,10 +168,10 @@ public class AE2Controller {
         @SuppressWarnings("MissingSerialAnnotation") // @Serial is unavailable on Java 8.
         private static final long serialVersionUID = 1L;
 
-        private final String status;
+        private final ApiStatus status;
 
-        private ServerTaskUnavailableException(String status) {
-            super(status);
+        private ServerTaskUnavailableException(ApiStatus status) {
+            super(status.name());
             this.status = status;
         }
     }
@@ -153,7 +193,7 @@ public class AE2Controller {
         }
 
         @Override
-        public void failIfPending(String status) {
+        public void failIfPending(ApiStatus status) {
             result.completeExceptionally(new ServerTaskUnavailableException(status));
         }
     }
@@ -188,7 +228,8 @@ public class AE2Controller {
      * behind the rate limiter - and does not mutate token state or send a response.
      */
     private static boolean isAlreadyIdentified(HttpExchange t, InetAddress client) {
-        if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && client.isLoopbackAddress()) {
+        if (!t.getRequestHeaders()
+            .containsKey("Authorization") && Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && client.isLoopbackAddress()) {
             return true;
         }
         String token = extractToken(t);
@@ -227,24 +268,48 @@ public class AE2Controller {
         }
     }
 
-    private static String extractToken(HttpExchange t) {
-        List<String> auth = t.getRequestHeaders()
+    private static String extractToken(HttpExchange exchange) {
+        List<String> authorization = exchange.getRequestHeaders()
             .get("Authorization");
-        if (auth != null && !auth.isEmpty()) {
-            return auth.get(0)
-                .replace("Bearer ", "");
+        if (authorization != null) {
+            if (authorization.size() != 1) return null;
+            String value = authorization.get(0);
+            if (!value.regionMatches(true, 0, "Bearer ", 0, "Bearer ".length())) return null;
+            String token = value.substring("Bearer ".length())
+                .trim();
+            return token.isEmpty() ? null : token;
         }
-        List<String> cookies = t.getRequestHeaders()
+        List<String> cookies = exchange.getRequestHeaders()
             .get("Cookie");
-        if (cookies != null && !cookies.isEmpty()) {
-            for (String cookie : cookies.get(0)
-                .split("; ")) {
-                if (cookie.startsWith("authenticationToken=")) {
-                    return cookie.substring("authenticationToken=".length());
+        if (cookies != null) {
+            for (String header : cookies) {
+                for (String part : header.split(";")) {
+                    String cookie = part.trim();
+                    if (cookie.startsWith("authenticationToken=")) {
+                        return cookie.substring("authenticationToken=".length());
+                    }
                 }
             }
         }
         return null;
+    }
+
+    /** Resolves credentials only; page forms and logout redirects are deliberately separate. */
+    private static RequestContext authenticateApi(HttpExchange exchange) {
+        InetAddress client = resolveClientAddress(exchange);
+        if (!exchange.getRequestHeaders()
+            .containsKey("Authorization") && Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && client.isLoopbackAddress()) {
+            return new RequestContext(exchange, WebPrincipal.localhost());
+        }
+        String token = extractToken(exchange);
+        if (token == null) return null;
+        AuthSession session = validTokens.get(token);
+        if (session == null) return null;
+        if (System.currentTimeMillis() >= session.expiresAtMillis) {
+            validTokens.remove(token, session);
+            return null;
+        }
+        return new RequestContext(exchange, session.principal);
     }
 
     public static void startHTTPServer() {
@@ -261,17 +326,28 @@ public class AE2Controller {
             HttpServer newServer = null;
             try {
                 newServer = HttpServer.create(new InetSocketAddress(Config.AE_PORT()), HTTP_BACKLOG);
-                newServer.createContext("/grids", new SyncedRequestHandler(GetGridList.class));
-                newServer.createContext("/list", new SyncedRequestHandler(GetCPUList.class));
-                newServer.createContext("/get", new SyncedRequestHandler(GetCPU.class));
-                newServer.createContext("/cancelcpu", new SyncedRequestHandler(CancelCPU.class));
-                newServer.createContext("/items", new SyncedRequestHandler(GetItems.class));
-                newServer.createContext("/order", new SyncedRequestHandler(Order.class));
-                newServer.createContext("/job", new SyncedRequestHandler(Job.class));
-                newServer.createContext("/trackinghistory", new ASyncRequestHandler(GetTrackingHistory.class));
-                newServer.createContext("/gettracking", new ASyncRequestHandler(GetTracking.class));
-                newServer.createContext("/gridsettings", new ASyncRequestHandler(GridSettings.class));
-                newServer.createContext("/auth", new AuthHandler());
+                ApiRouter api = new ApiRouter(
+                    AE2Controller::authenticateApi,
+                    exchange -> !isAlreadyIdentified(exchange, resolveClientAddress(exchange))
+                        && !rateLimiter.isAllowed(resolveClientAddress(exchange)),
+                    AE2Controller::sendRequest);
+                api.register(GetGrids.class);
+                api.register(GetCPUList.class);
+                api.register(GetCPU.class);
+                api.register(CancelCPU.class);
+                api.register(GetItems.class);
+                api.register(GetGridSettings.class);
+                api.register(PatchGridSettings.class);
+                api.register(CreateCraftingPlan.class);
+                api.register(GetCraftingPlan.class);
+                api.register(SubmitCraftingPlan.class);
+                api.register(DeleteCraftingPlan.class);
+                api.register(GetTrackingHistory.class);
+                api.register(GetTracking.class);
+                api.register(Login.class);
+                api.register(Register.class);
+                api.register(Logout.class);
+                newServer.createContext("/api", api);
                 newServer.createContext("/", new WebHandler());
                 newServer.setExecutor(newServerThread);
                 httpLifecycleGeneration.incrementAndGet();
@@ -298,7 +374,7 @@ public class AE2Controller {
             }
             IServerThreadTask task;
             while ((task = requests.poll()) != null) {
-                task.failIfPending("SERVER_STOPPING");
+                task.failIfPending(ApiStatus.SERVER_STOPPING);
             }
             shutdownHTTPExecutor(serverThread);
             server = null;
@@ -353,7 +429,7 @@ public class AE2Controller {
     static void clearWorldState() {
         IServerThreadTask task;
         while ((task = requests.poll()) != null) {
-            task.failIfPending("SERVER_STOPPING");
+            task.failIfPending(ApiStatus.SERVER_STOPPING);
         }
         synchronized (authenticationStateLock) {
             awaitingRegistration.clear();
@@ -379,9 +455,9 @@ public class AE2Controller {
     private static final class LoginResult {
 
         private final WebPrincipal principal;
-        private final String error;
+        private final ApiStatus error;
 
-        private LoginResult(WebPrincipal principal, String error) {
+        private LoginResult(WebPrincipal principal, ApiStatus error) {
             this.principal = principal;
             this.error = error;
         }
@@ -390,7 +466,7 @@ public class AE2Controller {
             return new LoginResult(principal, null);
         }
 
-        private static LoginResult failure(String error) {
+        private static LoginResult failure(ApiStatus error) {
             return new LoginResult(null, error);
         }
 
@@ -403,10 +479,10 @@ public class AE2Controller {
 
         private final UUID playerUuid;
         private final String passwordHash;
-        private final String error;
+        private final ApiStatus error;
         private final boolean serviceUnavailable;
 
-        private RegistrationResult(UUID playerUuid, String passwordHash, String error, boolean serviceUnavailable) {
+        private RegistrationResult(UUID playerUuid, String passwordHash, ApiStatus error, boolean serviceUnavailable) {
             this.playerUuid = playerUuid;
             this.passwordHash = passwordHash;
             this.error = error;
@@ -417,7 +493,7 @@ public class AE2Controller {
             return new RegistrationResult(playerUuid, passwordHash, null, false);
         }
 
-        private static RegistrationResult failure(String error, boolean serviceUnavailable) {
+        private static RegistrationResult failure(ApiStatus error, boolean serviceUnavailable) {
             return new RegistrationResult(null, null, error, serviceUnavailable);
         }
 
@@ -432,8 +508,8 @@ public class AE2Controller {
      * Lax, which is also what browsers apply to a cookie with no SameSite at all since Chrome 80 - so
      * stating it changes little today beyond covering older browsers. Strict would additionally block a
      * top-level navigation from another site, but it costs a login screen whenever someone follows a link
-     * here, and the endpoints it would protect should stop being GETs instead. See the plan for moving
-     * state-changing operations to POST, which is what actually closes this.
+     * here. Migrated state-changing API routes must also enforce a CSRF policy; changing the HTTP
+     * method alone does not provide that protection.
      * <p>
      * Deliberately no Secure attribute: the server speaks plain HTTP, and the cookie would then never be
      * sent at all.
@@ -446,17 +522,17 @@ public class AE2Controller {
         if (requestedUsername.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
             if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD()
                 .isEmpty()) {
-                return LoginResult.failure("invalidpassword");
+                return LoginResult.failure(ApiStatus.INVALID_PASSWORD);
             }
             return LoginResult.success(WebPrincipal.admin());
         }
 
         CoreData.Account account = CoreData.getAccount(requestedUsername);
         if (account == null) {
-            return LoginResult.failure("invaliduser");
+            return LoginResult.failure(ApiStatus.INVALID_USER);
         }
         if (!CoreData.verifyPassword(account, password)) {
-            return LoginResult.failure("invalidpassword");
+            return LoginResult.failure(ApiStatus.INVALID_PASSWORD);
         }
         return LoginResult.success(WebPrincipal.forPlayer(account.getIdentity()));
     }
@@ -469,12 +545,77 @@ public class AE2Controller {
             return RegistrationResult.failure(e.status, true);
         }
         if (playerUuid == null) {
-            return RegistrationResult.failure("notonline", false);
+            return RegistrationResult.failure(ApiStatus.NOT_ONLINE, false);
         }
         try {
             return RegistrationResult.success(playerUuid, PasswordHelper.generateStrongPasswordHash(password));
         } catch (Exception e) {
-            return RegistrationResult.failure("invalidpassword", false);
+            return RegistrationResult.failure(ApiStatus.INVALID_PASSWORD, false);
+        }
+    }
+
+    /** Issues a token without setting a browser cookie; page forms own their externally visible cookie path. */
+    public static ApiResponse loginApi(RequestContext context, String username, String password, boolean rememberMe) {
+        long generation = context.getLifecycleGeneration();
+        LoginResult login = authenticateLogin(username, password);
+        if (!login.succeeded()) return ApiResponse.error(login.error);
+        String token = PasswordHelper.generateToken(SESSION_TOKEN_LENGTH);
+        long seconds = rememberMe ? REMEMBER_ME_SESSION_SECONDS : SESSION_SECONDS;
+        AuthSession session = new AuthSession(
+            System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(seconds),
+            login.principal);
+        if (!publishToken(generation, token, session)) return ApiResponse.error(ApiStatus.SERVER_STOPPING);
+        Login.Session data = new Login.Session(
+            token,
+            login.principal.getUsername(),
+            login.principal.isAdmin(),
+            Config.CHECK_FOR_UPDATES() && CoreEngine.getAvailableUpdate() != null);
+        return ApiResponse.of(HttpURLConnection.HTTP_OK, new Login.Response(ApiStatus.OK, data));
+    }
+
+    /** Registration retains the bounded game-thread lookup and listener-generation publication fence. */
+    public static ApiResponse registerApi(RequestContext context, String username, String password) {
+        long generation = context.getLifecycleGeneration();
+        RegistrationResult registration = prepareRegistration(username, password);
+        if (!registration.succeeded()) {
+            if (registration.serviceUnavailable || registration.error == ApiStatus.NOT_ONLINE)
+                return ApiResponse.error(registration.error);
+            return ApiResponse.of(HttpURLConnection.HTTP_BAD_REQUEST, new ErrorResponse(registration.error, null));
+        }
+        String token = PasswordHelper.generateToken(CONFIRMATION_TOKEN_LENGTH);
+        if (!publishRegistration(generation, registration.playerUuid, Pair.of(token, registration.passwordHash))) {
+            return ApiResponse.error(ApiStatus.SERVER_STOPPING);
+        }
+        return ApiResponse
+            .of(HttpURLConnection.HTTP_ACCEPTED, new Register.Response(ApiStatus.OK, new Register.Confirmation(token)));
+    }
+
+    public static void logoutApi(RequestContext context) {
+        String token = extractToken(context.getExchange());
+        if (token != null) validTokens.remove(token);
+    }
+
+    private static boolean isSameOriginBrowserPost(HttpExchange exchange) {
+        String site = exchange.getRequestHeaders()
+            .getFirst("Sec-Fetch-Site");
+        if (site != null) return site.equals("same-origin") || site.equals("none");
+        String origin = exchange.getRequestHeaders()
+            .getFirst("Origin");
+        if (origin == null) return true; // Non-browser clients and older browsers without Fetch Metadata.
+        try {
+            URI source = URI.create(origin);
+            URI target = URI.create(
+                "http://" + exchange.getRequestHeaders()
+                    .getFirst("Host"));
+            int sourcePort = source.getPort() < 0 ? ("https".equalsIgnoreCase(source.getScheme()) ? 443 : 80)
+                : source.getPort();
+            int targetPort = target.getPort() < 0 ? 80 : target.getPort();
+            return "http".equalsIgnoreCase(source.getScheme()) && source.getHost() != null
+                && source.getHost()
+                    .equalsIgnoreCase(target.getHost())
+                && sourcePort == targetPort;
+        } catch (IllegalArgumentException exception) {
+            return false;
         }
     }
 
@@ -486,75 +627,25 @@ public class AE2Controller {
 
     private static AuthCheckResult checkAuth(HttpExchange t) throws IOException {
         long requestLifecycleGeneration = httpLifecycleGeneration.get();
-        InetAddress client = resolveClientAddress(t);
-
-        if (Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && client.isLoopbackAddress()) {
-            requestContext.set(new RequestContext(t, WebPrincipal.localhost()));
+        RequestContext authenticated = authenticateApi(t);
+        if (authenticated != null) {
+            requestContext.set(authenticated);
             return AuthCheckResult.AUTHENTICATED;
         }
-
-        // Alternative authentication method
-        List<String> auth = t.getRequestHeaders()
-            .get("Authorization");
-        if (auth != null && !auth.isEmpty()) {
-            String token = auth.get(0);
-            token = token.replace("Bearer ", "");
-            AuthSession session = validTokens.get(token);
-            if (session != null) {
-                long validity = session.expiresAtMillis;
-                if (System.currentTimeMillis() < validity) {
-                    requestContext.set(new RequestContext(t, session.principal));
-                    return AuthCheckResult.AUTHENTICATED; // Token is valid
-                } else {
-                    validTokens.remove(token, session);
-                    return AuthCheckResult.UNAUTHENTICATED; // Token expired
-                }
-            } else {
-                return AuthCheckResult.UNAUTHENTICATED; // Invalid token
-            }
-        }
-
-        List<String> cookies = t.getRequestHeaders()
-            .get("Cookie");
-        if (cookies != null && !cookies.isEmpty()) {
-            String cookiesString = cookies.get(0);
-            for (String cookie : cookiesString.split("; ")) {
-                if (cookie.startsWith("authenticationToken=")) {
-                    String token = cookie.substring("authenticationToken=".length());
-                    AuthSession session = validTokens.get(token);
-                    if (session != null) {
-                        long validity = session.expiresAtMillis;
-                        if (System.currentTimeMillis() < validity) {
-                            Map<String, String> GET_PARAMS = HTTPUtils.parseQueryString(
-                                t.getRequestURI()
-                                    .getRawQuery());
-                            if (GET_PARAMS.containsKey("logout")) {
-                                validTokens.remove(token); // Invalidate token on logout
-                                t.getResponseHeaders()
-                                    .add("Set-Cookie", sessionCookie(token, -1));
-                                t.getResponseHeaders()
-                                    .add("Location", ".");
-                                t.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
-                                return AuthCheckResult.RESPONSE_SENT; // Logout successful
-                            }
-                            requestContext.set(new RequestContext(t, session.principal));
-                            return AuthCheckResult.AUTHENTICATED; // Token is valid
-                        } else {
-                            validTokens.remove(token, session);
-                            t.getResponseHeaders()
-                                .add("Set-Cookie", sessionCookie(token, -1));
-                            return AuthCheckResult.UNAUTHENTICATED; // Token expired
-                        }
-                    } else {
-                        t.getResponseHeaders()
-                            .add("Set-Cookie", sessionCookie(token, -1));
-                        return AuthCheckResult.UNAUTHENTICATED; // Invalid token
-                    }
-                }
-            }
+        if (t.getRequestHeaders()
+            .containsKey("Authorization")) return AuthCheckResult.UNAUTHENTICATED;
+        String cookieToken = extractToken(t);
+        if (cookieToken != null) {
+            t.getResponseHeaders()
+                .add("Set-Cookie", sessionCookie(cookieToken, -1));
+            return AuthCheckResult.UNAUTHENTICATED;
         }
         if (t.getRequestMethod()
             .equals("POST")) {
+            if (!isSameOriginBrowserPost(t)) {
+                t.sendResponseHeaders(HttpURLConnection.HTTP_FORBIDDEN, -1);
+                return AuthCheckResult.RESPONSE_SENT;
+            }
             String postRaw = readBody(t);
             // Oversize is treated as no usable body: the branches below simply will not match and the
             // existing flow answers 401. checkAuth must not send its own response here - see C-25.
@@ -570,7 +661,7 @@ public class AE2Controller {
                 }
                 if (!registration.succeeded()) {
                     t.getResponseHeaders()
-                        .add("Location", "?" + registration.error);
+                        .add("Location", "?" + registration.error.code());
                     t.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
                     return AuthCheckResult.RESPONSE_SENT;
                 }
@@ -591,7 +682,7 @@ public class AE2Controller {
                 LoginResult login = authenticateLogin(postData.get("username"), postData.get("password"));
                 if (!login.succeeded()) {
                     t.getResponseHeaders()
-                        .add("Location", "?" + login.error);
+                        .add("Location", "?" + login.error.code());
                     t.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
                     return AuthCheckResult.RESPONSE_SENT;
                 }
@@ -616,53 +707,19 @@ public class AE2Controller {
         return AuthCheckResult.UNAUTHENTICATED;
     }
 
-    private static boolean preHTTPHandler(HttpExchange t) throws IOException {
-        InetAddress client = resolveClientAddress(t);
-        if (!isAlreadyIdentified(t, client) && !rateLimiter.isAllowed(client)) {
-            byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
-            t.getResponseHeaders()
-                .add("Content-Type", "text/plain");
-            t.sendResponseHeaders(429, raw_response.length); // NOPMD - HTTP Too Many Requests.
-            OutputStream os = t.getResponseBody();
-            os.write(raw_response);
-            os.close();
-            return true;
-        }
-        t.getResponseHeaders()
-            .add("Access-Control-Allow-Origin", "*");
-        if (t.getRequestMethod()
-            .equalsIgnoreCase("OPTIONS")) {
-            t.getResponseHeaders()
-                .add("Access-Control-Allow-Methods", "GET, OPTIONS");
-            t.getResponseHeaders()
-                .add("Access-Control-Allow-Headers", "Content-Type,Authorization");
-            t.sendResponseHeaders(HttpURLConnection.HTTP_NO_CONTENT, -1);
-            return true;
-        }
-        AuthCheckResult authResult = checkAuth(t);
-        if (authResult == AuthCheckResult.RESPONSE_SENT) {
-            return true;
-        }
-        if (authResult == AuthCheckResult.UNAUTHENTICATED) {
-            t.sendResponseHeaders(HttpURLConnection.HTTP_UNAUTHORIZED, -1);
-            return true;
-        }
-        return false;
-    }
-
-    private static String enqueueServerThreadTask(IServerThreadTask task) {
+    private static ApiStatus enqueueServerThreadTask(IServerThreadTask task) {
         if (!acceptingHTTPRequests) {
-            task.failIfPending("SERVER_STOPPING");
-            return "SERVER_STOPPING";
+            task.failIfPending(ApiStatus.SERVER_STOPPING);
+            return ApiStatus.SERVER_STOPPING;
         }
         if (!requests.offer(task)) {
-            String status = acceptingHTTPRequests ? "SERVER_BUSY" : "SERVER_STOPPING";
+            ApiStatus status = acceptingHTTPRequests ? ApiStatus.SERVER_BUSY : ApiStatus.SERVER_STOPPING;
             task.failIfPending(status);
             return status;
         }
         if (!acceptingHTTPRequests && requests.remove(task)) {
-            task.failIfPending("SERVER_STOPPING");
-            return "SERVER_STOPPING";
+            task.failIfPending(ApiStatus.SERVER_STOPPING);
+            return ApiStatus.SERVER_STOPPING;
         }
         return null;
     }
@@ -670,7 +727,7 @@ public class AE2Controller {
     @SuppressWarnings("ResultOfMethodCallIgnored") // The task may already be dequeued; failIfPending handles that race.
     private static UUID findOnlinePlayerOnServerThread(String username) throws ServerTaskUnavailableException {
         OnlinePlayerLookupTask task = new OnlinePlayerLookupTask(username);
-        String unavailableStatus = enqueueServerThreadTask(task);
+        ApiStatus unavailableStatus = enqueueServerThreadTask(task);
         if (unavailableStatus != null) {
             throw new ServerTaskUnavailableException(unavailableStatus);
         }
@@ -678,20 +735,20 @@ public class AE2Controller {
             return task.result.get(AUTH_LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             requests.remove(task);
-            task.failIfPending("SERVER_BUSY");
-            throw new ServerTaskUnavailableException("SERVER_BUSY");
+            task.failIfPending(ApiStatus.SERVER_BUSY);
+            throw new ServerTaskUnavailableException(ApiStatus.SERVER_BUSY);
         } catch (InterruptedException e) {
             requests.remove(task);
-            task.failIfPending("SERVER_STOPPING");
+            task.failIfPending(ApiStatus.SERVER_STOPPING);
             Thread.currentThread()
                 .interrupt();
-            throw new ServerTaskUnavailableException("SERVER_STOPPING");
+            throw new ServerTaskUnavailableException(ApiStatus.SERVER_STOPPING);
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof ServerTaskUnavailableException) {
                 throw (ServerTaskUnavailableException) cause;
             }
-            throw new ServerTaskUnavailableException("INTERNAL_ERROR");
+            throw new ServerTaskUnavailableException(ApiStatus.INTERNAL_ERROR);
         }
     }
 
@@ -704,211 +761,15 @@ public class AE2Controller {
             request.awaitCompletion(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             requests.remove(request);
-            request.failIfPending("TIMEOUT");
+            request.failIfPending(ApiStatus.TIMEOUT);
         } catch (InterruptedException e) {
             requests.remove(request);
-            request.failIfPending("SERVER_STOPPING");
+            request.failIfPending(ApiStatus.SERVER_STOPPING);
             Thread.currentThread()
                 .interrupt();
             return true;
         }
         return false;
-    }
-
-    static class SyncedRequestHandler implements HttpHandler {
-
-        private final Constructor<? extends ISyncedRequest> factory;
-
-        public SyncedRequestHandler(Class<? extends ISyncedRequest> syncedRequestClass) {
-            try {
-                factory = syncedRequestClass.getConstructor();
-            } catch (NoSuchMethodException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        @Override
-        public void handle(HttpExchange t) throws IOException {
-            if (preHTTPHandler(t)) return;
-
-            ISyncedRequest syncedRequest;
-
-            try {
-                syncedRequest = factory.newInstance();
-            } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-                throw new RuntimeException(e);
-            }
-
-            boolean serviceUnavailable = false;
-            if (syncedRequest.init(requestContext.get())) {
-                serviceUnavailable = sendRequest(syncedRequest);
-            }
-
-            byte[] raw_response = syncedRequest.getJSON()
-                .getBytes(StandardCharsets.UTF_8);
-            t.sendResponseHeaders(
-                serviceUnavailable ? HttpURLConnection.HTTP_UNAVAILABLE : HttpURLConnection.HTTP_OK,
-                raw_response.length);
-            OutputStream os = t.getResponseBody();
-            os.write(raw_response);
-            os.close();
-
-        }
-
-    }
-
-    static class ASyncRequestHandler implements HttpHandler {
-
-        private final Constructor<? extends IAsyncRequest> factory;
-
-        public ASyncRequestHandler(Class<? extends IAsyncRequest> syncedRequestClass) {
-            try {
-                factory = syncedRequestClass.getConstructor();
-            } catch (NoSuchMethodException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        @Override
-        public void handle(HttpExchange t) throws IOException {
-            if (preHTTPHandler(t)) return;
-
-            IAsyncRequest asyncRequest;
-
-            try {
-                asyncRequest = factory.newInstance();
-            } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-                throw new RuntimeException(e);
-            }
-
-            asyncRequest.handle(requestContext.get());
-
-            byte[] raw_response = asyncRequest.getJSON()
-                .getBytes(StandardCharsets.UTF_8);
-            t.sendResponseHeaders(HttpURLConnection.HTTP_OK, raw_response.length);
-            OutputStream os = t.getResponseBody();
-            os.write(raw_response);
-            os.close();
-        }
-
-    }
-
-    static class AuthHandler implements HttpHandler {
-
-        @Override
-        public void handle(HttpExchange t) throws IOException {
-            long requestLifecycleGeneration = httpLifecycleGeneration.get();
-            InetAddress client = resolveClientAddress(t);
-            if (!isAlreadyIdentified(t, client) && !rateLimiter.isAllowed(client)) {
-                byte[] raw_response = "Too Many Requests".getBytes(StandardCharsets.UTF_8);
-                t.getResponseHeaders()
-                    .add("Content-Type", "text/plain");
-                t.sendResponseHeaders(429, raw_response.length); // NOPMD - HTTP Too Many Requests.
-                OutputStream os = t.getResponseBody();
-                os.write(raw_response);
-                os.close();
-                return;
-            }
-            if (t.getRequestMethod()
-                .equals("POST")) {
-                String postRaw = readBody(t);
-                if (postRaw == null) {
-                    byte[] raw_response = "requesttoolarge".getBytes(StandardCharsets.UTF_8);
-                    t.sendResponseHeaders(HttpURLConnection.HTTP_BAD_REQUEST, raw_response.length);
-                    OutputStream os = t.getResponseBody();
-                    os.write(raw_response);
-                    os.close();
-                    return;
-                }
-                Map<String, String> postData = HTTPUtils.parseQueryString(postRaw);
-
-                if (postData.containsKey("register") && postData.containsKey("password")) {
-                    RegistrationResult registration = prepareRegistration(
-                        postData.get("register"),
-                        postData.get("password"));
-                    if (!registration.succeeded() && registration.serviceUnavailable) {
-                        sendServerUnavailable(t, registration.error);
-                        return;
-                    }
-                    if (!registration.succeeded()) {
-                        byte[] raw_response = registration.error.getBytes(StandardCharsets.UTF_8);
-                        t.sendResponseHeaders(HttpURLConnection.HTTP_BAD_REQUEST, raw_response.length);
-                        OutputStream os = t.getResponseBody();
-                        os.write(raw_response);
-                        os.close();
-                        return;
-                    }
-
-                    String confirmationToken = PasswordHelper.generateToken(CONFIRMATION_TOKEN_LENGTH);
-                    Pair<String, String> pending = Pair.of(confirmationToken, registration.passwordHash);
-                    if (!publishRegistration(requestLifecycleGeneration, registration.playerUuid, pending)) {
-                        sendServerStopping(t);
-                        return;
-                    }
-                    byte[] raw_response = confirmationToken.getBytes(StandardCharsets.UTF_8);
-                    t.sendResponseHeaders(HttpURLConnection.HTTP_OK, raw_response.length);
-                    OutputStream os = t.getResponseBody();
-                    os.write(raw_response);
-                    os.close();
-                    return;
-                }
-
-                if (postData.containsKey("password") && postData.containsKey("username")) {
-                    LoginResult login = authenticateLogin(postData.get("username"), postData.get("password"));
-                    if (!login.succeeded()) {
-                        byte[] raw_response = login.error.getBytes(StandardCharsets.UTF_8);
-                        t.sendResponseHeaders(HttpURLConnection.HTTP_BAD_REQUEST, raw_response.length);
-                        OutputStream os = t.getResponseBody();
-                        os.write(raw_response);
-                        os.close();
-                        return;
-                    }
-                    boolean rememberMe = postData.containsKey("remember");
-                    String token = PasswordHelper.generateToken(SESSION_TOKEN_LENGTH);
-                    long validFor = rememberMe ? REMEMBER_ME_SESSION_SECONDS : SESSION_SECONDS;
-                    AuthSession session = new AuthSession(
-                        System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(validFor),
-                        login.principal);
-                    if (!publishToken(requestLifecycleGeneration, token, session)) {
-                        sendServerStopping(t);
-                        return;
-                    }
-                    JsonObject json = new JsonObject();
-                    json.addProperty("token", token);
-                    json.addProperty("username", login.principal.getUsername());
-                    json.addProperty("isAdmin", login.principal.isAdmin());
-                    json.addProperty(
-                        "isOutdated",
-                        Config.CHECK_FOR_UPDATES() && CoreEngine.getAvailableUpdate() != null);
-                    byte[] raw_response = json.toString()
-                        .getBytes(StandardCharsets.UTF_8);
-                    t.sendResponseHeaders(HttpURLConnection.HTTP_OK, raw_response.length);
-                    OutputStream os = t.getResponseBody();
-                    os.write(raw_response);
-                    os.close();
-                    return;
-                }
-            }
-
-            Map<String, String> GET_PARAMS = HTTPUtils.parseQueryString(
-                t.getRequestURI()
-                    .getRawQuery());
-
-            if (GET_PARAMS.containsKey("revoke")) {
-                List<String> auth = t.getRequestHeaders()
-                    .get("Authorization");
-                if (auth != null && !auth.isEmpty()) {
-                    String token = auth.get(0);
-                    token = token.replace("Bearer ", "");
-                    validTokens.remove(token);
-                    t.sendResponseHeaders(HttpURLConnection.HTTP_OK, -1);
-                    return;
-                }
-            }
-
-            t.sendResponseHeaders(HttpURLConnection.HTTP_BAD_REQUEST, -1);
-        }
-
     }
 
     private static boolean publishRegistration(long generation, UUID uuid, Pair<String, String> registration) {
@@ -936,11 +797,12 @@ public class AE2Controller {
     }
 
     private static void sendServerStopping(HttpExchange exchange) throws IOException {
-        sendServerUnavailable(exchange, "SERVER_STOPPING");
+        sendServerUnavailable(exchange, ApiStatus.SERVER_STOPPING);
     }
 
-    private static void sendServerUnavailable(HttpExchange exchange, String status) throws IOException {
-        byte[] response = status.getBytes(StandardCharsets.UTF_8);
+    private static void sendServerUnavailable(HttpExchange exchange, ApiStatus status) throws IOException {
+        byte[] response = status.code()
+            .getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(HttpURLConnection.HTTP_UNAVAILABLE, response.length);
         try (OutputStream output = exchange.getResponseBody()) {
             output.write(response);

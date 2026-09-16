@@ -22,7 +22,7 @@ test(page + ': duplicate CPU names remain separate and requests use stable IDs',
     assert.ok(rendered.includes('Main &lt;CPU&gt;'));
     assert.ok(!rendered.includes('Main <CPU>'));
     context.selectCPU({ name: second });
-    assert.equal(new URL(requests[0].url, 'http://local/').searchParams.get('cpu'), second);
+    assert.equal(decodeURIComponent(new URL(requests[0].url, 'http://local/ae2/').pathname), '/ae2/api/grids/123/cpus/' + second);
     assert.ok(!elements.get('overlaytext').innerHTML.includes('Main <CPU>'));
     requests[0].success({ status: 'OK', data: { isBusy: false } });
     assert.ok(elements.get('terminalCPUHeaderText').innerHTML.includes('Main &lt;CPU&gt;'));
@@ -60,7 +60,9 @@ test(page + ': vanished order target requires selection instead of silently choo
     assert.equal(requests.length, 0);
     context.selectCPUForJob({ name: second });
     context.startCurrentJob();
-    assert.equal(new URL(requests[0].url, 'http://local/').searchParams.get('cpu'), second);
+    assert.equal(requests[0].url, 'api/grids/123/crafting-plans/12/submit');
+    assert.equal(requests[0].method, 'POST');
+    assert.equal(JSON.parse(requests[0].data).cpuKey, second);
 });
 
 test(page + ': stale CPU detail response cannot overwrite a newer selection', () => {
@@ -86,11 +88,11 @@ test(page + ': rejected stale CPU submit retains the plan and refreshes without 
     context.cpuForJob = id;
     context.globalCPUList = { [id]: { name: 'Main', isBusy: false, availableStorage: 64 } };
     context.startCurrentJob();
-    requests.shift().success({ status: 'CPU_NOT_FOUND' });
+    requests.shift().failure({ status: 404, responseJSON: { status: 'CPU_NOT_FOUND', data: null } });
     assert.equal(context.currentWindow, 2);
     assert.equal(context.currentJob.id, 12);
     assert.ok(!context.cpuForJob);
-    const refresh = requests.find(request => new URL(request.url, 'http://local/').pathname === '/list');
+    const refresh = requests.find(request => new URL(request.url, 'http://local/').pathname === '/api/grids/123/cpus');
     assert.ok(refresh);
     refresh.success({ status: 'OK', data: { 'ae2:0:4:5:6': { name: 'Main', isBusy: false, availableStorage: 64 } } });
     const sent = requests.length;

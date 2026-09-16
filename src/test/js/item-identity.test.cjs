@@ -10,10 +10,11 @@ test(page + ': ordering sends the stable resource key', () => {
     const key = 'AAAAAAAAAAAAAAAAAAAAAA';
     context.beginOrderingItem(key);
     assert.equal(requests.length, 1);
-    const query = new URL(requests[0].url, 'http://local/').searchParams;
-    assert.equal(query.get('itemKey'), key);
-    assert.equal(query.has('item'), false);
-    assert.equal(query.get('quantity'), '3');
+    assert.equal(requests[0].url, 'api/grids/123/crafting-plans');
+    assert.equal(requests[0].method, 'POST');
+    assert.equal(requests[0].contentType, 'application/json');
+    assert.equal(requests[0].headers['X-AE2-Request'], 'true');
+    assert.deepEqual(JSON.parse(requests[0].data), { itemKey: key, quantity: 3 });
 });
 
 test(page + ': CPU merging requires two present matching resource keys', () => {
@@ -48,7 +49,7 @@ test(page + ': only craftable rows with a usable identity offer ordering', () =>
         const buttons = [...rendered.matchAll(/<button[^>]*onclick="([^"]+)"[^>]*>/g)];
         assert.equal(buttons.length, 1);
         vm.runInContext(buttons[0][1], context);
-        assert.equal(new URL(requests[0].url, 'http://local/').searchParams.get('itemKey'), key);
+        assert.equal(JSON.parse(requests[0].data).itemKey, key);
     }
 });
 

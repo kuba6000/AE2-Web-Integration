@@ -204,9 +204,13 @@ which keeps all crafting completion notifications enabled.
 
 ## Custom website
 
-If you already have a web server and want to host the panel there, you can! There is no complete API
-documentation yet, but the [`example_website`](./example_website) directory contains a ready-to-use simple PHP
+If you already have a web server and want to host the panel there, you can! The
+[`example_website`](./example_website) directory contains a ready-to-use simple PHP
 proxy. It forwards API calls from your web server to the AE2 Web Integration endpoint.
+
+The HTTP API uses `/api` routes with explicit methods and HTTP error statuses. See the
+[API migration and OpenAPI guide](tools/openapi-doclet/README.md) for routes, authentication and
+specification generation. Legacy API routes have been removed.
 
 ## Compatibility
 

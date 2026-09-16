@@ -27,14 +27,14 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.CancelCPU;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPU;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPUList;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetGridList;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.CancelCPU;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPUList;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.SubmitCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGrids;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -51,7 +51,7 @@ class CpuAddressingRequestTest extends GridTestScope {
     @Test
     void gridListRecordSerializesTheResolvedIdentityAsACanonicalString() {
         TestGrid grid = new TestGrid(GRID);
-        JsonObject response = request(new GetGridList(), grid, "");
+        JsonObject response = request(new GetGrids(), grid, "");
         assertStatus("OK", response);
         JsonElement key = response.getAsJsonArray("data")
             .get(0)
@@ -214,9 +214,10 @@ class CpuAddressingRequestTest extends GridTestScope {
         TestGrid grid = new TestGrid(GRID, cpu);
         for (String invalid : new String[] { StableKey.create(sink -> sink.putInt(2))
             .toString(), "Main", "" }) {
-            assertStatus("CPU_NOT_FOUND", request(new GetCPU(), grid, "&cpu=" + invalid));
-            assertStatus("CPU_NOT_FOUND", request(new CancelCPU(), grid, "&cpu=" + invalid));
-            assertStatus("CPU_NOT_FOUND", submit(grid, "&cpu=" + invalid));
+            String expected = invalid.length() == 22 ? "CPU_NOT_FOUND" : "BAD_PARAM";
+            assertStatus(expected, request(new GetCPU(), grid, "&cpu=" + invalid));
+            assertStatus(expected, request(new CancelCPU(), grid, "&cpu=" + invalid));
+            assertStatus(expected, submit(grid, "&cpu=" + invalid));
         }
         grid.cpus.clear();
         assertStatus("CPU_NOT_FOUND", submit(grid, "&cpu=" + cpu.id));
@@ -233,13 +234,18 @@ class CpuAddressingRequestTest extends GridTestScope {
             64);
         TestGrid selected = new TestGrid(GRID);
         TestGrid other = new TestGrid(TestGridFixtures.key(991235), remote);
-        for (ISyncedRequest request : new ISyncedRequest[] { new GetCPU(), new CancelCPU(), new Job() }) {
+        for (ISyncedRequest request : new ISyncedRequest[] { new GetCPU(), new CancelCPU(),
+            new SubmitCraftingPlan() }) {
             assertTrue(
                 request.init(
                     TestGridFixtures.context(
                         -1,
-                        "grid=" + TestGridFixtures
-                            .resolvedKey(selected) + "&cpu=" + remote.id + "&submit&id=" + addPlan(selected))));
+                        "grid=" + TestGridFixtures.resolvedKey(selected)
+                            + "&cpu="
+                            + remote.id
+                            + (request instanceof SubmitCraftingPlan ? "&submit" : "")
+                            + "&id="
+                            + addPlan(selected))));
             request.runOnServerThread(TestGridFixtures.ae(selected, other));
             assertStatus(
                 "CPU_NOT_FOUND",
@@ -322,7 +328,7 @@ class CpuAddressingRequestTest extends GridTestScope {
     }
 
     private static JsonObject submit(TestGrid grid, String selection) {
-        return request(new Job(), grid, "&id=" + addPlan(grid) + "&submit" + selection);
+        return request(new SubmitCraftingPlan(), grid, "&id=" + addPlan(grid) + "&submit" + selection);
     }
 
     private static JsonObject request(ISyncedRequest request, TestGrid grid, String params) {

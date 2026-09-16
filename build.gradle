@@ -19,7 +19,7 @@ if (project == rootProject) {
         encoding 'UTF-8'
 
         java {
-            target 'src/main/java/**/*.java', 'src/test/java/**/*.java'
+            target 'src/main/java/**/*.java', 'src/test/java/**/*.java', 'tools/openapi-doclet/src/**/*.java'
 
             def orderFile = project.file('spotless/spotless.importorder')
             def formatFile = project.file('spotless/spotless.eclipseformat.xml')
@@ -108,5 +108,42 @@ configurations.configureEach {
             org.gradle.api.attributes.Attribute.of('rfgDeobfuscatorTransformed', Boolean),
             true
         )
+    }
+}
+
+// Documentation is an explicit standalone build operation, never part of a Minecraft runtime artifact.
+if (project == rootProject) {
+    def buildApiDoclet = tasks.register('buildApiDoclet', GradleBuild) {
+        dir = file('tools/openapi-doclet')
+        tasks = ['docletPath']
+    }
+    def docletFiles = fileTree('tools/openapi-doclet/build/doclet') { include '*.jar' }
+    def apiDocumentation = layout.buildDirectory.file('api-docs/openapi.json')
+    def apiDocumentationVersion = providers.gradleProperty('apiDocumentationVersion').getOrElse('development')
+    def documentationJdk = javaToolchains.javadocToolFor(java.toolchain)
+    tasks.register('generateApiDocs', Exec) {
+        group = 'documentation'
+        description = 'Generate OpenAPI from the HTTP endpoint declarations and Javadoc.'
+        dependsOn buildApiDoclet
+        notCompatibleWithConfigurationCache('The doclet is built independently before its classpath is resolved.')
+        inputs.files(sourceSets.main.allJava, sourceSets.main.compileClasspath, docletFiles)
+        inputs.property('apiDocumentationVersion', apiDocumentationVersion)
+        outputs.file(apiDocumentation)
+        doFirst {
+            // Javadoc tasks inject HTML-only flags. Write an argument file for the custom doclet instead.
+            def options = new org.gradle.external.javadoc.StandardJavadocDocletOptions()
+            options.noTimestamp = false
+            options.source = '17'
+            options.encoding = 'UTF-8'
+            options.doclet = 'pl.kuba6000.ae2webintegration.doclet.OpenApiDoclet'
+            options.docletpath = docletFiles.files.toList()
+            options.classpath = sourceSets.main.compileClasspath.files.toList()
+            options.sourceNames = sourceSets.main.allJava.files.collect { it.absolutePath }.sort()
+            options.addStringOption('-output', apiDocumentation.get().asFile.absolutePath)
+            options.addStringOption('-api-version', apiDocumentationVersion)
+            def argumentsFile = new File(temporaryDir, 'javadoc.options')
+            options.write(argumentsFile)
+            commandLine documentationJdk.get().executablePath.asFile, "@${argumentsFile.absolutePath}"
+        }
     }
 }

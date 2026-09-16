@@ -4,6 +4,18 @@ import org.jetbrains.annotations.NotNull;
 
 import com.github.bsideup.jabel.Desugar;
 
+/**
+ * Block position within a Minecraft dimension.
+ *
+ * @param dimid dimension identifier; a numeric string on legacy versions or a resource identifier on modern versions
+ * @param x     block X coordinate
+ * @param y     block Y coordinate
+ * @param z     block Z coordinate
+ * @example dimid minecraft:overworld
+ * @example x 120
+ * @example y 64
+ * @example z -32
+ */
 @Desugar
 public record DimensionalCoords(@NotNull String dimid, int x, int y, int z) implements Comparable<DimensionalCoords> {
 

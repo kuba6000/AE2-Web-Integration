@@ -23,6 +23,7 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
@@ -65,7 +66,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
         AE2JobTracker.addJob(cpu, grid, false);
         gridData.trackingInfo.trackingInfos.put(1, AE2JobTracker.findActiveJob(cpu));
         AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
-        pl.kuba6000.ae2webintegration.core.identity.StableKey itemKey = AE2Controller.itemIdentities.remember(
+        StableKey itemKey = AE2Controller.itemIdentities.remember(
             grid,
             cpu.web$getFinalOutput()
                 .web$what());
@@ -136,7 +137,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
         }
 
         @Override
-        public boolean web$isCraftable(pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid grid) {
+        public boolean web$isCraftable(IAEGrid grid) {
             return false;
         }
 

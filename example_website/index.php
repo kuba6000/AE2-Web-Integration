@@ -1,130 +1,151 @@
 <?php
-
-    // Lax matches what browsers already apply to a cookie with no SameSite, so this mainly covers older
-    // ones. It stops an image tag or a cross-site fetch carrying the session, but not a top-level
-    // navigation - and the endpoints behind this proxy are state-changing GETs, so the real fix is to
-    // move them to POST. PHP's positional setcookie() has no SameSite parameter; the options array does.
-    function cookieOptions($expires, $httpOnly) {
-        return [
-            'expires' => $expires,
-            'path' => '/',
-            'httponly' => $httpOnly,
-            'samesite' => 'Lax',
-        ];
-    }
-
     // AE2 Web Terminal url
     $AE2_SERVER_HOST = "http://localhost:2324/";
     // Is the public mode enabled on the server
     $AE2_IS_PUBLIC_MODE = true;
 
-    if (!isset($_COOKIE['authenticationToken'])) {
+    function cookieOptions($expires, $httpOnly) {
+        $directory = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
+        return [
+            'expires' => $expires,
+            'path' => rtrim($directory, '/') . '/',
+            'httponly' => $httpOnly,
+            'samesite' => 'Lax',
+        ];
+    }
 
-        if (isset($_POST['register'])){
-            $username = $_POST['register'];
-            $password = $_POST['password'];
-            $ch = curl_init($AE2_SERVER_HOST . 'auth');
-            curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml'));
-            curl_setopt($ch, CURLOPT_HEADER, FALSE);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($_POST));
-            $return = curl_exec($ch);
-            $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpcode == 400){
-                header("Location: ?" . $return);
-                exit;
-            }
-            elseif ($httpcode == 200){
-                header("Location: ?confirmregistration&token=" . $return);
-                exit;
-            }
+    function clearSessionCookies() {
+        foreach (['authenticationToken', 'username', 'isAdmin', 'isOutdated'] as $name) {
+            setcookie($name, '', cookieOptions(time() - 3600, $name === 'authenticationToken'));
         }
+    }
 
-        if (isset($_POST['password'])){
-            $password = $_POST['password'];
-            $remember = isset($_POST['remember']) && $_POST['remember'] == 'on';
-            $ch = curl_init($AE2_SERVER_HOST . 'auth');
-            curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml'));
-            curl_setopt($ch, CURLOPT_HEADER, FALSE);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($_POST));
-            $return = curl_exec($ch);
-            $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpcode == 400){
-                header("Location: ?" . $return);
-                exit;
-            }
-            elseif ($httpcode == 200){
-                $json = json_decode($return, true);
-                $validity = $remember ? (time() + (604_800)) : (time() + (3600));
-                setcookie("authenticationToken", $json['token'], cookieOptions($validity, true));
-                setcookie("username", $json['username'], cookieOptions($validity, false));
-                setcookie("isAdmin", $json['isAdmin'] ? '1' : '0', cookieOptions($validity, false));
-                setcookie("isOutdated", $json['isOutdated'] ? '1' : '0', cookieOptions($validity, false));
-                header("Location: .");
-                exit;
-            }
-        }
-
-
-        $loginfile = file_get_contents("login.html");
-        $loginfile = str_replace("_REPLACE_ME_IS_PUBLIC_MODE", $AE2_IS_PUBLIC_MODE ? "true" : "false", $loginfile);
-        echo $loginfile;
+    function apiError($code, $status) {
+        header('Content-Type: application/json; charset=UTF-8');
+        header('Cache-Control: no-store');
+        http_response_code($code);
+        if ($code === 401) header('WWW-Authenticate: Bearer');
+        echo json_encode(['status' => $status, 'data' => null]);
         exit;
     }
-    if (isset($_GET['logout'])) {
-        $ch = curl_init($AE2_SERVER_HOST . 'auth?revoke');
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml', 'Authorization: Bearer ' . $_COOKIE['authenticationToken']));
-        curl_setopt($ch, CURLOPT_HEADER, FALSE);
+
+    function isSameOriginForm() {
+        if (isset($_SERVER['HTTP_SEC_FETCH_SITE'])) {
+            return in_array($_SERVER['HTTP_SEC_FETCH_SITE'], ['same-origin', 'none'], true);
+        }
+        // Nonbrowser clients may omit both browser-origin headers.
+        if (!isset($_SERVER['HTTP_ORIGIN'])) return true;
+        $origin = parse_url($_SERVER['HTTP_ORIGIN']);
+        $scheme = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http';
+        $expected = parse_url($scheme . '://' . ($_SERVER['HTTP_HOST'] ?? ''));
+        return is_array($origin) && is_array($expected)
+            && isset($origin['scheme'], $origin['host'], $expected['host'])
+            && !isset($origin['user']) && !isset($origin['pass'])
+            && !isset($origin['path']) && !isset($origin['query']) && !isset($origin['fragment'])
+            && strtolower($origin['scheme']) === $scheme
+            && strcasecmp($origin['host'], $expected['host']) === 0
+            && ($origin['port'] ?? ($scheme === 'https' ? 443 : 80))
+                === ($expected['port'] ?? ($scheme === 'https' ? 443 : 80));
+    }
+
+    function upstreamRequest($url, $method, $headers, $body) {
+        $responseHeaders = [];
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-        $return = curl_exec($ch);
-        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($ch, $line) use (&$responseHeaders) {
+            $parts = explode(':', $line, 2);
+            if (count($parts) === 2 && in_array(strtolower(trim($parts[0])),
+                    ['content-type', 'allow', 'www-authenticate'], true)) {
+                $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+            }
+            return strlen($line);
+        });
+        if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        if ($method === 'HEAD') curl_setopt($ch, CURLOPT_NOBODY, true);
+        $response = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-        $validity = (time() - 3600);
-        setcookie("authenticationToken", "", cookieOptions($validity, true));
-        setcookie("username", "", cookieOptions($validity, false));
-        setcookie("isAdmin", '', cookieOptions($validity, false));
-        setcookie("isOutdated", '', cookieOptions($validity, false));
-        header("Location: .");
-        exit;
+        return [$response, $code, $responseHeaders];
     }
 
-    if (isset($_GET['API'])){
-
-        $api_path = $_GET['API'];
-        unset($_GET['API']);
-
-
+    $method = $_SERVER['REQUEST_METHOD'];
+    if (isset($_GET['API'])) {
+        $apiPath = $_GET['API'];
+        if (!is_string($apiPath) || !preg_match('~^api(?:/[A-Za-z0-9_-]+)+$~D', $apiPath)) {
+            apiError(404, 'NOT_FOUND');
+        }
+        $publicAuth = in_array($apiPath, ['api/auth/login', 'api/auth/register'], true);
+        $authorization = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        $hasBearer = preg_match('/^Bearer +\S+$/iD', $authorization) === 1;
+        if (isset($_SERVER['HTTP_AUTHORIZATION']) && !$hasBearer) {
+            apiError(401, 'UNAUTHORIZED');
+        }
+        $hasCookie = isset($_COOKIE['authenticationToken']);
+        $mutation = !in_array($method, ['GET', 'HEAD', 'OPTIONS'], true);
+        // Check the browser's marker before translating its cookie into an upstream Bearer token.
+        if (!$hasBearer && $hasCookie && !$publicAuth && $mutation
+                && ($_SERVER['HTTP_X_AE2_REQUEST'] ?? '') !== 'true') {
+            apiError(403, 'CSRF_REJECTED');
+        }
+        if (!$hasBearer && !$hasCookie && !$publicAuth && $method !== 'OPTIONS') {
+            apiError(401, 'UNAUTHORIZED');
+        }
+        $headers = ['Content-Type: ' . ($_SERVER['CONTENT_TYPE'] ?? '')];
+        if ($hasBearer) $headers[] = 'Authorization: ' . $authorization;
+        elseif ($hasCookie && !$publicAuth) $headers[] = 'Authorization: Bearer ' . $_COOKIE['authenticationToken'];
         $params = $_GET;
+        unset($params['API']);
+        $url = $AE2_SERVER_HOST . $apiPath;
+        if ($params) $url .= '?' . http_build_query($params);
+        [$response, $code, $responseHeaders] = upstreamRequest($url, $method, $headers,
+            $mutation ? file_get_contents('php://input') : null);
+        if ($response === false) apiError(502, 'UPSTREAM_UNAVAILABLE');
+        if ($hasCookie && !$hasBearer && !$publicAuth
+                && ($code === 401 || ($apiPath === 'api/auth/logout' && $method === 'POST' && $code === 200))) {
+            clearSessionCookies();
+        }
+        header('Cache-Control: no-store');
+        foreach ($responseHeaders as $name => $value) header($name . ': ' . $value);
+        http_response_code($code ?: 502);
+        echo $response;
+        exit;
+    }
 
-        $ch = curl_init($AE2_SERVER_HOST . $api_path . '?' . http_build_query($params));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml', 'Authorization: Bearer ' . $_COOKIE['authenticationToken']));
-        curl_setopt($ch, CURLOPT_HEADER, FALSE);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-        $return = curl_exec($ch);
-        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($httpcode == 401) {
-            $validity = (time() - 3600);
-            setcookie("authenticationToken", "", cookieOptions(time() - 3600, true));
-            setcookie("username", "", cookieOptions($validity, false));
-            setcookie("isAdmin", '', cookieOptions($validity, false));
-            setcookie("isOutdated", '', cookieOptions($validity, false));
-            header("Location: .");
+    if ($method === 'POST' && !isSameOriginForm()) apiError(403, 'CSRF_REJECTED');
+    if (!isset($_COOKIE['authenticationToken'])) {
+        if ($method === 'POST' && isset($_POST['password'])) {
+            $register = isset($_POST['register']);
+            $remember = isset($_POST['remember']) && $_POST['remember'] === 'on';
+            $body = ['username' => $register ? $_POST['register'] : ($_POST['username'] ?? ''),
+                'password' => $_POST['password']];
+            if (!$register) $body['rememberMe'] = $remember;
+            [$response, $code] = upstreamRequest($AE2_SERVER_HOST . 'api/auth/' . ($register ? 'register' : 'login'),
+                'POST', ['Content-Type: application/json'], json_encode($body));
+            $envelope = $response === false ? null : json_decode($response, true);
+            if ($envelope && $envelope['status'] === 'OK' && $code === ($register ? 202 : 200)) {
+                $data = $envelope['data'];
+                if ($register) {
+                    header('Location: ?confirmregistration&token=' . rawurlencode($data['token']));
+                } else {
+                    $validity = time() + ($remember ? 604800 : 3600);
+                    setcookie('authenticationToken', $data['token'], cookieOptions($validity, true));
+                    setcookie('username', $data['username'], cookieOptions($validity, false));
+                    setcookie('isAdmin', $data['isAdmin'] ? '1' : '0', cookieOptions($validity, false));
+                    setcookie('isOutdated', $data['isOutdated'] ? '1' : '0', cookieOptions($validity, false));
+                    header('Location: .');
+                }
+            } else {
+                $status = $envelope['status'] ?? 'UPSTREAM_UNAVAILABLE';
+                $knownError = in_array($status, ['notonline', 'invalidpassword', 'invaliduser'], true);
+                header('Location: ?' . ($knownError ? $status : 'error=' . rawurlencode($status)));
+            }
             exit;
         }
-
-        print($return);
-
+        $loginfile = file_get_contents(__DIR__ . '/login.html');
+        echo str_replace('_REPLACE_ME_IS_PUBLIC_MODE', $AE2_IS_PUBLIC_MODE ? 'true' : 'false', $loginfile);
         exit;
     }
 ?>
@@ -249,7 +270,7 @@
                 <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
                 <br>
                 You are logged in as <span id="username" style="font-weight: bold;"></span> <br>
-                <button onclick="document.location.href='?logout'">LogOut</button>
+                <button onclick="logout()">LogOut</button>
             </section>
         </section>
     </section>
@@ -406,13 +427,13 @@
     function onTrackThisGridChange(el) {
         if (selectedGrid == -1) return;
         let trackThisGrid = el.checked;
-        getJSONChecked('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
+        getJSONChecked(gridURL(selectedGrid, 'settings'), function(data) {
             data = data.data;
             el.checked = data['isTracked'];
             updateGridList();
         }, function(data) {
             showAlert(data.status + ": " + data.data);
-        });
+        }, 'PATCH', { isTracked: trackThisGrid });
     }
     function refreshTerminal() {
         if (currentWindow == 0)
@@ -636,7 +657,7 @@
         const gridId = selectedGrid;
         let message = "Asking for " + escapeCPUText(globalCPUList[cpuId].name) + "...";
         pushLoadingScreen(message);
-        $.getJSON('get?grid=' + gridId + '&cpu=' + encodeURIComponent(cpuId).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('GET', gridURL(gridId, 'cpus/' + encodeURIComponent(cpuId)), null, function(data){
             if (selectedCPU !== cpuId || selectedGrid !== gridId || !globalCPUList[cpuId]) {
                 popLoadingScreen(message);
                 return;
@@ -700,7 +721,7 @@
             return;
         }
         const gridId = selectedGrid;
-        $.getJSON('list?grid=' + gridId, function(data) {
+        requestJSON('GET', gridURL(gridId, 'cpus'), null, function(data) {
             if (selectedGrid !== gridId) return;
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
@@ -721,7 +742,7 @@
         });
     }
     function updateGridList(onDone){
-        $.getJSON('grids', function(data) {
+        $.getJSON('api/grids', function(data) {
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 return;
@@ -762,6 +783,10 @@
                 document.getElementById('gridselection').size = 2;
             if (onDone)
                 onDone();
+        }).fail(function(response) {
+            const error = response.responseJSON;
+            showAlert(error ? error.status + (error.data ? ': ' + error.data : '')
+                : 'HTTP ' + response.status + ': Could not load grids.');
         });
     }
     updateGridList();
@@ -819,8 +844,41 @@
         }
         container.appendChild(details);
     }
-    function getJSONChecked(url, onSuccess, onFailure){
-        $.getJSON(url, function(data){
+    function requestJSON(method, url, body, onResponse, onTransportFailure) {
+        const options = { url, method, dataType: 'json', success: onResponse };
+        if (method !== 'GET') options.headers = { 'X-AE2-Request': 'true' };
+        if (body !== null) {
+            options.contentType = 'application/json';
+            options.data = JSON.stringify(body);
+        }
+        return $.ajax(options).fail(function(response) {
+            if (response && response.responseJSON) {
+                onResponse(response.responseJSON);
+            } else if (onTransportFailure) {
+                onTransportFailure(response);
+            } else {
+                onResponse({ status: 'HTTP_ERROR', data: 'Request failed' +
+                    (response && response.status ? ' (HTTP ' + response.status + ')' : '') });
+            }
+        });
+    }
+    function logout() {
+        requestJSON('POST', 'api/auth/logout', null, function(data) {
+            if (data.status === 'OK' || data.status === 'UNAUTHORIZED') {
+                document.location.href = '.';
+            } else {
+                showAlert(data.status + ': ' + data.data);
+            }
+        }, function(response) {
+            if (response && response.status === 401) document.location.href = '.';
+            else showAlert('The logout response was lost. Please try again.');
+        });
+    }
+    function gridURL(grid, resource) {
+        return 'api/grids/' + encodeURIComponent(grid) + '/' + resource;
+    }
+    function getJSONChecked(url, onSuccess, onFailure, method = 'GET', body = null){
+        requestJSON(method, url, body, function(data){
             if (data.status !== "OK"){
                 onFailure(data);
                 return;
@@ -970,7 +1028,7 @@
             return;
         let message = "Asking for item list...";
         pushLoadingScreen(message);
-        $.getJSON('items?grid=' + selectedGrid, function(data){
+        requestJSON('GET', gridURL(selectedGrid, 'items'), null, function(data){
             console.log(data);
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
@@ -989,7 +1047,7 @@
             return;
         let message = "Asking for tracking history list...";
         pushLoadingScreen(message);
-        getJSONChecked('trackinghistory?grid=' + selectedGrid, function(data){
+        getJSONChecked(gridURL(selectedGrid, 'crafting-history'), function(data){
             console.log(data);
             data = data.data;
             let html = "<table>";
@@ -1189,7 +1247,7 @@
         isInterfaceChartInitialized = false;
         isItemChartInitialized = false;
         pushLoadingScreen(message);
-        getJSONChecked('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
+        getJSONChecked(gridURL(selectedGrid, 'crafting-history/' + encodeURIComponent(id)), function(data){
             console.log(data);
             data = data.data;
 
@@ -1270,7 +1328,7 @@
             document.getElementById('terminalCPUListForJob').innerHTML = "...";
             let message = "Sending order...";
             pushLoadingScreen(message);
-            $.getJSON('order?grid=' + selectedGrid + '&itemKey=' + encodeURIComponent(itemKey) + "&quantity=" + quantity, function(data){
+            requestJSON('POST', gridURL(selectedGrid, 'crafting-plans'), { itemKey, quantity }, function(data){
                 console.log(data);
                 if(data.status !== "OK"){
                     if (data.status === "ITEM_IDENTITY_UNKNOWN")
@@ -1295,7 +1353,7 @@
                     //setCurrentScreen(0);
                 }
                 popLoadingScreen(message);
-            }).fail(function() {
+            }, function() {
                 popLoadingScreen(message);
                 showAlert("The order response was lost. Check the crafting jobs before placing another order.");
             });
@@ -1307,7 +1365,7 @@
         if(currentWindow != 2){
             return;
         }
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id, function(data){
+        requestJSON('GET', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id), null, function(data){
             if(currentWindow != 2){
                 return;
             }
@@ -1375,7 +1433,7 @@
         }
         setCurrentScreen(0);
         refreshTerminal();
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&cancel", function(data){
+        requestJSON('DELETE', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id), null, function(data){
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 return;
@@ -1397,7 +1455,7 @@
         }
         let message = "Submitting job...";
         pushLoadingScreen(message);
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&submit" + "&cpu=" + encodeURIComponent(cpuForJob).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('POST', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id + '/submit'), { cpuKey: cpuForJob }, function(data){
             if (data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 if (data.status === "CPU_NOT_FOUND") {
@@ -1421,7 +1479,7 @@
         }
         let message = "Cancelling job...";
         pushLoadingScreen(message);
-        $.getJSON('cancelcpu?grid=' + selectedGrid + '&cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('POST', gridURL(selectedGrid, 'cpus/' + encodeURIComponent(selectedCPU) + '/cancel'), null, function(data){
             if (data.status !== "OK") showAlert(data.status + ": " + data.data);
             updateCPUList();
             refreshTerminal();

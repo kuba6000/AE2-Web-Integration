@@ -19,6 +19,11 @@ function terminal(page) {
         requests.push(request);
         return { fail(callback) { request.failure = callback; return this; } };
     };
+    $.ajax = options => {
+        const request = { ...options };
+        requests.push(request);
+        return { fail(callback) { request.failure = callback; return this; } };
+    };
     const context = vm.createContext({
         document, $, console: { log() {} }, setTimeout() {},
         window: { prompt: () => '3' },
