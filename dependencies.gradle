@@ -47,8 +47,22 @@ dependencies {
     shadowImplementation(project(path: ':core', configuration: 'default')) {
         transitive = false
     }
+    shadowImplementation('com.electronwill.night-config:core:3.6.4') {
+        transitive = false
+    }
+    shadowImplementation('com.electronwill.night-config:toml:3.6.4') {
+        transitive = false
+    }
 }
 
 tasks.named("shadowJar").configure {
+    relocate('com.electronwill.nightconfig', 'pl.kuba6000.ae2webintegration.internal.nightconfig')
+    if (minimizeShadowedDependencies.toBoolean()) {
+        // Object conversion discovers field annotations reflectively.
+        minimize {
+            exclude(dependency('com.electronwill.night-config:core:.*'))
+            exclude(dependency('com.electronwill.night-config:toml:.*'))
+        }
+    }
     dependsOn(":core:jar")
 }

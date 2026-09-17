@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.platform;
 
 import java.io.File;
+import java.util.Map;
 import java.util.UUID;
 
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -8,6 +9,7 @@ import net.minecraftforge.fml.common.FMLCommonHandler;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.ae2interface.config.LegacyConfigReader;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
 @Desugar
@@ -40,5 +42,10 @@ public record Platform(File configDir) implements IServerPlatform {
     @Override
     public File getConfigDirectory() {
         return configDir;
+    }
+
+    @Override
+    public Map<String, Object> readLegacyConfig() {
+        return LegacyConfigReader.read(getConfigDirectory());
     }
 }
