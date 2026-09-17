@@ -35,10 +35,9 @@ public final class AuthService {
     private static final Object authenticationStateLock = new Object();
     private static final ConcurrentHashMap<String, AuthSession> sessions = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<UUID, PendingRegistration> registrations = new ConcurrentHashMap<>();
-    private static volatile RateLimiter rateLimiter = new RateLimiter(
-        Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(),
-        RATE_LIMIT_WINDOW_MILLIS);
-    private static volatile ClientAddressResolver clientAddressResolver = ClientAddressResolver.fromConfig("");
+    // Initialized by reloadHttpSettings() before the HTTP listener starts accepting requests.
+    private static volatile RateLimiter rateLimiter;
+    private static volatile ClientAddressResolver clientAddressResolver;
 
     private AuthService() {}
 

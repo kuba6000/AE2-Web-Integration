@@ -7,6 +7,7 @@ import java.util.List;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
 import com.google.common.net.InetAddresses;
 
 /**
@@ -23,15 +24,8 @@ import com.google.common.net.InetAddresses;
 public final class ClientAddressResolver {
 
     /** A configured trusted entry: an address plus how many leading bits of it are significant. */
-    private static final class Entry {
-
-        private final byte[] address;
-        private final int prefixBits;
-
-        private Entry(byte[] address, int prefixBits) {
-            this.address = address;
-            this.prefixBits = prefixBits;
-        }
+    @Desugar
+    private record Entry(byte[] address, int prefixBits) {
 
         boolean matches(byte[] candidate) {
             // Different families (4 vs 16 bytes) never match.
