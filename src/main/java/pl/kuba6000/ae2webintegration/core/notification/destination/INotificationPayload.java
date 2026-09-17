@@ -10,6 +10,7 @@ public interface INotificationPayload {
 
     /**
      * The payload should be serializable to json for WebhookHelper
+     * 
      * @return the payload serialized in json format
      */
     JsonObject serializePayload();

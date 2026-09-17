@@ -13,8 +13,8 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.ntfy.NtfyDestination;
-import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
 
 public class NotificationManager extends Thread {
 
