@@ -216,12 +216,6 @@ If you already have a web server and want to host the panel there, you can! The
 [`example_website`](./example_website) directory contains a ready-to-use simple PHP
 proxy. It forwards API calls from your web server to the AE2 Web Integration endpoint.
 
-If another reverse proxy terminates HTTPS in front of the PHP site, preserve the public `Host` and
-overwrite `X-Forwarded-Proto` as above. Configure its direct connection IP in `$AE2_TRUSTED_PROXIES`
-in `index.php` (exact IPs; loopback `127.0.0.1` and `::1` are included by default). This PHP setting is
-separate from the mod's `trusted_proxies`. Cookies omit `Path`, so the browser scopes them to the
-directory of the login page, including installations under a path such as `/ae2/`.
-
 See the [OpenAPI generator guide](tools/openapi-doclet/README.md) for generating the API
 specification from endpoint annotations and Javadocs.
 
