@@ -56,6 +56,7 @@ import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.WebHandler;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Login;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Register;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
@@ -436,7 +437,7 @@ class ServerLifecycleHttpTest {
         try {
             Future<?> request = httpWorker.submit(() -> {
                 try {
-                    new AE2Controller.WebHandler().handle(exchange);
+                    new WebHandler().handle(exchange);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -804,7 +805,7 @@ class ServerLifecycleHttpTest {
                     .set("Origin", "https://terminal.example");
                 exchange.getRequestHeaders()
                     .set("X-Forwarded-Proto", "https");
-                new AE2Controller.WebHandler().handle(exchange);
+                new WebHandler().handle(exchange);
                 assertEquals(
                     peer.equals("192.0.2.11") ? HttpURLConnection.HTTP_MOVED_TEMP : HttpURLConnection.HTTP_FORBIDDEN,
                     exchange.responseCode,

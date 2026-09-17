@@ -6,8 +6,8 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -58,7 +58,7 @@ public final class Logout extends IAsyncRequest {
 
     @Override
     public void handle() {
-        AE2Controller.logoutApi(context);
+        AuthService.logout(context.getExchange());
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
     }
 }

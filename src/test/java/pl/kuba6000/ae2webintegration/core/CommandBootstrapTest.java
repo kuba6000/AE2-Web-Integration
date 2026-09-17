@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.UUID;
 import java.util.function.Consumer;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -68,7 +67,7 @@ class CommandBootstrapTest {
     }
 
     @Test
-    void testAuthHandlerWithToken() {
+    void testAuthHandlerWithToken() throws Exception {
         RecordingBuilder builder = new RecordingBuilder();
         CommandBootstrap.init(builder);
 
@@ -76,18 +75,13 @@ class CommandBootstrapTest {
         ctx.args = new String[] { "auth", "my-test-token" };
         ctx.playerIdentity = new PlayerIdentity(UUID.randomUUID(), "Player");
 
-        // Put a registration in the awaiting map so registerPlayer succeeds
-        UUID uuid = ctx.playerIdentity.uuid;
-        AE2Controller.awaitingRegistration.put(uuid, Pair.of("my-test-token", "password-hash"));
-
-        try {
+        try (RegistrationTestFixture registrations = new RegistrationTestFixture()) {
+            String token = registrations.begin(ctx.playerIdentity, "test-password");
+            ctx.args = new String[] { "auth", token };
             builder.authHandler.accept(ctx);
-
-            // Should have read args[1] as token
-            // RegisterPlayer should have succeeded
             assertNull(ctx.lastError, "no error expected");
-        } finally {
-            AE2Controller.awaitingRegistration.remove(uuid);
+            builder.authHandler.accept(ctx);
+            assertNotNull(ctx.lastError, "confirmation tokens are consumed by the command");
         }
     }
 

@@ -12,11 +12,12 @@ import java.io.File;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -65,53 +66,58 @@ class CoreEngineLifecycleTest extends GridTestScope {
         ICraftingCPUCluster cpu = new TestCpu();
         AE2JobTracker.addJob(cpu, grid, false);
         gridData.trackingInfo.trackingInfos.put(1, AE2JobTracker.findActiveJob(cpu));
-        AE2Controller.awaitingRegistration.put(UUID.randomUUID(), Pair.of("token", "password"));
-        StableKey itemKey = AE2Controller.itemIdentities.remember(
-            grid,
-            cpu.web$getFinalOutput()
-                .web$what());
+        try (RegistrationTestFixture registrations = new RegistrationTestFixture()) {
+            PlayerIdentity registeringPlayer = new PlayerIdentity(UUID.randomUUID(), "RegisteringPlayer");
+            String registrationToken = registrations.begin(registeringPlayer, "test-password");
+            StableKey itemKey = AE2Controller.itemIdentities.remember(
+                grid,
+                cpu.web$getFinalOutput()
+                    .web$what());
 
-        IAE processInterface = TestGridFixtures.ae(grid);
-        AE2Controller.AE2Interface = processInterface;
-        IServerPlatform processPlatform = new IServerPlatform() {
+            IAE processInterface = TestGridFixtures.ae(grid);
+            AE2Controller.AE2Interface = processInterface;
+            IServerPlatform processPlatform = new IServerPlatform() {
 
-            @Override
-            public UUID getOnlinePlayerUUID(String username) {
-                return null;
-            }
+                @Override
+                public UUID getOnlinePlayerUUID(String username) {
+                    return null;
+                }
 
-            @Override
-            public File getConfigDirectory() {
-                return null;
-            }
+                @Override
+                public File getConfigDirectory() {
+                    return null;
+                }
 
-            @Override
-            public File getWorldDirectory() {
-                return gridSave;
-            }
-        };
-        AE2Controller.serverPlatform = processPlatform;
-        CoreEngine.onServerStopped();
-        assertDoesNotThrow(CoreEngine::onServerStopped, "world teardown must be idempotent");
+                @Override
+                public File getWorldDirectory() {
+                    return gridSave;
+                }
+            };
+            AE2Controller.serverPlatform = processPlatform;
+            CoreEngine.onServerStopped();
+            assertDoesNotThrow(CoreEngine::onServerStopped, "world teardown must be idempotent");
 
-        assertSame(processInterface, AE2Controller.AE2Interface);
-        assertSame(processPlatform, AE2Controller.serverPlatform);
-        assertTrue(
-            TestGridFixtures.isTracked(
-                new GridIdentityRegistry(new File(gridSave, "ae2webintegration/grid-identities.json")),
-                gridKey),
-            "settings remain in the stopped save");
-        assertFalse(
-            TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, gridKey),
-            "the stopped world must not leak tracking into another world");
-        assertTrue(AE2Controller.awaitingRegistration.isEmpty());
-        assertNull(AE2Controller.itemIdentities.resolve(itemKey));
-        assertNull(CoreEngine.GRID_IDENTITIES.getGrid(gridKey));
-        assertNull(AE2JobTracker.findActiveJob(cpu));
-        assertTrue(gridData.trackingInfo.trackingInfos.isEmpty());
-        assertNull(gridData.getJob(planId));
-        assertTrue(pendingPlan.isCancelled());
-        assertEquals(1, gridData.addJob(new CompletableFuture<>()), "the next world gets fresh plan ids");
+            assertSame(processInterface, AE2Controller.AE2Interface);
+            assertSame(processPlatform, AE2Controller.serverPlatform);
+            assertTrue(
+                TestGridFixtures.isTracked(
+                    new GridIdentityRegistry(new File(gridSave, "ae2webintegration/grid-identities.json")),
+                    gridKey),
+                "settings remain in the stopped save");
+            assertFalse(
+                TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, gridKey),
+                "the stopped world must not leak tracking into another world");
+            assertFalse(
+                CommandProcessor.registerPlayer(registeringPlayer, registrationToken)
+                    .isSuccess());
+            assertNull(AE2Controller.itemIdentities.resolve(itemKey));
+            assertNull(CoreEngine.GRID_IDENTITIES.getGrid(gridKey));
+            assertNull(AE2JobTracker.findActiveJob(cpu));
+            assertTrue(gridData.trackingInfo.trackingInfos.isEmpty());
+            assertNull(gridData.getJob(planId));
+            assertTrue(pendingPlan.isCancelled());
+            assertEquals(1, gridData.addJob(new CompletableFuture<>()), "the next world gets fresh plan ids");
+        }
     }
 
     private static final class TestStack implements IAEGenericStack, IAEKey {

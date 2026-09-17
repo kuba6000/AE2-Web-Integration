@@ -3,10 +3,8 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
-import java.net.ServerSocket;
 import java.util.UUID;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -14,11 +12,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
-import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.config.Config;
-import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
+import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -34,30 +31,18 @@ class CommandProcessorTest {
     private static final UUID OTHER_UUID = UUID.fromString("11111111-2222-3333-4444-555555555555");
     private static final PlayerIdentity TEST_PLAYER = new PlayerIdentity(TEST_UUID, "Player");
     private static final PlayerIdentity OTHER_PLAYER = new PlayerIdentity(OTHER_UUID, "OtherPlayer");
-    private static IConfigValue<Integer> previousPort;
+
     private static File previousConfigDirectory;
+    private RegistrationTestFixture registrations;
 
     @BeforeAll
-    static void setupServer() throws Exception {
-        previousPort = ConfigBootstrap.aePortValue;
+    static void setupConfig() {
         previousConfigDirectory = Config.getConfigDirectory();
-        int testPort;
-        try (ServerSocket socket = new ServerSocket(0)) {
-            testPort = socket.getLocalPort();
-        }
-        ConfigBootstrap.aePortValue = () -> testPort;
-        // Initialize Config so CoreData can resolve its data file path
         Config.init(new File(System.getProperty("java.io.tmpdir")));
-
-        // Own a complete listener lifecycle even when another static-state test ran first in this JVM.
-        AE2Controller.stopHTTPServer();
-        AE2Controller.startHTTPServer();
     }
 
     @AfterAll
-    static void stopServer() {
-        AE2Controller.stopHTTPServer();
-        ConfigBootstrap.aePortValue = previousPort;
+    static void restoreConfig() {
         if (previousConfigDirectory != null) {
             Config.init(previousConfigDirectory.getParentFile());
         }
@@ -65,15 +50,14 @@ class CommandProcessorTest {
 
     @BeforeEach
     void setUp() {
-        // Clean registration map before each test
-        AE2Controller.awaitingRegistration.clear();
+        registrations = new RegistrationTestFixture();
         AE2Controller.AE2Interface = new TestAE();
         CoreDataTestFixture.reset();
     }
 
     @AfterEach
     void tearDown() {
-        AE2Controller.awaitingRegistration.clear();
+        registrations.close();
     }
 
     // --- reload tests ---
@@ -114,78 +98,62 @@ class CommandProcessorTest {
     // --- registerPlayer tests ---
 
     @Test
-    void testRegisterPlayerWithValidToken() {
-        String passwordHash = "test-password-hash";
-        String token = "correct-token";
-        AE2Controller.awaitingRegistration.put(TEST_UUID, Pair.of(token, passwordHash));
-
-        CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, token);
-
-        assertTrue(result.isSuccess(), "registration should succeed with valid token");
-        assertFalse(
-            AE2Controller.awaitingRegistration.containsKey(TEST_UUID),
-            "registration should be removed after successful auth");
-    }
-
-    @Test
-    void testRegisterPlayerWithInvalidToken() {
-        String passwordHash = "test-password-hash";
-        AE2Controller.awaitingRegistration.put(TEST_UUID, Pair.of("correct-token", passwordHash));
-
-        CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, "wrong-token");
-
-        assertFalse(result.isSuccess(), "registration should fail with wrong token");
-        assertEquals("Invalid token!", result.getMessage());
-        // Registration should NOT be removed on failure
+    void testRegisterPlayerWithValidToken() throws Exception {
+        String token = registrations.begin(TEST_PLAYER, "test-password");
         assertTrue(
-            AE2Controller.awaitingRegistration.containsKey(TEST_UUID),
-            "registration should persist after failed auth");
+            CommandProcessor.registerPlayer(TEST_PLAYER, token)
+                .isSuccess());
+        assertTrue(CoreData.verifyPassword(CoreData.getAccount(TEST_PLAYER.name), "test-password"));
+        assertFalse(
+            CommandProcessor.registerPlayer(TEST_PLAYER, token)
+                .isSuccess(),
+            "confirmation tokens are single-use");
     }
 
     @Test
-    void testRegisterPlayerDoesNotRequireAeState() {
-        String token = "correct-token";
+    void testRegisterPlayerWithInvalidToken() throws Exception {
+        String token = registrations.begin(TEST_PLAYER, "test-password");
+        assertFalse(
+            CommandProcessor.registerPlayer(TEST_PLAYER, "wrong-token")
+                .isSuccess());
+        assertNull(CoreData.getAccount(TEST_PLAYER.name));
+        assertTrue(
+            CommandProcessor.registerPlayer(TEST_PLAYER, token)
+                .isSuccess(),
+            "a wrong token does not consume registration");
+    }
+
+    @Test
+    void testRegisterPlayerDoesNotRequireAeState() throws Exception {
+        String token = registrations.begin(TEST_PLAYER, "test-password");
         AE2Controller.AE2Interface = null;
-        AE2Controller.awaitingRegistration.put(TEST_UUID, Pair.of(token, "hash"));
-
-        CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, token);
-
-        assertTrue(result.isSuccess());
-        assertFalse(AE2Controller.awaitingRegistration.containsKey(TEST_UUID));
+        assertTrue(
+            CommandProcessor.registerPlayer(TEST_PLAYER, token)
+                .isSuccess());
     }
 
     @Test
     void testRegisterPlayerNoRegistration() {
-        CommandResult result = CommandProcessor.registerPlayer(TEST_PLAYER, "any-token");
-        assertFalse(result.isSuccess(), "registration should fail when no registration exists");
-        assertTrue(
-            result.getMessage()
-                .toLowerCase()
-                .contains("initialize"),
-            "error should mention initialization: " + result.getMessage());
+        assertFalse(
+            CommandProcessor.registerPlayer(TEST_PLAYER, "any-token")
+                .isSuccess());
     }
 
     @Test
-    void testRegisterPlayerMultipleRegistrations() {
-        // Two different players with different tokens
-        String token1 = "token1";
-        String token2 = "token2";
-        AE2Controller.awaitingRegistration.put(TEST_UUID, Pair.of(token1, "hash1"));
-        AE2Controller.awaitingRegistration.put(OTHER_UUID, Pair.of(token2, "hash2"));
-
-        // Auth the first player
-        CommandResult result1 = CommandProcessor.registerPlayer(TEST_PLAYER, token1);
-        assertTrue(result1.isSuccess(), "player 1 should succeed");
+    void testRegisterPlayerMultipleRegistrations() throws Exception {
+        String token1 = registrations.begin(TEST_PLAYER, "first-password");
+        String token2 = registrations.begin(OTHER_PLAYER, "second-password");
         assertFalse(
-            AE2Controller.awaitingRegistration.containsKey(TEST_UUID),
-            "player 1 registration should be removed");
-
-        // Auth the second player
-        CommandResult result2 = CommandProcessor.registerPlayer(OTHER_PLAYER, token2);
-        assertTrue(result2.isSuccess(), "player 2 should succeed");
-        assertFalse(
-            AE2Controller.awaitingRegistration.containsKey(OTHER_UUID),
-            "player 2 registration should be removed");
+            CommandProcessor.registerPlayer(OTHER_PLAYER, token1)
+                .isSuccess());
+        assertTrue(
+            CommandProcessor.registerPlayer(TEST_PLAYER, token1)
+                .isSuccess());
+        assertTrue(
+            CommandProcessor.registerPlayer(OTHER_PLAYER, token2)
+                .isSuccess());
+        assertTrue(CoreData.verifyPassword(CoreData.getAccount(TEST_PLAYER.name), "first-password"));
+        assertTrue(CoreData.verifyPassword(CoreData.getAccount(OTHER_PLAYER.name), "second-password"));
     }
 
     private static class TestAE implements IAE {

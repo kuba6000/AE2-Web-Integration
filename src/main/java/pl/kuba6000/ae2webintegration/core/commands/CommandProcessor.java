@@ -1,11 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.commands;
 
-import org.apache.commons.lang3.tuple.Pair;
-
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
-import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 
 public class CommandProcessor {
 
@@ -37,16 +35,11 @@ public class CommandProcessor {
      * @return a CommandResult with success/failure status and a human-readable message
      */
     public static CommandResult registerPlayer(PlayerIdentity player, String token) {
-        Pair<String, String> registration = AE2Controller.awaitingRegistration.get(player.uuid);
-        if (registration == null) {
-            return CommandResult.error("You have to initialize the registration on the web interface first!");
-        }
-        if (!registration.getLeft()
-            .equals(token)) {
-            return CommandResult.error("Invalid token!");
-        }
-        CoreData.setPassword(player, registration.getRight());
-        AE2Controller.awaitingRegistration.remove(player.uuid);
-        return CommandResult.success("Registered successfully!");
+        return switch (AuthService.confirmRegistration(player, token)) {
+            case NOT_PENDING -> CommandResult
+                .error("You have to initialize the registration on the web interface first!");
+            case INVALID_TOKEN -> CommandResult.error("Invalid token!");
+            case SUCCESS -> CommandResult.success("Registered successfully!");
+        };
     }
 }
