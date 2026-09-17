@@ -603,14 +603,41 @@ public class AE2Controller {
             .getFirst("Origin");
         if (origin == null) return true; // Non-browser clients and older browsers without Fetch Metadata.
         try {
+            String scheme = "http";
+            if (clientAddressResolver.isTrustedProxy(
+                exchange.getRemoteAddress()
+                    .getAddress(),
+                exchange.getLocalAddress()
+                    .getAddress())) {
+                List<String> forwarded = exchange.getRequestHeaders()
+                    .get("X-Forwarded-Proto");
+                if (forwarded != null) {
+                    // The trusted proxy must overwrite this header with the external protocol.
+                    if (forwarded.size() != 1) return false;
+                    scheme = forwarded.get(0)
+                        .trim();
+                    if (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https")) return false;
+                }
+            }
+            String host = exchange.getRequestHeaders()
+                .getFirst("Host");
+            if (host == null) return false;
             URI source = URI.create(origin);
-            URI target = URI.create(
-                "http://" + exchange.getRequestHeaders()
-                    .getFirst("Host"));
-            int sourcePort = source.getPort() < 0 ? ("https".equalsIgnoreCase(source.getScheme()) ? 443 : 80)
-                : source.getPort();
-            int targetPort = target.getPort() < 0 ? 80 : target.getPort();
-            return "http".equalsIgnoreCase(source.getScheme()) && source.getHost() != null
+            URI target = URI.create(scheme + "://" + host);
+            int defaultPort = "https".equalsIgnoreCase(scheme) ? 443 : 80;
+            int sourcePort = source.getPort() < 0 ? defaultPort : source.getPort();
+            int targetPort = target.getPort() < 0 ? defaultPort : target.getPort();
+            return scheme.equalsIgnoreCase(source.getScheme()) && source.getHost() != null
+                && source.getRawUserInfo() == null
+                && source.getRawPath()
+                    .isEmpty()
+                && source.getRawQuery() == null
+                && source.getRawFragment() == null
+                && target.getRawUserInfo() == null
+                && target.getRawPath()
+                    .isEmpty()
+                && target.getRawQuery() == null
+                && target.getRawFragment() == null
                 && source.getHost()
                     .equalsIgnoreCase(target.getHost())
                 && sourcePort == targetPort;

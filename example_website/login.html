@@ -81,7 +81,7 @@ if (url.searchParams.has("error")) {
 }
 
 function acceptCookies(){
-    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7 + "; path=/"; // Set cookie for 7 days
+    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7; // Set cookie for 7 days
     document.getElementById("cookiemonster").style.display = "none"; // Hide the cookie monster section
 }
 
@@ -104,7 +104,7 @@ if (getCookie("cookiesAccepted") !== "true"){
     document.getElementById("cookiemonster").style.display = "flex"; // Show the cookie monster section
 }
 else {
-    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7 + "; path=/";
+    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7;
 }
 
 </script>

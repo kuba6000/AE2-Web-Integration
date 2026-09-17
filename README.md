@@ -149,12 +149,20 @@ from right to left, skips configured trusted proxies, and uses the first untrust
 prevents a client from granting itself localhost access by sending a forged
 `X-Forwarded-For: 127.0.0.1` header directly.
 
+For HTTPS termination, preserve the public `Host` header (including any nonstandard port) and set
+`X-Forwarded-Proto` to the public protocol, `http` or `https`. The mod accepts this protocol header only
+from the same trusted proxies described above. It is used to validate the origin of browser login and
+registration forms when `Sec-Fetch-Site` is absent. The proxy must overwrite `X-Forwarded-Proto`, not
+forward an arbitrary client value or append a list. With multiple proxy hops, the last trusted proxy
+must supply the verified public protocol.
+
 Example Nginx configuration for a proxy running on the same machine:
 
 ```nginx
 location / {
     proxy_pass http://127.0.0.1:2324;
-    proxy_set_header Host $host;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 }
@@ -207,6 +215,12 @@ which keeps all crafting completion notifications enabled.
 If you already have a web server and want to host the panel there, you can! The
 [`example_website`](./example_website) directory contains a ready-to-use simple PHP
 proxy. It forwards API calls from your web server to the AE2 Web Integration endpoint.
+
+If another reverse proxy terminates HTTPS in front of the PHP site, preserve the public `Host` and
+overwrite `X-Forwarded-Proto` as above. Configure its direct connection IP in `$AE2_TRUSTED_PROXIES`
+in `index.php` (exact IPs; loopback `127.0.0.1` and `::1` are included by default). This PHP setting is
+separate from the mod's `trusted_proxies`. Cookies omit `Path`, so the browser scopes them to the
+directory of the login page, including installations under a path such as `/ae2/`.
 
 The HTTP API uses `/api` routes with explicit methods and HTTP error statuses. See the
 [API migration and OpenAPI guide](tools/openapi-doclet/README.md) for routes, authentication and

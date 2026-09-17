@@ -3,12 +3,13 @@
     $AE2_SERVER_HOST = "http://localhost:2324/";
     // Is the public mode enabled on the server
     $AE2_IS_PUBLIC_MODE = true;
+    // Immediate proxy IPs allowed to supply X-Forwarded-Proto. Add remote proxies explicitly.
+    // These proxies must preserve the public Host (including its port) and overwrite this header.
+    $AE2_TRUSTED_PROXIES = ['127.0.0.1', '::1'];
 
     function cookieOptions($expires, $httpOnly) {
-        $directory = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
         return [
             'expires' => $expires,
-            'path' => rtrim($directory, '/') . '/',
             'httponly' => $httpOnly,
             'samesite' => 'Lax',
         ];
@@ -30,6 +31,7 @@
     }
 
     function isSameOriginForm() {
+        global $AE2_TRUSTED_PROXIES;
         if (isset($_SERVER['HTTP_SEC_FETCH_SITE'])) {
             return in_array($_SERVER['HTTP_SEC_FETCH_SITE'], ['same-origin', 'none'], true);
         }
@@ -37,6 +39,11 @@
         if (!isset($_SERVER['HTTP_ORIGIN'])) return true;
         $origin = parse_url($_SERVER['HTTP_ORIGIN']);
         $scheme = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http';
+        if (isset($_SERVER['HTTP_X_FORWARDED_PROTO'])
+                && in_array($_SERVER['REMOTE_ADDR'] ?? '', $AE2_TRUSTED_PROXIES, true)) {
+            $scheme = strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO']));
+            if (!in_array($scheme, ['http', 'https'], true)) return false;
+        }
         $expected = parse_url($scheme . '://' . ($_SERVER['HTTP_HOST'] ?? ''));
         return is_array($origin) && is_array($expected)
             && isset($origin['scheme'], $origin['host'], $expected['host'])
@@ -277,7 +284,7 @@
 </section>
 
 <script>
-    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7 + "; path=/";
+    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7;
     const username = "<?php echo isset($_COOKIE['username']) ? $_COOKIE['username'] : ''; ?>";
     const isAdmin = <?php echo isset($_COOKIE['isAdmin']) ? ($_COOKIE['isAdmin'] == '1' ? 'true' : 'false') : 'false'; ?>;
     const isOutdated = <?php echo isset($_COOKIE['isOutdated']) ? ($_COOKIE['isOutdated'] == '1' ? 'true' : 'false') : 'false'; ?>;
@@ -453,7 +460,7 @@
         const d = new Date();
         d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
         let expires = "expires="+d.toUTCString();
-        document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+        document.cookie = cname + "=" + cvalue + ";" + expires;
     }
     function getCookie(cname) {
         let name = cname + "=";

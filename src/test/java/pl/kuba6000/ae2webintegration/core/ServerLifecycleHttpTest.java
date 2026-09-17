@@ -7,11 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
@@ -19,6 +21,7 @@ import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -736,6 +739,80 @@ class ServerLifecycleHttpTest {
             new Gson().fromJson(failed.body(), JsonObject.class)
                 .get("status")
                 .getAsString());
+    }
+
+    @Test
+    void websiteLoginUsesTrustedProxySchemeAndPublicHostWithoutFetchMetadata() throws Exception {
+        startApi();
+        String[][] origins = { { "https://terminal.example", "terminal.example", "https", "302" },
+            { "https://terminal.example:8443", "terminal.example:8443", "https", "302" },
+            { "http://terminal.example", "terminal.example", "http", "302" },
+            { "http://terminal.example", "terminal.example", null, "302" },
+            { "https://terminal.example", "terminal.example", null, "403" },
+            { "https://other.example", "terminal.example", "https", "403" },
+            { "https://terminal.example:8443", "terminal.example", "https", "403" },
+            { "http://terminal.example", "terminal.example", "https", "403" },
+            { "https://terminal.example", "terminal.example", "https, http", "403" },
+            { "https://terminal.example", "terminal.example", "https\r\nX-Forwarded-Proto: https", "403" },
+            { "https://terminal.example", "terminal.example", "invalid", "403" },
+            { "https://terminal.example/path", "terminal.example", "https", "403" },
+            { "https://user@terminal.example", "terminal.example", "https", "403" },
+            { "null", "terminal.example", "https", "403" } };
+        for (String[] scenario : origins) {
+            // A raw HTTP request preserves Host and Origin, which HttpURLConnection restricts.
+            try (Socket socket = new Socket("127.0.0.1", port)) {
+                socket.setSoTimeout(5000);
+                String body = "username=admin&password=lifecycle-password";
+                String request = "POST / HTTP/1.1\r\nHost: " + scenario[1]
+                    + "\r\nOrigin: "
+                    + scenario[0]
+                    + (scenario[2] == null ? "" : "\r\nX-Forwarded-Proto: " + scenario[2])
+                    + "\r\nContent-Type: application/x-www-form-urlencoded\r\nConnection: close\r\nContent-Length: "
+                    + body.length()
+                    + "\r\n\r\n"
+                    + body;
+                socket.getOutputStream()
+                    .write(request.getBytes(StandardCharsets.US_ASCII));
+                BufferedReader response = new BufferedReader(
+                    new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+                assertEquals(
+                    scenario[3],
+                    response.readLine()
+                        .split(" ")[1],
+                    scenario[0] + " via " + scenario[2]);
+            }
+        }
+    }
+
+    @Test
+    void websiteLoginIgnoresForwardedSchemeFromUntrustedConnections() throws Exception {
+        IConfigValue<String> previousTrustedProxies = ConfigBootstrap.trustedProxiesValue;
+        try {
+            ConfigBootstrap.trustedProxiesValue = () -> "192.0.2.11";
+            startApi();
+            for (String peer : new String[] { "192.0.2.10", "192.0.2.11" }) {
+                PostExchange exchange = new PostExchange("username=admin&password=lifecycle-password") {
+
+                    @Override
+                    public InetSocketAddress getRemoteAddress() {
+                        return new InetSocketAddress(peer, 12345);
+                    }
+                };
+                exchange.getRequestHeaders()
+                    .set("Host", "terminal.example");
+                exchange.getRequestHeaders()
+                    .set("Origin", "https://terminal.example");
+                exchange.getRequestHeaders()
+                    .set("X-Forwarded-Proto", "https");
+                new AE2Controller.WebHandler().handle(exchange);
+                assertEquals(
+                    peer.equals("192.0.2.11") ? HttpURLConnection.HTTP_MOVED_TEMP : HttpURLConnection.HTTP_FORBIDDEN,
+                    exchange.responseCode,
+                    peer);
+            }
+        } finally {
+            ConfigBootstrap.trustedProxiesValue = previousTrustedProxies;
+        }
     }
 
     @Test

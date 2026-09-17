@@ -4,6 +4,9 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
 import com.google.common.net.InetAddresses;
 
 /**
@@ -57,9 +60,9 @@ public final class ClientAddressResolver {
     }
 
     /**
-     * @param trustedProxies comma-separated addresses and/or CIDR blocks. Empty means nothing is trusted,
-     *                       so forwarding headers are ignored entirely. Hostnames are rejected rather
-     *                       than resolved, to keep config parsing free of DNS.
+     * @param trustedProxies comma-separated addresses and/or CIDR blocks. Empty trusts only connections
+     *                       from this machine. Hostnames are rejected rather than resolved, to keep
+     *                       config parsing free of DNS.
      */
     public static ClientAddressResolver fromConfig(String trustedProxies) {
         List<Entry> entries = new ArrayList<>();
@@ -140,6 +143,11 @@ public final class ClientAddressResolver {
         return peer.isLoopbackAddress() || peer.equals(localAddress);
     }
 
+    /** Whether forwarding headers from this direct connection can be trusted. */
+    public boolean isTrustedProxy(@NotNull InetAddress peer, @Nullable InetAddress localAddress) {
+        return isTrusted(peer) || isSameMachine(peer, localAddress);
+    }
+
     /**
      * @param peer         the address the TCP connection actually came from
      * @param localAddress the local destination address, or {@code null} if unknown
@@ -150,7 +158,7 @@ public final class ClientAddressResolver {
      */
     public InetAddress resolve(InetAddress peer, InetAddress localAddress, List<String> forwardedFor,
         List<String> realIp) {
-        if (!isTrusted(peer) && !isSameMachine(peer, localAddress)) {
+        if (!isTrustedProxy(peer, localAddress)) {
             return peer;
         }
         InetAddress fromChain = firstUntrustedFromRight(forwardedFor);
