@@ -17,7 +17,6 @@ import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.config.Config;
-import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -28,6 +27,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
+import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
+import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
 
 public class AE2JobTracker {
 
@@ -242,22 +243,19 @@ public class AE2JobTracker {
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         long durationMillis = info.timeDone - info.timeStarted;
         long craftedAmount = info.finalOutput.quantity;
-        if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
-            .isEmpty() && DiscordManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
+        if (!Config.AE_PUBLIC_MODE()
+            && NotificationManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
             // Native enumeration assigns the fallback CPU display ordinals used by the notification name.
             grid.web$getCraftingGrid()
                 .web$getCPUs();
-            DiscordManager.postMessageNonBlocking(
-                new DiscordManager.DiscordEmbed(
-                    "AE2 Job Tracker [ Grid " + key + " ][ " + cpu.web$getName() + " ]",
-                    "Crafting for `" + info.finalOutput.itemname
-                        + " x"
-                        + craftedAmount
-                        + "` "
-                        + (info.wasCancelled ? "cancelled" : "completed")
-                        + "!\nIt took "
-                        + DiscordManager.formatDuration(durationMillis),
-                    info.wasCancelled ? DiscordManager.COLOR_RED : DiscordManager.COLOR_GREEN));
+            NotificationManager.postMessageNonBlocking(
+                new CraftingMessage(
+                    key,
+                    cpu.web$getName(),
+                    info.finalOutput.itemname,
+                    craftedAmount,
+                    NotificationManager.formatDuration(durationMillis),
+                    info.wasCancelled));
         }
     }
 

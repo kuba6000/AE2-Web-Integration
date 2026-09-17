@@ -4,6 +4,7 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
+import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
 
 public class CommandProcessor {
 
@@ -21,6 +22,7 @@ public class CommandProcessor {
             configReloader.run();
             AE2Controller.stopHTTPServer();
             AE2Controller.startHTTPServer();
+            NotificationManager.init();
             return CommandResult.success("Successfully reloaded the config and restarted the web server!");
         } catch (Exception e) {
             return CommandResult.error("Failed to reload config: " + e.getMessage());
