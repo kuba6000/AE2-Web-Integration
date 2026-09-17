@@ -1,7 +1,8 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
+import java.net.HttpURLConnection;
 import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -11,10 +12,13 @@ import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.DeleteCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.SubmitCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -49,8 +53,68 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         assertStatus("FAIL", submit(grid, id));
     }
 
+    @Test
+    void deletingAPendingPlanCancelsCalculationAndRemovesIt() {
+        TestGrid grid = new TestGrid(GRID_KEY, new TestCraftingGrid(null));
+        CompletableFuture<IAECraftingJob> pending = new CompletableFuture<>();
+        int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
+            .addJob(pending);
+        DeleteCraftingPlan request = new DeleteCraftingPlan();
+        assertTrue(
+            request
+                .init(TestGridFixtures.context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id)));
+        request.runOnServerThread(TestGridFixtures.ae(grid));
+        assertStatus("OK", request.getJSON());
+        assertEquals(
+            HttpURLConnection.HTTP_OK,
+            request.getResponse()
+                .httpStatus());
+        assertTrue(pending.isCancelled());
+        GetCraftingPlan poll = new GetCraftingPlan();
+        assertTrue(
+            poll.init(TestGridFixtures.context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id)));
+        poll.runOnServerThread(TestGridFixtures.ae(grid));
+        assertStatus("INVALID_ID", poll.getJSON());
+        assertEquals(
+            HttpURLConnection.HTTP_NOT_FOUND,
+            poll.getResponse()
+                .httpStatus());
+    }
+
+    @Test
+    void pollingPendingCalculationSucceedsButSubmissionConflicts() {
+        TestGrid grid = new TestGrid(GRID_KEY, new TestCraftingGrid(null));
+        int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
+            .addJob(new CompletableFuture<>());
+        GetCraftingPlan poll = new GetCraftingPlan();
+        assertTrue(
+            poll.init(TestGridFixtures.context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id)));
+        poll.runOnServerThread(TestGridFixtures.ae(grid));
+        assertEquals(
+            HttpURLConnection.HTTP_OK,
+            poll.getResponse()
+                .httpStatus());
+        assertFalse(
+            JsonParser.parseString(poll.getJSON())
+                .getAsJsonObject()
+                .getAsJsonObject("data")
+                .get("isDone")
+                .getAsBoolean());
+        SubmitCraftingPlan submit = new SubmitCraftingPlan();
+        assertTrue(
+            submit.init(
+                TestGridFixtures
+                    .context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id + "&submit")));
+        submit.runOnServerThread(TestGridFixtures.ae(grid));
+        assertStatus("JOB_NOT_DONE", submit.getJSON());
+        assertEquals(
+            HttpURLConnection.HTTP_CONFLICT,
+            submit.getResponse()
+                .httpStatus());
+    }
+
     private static String submit(TestGrid grid, int id) {
-        Job request = new Job();
+        SubmitCraftingPlan request = new SubmitCraftingPlan();
         request.init(
             TestGridFixtures.context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id + "&submit"));
         request.runOnServerThread(TestGridFixtures.ae(grid));

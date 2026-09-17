@@ -206,13 +206,13 @@
     }
 
     var url = new URL(window.location.href);
-    if (url.searchParams.get("notonline") !== null){
+    if (url.searchParams.get("NOT_ONLINE") !== null){
         document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>You have to be on the server (online) to perform this action!</b><br><br>";
         window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
-    } else if (url.searchParams.get("invalidpassword") !== null) {
+    } else if (url.searchParams.get("INVALID_PASSWORD") !== null) {
         document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>Invalid password!</b><br><br>";
         window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
-    } else if (url.searchParams.get("invaliduser") !== null) {
+    } else if (url.searchParams.get("INVALID_USER") !== null) {
         document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>Invalid username!</b><br><br>";
         window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
     } else if (url.searchParams.get("confirmregistration") !== null) {
@@ -221,7 +221,7 @@
     }
 
     function acceptCookies(){
-        document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7 + "; path=/"; // Set cookie for 7 days
+        document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7; // Set cookie for 7 days
         document.getElementById("cookiemonster").style.display = "none"; // Hide the cookie monster section
     }
 
@@ -244,7 +244,7 @@
         document.getElementById("cookiemonster").style.display = "flex"; // Show the cookie monster section
     }
     else {
-        document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7 + "; path=/";
+        document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7;
     }
 
 </script>

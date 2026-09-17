@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.concurrent.TimeUnit;
@@ -14,6 +15,7 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
@@ -63,7 +65,7 @@ public class CoreEngine {
     public static void onServerStarted() {
         try {
             CoreEngine.GRID_IDENTITIES.initialize(AE2Controller.serverPlatform.getWorldDirectory());
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             LOG.error("Failed to load grid identities; grid requests remain unavailable", e);
         }
         serverRunning = true;
@@ -137,7 +139,7 @@ public class CoreEngine {
                     task.getClass()
                         .getSimpleName(),
                     t);
-                task.failIfPending("INTERNAL_ERROR");
+                task.failIfPending(ApiStatus.INTERNAL_ERROR);
             }
             // Checked after handling, never before, so a request costlier than the whole budget still runs
             // and can never starve the queue.

@@ -6,6 +6,11 @@ import org.jetbrains.annotations.NotNull;
 @SuppressWarnings("SynchronizeOnNonFinalField") // Bound to the registry before publication; never rebound while in use.
 public final class GridSettingsData {
 
+    /**
+     * Whether this grid records crafting activity.
+     * 
+     * @example true
+     */
     private boolean isTracked;
     private transient @NotNull Object lock = this;
     private transient @NotNull Runnable markDirty = () -> {};

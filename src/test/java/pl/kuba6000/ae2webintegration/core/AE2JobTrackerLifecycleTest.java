@@ -26,12 +26,12 @@ import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.ae2request.async.GetTrackingHistory;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.Job;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTrackingHistory;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
@@ -246,7 +246,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         assertNotNull(splitKey);
         assertNotEquals(losingKey, splitKey);
         assertEmptyHistory(TestGridFixtures.OWNER_ID, splitKey);
-        Job request = new Job();
+        GetCraftingPlan request = new GetCraftingPlan();
         assertTrue(
             request.init(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + splitKey + "&id=" + losingId)));
         request.runOnServerThread(split);
@@ -276,7 +276,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         assertNotEquals(gridKey, replacementKey);
         assertEmptyHistory(42, replacementKey);
         assertTrue(plan.isCancelled());
-        Job request = new Job();
+        GetCraftingPlan request = new GetCraftingPlan();
         assertTrue(request.init(TestGridFixtures.context(42, "grid=" + replacementKey + "&id=" + planId)));
         request.runOnServerThread(ae);
         assertEquals(

@@ -11,12 +11,24 @@ import org.jetbrains.annotations.NotNull;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
+/** A completed or cancelled crafting job with per-resource and pattern-provider timing measurements. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class JSON_CompactedJobTrackingInfo {
 
+    /** One measured processing interval with absolute timestamps. */
     public static class timingClass {
 
+        /**
+         * Interval start in Unix epoch milliseconds.
+         *
+         * @example 1700000000000
+         */
         long started;
+        /**
+         * Interval end in Unix epoch milliseconds.
+         *
+         * @example 1700000010000
+         */
         long ended;
 
         public timingClass(long started, long ended) {
@@ -25,35 +37,104 @@ public class JSON_CompactedJobTrackingInfo {
         }
     }
 
+    /** Completed processing measurements for one resource identity. */
     public static class CompactedTrackingGSONItem {
 
+        /**
+         * Registry resource identifier.
+         *
+         * @example minecraft:iron_ingot
+         */
         public String itemid;
+        /**
+         * Resource display name.
+         *
+         * @example Iron Ingot
+         */
         public String itemname;
+        /**
+         * Measured processing time for this resource, in milliseconds.
+         *
+         * @example 10000
+         */
         public long timeSpentOn;
+        /**
+         * Total resource units produced during the measured work.
+         *
+         * @example 64
+         */
         public long craftedTotal;
+        /**
+         * Fraction of summed resource processing time attributed to this resource; one when no processing time is
+         * recorded.
+         *
+         * @example 1.0
+         */
         public double shareInCraftingTime = 0d;
+        /**
+         * Fraction of job elapsed time spent processing this resource, capped at one.
+         *
+         * @example 1.0
+         */
         public double shareInCraftingTimeCombined = 0d;
+        /**
+         * Produced resource units per second of measured processing time.
+         *
+         * @example 6.4
+         */
         public double craftsPerSec = 0d;
 
+        /** Measured processing intervals. */
         public ArrayList<timingClass> timings = new ArrayList<>();
     }
 
+    /** Detached snapshot of the final crafting output. */
     public @NotNull JSON_Stack finalOutput;
+    /**
+     * Crafting start in Unix epoch milliseconds.
+     *
+     * @example 1700000000000
+     */
     public long timeStarted;
+    /**
+     * Crafting completion or cancellation in Unix epoch milliseconds.
+     *
+     * @example 1700000010000
+     */
     public long timeDone;
+    /**
+     * Whether the crafting work was cancelled.
+     *
+     * @example false
+     */
     public boolean wasCancelled;
+    /** Per-resource crafting measurements. */
     public ArrayList<CompactedTrackingGSONItem> items = new ArrayList<>();
 
+    /** Processing measurements combined for pattern providers sharing a display name. */
     public static class AEInterfaceGSON {
 
+        /**
+         * Pattern provider display name.
+         *
+         * @example Iron Smelter
+         */
         String name;
 
+        /** Measured processing intervals. */
         public ArrayList<timingClass> timings = new ArrayList<>();
+        /**
+         * Sum of provider processing interval durations, in milliseconds.
+         *
+         * @example 10000
+         */
         public long timingsCombined;
 
+        /** Locations of pattern providers sharing this display name. */
         public HashSet<DimensionalCoords> location = new HashSet<>();
     }
 
+    /** Processing measurements grouped by pattern provider name. */
     public ArrayList<AEInterfaceGSON> interfaceShare = new ArrayList<>();
 
     public JSON_CompactedJobTrackingInfo(AE2JobTracker.JobTrackingInfo info) {

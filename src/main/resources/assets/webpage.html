@@ -729,14 +729,14 @@
                 <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
                 <br>
                 You are logged in as <span id="username" style="font-weight: bold;"></span> <br>
-                <button onclick="document.location.href='?logout'">LogOut</button>
+                <button onclick="logout()">LogOut</button>
             </section>
         </section>
     </section>
 </section>
 
 <script>
-    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7 + "; path=/";
+    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7;
     const username = "_REPLACE_ME_USERNAME";
     const isAdmin = _REPLACE_ME_IS_ADMIN;
     const isOutdated = _REPLACE_ME_VERSION_OUTDATED;
@@ -886,13 +886,13 @@
     function onTrackThisGridChange(el) {
         if (selectedGrid == -1) return;
         let trackThisGrid = el.checked;
-        getJSONChecked('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
+        getJSONChecked(gridURL(selectedGrid, 'settings'), function(data) {
             data = data.data;
             el.checked = data['isTracked'];
             updateGridList();
         }, function(data) {
             showAlert(data.status + ": " + data.data);
-        });
+        }, 'PATCH', { isTracked: trackThisGrid });
     }
     function refreshTerminal() {
         if (currentWindow == 0)
@@ -912,7 +912,7 @@
         const d = new Date();
         d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
         let expires = "expires="+d.toUTCString();
-        document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+        document.cookie = cname + "=" + cvalue + ";" + expires;
     }
     function getCookie(cname) {
         let name = cname + "=";
@@ -1116,7 +1116,7 @@
         const gridId = selectedGrid;
         let message = "Asking for " + escapeCPUText(globalCPUList[cpuId].name) + "...";
         pushLoadingScreen(message);
-        $.getJSON('get?grid=' + gridId + '&cpu=' + encodeURIComponent(cpuId).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('GET', gridURL(gridId, 'cpus/' + encodeURIComponent(cpuId)), null, function(data){
             if (selectedCPU !== cpuId || selectedGrid !== gridId || !globalCPUList[cpuId]) {
                 popLoadingScreen(message);
                 return;
@@ -1180,7 +1180,7 @@
             return;
         }
         const gridId = selectedGrid;
-        $.getJSON('list?grid=' + gridId, function(data) {
+        requestJSON('GET', gridURL(gridId, 'cpus'), null, function(data) {
             if (selectedGrid !== gridId) return;
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
@@ -1201,7 +1201,7 @@
         });
     }
     function updateGridList(onDone){
-        $.getJSON('grids', function(data) {
+        $.getJSON('api/grids', function(data) {
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 return;
@@ -1242,6 +1242,10 @@
                 document.getElementById('gridselection').size = 2;
             if (onDone)
                 onDone();
+        }).fail(function(response) {
+            const error = response.responseJSON;
+            showAlert(error ? error.status + (error.data ? ': ' + error.data : '')
+                : 'HTTP ' + response.status + ': Could not load grids.');
         });
     }
     updateGridList();
@@ -1299,8 +1303,41 @@
         }
         container.appendChild(details);
     }
-    function getJSONChecked(url, onSuccess, onFailure){
-        $.getJSON(url, function(data){
+    function requestJSON(method, url, body, onResponse, onTransportFailure) {
+        const options = { url, method, dataType: 'json', success: onResponse };
+        if (method !== 'GET') options.headers = { 'X-AE2-Request': 'true' };
+        if (body !== null) {
+            options.contentType = 'application/json';
+            options.data = JSON.stringify(body);
+        }
+        return $.ajax(options).fail(function(response) {
+            if (response && response.responseJSON) {
+                onResponse(response.responseJSON);
+            } else if (onTransportFailure) {
+                onTransportFailure(response);
+            } else {
+                onResponse({ status: 'HTTP_ERROR', data: 'Request failed' +
+                    (response && response.status ? ' (HTTP ' + response.status + ')' : '') });
+            }
+        });
+    }
+    function logout() {
+        requestJSON('POST', 'api/auth/logout', null, function(data) {
+            if (data.status === 'OK' || data.status === 'UNAUTHORIZED') {
+                document.location.href = '.';
+            } else {
+                showAlert(data.status + ': ' + data.data);
+            }
+        }, function(response) {
+            if (response && response.status === 401) document.location.href = '.';
+            else showAlert('The logout response was lost. Please try again.');
+        });
+    }
+    function gridURL(grid, resource) {
+        return 'api/grids/' + encodeURIComponent(grid) + '/' + resource;
+    }
+    function getJSONChecked(url, onSuccess, onFailure, method = 'GET', body = null){
+        requestJSON(method, url, body, function(data){
             if (data.status !== "OK"){
                 onFailure(data);
                 return;
@@ -1450,7 +1487,7 @@
             return;
         let message = "Asking for item list...";
         pushLoadingScreen(message);
-        $.getJSON('items?grid=' + selectedGrid, function(data){
+        requestJSON('GET', gridURL(selectedGrid, 'items'), null, function(data){
             console.log(data);
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
@@ -1469,7 +1506,7 @@
             return;
         let message = "Asking for tracking history list...";
         pushLoadingScreen(message);
-        getJSONChecked('trackinghistory?grid=' + selectedGrid, function(data){
+        getJSONChecked(gridURL(selectedGrid, 'crafting-history'), function(data){
             console.log(data);
             data = data.data;
             let html = "<table>";
@@ -1669,7 +1706,7 @@
         isInterfaceChartInitialized = false;
         isItemChartInitialized = false;
         pushLoadingScreen(message);
-        getJSONChecked('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
+        getJSONChecked(gridURL(selectedGrid, 'crafting-history/' + encodeURIComponent(id)), function(data){
             console.log(data);
             data = data.data;
 
@@ -1750,7 +1787,7 @@
             document.getElementById('terminalCPUListForJob').innerHTML = "...";
             let message = "Sending order...";
             pushLoadingScreen(message);
-            $.getJSON('order?grid=' + selectedGrid + '&itemKey=' + encodeURIComponent(itemKey) + "&quantity=" + quantity, function(data){
+            requestJSON('POST', gridURL(selectedGrid, 'crafting-plans'), { itemKey, quantity }, function(data){
                 console.log(data);
                 if(data.status !== "OK"){
                     if (data.status === "ITEM_IDENTITY_UNKNOWN")
@@ -1775,7 +1812,7 @@
                     //setCurrentScreen(0);
                 }
                 popLoadingScreen(message);
-            }).fail(function() {
+            }, function() {
                 popLoadingScreen(message);
                 showAlert("The order response was lost. Check the crafting jobs before placing another order.");
             });
@@ -1787,7 +1824,7 @@
         if(currentWindow != 2){
             return;
         }
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id, function(data){
+        requestJSON('GET', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id), null, function(data){
             if(currentWindow != 2){
                 return;
             }
@@ -1855,7 +1892,7 @@
         }
         setCurrentScreen(0);
         refreshTerminal();
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&cancel", function(data){
+        requestJSON('DELETE', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id), null, function(data){
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 return;
@@ -1877,7 +1914,7 @@
         }
         let message = "Submitting job...";
         pushLoadingScreen(message);
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&submit" + "&cpu=" + encodeURIComponent(cpuForJob).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('POST', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id + '/submit'), { cpuKey: cpuForJob }, function(data){
             if (data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 if (data.status === "CPU_NOT_FOUND") {
@@ -1901,7 +1938,7 @@
         }
         let message = "Cancelling job...";
         pushLoadingScreen(message);
-        $.getJSON('cancelcpu?grid=' + selectedGrid + '&cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('POST', gridURL(selectedGrid, 'cpus/' + encodeURIComponent(selectedCPU) + '/cancel'), null, function(data){
             if (data.status !== "OK") showAlert(data.status + ": " + data.data);
             updateCPUList();
             refreshTerminal();

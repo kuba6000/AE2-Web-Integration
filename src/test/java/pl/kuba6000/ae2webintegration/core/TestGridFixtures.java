@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -19,6 +20,7 @@ import java.util.UUID;
 
 import org.jetbrains.annotations.NotNull;
 
+import com.google.gson.JsonObject;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
@@ -39,6 +41,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 /**
  * Shared fakes for grid/authorization tests. Deliberately one copy rather than the per-test-class
@@ -92,8 +95,8 @@ final class TestGridFixtures {
             StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
             assertNotNull(key);
             TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, key, true);
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -125,7 +128,35 @@ final class TestGridFixtures {
     }
 
     static AE2Controller.RequestContext context(WebPrincipal principal, String query) {
-        return new AE2Controller.RequestContext(new TestExchange(query), principal);
+        TestExchange exchange = new TestExchange(query);
+        Map<String, String> parameters = HTTPUtils.parseQueryString(
+            exchange.getRequestURI()
+                .getRawQuery());
+        Map<String, String> path = new HashMap<>();
+        if (parameters.containsKey("grid")) path.put("gridKey", parameters.get("grid"));
+        if (parameters.containsKey("cpu")) path.put("cpuKey", parameters.get("cpu"));
+        if (parameters.containsKey("id")) {
+            path.put("planId", parameters.get("id"));
+            path.put("entryId", parameters.get("id"));
+        }
+        JsonObject body = new JsonObject();
+        if (parameters.containsKey("itemKey")) body.addProperty("itemKey", parameters.get("itemKey"));
+        if (parameters.containsKey("quantity")) {
+            String quantity = parameters.get("quantity");
+            try {
+                body.addProperty("quantity", Long.parseLong(quantity));
+            } catch (NumberFormatException e) {
+                body.addProperty("quantity", quantity);
+            }
+        }
+        if (parameters.containsKey("submit") && parameters.containsKey("cpu")) {
+            body.addProperty("cpuKey", parameters.get("cpu"));
+        }
+        if (parameters.containsKey("track")) body.addProperty(
+            "isTracked",
+            parameters.get("track")
+                .equals("1"));
+        return new AE2Controller.RequestContext(exchange, principal, path, body);
     }
 
     static class TestGrid implements IAEGrid, IAEPathingGrid {

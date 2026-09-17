@@ -57,7 +57,7 @@ public class ConfigBootstrap {
         trustedProxiesValue = builder.defineString(
             "trusted_proxies",
             "",
-            "Extra reverse proxies whose X-Forwarded-For / X-Real-IP headers should be believed,"
+            "Extra reverse proxies whose X-Forwarded-For / X-Real-IP / X-Forwarded-Proto headers should be believed,"
                 + " as comma-separated addresses/CIDRs, e.g. \"192.168.1.10, 10.0.0.0/24\"."
                 + " A proxy running on this same machine is always accepted and needs no entry here."
                 + " Only list proxies you control: believing those headers from anyone would let a client"

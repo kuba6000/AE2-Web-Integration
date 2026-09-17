@@ -19,7 +19,7 @@ if (project == rootProject) {
         encoding 'UTF-8'
 
         java {
-            target 'src/main/java/**/*.java', 'src/test/java/**/*.java'
+            target 'src/main/java/**/*.java', 'src/test/java/**/*.java', 'tools/openapi-doclet/src/**/*.java'
 
             def orderFile = project.file('spotless/spotless.importorder')
             def formatFile = project.file('spotless/spotless.eclipseformat.xml')
@@ -63,7 +63,8 @@ dependencies {
     testAnnotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
 
     compileOnlyApi 'org.jetbrains:annotations:26.0.2'
-    implementation 'com.google.code.gson:gson:2.8.9'
+    // Minecraft supplies Gson. Compile against the oldest supported API instead of bundling a newer one.
+    compileOnlyApi 'com.google.code.gson:gson:2.2.4'
     implementation 'com.google.guava:guava:21.0'
     implementation 'commons-io:commons-io:2.5'
     implementation 'org.apache.commons:commons-lang3:3.5'
@@ -71,6 +72,7 @@ dependencies {
     // Minecraft supplies Log4j at runtime; do not publish or bundle this dependency.
     compileOnly 'org.apache.logging.log4j:log4j-api:2.0-beta9-fixed'
     // Testing
+    testImplementation 'com.google.code.gson:gson:2.8.9'
     testImplementation 'org.apache.logging.log4j:log4j-api:2.17.2'
     testImplementation 'org.apache.logging.log4j:log4j-core:2.17.2'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
@@ -79,6 +81,29 @@ dependencies {
 
 test {
     useJUnitPlatform()
+}
+
+// Exercise the real HTTP boundary with the Gson versions supplied by legacy Minecraft.
+['224': '2.2.4', '280': '2.8.0'].each { suffix, gsonVersion ->
+    def legacyRuntime = configurations.create("gson${suffix}TestRuntime") {
+        canBeConsumed = false
+        extendsFrom configurations.testImplementation, configurations.testRuntimeOnly
+        resolutionStrategy.force "com.google.code.gson:gson:${gsonVersion}"
+    }
+    def compatibilityTest = tasks.register("testGson${suffix}", Test) {
+        group = 'verification'
+        description = "Test HTTP requests and responses with Gson ${gsonVersion}."
+        testClassesDirs = sourceSets.test.output.classesDirs
+        classpath = sourceSets.test.output + sourceSets.main.output + legacyRuntime
+        useJUnitPlatform()
+        filter {
+            includeTestsMatching '*ApiRoutingHttpTest'
+            includeTestsMatching '*ServerLifecycleHttpTest'
+            includeTestsMatching '*RequestCompletionTest'
+        }
+        shouldRunAfter tasks.named('test')
+    }
+    tasks.named('check') { dependsOn compatibilityTest }
 }
 
 java {
@@ -108,5 +133,42 @@ configurations.configureEach {
             org.gradle.api.attributes.Attribute.of('rfgDeobfuscatorTransformed', Boolean),
             true
         )
+    }
+}
+
+// Documentation is an explicit standalone build operation, never part of a Minecraft runtime artifact.
+if (project == rootProject) {
+    def buildApiDoclet = tasks.register('buildApiDoclet', GradleBuild) {
+        dir = file('tools/openapi-doclet')
+        tasks = ['docletPath']
+    }
+    def docletFiles = fileTree('tools/openapi-doclet/build/doclet') { include '*.jar' }
+    def apiDocumentation = layout.buildDirectory.file('api-docs/openapi.json')
+    def apiDocumentationVersion = providers.gradleProperty('apiDocumentationVersion').getOrElse('development')
+    def documentationJdk = javaToolchains.javadocToolFor(java.toolchain)
+    tasks.register('generateApiDocs', Exec) {
+        group = 'documentation'
+        description = 'Generate OpenAPI from the HTTP endpoint declarations and Javadoc.'
+        dependsOn buildApiDoclet
+        notCompatibleWithConfigurationCache('The doclet is built independently before its classpath is resolved.')
+        inputs.files(sourceSets.main.allJava, sourceSets.main.compileClasspath, docletFiles)
+        inputs.property('apiDocumentationVersion', apiDocumentationVersion)
+        outputs.file(apiDocumentation)
+        doFirst {
+            // Javadoc tasks inject HTML-only flags. Write an argument file for the custom doclet instead.
+            def options = new org.gradle.external.javadoc.StandardJavadocDocletOptions()
+            options.noTimestamp = false
+            options.source = '17'
+            options.encoding = 'UTF-8'
+            options.doclet = 'pl.kuba6000.ae2webintegration.doclet.OpenApiDoclet'
+            options.docletpath = docletFiles.files.toList()
+            options.classpath = sourceSets.main.compileClasspath.files.toList()
+            options.sourceNames = sourceSets.main.allJava.files.collect { it.absolutePath }.sort()
+            options.addStringOption('-output', apiDocumentation.get().asFile.absolutePath)
+            options.addStringOption('-api-version', apiDocumentationVersion)
+            def argumentsFile = new File(temporaryDir, 'javadoc.options')
+            options.write(argumentsFile)
+            commandLine documentationJdk.get().executablePath.asFile, "@${argumentsFile.absolutePath}"
+        }
     }
 }

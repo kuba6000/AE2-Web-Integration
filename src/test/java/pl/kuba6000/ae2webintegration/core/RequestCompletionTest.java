@@ -19,14 +19,37 @@ import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class RequestCompletionTest {
+
+    @ParameterizedTest
+    @CsvSource({ "GRID_NOT_FOUND,GRID_NOT_FOUND,404", "INVALID_USER,INVALID_USER,401",
+        "INVALID_PASSWORD,INVALID_PASSWORD,401", "NOT_ONLINE,NOT_ONLINE,409" })
+    void typedFailuresPreserveTheirWireCodesAndHttpStatuses(ApiStatus status, String expectedCode, int expectedHttp) {
+        TestRequest request = new TestRequest();
+        request.deny(status);
+        assertEquals(
+            expectedHttp,
+            request.getResponse()
+                .httpStatus());
+        JsonObject response = new Gson().fromJson(request.getJSON(), JsonObject.class);
+        assertEquals(
+            expectedCode,
+            response.get("status")
+                .getAsString());
+        assertTrue(
+            response.get("data")
+                .isJsonNull());
+    }
 
     private static final class TestRequest extends ISyncedRequest {
 
@@ -34,7 +57,7 @@ class RequestCompletionTest {
         public void handle() {}
 
         void reject(Object data) {
-            deny("BAD_PARAM", data);
+            deny(ApiStatus.BAD_PARAM, data);
         }
 
         void respond(Object data) {
@@ -74,7 +97,7 @@ class RequestCompletionTest {
     void serializationFailureLeavesTheRequestAvailableForAnErrorResponse() {
         TestRequest request = new TestRequest();
         assertThrows(IllegalStateException.class, () -> request.respond(new UnserializableData()));
-        request.failIfPending("INTERNAL_ERROR");
+        request.failIfPending(ApiStatus.INTERNAL_ERROR);
         assertEquals(
             "INTERNAL_ERROR",
             new Gson().fromJson(request.getJSON(), JsonObject.class)
@@ -85,7 +108,7 @@ class RequestCompletionTest {
     @Test
     void completedRequestDoesNotReadALatePayload() {
         TestRequest request = new TestRequest();
-        request.failIfPending("SERVER_BUSY");
+        request.failIfPending(ApiStatus.SERVER_BUSY);
         assertDoesNotThrow(() -> request.respond(new UnserializableData()));
         assertEquals(
             "SERVER_BUSY",
@@ -132,7 +155,7 @@ class RequestCompletionTest {
     void infrastructureFailureCannotBeOverwrittenByALateHandlerCompletion() {
         TestRequest request = new TestRequest();
 
-        request.failIfPending("SERVER_BUSY");
+        request.failIfPending(ApiStatus.SERVER_BUSY);
         request.done();
 
         JsonObject response = new Gson().fromJson(request.getJSON(), JsonObject.class);

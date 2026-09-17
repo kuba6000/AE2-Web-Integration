@@ -3,10 +3,12 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
@@ -34,7 +36,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         byte[] invalid = "{".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         java.nio.file.Files.write(invalidFile, invalid);
 
-        assertThrows(java.io.IOException.class, () -> CoreEngine.GRID_IDENTITIES.initialize(invalidSave));
+        assertThrows(IOException.class, () -> CoreEngine.GRID_IDENTITIES.initialize(invalidSave));
         assertFalse(CoreEngine.GRID_IDENTITIES.isInitialized());
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
@@ -109,7 +111,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
 
     @Test
     void keyAndAccessReadsNeverDiscoverControllerMembership() throws Exception {
-        java.util.concurrent.atomic.AtomicInteger reads = new java.util.concurrent.atomic.AtomicInteger();
+        AtomicInteger reads = new AtomicInteger();
         TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(81, false, AEControllerState.CONTROLLER_ONLINE) {
 
             @Override

@@ -15,6 +15,8 @@ import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 
@@ -23,12 +25,13 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
 
     private static final WebPrincipal ME = TestGridFixtures.principal(42);
 
+    @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/probe")
     private static class ProbeRequest extends IAsyncRequest {
 
         boolean handlerRan;
 
         @Override
-        public void handle(Map<String, String> params) {
+        public void handle() {
             handlerRan = true;
             done();
         }
@@ -70,7 +73,7 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         for (WebPrincipal user : new WebPrincipal[] { WebPrincipal.admin(), WebPrincipal.localhost() }) {
             assertStatus("OK", run(user, "grid=" + key));
-            assertStatus("NO_PERMISSIONS", run(user, "grid=" + TestGridFixtures.key(99)));
+            assertStatus("GRID_NOT_FOUND", run(user, "grid=" + TestGridFixtures.key(99)));
         }
     }
 
@@ -79,7 +82,7 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
-        assertStatus("NO_PERMISSIONS", run(ME, "grid=" + key));
+        assertStatus("GRID_NOT_FOUND", run(ME, "grid=" + key));
     }
 
     @Test
@@ -87,13 +90,13 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1, 42);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         CoreEngine.GRID_IDENTITIES.clear();
-        assertStatus("NO_PERMISSIONS", run(ME, "grid=" + key));
+        assertStatus("GRID_NOT_FOUND", run(ME, "grid=" + key));
     }
 
     @Test
     void unauthorizedRequestDoesNotCreateGridData() {
         StableKey key = TestGridFixtures.key(99);
-        assertStatus("NO_PERMISSIONS", run(ME, "grid=" + key));
+        assertStatus("GRID_NOT_FOUND", run(ME, "grid=" + key));
         assertNull(GridData.find(key));
     }
 
@@ -103,8 +106,8 @@ class AsyncRequestAuthorizationTest extends GridTestScope {
     }
 
     @Test
-    void requestWithoutGridStillReachesHandler() {
-        assertStatus("OK", run(ME, ""));
+    void requestWithoutGridIsRejected() {
+        assertStatus("BAD_PARAM", run(ME, ""));
     }
 
     @Test

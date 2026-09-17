@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.lang.reflect.Proxy;
+import java.net.HttpURLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -14,11 +15,14 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.*;
+import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.CreateCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.*;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
@@ -57,7 +61,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         System.gc();
         assertEquals(
             "OK",
-            run(new Order(), second, "&itemKey=" + key + "&quantity=1").get("status")
+            run(new CreateCraftingPlan(), second, "&itemKey=" + key + "&quantity=1").get("status")
                 .getAsString());
         second.rows.clear();
         assertEquals(
@@ -69,7 +73,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         do {
             System.gc();
             Thread.sleep(10);
-            status = run(new Order(), second, "&itemKey=" + key + "&quantity=1").get("status")
+            status = run(new CreateCraftingPlan(), second, "&itemKey=" + key + "&quantity=1").get("status")
                 .getAsString();
         } while (status.equals("ITEM_NOT_FOUND") && System.nanoTime() < deadline);
         assertEquals("ITEM_IDENTITY_UNKNOWN", status);
@@ -99,7 +103,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         grid.rows.add(new Resource("iron", 5, true));
         assertEquals(
             "OK",
-            run(new Order(), grid, "&itemKey=" + key + "&quantity=1").get("status")
+            run(new CreateCraftingPlan(), grid, "&itemKey=" + key + "&quantity=1").get("status")
                 .getAsString());
     }
 
@@ -109,7 +113,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         Grid grid = new Grid(910008, stored);
         grid.recipes = new LinkedHashSet<>(
             Arrays.asList(new Resource("variantA", 0, true), new Resource("variantB", 0, true)));
-        com.google.gson.JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
+        JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
         assertEquals(2, rows.size());
         assertEquals(
             5,
@@ -134,21 +138,21 @@ class ItemIdentityRequestTest extends GridTestScope {
             .get("itemKey")
             .getAsString();
         assertEquals(
-            "NO_PARAM",
-            run(new Order(), grid, "&item=2112&quantity=1").get("status")
+            "BAD_PARAM",
+            run(new CreateCraftingPlan(), grid, "&item=2112&quantity=1").get("status")
                 .getAsString());
         assertEquals(
             "BAD_PARAM",
-            run(new Order(), grid, "&itemKey=2112&quantity=1").get("status")
+            run(new CreateCraftingPlan(), grid, "&itemKey=2112&quantity=1").get("status")
                 .getAsString());
         assertEquals(
             "BAD_PARAM",
-            run(new Order(), grid, "&itemKey=ik1:" + key + "&quantity=1").get("status")
+            run(new CreateCraftingPlan(), grid, "&itemKey=ik1:" + key + "&quantity=1").get("status")
                 .getAsString());
         assertEquals(0, grid.jobs);
         assertEquals(
             "OK",
-            run(new Order(), grid, "&itemKey=" + key + "&quantity=1").get("status")
+            run(new CreateCraftingPlan(), grid, "&itemKey=" + key + "&quantity=1").get("status")
                 .getAsString());
     }
 
@@ -171,7 +175,7 @@ class ItemIdentityRequestTest extends GridTestScope {
                 return this;
             }
         });
-        com.google.gson.JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
+        JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
         JsonObject normal = rows.get(0)
             .getAsJsonObject();
         assertTrue(normal.has("itemKey"));
@@ -205,7 +209,7 @@ class ItemIdentityRequestTest extends GridTestScope {
     @Test
     void ordinaryHashCollisionsDoNotMergeStableKeys() {
         Grid grid = new Grid(910004, new Resource("Aa", 1, true), new Resource("BB", 1, true));
-        com.google.gson.JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
+        JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
         String first = rows.get(0)
             .getAsJsonObject()
             .get("itemKey")
@@ -217,7 +221,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         assertNotEquals(first, second);
         assertEquals(
             "OK",
-            run(new Order(), grid, "&itemKey=" + first + "&quantity=1").get("status")
+            run(new CreateCraftingPlan(), grid, "&itemKey=" + first + "&quantity=1").get("status")
                 .getAsString());
         assertEquals("Aa", grid.ordered.web$getItemID());
     }
@@ -227,11 +231,11 @@ class ItemIdentityRequestTest extends GridTestScope {
         Grid grid = new Grid(910005, new Resource("iron", 1, true));
         assertEquals(
             "BAD_PARAM",
-            run(new Order(), grid, "&itemKey=broken&quantity=1").get("status")
+            run(new CreateCraftingPlan(), grid, "&itemKey=broken&quantity=1").get("status")
                 .getAsString());
         assertEquals(
             "ITEM_IDENTITY_UNKNOWN",
-            run(new Order(), grid, "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=1").get("status")
+            run(new CreateCraftingPlan(), grid, "&itemKey=AAAAAAAAAAAAAAAAAAAAAA&quantity=1").get("status")
                 .getAsString());
         assertEquals(0, grid.jobs);
     }
@@ -239,7 +243,7 @@ class ItemIdentityRequestTest extends GridTestScope {
     @Test
     void authorizationHappensBeforeIdentityResolution() {
         Grid grid = new Grid(910006, new Resource("iron", 1, true));
-        Order request = new Order();
+        CreateCraftingPlan request = new CreateCraftingPlan();
         assertTrue(
             request.init(
                 TestGridFixtures.context(
@@ -276,17 +280,41 @@ class ItemIdentityRequestTest extends GridTestScope {
         first.currentCraftable = false;
         assertEquals(
             "ITEM_NOT_FOUND",
-            run(new Order(), first, "&itemKey=" + key + "&quantity=2").get("status")
+            run(new CreateCraftingPlan(), first, "&itemKey=" + key + "&quantity=2").get("status")
                 .getAsString());
         assertEquals(0, first.jobs);
         first.currentCraftable = true;
         assertEquals(
             "OK",
-            run(new Order(), first, "&itemKey=" + key + "&quantity=2147483648").get("status")
+            run(new CreateCraftingPlan(), first, "&itemKey=" + key + "&quantity=2147483648").get("status")
                 .getAsString());
         assertEquals(1, first.jobs);
         assertEquals(2147483648L, first.orderedAmount);
         assertEquals("iron", first.ordered.web$getItemID());
+    }
+
+    @Test
+    void creatingAPlanReturnsAcceptedAndAnIdentifier() {
+        Grid grid = new Grid(910011, new Resource("iron", 1, true));
+        String key = run(new GetItems(), grid, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject()
+            .get("itemKey")
+            .getAsString();
+        CreateCraftingPlan request = new CreateCraftingPlan();
+        JsonObject result = run(request, grid, "&itemKey=" + key + "&quantity=1");
+        assertEquals(
+            HttpURLConnection.HTTP_ACCEPTED,
+            request.getResponse()
+                .httpStatus());
+        assertEquals(
+            "OK",
+            result.get("status")
+                .getAsString());
+        assertTrue(
+            result.getAsJsonObject("data")
+                .has("jobID"));
+        assertEquals(1, grid.jobs);
     }
 
     private JsonObject run(ISyncedRequest request, Grid grid, String params) {

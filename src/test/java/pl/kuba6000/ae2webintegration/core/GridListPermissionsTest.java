@@ -16,10 +16,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetGridList;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGrids;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -53,7 +53,7 @@ class GridListPermissionsTest extends GridTestScope {
             }
         };
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        GetGridList request = new GetGridList();
+        GetGrids request = new GetGrids();
         request.init(TestGridFixtures.context(42, ""));
         request.runOnServerThread(TestGridFixtures.ae(grid));
         grid.web$getPermissions()
@@ -90,7 +90,7 @@ class GridListPermissionsTest extends GridTestScope {
                 identity.get("name")
                     .getAsString());
         }
-        GetGridList next = new GetGridList();
+        GetGrids next = new GetGrids();
         next.init(TestGridFixtures.context(42, ""));
         next.runOnServerThread(TestGridFixtures.ae(grid));
         assertEquals(
