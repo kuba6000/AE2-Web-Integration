@@ -36,6 +36,10 @@ public class NtfyDestination implements INotificationDestination {
         if (Config.NTFY_HOST()
             .isEmpty()) return;
 
+        // If no protocol is set in config, assume https
+        String host = Config.NTFY_HOST();
+        if (!host.contains("http")) host = "https://" + host;
+
         NtfyPayload payload = null;
         if (message instanceof CraftingMessage craftingMessage) {
             List<String> tags = new ArrayList<>();
@@ -70,6 +74,6 @@ public class NtfyDestination implements INotificationDestination {
             payload = new NtfyPayload(statusMessage.title(), statusMessage.description(), priority, tags);
         }
 
-        WebhookHelper.sendPayload(Config.NTFY_HOST(), Config.NTFY_USER(), Config.NTFY_PASSWORD(), payload);
+        WebhookHelper.sendPayload(host, Config.NTFY_USER(), Config.NTFY_PASSWORD(), payload);
     }
 }
