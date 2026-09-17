@@ -53,7 +53,7 @@ public class CoreEngine {
         stopVersionChecker();
         CoreEngine.versionIdentifier = versionIdentifier;
         AE2Controller.serverPlatform = serverPlatform;
-        Config.init(serverPlatform.getConfigDirectory());
+        Config.init(serverPlatform.getConfigDirectory(), serverPlatform::readLegacyConfig);
         CoreEngine.modVersion = modVersion;
         loadData();
     }

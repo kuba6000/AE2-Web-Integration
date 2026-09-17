@@ -9,6 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Collections;
+import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -214,6 +216,11 @@ class CoreDataTest {
         @Override
         public UUID getOnlinePlayerUUID(String username) {
             return REGISTERED_UUID;
+        }
+
+        @Override
+        public Map<String, Object> readLegacyConfig() {
+            return Collections.emptyMap();
         }
 
         @Override

@@ -43,7 +43,7 @@ public class CommandBootstrap {
             ctx.sendError("You do not have permission to use this command!");
             return;
         }
-        CommandResult result = CommandProcessor.reload(ctx.getReloader());
+        CommandResult result = CommandProcessor.reload();
         if (result.isSuccess()) {
             ctx.sendMessage(result.getMessage());
         } else {

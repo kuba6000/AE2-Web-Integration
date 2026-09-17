@@ -136,11 +136,10 @@ A proxy on the same machine is trusted automatically and does not need to be add
 running on another machine, set `trusted_proxies` to a comma-separated list of literal IPv4/IPv6 addresses or
 CIDR ranges. For example, in the TOML config:
 
-```text
-trusted_proxies = "192.168.1.10, 10.20.0.0/24, 2001:db8::10"
+```toml
+[general]
+trusted_proxies = '192.168.1.10, 10.20.0.0/24, 2001:db8::10'
 ```
-
-The same option is available in the Forge `.cfg` file on older versions.
 
 Hostnames are not accepted; use a literal address or CIDR range instead.
 
@@ -183,12 +182,10 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 2. Drop the mod into the server's `mods` folder. On multiplayer, it only belongs on the server. It also works in
    a single-player instance, although that is not its main use case.
 3. Start the server once to generate the config.
-4. Open `config/ae2webintegration/ae2webintegration.toml`, or
-   `config/ae2webintegration/ae2webintegration.cfg` on older Minecraft versions. Configure the port, admin
+4. Open `config/ae2webintegration/config.toml`. Configure the port, admin
    password, public mode, and other settings as needed.
 5. **Disable public mode if you are playing alone.**
-6. Reload the config with `/ae2webintegration reload`, or restart the server. On 1.21.1, NeoForge normally
-   notices file changes automatically, but the command can still force a full config and web server reload.
+6. Reload the config with `/ae2webintegration reload`, or restart the server.
 7. Allow the configured port through your firewall and router as needed, or route access through a reverse
    proxy.
 8. Visit `http://your-server-ip-or-domain:configured-port/` and log in with the `Admin` account and the password
@@ -196,6 +193,9 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 
 In public mode, a player can create an account from the login page. After choosing a password, the page displays
 an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
+
+On upgrade, settings from the existing CFG or TOML file are imported when `config.toml` is absent.
+The old file is kept; subsequent edits belong in `config.toml`. See [configuration options](docs/configuration.md).
 
 ## Discord integration
 

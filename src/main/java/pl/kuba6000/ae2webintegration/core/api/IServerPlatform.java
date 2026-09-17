@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
 import java.io.File;
+import java.util.Map;
 import java.util.UUID;
 
 public interface IServerPlatform {
@@ -9,6 +10,9 @@ public interface IServerPlatform {
     UUID getOnlinePlayerUUID(String username);
 
     File getConfigDirectory();
+
+    /** Reads the old loader configuration without changing it; absent files return an empty map. */
+    Map<String, Object> readLegacyConfig();
 
     /** Root of the active server save, available after server startup. */
     File getWorldDirectory();
