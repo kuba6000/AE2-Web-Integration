@@ -5,7 +5,6 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
-import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
@@ -75,8 +74,4 @@ public class CommandContext implements ICommandContext {
                     .withStyle(ChatFormatting.RED));
     }
 
-    @Override
-    public Runnable getReloader() {
-        return Config::reloadFromDisk;
-    }
 }
