@@ -13,7 +13,7 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.notification.destination.INotificationDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination;
 import pl.kuba6000.ae2webintegration.core.notification.destination.ntfy.NtfyDestination;
-import pl.kuba6000.ae2webintegration.core.notification.message.ErrorMessage;
+import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
 import pl.kuba6000.ae2webintegration.core.notification.message.IMessage;
 
 public class NotificationManager extends Thread {
@@ -38,15 +38,15 @@ public class NotificationManager extends Thread {
 
         if (!Config.AE_PUBLIC_MODE() && (!destinations.isEmpty())) {
             NotificationManager.postMessageNonBlocking(
-                new ErrorMessage(
+                new StatusMessage(
                     "AE2 Web Integration",
                     "Notification integration started!",
-                    ErrorMessage.Severity.NONE));
+                    StatusMessage.Severity.NONE));
         } else if (Config.AE_PUBLIC_MODE() && (!destinations.isEmpty())) {
-            NotificationManager.postMessageNonBlocking(new ErrorMessage("AE2 Web Integration", """
+            NotificationManager.postMessageNonBlocking(new StatusMessage("AE2 Web Integration", """
                 Warning!
                 Notifications are enabled in the config, but the public mode is enabled!
-                Notifications will be disabled!""", ErrorMessage.Severity.WARNING));
+                Notifications will be disabled!""", StatusMessage.Severity.WARNING));
         }
 
         thread = new NotificationManager();
