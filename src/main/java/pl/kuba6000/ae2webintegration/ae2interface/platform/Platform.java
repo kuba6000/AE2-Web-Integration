@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.platform;
 
 import java.io.File;
+import java.util.Map;
 import java.util.UUID;
 
 import net.minecraft.server.level.ServerPlayer;
@@ -8,6 +9,7 @@ import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.server.ServerLifecycleHooks;
 
+import pl.kuba6000.ae2webintegration.ae2interface.config.LegacyConfigReader;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
 public class Platform implements IServerPlatform {
@@ -32,5 +34,10 @@ public class Platform implements IServerPlatform {
     public File getConfigDirectory() {
         return FMLPaths.CONFIGDIR.get()
             .toFile();
+    }
+
+    @Override
+    public Map<String, Object> readLegacyConfig() {
+        return LegacyConfigReader.read(getConfigDirectory());
     }
 }
