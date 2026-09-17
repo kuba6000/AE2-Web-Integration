@@ -15,10 +15,9 @@ import org.junit.jupiter.api.Test;
 
 import com.sun.net.httpserver.HttpServer;
 
-import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
 import pl.kuba6000.ae2webintegration.core.api.IPlayerMessenger;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
-import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
+import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 class UpdateNotifierTest {
@@ -44,19 +43,19 @@ class UpdateNotifierTest {
             exchange.close();
         });
         server.start();
-        IConfigValue<Boolean> oldConfig = ConfigBootstrap.checkForUpdatesValue;
         // Wire a real local feed into the lifecycle owner without a production test-only setter.
         Field activeChecker = CoreEngine.class.getDeclaredField("versionChecker");
         activeChecker.setAccessible(true);
         Object previous = activeChecker.get(null);
-        try (VersionChecker checker = new VersionChecker(
-            new URL(
-                "http://127.0.0.1:" + server.getAddress()
-                    .getPort() + "/"),
-            "1.0.0-forge-1.7.10",
-            "-forge-1.7.10")) {
+        try (ConfigTestFixture config = new ConfigTestFixture();
+            VersionChecker checker = new VersionChecker(
+                new URL(
+                    "http://127.0.0.1:" + server.getAddress()
+                        .getPort() + "/"),
+                "1.0.0-forge-1.7.10",
+                "-forge-1.7.10")) {
             activeChecker.set(null, checker);
-            ConfigBootstrap.checkForUpdatesValue = () -> true;
+            config.set("general.check_for_updates", true);
             RecordingMessenger messenger = new RecordingMessenger();
             UpdateNotifier.onPlayerLoggedIn(messenger, PLAYER, true);
             assertEquals(0, messenger.sentMessages);
@@ -68,7 +67,7 @@ class UpdateNotifierTest {
             assertEquals(1, messenger.sentMessages);
             assertTrue(messenger.lastMessage.contains("1.1.0-forge-1.7.10"));
             assertTrue(messenger.lastMessage.contains(releaseUrl));
-            ConfigBootstrap.checkForUpdatesValue = () -> false;
+            config.set("general.check_for_updates", false);
             UpdateNotifier.onPlayerLoggedIn(messenger, PLAYER, true);
             assertEquals(1, messenger.sentMessages);
             CoreEngine.onServerStopping();
@@ -78,7 +77,6 @@ class UpdateNotifierTest {
                     .isCancelled());
         } finally {
             activeChecker.set(null, previous);
-            ConfigBootstrap.checkForUpdatesValue = oldConfig;
             server.stop(0);
         }
     }

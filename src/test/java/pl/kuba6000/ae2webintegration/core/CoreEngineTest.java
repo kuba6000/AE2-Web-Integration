@@ -3,6 +3,8 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.File;
+import java.util.Collections;
+import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,11 @@ class CoreEngineTest {
         @Override
         public UUID getOnlinePlayerUUID(String username) {
             return null;
+        }
+
+        @Override
+        public Map<String, Object> readLegacyConfig() {
+            return Collections.emptyMap();
         }
 
         @Override

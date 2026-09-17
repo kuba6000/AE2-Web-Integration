@@ -9,6 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
+import java.util.Collections;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -81,6 +83,11 @@ class CoreEngineLifecycleTest extends GridTestScope {
                 @Override
                 public UUID getOnlinePlayerUUID(String username) {
                     return null;
+                }
+
+                @Override
+                public Map<String, Object> readLegacyConfig() {
+                    return Collections.emptyMap();
                 }
 
                 @Override
