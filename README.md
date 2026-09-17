@@ -222,9 +222,8 @@ in `index.php` (exact IPs; loopback `127.0.0.1` and `::1` are included by defaul
 separate from the mod's `trusted_proxies`. Cookies omit `Path`, so the browser scopes them to the
 directory of the login page, including installations under a path such as `/ae2/`.
 
-The HTTP API uses `/api` routes with explicit methods and HTTP error statuses. See the
-[API migration and OpenAPI guide](tools/openapi-doclet/README.md) for routes, authentication and
-specification generation. Legacy API routes have been removed.
+See the [OpenAPI generator guide](tools/openapi-doclet/README.md) for generating the API
+specification from endpoint annotations and Javadocs.
 
 ## Compatibility
 
