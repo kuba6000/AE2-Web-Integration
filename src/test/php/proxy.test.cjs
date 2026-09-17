@@ -4,7 +4,9 @@ const http = require('node:http');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn, spawnSync } = require('node:child_process');
+const { spawn, spawnSync, execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+const run = promisify(execFile);
 
 const php = process.env.PHP_BINARY || 'php';
 const available = spawnSync(php, ['-v'], { windowsHide: true }).status === 0;
@@ -15,9 +17,15 @@ test('PHP proxy preserves explicit credentials and guards cookie mutations', { s
     const upstream = http.createServer((request, response) => {
         received.push(request.headers.authorization);
         response.setHeader('Content-Type', 'application/json');
+        if (authFailure === 'NETWORK') { request.destroy(); return; }
         if (authFailure) {
-            response.statusCode = authFailure === 'NOT_ONLINE' ? 409 : 401;
+            response.statusCode = authFailure === 'NOT_ONLINE' ? 409 : authFailure === 'ACCESS_DENIED' ? 403 : 401;
             response.end(JSON.stringify({ status: authFailure, data: null }));
+            return;
+        }
+        if (request.url === '/api/auth/logout') {
+            authFailure = 'UNAUTHORIZED';
+            response.end(JSON.stringify({ status: 'OK', data: null }));
             return;
         }
         response.end(JSON.stringify({ status: 'OK', data: {
@@ -34,6 +42,21 @@ test('PHP proxy preserves explicit credentials and guards cookie mutations', { s
         'http://localhost:2324/', `http://127.0.0.1:${upstream.address().port}/`), 'utf8');
     await fs.mkdir(path.join(directory, 'ae2'));
     await fs.copyFile(path.join(directory, 'index.php'), path.join(directory, 'ae2/index.php'));
+    for (const mount of ['', 'ae2']) {
+        await fs.copyFile(path.resolve(__dirname, '../../../example_website/login.html'),
+            path.join(directory, mount, 'login.html'));
+    }
+    // Preserve the public URL while applying the example's Apache API rewrite.
+    const router = path.join(directory, 'router.php');
+    await fs.writeFile(router, `<?php
+        $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+        if (preg_match('~^(/ae2)?/(api/.*)$~', $path, $match)) {
+            $_GET['API'] = $match[2];
+            require __DIR__ . ($match[1] ?? '') . '/index.php';
+            return true;
+        }
+        return false;
+    `);
     await fs.mkdir(path.join(directory, 'untrusted'));
     await fs.writeFile(path.join(directory, 'untrusted/index.php'), website.replace(
         'http://localhost:2324/', `http://127.0.0.1:${upstream.address().port}/`).replace(
@@ -42,7 +65,7 @@ test('PHP proxy preserves explicit credentials and guards cookie mutations', { s
     await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
     const port = reservation.address().port;
     await new Promise(resolve => reservation.close(resolve));
-    const child = spawn(php, ['-S', `127.0.0.1:${port}`, '-t', directory], {
+    const child = spawn(php, ['-S', `127.0.0.1:${port}`, '-t', directory, router], {
         windowsHide: true, stdio: ['ignore', 'ignore', 'pipe']
     });
     t.after(async () => {
@@ -94,30 +117,55 @@ test('PHP proxy preserves explicit credentials and guards cookie mutations', { s
         assert.equal(response.headers.get('location'), `?${status}`);
     }
     authFailure = null;
-    await t.test('mounted login and logout leave cookie scope to the browser', async () => {
-        const login = await fetch(`http://127.0.0.1:${port}/ae2/index.php`, {
-            method: 'POST', redirect: 'manual',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'username=ExamplePlayer&password=test'
-        });
-        assert.equal(login.status, 302);
-        assert.equal(login.headers.get('location'), '.');
-        const cookies = login.headers.getSetCookie();
-        assert.equal(cookies.length, 4);
-        for (const cookie of cookies) assert.doesNotMatch(cookie, /;\s*path=/i);
-        const logout = await fetch(`http://127.0.0.1:${port}/ae2/index.php?API=api/auth/logout`, {
-            method: 'POST', headers: {
-                Cookie: cookies.map(cookie => cookie.split(';')[0]).join('; '),
-                'X-AE2-Request': 'true'
-            }
-        });
+    for (const mount of ['/', '/ae2/']) await t.test(`${mount}: page cleanup expires browser cookies and permits another login`, async () => {
+        const jar = path.join(directory, mount === '/' ? 'root.cookies' : 'mounted.cookies');
+        const headerFile = jar + '.headers';
+        const bodyFile = jar + '.body';
+        const request = async (resource, args = []) => {
+            const { stdout } = await run(process.platform === 'win32' ? 'curl.exe' : 'curl', [
+                '--silent', '--show-error', '--cookie', jar, '--cookie-jar', jar,
+                '--dump-header', headerFile, '--output', bodyFile, '--write-out', '%{http_code}',
+                ...args, `http://127.0.0.1:${port}${mount}${resource}`
+            ], { windowsHide: true });
+            return { status: Number(stdout), headers: await fs.readFile(headerFile, 'utf8'),
+                body: await fs.readFile(bodyFile, 'utf8') };
+        };
+        const login = async () => {
+            authFailure = null;
+            const response = await request('', ['--data', 'username=ExamplePlayer&password=test']);
+            assert.equal(response.status, 302);
+            assert.doesNotMatch(response.headers, /;\s*path=/i);
+            assert.doesNotMatch((await request('')).body, /<input[^>]*name="password"/);
+        };
+        await login();
+        const logout = await request('api/auth/logout', ['-X', 'POST', '-H', 'X-AE2-Request: true']);
         assert.equal(logout.status, 200);
-        const expired = logout.headers.getSetCookie();
-        assert.equal(expired.length, 4);
-        for (const cookie of expired) {
-            assert.doesNotMatch(cookie, /;\s*path=/i);
-            assert.match(cookie, /;\s*max-age=0(?:;|$)/i);
+        const cleanup = await request('', ['--data', 'clearSession=true', '-H', 'Sec-Fetch-Site: same-origin']);
+        assert.match((await request('')).body, /<input[^>]*name="password"/,
+            'After logout and page cleanup, the browser must receive the login form');
+        assert.equal(cleanup.status, 302);
+        assert.match(cleanup.headers, /Location: \./i);
+        assert.doesNotMatch(cleanup.headers, /;\s*path=/i);
+        assert.match(cleanup.headers, /Max-Age=0/i);
+        assert.doesNotMatch(logout.headers, /set-cookie:/i);
+        await login();
+        for (const [failure, status] of [['ACCESS_DENIED', 403], ['NETWORK', 502], ['UNAUTHORIZED', 401]]) {
+            authFailure = failure;
+            const response = await request('api/grids');
+            assert.equal(response.status, status);
+            assert.doesNotMatch(response.headers, /set-cookie:/i);
+            assert.doesNotMatch((await request('')).body, /<input[^>]*name="password"/);
         }
+        const bearerFailure = await request('api/grids', ['-H', 'Authorization: Bearer invalid']);
+        assert.equal(bearerFailure.status, 401);
+        assert.doesNotMatch(bearerFailure.headers, /set-cookie:/i);
+        const crossSite = await request('', ['--data', 'clearSession=true', '-H', 'Sec-Fetch-Site: cross-site']);
+        assert.equal(crossSite.status, 403);
+        assert.doesNotMatch(crossSite.headers, /set-cookie:/i);
+        assert.doesNotMatch((await request('')).body, /<input[^>]*name="password"/);
+        assert.equal((await request('', ['--data', 'clearSession=true'])).status, 302);
+        assert.match((await request('')).body, /<input[^>]*name="password"/);
+        await login();
     });
     await t.test('HTTPS form origin uses the public host and trusted proxy protocol', async () => {
         const form = (headers, pathname = '/ae2/index.php') => new Promise((resolve, reject) => {

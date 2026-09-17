@@ -110,10 +110,6 @@
         [$response, $code, $responseHeaders] = upstreamRequest($url, $method, $headers,
             $mutation ? file_get_contents('php://input') : null);
         if ($response === false) apiError(502, 'UPSTREAM_UNAVAILABLE');
-        if ($hasCookie && !$hasBearer && !$publicAuth
-                && ($code === 401 || ($apiPath === 'api/auth/logout' && $method === 'POST' && $code === 200))) {
-            clearSessionCookies();
-        }
         header('Cache-Control: no-store');
         foreach ($responseHeaders as $name => $value) header($name . ': ' . $value);
         http_response_code($code ?: 502);
@@ -122,6 +118,12 @@
     }
 
     if ($method === 'POST' && !isSameOriginForm()) apiError(403, 'CSRF_REJECTED');
+    if ($method === 'POST' && ($_POST['clearSession'] ?? '') === 'true') {
+        // Expire cookies from the page directory where login set their default browser scope.
+        clearSessionCookies();
+        header('Location: .');
+        exit;
+    }
     if (!isset($_COOKIE['authenticationToken'])) {
         if ($method === 'POST' && isset($_POST['password'])) {
             $register = isset($_POST['register']);
@@ -284,6 +286,7 @@
 </section>
 
 <script>
+    let clearingBrowserSession = false;
     document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7;
     const username = "<?php echo isset($_COOKIE['username']) ? $_COOKIE['username'] : ''; ?>";
     const isAdmin = <?php echo isset($_COOKIE['isAdmin']) ? ($_COOKIE['isAdmin'] == '1' ? 'true' : 'false') : 'false'; ?>;
@@ -791,6 +794,10 @@
             if (onDone)
                 onDone();
         }).fail(function(response) {
+            if (response.status === 401) {
+                clearBrowserSession();
+                return;
+            }
             const error = response.responseJSON;
             showAlert(error ? error.status + (error.data ? ': ' + error.data : '')
                 : 'HTTP ' + response.status + ': Could not load grids.');
@@ -859,6 +866,10 @@
             options.data = JSON.stringify(body);
         }
         return $.ajax(options).fail(function(response) {
+            if (response && response.status === 401) {
+                clearBrowserSession();
+                return;
+            }
             if (response && response.responseJSON) {
                 onResponse(response.responseJSON);
             } else if (onTransportFailure) {
@@ -869,16 +880,30 @@
             }
         });
     }
+    function clearBrowserSession() {
+        if (clearingBrowserSession) return;
+        clearingBrowserSession = true;
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '.';
+        form.hidden = true;
+        const field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = 'clearSession';
+        field.value = 'true';
+        form.appendChild(field);
+        document.body.appendChild(form);
+        form.submit();
+    }
     function logout() {
         requestJSON('POST', 'api/auth/logout', null, function(data) {
             if (data.status === 'OK' || data.status === 'UNAUTHORIZED') {
-                document.location.href = '.';
+                clearBrowserSession();
             } else {
                 showAlert(data.status + ': ' + data.data);
             }
-        }, function(response) {
-            if (response && response.status === 401) document.location.href = '.';
-            else showAlert('The logout response was lost. Please try again.');
+        }, function() {
+            showAlert('The logout response was lost. Please try again.');
         });
     }
     function gridURL(grid, resource) {

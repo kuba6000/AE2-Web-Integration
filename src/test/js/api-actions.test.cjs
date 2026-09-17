@@ -55,7 +55,7 @@ for (const page of ['../../main/resources/assets/webpage.html', '../../../exampl
 
     test(`${page}: logout posts before returning to the mounted page, including an expired session`, () => {
         for (const response of [null, { status: 401, responseJSON: { status: 'UNAUTHORIZED', data: null } }, { status: 401 }]) {
-            const { context, requests } = terminal(page);
+            const { context, requests, submissions } = terminal(page);
             const navigations = [];
             context.document.location = { set href(value) { navigations.push(value); } };
             context.logout();
@@ -66,8 +66,47 @@ for (const page of ['../../main/resources/assets/webpage.html', '../../../exampl
             assert.equal(navigations.length, 0);
             if (response) request.failure(response);
             else request.success({ status: 'OK', data: null });
-            assert.equal(navigations.length, 1);
-            assert.equal(new URL(navigations[0], 'https://example.com/ae2/').pathname, '/ae2/');
+            if (page.endsWith('.php')) {
+                assert.equal(navigations.length, 0);
+                assert.equal(submissions.length, 1);
+                assert.equal(submissions[0].method.toUpperCase(), 'POST');
+                assert.equal(new URL(submissions[0].action, 'https://example.com/ae2/').pathname, '/ae2/');
+                assert.equal(submissions[0].fields.clearSession, 'true');
+            } else {
+                assert.equal(navigations.length, 1);
+                assert.equal(new URL(navigations[0], 'https://example.com/ae2/').pathname, '/ae2/');
+            }
         }
     });
 }
+
+test('PHP terminal clears an expired browser session once across concurrent API failures', () => {
+    for (const first of ['grids', 'history']) {
+        const { context, requests, submissions } = terminal('../../../example_website/index.php');
+        context.updateGridList();
+        context.getCraftingHistory();
+        const grids = requests.shift();
+        const history = requests.shift();
+        const failures = first === 'grids' ? [grids, history] : [history, grids];
+        for (const request of failures) request.failure({ status: 401 });
+        assert.equal(submissions.length, 1);
+        assert.equal(submissions[0].method.toUpperCase(), 'POST');
+        assert.equal(submissions[0].fields.clearSession, 'true');
+    }
+});
+
+test('PHP terminal retains browser sessions on denied requests and network failures', () => {
+    for (const failure of [
+        { status: 403, responseJSON: { status: 'ACCESS_DENIED', data: null } }, { status: 0 }
+    ]) {
+        const { context, requests, submissions } = terminal('../../../example_website/index.php');
+        const navigations = [];
+        context.document.location = { set href(value) { navigations.push(value); } };
+        context.updateGridList();
+        context.getCraftingHistory();
+        context.logout();
+        for (const request of requests) request.failure(failure);
+        assert.equal(submissions.length, 0);
+        assert.equal(navigations.length, 0);
+    }
+});

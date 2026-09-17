@@ -4,8 +4,20 @@ const vm = require('node:vm');
 
 function terminal(page) {
     const elements = new Map();
+    const submissions = [];
     const document = {
         cookie: '',
+        body: { appendChild() {} },
+        createElement(tagName) {
+            return {
+                tagName, children: [],
+                appendChild(child) { this.children.push(child); },
+                submit() {
+                    submissions.push({ method: this.method, action: this.action,
+                        fields: Object.fromEntries(this.children.map(child => [child.name, child.value])) });
+                }
+            };
+        },
         getElementById(id) {
             if (!elements.has(id)) elements.set(id, { innerHTML: '', style: {}, value: '', checked: false });
             return elements.get(id);
@@ -36,7 +48,7 @@ function terminal(page) {
     vm.runInContext(script, context);
     requests.length = 0;
     context.selectedGrid = 123;
-    return { context, requests, elements };
+    return { context, requests, elements, submissions };
 }
 
 module.exports = { terminal };

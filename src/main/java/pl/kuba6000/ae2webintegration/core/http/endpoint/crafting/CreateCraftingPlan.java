@@ -9,7 +9,7 @@ import org.jetbrains.annotations.NotNull;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
@@ -105,7 +105,7 @@ public final class CreateCraftingPlan extends ISyncedRequest {
     private @NotNull Input input;
 
     @Override
-    public boolean init(AE2Controller.RequestContext context) {
+    public boolean init(RequestContext context) {
         if (!super.init(context)) return false;
         if (input.quantity <= 0) {
             deny(ApiStatus.INVALID_QUANTITY);

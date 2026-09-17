@@ -85,8 +85,12 @@ Configured local access is an authentication exception determined by the server'
 Authenticated mutations using a cookie or configured local access require `X-AE2-Request: true`.
 A valid Bearer request does not need that marker. Public login/registration do not require it. The
 server permits no credentialed CORS and does not allow the marker in cross-origin preflight. Browser
-clients should call the same-origin API and redirect to the website after logout to clear the cookie
-at its original path. A PHP proxy must check the marker before converting the browser cookie to Bearer.
+clients should call the same-origin API and use the website's session-clearing flow after logout.
+The embedded site clears an invalid cookie when the page is loaded. The example PHP site submits
+`clearSession=true` by POST to the page after logout or an API 401, then redirects to the login page.
+Cookie expiration must come from the page directory, because cookies omit `Path`; an API-path response
+would target a different default cookie scope. A PHP proxy must check the marker before converting the
+browser cookie to Bearer.
 
 JSON bodies require `Content-Type: application/json` and must be at most 8192 UTF-8 bytes. Every current
 runtime input is a flat object containing strings, booleans or integers. Nested objects/arrays, duplicate

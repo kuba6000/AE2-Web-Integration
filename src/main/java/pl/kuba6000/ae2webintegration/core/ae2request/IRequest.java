@@ -92,10 +92,6 @@ public abstract class IRequest {
         completion.complete(new ApiResponse(httpStatus, json));
     }
 
-    protected final void respond(ApiResponse response) {
-        completion.complete(response);
-    }
-
     /**
      * Answers a request whose handler died in the tick pump, so its HTTP worker returns at once instead of
      * waiting for the request timeout and then reporting TIMEOUT.
