@@ -22,7 +22,7 @@ jobs:
       - name: Checkout core
         uses: actions/checkout@v4
 
-      - name: Test core pin updater
+      - name: Test repository automation
         run: python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
 
       - name: Set up Node.js
@@ -32,6 +32,12 @@ jobs:
 
       - name: Test web terminal behavior
         run: node --test src/test/js/*.test.cjs
+
+      - name: Test PHP proxy
+        run: |
+          php --version
+          php -l example_website/index.php
+          node --test src/test/php/*.test.cjs
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -49,3 +55,16 @@ jobs:
 
       - name: Build and test core
         run: ./gradlew --build-cache --info --stacktrace build
+
+      - name: Test API documentation generator
+        run: ./gradlew -p tools/openapi-doclet --build-cache test
+
+      - name: Generate OpenAPI
+        run: ./gradlew generateApiDocs -PapiDocumentationVersion=${{ github.sha }}
+
+      - name: Upload API specification
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi
+          path: build/api-docs/openapi.json
+          if-no-files-found: error

@@ -524,6 +524,95 @@
                 font-size: 150%;
             }
         }
+
+        #terminalgrid, #terminalgrid * { box-sizing: border-box; }
+        #terminalgrid { color-scheme: dark; }
+        #terminalgrid .grid-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: flex-start;
+        }
+        #gridselection {
+            flex: 1 1 360px;
+            min-width: 0;
+            max-width: 100%;
+            overflow-y: auto;
+        }
+        .grid-settings {
+            display: grid;
+            gap: 10px;
+            padding: 6px 0;
+        }
+        .grid-settings label {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+        #terminalgrid .note {
+            flex: 0 0 100%;
+            color: #aeb9cc;
+            font-size: 12px;
+            line-height: 1.6;
+            opacity: 1;
+        }
+        #gridaccessdetails { margin-top: 16px; min-width: 0; }
+        #gridaccessdetails:empty { display: none; }
+        .grid-access {
+            border: 1px solid #35405c;
+            border-radius: 6px;
+            background: #191e2d;
+            overflow: hidden;
+        }
+        .grid-access > summary {
+            padding: 12px 14px;
+            background: #252d43;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .grid-access > summary:hover { background: #303b56; }
+        .grid-access > summary:focus-visible { outline: 2px solid #bda3e0; outline-offset: -3px; }
+        .grid-access-count {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            background: #394665;
+            font-size: 12px;
+        }
+        .grid-access-player { padding: 16px; }
+        .grid-access-player + .grid-access-player { border-top: 1px solid #35405c; }
+        .grid-access-heading { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+        .grid-access-name { font-weight: 600; overflow-wrap: anywhere; }
+        .grid-access-uuid {
+            font: 12px ui-monospace, Consolas, monospace;
+            color: #aeb9cc;
+            overflow-wrap: anywhere;
+        }
+        .grid-access-sources { list-style: none; margin-top: 10px; }
+        .grid-access-source {
+            display: grid;
+            grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr);
+            gap: 6px 24px;
+            padding: 10px 0;
+            border-top: 1px solid #2b344b;
+        }
+        .grid-access-source > div { min-width: 0; }
+        .grid-access-kind { display: block; font-size: 14px; font-weight: 500; }
+        .grid-access-reason, .grid-access-world {
+            display: block;
+            margin-top: 4px;
+            color: #aeb9cc;
+            font-size: 12px;
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+        .grid-access-position { font: 13px ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+        @media (max-width: 600px) {
+            .grid-access-player { padding: 12px; }
+            .grid-access-source { grid-template-columns: 1fr; gap: 6px; }
+            .grid-access-heading { flex-direction: column; gap: 4px; }
+        }
     </style>
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
@@ -550,19 +639,20 @@
 <section id="terminalgrid">
     <button class='collapsible' id='currentgrid'>No grid selected</button>
     <section style='display: none;'>
-        <section style='display: flex; flex-direction: row; flex-wrap: wrap;'>
-            <select id="gridselection" aria-label="Select a grid" size="5" style="margin-right: 10px; overflow-y: auto;" onchange="selectedGridChanged(this);">
+        <section class="grid-options">
+            <select id="gridselection" aria-label="Select a grid" size="5" onchange="selectedGridChanged(this);">
                 <!-- <option value="1">Grid 1 owned</option>
                 <option value="2">Grid 2 owned</option>
                 <option value="3">Grid 3 owned</option>
                 <option value="4">Grid 4 owned</option> -->
             </select>
-            <section>
-                <input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">  <label for="thisgridbydefault">Select this grid by default</label> <br>
-                <input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);"> <label for="trackthisgrid">Enable tracking for this grid (track jobs)</label> <br>
+            <section class="grid-settings">
+                <label><input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">Select this grid by default</label>
+                <label><input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);">Enable crafting tracking</label>
             </section>
-            <span class='note' style="flex: 0 0 100%; margin-top: 10px;">To select a grid, the network must be exposed for web access. On newer versions, place a Wireless Access Point on the network. On older versions, use a Security Terminal and grant the required permissions.</span>
+            <span class='note'>Access is granted through a controller, Wireless Access Point or terminal assigned to you, or through supported security permissions. The network must have an online controller.</span>
         </section>
+        <section id="gridaccessdetails" aria-live="polite"></section>
     </section>
 </section>
 <section id="terminalcontainer">
@@ -639,14 +729,14 @@
                 <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
                 <br>
                 You are logged in as <span id="username" style="font-weight: bold;"></span> <br>
-                <button onclick="document.location.href='?logout'">LogOut</button>
+                <button onclick="logout()">LogOut</button>
             </section>
         </section>
     </section>
 </section>
 
 <script>
-    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7 + "; path=/";
+    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7;
     const username = "_REPLACE_ME_USERNAME";
     const isAdmin = _REPLACE_ME_IS_ADMIN;
     const isOutdated = _REPLACE_ME_VERSION_OUTDATED;
@@ -796,13 +886,13 @@
     function onTrackThisGridChange(el) {
         if (selectedGrid == -1) return;
         let trackThisGrid = el.checked;
-        getJSONWithGridRefresh('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
+        getJSONChecked(gridURL(selectedGrid, 'settings'), function(data) {
             data = data.data;
             el.checked = data['isTracked'];
             updateGridList();
         }, function(data) {
             showAlert(data.status + ": " + data.data);
-        });
+        }, 'PATCH', { isTracked: trackThisGrid });
     }
     function refreshTerminal() {
         if (currentWindow == 0)
@@ -822,7 +912,7 @@
         const d = new Date();
         d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
         let expires = "expires="+d.toUTCString();
-        document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+        document.cookie = cname + "=" + cvalue + ";" + expires;
     }
     function getCookie(cname) {
         let name = cname + "=";
@@ -841,7 +931,7 @@
     function initSettings(){
         let cookie = getCookie("defaultGrid");
         if (cookie != "")
-            settings.defaultGrid = Number(cookie);
+            settings.defaultGrid = cookie === '-1' ? -1 : cookie;
         cookie = getCookie("sortBy");
         if (cookie != "")
             sortingOptions.sortBy = Number(cookie);
@@ -1026,7 +1116,7 @@
         const gridId = selectedGrid;
         let message = "Asking for " + escapeCPUText(globalCPUList[cpuId].name) + "...";
         pushLoadingScreen(message);
-        $.getJSON('get?grid=' + gridId + '&cpu=' + encodeURIComponent(cpuId).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('GET', gridURL(gridId, 'cpus/' + encodeURIComponent(cpuId)), null, function(data){
             if (selectedCPU !== cpuId || selectedGrid !== gridId || !globalCPUList[cpuId]) {
                 popLoadingScreen(message);
                 return;
@@ -1090,7 +1180,7 @@
             return;
         }
         const gridId = selectedGrid;
-        $.getJSON('list?grid=' + gridId, function(data) {
+        requestJSON('GET', gridURL(gridId, 'cpus'), null, function(data) {
             if (selectedGrid !== gridId) return;
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
@@ -1111,7 +1201,7 @@
         });
     }
     function updateGridList(onDone){
-        $.getJSON('grids', function(data) {
+        $.getJSON('api/grids', function(data) {
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 return;
@@ -1119,48 +1209,135 @@
             data = data.data;
             console.log(data);
             let gridFound = false;
-            let html = "";
+            const selection = document.getElementById('gridselection');
+            selection.replaceChildren();
             for (let i = 0; i < data.length; i++){
                 let grid = data[i];
                 let str = grid['key'] + " [ Owned by " + grid['owner'] + " ][ CPU count: " + grid['cpuCount'] + " ]" + (settings.defaultGrid != -1 && grid['key'] == settings.defaultGrid ? "[ Default ]" : "") + (grid['isTrackingEnabled'] ? "[ Tracked ]" : "");
-                html += "<option value='" + grid['key'] + "' " + (grid['key'] == -1 ? "disabled" : "") + (selectedGrid != -1 && grid['key'] == selectedGrid ? "selected" : "") + ">Grid " + str + "</option>";
+                const option = document.createElement('option');
+                option.value = grid.key;
+                option.textContent = 'Grid ' + str;
+                option.selected = selectedGrid === grid.key;
+                selection.appendChild(option);
                 if (selectedGrid != -1 && grid['key'] == selectedGrid) {
                     document.getElementById('thisgridbydefault').checked = settings.defaultGrid == selectedGrid;
                     document.getElementById('thisgridbydefault').disabled = false;
                     document.getElementById('trackthisgrid').disabled = false;
                     document.getElementById('trackthisgrid').checked = grid['isTrackingEnabled'];
-                    document.getElementById('currentgrid').innerHTML = "Current grid: " + str;
+                    document.getElementById('currentgrid').textContent = "Current grid: " + str;
                     gridFound = true;
                 }
             }
-            document.getElementById('gridselection').innerHTML = html;
+            if (!gridFound) {
+                selectedGrid = -1;
+                document.getElementById('currentgrid').textContent = 'No grid selected';
+                document.getElementById('thisgridbydefault').disabled = true;
+                document.getElementById('trackthisgrid').disabled = true;
+            }
+            const selected = data.find(grid => grid.key === selectedGrid);
+            showGridAccess(selected ? selected.accessSources : {});
             if (data.length > 1)
                 document.getElementById('gridselection').size = data.length;
             else
                 document.getElementById('gridselection').size = 2;
             if (onDone)
                 onDone();
+        }).fail(function(response) {
+            const error = response.responseJSON;
+            showAlert(error ? error.status + (error.data ? ': ' + error.data : '')
+                : 'HTTP ' + response.status + ': Could not load grids.');
         });
     }
     updateGridList();
-    // The async endpoints (trackinghistory / gettracking / gridsettings) authorize against a per-user
-    // access set that the server rebuilds during synced requests. After a long idle period it expires and
-    // the server answers REFRESH_REQUIRED instead of serving the request. Asking for the grid list rebuilds
-    // that set, so retry once before bothering the user with an error.
-    function getJSONWithGridRefresh(url, onSuccess, onFailure){
-        $.getJSON(url, function(data){
-            if (data.status === "REFRESH_REQUIRED"){
-                updateGridList(function(){
-                    $.getJSON(url, function(retried){
-                        if (retried.status !== "OK"){
-                            onFailure(retried);
-                            return;
-                        }
-                        onSuccess(retried);
-                    });
-                });
-                return;
+    function showGridAccess(groups) {
+        const container = document.getElementById('gridaccessdetails');
+        const expanded = container.children.length > 0 && container.children[0].open;
+        container.replaceChildren();
+        const players = Object.entries(groups || {}).filter(([, entries]) => entries.length > 0);
+        if (players.length === 0) return;
+        const details = document.createElement('details');
+        details.className = 'grid-access';
+        details.open = expanded;
+        const summary = document.createElement('summary');
+        summary.textContent = 'Players with access';
+        const count = document.createElement('span');
+        count.className = 'grid-access-count';
+        count.textContent = players.length;
+        summary.appendChild(count);
+        details.appendChild(summary);
+        const kinds = {controller: 'Controller', wireless_access_point: 'Wireless Access Point', terminal: 'Terminal', security_terminal: 'Security Terminal'};
+        const reasons = {node_owner: 'Block owner', security_owner: 'Security owner', security_card: 'Security permissions'};
+        function appendText(parent, tag, className, text) {
+            const element = document.createElement(tag);
+            element.className = className;
+            element.textContent = text;
+            parent.appendChild(element);
+        }
+        for (const [uuid, entries] of players) {
+            const player = document.createElement('section');
+            player.className = 'grid-access-player';
+            const heading = document.createElement('header');
+            heading.className = 'grid-access-heading';
+            appendText(heading, 'strong', 'grid-access-name', entries[0].player.name);
+            appendText(heading, 'span', 'grid-access-uuid', uuid);
+            player.appendChild(heading);
+            const list = document.createElement('ul');
+            list.className = 'grid-access-sources';
+            for (const source of entries) {
+                const item = document.createElement('li');
+                item.className = 'grid-access-source';
+                const block = document.createElement('div');
+                appendText(block, 'span', 'grid-access-kind', kinds[source.kind] || source.kind);
+                appendText(block, 'span', 'grid-access-reason', reasons[source.reason] || source.reason);
+                const location = document.createElement('div');
+                const pos = source.position;
+                appendText(location, 'code', 'grid-access-position', pos.x + ', ' + pos.y + ', ' + pos.z);
+                appendText(location, 'span', 'grid-access-world', 'Dimension: ' + pos.dimid +
+                    (source.side ? ' · Side: ' + source.side : ''));
+                item.appendChild(block);
+                item.appendChild(location);
+                list.appendChild(item);
             }
+            player.appendChild(list);
+            details.appendChild(player);
+        }
+        container.appendChild(details);
+    }
+    function requestJSON(method, url, body, onResponse, onTransportFailure) {
+        const options = { url, method, dataType: 'json', success: onResponse };
+        if (method !== 'GET') options.headers = { 'X-AE2-Request': 'true' };
+        if (body !== null) {
+            options.contentType = 'application/json';
+            options.data = JSON.stringify(body);
+        }
+        return $.ajax(options).fail(function(response) {
+            if (response && response.responseJSON) {
+                onResponse(response.responseJSON);
+            } else if (onTransportFailure) {
+                onTransportFailure(response);
+            } else {
+                onResponse({ status: 'HTTP_ERROR', data: 'Request failed' +
+                    (response && response.status ? ' (HTTP ' + response.status + ')' : '') });
+            }
+        });
+    }
+    function logout() {
+        requestJSON('POST', 'api/auth/logout', null, function(data) {
+            if (data.status === 'OK' || data.status === 'UNAUTHORIZED') {
+                document.location.href = '.';
+            } else {
+                showAlert(data.status + ': ' + data.data);
+            }
+        }, function(response) {
+            if (response && response.status === 401) document.location.href = '.';
+            else showAlert('The logout response was lost. Please try again.');
+        });
+    }
+    function gridURL(grid, resource) {
+        return 'api/grids/' + encodeURIComponent(grid) + '/' + resource;
+    }
+    function getJSONChecked(url, onSuccess, onFailure, method = 'GET', body = null){
+        requestJSON(method, url, body, function(data){
             if (data.status !== "OK"){
                 onFailure(data);
                 return;
@@ -1169,7 +1346,7 @@
         });
     }
     function selectedGridChanged(el){
-        selectedGrid = Number(el.value);
+        selectedGrid = el.value;
         selectedCPU = "";
         cpuForJob = "";
         globalCPUList = {};
@@ -1310,7 +1487,7 @@
             return;
         let message = "Asking for item list...";
         pushLoadingScreen(message);
-        $.getJSON('items?grid=' + selectedGrid, function(data){
+        requestJSON('GET', gridURL(selectedGrid, 'items'), null, function(data){
             console.log(data);
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
@@ -1329,7 +1506,7 @@
             return;
         let message = "Asking for tracking history list...";
         pushLoadingScreen(message);
-        getJSONWithGridRefresh('trackinghistory?grid=' + selectedGrid, function(data){
+        getJSONChecked(gridURL(selectedGrid, 'crafting-history'), function(data){
             console.log(data);
             data = data.data;
             let html = "<table>";
@@ -1529,7 +1706,7 @@
         isInterfaceChartInitialized = false;
         isItemChartInitialized = false;
         pushLoadingScreen(message);
-        getJSONWithGridRefresh('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
+        getJSONChecked(gridURL(selectedGrid, 'crafting-history/' + encodeURIComponent(id)), function(data){
             console.log(data);
             data = data.data;
 
@@ -1610,7 +1787,7 @@
             document.getElementById('terminalCPUListForJob').innerHTML = "...";
             let message = "Sending order...";
             pushLoadingScreen(message);
-            $.getJSON('order?grid=' + selectedGrid + '&itemKey=' + encodeURIComponent(itemKey) + "&quantity=" + quantity, function(data){
+            requestJSON('POST', gridURL(selectedGrid, 'crafting-plans'), { itemKey, quantity }, function(data){
                 console.log(data);
                 if(data.status !== "OK"){
                     if (data.status === "ITEM_IDENTITY_UNKNOWN")
@@ -1635,7 +1812,7 @@
                     //setCurrentScreen(0);
                 }
                 popLoadingScreen(message);
-            }).fail(function() {
+            }, function() {
                 popLoadingScreen(message);
                 showAlert("The order response was lost. Check the crafting jobs before placing another order.");
             });
@@ -1647,7 +1824,7 @@
         if(currentWindow != 2){
             return;
         }
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id, function(data){
+        requestJSON('GET', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id), null, function(data){
             if(currentWindow != 2){
                 return;
             }
@@ -1715,7 +1892,7 @@
         }
         setCurrentScreen(0);
         refreshTerminal();
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&cancel", function(data){
+        requestJSON('DELETE', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id), null, function(data){
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 return;
@@ -1737,7 +1914,7 @@
         }
         let message = "Submitting job...";
         pushLoadingScreen(message);
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&submit" + "&cpu=" + encodeURIComponent(cpuForJob).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('POST', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id + '/submit'), { cpuKey: cpuForJob }, function(data){
             if (data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 if (data.status === "CPU_NOT_FOUND") {
@@ -1761,7 +1938,7 @@
         }
         let message = "Cancelling job...";
         pushLoadingScreen(message);
-        $.getJSON('cancelcpu?grid=' + selectedGrid + '&cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('POST', gridURL(selectedGrid, 'cpus/' + encodeURIComponent(selectedCPU) + '/cancel'), null, function(data){
             if (data.status !== "OK") showAlert(data.status + ": " + data.data);
             updateCPUList();
             refreshTerminal();

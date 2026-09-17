@@ -1,0 +1,91 @@
+name: Update release feed
+
+on:
+  workflow_run:
+    workflows: [ Release tagged build ]
+    types: [ completed ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Every run reconciles all published releases, including any whose pending run was replaced.
+concurrency:
+  group: update-release-feed
+  cancel-in-progress: false
+
+jobs:
+  update-release-feed:
+    if: >-
+      github.repository == 'kuba6000/AE2-Web-Integration' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      BOT_EMAIL: agent@kuba6000.pl
+      BOT_LOGIN: kuba6000-agent
+      BOT_NAME: "KLANKER | kuba6000"
+
+    steps:
+      - name: Checkout trusted core automation
+        uses: actions/checkout@v4
+        with:
+          ref: core
+          persist-credentials: false
+          submodules: false
+
+      - name: Checkout version feed
+        uses: actions/checkout@v4
+        with:
+          ref: version
+          path: version-feed
+          persist-credentials: false
+
+      - name: Verify bot token identity
+        env:
+          GH_TOKEN: ${{ secrets.CORE_PIN_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          authenticated_login="$(gh api user --jq .login)"
+          if [[ "${authenticated_login}" != "${BOT_LOGIN}" ]]; then
+            echo "CORE_PIN_BOT_TOKEN belongs to ${authenticated_login}, expected ${BOT_LOGIN}." >&2
+            exit 1
+          fi
+
+      - name: Reconcile and publish release feed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CORE_PIN_BOT_TOKEN: ${{ secrets.CORE_PIN_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          basic_auth="$(printf 'x-access-token:%s' "${CORE_PIN_BOT_TOKEN}" | base64 -w 0)"
+          echo "::add-mask::${basic_auth}"
+
+          for attempt in 1 2 3 4 5; do
+            git -C version-feed fetch --no-tags origin refs/heads/version
+            git -C version-feed reset --hard FETCH_HEAD
+            previous_sha="$(git -C version-feed rev-parse HEAD)"
+
+            gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              | jq 'add' > "${RUNNER_TEMP}/published-releases.json"
+            python3 .github/scripts/update_release_feed.py \
+              --repository version-feed \
+              --releases "${RUNNER_TEMP}/published-releases.json" \
+              --author-name "${BOT_NAME}" \
+              --author-email "${BOT_EMAIL}"
+
+            if [[ "$(git -C version-feed rev-parse HEAD)" == "${previous_sha}" ]]; then
+              exit 0
+            fi
+            if git -C version-feed \
+              -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${basic_auth}" \
+              push "https://github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/version; then
+              exit 0
+            fi
+            echo "Push failed; refreshing version branch before retry ${attempt}/5."
+          done
+          echo "Unable to publish release feed after five attempts." >&2
+          exit 1

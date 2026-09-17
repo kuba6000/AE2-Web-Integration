@@ -1,19 +1,29 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
 public class CoreEngine {
+
+    public static final GridIdentityRegistry GRID_IDENTITIES = new GridIdentityRegistry();
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
@@ -24,7 +34,7 @@ public class CoreEngine {
      * cost of a request varies by orders of magnitude - {@code /items} on a large network against
      * {@code /gettracking} - so no count can bound the time.
      */
-    static final long DRAIN_BUDGET_NANOS = 5_000_000L;
+    static final long DRAIN_BUDGET_NANOS = TimeUnit.MILLISECONDS.toNanos(5);
     static final long PLAN_SWEEP_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
     static final int PLAN_SWEEP_GRIDS_PER_TICK = 8;
 
@@ -34,9 +44,14 @@ public class CoreEngine {
 
     // Populated by the interface layer from the buildscript-generated mod version.
     private static volatile String modVersion;
+    private static String versionIdentifier;
+    private static volatile @Nullable VersionChecker versionChecker;
+    private static boolean serverRunning;
 
     public static void init(IServerPlatform serverPlatform, String modVersion, String versionIdentifier) {
-        VersionChecker.setVersionIdentifier(versionIdentifier);
+        serverRunning = false;
+        stopVersionChecker();
+        CoreEngine.versionIdentifier = versionIdentifier;
         AE2Controller.serverPlatform = serverPlatform;
         Config.init(serverPlatform.getConfigDirectory());
         CoreEngine.modVersion = modVersion;
@@ -45,13 +60,18 @@ public class CoreEngine {
 
     private static void loadData() {
         CoreData.loadData();
-        GridData.loadData();
     }
 
     public static void onServerStarted() {
+        try {
+            CoreEngine.GRID_IDENTITIES.initialize(AE2Controller.serverPlatform.getWorldDirectory());
+        } catch (IOException e) {
+            LOG.error("Failed to load grid identities; grid requests remain unavailable", e);
+        }
+        serverRunning = true;
         AE2Controller.init();
         StartupHandler.logOpenAdminAccessWarning();
-        StartupHandler.logOutdatedWarning();
+        maintainVersionChecker();
         StartupHandler.handleNotificationIntegration();
     }
 
@@ -63,6 +83,38 @@ public class CoreEngine {
     public static void onServerTick() {
         drainRequests(System::nanoTime);
         runPlanMaintenance(System.nanoTime());
+        maintainVersionChecker();
+    }
+
+    private static void maintainVersionChecker() {
+        if (!serverRunning) return;
+        if (!Config.CHECK_FOR_UPDATES()) {
+            stopVersionChecker();
+        } else if (versionChecker == null && modVersion != null) {
+            try {
+                VersionChecker checker = new VersionChecker(
+                    new URL("https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/version/"),
+                    modVersion,
+                    versionIdentifier);
+                versionChecker = checker;
+                checker.checkForUpdates();
+            } catch (MalformedURLException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
+    private static void stopVersionChecker() {
+        VersionChecker checker = versionChecker;
+        if (checker != null) {
+            checker.close();
+            versionChecker = null;
+        }
+    }
+
+    public static @Nullable ReleaseManifest.Release getAvailableUpdate() {
+        VersionChecker checker = versionChecker;
+        return checker == null ? null : checker.getAvailableUpdate();
     }
 
     /** Called from the platform's player-login event, which already runs on the server thread. */
@@ -87,7 +139,7 @@ public class CoreEngine {
                     task.getClass()
                         .getSimpleName(),
                     t);
-                task.failIfPending("INTERNAL_ERROR");
+                task.failIfPending(ApiStatus.INTERNAL_ERROR);
             }
             // Checked after handling, never before, so a request costlier than the whole budget still runs
             // and can never starve the queue.
@@ -119,18 +171,22 @@ public class CoreEngine {
     }
 
     public static void onServerStopping() {
+        serverRunning = false;
+        stopVersionChecker();
         AE2Controller.stopHTTPServer();
         // Authorization must not survive into the next world loaded in this JVM.
-        GridAccessSessions.clear();
+        GRID_IDENTITIES.clear();
     }
 
     public static synchronized void onServerStopped() {
+        serverRunning = false;
+        stopVersionChecker();
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.
         AE2Controller.stopHTTPServer();
         AE2Controller.clearWorldState();
-        GridAccessSessions.clear();
         AE2JobTracker.clearActiveJobs();
         GridData.clearRuntimeState();
+        CoreEngine.GRID_IDENTITIES.clear();
         resetPlanMaintenance();
     }
 

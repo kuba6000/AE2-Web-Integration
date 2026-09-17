@@ -17,11 +17,13 @@ public final class WebPrincipal {
     private enum Kind {
         PLAYER,
         ADMIN,
-        LOCALHOST
+        LOCALHOST,
+        ANONYMOUS
     }
 
     private static final WebPrincipal ADMIN = new WebPrincipal(Kind.ADMIN, null, "Admin");
     private static final WebPrincipal LOCALHOST = new WebPrincipal(Kind.LOCALHOST, null, "localhost");
+    private static final WebPrincipal ANONYMOUS = new WebPrincipal(Kind.ANONYMOUS, null, "");
 
     private final @NotNull Kind kind;
     // PLAYER principals are constructed only by forPlayer, which always supplies an identity.
@@ -47,7 +49,11 @@ public final class WebPrincipal {
     }
 
     public boolean isAdmin() {
-        return kind != Kind.PLAYER;
+        return kind == Kind.ADMIN || kind == Kind.LOCALHOST;
+    }
+
+    public static @NotNull WebPrincipal anonymous() {
+        return ANONYMOUS;
     }
 
     public @Nullable PlayerIdentity getPlayerIdentity() {

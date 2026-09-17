@@ -1,57 +1,43 @@
 package pl.kuba6000.ae2webintegration.core.ae2request.async;
 
-import java.util.Map;
-
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.GridAccess;
-import pl.kuba6000.ae2webintegration.core.GridAccessSessions;
-import pl.kuba6000.ae2webintegration.core.GridData;
+import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
-import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 
-/**
- * Requests served directly on the HTTP worker thread, without a hop through the server tick.
- * <p>
- * They only ever touch stored {@link GridData}, never live AE2 state, which is what keeps them off the
- * server thread. Authorization therefore cannot be evaluated here - it is read from
- * {@link GridAccessSessions}, which the server thread keeps up to date during synced requests.
- */
+/** HTTP-thread operations read stored data and synchronized permissions, never live native game state. */
 public abstract class IAsyncRequest extends IRequest {
 
-    protected long gridKey = -1;
-    protected GridData grid = null;
+    @PathParam("gridKey")
+    protected StableKey gridKey;
+    protected GridData grid;
 
-    public void handle(Map<String, String> getParams) {}
-
-    public void handle(AE2Controller.RequestContext context) {
-        String gridstr = context.getGetParams()
-            .get("grid");
-        if (gridstr == null || gridstr.isEmpty()) {
-            gridKey = -1;
-        } else {
-            Long parsed = HTTPUtils.parseLong(gridstr);
-            if (parsed == null) {
-                deny("BAD_PARAM");
-                return;
+    @Override
+    public boolean init(RequestContext context) {
+        if (!super.init(context)) return false;
+        if (gridKey != null) {
+            IAEGrid liveGrid = CoreEngine.GRID_IDENTITIES.getGrid(gridKey);
+            if (liveGrid == null) {
+                deny(ApiStatus.GRID_NOT_FOUND);
+                return false;
             }
-            gridKey = parsed;
-        }
-        if (gridKey != -1) {
-            GridAccess access = GridAccessSessions.get(context.getPrincipal());
-            if (access == null || access.isStale(System.currentTimeMillis())) {
-                // Distinct from NO_PERMISSIONS so the client can re-fetch the grid list and retry instead
-                // of reporting a permission error.
-                deny("REFRESH_REQUIRED");
-                return;
+            if (!GridAccess.allows(liveGrid, context.getPrincipal())) {
+                deny(ApiStatus.NO_PERMISSIONS);
+                return false;
             }
-            if (!access.canAccess(gridKey)) {
-                deny("NO_PERMISSIONS");
-                return;
-            }
-            // Lookup, not create: a handler that stores something asks for the entry itself, so a plain
-            // read can no longer leave a phantom grid behind in griddata.json.
             grid = GridData.find(gridKey);
         }
-        handle(context.getGetParams());
+        return true;
+    }
+
+    public abstract void handle();
+
+    public final void handle(RequestContext context) {
+        if (init(context)) handle();
     }
 }

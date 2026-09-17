@@ -16,11 +16,11 @@ import org.junit.jupiter.api.Test;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPU;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.GetCPUList;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPUList;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -33,7 +33,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
-class OutputSnapshotTest {
+class OutputSnapshotTest extends GridTestScope {
 
     @BeforeEach
     void clearRegistry() {
@@ -160,7 +160,6 @@ class OutputSnapshotTest {
             });
         TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
             990124,
-            true,
             false,
             AEControllerState.CONTROLLER_ONLINE) {
 
@@ -189,7 +188,11 @@ class OutputSnapshotTest {
         AE2Controller.AE2Interface = ae;
         try {
             for (ISyncedRequest request : new ISyncedRequest[] { new GetCPUList(), new GetCPU() }) {
-                assertTrue(request.init(TestGridFixtures.context(-1, "grid=990124&cpu=AAAAAAAAAAAAAAAAAAAAAA")));
+                assertTrue(
+                    request.init(
+                        TestGridFixtures.context(
+                            -1,
+                            "grid=" + TestGridFixtures.resolvedKey(grid) + "&cpu=AAAAAAAAAAAAAAAAAAAAAA")));
                 request.runOnServerThread(ae);
                 JsonObject data = JsonParser.parseString(request.getJSON())
                     .getAsJsonObject()
@@ -211,7 +214,8 @@ class OutputSnapshotTest {
     void trackingMergePublishesNewCapturedAmountWithoutRetainingNativeStack() {
         long gridId = 990123;
         AE2JobTracker.clearActiveJobs();
-        GridData.getOrCreate(gridId).isTracked = true;
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(gridId);
+        TestGridFixtures.track(grid);
         AtomicReference<Stack> output = new AtomicReference<>(new Stack(new Resource(), 5));
         ICraftingCPUCluster cpu = (ICraftingCPUCluster) Proxy.newProxyInstance(
             getClass().getClassLoader(),
@@ -221,12 +225,12 @@ class OutputSnapshotTest {
                     .equals("web$getFinalOutput")) return output.get();
                 throw new AssertionError("Unexpected native CPU call");
             });
-        AE2JobTracker.addJob(cpu, TestGridFixtures.grid(gridId), false);
+        AE2JobTracker.addJob(cpu, grid, false);
         Object initial = AE2JobTracker.findActiveJob(cpu).finalOutput;
         output.get().unavailable = true;
         output.get().key.unavailable = true;
         output.set(new Stack(new Resource(), 9));
-        AE2JobTracker.addJob(cpu, TestGridFixtures.grid(gridId), true);
+        AE2JobTracker.addJob(cpu, grid, true);
         Object merged = AE2JobTracker.findActiveJob(cpu).finalOutput;
         output.get().unavailable = true;
         output.get().key.unavailable = true;

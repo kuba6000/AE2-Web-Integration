@@ -149,12 +149,20 @@ from right to left, skips configured trusted proxies, and uses the first untrust
 prevents a client from granting itself localhost access by sending a forged
 `X-Forwarded-For: 127.0.0.1` header directly.
 
+For HTTPS termination, preserve the public `Host` header (including any nonstandard port) and set
+`X-Forwarded-Proto` to the public protocol, `http` or `https`. The mod accepts this protocol header only
+from the same trusted proxies described above. It is used to validate the origin of browser login and
+registration forms when `Sec-Fetch-Site` is absent. The proxy must overwrite `X-Forwarded-Proto`, not
+forward an arbitrary client value or append a list. With multiple proxy hops, the last trusted proxy
+must supply the verified public protocol.
+
 Example Nginx configuration for a proxy running on the same machine:
 
 ```nginx
 location / {
     proxy_pass http://127.0.0.1:2324;
-    proxy_set_header Host $host;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 }
@@ -204,9 +212,12 @@ which keeps all crafting completion notifications enabled.
 
 ## Custom website
 
-If you already have a web server and want to host the panel there, you can! There is no complete API
-documentation yet, but the [`example_website`](./example_website) directory contains a ready-to-use simple PHP
+If you already have a web server and want to host the panel there, you can! The
+[`example_website`](./example_website) directory contains a ready-to-use simple PHP
 proxy. It forwards API calls from your web server to the AE2 Web Integration endpoint.
+
+See the [OpenAPI generator guide](tools/openapi-doclet/README.md) for generating the API
+specification from endpoint annotations and Javadocs.
 
 ## Compatibility
 

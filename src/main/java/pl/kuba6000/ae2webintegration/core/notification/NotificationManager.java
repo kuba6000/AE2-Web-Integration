@@ -29,7 +29,7 @@ public class NotificationManager extends Thread {
 
     public static void init() {
         LOG.info("Initializing NotificationManager");
-        if (thread != null) return;
+        if (thread != null) shutdown();
 
         DiscordDestination discord = new DiscordDestination();
         if (discord.isUsable()) destinations.add(discord);

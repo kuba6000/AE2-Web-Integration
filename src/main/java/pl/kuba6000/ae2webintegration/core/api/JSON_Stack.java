@@ -12,9 +12,29 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public final class JSON_Stack {
 
+    /**
+     * Registry resource identifier.
+     *
+     * @example minecraft:iron_ingot
+     */
     public final @NotNull String itemid;
+    /**
+     * Resource display name.
+     *
+     * @example Iron Ingot
+     */
     public final @NotNull String itemname;
+    /**
+     * Number of resource units.
+     *
+     * @example 64
+     */
     public final long quantity;
+    /**
+     * Stable resource key, or null when an identity could not be captured.
+     *
+     * @example AAAAAAAAAAAAAAAAAAAAAA
+     */
     public final @Nullable String itemKey;
 
     private JSON_Stack(@NotNull String itemid, @NotNull String itemname, long quantity, @Nullable String itemKey) {

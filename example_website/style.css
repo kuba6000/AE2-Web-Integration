@@ -518,3 +518,93 @@ option:checked{
         font-size: 150%;
     }
 }
+
+
+#terminalgrid, #terminalgrid * { box-sizing: border-box; }
+#terminalgrid { color-scheme: dark; }
+#terminalgrid .grid-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-start;
+}
+#gridselection {
+    flex: 1 1 360px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-y: auto;
+}
+.grid-settings {
+    display: grid;
+    gap: 10px;
+    padding: 6px 0;
+}
+.grid-settings label {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+#terminalgrid .note {
+    flex: 0 0 100%;
+    color: #aeb9cc;
+    font-size: 12px;
+    line-height: 1.6;
+    opacity: 1;
+}
+#gridaccessdetails { margin-top: 16px; min-width: 0; }
+#gridaccessdetails:empty { display: none; }
+.grid-access {
+    border: 1px solid #35405c;
+    border-radius: 6px;
+    background: #191e2d;
+    overflow: hidden;
+}
+.grid-access > summary {
+    padding: 12px 14px;
+    background: #252d43;
+    cursor: pointer;
+    font-weight: 500;
+}
+.grid-access > summary:hover { background: #303b56; }
+.grid-access > summary:focus-visible { outline: 2px solid #bda3e0; outline-offset: -3px; }
+.grid-access-count {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: #394665;
+    font-size: 12px;
+}
+.grid-access-player { padding: 16px; }
+.grid-access-player + .grid-access-player { border-top: 1px solid #35405c; }
+.grid-access-heading { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+.grid-access-name { font-weight: 600; overflow-wrap: anywhere; }
+.grid-access-uuid {
+    font: 12px ui-monospace, Consolas, monospace;
+    color: #aeb9cc;
+    overflow-wrap: anywhere;
+}
+.grid-access-sources { list-style: none; margin-top: 10px; }
+.grid-access-source {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr);
+    gap: 6px 24px;
+    padding: 10px 0;
+    border-top: 1px solid #2b344b;
+}
+.grid-access-source > div { min-width: 0; }
+.grid-access-kind { display: block; font-size: 14px; font-weight: 500; }
+.grid-access-reason, .grid-access-world {
+    display: block;
+    margin-top: 4px;
+    color: #aeb9cc;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+.grid-access-position { font: 13px ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+    .grid-access-player { padding: 12px; }
+    .grid-access-source { grid-template-columns: 1fr; gap: 6px; }
+    .grid-access-heading { flex-direction: column; gap: 4px; }
+}

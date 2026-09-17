@@ -1,130 +1,160 @@
 <?php
+    // AE2 Web Terminal url
+    $AE2_SERVER_HOST = "http://localhost:2324/";
+    // Is the public mode enabled on the server
+    $AE2_IS_PUBLIC_MODE = true;
+    // Immediate proxy IPs allowed to supply X-Forwarded-Proto. Add remote proxies explicitly.
+    // These proxies must preserve the public Host (including its port) and overwrite this header.
+    $AE2_TRUSTED_PROXIES = ['127.0.0.1', '::1'];
 
-    // Lax matches what browsers already apply to a cookie with no SameSite, so this mainly covers older
-    // ones. It stops an image tag or a cross-site fetch carrying the session, but not a top-level
-    // navigation - and the endpoints behind this proxy are state-changing GETs, so the real fix is to
-    // move them to POST. PHP's positional setcookie() has no SameSite parameter; the options array does.
     function cookieOptions($expires, $httpOnly) {
         return [
             'expires' => $expires,
-            'path' => '/',
             'httponly' => $httpOnly,
             'samesite' => 'Lax',
         ];
     }
 
-    // AE2 Web Terminal url
-    $AE2_SERVER_HOST = "http://localhost:2324/";
-    // Is the public mode enabled on the server
-    $AE2_IS_PUBLIC_MODE = true;
-
-    if (!isset($_COOKIE['authenticationToken'])) {
-
-        if (isset($_POST['register'])){
-            $username = $_POST['register'];
-            $password = $_POST['password'];
-            $ch = curl_init($AE2_SERVER_HOST . 'auth');
-            curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml'));
-            curl_setopt($ch, CURLOPT_HEADER, FALSE);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($_POST));
-            $return = curl_exec($ch);
-            $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpcode == 400){
-                header("Location: ?" . $return);
-                exit;
-            }
-            elseif ($httpcode == 200){
-                header("Location: ?confirmregistration&token=" . $return);
-                exit;
-            }
+    function clearSessionCookies() {
+        foreach (['authenticationToken', 'username', 'isAdmin', 'isOutdated'] as $name) {
+            setcookie($name, '', cookieOptions(time() - 3600, $name === 'authenticationToken'));
         }
+    }
 
-        if (isset($_POST['password'])){
-            $password = $_POST['password'];
-            $remember = isset($_POST['remember']) && $_POST['remember'] == 'on';
-            $ch = curl_init($AE2_SERVER_HOST . 'auth');
-            curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml'));
-            curl_setopt($ch, CURLOPT_HEADER, FALSE);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($_POST));
-            $return = curl_exec($ch);
-            $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpcode == 400){
-                header("Location: ?" . $return);
-                exit;
-            }
-            elseif ($httpcode == 200){
-                $json = json_decode($return, true);
-                $validity = $remember ? (time() + (604_800)) : (time() + (3600));
-                setcookie("authenticationToken", $json['token'], cookieOptions($validity, true));
-                setcookie("username", $json['username'], cookieOptions($validity, false));
-                setcookie("isAdmin", $json['isAdmin'] ? '1' : '0', cookieOptions($validity, false));
-                setcookie("isOutdated", $json['isOutdated'] ? '1' : '0', cookieOptions($validity, false));
-                header("Location: .");
-                exit;
-            }
-        }
-
-
-        $loginfile = file_get_contents("login.html");
-        $loginfile = str_replace("_REPLACE_ME_IS_PUBLIC_MODE", $AE2_IS_PUBLIC_MODE ? "true" : "false", $loginfile);
-        echo $loginfile;
+    function apiError($code, $status) {
+        header('Content-Type: application/json; charset=UTF-8');
+        header('Cache-Control: no-store');
+        http_response_code($code);
+        if ($code === 401) header('WWW-Authenticate: Bearer');
+        echo json_encode(['status' => $status, 'data' => null]);
         exit;
     }
-    if (isset($_GET['logout'])) {
-        $ch = curl_init($AE2_SERVER_HOST . 'auth?revoke');
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml', 'Authorization: Bearer ' . $_COOKIE['authenticationToken']));
-        curl_setopt($ch, CURLOPT_HEADER, FALSE);
+
+    function isSameOriginForm() {
+        global $AE2_TRUSTED_PROXIES;
+        if (isset($_SERVER['HTTP_SEC_FETCH_SITE'])) {
+            return in_array($_SERVER['HTTP_SEC_FETCH_SITE'], ['same-origin', 'none'], true);
+        }
+        // Nonbrowser clients may omit both browser-origin headers.
+        if (!isset($_SERVER['HTTP_ORIGIN'])) return true;
+        $origin = parse_url($_SERVER['HTTP_ORIGIN']);
+        $scheme = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http';
+        if (isset($_SERVER['HTTP_X_FORWARDED_PROTO'])
+                && in_array($_SERVER['REMOTE_ADDR'] ?? '', $AE2_TRUSTED_PROXIES, true)) {
+            $scheme = strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO']));
+            if (!in_array($scheme, ['http', 'https'], true)) return false;
+        }
+        $expected = parse_url($scheme . '://' . ($_SERVER['HTTP_HOST'] ?? ''));
+        return is_array($origin) && is_array($expected)
+            && isset($origin['scheme'], $origin['host'], $expected['host'])
+            && !isset($origin['user']) && !isset($origin['pass'])
+            && !isset($origin['path']) && !isset($origin['query']) && !isset($origin['fragment'])
+            && strtolower($origin['scheme']) === $scheme
+            && strcasecmp($origin['host'], $expected['host']) === 0
+            && ($origin['port'] ?? ($scheme === 'https' ? 443 : 80))
+                === ($expected['port'] ?? ($scheme === 'https' ? 443 : 80));
+    }
+
+    function upstreamRequest($url, $method, $headers, $body) {
+        $responseHeaders = [];
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-        $return = curl_exec($ch);
-        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($ch, $line) use (&$responseHeaders) {
+            $parts = explode(':', $line, 2);
+            if (count($parts) === 2 && in_array(strtolower(trim($parts[0])),
+                    ['content-type', 'allow', 'www-authenticate'], true)) {
+                $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+            }
+            return strlen($line);
+        });
+        if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        if ($method === 'HEAD') curl_setopt($ch, CURLOPT_NOBODY, true);
+        $response = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-        $validity = (time() - 3600);
-        setcookie("authenticationToken", "", cookieOptions($validity, true));
-        setcookie("username", "", cookieOptions($validity, false));
-        setcookie("isAdmin", '', cookieOptions($validity, false));
-        setcookie("isOutdated", '', cookieOptions($validity, false));
-        header("Location: .");
-        exit;
+        return [$response, $code, $responseHeaders];
     }
 
-    if (isset($_GET['API'])){
-
-        $api_path = $_GET['API'];
-        unset($_GET['API']);
-
-
+    $method = $_SERVER['REQUEST_METHOD'];
+    if (isset($_GET['API'])) {
+        $apiPath = $_GET['API'];
+        if (!is_string($apiPath) || !preg_match('~^api(?:/[A-Za-z0-9_-]+)+$~D', $apiPath)) {
+            apiError(404, 'NOT_FOUND');
+        }
+        $publicAuth = in_array($apiPath, ['api/auth/login', 'api/auth/register'], true);
+        $authorization = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        $hasBearer = preg_match('/^Bearer +\S+$/iD', $authorization) === 1;
+        if (isset($_SERVER['HTTP_AUTHORIZATION']) && !$hasBearer) {
+            apiError(401, 'UNAUTHORIZED');
+        }
+        $hasCookie = isset($_COOKIE['authenticationToken']);
+        $mutation = !in_array($method, ['GET', 'HEAD', 'OPTIONS'], true);
+        // Check the browser's marker before translating its cookie into an upstream Bearer token.
+        if (!$hasBearer && $hasCookie && !$publicAuth && $mutation
+                && ($_SERVER['HTTP_X_AE2_REQUEST'] ?? '') !== 'true') {
+            apiError(403, 'CSRF_REJECTED');
+        }
+        if (!$hasBearer && !$hasCookie && !$publicAuth && $method !== 'OPTIONS') {
+            apiError(401, 'UNAUTHORIZED');
+        }
+        $headers = ['Content-Type: ' . ($_SERVER['CONTENT_TYPE'] ?? '')];
+        if ($hasBearer) $headers[] = 'Authorization: ' . $authorization;
+        elseif ($hasCookie && !$publicAuth) $headers[] = 'Authorization: Bearer ' . $_COOKIE['authenticationToken'];
         $params = $_GET;
+        unset($params['API']);
+        $url = $AE2_SERVER_HOST . $apiPath;
+        if ($params) $url .= '?' . http_build_query($params);
+        [$response, $code, $responseHeaders] = upstreamRequest($url, $method, $headers,
+            $mutation ? file_get_contents('php://input') : null);
+        if ($response === false) apiError(502, 'UPSTREAM_UNAVAILABLE');
+        header('Cache-Control: no-store');
+        foreach ($responseHeaders as $name => $value) header($name . ': ' . $value);
+        http_response_code($code ?: 502);
+        echo $response;
+        exit;
+    }
 
-        $ch = curl_init($AE2_SERVER_HOST . $api_path . '?' . http_build_query($params));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/xml', 'Authorization: Bearer ' . $_COOKIE['authenticationToken']));
-        curl_setopt($ch, CURLOPT_HEADER, FALSE);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-        $return = curl_exec($ch);
-        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($httpcode == 401) {
-            $validity = (time() - 3600);
-            setcookie("authenticationToken", "", cookieOptions(time() - 3600, true));
-            setcookie("username", "", cookieOptions($validity, false));
-            setcookie("isAdmin", '', cookieOptions($validity, false));
-            setcookie("isOutdated", '', cookieOptions($validity, false));
-            header("Location: .");
+    if ($method === 'POST' && !isSameOriginForm()) apiError(403, 'CSRF_REJECTED');
+    if ($method === 'POST' && ($_POST['clearSession'] ?? '') === 'true') {
+        // Expire cookies from the page directory where login set their default browser scope.
+        clearSessionCookies();
+        header('Location: .');
+        exit;
+    }
+    if (!isset($_COOKIE['authenticationToken'])) {
+        if ($method === 'POST' && isset($_POST['password'])) {
+            $register = isset($_POST['register']);
+            $remember = isset($_POST['remember']) && $_POST['remember'] === 'on';
+            $body = ['username' => $register ? $_POST['register'] : ($_POST['username'] ?? ''),
+                'password' => $_POST['password']];
+            if (!$register) $body['rememberMe'] = $remember;
+            [$response, $code] = upstreamRequest($AE2_SERVER_HOST . 'api/auth/' . ($register ? 'register' : 'login'),
+                'POST', ['Content-Type: application/json'], json_encode($body));
+            $envelope = $response === false ? null : json_decode($response, true);
+            if ($envelope && $envelope['status'] === 'OK' && $code === ($register ? 202 : 200)) {
+                $data = $envelope['data'];
+                if ($register) {
+                    header('Location: ?confirmregistration&token=' . rawurlencode($data['token']));
+                } else {
+                    $validity = time() + ($remember ? 604800 : 3600);
+                    setcookie('authenticationToken', $data['token'], cookieOptions($validity, true));
+                    setcookie('username', $data['username'], cookieOptions($validity, false));
+                    setcookie('isAdmin', $data['isAdmin'] ? '1' : '0', cookieOptions($validity, false));
+                    setcookie('isOutdated', $data['isOutdated'] ? '1' : '0', cookieOptions($validity, false));
+                    header('Location: .');
+                }
+            } else {
+                $status = $envelope['status'] ?? 'UPSTREAM_UNAVAILABLE';
+                $knownError = in_array($status, ['NOT_ONLINE', 'INVALID_PASSWORD', 'INVALID_USER'], true);
+                header('Location: ?' . ($knownError ? $status : 'error=' . rawurlencode($status)));
+            }
             exit;
         }
-
-        print($return);
-
+        $loginfile = file_get_contents(__DIR__ . '/login.html');
+        echo str_replace('_REPLACE_ME_IS_PUBLIC_MODE', $AE2_IS_PUBLIC_MODE ? 'true' : 'false', $loginfile);
         exit;
     }
 ?>
@@ -159,19 +189,20 @@
 <section id="terminalgrid">
     <button class='collapsible' id='currentgrid'>No grid selected</button>
     <section style='display: none;'>
-        <section style='display: flex; flex-direction: row; flex-wrap: wrap;'>
-            <select id="gridselection" aria-label="Select a grid" size="5" style="margin-right: 10px; overflow-y: auto;" onchange="selectedGridChanged(this);">
+        <section class="grid-options">
+            <select id="gridselection" aria-label="Select a grid" size="5" onchange="selectedGridChanged(this);">
                 <!-- <option value="1">Grid 1 owned</option>
                 <option value="2">Grid 2 owned</option>
                 <option value="3">Grid 3 owned</option>
                 <option value="4">Grid 4 owned</option> -->
             </select>
-            <section>
-                <input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">  <label for="thisgridbydefault">Select this grid by default</label> <br>
-                <input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);"> <label for="trackthisgrid">Enable tracking for this grid (track jobs)</label> <br>
+            <section class="grid-settings">
+                <label><input type="checkbox" id="thisgridbydefault" disabled onchange="onThisGridByDefaultChange(this);">Select this grid by default</label>
+                <label><input type="checkbox" id="trackthisgrid" disabled onchange="onTrackThisGridChange(this);">Enable crafting tracking</label>
             </section>
-            <span class='note' style="flex: 0 0 100%; margin-top: 10px;">To select a grid, the network must be exposed for web access. On newer versions, place a Wireless Access Point on the network. On older versions, use a Security Terminal and grant the required permissions.</span>
+            <span class='note'>Access is granted through a controller, Wireless Access Point or terminal assigned to you, or through supported security permissions. The network must have an online controller.</span>
         </section>
+        <section id="gridaccessdetails" aria-live="polite"></section>
     </section>
 </section>
 <section id="terminalcontainer">
@@ -248,14 +279,15 @@
                 <button onclick="if(confirm('Are you sure you want to purge icons cache? This will result all icons to be redownloaded!')){ localStorage.clear(); location.reload(); }">Purge icon cache</button>
                 <br>
                 You are logged in as <span id="username" style="font-weight: bold;"></span> <br>
-                <button onclick="document.location.href='?logout'">LogOut</button>
+                <button onclick="logout()">LogOut</button>
             </section>
         </section>
     </section>
 </section>
 
 <script>
-    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7 + "; path=/";
+    let clearingBrowserSession = false;
+    document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7;
     const username = "<?php echo isset($_COOKIE['username']) ? $_COOKIE['username'] : ''; ?>";
     const isAdmin = <?php echo isset($_COOKIE['isAdmin']) ? ($_COOKIE['isAdmin'] == '1' ? 'true' : 'false') : 'false'; ?>;
     const isOutdated = <?php echo isset($_COOKIE['isOutdated']) ? ($_COOKIE['isOutdated'] == '1' ? 'true' : 'false') : 'false'; ?>;
@@ -405,13 +437,13 @@
     function onTrackThisGridChange(el) {
         if (selectedGrid == -1) return;
         let trackThisGrid = el.checked;
-        getJSONWithGridRefresh('gridsettings?grid=' + selectedGrid + '&track=' + (trackThisGrid ? '1' : '0'), function(data) {
+        getJSONChecked(gridURL(selectedGrid, 'settings'), function(data) {
             data = data.data;
             el.checked = data['isTracked'];
             updateGridList();
         }, function(data) {
             showAlert(data.status + ": " + data.data);
-        });
+        }, 'PATCH', { isTracked: trackThisGrid });
     }
     function refreshTerminal() {
         if (currentWindow == 0)
@@ -431,7 +463,7 @@
         const d = new Date();
         d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
         let expires = "expires="+d.toUTCString();
-        document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+        document.cookie = cname + "=" + cvalue + ";" + expires;
     }
     function getCookie(cname) {
         let name = cname + "=";
@@ -450,7 +482,7 @@
     function initSettings(){
         let cookie = getCookie("defaultGrid");
         if (cookie != "")
-            settings.defaultGrid = Number(cookie);
+            settings.defaultGrid = cookie === '-1' ? -1 : cookie;
         cookie = getCookie("sortBy");
         if (cookie != "")
             sortingOptions.sortBy = Number(cookie);
@@ -635,7 +667,7 @@
         const gridId = selectedGrid;
         let message = "Asking for " + escapeCPUText(globalCPUList[cpuId].name) + "...";
         pushLoadingScreen(message);
-        $.getJSON('get?grid=' + gridId + '&cpu=' + encodeURIComponent(cpuId).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('GET', gridURL(gridId, 'cpus/' + encodeURIComponent(cpuId)), null, function(data){
             if (selectedCPU !== cpuId || selectedGrid !== gridId || !globalCPUList[cpuId]) {
                 popLoadingScreen(message);
                 return;
@@ -699,7 +731,7 @@
             return;
         }
         const gridId = selectedGrid;
-        $.getJSON('list?grid=' + gridId, function(data) {
+        requestJSON('GET', gridURL(gridId, 'cpus'), null, function(data) {
             if (selectedGrid !== gridId) return;
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
@@ -720,7 +752,7 @@
         });
     }
     function updateGridList(onDone){
-        $.getJSON('grids', function(data) {
+        $.getJSON('api/grids', function(data) {
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 return;
@@ -728,48 +760,157 @@
             data = data.data;
             console.log(data);
             let gridFound = false;
-            let html = "";
+            const selection = document.getElementById('gridselection');
+            selection.replaceChildren();
             for (let i = 0; i < data.length; i++){
                 let grid = data[i];
                 let str = grid['key'] + " [ Owned by " + grid['owner'] + " ][ CPU count: " + grid['cpuCount'] + " ]" + (settings.defaultGrid != -1 && grid['key'] == settings.defaultGrid ? "[ Default ]" : "") + (grid['isTrackingEnabled'] ? "[ Tracked ]" : "");
-                html += "<option value='" + grid['key'] + "' " + (grid['key'] == -1 ? "disabled" : "") + (selectedGrid != -1 && grid['key'] == selectedGrid ? "selected" : "") + ">Grid " + str + "</option>";
+                const option = document.createElement('option');
+                option.value = grid.key;
+                option.textContent = 'Grid ' + str;
+                option.selected = selectedGrid === grid.key;
+                selection.appendChild(option);
                 if (selectedGrid != -1 && grid['key'] == selectedGrid) {
                     document.getElementById('thisgridbydefault').checked = settings.defaultGrid == selectedGrid;
                     document.getElementById('thisgridbydefault').disabled = false;
                     document.getElementById('trackthisgrid').disabled = false;
                     document.getElementById('trackthisgrid').checked = grid['isTrackingEnabled'];
-                    document.getElementById('currentgrid').innerHTML = "Current grid: " + str;
+                    document.getElementById('currentgrid').textContent = "Current grid: " + str;
                     gridFound = true;
                 }
             }
-            document.getElementById('gridselection').innerHTML = html;
+            if (!gridFound) {
+                selectedGrid = -1;
+                document.getElementById('currentgrid').textContent = 'No grid selected';
+                document.getElementById('thisgridbydefault').disabled = true;
+                document.getElementById('trackthisgrid').disabled = true;
+            }
+            const selected = data.find(grid => grid.key === selectedGrid);
+            showGridAccess(selected ? selected.accessSources : {});
             if (data.length > 1)
                 document.getElementById('gridselection').size = data.length;
             else
                 document.getElementById('gridselection').size = 2;
             if (onDone)
                 onDone();
+        }).fail(function(response) {
+            if (response.status === 401) {
+                clearBrowserSession();
+                return;
+            }
+            const error = response.responseJSON;
+            showAlert(error ? error.status + (error.data ? ': ' + error.data : '')
+                : 'HTTP ' + response.status + ': Could not load grids.');
         });
     }
     updateGridList();
-    // The async endpoints (trackinghistory / gettracking / gridsettings) authorize against a per-user
-    // access set that the server rebuilds during synced requests. After a long idle period it expires and
-    // the server answers REFRESH_REQUIRED instead of serving the request. Asking for the grid list rebuilds
-    // that set, so retry once before bothering the user with an error.
-    function getJSONWithGridRefresh(url, onSuccess, onFailure){
-        $.getJSON(url, function(data){
-            if (data.status === "REFRESH_REQUIRED"){
-                updateGridList(function(){
-                    $.getJSON(url, function(retried){
-                        if (retried.status !== "OK"){
-                            onFailure(retried);
-                            return;
-                        }
-                        onSuccess(retried);
-                    });
-                });
+    function showGridAccess(groups) {
+        const container = document.getElementById('gridaccessdetails');
+        const expanded = container.children.length > 0 && container.children[0].open;
+        container.replaceChildren();
+        const players = Object.entries(groups || {}).filter(([, entries]) => entries.length > 0);
+        if (players.length === 0) return;
+        const details = document.createElement('details');
+        details.className = 'grid-access';
+        details.open = expanded;
+        const summary = document.createElement('summary');
+        summary.textContent = 'Players with access';
+        const count = document.createElement('span');
+        count.className = 'grid-access-count';
+        count.textContent = players.length;
+        summary.appendChild(count);
+        details.appendChild(summary);
+        const kinds = {controller: 'Controller', wireless_access_point: 'Wireless Access Point', terminal: 'Terminal', security_terminal: 'Security Terminal'};
+        const reasons = {node_owner: 'Block owner', security_owner: 'Security owner', security_card: 'Security permissions'};
+        function appendText(parent, tag, className, text) {
+            const element = document.createElement(tag);
+            element.className = className;
+            element.textContent = text;
+            parent.appendChild(element);
+        }
+        for (const [uuid, entries] of players) {
+            const player = document.createElement('section');
+            player.className = 'grid-access-player';
+            const heading = document.createElement('header');
+            heading.className = 'grid-access-heading';
+            appendText(heading, 'strong', 'grid-access-name', entries[0].player.name);
+            appendText(heading, 'span', 'grid-access-uuid', uuid);
+            player.appendChild(heading);
+            const list = document.createElement('ul');
+            list.className = 'grid-access-sources';
+            for (const source of entries) {
+                const item = document.createElement('li');
+                item.className = 'grid-access-source';
+                const block = document.createElement('div');
+                appendText(block, 'span', 'grid-access-kind', kinds[source.kind] || source.kind);
+                appendText(block, 'span', 'grid-access-reason', reasons[source.reason] || source.reason);
+                const location = document.createElement('div');
+                const pos = source.position;
+                appendText(location, 'code', 'grid-access-position', pos.x + ', ' + pos.y + ', ' + pos.z);
+                appendText(location, 'span', 'grid-access-world', 'Dimension: ' + pos.dimid +
+                    (source.side ? ' · Side: ' + source.side : ''));
+                item.appendChild(block);
+                item.appendChild(location);
+                list.appendChild(item);
+            }
+            player.appendChild(list);
+            details.appendChild(player);
+        }
+        container.appendChild(details);
+    }
+    function requestJSON(method, url, body, onResponse, onTransportFailure) {
+        const options = { url, method, dataType: 'json', success: onResponse };
+        if (method !== 'GET') options.headers = { 'X-AE2-Request': 'true' };
+        if (body !== null) {
+            options.contentType = 'application/json';
+            options.data = JSON.stringify(body);
+        }
+        return $.ajax(options).fail(function(response) {
+            if (response && response.status === 401) {
+                clearBrowserSession();
                 return;
             }
+            if (response && response.responseJSON) {
+                onResponse(response.responseJSON);
+            } else if (onTransportFailure) {
+                onTransportFailure(response);
+            } else {
+                onResponse({ status: 'HTTP_ERROR', data: 'Request failed' +
+                    (response && response.status ? ' (HTTP ' + response.status + ')' : '') });
+            }
+        });
+    }
+    function clearBrowserSession() {
+        if (clearingBrowserSession) return;
+        clearingBrowserSession = true;
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '.';
+        form.hidden = true;
+        const field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = 'clearSession';
+        field.value = 'true';
+        form.appendChild(field);
+        document.body.appendChild(form);
+        form.submit();
+    }
+    function logout() {
+        requestJSON('POST', 'api/auth/logout', null, function(data) {
+            if (data.status === 'OK' || data.status === 'UNAUTHORIZED') {
+                clearBrowserSession();
+            } else {
+                showAlert(data.status + ': ' + data.data);
+            }
+        }, function() {
+            showAlert('The logout response was lost. Please try again.');
+        });
+    }
+    function gridURL(grid, resource) {
+        return 'api/grids/' + encodeURIComponent(grid) + '/' + resource;
+    }
+    function getJSONChecked(url, onSuccess, onFailure, method = 'GET', body = null){
+        requestJSON(method, url, body, function(data){
             if (data.status !== "OK"){
                 onFailure(data);
                 return;
@@ -778,7 +919,7 @@
         });
     }
     function selectedGridChanged(el){
-        selectedGrid = Number(el.value);
+        selectedGrid = el.value;
         selectedCPU = "";
         cpuForJob = "";
         globalCPUList = {};
@@ -919,7 +1060,7 @@
             return;
         let message = "Asking for item list...";
         pushLoadingScreen(message);
-        $.getJSON('items?grid=' + selectedGrid, function(data){
+        requestJSON('GET', gridURL(selectedGrid, 'items'), null, function(data){
             console.log(data);
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
@@ -938,7 +1079,7 @@
             return;
         let message = "Asking for tracking history list...";
         pushLoadingScreen(message);
-        getJSONWithGridRefresh('trackinghistory?grid=' + selectedGrid, function(data){
+        getJSONChecked(gridURL(selectedGrid, 'crafting-history'), function(data){
             console.log(data);
             data = data.data;
             let html = "<table>";
@@ -1138,7 +1279,7 @@
         isInterfaceChartInitialized = false;
         isItemChartInitialized = false;
         pushLoadingScreen(message);
-        getJSONWithGridRefresh('gettracking?grid=' + selectedGrid + '&id=' + id, function(data){
+        getJSONChecked(gridURL(selectedGrid, 'crafting-history/' + encodeURIComponent(id)), function(data){
             console.log(data);
             data = data.data;
 
@@ -1219,7 +1360,7 @@
             document.getElementById('terminalCPUListForJob').innerHTML = "...";
             let message = "Sending order...";
             pushLoadingScreen(message);
-            $.getJSON('order?grid=' + selectedGrid + '&itemKey=' + encodeURIComponent(itemKey) + "&quantity=" + quantity, function(data){
+            requestJSON('POST', gridURL(selectedGrid, 'crafting-plans'), { itemKey, quantity }, function(data){
                 console.log(data);
                 if(data.status !== "OK"){
                     if (data.status === "ITEM_IDENTITY_UNKNOWN")
@@ -1244,7 +1385,7 @@
                     //setCurrentScreen(0);
                 }
                 popLoadingScreen(message);
-            }).fail(function() {
+            }, function() {
                 popLoadingScreen(message);
                 showAlert("The order response was lost. Check the crafting jobs before placing another order.");
             });
@@ -1256,7 +1397,7 @@
         if(currentWindow != 2){
             return;
         }
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id, function(data){
+        requestJSON('GET', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id), null, function(data){
             if(currentWindow != 2){
                 return;
             }
@@ -1324,7 +1465,7 @@
         }
         setCurrentScreen(0);
         refreshTerminal();
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&cancel", function(data){
+        requestJSON('DELETE', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id), null, function(data){
             if(data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 return;
@@ -1346,7 +1487,7 @@
         }
         let message = "Submitting job...";
         pushLoadingScreen(message);
-        $.getJSON('job?grid=' + selectedGrid + '&id=' + currentJob.id + "&submit" + "&cpu=" + encodeURIComponent(cpuForJob).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('POST', gridURL(selectedGrid, 'crafting-plans/' + currentJob.id + '/submit'), { cpuKey: cpuForJob }, function(data){
             if (data.status !== "OK"){
                 showAlert(data.status + ": " + data.data);
                 if (data.status === "CPU_NOT_FOUND") {
@@ -1370,7 +1511,7 @@
         }
         let message = "Cancelling job...";
         pushLoadingScreen(message);
-        $.getJSON('cancelcpu?grid=' + selectedGrid + '&cpu=' + encodeURIComponent(selectedCPU).replace(/'/g,"%27").replace(/"/g,"%22"), function(data){
+        requestJSON('POST', gridURL(selectedGrid, 'cpus/' + encodeURIComponent(selectedCPU) + '/cancel'), null, function(data){
             if (data.status !== "OK") showAlert(data.status + ": " + data.data);
             updateCPUList();
             refreshTerminal();

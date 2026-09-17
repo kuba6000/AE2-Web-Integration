@@ -8,6 +8,4 @@ public interface IAE {
 
     IAEGenericStack web$stackOf(IAEKey key, long amount);
 
-    IAEPlayerData web$getPlayerData();
-
 }
