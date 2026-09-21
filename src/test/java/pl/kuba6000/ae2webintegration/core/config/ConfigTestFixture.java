@@ -9,12 +9,12 @@ import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
-import java.util.stream.Stream;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.toml.TomlParser;
 import com.electronwill.nightconfig.toml.TomlWriter;
+
+import pl.kuba6000.ae2webintegration.core.TempDirectories;
 
 /** Edits real configuration files through the same init/reload boundary used by a server. */
 public final class ConfigTestFixture implements AutoCloseable {
@@ -81,18 +81,7 @@ public final class ConfigTestFixture implements AutoCloseable {
             Config.reload();
         }
         if (ownsRoot) {
-            try (Stream<Path> paths = Files.walk(root.toPath())) {
-                paths.sorted(Comparator.reverseOrder())
-                    .forEach(path -> {
-                        try {
-                            Files.delete(path);
-                        } catch (IOException e) {
-                            throw new UncheckedIOException(e);
-                        }
-                    });
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
+            TempDirectories.deleteRecursively(root.toPath());
         }
     }
 
