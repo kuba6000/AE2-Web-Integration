@@ -17,8 +17,7 @@ public class StartupHandler {
      * and cancelling crafts, for every network on the server.
      */
     public static void logOpenAdminAccessWarning() {
-        if (!Config.AE_PASSWORD()
-            .isEmpty()) {
+        if (!Config.INSTANCE.general.password.isEmpty()) {
             return;
         }
         LOG.warn(
@@ -27,21 +26,19 @@ public class StartupHandler {
                 + " cancelling crafting jobs."
                 + " Set 'password' in the config to require a login."
                 + " (Access from localhost is controlled separately by 'allow_no_password_on_localhost'.)",
-            Config.AE_PORT());
+            Config.INSTANCE.general.port);
     }
 
     public static void handleDiscordIntegration() {
         DiscordManager.init();
-        if (!Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
-            .isEmpty()) {
+        if (!Config.INSTANCE.general.publicMode && !Config.INSTANCE.discord.webhook.isEmpty()) {
             DiscordManager.postMessageNonBlocking(
                 new DiscordManager.DiscordEmbed("AE2 Web Integration", "Discord integration started!"));
-        } else if (Config.AE_PUBLIC_MODE() && !Config.DISCORD_WEBHOOK()
-            .isEmpty()) {
-                DiscordManager.postMessageNonBlocking(new DiscordManager.DiscordEmbed("AE2 Web Integration", """
-                    Warning!
-                    Discord integration webhook is set in the config, but the public mode is enabled!
-                    Discord integration will be disabled!""", DiscordManager.COLOR_RED));
-            }
+        } else if (Config.INSTANCE.general.publicMode && !Config.INSTANCE.discord.webhook.isEmpty()) {
+            DiscordManager.postMessageNonBlocking(new DiscordManager.DiscordEmbed("AE2 Web Integration", """
+                Warning!
+                Discord integration webhook is set in the config, but the public mode is enabled!
+                Discord integration will be disabled!""", DiscordManager.COLOR_RED));
+        }
     }
 }

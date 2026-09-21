@@ -28,7 +28,7 @@ class ConfigFileTest {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
         assertTrue(Files.isRegularFile(file));
-        String password = Config.AE_PASSWORD();
+        String password = Config.INSTANCE.general.password;
         assertFalse(password.isEmpty());
         String contents = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
         CommentedConfig document = new TomlParser().parse(contents);
@@ -38,7 +38,7 @@ class ConfigFileTest {
         assertTrue(document.contains("general.password"));
 
         Config.init(root.toFile());
-        assertEquals(password, Config.AE_PASSWORD());
+        assertEquals(password, Config.INSTANCE.general.password);
     }
 
     @Test
@@ -60,18 +60,18 @@ class ConfigFileTest {
         Config.init(root.toFile(), () -> legacy);
         Config.init(root.toFile(), () -> { throw new AssertionError("Existing TOML must bypass migration"); });
 
-        assertEquals(25432, Config.AE_PORT());
-        assertEquals("existing-admin-password", Config.AE_PASSWORD());
-        assertFalse(Config.ALLOW_NO_PASSWORD_ON_LOCALHOST());
-        assertEquals("192.0.2.10", Config.TRUSTED_PROXIES());
-        assertFalse(Config.AE_PUBLIC_MODE());
-        assertEquals(37, Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE());
-        assertFalse(Config.CHECK_FOR_UPDATES());
-        assertEquals("https://example.invalid/webhook", Config.DISCORD_WEBHOOK());
-        assertEquals("123456789", Config.DISCORD_ROLE_ID());
-        assertEquals(64, Config.DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS());
-        assertEquals(128, Config.DISCORD_MINIMUM_CRAFTING_AMOUNT());
-        assertTrue(Config.TRACKING_TRACK_MACHINE_CRAFTING());
+        assertEquals(25432, Config.INSTANCE.general.port);
+        assertEquals("existing-admin-password", Config.INSTANCE.general.password);
+        assertFalse(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
+        assertEquals("192.0.2.10", Config.INSTANCE.general.trustedProxies);
+        assertFalse(Config.INSTANCE.general.publicMode);
+        assertEquals(37, Config.INSTANCE.general.maxRequestsBeforeLoggedInPerMinute);
+        assertFalse(Config.INSTANCE.general.checkForUpdates);
+        assertEquals("https://example.invalid/webhook", Config.INSTANCE.discord.webhook);
+        assertEquals("123456789", Config.INSTANCE.discord.roleId);
+        assertEquals(64, Config.INSTANCE.discord.minimumCraftingDurationSeconds);
+        assertEquals(128, Config.INSTANCE.discord.minimumCraftingAmount);
+        assertTrue(Config.INSTANCE.tracking.trackMachineCrafting);
     }
 
     @Test
@@ -81,14 +81,14 @@ class ConfigFileTest {
             .toPath();
         Files.write(file, "[general]\nport = 25433\npassword = 'edited-password'\n".getBytes(StandardCharsets.UTF_8));
         Config.reload();
-        assertEquals(25433, Config.AE_PORT());
-        assertEquals("edited-password", Config.AE_PASSWORD());
+        assertEquals(25433, Config.INSTANCE.general.port);
+        assertEquals("edited-password", Config.INSTANCE.general.password);
 
         String invalid = "[general]\nport = 65536\npassword = 'must-not-be-published'\n";
         Files.write(file, invalid.getBytes(StandardCharsets.UTF_8));
         assertThrows(IllegalArgumentException.class, Config::reload);
-        assertEquals(25433, Config.AE_PORT());
-        assertEquals("edited-password", Config.AE_PASSWORD());
+        assertEquals(25433, Config.INSTANCE.general.port);
+        assertEquals("edited-password", Config.INSTANCE.general.password);
         assertEquals(invalid, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
     }
 
@@ -98,39 +98,39 @@ class ConfigFileTest {
         Files.createDirectories(file.getParent());
         Files.write(file, "[general]\nport = 25434\n".getBytes(StandardCharsets.UTF_8));
         Config.init(root.toFile());
-        String password = Config.AE_PASSWORD();
+        String password = Config.INSTANCE.general.password;
         assertFalse(password.isEmpty());
-        assertTrue(Config.AE_PUBLIC_MODE());
-        assertFalse(Config.TRACKING_TRACK_MACHINE_CRAFTING());
+        assertTrue(Config.INSTANCE.general.publicMode);
+        assertFalse(Config.INSTANCE.tracking.trackMachineCrafting);
         Config.init(root.toFile());
-        assertEquals(password, Config.AE_PASSWORD());
-        assertEquals(25434, Config.AE_PORT());
+        assertEquals(password, Config.INSTANCE.general.password);
+        assertEquals(25434, Config.INSTANCE.general.port);
     }
 
     @Test
     void malformedOrMissingFileCannotResetAnActiveConfiguration() throws Exception {
         Config.init(root.toFile());
-        String password = Config.AE_PASSWORD();
+        String password = Config.INSTANCE.general.password;
         Path file = Config.getConfigFile("config.toml")
             .toPath();
         Files.write(file, "[general".getBytes(StandardCharsets.UTF_8));
         assertThrows(RuntimeException.class, Config::reload);
-        assertEquals(password, Config.AE_PASSWORD());
+        assertEquals(password, Config.INSTANCE.general.password);
         Files.delete(file);
         assertThrows(UncheckedIOException.class, Config::reload);
         assertFalse(Files.exists(file));
-        assertEquals(password, Config.AE_PASSWORD());
+        assertEquals(password, Config.INSTANCE.general.password);
     }
 
     @Test
     void failedMigrationDoesNotCreateAConfigOrReplaceActiveSettings() {
         Path workingRoot = root.resolve("working");
         Config.init(workingRoot.toFile());
-        String password = Config.AE_PASSWORD();
+        String password = Config.INSTANCE.general.password;
         assertThrows(IllegalArgumentException.class, () -> Config.init(root.toFile(), () -> {
             throw new IllegalArgumentException("Cannot read legacy configuration");
         }));
-        assertEquals(password, Config.AE_PASSWORD());
+        assertEquals(password, Config.INSTANCE.general.password);
         assertEquals(
             workingRoot.resolve("ae2webintegration")
                 .toFile(),
@@ -154,9 +154,9 @@ class ConfigFileTest {
             + "# My custom port\nport = 25435\n";
         Files.write(file, contents.getBytes(StandardCharsets.UTF_8));
         Config.reload();
-        assertEquals("C:\\Minecraft\\config", Config.AE_PASSWORD());
+        assertEquals("C:\\Minecraft\\config", Config.INSTANCE.general.password);
         Config.init(root.toFile());
-        assertEquals("C:\\Minecraft\\config", Config.AE_PASSWORD());
+        assertEquals("C:\\Minecraft\\config", Config.INSTANCE.general.password);
         CommentedConfig saved = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
         assertTrue(
             saved.getComment("general.password")
@@ -173,19 +173,19 @@ class ConfigFileTest {
             + " and backspace\b and formfeed\f and Unicode zażółć";
         Config.init(root.toFile(), () -> Collections.singletonMap("password", password));
         Config.reload();
-        assertEquals(password, Config.AE_PASSWORD());
+        assertEquals(password, Config.INSTANCE.general.password);
     }
 
     @Test
     void unsupportedControlCharacterCannotReplaceTheFileOrActivePassword() throws Exception {
         Config.init(root.toFile());
-        String password = Config.AE_PASSWORD();
+        String password = Config.INSTANCE.general.password;
         Path file = Config.getConfigFile("config.toml")
             .toPath();
         String contents = "[general]\npassword = \"a\\u0001b\"\n";
         Files.write(file, contents.getBytes(StandardCharsets.UTF_8));
         assertThrows(IllegalArgumentException.class, Config::reload);
         assertEquals(contents, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
-        assertEquals(password, Config.AE_PASSWORD());
+        assertEquals(password, Config.INSTANCE.general.password);
     }
 }

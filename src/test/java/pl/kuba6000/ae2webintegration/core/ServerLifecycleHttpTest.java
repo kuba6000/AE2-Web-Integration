@@ -201,10 +201,10 @@ class ServerLifecycleHttpTest {
             CommandProcessor.reload()
                 .isSuccess());
 
-        assertEquals(port, Config.AE_PORT());
-        assertEquals("lifecycle-password", Config.AE_PASSWORD());
-        assertFalse(Config.AE_PUBLIC_MODE());
-        assertFalse(Config.ALLOW_NO_PASSWORD_ON_LOCALHOST());
+        assertEquals(port, Config.INSTANCE.general.port);
+        assertEquals("lifecycle-password", Config.INSTANCE.general.password);
+        assertFalse(Config.INSTANCE.general.publicMode);
+        assertFalse(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
         assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
     }
 

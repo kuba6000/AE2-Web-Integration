@@ -27,59 +27,11 @@ import pl.kuba6000.ae2webintegration.core.utils.AtomicFileWriter;
 public class Config {
 
     private static final ObjectConverter CONVERTER = new ObjectConverter();
-    private static volatile ConfigSettings settings = new ConfigSettings();
+
+    /** Replaced as a whole on init and reload. Fields of a published instance are read-only. */
+    public static volatile ConfigSettings INSTANCE = new ConfigSettings();
+
     private static File configDirectory;
-
-    // General
-    public static int AE_PORT() {
-        return settings.general.port;
-    }
-
-    public static String AE_PASSWORD() {
-        return settings.general.password;
-    }
-
-    public static String TRUSTED_PROXIES() {
-        return settings.general.trustedProxies;
-    }
-
-    public static boolean ALLOW_NO_PASSWORD_ON_LOCALHOST() {
-        return settings.general.allowNoPasswordOnLocalhost;
-    }
-
-    public static boolean AE_PUBLIC_MODE() {
-        return settings.general.publicMode;
-    }
-
-    public static int AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE() {
-        return settings.general.maxRequestsBeforeLoggedInPerMinute;
-    }
-
-    public static boolean CHECK_FOR_UPDATES() {
-        return settings.general.checkForUpdates;
-    }
-
-    // Discord
-    public static String DISCORD_WEBHOOK() {
-        return settings.discord.webhook;
-    }
-
-    public static String DISCORD_ROLE_ID() {
-        return settings.discord.roleId;
-    }
-
-    public static int DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS() {
-        return settings.discord.minimumCraftingDurationSeconds;
-    }
-
-    public static int DISCORD_MINIMUM_CRAFTING_AMOUNT() {
-        return settings.discord.minimumCraftingAmount;
-    }
-
-    // Tracking
-    public static boolean TRACKING_TRACK_MACHINE_CRAFTING() {
-        return settings.tracking.trackMachineCrafting;
-    }
 
     // --- Directory / file setup ---
 
@@ -150,7 +102,7 @@ public class Config {
         serializer.setWriteStringLiteralPredicate(Config::useLiteralString);
         disableMultilineStrings(serializer);
         AtomicFileWriter.write(file, writer -> serializer.write(document, writer));
-        settings = loaded;
+        INSTANCE = loaded;
     }
 
     private static boolean useLiteralString(String value) {

@@ -60,7 +60,7 @@ class CommandBootstrapTest {
         // Verify: should have checked permission(4)
         assertTrue(ctx.lastPermissionCheck >= 4, "should check permission level >= 4");
         // Reload applies the edited file through the command.
-        assertFalse(Config.AE_PUBLIC_MODE());
+        assertFalse(Config.INSTANCE.general.publicMode);
         assertNull(ctx.lastError);
     }
 
@@ -78,7 +78,7 @@ class CommandBootstrapTest {
         // Should send error when no permission
         assertNotNull(ctx.lastError, "should have sent error message");
         // The denied command leaves the active settings unchanged.
-        assertTrue(Config.AE_PUBLIC_MODE());
+        assertTrue(Config.INSTANCE.general.publicMode);
     }
 
     @Test

@@ -188,7 +188,7 @@ public class AE2Controller {
             ExecutorService newServerThread = createHTTPExecutor();
             HttpServer newServer = null;
             try {
-                newServer = HttpServer.create(new InetSocketAddress(Config.AE_PORT()), HTTP_BACKLOG);
+                newServer = HttpServer.create(new InetSocketAddress(Config.INSTANCE.general.port), HTTP_BACKLOG);
                 ApiRouter api = new ApiRouter(
                     AuthService::authenticate,
                     AuthService::isRateLimited,

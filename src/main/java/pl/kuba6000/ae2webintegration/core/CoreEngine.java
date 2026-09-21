@@ -88,7 +88,7 @@ public class CoreEngine {
 
     private static void maintainVersionChecker() {
         if (!serverRunning) return;
-        if (!Config.CHECK_FOR_UPDATES()) {
+        if (!Config.INSTANCE.general.checkForUpdates) {
             stopVersionChecker();
         } else if (versionChecker == null && modVersion != null) {
             try {

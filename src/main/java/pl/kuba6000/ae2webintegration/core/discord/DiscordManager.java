@@ -63,8 +63,9 @@ public class DiscordManager extends Thread {
     }
 
     public static boolean shouldPostCraftingNotification(long durationMillis, long craftedAmount) {
-        long minimumDurationMillis = TimeUnit.SECONDS.toMillis(Config.DISCORD_MINIMUM_CRAFTING_DURATION_SECONDS());
-        return durationMillis >= minimumDurationMillis && craftedAmount >= Config.DISCORD_MINIMUM_CRAFTING_AMOUNT();
+        long minimumDurationMillis = TimeUnit.SECONDS.toMillis(Config.INSTANCE.discord.minimumCraftingDurationSeconds);
+        return durationMillis >= minimumDurationMillis
+            && craftedAmount >= Config.INSTANCE.discord.minimumCraftingAmount;
     }
 
     public static class DiscordEmbed {
@@ -85,10 +86,10 @@ public class DiscordManager extends Thread {
     }
 
     private static void postMessage(DiscordEmbed message) {
-        String webhook = Config.DISCORD_WEBHOOK();
+        String webhook = Config.INSTANCE.discord.webhook;
         if (webhook.isEmpty()) return;
 
-        String roleID = Config.DISCORD_ROLE_ID();
+        String roleID = Config.INSTANCE.discord.roleId;
 
         JsonObject json = new JsonObject();
         json.addProperty("username", "AE2 Web Integration");
