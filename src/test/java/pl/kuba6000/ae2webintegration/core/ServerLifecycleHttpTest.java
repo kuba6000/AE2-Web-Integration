@@ -47,6 +47,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
@@ -83,8 +84,8 @@ class ServerLifecycleHttpTest {
         }
 
         @Override
-        public Map<String, Object> readLegacyConfig() {
-            return Collections.emptyMap();
+        public ILegacyConfigProvider getLegacyConfig() {
+            return null;
         }
 
         @Override
@@ -298,8 +299,8 @@ class ServerLifecycleHttpTest {
             }
 
             @Override
-            public Map<String, Object> readLegacyConfig() {
-                return Collections.emptyMap();
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
             }
 
             @Override
@@ -374,8 +375,8 @@ class ServerLifecycleHttpTest {
             }
 
             @Override
-            public Map<String, Object> readLegacyConfig() {
-                return Collections.emptyMap();
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
             }
 
             @Override
@@ -436,8 +437,8 @@ class ServerLifecycleHttpTest {
             }
 
             @Override
-            public Map<String, Object> readLegacyConfig() {
-                return Collections.emptyMap();
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
             }
 
             @Override
@@ -643,8 +644,8 @@ class ServerLifecycleHttpTest {
             }
 
             @Override
-            public Map<String, Object> readLegacyConfig() {
-                return Collections.emptyMap();
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
             }
 
             @Override

@@ -7,11 +7,11 @@ import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.UnmodifiableConfig;
@@ -22,9 +22,12 @@ import com.electronwill.nightconfig.toml.TomlFormat;
 import com.electronwill.nightconfig.toml.TomlParser;
 import com.electronwill.nightconfig.toml.TomlWriter;
 
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.utils.AtomicFileWriter;
 
 public class Config {
+
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
     private static final ObjectConverter CONVERTER = new ObjectConverter();
 
@@ -36,16 +39,29 @@ public class Config {
     // --- Directory / file setup ---
 
     public static synchronized void init(File configDirectory) {
-        init(configDirectory, Collections::emptyMap);
+        init(configDirectory, null);
     }
 
     /** Imports legacy settings only when the TOML configuration does not exist. */
-    public static synchronized void init(File configDirectory, Supplier<Map<String, Object>> legacyReader) {
+    public static synchronized void init(File configDirectory, ILegacyConfigProvider legacyReader) {
         File directory = new File(configDirectory, "ae2webintegration");
         File file = new File(directory, "config.toml");
         try {
-            CommentedConfig document = file.exists() ? read(file) : migrate(legacyReader.get());
+            boolean wasMigrated = false;
+            CommentedConfig document;
+            if (file.exists()) {
+                document = read(file);
+            } else if (legacyReader != null && legacyReader.isAvailable()) {
+                document = migrate(legacyReader);
+                wasMigrated = true;
+            } else {
+                document = newDocument();
+                CONVERTER.toConfig(new ConfigSettings(), document);
+            }
             publish(file, document);
+            if (wasMigrated) {
+                legacyReader.markAsMigrated();
+            }
         } catch (IOException e) {
             throw new UncheckedIOException("Could not load configuration: " + file, e);
         }
@@ -74,7 +90,8 @@ public class Config {
         return document;
     }
 
-    private static CommentedConfig migrate(Map<String, Object> legacy) {
+    private static CommentedConfig migrate(ILegacyConfigProvider legacy) {
+        LOG.info("LEGACY CONFIG MIGRATION INIT");
         CommentedConfig document = newDocument();
         CONVERTER.toConfig(new ConfigSettings(), document);
         for (UnmodifiableConfig.Entry category : document.entrySet()) {
@@ -83,7 +100,13 @@ public class Config {
                 String key = setting.getKey();
                 String oldKey = category.getKey()
                     .equals("discord") ? "discord_" + key : key;
-                if (legacy.containsKey(oldKey)) section.set(key, legacy.get(oldKey));
+                Object val = legacy.get(oldKey);
+                if (val != null) {
+                    section.set(key, val);
+                    LOG.info("Mapped {} to {}", oldKey, key);
+                } else {
+                    LOG.warn("Key {} not found in the legacy config", oldKey);
+                }
             }
         }
         return document;

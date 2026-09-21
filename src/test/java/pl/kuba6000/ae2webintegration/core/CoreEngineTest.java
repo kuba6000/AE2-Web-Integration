@@ -3,8 +3,6 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.File;
-import java.util.Collections;
-import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -12,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 
@@ -40,8 +39,8 @@ class CoreEngineTest {
         }
 
         @Override
-        public Map<String, Object> readLegacyConfig() {
-            return Collections.emptyMap();
+        public ILegacyConfigProvider getLegacyConfig() {
+            return null;
         }
 
         @Override

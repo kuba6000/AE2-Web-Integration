@@ -16,6 +16,7 @@ import org.junit.jupiter.api.io.TempDir;
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.toml.TomlParser;
 
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 
 class ConfigFileTest {
@@ -57,8 +58,10 @@ class ConfigFileTest {
         legacy.put("discord_minimum_crafting_amount", 128);
         legacy.put("track_machine_crafting", true);
 
-        Config.init(root.toFile(), () -> legacy);
-        Config.init(root.toFile(), () -> { throw new AssertionError("Existing TOML must bypass migration"); });
+        MapLegacyConfig legacyConfig = new MapLegacyConfig(legacy);
+        Config.init(root.toFile(), legacyConfig);
+        assertTrue(legacyConfig.migrated);
+        Config.init(root.toFile(), new ThrowingLegacyConfig("Existing TOML must bypass migration"));
 
         assertEquals(25432, Config.INSTANCE.general.port);
         assertEquals("existing-admin-password", Config.INSTANCE.general.password);
@@ -127,9 +130,9 @@ class ConfigFileTest {
         Path workingRoot = root.resolve("working");
         Config.init(workingRoot.toFile());
         String password = Config.INSTANCE.general.password;
-        assertThrows(IllegalArgumentException.class, () -> Config.init(root.toFile(), () -> {
-            throw new IllegalArgumentException("Cannot read legacy configuration");
-        }));
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Config.init(root.toFile(), new ThrowingLegacyConfig("Cannot read legacy configuration")));
         assertEquals(password, Config.INSTANCE.general.password);
         assertEquals(
             workingRoot.resolve("ae2webintegration")
@@ -140,8 +143,9 @@ class ConfigFileTest {
 
     @Test
     void migrationRejectsNumbersThatWouldOverflowAnIntegerSetting() {
-        Map<String, Object> legacy = Collections.singletonMap("port", 4294992728L);
-        assertThrows(RuntimeException.class, () -> Config.init(root.toFile(), () -> legacy));
+        MapLegacyConfig legacy = new MapLegacyConfig(Collections.singletonMap("port", 4294992728L));
+        assertThrows(RuntimeException.class, () -> Config.init(root.toFile(), legacy));
+        assertFalse(legacy.migrated);
         assertFalse(Files.exists(root.resolve("ae2webintegration/config.toml")));
     }
 
@@ -171,7 +175,7 @@ class ConfigFileTest {
     void savingSpecialCharactersPreservesTheirValues() {
         String password = "quotes ' and \" and backslash \\ and newline\n and CRLF\r\n and CR\r and tab\t"
             + " and backspace\b and formfeed\f and Unicode zażółć";
-        Config.init(root.toFile(), () -> Collections.singletonMap("password", password));
+        Config.init(root.toFile(), new MapLegacyConfig(Collections.singletonMap("password", password)));
         Config.reload();
         assertEquals(password, Config.INSTANCE.general.password);
     }
@@ -187,5 +191,54 @@ class ConfigFileTest {
         assertThrows(IllegalArgumentException.class, Config::reload);
         assertEquals(contents, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
         assertEquals(password, Config.INSTANCE.general.password);
+    }
+
+    private static final class MapLegacyConfig implements ILegacyConfigProvider {
+
+        private final Map<String, Object> values;
+        private boolean migrated;
+
+        private MapLegacyConfig(Map<String, Object> values) {
+            this.values = values;
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return true;
+        }
+
+        @Override
+        public Object get(String key) {
+            return values.get(key);
+        }
+
+        @Override
+        public void markAsMigrated() {
+            migrated = true;
+        }
+    }
+
+    private static final class ThrowingLegacyConfig implements ILegacyConfigProvider {
+
+        private final String message;
+
+        private ThrowingLegacyConfig(String message) {
+            this.message = message;
+        }
+
+        @Override
+        public boolean isAvailable() {
+            throw new IllegalArgumentException(message);
+        }
+
+        @Override
+        public Object get(String key) {
+            throw new IllegalArgumentException(message);
+        }
+
+        @Override
+        public void markAsMigrated() {
+            throw new AssertionError(message);
+        }
     }
 }

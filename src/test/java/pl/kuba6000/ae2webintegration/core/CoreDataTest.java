@@ -9,8 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.Collections;
-import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
@@ -219,8 +218,8 @@ class CoreDataTest {
         }
 
         @Override
-        public Map<String, Object> readLegacyConfig() {
-            return Collections.emptyMap();
+        public ILegacyConfigProvider getLegacyConfig() {
+            return null;
         }
 
         @Override

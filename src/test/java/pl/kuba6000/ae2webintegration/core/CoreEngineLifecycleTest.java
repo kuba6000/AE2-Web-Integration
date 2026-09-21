@@ -9,14 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
-import java.util.Collections;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
@@ -86,8 +85,8 @@ class CoreEngineLifecycleTest extends GridTestScope {
                 }
 
                 @Override
-                public Map<String, Object> readLegacyConfig() {
-                    return Collections.emptyMap();
+                public ILegacyConfigProvider getLegacyConfig() {
+                    return null;
                 }
 
                 @Override
