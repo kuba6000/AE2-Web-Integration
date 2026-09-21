@@ -6,7 +6,9 @@ import java.io.UncheckedIOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -14,32 +16,72 @@ import net.minecraftforge.common.ForgeModContainer;
 import net.minecraftforge.common.config.Configuration;
 import net.minecraftforge.common.config.Property;
 
-public final class LegacyConfigReader {
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 
-    private LegacyConfigReader() {}
+@Deprecated
+public final class LegacyConfigReader implements ILegacyConfigProvider {
 
-    public static Map<String, Object> read(File configDirectory) {
-        Path file = configDirectory.toPath()
+    private static final LegacyConfigReader ABSENT = new LegacyConfigReader(Collections.emptyMap(), null);
+
+    private final Map<String, Object> values;
+    private final Path source;
+
+    private LegacyConfigReader(Map<String, Object> values, Path source) {
+        this.values = values;
+        this.source = source;
+    }
+
+    public static LegacyConfigReader open(File configDirectory) {
+        Path nested = configDirectory.toPath()
             .resolve("ae2webintegration/ae2webintegration.cfg");
-        if (ForgeModContainer.getConfig()
-            .getCategory(Configuration.CATEGORY_GENERAL)
-            .get("enableGlobalConfig")
-            .getBoolean()) {
-            // Global mode resolves the original filename in Forge's already loaded configuration.
-            Map<String, Object> settings = collect(new Configuration(file.toFile()));
-            if (settings.isEmpty()) {
-                return collect(new Configuration(new File(configDirectory, "ae2webintegration.cfg")));
-            }
-            return settings;
-        }
-        if (!Files.exists(file)) file = configDirectory.toPath()
+        Path flat = configDirectory.toPath()
             .resolve("ae2webintegration.cfg");
-        if (!Files.exists(file)) return new HashMap<>();
+        if (globalConfig()) {
+            if (Files.exists(nested)) {
+                Map<String, Object> settings = collect(new Configuration(nested.toFile()));
+                if (!settings.isEmpty()) return new LegacyConfigReader(settings, nested);
+            }
+            if (Files.exists(flat)) return new LegacyConfigReader(collect(new Configuration(flat.toFile())), flat);
+            return ABSENT;
+        }
+        Path file = Files.exists(nested) ? nested : flat;
+        if (!Files.exists(file)) return ABSENT;
         try {
-            return readFile(file);
+            return new LegacyConfigReader(readFile(file), file);
         } catch (IOException e) {
             throw new UncheckedIOException("Could not read legacy configuration " + file, e);
         }
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return source != null;
+    }
+
+    @Override
+    public Object get(String key) {
+        return values.get(key);
+    }
+
+    /** Keeps the imported file, but not under the name of a live configuration. */
+    @Override
+    public void markAsMigrated() {
+        if (source == null) return;
+        Path renamed = source.resolveSibling(
+            source.getFileName()
+                .toString() + ".old");
+        try {
+            Files.move(source, renamed, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not rename legacy configuration " + source, e);
+        }
+    }
+
+    private static boolean globalConfig() {
+        return ForgeModContainer.getConfig()
+            .getCategory(Configuration.CATEGORY_GENERAL)
+            .get("enableGlobalConfig")
+            .getBoolean();
     }
 
     private static Map<String, Object> readFile(Path file) throws IOException {
