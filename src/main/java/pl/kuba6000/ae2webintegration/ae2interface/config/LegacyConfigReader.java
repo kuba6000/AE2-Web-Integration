@@ -56,8 +56,9 @@ public final class LegacyConfigReader implements ILegacyConfigProvider {
     @Override
     public void markAsMigrated() {
         if (source == null) return;
-        Path renamed = source.resolveSibling(source.getFileName()
-            .toString() + ".old");
+        Path renamed = source.resolveSibling(
+            source.getFileName()
+                .toString() + ".old");
         try {
             Files.move(source, renamed, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
