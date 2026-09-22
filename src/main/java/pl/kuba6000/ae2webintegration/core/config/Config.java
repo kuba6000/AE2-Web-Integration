@@ -8,6 +8,7 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.function.Predicate;
 
 import org.apache.logging.log4j.LogManager;
@@ -90,24 +91,36 @@ public class Config {
         return document;
     }
 
+    @Deprecated
+    private static final Map<String, String> LEGACY_KEYS = new LinkedHashMap<>();
+
+    static {
+        LEGACY_KEYS.put("port", "general.port");
+        LEGACY_KEYS.put("password", "general.password");
+        LEGACY_KEYS.put("allow_no_password_on_localhost", "general.allow_no_password_on_localhost");
+        LEGACY_KEYS.put("trusted_proxies", "general.trusted_proxies");
+        LEGACY_KEYS.put("public_mode", "general.public_mode");
+        LEGACY_KEYS.put("max_requests_before_logged_in_per_minute", "general.max_requests_before_logged_in_per_minute");
+        LEGACY_KEYS.put("check_for_updates", "general.check_for_updates");
+        LEGACY_KEYS.put("discord_webhook", "discord.webhook");
+        LEGACY_KEYS.put("discord_role_id", "discord.role_id");
+        LEGACY_KEYS.put("discord_minimum_crafting_duration_seconds", "notifications.minimum_crafting_duration_seconds");
+        LEGACY_KEYS.put("discord_minimum_crafting_amount", "notifications.minimum_crafting_amount");
+        LEGACY_KEYS.put("track_machine_crafting", "tracking.track_machine_crafting");
+    }
+
+    @Deprecated
     private static CommentedConfig migrate(ILegacyConfigProvider legacy) {
         LOG.info("LEGACY CONFIG MIGRATION INIT");
         CommentedConfig document = newDocument();
         CONVERTER.toConfig(new ConfigSettings(), document);
-        for (UnmodifiableConfig.Entry category : document.entrySet()) {
-            CommentedConfig section = category.getValue();
-            for (UnmodifiableConfig.Entry setting : section.entrySet()) {
-                String key = setting.getKey();
-                String oldKey = category.getKey()
-                    .equals("discord") ? "discord_" + key : key;
-                Object val = legacy.get(oldKey);
-                if (val != null) {
-                    section.set(key, val);
-                    LOG.info("Mapped {} to {}", oldKey, key);
-                } else {
-                    LOG.warn("Key {} not found in the legacy config", oldKey);
-                }
+        for (Map.Entry<String, String> entry : LEGACY_KEYS.entrySet()) {
+            Object value = legacy.get(entry.getKey());
+            if (value == null) {
+                continue;
             }
+            document.set(entry.getValue(), value);
+            LOG.info("Mapped {} to {}", entry.getKey(), entry.getValue());
         }
         return document;
     }

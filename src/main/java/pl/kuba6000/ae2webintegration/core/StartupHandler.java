@@ -4,7 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import pl.kuba6000.ae2webintegration.core.config.Config;
-import pl.kuba6000.ae2webintegration.core.discord.DiscordManager;
+import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
 
 public class StartupHandler {
 
@@ -29,16 +29,7 @@ public class StartupHandler {
             Config.INSTANCE.general.port);
     }
 
-    public static void handleDiscordIntegration() {
-        DiscordManager.init();
-        if (!Config.INSTANCE.general.publicMode && !Config.INSTANCE.discord.webhook.isEmpty()) {
-            DiscordManager.postMessageNonBlocking(
-                new DiscordManager.DiscordEmbed("AE2 Web Integration", "Discord integration started!"));
-        } else if (Config.INSTANCE.general.publicMode && !Config.INSTANCE.discord.webhook.isEmpty()) {
-            DiscordManager.postMessageNonBlocking(new DiscordManager.DiscordEmbed("AE2 Web Integration", """
-                Warning!
-                Discord integration webhook is set in the config, but the public mode is enabled!
-                Discord integration will be disabled!""", DiscordManager.COLOR_RED));
-        }
+    public static void handleNotificationIntegration() {
+        NotificationManager.init();
     }
 }

@@ -72,8 +72,8 @@ class ConfigFileTest {
         assertFalse(Config.INSTANCE.general.checkForUpdates);
         assertEquals("https://example.invalid/webhook", Config.INSTANCE.discord.webhook);
         assertEquals("123456789", Config.INSTANCE.discord.roleId);
-        assertEquals(64, Config.INSTANCE.discord.minimumCraftingDurationSeconds);
-        assertEquals(128, Config.INSTANCE.discord.minimumCraftingAmount);
+        assertEquals(64, Config.INSTANCE.notifications.minimumCraftingDurationSeconds);
+        assertEquals(128, Config.INSTANCE.notifications.minimumCraftingAmount);
         assertTrue(Config.INSTANCE.tracking.trackMachineCrafting);
     }
 
