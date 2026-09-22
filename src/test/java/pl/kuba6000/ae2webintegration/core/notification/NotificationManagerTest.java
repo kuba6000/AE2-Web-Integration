@@ -31,10 +31,7 @@ import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class NotificationManagerTest {
 
-    private IConfigValue<Integer> previousMinimumDuration;
-    private IConfigValue<Integer> previousMinimumAmount;
-    private IConfigValue<String> previousWebhook;
-    private IConfigValue<String> previousRole;
+    private ConfigTestFixture config;
 
     @BeforeEach
     void resetConfig() {
@@ -56,9 +53,7 @@ class NotificationManagerTest {
 
     @Test
     void invalidWebhooksAreDiagnosedWithoutKillingTheNotificationWorker() throws InterruptedException {
-        AtomicReference<String> webhook = new AtomicReference<>("malformed-webhook");
-        ConfigBootstrap.discordWebhookValue = webhook::get;
-        ConfigBootstrap.discordRoleIdValue = () -> "";
+        config.set("discord.webhook", "malformed-webhook");
         BlockingQueue<String> errors = new LinkedBlockingQueue<>();
         Logger logger = (Logger) LogManager.getLogger("ae2webintegration - WEBHOOK INTEGRATION");
         AbstractAppender appender = new AbstractAppender("webhook-errors", null, null, false, Property.EMPTY_ARRAY) {

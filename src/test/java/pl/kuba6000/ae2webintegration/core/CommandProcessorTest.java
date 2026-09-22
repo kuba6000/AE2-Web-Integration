@@ -2,19 +2,16 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.io.File;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
-import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
@@ -32,31 +29,21 @@ class CommandProcessorTest {
     private static final PlayerIdentity TEST_PLAYER = new PlayerIdentity(TEST_UUID, "Player");
     private static final PlayerIdentity OTHER_PLAYER = new PlayerIdentity(OTHER_UUID, "OtherPlayer");
 
-    private static File previousConfigDirectory;
+    private ConfigTestFixture config;
     private RegistrationTestFixture registrations;
-
-    @BeforeAll
-    static void setupConfig() {
-        previousConfigDirectory = Config.getConfigDirectory();
-        Config.init(new File(System.getProperty("java.io.tmpdir")));
-    }
-
-    @AfterAll
-    static void restoreConfig() {
-        if (previousConfigDirectory != null) {
-            Config.init(previousConfigDirectory.getParentFile());
-        }
-    }
 
     @BeforeEach
     void setUp() {
         registrations = new RegistrationTestFixture();
+        config = new ConfigTestFixture();
+        config.set("general.port", ConfigTestFixture.unusedLoopbackPort());
         AE2Controller.AE2Interface = new TestAE();
         CoreDataTestFixture.reset();
     }
 
     @AfterEach
     void tearDown() {
+        config.close();
         registrations.close();
     }
 
@@ -64,7 +51,7 @@ class CommandProcessorTest {
 
     @Test
     void testReloadSuccess() {
-        CommandResult result = CommandProcessor.reload(() -> {});
+        CommandResult result = CommandProcessor.reload();
         assertTrue(result.isSuccess(), "reload should succeed");
         assertNotNull(result.getMessage());
         assertTrue(
@@ -76,8 +63,9 @@ class CommandProcessorTest {
 
     @Test
     void testReloadFailure() {
-        CommandResult result = CommandProcessor.reload(() -> { throw new RuntimeException("simulated failure"); });
-        assertFalse(result.isSuccess(), "reload should fail when configReloader throws");
+        config.writeRaw("[general\nport = 2324");
+        CommandResult result = CommandProcessor.reload();
+        assertFalse(result.isSuccess(), "reload should fail when the configuration file is invalid");
         assertTrue(
             result.getMessage()
                 .toLowerCase()
@@ -88,10 +76,10 @@ class CommandProcessorTest {
     @Test
     void repeatedReloadsCreateUsableServerLifecycles() {
         assertTrue(
-            CommandProcessor.reload(() -> {})
+            CommandProcessor.reload()
                 .isSuccess());
         assertTrue(
-            CommandProcessor.reload(() -> {})
+            CommandProcessor.reload()
                 .isSuccess());
     }
 

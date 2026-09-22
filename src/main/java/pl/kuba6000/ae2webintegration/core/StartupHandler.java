@@ -17,8 +17,7 @@ public class StartupHandler {
      * and cancelling crafts, for every network on the server.
      */
     public static void logOpenAdminAccessWarning() {
-        if (!Config.AE_PASSWORD()
-            .isEmpty()) {
+        if (!Config.INSTANCE.general.password.isEmpty()) {
             return;
         }
         LOG.warn(
@@ -27,7 +26,7 @@ public class StartupHandler {
                 + " cancelling crafting jobs."
                 + " Set 'password' in the config to require a login."
                 + " (Access from localhost is controlled separately by 'allow_no_password_on_localhost'.)",
-            Config.AE_PORT());
+            Config.INSTANCE.general.port);
     }
 
     public static void handleNotificationIntegration() {

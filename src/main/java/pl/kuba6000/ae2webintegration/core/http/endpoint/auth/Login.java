@@ -111,7 +111,7 @@ public final class Login extends IAsyncRequest {
             result.token(),
             principal.getUsername(),
             principal.isAdmin(),
-            Config.CHECK_FOR_UPDATES() && CoreEngine.getAvailableUpdate() != null);
+            Config.INSTANCE.general.checkForUpdates && CoreEngine.getAvailableUpdate() != null);
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, session));
     }
 }

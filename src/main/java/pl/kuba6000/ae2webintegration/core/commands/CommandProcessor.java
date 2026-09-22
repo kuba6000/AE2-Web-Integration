@@ -5,6 +5,7 @@ import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 
 public class CommandProcessor {
 
@@ -13,13 +14,11 @@ public class CommandProcessor {
     /**
      * Reloads the configuration and restarts the HTTP server.
      *
-     * @param configReloader a Runnable that performs the Forge-specific config reload
-     *                       (reads the Forge config file and applies values to ConfigBootstrap)
      * @return a CommandResult with success/failure status and a human-readable message
      */
-    public static CommandResult reload(Runnable configReloader) {
+    public static CommandResult reload() {
         try {
-            configReloader.run();
+            Config.reload();
             AE2Controller.stopHTTPServer();
             AE2Controller.startHTTPServer();
             NotificationManager.init();

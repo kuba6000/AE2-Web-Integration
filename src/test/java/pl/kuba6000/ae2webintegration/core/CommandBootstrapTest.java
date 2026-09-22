@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.UUID;
 import java.util.function.Consumer;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +13,8 @@ import pl.kuba6000.ae2webintegration.core.api.ICommandBuilder;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.commands.CommandBootstrap;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -23,10 +26,20 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class CommandBootstrapTest {
 
+    private ConfigTestFixture config;
+
     @BeforeEach
     void setUpPlayerLookup() {
+        config = new ConfigTestFixture();
+        config.set("general.port", ConfigTestFixture.unusedLoopbackPort());
         AE2Controller.AE2Interface = new TestAE();
         CoreDataTestFixture.reset();
+    }
+
+    @AfterEach
+    void tearDown() {
+        AE2Controller.stopHTTPServer();
+        config.close();
     }
 
     @Test
@@ -38,7 +51,7 @@ class CommandBootstrapTest {
         RecordingContext ctx = new RecordingContext();
         // Grant permission
         ctx.hasPermissionResult = true;
-        ctx.reloader = () -> {};
+        config.write("general.public_mode", false);
         ctx.playerIdentity = new PlayerIdentity(UUID.randomUUID(), "Player");
 
         // Invoke the captured reload handler
@@ -46,8 +59,9 @@ class CommandBootstrapTest {
 
         // Verify: should have checked permission(4)
         assertTrue(ctx.lastPermissionCheck >= 4, "should check permission level >= 4");
-        // Verify reload was triggered (reloader was run)
-        assertTrue(ctx.reloaderRan, "reloader should have been invoked");
+        // Reload applies the edited file through the command.
+        assertFalse(Config.INSTANCE.general.publicMode);
+        assertNull(ctx.lastError);
     }
 
     @Test
@@ -57,13 +71,14 @@ class CommandBootstrapTest {
 
         RecordingContext ctx = new RecordingContext();
         ctx.hasPermissionResult = false;
+        config.write("general.public_mode", false);
 
         builder.reloadHandler.accept(ctx);
 
         // Should send error when no permission
         assertNotNull(ctx.lastError, "should have sent error message");
-        // Verify reload was NOT triggered
-        assertFalse(ctx.reloaderRan, "reloader should NOT have been invoked");
+        // The denied command leaves the active settings unchanged.
+        assertTrue(Config.INSTANCE.general.publicMode);
     }
 
     @Test
@@ -186,8 +201,6 @@ class CommandBootstrapTest {
         boolean hasPermissionResult = false;
         String lastError;
         PlayerIdentity playerIdentity;
-        Runnable reloader;
-        boolean reloaderRan;
 
         @Override
         public String[] getArgs() {
@@ -213,12 +226,5 @@ class CommandBootstrapTest {
             lastError = text;
         }
 
-        @Override
-        public Runnable getReloader() {
-            return () -> {
-                reloaderRan = true;
-                if (reloader != null) reloader.run();
-            };
-        }
     }
 }

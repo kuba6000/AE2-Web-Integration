@@ -65,6 +65,9 @@ dependencies {
     compileOnlyApi 'org.jetbrains:annotations:26.0.2'
     // Minecraft supplies Gson. Compile against the oldest supported API instead of bundling a newer one.
     compileOnlyApi 'com.google.code.gson:gson:2.2.4'
+    // Modern loaders supply NightConfig; only legacy adapters bundle their own relocated copy.
+    compileOnlyApi 'com.electronwill.night-config:core:3.6.4'
+    compileOnlyApi 'com.electronwill.night-config:toml:3.6.4'
     implementation 'com.google.guava:guava:21.0'
     implementation 'commons-io:commons-io:2.5'
     implementation 'org.apache.commons:commons-lang3:3.5'
@@ -73,6 +76,8 @@ dependencies {
     compileOnly 'org.apache.logging.log4j:log4j-api:2.0-beta9-fixed'
     // Testing
     testImplementation 'com.google.code.gson:gson:2.8.9'
+    testImplementation 'com.electronwill.night-config:core:3.6.4'
+    testImplementation 'com.electronwill.night-config:toml:3.6.4'
     testImplementation 'org.apache.logging.log4j:log4j-api:2.17.2'
     testImplementation 'org.apache.logging.log4j:log4j-core:2.17.2'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
@@ -105,6 +110,28 @@ test {
     }
     tasks.named('check') { dependsOn compatibilityTest }
 }
+
+// Forge 1.20.1 and legacy use 3.6.4; NeoForge 1.21.1 supplies 3.8.3.
+def modernNightConfigRuntime = configurations.create('nightConfig383TestRuntime') {
+    canBeConsumed = false
+    extendsFrom configurations.testImplementation, configurations.testRuntimeOnly
+    resolutionStrategy.force 'com.electronwill.night-config:core:3.8.3', 'com.electronwill.night-config:toml:3.8.3'
+}
+tasks.register('testNightConfig383', Test) {
+    group = 'verification'
+    description = 'Test configuration and HTTP reload with the NightConfig supplied by NeoForge.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.output + sourceSets.main.output + modernNightConfigRuntime
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching '*ConfigFileTest'
+        includeTestsMatching '*ConfigDirectoryTest'
+        includeTestsMatching '*CommandProcessorTest'
+        includeTestsMatching '*ServerLifecycleHttpTest'
+    }
+    shouldRunAfter tasks.named('test')
+}
+tasks.named('check') { dependsOn tasks.named('testNightConfig383') }
 
 java {
     toolchain {

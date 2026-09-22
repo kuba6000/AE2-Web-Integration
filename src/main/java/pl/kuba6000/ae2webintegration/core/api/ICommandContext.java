@@ -23,6 +23,4 @@ public interface ICommandContext {
     /** Sends an error message to the sender (interface adds red coloring). */
     void sendError(String text);
 
-    /** Returns a Runnable that triggers the platform-specific config reload. */
-    Runnable getReloader();
 }
