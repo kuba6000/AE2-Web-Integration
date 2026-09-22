@@ -76,7 +76,7 @@ public final class ConfigTestFixture implements AutoCloseable {
     public void close() {
         if (previousDirectory != null && new File(previousDirectory, "config.toml").isFile()) {
             Config.init(previousDirectory.getParentFile());
-        } else {
+        } else if (Files.exists(file)) {
             writeRaw("");
             Config.reload();
         }

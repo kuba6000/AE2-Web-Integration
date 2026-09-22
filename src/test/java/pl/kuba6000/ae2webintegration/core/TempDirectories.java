@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -30,7 +31,7 @@ public final class TempDirectories {
             if (lastFailure == null) {
                 return;
             }
-            if (!(lastFailure instanceof DirectoryNotEmptyException)) {
+            if (!shouldRetry(lastFailure)) {
                 break;
             }
             try {
@@ -63,5 +64,9 @@ public final class TempDirectories {
             }
         }
         return null;
+    }
+
+    private static boolean shouldRetry(IOException failure) {
+        return failure instanceof DirectoryNotEmptyException || failure instanceof FileSystemException;
     }
 }

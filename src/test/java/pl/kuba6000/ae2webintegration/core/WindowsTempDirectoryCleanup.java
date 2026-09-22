@@ -1,38 +1,53 @@
 package pl.kuba6000.ae2webintegration.core;
 
-import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
+import java.io.File;
+import java.lang.reflect.Field;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Removes JUnit temporary directories before JUnit's own cleanup.
+ * Deletes this test's {@link TempDir} before JUnit's own cleanup.
  * <p>
- * {@code @TempDir} is created in an earlier callback, so a snapshot taken in {@code beforeEach}
- * already contains it and would skip the directory that later fails to delete. {@code @TempDir}
- * records {@link java.nio.file.DirectoryNotEmptyException} without waiting.
+ * JUnit records {@link java.nio.file.DirectoryNotEmptyException} without waiting. Only this test's
+ * directory is removed: wiping every {@code junit*} folder races other tests that still have it open.
  */
 public class WindowsTempDirectoryCleanup implements AfterEachCallback {
 
     @Override
-    public void afterEach(ExtensionContext context) {
+    public void afterEach(ExtensionContext context) throws Exception {
         if (!System.getProperty("os.name", "")
             .startsWith("Windows")) {
             return;
         }
-        Path temporary = Paths.get(System.getProperty("java.io.tmpdir"));
-        try (DirectoryStream<Path> children = Files.newDirectoryStream(temporary, "junit*")) {
-            for (Path child : children) {
-                if (Files.isDirectory(child)) {
-                    TempDirectories.deleteRecursively(child);
+        if (!context.getTestInstances()
+            .isPresent()) {
+            return;
+        }
+        for (Object instance : context.getTestInstances()
+            .get()
+            .getAllInstances()) {
+            Class<?> type = instance.getClass();
+            while (type != null && type != Object.class) {
+                for (Field field : type.getDeclaredFields()) {
+                    if (field.getAnnotation(TempDir.class) == null) {
+                        continue;
+                    }
+                    field.setAccessible(true);
+                    delete(field.get(instance));
                 }
+                type = type.getSuperclass();
             }
-        } catch (IOException ignored) {
-            // A missing temp directory has nothing for JUnit to clean up.
+        }
+    }
+
+    private static void delete(Object value) {
+        if (value instanceof Path) {
+            TempDirectories.deleteRecursively((Path) value);
+        } else if (value instanceof File) {
+            TempDirectories.deleteRecursively(((File) value).toPath());
         }
     }
 }
