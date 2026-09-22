@@ -194,29 +194,44 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 In public mode, a player can create an account from the login page. After choosing a password, the page displays
 an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
 
-On upgrade, settings from the existing CFG or TOML file are imported when `config.toml` is absent.
-The old file is kept; subsequent edits belong in `config.toml`. See [configuration options](docs/configuration.md).
+## Notification services integration
 
-## Discord integration
+**Integrations only works when public mode is disabled.**
 
-**Discord integration only works when public mode is disabled.**
+Crafting completion notifications can be filtered with `minimum_crafting_duration_seconds` and
+`minimum_crafting_amount`. A notification must meet both configured minimums. Both values default to `0`,
+which keeps all crafting completion notifications enabled.
+Notifications are initialized ONLY for tracked grids
+
+#### Discord Integration
 
 Create a Discord webhook and set its URL as `discord_webhook` in the AE2 Web Integration config. You can also
 set `discord_role_id` if a role should be pinged on errors.
 
-Crafting completion notifications can be filtered with `discord_minimum_crafting_duration_seconds` and
-`discord_minimum_crafting_amount`. A notification must meet both configured minimums. Both values default to `0`,
-which keeps all crafting completion notifications enabled.
 
 <img width="467" height="224" alt="AE2 Web Integration Discord message" src="https://github.com/user-attachments/assets/f9f7635d-676c-40a3-8334-f7fa35e5867a" />
 
-## Custom website
+#### NTFY Integration
+
+[ntfy](https://ntfy.sh/) sends the same crafting updates as a phone or desktop notification. Set `ntfy.host` to [ntfy.sh](https://ntfy.sh/) or to your own server, and set `ntfy.topic` to a topic you subscribed to in the app. A host without `http://` or `https://` is sent over HTTPS.
+
+Leave `ntfy.user` and `ntfy.password` empty when the topic is public. A private topic needs both. Setting only one of them turns ntfy off.
+
+`notifications.full_domain` is optional. When it is set, opening the notification goes to that address.
+
+## Custom website and Automation
 
 If you already have a web server and want to host the panel there, you can! The
 [`example_website`](./example_website) directory contains a ready-to-use simple PHP
 proxy. It forwards API calls from your web server to the AE2 Web Integration endpoint.
 
-See the [OpenAPI generator guide](tools/openapi-doclet/README.md) for generating the API
+If you want to use this mod as an API endpoint,
+website exposes the entire API at /api/ endpoint,
+documentation can be found here: https://ae2web.kuba6000.pl/docs/
+*NOTE: All requests should be sent to YOUR server, NOT ae2web.kuba6000.pl*
+
+You can also generate the entire documentation yourself,
+see the [OpenAPI generator guide](tools/openapi-doclet/README.md) for generating the API
 specification from endpoint annotations and Javadocs.
 
 ## Compatibility
