@@ -5,7 +5,6 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextFormatting;
 
-import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.core.api.ICommandContext;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 
@@ -54,14 +53,4 @@ public class CommandContext implements ICommandContext {
         sender.sendMessage(new TextComponentString(TextFormatting.RED + text));
     }
 
-    /**
-     * Returns a Runnable that re-reads the Forge config file via
-     * {@link Config#synchronizeConfiguration()} and restarts the
-     * HTTP server. {@link pl.kuba6000.ae2webintegration.core.commands.CommandProcessor#reload}
-     * handles the actual stop/start — this runnable only re-reads the config.
-     */
-    @Override
-    public Runnable getReloader() {
-        return Config::synchronizeConfiguration;
-    }
 }
