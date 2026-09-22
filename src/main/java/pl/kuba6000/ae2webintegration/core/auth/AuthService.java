@@ -69,8 +69,10 @@ public final class AuthService {
 
     /** Reload changes request limits and proxy trust without invalidating existing sessions. */
     public static void reloadHttpSettings() {
-        rateLimiter = new RateLimiter(Config.AE_MAX_REQUESTS_BEFORE_LOGGED_IN_PER_MINUTE(), RATE_LIMIT_WINDOW_MILLIS);
-        clientAddressResolver = ClientAddressResolver.fromConfig(Config.TRUSTED_PROXIES());
+        rateLimiter = new RateLimiter(
+            Config.INSTANCE.general.maxRequestsBeforeLoggedInPerMinute,
+            RATE_LIMIT_WINDOW_MILLIS);
+        clientAddressResolver = ClientAddressResolver.fromConfig(Config.INSTANCE.general.trustedProxies);
     }
 
     public static boolean isTrustedProxy(@NotNull HttpExchange exchange) {
@@ -109,7 +111,8 @@ public final class AuthService {
 
     private static boolean isLocalAccess(@NotNull HttpExchange exchange, @NotNull InetAddress client) {
         return !exchange.getRequestHeaders()
-            .containsKey("Authorization") && Config.ALLOW_NO_PASSWORD_ON_LOCALHOST() && client.isLoopbackAddress();
+            .containsKey("Authorization") && Config.INSTANCE.general.allowNoPasswordOnLocalhost
+            && client.isLoopbackAddress();
     }
 
     /** An explicit Authorization header always takes precedence over browser cookies. */
@@ -158,9 +161,8 @@ public final class AuthService {
     public static @NotNull LoginResult login(long generation, @NotNull String username, @NotNull String password,
         boolean rememberMe) {
         WebPrincipal principal;
-        if (username.equalsIgnoreCase("admin") || !Config.AE_PUBLIC_MODE()) {
-            if (!password.equals(Config.AE_PASSWORD()) && !Config.AE_PASSWORD()
-                .isEmpty()) {
+        if (username.equalsIgnoreCase("admin") || !Config.INSTANCE.general.publicMode) {
+            if (!password.equals(Config.INSTANCE.general.password) && !Config.INSTANCE.general.password.isEmpty()) {
                 return LoginResult.failure(ApiStatus.INVALID_PASSWORD);
             }
             principal = WebPrincipal.admin();

@@ -12,22 +12,22 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
-import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
-import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
+import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Register;
 
 /** Starts registrations through their public request handler, with the normal game-thread lookup. */
 final class RegistrationTestFixture implements AutoCloseable {
 
-    private final IConfigValue<Integer> previousPort = ConfigBootstrap.aePortValue;
+    private final ConfigTestFixture config = new ConfigTestFixture();
 
     RegistrationTestFixture() {
         AE2Controller.stopHTTPServer();
         AuthService.clearWorldState();
-        ConfigBootstrap.aePortValue = () -> 0;
+        config.set("general.port", ConfigTestFixture.unusedLoopbackPort());
         AE2Controller.startHTTPServer();
     }
 
@@ -39,6 +39,11 @@ final class RegistrationTestFixture implements AutoCloseable {
             @Override
             public UUID getOnlinePlayerUUID(String username) {
                 return player.name.equals(username) ? player.uuid : null;
+            }
+
+            @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
             }
 
             @Override
@@ -81,6 +86,6 @@ final class RegistrationTestFixture implements AutoCloseable {
     public void close() {
         AE2Controller.stopHTTPServer();
         AuthService.clearWorldState();
-        ConfigBootstrap.aePortValue = previousPort;
+        config.close();
     }
 }

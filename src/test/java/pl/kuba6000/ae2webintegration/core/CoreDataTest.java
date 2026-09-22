@@ -17,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
@@ -214,6 +215,11 @@ class CoreDataTest {
         @Override
         public UUID getOnlinePlayerUUID(String username) {
             return REGISTERED_UUID;
+        }
+
+        @Override
+        public ILegacyConfigProvider getLegacyConfig() {
+            return null;
         }
 
         @Override

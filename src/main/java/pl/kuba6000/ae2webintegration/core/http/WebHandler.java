@@ -134,10 +134,11 @@ public final class WebHandler implements HttpHandler {
                     .collect(Collectors.joining(System.lineSeparator()));
             }
         }
-        response = response.replace("_REPLACE_ME_IS_PUBLIC_MODE", Config.AE_PUBLIC_MODE() ? "true" : "false");
+        response = response
+            .replace("_REPLACE_ME_IS_PUBLIC_MODE", Config.INSTANCE.general.publicMode ? "true" : "false");
         response = response.replace(
             "_REPLACE_ME_VERSION_OUTDATED",
-            Config.CHECK_FOR_UPDATES() && CoreEngine.getAvailableUpdate() != null ? "true" : "false");
+            Config.INSTANCE.general.checkForUpdates && CoreEngine.getAvailableUpdate() != null ? "true" : "false");
         if (context != null) {
             response = response.replace(
                 "_REPLACE_ME_USERNAME",

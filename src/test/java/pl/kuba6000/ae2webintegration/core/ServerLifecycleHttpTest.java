@@ -47,11 +47,12 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.config.Config;
-import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
+import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
@@ -80,6 +81,11 @@ class ServerLifecycleHttpTest {
         @Override
         public UUID getOnlinePlayerUUID(String username) {
             return awaitLookup();
+        }
+
+        @Override
+        public ILegacyConfigProvider getLegacyConfig() {
+            return null;
         }
 
         @Override
@@ -159,47 +165,48 @@ class ServerLifecycleHttpTest {
     @TempDir
     File tempDirectory;
 
-    private IConfigValue<Integer> previousPort;
-    private IConfigValue<String> previousPassword;
-    private IConfigValue<Boolean> previousLocalAccess;
-    private IConfigValue<Boolean> previousPublicMode;
-    private IConfigValue<Boolean> previousCheckForUpdates;
-    private File previousConfigDirectory;
+    private ConfigTestFixture config;
     private IServerPlatform previousServerPlatform;
     private int port;
 
     @BeforeEach
     void setUp() throws IOException {
         CoreEngine.onServerStopped();
-        previousPort = ConfigBootstrap.aePortValue;
-        previousPassword = ConfigBootstrap.aePasswordValue;
-        previousLocalAccess = ConfigBootstrap.allowNoPasswordOnLocalhostValue;
-        previousPublicMode = ConfigBootstrap.aePublicModeValue;
-        previousCheckForUpdates = ConfigBootstrap.checkForUpdatesValue;
-        previousConfigDirectory = Config.getConfigDirectory();
         previousServerPlatform = AE2Controller.serverPlatform;
 
         port = unusedLoopbackPort();
-        ConfigBootstrap.aePortValue = () -> port;
-        ConfigBootstrap.aePasswordValue = () -> "lifecycle-password";
-        ConfigBootstrap.allowNoPasswordOnLocalhostValue = () -> false;
-        ConfigBootstrap.aePublicModeValue = () -> false;
-        ConfigBootstrap.checkForUpdatesValue = () -> false;
-        Config.init(tempDirectory);
+        config = new ConfigTestFixture(tempDirectory);
+        config.write("general.port", port);
+        config.write("general.password", "lifecycle-password");
+        config.write("general.allow_no_password_on_localhost", false);
+        config.write("general.public_mode", false);
+        config.write("general.check_for_updates", false);
+        Config.reload();
     }
 
     @AfterEach
     void tearDown() {
         CoreEngine.onServerStopped();
-        ConfigBootstrap.aePortValue = previousPort;
-        ConfigBootstrap.aePasswordValue = previousPassword;
-        ConfigBootstrap.allowNoPasswordOnLocalhostValue = previousLocalAccess;
-        ConfigBootstrap.aePublicModeValue = previousPublicMode;
-        ConfigBootstrap.checkForUpdatesValue = previousCheckForUpdates;
         AE2Controller.serverPlatform = previousServerPlatform;
-        if (previousConfigDirectory != null) {
-            Config.init(previousConfigDirectory.getParentFile());
-        }
+        config.close();
+    }
+
+    @Test
+    void failedConfigReloadKeepsTheListenerAndAuthenticatedSessionWorking() throws Exception {
+        startApi();
+        String token = login();
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
+
+        config.writeRaw("[general\nport = 2324");
+        assertFalse(
+            CommandProcessor.reload()
+                .isSuccess());
+
+        assertEquals(port, Config.INSTANCE.general.port);
+        assertEquals("lifecycle-password", Config.INSTANCE.general.password);
+        assertFalse(Config.INSTANCE.general.publicMode);
+        assertFalse(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
+        assertEquals(HttpURLConnection.HTTP_OK, performSyncedRequest(token).status());
     }
 
     @Test
@@ -292,6 +299,11 @@ class ServerLifecycleHttpTest {
             }
 
             @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
+            }
+
+            @Override
             public File getConfigDirectory() {
                 return tempDirectory;
             }
@@ -363,6 +375,11 @@ class ServerLifecycleHttpTest {
             }
 
             @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
+            }
+
+            @Override
             public File getConfigDirectory() {
                 return tempDirectory;
             }
@@ -420,6 +437,11 @@ class ServerLifecycleHttpTest {
             }
 
             @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
+            }
+
+            @Override
             public File getConfigDirectory() {
                 return tempDirectory;
             }
@@ -470,7 +492,7 @@ class ServerLifecycleHttpTest {
         UUID playerUuid = UUID.fromString("11111111-2222-3333-4444-555555555555");
         BlockingPlayerLookup platform = new BlockingPlayerLookup(playerUuid);
         AE2Controller.serverPlatform = platform;
-        ConfigBootstrap.aePublicModeValue = () -> true;
+        config.set("general.public_mode", true);
         AE2Controller.AE2Interface = null;
         CoreDataTestFixture.reset();
         assertTrue(
@@ -516,7 +538,7 @@ class ServerLifecycleHttpTest {
     @Test
     void authenticatedPageUsesTheAccountNameWithoutReadingTheAeProfile() throws Exception {
         UUID playerUuid = UUID.fromString("99999999-8888-7777-6666-555555555555");
-        ConfigBootstrap.aePublicModeValue = () -> true;
+        config.set("general.public_mode", true);
         AE2Controller.AE2Interface = null;
         CoreDataTestFixture.reset();
         assertTrue(
@@ -622,6 +644,11 @@ class ServerLifecycleHttpTest {
             }
 
             @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
+            }
+
+            @Override
             public File getConfigDirectory() {
                 return tempDirectory;
             }
@@ -662,7 +689,7 @@ class ServerLifecycleHttpTest {
             new Gson().fromJson(response.body(), JsonObject.class)
                 .get("status")
                 .getAsString());
-        ConfigBootstrap.aePublicModeValue = () -> true;
+        config.set("general.public_mode", true);
         CoreDataTestFixture.reset();
         Response missing = read(
             jsonPost("/api/auth/login", null, "{\"username\":\"MissingPlayer\",\"password\":\"incorrect\"}"));
@@ -787,32 +814,27 @@ class ServerLifecycleHttpTest {
 
     @Test
     void websiteLoginIgnoresForwardedSchemeFromUntrustedConnections() throws Exception {
-        IConfigValue<String> previousTrustedProxies = ConfigBootstrap.trustedProxiesValue;
-        try {
-            ConfigBootstrap.trustedProxiesValue = () -> "192.0.2.11";
-            startApi();
-            for (String peer : new String[] { "192.0.2.10", "192.0.2.11" }) {
-                PostExchange exchange = new PostExchange("username=admin&password=lifecycle-password") {
+        config.set("general.trusted_proxies", "192.0.2.11");
+        startApi();
+        for (String peer : new String[] { "192.0.2.10", "192.0.2.11" }) {
+            PostExchange exchange = new PostExchange("username=admin&password=lifecycle-password") {
 
-                    @Override
-                    public InetSocketAddress getRemoteAddress() {
-                        return new InetSocketAddress(peer, 12345);
-                    }
-                };
-                exchange.getRequestHeaders()
-                    .set("Host", "terminal.example");
-                exchange.getRequestHeaders()
-                    .set("Origin", "https://terminal.example");
-                exchange.getRequestHeaders()
-                    .set("X-Forwarded-Proto", "https");
-                new WebHandler().handle(exchange);
-                assertEquals(
-                    peer.equals("192.0.2.11") ? HttpURLConnection.HTTP_MOVED_TEMP : HttpURLConnection.HTTP_FORBIDDEN,
-                    exchange.responseCode,
-                    peer);
-            }
-        } finally {
-            ConfigBootstrap.trustedProxiesValue = previousTrustedProxies;
+                @Override
+                public InetSocketAddress getRemoteAddress() {
+                    return new InetSocketAddress(peer, 12345);
+                }
+            };
+            exchange.getRequestHeaders()
+                .set("Host", "terminal.example");
+            exchange.getRequestHeaders()
+                .set("Origin", "https://terminal.example");
+            exchange.getRequestHeaders()
+                .set("X-Forwarded-Proto", "https");
+            new WebHandler().handle(exchange);
+            assertEquals(
+                peer.equals("192.0.2.11") ? HttpURLConnection.HTTP_MOVED_TEMP : HttpURLConnection.HTTP_FORBIDDEN,
+                exchange.responseCode,
+                peer);
         }
     }
 

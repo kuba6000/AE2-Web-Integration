@@ -10,6 +10,10 @@ public interface IServerPlatform {
 
     File getConfigDirectory();
 
+    /** Reads the old loader configuration without changing it; absent files return an empty map. */
+    @Deprecated // remove after a few versions
+    ILegacyConfigProvider getLegacyConfig();
+
     /** Root of the active server save, available after server startup. */
     File getWorldDirectory();
 }

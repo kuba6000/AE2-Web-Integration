@@ -13,7 +13,7 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
 
     @Override
     public void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isAuthorPlayer) {
-        if (!Config.TRACKING_TRACK_MACHINE_CRAFTING() && !isAuthorPlayer) {
+        if (!Config.INSTANCE.tracking.trackMachineCrafting && !isAuthorPlayer) {
             return;
         }
         AE2JobTracker.addJob(cpuCluster, grid, isMerging);

@@ -8,7 +8,7 @@ import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 public class UpdateNotifier {
 
     public static void notifyPlayerIfOutdated(IPlayerMessenger messenger, PlayerIdentity player) {
-        if (!Config.CHECK_FOR_UPDATES()) return;
+        if (!Config.INSTANCE.general.checkForUpdates) return;
         ReleaseManifest.Release update = CoreEngine.getAvailableUpdate();
         if (update != null) {
             messenger.sendMessage(

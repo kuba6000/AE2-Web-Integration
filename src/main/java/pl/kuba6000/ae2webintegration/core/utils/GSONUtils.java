@@ -1,14 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
@@ -67,33 +60,9 @@ public class GSONUtils {
      *                     a failed non-atomic replacement may affect the target.
      */
     public static void writeAtomically(File target, Object value) throws IOException {
-        File directory = target.getParentFile();
-        if (directory != null) {
-            Files.createDirectories(directory.toPath());
-        }
-        File temporary = new File(target.getPath() + ".tmp");
-        try {
-            try (FileOutputStream out = new FileOutputStream(temporary);
-                Writer writer = new OutputStreamWriter(out, StandardCharsets.UTF_8)) {
-                GSON_BUILDER.create()
-                    .toJson(value, writer);
-                writer.flush();
-                out.getFD()
-                    .sync();
-            }
-            try {
-                Files.move(
-                    temporary.toPath(),
-                    target.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            }
-        } finally {
-            // Nothing useful to do if this fails; the stale temp file is harmless.
-            // noinspection ResultOfMethodCallIgnored
-            temporary.delete();
-        }
+        AtomicFileWriter.write(
+            target,
+            writer -> GSON_BUILDER.create()
+                .toJson(value, writer));
     }
 }
