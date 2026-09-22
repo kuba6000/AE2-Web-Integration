@@ -8,6 +8,8 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import com.github.bsideup.jabel.Desugar;
 
 import cpw.mods.fml.common.FMLCommonHandler;
+import pl.kuba6000.ae2webintegration.ae2interface.config.LegacyConfigReader;
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
 @Desugar
@@ -38,5 +40,10 @@ public record Platform(File configDir) implements IServerPlatform {
     @Override
     public File getConfigDirectory() {
         return configDir;
+    }
+
+    @Override
+    public ILegacyConfigProvider getLegacyConfig() {
+        return LegacyConfigReader.open(getConfigDirectory());
     }
 }
