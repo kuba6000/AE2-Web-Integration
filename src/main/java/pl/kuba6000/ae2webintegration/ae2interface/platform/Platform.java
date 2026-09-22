@@ -8,6 +8,8 @@ import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
+import pl.kuba6000.ae2webintegration.ae2interface.config.LegacyConfigReader;
+import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 
 public class Platform implements IServerPlatform {
@@ -32,5 +34,10 @@ public class Platform implements IServerPlatform {
     public File getConfigDirectory() {
         return FMLPaths.CONFIGDIR.get()
             .toFile();
+    }
+
+    @Override
+    public ILegacyConfigProvider getLegacyConfig() {
+        return LegacyConfigReader.open(getConfigDirectory());
     }
 }

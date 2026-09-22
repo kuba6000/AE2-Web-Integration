@@ -1,11 +1,9 @@
 package pl.kuba6000.ae2webintegration.ae2interface;
 
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModLoadingContext;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
@@ -16,7 +14,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder;
-import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
@@ -37,11 +34,6 @@ public class AE2WebIntegration {
             .getModInfo()
             .getVersion()
             .toString();
-
-        // Register config before anything that depends on it
-        ModContainer container = ModLoadingContext.get()
-            .getActiveContainer();
-        container.registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
 
         CoreEngine.init(platform, version, "-neoforge-1.21.1");
         LOG.info("AE2WebIntegration loading at version {}", version);
