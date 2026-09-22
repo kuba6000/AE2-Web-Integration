@@ -14,15 +14,9 @@ public class NtfyDestination implements INotificationDestination {
 
     @Override
     public boolean isUsable() {
-        if (Config.NTFY_HOST()
-            .isEmpty()) return false;
-        if (Config.NTFY_TOPIC()
-            .isEmpty()) return false;
-        if (Config.NTFY_USER()
-            .isEmpty()
-            != Config.NTFY_PASSWORD()
-                .isEmpty())
-            return false;
+        if (Config.INSTANCE.ntfy.host.isEmpty()) return false;
+        if (Config.INSTANCE.ntfy.topic.isEmpty()) return false;
+        if (Config.INSTANCE.ntfy.user.isEmpty() != Config.INSTANCE.ntfy.password.isEmpty()) return false;
         return true;
     }
 
@@ -33,11 +27,10 @@ public class NtfyDestination implements INotificationDestination {
 
     @Override
     public void sendNotification(IMessage message) {
-        if (Config.NTFY_HOST()
-            .isEmpty()) return;
+        if (Config.INSTANCE.ntfy.host.isEmpty()) return;
 
         // If no protocol is set in config, assume https
-        String host = Config.NTFY_HOST();
+        String host = Config.INSTANCE.ntfy.host;
         if (!host.contains("http")) host = "https://" + host;
 
         NtfyPayload payload = null;
@@ -74,6 +67,6 @@ public class NtfyDestination implements INotificationDestination {
             payload = new NtfyPayload(statusMessage.title(), statusMessage.description(), priority, tags);
         }
 
-        WebhookHelper.sendPayload(host, Config.NTFY_USER(), Config.NTFY_PASSWORD(), payload);
+        WebhookHelper.sendPayload(host, Config.INSTANCE.ntfy.user, Config.INSTANCE.ntfy.password, payload);
     }
 }

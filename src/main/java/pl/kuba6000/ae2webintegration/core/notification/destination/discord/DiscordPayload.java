@@ -26,7 +26,7 @@ public class DiscordPayload implements INotificationPayload {
 
     @Override
     public JsonObject serializePayload() {
-        String roleID = Config.DISCORD_ROLE_ID();
+        String roleID = Config.INSTANCE.discord.roleId;
 
         JsonObject json = new JsonObject();
         json.addProperty("username", "AE2 Web Integration");

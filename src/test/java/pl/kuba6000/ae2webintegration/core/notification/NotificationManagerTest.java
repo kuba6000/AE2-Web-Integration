@@ -23,8 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
-import pl.kuba6000.ae2webintegration.core.api.IConfigValue;
-import pl.kuba6000.ae2webintegration.core.config.ConfigBootstrap;
+import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.notification.destination.discord.DiscordDestination;
 import pl.kuba6000.ae2webintegration.core.notification.message.StatusMessage;
 
@@ -35,20 +34,12 @@ class NotificationManagerTest {
 
     @BeforeEach
     void resetConfig() {
-        previousMinimumDuration = ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue;
-        previousMinimumAmount = ConfigBootstrap.notificationMinimumCraftingAmountValue;
-        previousWebhook = ConfigBootstrap.discordWebhookValue;
-        previousRole = ConfigBootstrap.discordRoleIdValue;
-        ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue = () -> 0;
-        ConfigBootstrap.notificationMinimumCraftingAmountValue = () -> 0;
+        config = new ConfigTestFixture();
     }
 
     @AfterEach
     void restoreConfig() {
-        ConfigBootstrap.notificationMinimumCraftingAmountValue = previousMinimumAmount;
-        ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue = previousMinimumDuration;
-        ConfigBootstrap.discordWebhookValue = previousWebhook;
-        ConfigBootstrap.discordRoleIdValue = previousRole;
+        config.close();
     }
 
     @Test
@@ -82,17 +73,17 @@ class NotificationManagerTest {
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Malformed webhook must be diagnosed");
 
             // No connection should be opened for a protocol Discord webhooks do not support.
-            webhook.set("http://127.0.0.1:1/webhook");
+            config.set("discord.webhook", "http://127.0.0.1:1/webhook");
             discordDestination
                 .sendNotification(new StatusMessage("Second", "Second message", StatusMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Unsupported protocol must be diagnosed");
 
-            webhook.set("https://localhost:65536/webhook");
+            config.set("discord.webhook", "https://localhost:65536/webhook");
             discordDestination
                 .sendNotification(new StatusMessage("Third", "Third message", StatusMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Invalid port must be diagnosed");
 
-            webhook.set("another-malformed-webhook");
+            config.set("discord.webhook", "another-malformed-webhook");
             discordDestination
                 .sendNotification(new StatusMessage("Fourth", "Fourth message", StatusMessage.Severity.NONE));
             assertNotNull(errors.poll(3, TimeUnit.SECONDS), "Worker must continue processing the queue");
@@ -116,7 +107,7 @@ class NotificationManagerTest {
 
     @Test
     void durationThresholdFiltersShortCraftingJobs() {
-        ConfigBootstrap.notificationMinimumCraftingDurationSecondsValue = () -> 300;
+        config.set("notifications.minimum_crafting_duration_seconds", 300);
 
         assertFalse(NotificationManager.shouldPostCraftingNotification(299_999L, 1L));
         assertTrue(NotificationManager.shouldPostCraftingNotification(300_000L, 1L));
@@ -124,7 +115,7 @@ class NotificationManagerTest {
 
     @Test
     void amountThresholdFiltersSmallCraftingJobs() {
-        ConfigBootstrap.notificationMinimumCraftingAmountValue = () -> 1000;
+        config.set("notifications.minimum_crafting_amount", 1000);
 
         assertFalse(NotificationManager.shouldPostCraftingNotification(1L, 999L));
         assertTrue(NotificationManager.shouldPostCraftingNotification(1L, 1000L));

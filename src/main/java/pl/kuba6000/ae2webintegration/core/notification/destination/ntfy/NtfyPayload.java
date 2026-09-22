@@ -53,7 +53,7 @@ public class NtfyPayload implements INotificationPayload {
 
     @Override
     public JsonObject serializePayload() {
-        String topic = Config.NTFY_TOPIC();
+        String topic = Config.INSTANCE.ntfy.topic;
 
         JsonObject json = new JsonObject();
         json.addProperty("topic", topic);
@@ -65,9 +65,8 @@ public class NtfyPayload implements INotificationPayload {
         json.add("tags", tagsArray);
 
         json.addProperty("priority", this.priority.getValue());
-        if (!Config.AE_FULL_DOMAIN()
-            .isEmpty()) {
-            json.addProperty("click", Config.AE_FULL_DOMAIN());
+        if (!Config.INSTANCE.notifications.fullDomain.isEmpty()) {
+            json.addProperty("click", Config.INSTANCE.notifications.fullDomain);
         }
 
         return json;

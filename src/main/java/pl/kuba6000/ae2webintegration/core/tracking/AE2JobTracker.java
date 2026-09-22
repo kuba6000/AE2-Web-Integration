@@ -243,7 +243,7 @@ public class AE2JobTracker {
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         long durationMillis = info.timeDone - info.timeStarted;
         long craftedAmount = info.finalOutput.quantity;
-        if (!Config.AE_PUBLIC_MODE()
+        if (!Config.INSTANCE.general.publicMode
             && NotificationManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
             // Native enumeration assigns the fallback CPU display ordinals used by the notification name.
             grid.web$getCraftingGrid()

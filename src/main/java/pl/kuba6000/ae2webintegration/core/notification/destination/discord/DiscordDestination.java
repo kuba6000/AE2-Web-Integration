@@ -16,8 +16,7 @@ public class DiscordDestination implements INotificationDestination {
 
     @Override
     public boolean isUsable() {
-        return !Config.DISCORD_WEBHOOK()
-            .isEmpty();
+        return !Config.INSTANCE.discord.webhook.isEmpty();
     }
 
     @Override
@@ -27,7 +26,7 @@ public class DiscordDestination implements INotificationDestination {
 
     @Override
     public void sendNotification(IMessage message) {
-        String webhook = Config.DISCORD_WEBHOOK();
+        String webhook = Config.INSTANCE.discord.webhook;
         if (webhook.isEmpty()) return;
 
         DiscordPayload payload = null;

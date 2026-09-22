@@ -31,18 +31,20 @@ public class NotificationManager extends Thread {
         LOG.info("Initializing NotificationManager");
         if (thread != null) shutdown();
 
+        destinations.clear();
+
         DiscordDestination discord = new DiscordDestination();
         if (discord.isUsable()) destinations.add(discord);
         NtfyDestination ntfy = new NtfyDestination();
         if (ntfy.isUsable()) destinations.add(ntfy);
 
-        if (!Config.AE_PUBLIC_MODE() && (!destinations.isEmpty())) {
+        if (!Config.INSTANCE.general.publicMode && (!destinations.isEmpty())) {
             NotificationManager.postMessageNonBlocking(
                 new StatusMessage(
                     "AE2 Web Integration",
                     "Notification integration started!",
                     StatusMessage.Severity.NONE));
-        } else if (Config.AE_PUBLIC_MODE() && (!destinations.isEmpty())) {
+        } else if (Config.INSTANCE.general.publicMode && (!destinations.isEmpty())) {
             NotificationManager.postMessageNonBlocking(new StatusMessage("AE2 Web Integration", """
                 Warning!
                 Notifications are enabled in the config, but the public mode is enabled!
@@ -82,9 +84,10 @@ public class NotificationManager extends Thread {
     }
 
     public static boolean shouldPostCraftingNotification(long durationMillis, long craftedAmount) {
-        long minimumDurationMillis = TimeUnit.SECONDS.toMillis(Config.NOTIFICATION_MINIMUM_CRAFTING_DURATION_SECONDS());
+        long minimumDurationMillis = TimeUnit.SECONDS
+            .toMillis(Config.INSTANCE.notifications.minimumCraftingDurationSeconds);
         return durationMillis >= minimumDurationMillis
-            && craftedAmount >= Config.NOTIFICATION_MINIMUM_CRAFTING_AMOUNT();
+            && craftedAmount >= Config.INSTANCE.notifications.minimumCraftingAmount;
     }
 
     private static void postMessage(IMessage message) {
