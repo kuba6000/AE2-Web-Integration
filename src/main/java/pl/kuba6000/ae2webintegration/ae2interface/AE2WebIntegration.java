@@ -8,7 +8,6 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.IExtensionPoint;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.network.NetworkConstants;
 
@@ -16,7 +15,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import pl.kuba6000.ae2webintegration.ae2interface.commands.CommandBuilder;
-import pl.kuba6000.ae2webintegration.ae2interface.config.Config;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.ae2interface.platform.Platform;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
@@ -38,9 +36,6 @@ public class AE2WebIntegration {
             .getVersion()
             .toString();
 
-        // Register config before anything that depends on it
-        ModLoadingContext.get()
-            .registerConfig(ModConfig.Type.COMMON, Config.SPEC, "ae2webintegration/ae2webintegration.toml");
         ModLoadingContext.get()
             .registerExtensionPoint(
                 IExtensionPoint.DisplayTest.class,
