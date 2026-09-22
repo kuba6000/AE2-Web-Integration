@@ -9,11 +9,11 @@
       "github_release_download_url": "https://github.com/kuba6000/AE2-Web-Integration/releases/download/1.0.2-forge-1.7.10/ae2webintegration-1.0.2-forge-1.7.10.jar"
     },
     "prerelease": {
-      "newest": "1.1.0",
-      "timestamp": 1786902605,
-      "github_release_tag": "1.1.0-forge-pre-1.7.10",
-      "github_release_url": "https://github.com/kuba6000/AE2-Web-Integration/releases/tag/1.1.0-forge-pre-1.7.10",
-      "github_release_download_url": "https://github.com/kuba6000/AE2-Web-Integration/releases/download/1.1.0-forge-pre-1.7.10/ae2webintegration-1.1.0-forge-pre-1.7.10.jar"
+      "newest": "1.2.0-pre",
+      "timestamp": 1790046067,
+      "github_release_tag": "1.2.0-pre-forge-1.7.10",
+      "github_release_url": "https://github.com/kuba6000/AE2-Web-Integration/releases/tag/1.2.0-pre-forge-1.7.10",
+      "github_release_download_url": "https://github.com/kuba6000/AE2-Web-Integration/releases/download/1.2.0-pre-forge-1.7.10/ae2webintegration-1.2.0-pre-forge-1.7.10.jar"
     }
   }
 }
