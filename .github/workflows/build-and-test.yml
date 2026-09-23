@@ -33,6 +33,13 @@ jobs:
       - name: Test web terminal behavior
         run: node --test src/test/js/*.test.cjs
 
+      - name: Test new terminal in Chromium
+        working-directory: tools/ui-tests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm test
+
       - name: Test PHP proxy
         run: |
           php --version

@@ -192,6 +192,117 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    void browserModulesAndStylesLoadWithoutConsumingTheLoginRequestBudget() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        for (int i = 0; i < 3; i++) {
+            HttpURLConnection module = connection("/assets/web/http-test.mjs", null);
+            assertEquals(HttpURLConnection.HTTP_OK, read(module).status());
+            assertEquals("text/javascript; charset=UTF-8", module.getHeaderField("Content-Type"));
+            HttpURLConnection style = connection("/assets/web/http-test.css", null);
+            assertEquals(HttpURLConnection.HTTP_OK, read(style).status());
+            assertEquals("text/css; charset=UTF-8", style.getHeaderField("Content-Type"));
+        }
+        assertEquals(HttpURLConnection.HTTP_OK, get("/?ui=next", null).status());
+        assertEquals(429, get("/?ui=next", null).status());
+    }
+
+    @Test
+    void browserAssetsSupportHeadAndRejectWritesMissingFilesAndPrivateResources() throws Exception {
+        startApi();
+        HttpURLConnection get = connection("/assets/web/http-test.mjs", null);
+        Response content = read(get);
+        HttpURLConnection head = connection("/assets/web/http-test.mjs", null);
+        head.setRequestMethod("HEAD");
+        Response metadata = read(head);
+        assertEquals(HttpURLConnection.HTTP_OK, metadata.status());
+        assertEquals("", metadata.body());
+        assertEquals(
+            content.body()
+                .getBytes(StandardCharsets.UTF_8).length,
+            head.getContentLength());
+        assertEquals(get.getHeaderField("Content-Type"), head.getHeaderField("Content-Type"));
+        HttpURLConnection write = connection("/assets/web/http-test.mjs", null);
+        write.setRequestMethod("POST");
+        assertEquals(HttpURLConnection.HTTP_BAD_METHOD, read(write).status());
+        assertEquals("GET, HEAD", write.getHeaderField("Allow"));
+        for (String path : new String[] { "/assets/web/missing.mjs", "/assets/web/index.html",
+            "/assets/web/../login.html", "/assets/web/%2e%2e/login.html", "/assets/web/../../junit-platform.properties",
+            "/assets/web/%2e%2e%5clogin.html", "/assets/web/config.toml" }) {
+            assertEquals(HttpURLConnection.HTTP_NOT_FOUND, get(path, null).status(), path);
+        }
+    }
+
+    @Test
+    void browserLoginKeepsTheRequestedUiOnSuccessAndFailure() throws Exception {
+        startApi();
+        for (String selector : new String[] { "", "?ui=next" }) {
+            HttpURLConnection failure = browserForm("/" + selector, "username=admin&password=wrong");
+            assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(failure).status());
+            assertEquals(
+                "?INVALID_PASSWORD" + (selector.isEmpty() ? "" : "&ui=next"),
+                failure.getHeaderField("Location"));
+            HttpURLConnection success = browserForm("/" + selector, "username=admin&password=lifecycle-password");
+            assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(success).status());
+            assertEquals(selector.isEmpty() ? "." : "?ui=next", success.getHeaderField("Location"));
+            assertTrue(
+                success.getHeaderField("Set-Cookie")
+                    .contains("HttpOnly"));
+        }
+    }
+
+    @Test
+    void browserRegistrationKeepsTheRequestedUiOnTheConfirmationPage() throws Exception {
+        BlockingPlayerLookup platform = new BlockingPlayerLookup(
+            UUID.fromString("11111111-2222-3333-4444-555555555555"));
+        platform.release.countDown();
+        AE2Controller.serverPlatform = platform;
+        config.set("general.public_mode", true);
+        startApi();
+        HttpURLConnection registration = browserForm("/?ui=next", "register=Player&password=player-password");
+        assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, performSyncedRequest(() -> read(registration)).status());
+        String location = registration.getHeaderField("Location");
+        assertTrue(location.startsWith("?confirmregistration&token="));
+        assertTrue(location.endsWith("&ui=next"));
+        Response confirmation = get("/" + location, null);
+        assertEquals(HttpURLConnection.HTTP_OK, confirmation.status());
+        assertTrue(
+            confirmation.body()
+                .contains("type=\"password\""));
+        assertFalse(
+            confirmation.body()
+                .contains("type=\"module\""));
+    }
+
+    @Test
+    void nextUiRequiresAuthenticationAndLeavesTheExistingPageAsDefault() throws Exception {
+        startApi();
+        Response loginPage = get("/?ui=next", null);
+        assertEquals(HttpURLConnection.HTTP_OK, loginPage.status());
+        assertTrue(
+            loginPage.body()
+                .contains("type=\"password\""));
+        assertFalse(
+            loginPage.body()
+                .contains("type=\"module\""));
+
+        String token = login();
+        Response legacy = get("/", token);
+        assertEquals(HttpURLConnection.HTTP_OK, legacy.status());
+        assertFalse(
+            legacy.body()
+                .contains("type=\"module\""));
+        Response next = get("/?ui=next", token);
+        assertEquals(HttpURLConnection.HTTP_OK, next.status());
+        assertTrue(
+            next.body()
+                .contains("type=\"module\""));
+        assertFalse(
+            next.body()
+                .contains("type=\"password\""));
+    }
+
+    @Test
     void failedConfigReloadKeepsTheListenerAndAuthenticatedSessionWorking() throws Exception {
         startApi();
         String token = login();
@@ -1002,6 +1113,18 @@ class ServerLifecycleHttpTest {
         byte[] encoded = body.getBytes(StandardCharsets.UTF_8);
         try (OutputStream output = connection.getOutputStream()) {
             output.write(encoded);
+        }
+        return connection;
+    }
+
+    private HttpURLConnection browserForm(String path, String body) throws IOException {
+        HttpURLConnection connection = connection(path, null);
+        connection.setInstanceFollowRedirects(false);
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+        connection.setDoOutput(true);
+        try (OutputStream output = connection.getOutputStream()) {
+            output.write(body.getBytes(StandardCharsets.UTF_8));
         }
         return connection;
     }
