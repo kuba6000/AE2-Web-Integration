@@ -37,12 +37,13 @@ public final class LegacyConfigReader implements ILegacyConfigProvider {
         Path flat = configDirectory.toPath()
             .resolve("ae2webintegration.cfg");
         if (globalConfig()) {
-            if (Files.exists(nested)) {
-                Map<String, Object> settings = collect(new Configuration(nested.toFile()));
-                if (!settings.isEmpty()) return new LegacyConfigReader(settings, nested);
+            // Forge uses these paths as child identifiers even when only global.cfg exists.
+            Map<String, Object> settings = collect(new Configuration(nested.toFile()));
+            if (!settings.isEmpty()) {
+                return new LegacyConfigReader(settings, Files.exists(nested) ? nested : null);
             }
-            if (Files.exists(flat)) return new LegacyConfigReader(collect(new Configuration(flat.toFile())), flat);
-            return ABSENT;
+            settings = collect(new Configuration(flat.toFile()));
+            return new LegacyConfigReader(settings, Files.exists(flat) ? flat : null);
         }
         Path file = Files.exists(nested) ? nested : flat;
         if (!Files.exists(file)) return ABSENT;
@@ -55,7 +56,7 @@ public final class LegacyConfigReader implements ILegacyConfigProvider {
 
     @Override
     public boolean isAvailable() {
-        return source != null;
+        return source != null || !values.isEmpty();
     }
 
     @Override
