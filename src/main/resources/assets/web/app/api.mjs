@@ -40,6 +40,8 @@ export function createApi(base, onUnauthorized) {
         createPlan: (gridKey, body) => request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans`, { method: 'POST', body }),
         plan: (gridKey, planId, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${planId}`, { signal }),
         cpus: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/cpus`, { signal }),
+        cpu: (gridKey, cpuKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}`, { signal }),
+        cancelCpu: (gridKey, cpuKey) => request(`api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}/cancel`, { method: 'POST' }),
         submitPlan: (gridKey, planId, cpuKey) => request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${planId}/submit`, { method: 'POST', body: { cpuKey } }),
         deletePlan: (gridKey, planId) => request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${planId}`, { method: 'DELETE' }),
         logout: () => request('api/auth/logout', { method: 'POST' })

@@ -1,5 +1,16 @@
 const translations = {
     en: {
+        cpus: 'CPUs', cpuWork: 'CPU work', selectCpuWork: 'Choose a CPU to inspect its current work.', noCpus: 'This network has no crafting CPUs.',
+        cpuCapacity: 'Capacity: {count} B', cpuUsedStorage: 'Used: {count} B', cpuStorageUnknown: 'Used storage unavailable',
+        cpuOutput: 'Current output', cpuOutputUnknown: 'Current output unavailable', cpuWorking: 'CPU is crafting.', cpuIdleMessage: 'CPU is idle.',
+        cpuStarted: 'Started: {time}', cpuElapsed: 'Elapsed: {count} s', cpuTrackingUnavailable: 'Tracking measurements are unavailable for this work.',
+        cpuActive: 'Active', cpuPending: 'Pending', cpuStored: 'Stored in CPU', cpuTimeSpent: 'Processing time', cpuCraftedTotal: 'Crafted total',
+        cpuRate: 'Produced per second', cpuElapsedShare: 'Share of elapsed time', cpuProcessingShare: 'Share of processing time', seconds: '{count} s',
+        cancelCpuWork: 'Cancel current work',
+        cpuCancelled: 'Cancellation completed.', CPU_NOT_BUSY: 'The CPU had no work to cancel. Its current state has been refreshed.',
+        cpuCancelling: 'Cancelling current work…',
+        cpuCancelUncertain: 'Cancellation outcome is unknown. Check the refreshed current work. Cancellation will not be sent again from this view; reload only to deliberately cancel current work again.',
+        inspectCpu: 'Inspect CPU work', cpuNoResources: 'No resource details are available for this current work.',
         craftQuantity: 'Craft quantity', calculatePlan: 'Calculate plan', craftingPlan: 'Crafting plan',
         resource: 'Resource', consumed: 'From storage', requested: 'Requested', missingAmount: 'Missing', steps: 'Crafting steps',
         craftingCpu: 'Crafting CPU', chooseCpu: 'Choose a CPU', startCrafting: 'Start crafting',
@@ -11,7 +22,7 @@ const translations = {
         JOB_NOT_DONE: 'The plan is still calculating. Refresh to check its progress.',
         INVALID_ID: 'This plan is unavailable. It may have expired or been removed. Return to resources to calculate a new plan.',
         simulation: 'This plan has missing resources and cannot be submitted.',
-        uncertainSubmit: 'Submission outcome is unknown. Check current CPU work in the previous interface before making another request. This plan will not be submitted again from this view.',
+        uncertainSubmit: 'Submission outcome is unknown. Inspect current CPU work before making another request. This plan will not be submitted again from this view.',
         uncertainCreate: 'Calculation outcome is unknown. The server may still be calculating a plan, but its ID was not received. Automatic retry is disabled; reload only if you deliberately want a separate calculation.',
         uncertainDelete: 'Deletion outcome is unknown. Refresh can check whether the plan is available, but deletion will not be sent again from this view.',
         ALL_CPU_BUSY: 'Calculation requires at least one idle crafting CPU. Wait for a CPU to finish or make one available.',
@@ -35,7 +46,7 @@ const translations = {
         craftableYes: 'Crafting available', craftableNo: 'Not craftable', identityUnavailable: 'This resource currently has no usable web identity.',
         resourceCount: { one: '{count} resource', other: '{count} resources' },
         language: 'Language', appearance: 'Appearance', light: 'Light', dark: 'Dark', system: 'System',
-        logout: 'Log out', previous: 'Crafting, CPUs and history', previousHelp: 'Open these features in the previous interface.',
+        logout: 'Log out', previous: 'History and settings', previousHelp: 'Open these features in the previous interface.',
         updated: 'Updated {time}', unknownOwner: 'Unknown', invalidRoute: 'This view does not exist.',
         error: 'Could not load data.', NETWORK_ERROR: 'Cannot connect to the server.',
         NO_PERMISSIONS: 'You no longer have access to this network.', GRID_NOT_FOUND: 'This network is not available.',
@@ -44,6 +55,17 @@ const translations = {
         TIMEOUT: 'The request timed out.', INVALID_RESPONSE: 'The server returned an unreadable response.'
     },
     pl: {
+        cpus: 'CPU', cpuWork: 'Praca CPU', selectCpuWork: 'Wybierz CPU, aby sprawdzić jego bieżącą pracę.', noCpus: 'Ta sieć nie ma CPU craftingu.',
+        cpuCapacity: 'Pojemność: {count} B', cpuUsedStorage: 'Używane: {count} B', cpuStorageUnknown: 'Zużycie pamięci niedostępne',
+        cpuOutput: 'Bieżący produkt', cpuOutputUnknown: 'Bieżący produkt niedostępny', cpuWorking: 'CPU pracuje.', cpuIdleMessage: 'CPU jest wolny.',
+        cpuStarted: 'Początek: {time}', cpuElapsed: 'Czas trwania: {count} s', cpuTrackingUnavailable: 'Pomiary śledzenia są niedostępne dla tej pracy.',
+        cpuActive: 'Aktywne', cpuPending: 'Oczekujące', cpuStored: 'W magazynie CPU', cpuTimeSpent: 'Czas przetwarzania', cpuCraftedTotal: 'Wytworzono łącznie',
+        cpuRate: 'Wytwarzane na sekundę', cpuElapsedShare: 'Udział w czasie trwania', cpuProcessingShare: 'Udział w czasie przetwarzania', seconds: '{count} s',
+        cancelCpuWork: 'Anuluj bieżącą pracę',
+        cpuCancelled: 'Anulowanie zakończone.', CPU_NOT_BUSY: 'CPU nie miało pracy do anulowania. Odświeżono jego bieżący stan.',
+        cpuCancelling: 'Anulowanie bieżącej pracy…',
+        cpuCancelUncertain: 'Wynik anulowania jest nieznany. Sprawdź odświeżoną bieżącą pracę. Ten widok nie wyśle ponownie anulowania; przeładuj stronę tylko po świadomej decyzji o ponownym anulowaniu bieżącej pracy.',
+        inspectCpu: 'Sprawdź pracę CPU', cpuNoResources: 'Szczegóły zasobów bieżącej pracy są niedostępne.',
         craftQuantity: 'Ilość do wytworzenia', calculatePlan: 'Oblicz plan', craftingPlan: 'Plan craftingu',
         resource: 'Zasób', consumed: 'Z magazynu', requested: 'Żądane', missingAmount: 'Brakuje', steps: 'Kroki craftingu',
         craftingCpu: 'CPU craftingu', chooseCpu: 'Wybierz CPU', startCrafting: 'Rozpocznij crafting',
@@ -55,7 +77,7 @@ const translations = {
         JOB_NOT_DONE: 'Plan jest nadal obliczany. Odśwież, aby sprawdzić postęp.',
         INVALID_ID: 'Ten plan jest niedostępny. Mógł wygasnąć lub zostać usunięty. Wróć do zasobów, aby obliczyć nowy plan.',
         simulation: 'W tym planie brakuje zasobów. Nie można rozpocząć craftingu.',
-        uncertainSubmit: 'Wynik zlecenia jest nieznany. Sprawdź pracę CPU w poprzednim interfejsie przed kolejnym żądaniem. Ten widok nie wyśle planu ponownie.',
+        uncertainSubmit: 'Wynik zlecenia jest nieznany. Sprawdź bieżącą pracę CPU przed kolejnym żądaniem. Ten widok nie wyśle planu ponownie.',
         uncertainCreate: 'Wynik obliczenia jest nieznany. Serwer może nadal obliczać plan, ale nie otrzymano jego identyfikatora. Ponawianie jest wyłączone; przeładuj stronę tylko wtedy, gdy chcesz świadomie utworzyć osobne obliczenie.',
         uncertainDelete: 'Wynik usunięcia jest nieznany. Odświeżenie sprawdzi dostępność planu, ale ten widok nie wyśle ponownie żądania usunięcia.',
         ALL_CPU_BUSY: 'Obliczenie wymaga co najmniej jednego wolnego CPU craftingu. Poczekaj na zakończenie pracy lub udostępnij CPU.',
@@ -79,7 +101,7 @@ const translations = {
         craftableYes: 'Dostępny crafting', craftableNo: 'Brak craftingu', identityUnavailable: 'Ten zasób nie ma obecnie dostępnego identyfikatora webowego.',
         resourceCount: { one: '{count} zasób', few: '{count} zasoby', many: '{count} zasobów', other: '{count} zasobu' },
         language: 'Język', appearance: 'Wygląd', light: 'Jasny', dark: 'Ciemny', system: 'Systemowy',
-        logout: 'Wyloguj', previous: 'Crafting, CPU i historia', previousHelp: 'Otwórz te funkcje w poprzednim interfejsie.',
+        logout: 'Wyloguj', previous: 'Historia i ustawienia', previousHelp: 'Otwórz te funkcje w poprzednim interfejsie.',
         updated: 'Aktualizacja: {time}', unknownOwner: 'Nieznany', invalidRoute: 'Ten widok nie istnieje.',
         error: 'Nie udało się pobrać danych.', NETWORK_ERROR: 'Brak połączenia z serwerem.',
         NO_PERMISSIONS: 'Nie masz już dostępu do tej sieci.', GRID_NOT_FOUND: 'Ta sieć jest niedostępna.',
@@ -98,5 +120,6 @@ export function createTranslator(language) {
         if (typeof message === 'object') message = message[plural.select(values.count)] || message.other;
         return message.replace(/\{(\w+)\}/g, (_, name) => typeof values[name] === 'number' ? numbers.format(values[name]) : String(values[name] ?? ''));
     }
-    return { t, number: value => numbers.format(value), time: value => new Intl.DateTimeFormat(language, { timeStyle: 'medium' }).format(value) };
+    return { t, number: value => numbers.format(value), time: value => new Intl.DateTimeFormat(language, { timeStyle: 'medium' }).format(value),
+        dateTime: value => new Intl.DateTimeFormat(language, {dateStyle: 'medium', timeStyle: 'medium'}).format(value) };
 }

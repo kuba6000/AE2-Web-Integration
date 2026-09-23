@@ -1,3 +1,5 @@
+import { cpuHref } from '../../app/router.mjs';
+
 function element(tag, text = '') {
     const node = document.createElement(tag);
     node.textContent = text;
@@ -35,7 +37,8 @@ export function createCraftingView(root, application) {
     const start = element('button'); start.type = 'button'; start.addEventListener('click', () => application.crafting.submit());
     const remove = element('button'); remove.type = 'button'; remove.addEventListener('click', () => application.crafting.remove());
     const back = element('a');
-    const actions = element('div'); actions.className = 'plan-actions'; actions.append(start, remove, back);
+    const inspectCpu = element('a');
+    const actions = element('div'); actions.className = 'plan-actions'; actions.append(start, remove, inspectCpu, back);
     planView.append(title, output, status, reason, bytes, tableScroll, mergeHint, cpuHint, cpuLabel, actions);
     let lastPlan;
     let lastLocale;
@@ -59,6 +62,7 @@ export function createCraftingView(root, application) {
                 ? t('simulation') : t(state.status);
             reason.textContent = state.errorDetail || '';
             back.textContent = t('backResources'); back.href = `#/grids/${encodeURIComponent(route.gridKey)}/items`;
+            inspectCpu.textContent = t('inspectCpu'); inspectCpu.href = cpuHref(route.gridKey, state.selectedCpu);
             bytes.textContent = state.plan?.isDone ? t('planBytes', {count: state.plan.bytesTotal}) : '';
             tableScroll.hidden = !state.plan?.isDone;
             if (lastPlan !== state.plan || lastLocale !== locale) {

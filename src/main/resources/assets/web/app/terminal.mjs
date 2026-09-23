@@ -1,4 +1,5 @@
 import { createCrafting } from './crafting.mjs';
+import { createCpuMonitor } from './cpus.mjs';
 
 /** Shared state/actions for terminal renderers; a theme does not own requests or refresh timers. */
 export function createTerminal(api, preferences) {
@@ -17,6 +18,8 @@ export function createTerminal(api, preferences) {
     const notify = () => { if (!disposed) for (const listener of listeners) listener(state); };
     const crafting = createCrafting(api, () => { notify(); schedule(); });
     state.crafting = crafting.state;
+    const cpus = createCpuMonitor(api, () => { notify(); schedule(); });
+    state.cpus = cpus.state;
 
     function invalidateItems() {
         serial++;
@@ -68,6 +71,11 @@ export function createTerminal(api, preferences) {
         if (!state.grids.some(grid => grid.key === state.route.gridKey)) crafting.block('GRID_NOT_FOUND');
         else return crafting.refresh();
     }
+    function loadCpus() {
+        if (state.route.view !== 'cpus' || state.gridStatus !== 'ready') return;
+        if (!state.grids.some(grid => grid.key === state.route.gridKey)) cpus.block('GRID_NOT_FOUND');
+        else return cpus.refresh();
+    }
     async function refresh() {
         if (disposed) return;
         if (refreshingGrids) return refreshingGrids;
@@ -81,10 +89,11 @@ export function createTerminal(api, preferences) {
                 notify();
                 await loadItems();
                 await loadCrafting();
+                await loadCpus();
             } catch (error) {
                 if (disposed || error.name === 'AbortError') return;
                 state.gridStatus = 'error'; state.gridError = error.status || 'NETWORK_ERROR';
-                invalidateItems(); crafting.block(state.gridError); notify();
+                invalidateItems(); crafting.block(state.gridError); cpus.block(state.gridError); notify();
             } finally { refreshingGrids = null; schedule(); }
         })();
         return refreshingGrids;
@@ -92,12 +101,13 @@ export function createTerminal(api, preferences) {
     return {
         state,
         crafting,
+        cpus,
         subscribe(listener) { listeners.add(listener); listener(state); return () => listeners.delete(listener); },
         refresh,
-        route(route) { invalidateItems(); state.route = route; crafting.route(route); notify(); loadItems(); loadCrafting(); schedule(); },
+        route(route) { invalidateItems(); state.route = route; crafting.route(route); cpus.route(route); notify(); loadItems(); loadCrafting(); loadCpus(); schedule(); },
         search(value) { state.search = value; notify(); },
         select(item) { state.selected = item; notify(); },
         preference(name, value) { preferences.set(name, value); notify(); if (name === 'autoRefresh') schedule(); },
-        dispose() { disposed = true; clearTimeout(timer); gridRequest?.abort(); itemRequest?.abort(); crafting.dispose(); listeners.clear(); }
+        dispose() { disposed = true; clearTimeout(timer); gridRequest?.abort(); itemRequest?.abort(); crafting.dispose(); cpus.dispose(); listeners.clear(); }
     };
 }

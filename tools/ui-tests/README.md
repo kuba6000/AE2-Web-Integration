@@ -13,7 +13,9 @@ access failures and login destination preservation. Crafting coverage uses visib
 controls and HTTP requests to verify quantity validation, calculation polling and
 deletion, stable CPU choice, direct plan entry, submission, unavailable plans,
 lost access, and uncertain mutations without replay. Delayed HTTP responses exercise
-navigation and mutation lifetimes. Tests do not inspect private application state
+navigation and mutation lifetimes. CPU monitoring coverage checks stable selection,
+current resource and optional tracking data, explicit cancellation, missing CPUs,
+access loss and uncertain/pending cancellation across navigation. Tests do not inspect private application state
 or production source, and do not require Minecraft.
 Set `BROWSER_CHANNEL=msedge` to use an installed Microsoft Edge instead of downloaded
 Chromium. Playwright is a development dependency and is not included in mod JARs.

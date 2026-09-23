@@ -14,10 +14,15 @@ const readyPlan = { isDone: true, isSimulating: false, bytesTotal: 2048, plan: [
     { itemid: 'minecraft:iron_ingot', itemname: 'Iron Ingot', stored: 4, requested: 12, missing: 0, steps: 3, usedPercent: 0 }
 ] };
 const cpu = { name: 'Assembler', isBusy: false, availableStorage: 8192, usedStorage: 0, coProcessors: 1 };
+const cpuWork = { size: 8192, isBusy: true, finalOutput: {...iron, quantity: 12}, hasTrackingInfo: true,
+    timeStarted: 1700000000000, timeElapsed: 10000, items: [{itemid: 'minecraft:iron_ingot', itemname: 'Iron Ingot',
+        active: 4, pending: 6, stored: 2, timeSpentCrafting: 5000, craftedTotal: 10,
+        shareInCraftingTime: 0.4, shareInCraftingTimeCombined: 0.5, craftsPerSec: 2}] };
 
 async function fixture(t, mount = '') {
     const options = { delayA: 0, status: 200, requests: [], empty: false, reverseGrids: false, loggedOut: false, itemsA: [iron, quartz],
-        plan: readyPlan, pendingReads: 0, cpus: { 'cpu-a': cpu, 'cpu-b': cpu }, planStatus: 'OK', submitStatus: 'OK' };
+        plan: readyPlan, pendingReads: 0, cpus: { 'cpu-a': cpu, 'cpu-b': cpu }, planStatus: 'OK', submitStatus: 'OK',
+        cpuDetails: {'cpu-a': cpuWork, 'cpu-b': cpuWork}, cancelStatus: 'OK' };
     const server = http.createServer(async (request, response) => {
         const url = new URL(request.url, 'http://localhost');
         if (!url.pathname.startsWith(mount + '/')) { response.writeHead(404).end(); return; }
@@ -28,7 +33,7 @@ async function fixture(t, mount = '') {
             body: body.length ? JSON.parse(Buffer.concat(body).toString()) : null });
         if (resource.startsWith('/api/')) {
             response.setHeader('Content-Type', 'application/json');
-            const mutation = request.method === 'DELETE' ? 'delete' : resource.endsWith('/submit') ? 'submit'
+            const mutation = request.method === 'DELETE' ? 'delete' : resource.endsWith('/cancel') ? 'cancel' : resource.endsWith('/submit') ? 'submit'
                 : request.method === 'POST' && resource.endsWith('/crafting-plans') ? 'create' : null;
             if (mutation && options.fault?.operation === mutation) {
                 if (options.fault.status === 'NETWORK_ERROR') { response.destroy(); return; }
@@ -59,6 +64,19 @@ async function fixture(t, mount = '') {
             } else if (resource.endsWith('/cpus')) {
                 if (options.cpuError) { response.statusCode = 403; response.end(JSON.stringify({status: options.cpuError, data: null})); return; }
                 response.end(JSON.stringify({ status: 'OK', data: options.cpus }));
+            } else if (resource.endsWith('/cancel')) {
+                if (options.cancelStatus === 'OK') {
+                    const key = decodeURIComponent(resource.split('/').at(-2));
+                    options.cpus[key] = {...options.cpus[key], isBusy: false, finalOutput: null, usedStorage: 0};
+                    options.cpuDetails[key] = {size: 8192, isBusy: false, finalOutput: null, items: null, hasTrackingInfo: false, timeStarted: 0, timeElapsed: 0};
+                }
+                response.statusCode = options.cancelStatus === 'OK' ? 200 : 409;
+                response.end(JSON.stringify({status: options.cancelStatus, data: null}));
+            } else if (/\/cpus\/[^/]+$/.test(resource)) {
+                const key = decodeURIComponent(resource.split('/').at(-1));
+                const status = options.detailError || (options.cpuDetails[key] ? 'OK' : 'CPU_NOT_FOUND');
+                response.statusCode = status === 'OK' ? 200 : 404;
+                response.end(JSON.stringify({status, data: status === 'OK' ? options.cpuDetails[key] : null}));
             } else if (resource.endsWith('/items')) {
                 const first = resource.includes(gridA);
                 const send = () => { response.statusCode = options.status; response.end(JSON.stringify(options.status === 200
@@ -134,6 +152,47 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
     assert.equal(create[0].headers['x-ae2-request'], 'true');
     assert.match(create[0].headers['content-type'], /application\/json/);
     assert.deepEqual(options.requests.filter(request => request.path.endsWith('/submit')).map(request => request.body), [{cpuKey: 'cpu-b'}]);
+    await page.getByRole('link', {name: 'Inspect CPU work', exact: true}).click({timeout: 3000});
+    await page.getByRole('cell', {name: /Iron Ingot/}).waitFor();
+    assert.match(page.url(), /\/cpus\/cpu-b$/);
+});
+
+test('pending CPU cancellation settles on the revisited CPU and older reads cannot override it', async t => {
+    const {page, options, base} = await fixture(t);
+    let complete;
+    await page.route('**/cancel', route => { complete = status => route.fulfill({status: status === 'OK' ? 200 : 503,
+        contentType: 'application/json', body: JSON.stringify({status, data: null})}); });
+    for (const result of ['OK', 'TIMEOUT']) {
+        options.cpuDetails['cpu-a'] = cpuWork;
+        await page.goto(`${base}&case=${result}#/grids/${gridA}/cpus/cpu-a`);
+        await page.getByRole('button', {name: 'Cancel current work', exact: true}).click();
+        assert.equal(await page.getByRole('button', {name: 'Cancel current work', exact: true}).isDisabled(), true);
+        await page.getByRole('link', {name: 'Back to resources', exact: true}).click();
+        await page.getByRole('button', {name: /Iron Ingot/}).waitFor();
+        await page.goBack();
+        await page.getByRole('status').filter({hasText: /Cancelling/i}).waitFor();
+        if (result === 'OK') options.cpuDetails['cpu-a'] = {...cpuWork, isBusy: false, items: null, finalOutput: null};
+        await complete(result);
+        await page.getByRole('status').filter({hasText: result === 'OK' ? /CPU is idle/i : /outcome.*unknown/i}).waitFor();
+        await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+        await page.getByRole('status').filter({hasText: result === 'OK' ? /CPU is idle/i : /outcome.*unknown/i}).waitFor();
+    }
+    await page.unroute('**/cancel');
+    options.cpuDetails['cpu-a'] = cpuWork;
+    await page.goto(`${base}&case=late-read#/grids/${gridA}/cpus/cpu-a`);
+    await page.getByRole('cell', {name: /Iron Ingot/}).waitFor();
+    let capture;
+    const captured = new Promise(resolve => { capture = resolve; });
+    let held = false;
+    await page.route('**/cpus/cpu-a', route => { if (held) return route.continue(); held = true; capture(route); });
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    const delayed = await captured;
+    await page.getByRole('button', {name: 'Cancel current work', exact: true}).click();
+    await page.getByRole('status').filter({hasText: /CPU is idle/i}).waitFor();
+    await delayed.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify({status: 'OK', data: cpuWork})});
+    await page.getByRole('combobox', {name: 'Appearance', exact: true}).selectOption('dark');
+    assert.equal(await page.getByRole('cell', {name: /Iron Ingot/}).count(), 0);
+    assert.equal(await page.getByRole('button', {name: 'Cancel current work', exact: true}).count(), 0);
 });
 
 // Public seam: reopening a calculation reads its runtime identity; cancelling it is a single
@@ -186,6 +245,130 @@ test('busy CPU eligibility uses known output identity and missing selections req
     assert.equal(await cpus.getByRole('option', {name: /cpu-b/}).evaluate(option => option.disabled), true);
     await page.getByText(/Only idle CPUs/).waitFor();
     assert.equal(options.requests.filter(request => request.method === 'POST').length, 1);
+});
+
+// Public seam: CPU links and current-work controls plus HTTP. Display names may duplicate;
+// navigation and cancellation must continue to address the selected stable CPU key.
+test('CPU monitoring opens stable current work and explicitly cancels it without unrelated requests', async t => {
+    const {page, options, base} = await fixture(t, '/ae2');
+    options.cpus = {'cpu-a': {...cpu, isBusy: true, finalOutput: {...iron, quantity: 12}},
+        'cpu-b': {...cpu, isBusy: true, finalOutput: {...iron, quantity: 12}}};
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('link', {name: 'CPUs', exact: true}).click({timeout: 3000});
+    await page.getByRole('link', {name: /Assembler.*cpu-b/}).click();
+    await page.getByRole('cell', {name: /Iron Ingot/}).waitFor();
+    assert.match(page.url(), /\/cpus\/cpu-b$/);
+    assert.equal(await page.getByRole('columnheader', {name: 'Active', exact: true}).count(), 1);
+    assert.equal(await page.getByRole('columnheader', {name: 'Crafted total', exact: true}).count(), 1);
+    options.cpus = {'cpu-b': options.cpus['cpu-b'], 'cpu-a': options.cpus['cpu-a']};
+    const refreshed = page.waitForResponse(response => response.url().endsWith('/cpus/cpu-b'));
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await (await refreshed).finished();
+    assert.match(page.url(), /\/cpus\/cpu-b$/);
+    await page.getByRole('button', {name: 'Cancel current work', exact: true}).click();
+    await page.getByRole('status').filter({hasText: /CPU is idle/i}).waitFor();
+    assert.equal(await page.getByRole('cell', {name: /Iron Ingot/}).count(), 0);
+    const cancel = options.requests.filter(request => request.path.endsWith('/cancel'));
+    assert.equal(cancel.length, 1);
+    assert.equal(cancel[0].path, `/api/grids/${gridA}/cpus/cpu-b/cancel`);
+    assert.equal(cancel[0].method, 'POST');
+    assert.equal(cancel[0].headers['x-ae2-request'], 'true');
+    assert.equal(options.requests.filter(request => request.path.endsWith('/items')).length, 1);
+    assert.equal(options.requests.filter(request => request.path.endsWith('/cpus/cpu-a')).length, 0);
+});
+
+// Public seam: a missing selected key cannot become another CPU, and access/read failures
+// must remove current-work data and the ability to cancel from stale observations.
+test('CPU removal and denied reads clear current work without selecting a replacement', async t => {
+    const {page, options, base} = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-b`);
+    await page.getByRole('cell', {name: /Iron Ingot/}).waitFor();
+    delete options.cpus['cpu-b'];
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await page.getByRole('status').filter({hasText: /CPU.*available/i}).waitFor({timeout: 3000});
+    assert.match(page.url(), /\/cpus\/cpu-b$/);
+    assert.equal(await page.getByRole('cell', {name: /Iron Ingot/}).count(), 0);
+    assert.equal(await page.getByRole('button', {name: 'Cancel current work', exact: true}).count(), 0);
+    await page.getByRole('link', {name: /Assembler.*cpu-a/}).click();
+    await page.getByRole('cell', {name: /Iron Ingot/}).waitFor();
+    options.detailError = 'NO_PERMISSIONS';
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await page.getByRole('status').filter({hasText: /no longer have access/i}).waitFor();
+    assert.equal(await page.getByRole('link', {name: /Assembler/}).count(), 0);
+    assert.equal(await page.getByRole('cell', {name: /Iron Ingot/}).count(), 0);
+    options.detailError = null;
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await page.getByRole('cell', {name: /Iron Ingot/}).waitFor();
+    options.cpuError = 'GRID_NOT_FOUND';
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await page.getByRole('status').filter({hasText: /network.*available/i}).waitFor();
+    assert.equal(await page.getByRole('link', {name: /Assembler/}).count(), 0);
+    assert.equal(options.requests.some(request => request.method !== 'GET'), false);
+});
+
+test('known CPU cancellation rejections refresh stale work or clear unavailable private data', async t => {
+    const {page, options, base} = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await page.getByRole('cell', {name: /Iron Ingot/}).waitFor();
+    options.cancelStatus = 'CPU_NOT_BUSY';
+    options.cpuDetails['cpu-a'] = {...cpuWork, isBusy: false, items: null, finalOutput: null, hasTrackingInfo: false};
+    await page.getByRole('button', {name: 'Cancel current work', exact: true}).click();
+    await page.getByRole('status').filter({hasText: /CPU is idle/i}).waitFor({timeout: 3000});
+    assert.equal(await page.getByRole('button', {name: 'Cancel current work', exact: true}).count(), 0);
+    for (const status of ['CPU_NOT_FOUND', 'NO_PERMISSIONS', 'GRID_NOT_FOUND']) {
+        options.cancelStatus = status;
+        options.cpuDetails['cpu-a'] = cpuWork;
+        await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+        await page.getByRole('button', {name: 'Cancel current work', exact: true}).click();
+        await page.getByRole('cell', {name: /Iron Ingot/}).waitFor({state: 'hidden'});
+        assert.equal(await page.getByRole('button', {name: 'Cancel current work', exact: true}).count(), 0);
+    }
+    assert.equal(options.requests.filter(request => request.path.endsWith('/cancel')).length, 4);
+});
+
+test('late CPU reads cannot leak across selection or grid changes and busy state does not need output metadata', async t => {
+    const {page, options, base} = await fixture(t);
+    options.cpuDetails['cpu-b'] = {...cpuWork, finalOutput: null, items: [], hasTrackingInfo: false};
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await page.getByRole('cell', {name: /Iron Ingot/}).waitFor();
+    let release;
+    const captured = new Promise(resolve => { release = resolve; });
+    await page.route('**/cpus/cpu-a', route => release(route));
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    const delayed = await captured;
+    await page.getByRole('link', {name: /Assembler.*cpu-b/}).click();
+    await page.getByText('Current output unavailable', {exact: true}).waitFor();
+    await page.getByRole('status').filter({hasText: /CPU is crafting/i}).waitFor();
+    await delayed.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify({status: 'OK', data: cpuWork})});
+    await page.getByRole('combobox', {name: 'Appearance', exact: true}).selectOption('dark');
+    assert.equal(await page.getByRole('cell', {name: /Iron Ingot/}).count(), 0);
+    assert.equal(await page.getByRole('columnheader', {name: 'Crafted total', exact: true}).count(), 0);
+    assert.equal(await page.getByRole('button', {name: 'Cancel current work', exact: true}).isEnabled(), true);
+    await page.getByRole('combobox', {name: 'Network', exact: true}).selectOption(gridB);
+    await page.getByRole('button', {name: /Gold Ingot/}).waitFor();
+    assert.equal(await page.getByRole('button', {name: 'Cancel current work', exact: true}).count(), 0);
+    assert.equal(options.requests.some(request => request.method !== 'GET'), false);
+});
+
+// No expected-job token exists: a retry could cancel newer work on this same CPU. Unknown
+// outcomes retain a local lock across reads/navigation and never issue another cancel request.
+test('uncertain CPU cancellation never replays after refresh or route reentry', async t => {
+    const {page, options, base} = await fixture(t);
+    for (const status of ['TIMEOUT', 'INTERNAL_ERROR', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
+        await page.goto(`${base}&case=${status}#/grids/${gridA}/cpus/cpu-a`);
+        options.fault = {operation: 'cancel', status};
+        await page.getByRole('button', {name: 'Cancel current work', exact: true}).click();
+        await page.getByRole('status').filter({hasText: /outcome.*unknown/i}).waitFor({timeout: 3000});
+        const count = options.requests.filter(request => request.path.endsWith('/cancel')).length;
+        await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+        await page.getByRole('link', {name: 'Back to resources', exact: true}).click();
+        await page.getByRole('button', {name: /Iron Ingot/}).waitFor();
+        await page.goBack();
+        await page.getByRole('status').filter({hasText: /outcome.*unknown/i}).waitFor();
+        await page.getByRole('cell', {name: /Iron Ingot/}).waitFor();
+        assert.equal(await page.getByRole('button', {name: 'Cancel current work', exact: true}).isDisabled(), true);
+        assert.equal(options.requests.filter(request => request.path.endsWith('/cancel')).length, count);
+    }
 });
 
 // Known native failures retain the computed resource details and safely display opaque text.

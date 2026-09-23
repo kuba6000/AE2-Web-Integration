@@ -1,6 +1,7 @@
 import { createTranslator } from '../../app/i18n.mjs';
-import { navigateToGrid } from '../../app/router.mjs';
+import { navigateToGrid, cpuHref } from '../../app/router.mjs';
 import { createCraftingView } from './crafting.mjs';
+import { createCpuView } from './cpus.mjs';
 
 const PAGE_SIZE = 100;
 
@@ -17,7 +18,7 @@ export function mount(root, application, { base, logout }) {
         <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
         <label><span data-text="appearance"></span><select id="appearance"><option value="system" data-text="system"></option><option value="light" data-text="light"></option><option value="dark" data-text="dark"></option></select></label>
         <button id="logout" data-text="logout"></button></div></header>
-        <nav><a href="#/" data-text="home"></a><a id="legacy" data-text="previous"></a></nav>
+        <nav><a href="#/" data-text="home"></a><a id="cpu-link" data-text="cpus" hidden></a><a id="legacy" data-text="previous"></a></nav>
         <p class="hint" data-text="previousHelp"></p>
         <section class="network-bar"><label><span data-text="network"></span><select id="network"></select></label>
         <button id="refresh" data-text="refresh"></button><label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label></section>
@@ -33,6 +34,7 @@ export function mount(root, application, { base, logout }) {
         <p id="missing" data-text="invalidRoute" hidden></p><footer id="updated" aria-live="off"></footer>`;
     const find = selector => root.querySelector(selector);
     const craftingView = createCraftingView(root, application);
+    const cpuView = createCpuView(root, application);
     find('#legacy').href = base.href;
     const tooltip = element('div', '', 'tooltip');
     tooltip.id = 'resource-tooltip'; tooltip.role = 'tooltip'; tooltip.hidden = true;
@@ -187,6 +189,9 @@ export function mount(root, application, { base, logout }) {
         find('#missing').hidden = state.route.view !== 'missing';
         renderNetworks(); renderItems(); renderDetails();
         craftingView.render(state.route, state.crafting, locale);
+        cpuView.render(state.route, state.cpus, locale);
+        find('#cpu-link').hidden = !state.route.gridKey;
+        find('#cpu-link').href = cpuHref(state.route.gridKey);
         find('#updated').textContent = state.updatedAt ? locale.t('updated', { time: locale.time(state.updatedAt) }) : '';
     }
     find('#network').addEventListener('change', event => navigateToGrid(event.target.value));
