@@ -42,6 +42,10 @@ export function createApi(base, onUnauthorized) {
         cpus: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/cpus`, { signal }),
         cpu: (gridKey, cpuKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}`, { signal }),
         cancelCpu: (gridKey, cpuKey) => request(`api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}/cancel`, { method: 'POST' }),
+        history: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/crafting-history`, { signal }),
+        historyEntry: (gridKey, entryId, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/crafting-history/${entryId}`, { signal }),
+        settings: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { signal }),
+        saveSettings: (gridKey, body) => request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { method: 'PATCH', body }),
         submitPlan: (gridKey, planId, cpuKey) => request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${planId}/submit`, { method: 'POST', body: { cpuKey } }),
         deletePlan: (gridKey, planId) => request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${planId}`, { method: 'DELETE' }),
         logout: () => request('api/auth/logout', { method: 'POST' })

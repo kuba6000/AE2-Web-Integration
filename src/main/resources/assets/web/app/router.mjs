@@ -1,6 +1,14 @@
 export function readRoute() {
     const hash = location.hash.replace(/^#/, '');
     if (!hash || hash === '/' || hash === '/home') return { view: 'home', gridKey: null };
+    const settings = /^\/grids\/([^/]+)\/settings$/.exec(hash);
+    if (settings) {
+        try { return {view: 'settings', gridKey: decodeURIComponent(settings[1])}; } catch {}
+    }
+    const history = /^\/grids\/([^/]+)\/history(?:\/(\d+))?$/.exec(hash);
+    if (history) {
+        try { return {view: 'history', gridKey: decodeURIComponent(history[1]), entryId: history[2] ?? null}; } catch {}
+    }
     const cpu = /^\/grids\/([^/]+)\/cpus(?:\/([^/]+))?$/.exec(hash);
     if (cpu) {
         try { return {view: 'cpus', gridKey: decodeURIComponent(cpu[1]), cpuKey: cpu[2] ? decodeURIComponent(cpu[2]) : null}; } catch {}
@@ -22,6 +30,10 @@ export function navigateToPlan(gridKey, planId) {
 
 export function cpuHref(gridKey, cpuKey = null) {
     return `#/grids/${encodeURIComponent(gridKey)}/cpus${cpuKey ? '/' + encodeURIComponent(cpuKey) : ''}`;
+}
+
+export function historyHref(gridKey, entryId = null) {
+    return `#/grids/${encodeURIComponent(gridKey)}/history${entryId === null ? '' : '/' + entryId}`;
 }
 
 export function navigateToGrid(key) {

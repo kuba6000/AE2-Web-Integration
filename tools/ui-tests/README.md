@@ -17,5 +17,10 @@ navigation and mutation lifetimes. CPU monitoring coverage checks stable selecti
 current resource and optional tracking data, explicit cancellation, missing CPUs,
 access loss and uncertain/pending cancellation across navigation. Tests do not inspect private application state
 or production source, and do not require Minecraft.
+
+History and settings tests cover entry identity, measured intervals and provider positions,
+read-only restoration, explicit tracking saves, draft preservation, unconfirmed persistence,
+grouped access information, and delayed reads or saves across navigation and access changes.
+
 Set `BROWSER_CHANNEL=msedge` to use an installed Microsoft Edge instead of downloaded
 Chromium. Playwright is a development dependency and is not included in mod JARs.

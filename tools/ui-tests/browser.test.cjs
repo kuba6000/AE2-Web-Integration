@@ -18,11 +18,18 @@ const cpuWork = { size: 8192, isBusy: true, finalOutput: {...iron, quantity: 12}
     timeStarted: 1700000000000, timeElapsed: 10000, items: [{itemid: 'minecraft:iron_ingot', itemname: 'Iron Ingot',
         active: 4, pending: 6, stored: 2, timeSpentCrafting: 5000, craftedTotal: 10,
         shareInCraftingTime: 0.4, shareInCraftingTimeCombined: 0.5, craftsPerSec: 2}] };
+const historyEntry = {id: 1, finalOutput: {...iron, quantity: 12}, timeStarted: 1700000000000, timeDone: 1700000010000, wasCancelled: true};
+const historyDetail = {...historyEntry, items: [{itemname: 'Iron Ingot', itemid: 'minecraft:iron_ingot', timeSpentOn: 5000,
+    craftedTotal: 10, craftsPerSec: 2, shareInCraftingTime: 0.4, shareInCraftingTimeCombined: 0.5,
+    timings: [{started: 1700000001000, ended: 1700000006000}]}],
+    interfaceShare: [{name: 'Smelter', timingsCombined: 5000, location: [{dimid: 'minecraft:overworld', x: 120, y: 64, z: -32}],
+        timings: [{started: 1700000001000, ended: 1700000006000}]}]};
 
 async function fixture(t, mount = '') {
     const options = { delayA: 0, status: 200, requests: [], empty: false, reverseGrids: false, loggedOut: false, itemsA: [iron, quartz],
         plan: readyPlan, pendingReads: 0, cpus: { 'cpu-a': cpu, 'cpu-b': cpu }, planStatus: 'OK', submitStatus: 'OK',
-        cpuDetails: {'cpu-a': cpuWork, 'cpu-b': cpuWork}, cancelStatus: 'OK' };
+        cpuDetails: {'cpu-a': cpuWork, 'cpu-b': cpuWork}, cancelStatus: 'OK', history: [historyEntry], historyDetail,
+        settings: {[gridA]: {isTracked: false}, [gridB]: {isTracked: false}}, accessSources: {} };
     const server = http.createServer(async (request, response) => {
         const url = new URL(request.url, 'http://localhost');
         if (!url.pathname.startsWith(mount + '/')) { response.writeHead(404).end(); return; }
@@ -33,7 +40,7 @@ async function fixture(t, mount = '') {
             body: body.length ? JSON.parse(Buffer.concat(body).toString()) : null });
         if (resource.startsWith('/api/')) {
             response.setHeader('Content-Type', 'application/json');
-            const mutation = request.method === 'DELETE' ? 'delete' : resource.endsWith('/cancel') ? 'cancel' : resource.endsWith('/submit') ? 'submit'
+            const mutation = request.method === 'PATCH' ? 'settings' : request.method === 'DELETE' ? 'delete' : resource.endsWith('/cancel') ? 'cancel' : resource.endsWith('/submit') ? 'submit'
                 : request.method === 'POST' && resource.endsWith('/crafting-plans') ? 'create' : null;
             if (mutation && options.fault?.operation === mutation) {
                 if (options.fault.status === 'NETWORK_ERROR') { response.destroy(); return; }
@@ -47,7 +54,7 @@ async function fixture(t, mount = '') {
             } else if (resource === '/api/grids') {
                 if (options.gridError) { response.statusCode = 403; response.end(JSON.stringify({status: options.gridError, data: null})); return; }
                 const grids = [
-                    { key: gridA, owner: 'Alpha', cpuCount: 2, accessSources: {} },
+                    { key: gridA, owner: 'Alpha', cpuCount: 2, isOwned: false, accessSources: options.accessSources },
                     { key: gridB, owner: 'Beta', cpuCount: 1, accessSources: {} }
                 ];
                 response.end(JSON.stringify({ status: 'OK', data: options.empty ? [] : options.reverseGrids ? grids.reverse() : grids }));
@@ -64,6 +71,14 @@ async function fixture(t, mount = '') {
             } else if (resource.endsWith('/cpus')) {
                 if (options.cpuError) { response.statusCode = 403; response.end(JSON.stringify({status: options.cpuError, data: null})); return; }
                 response.end(JSON.stringify({ status: 'OK', data: options.cpus }));
+            } else if (resource.endsWith('/crafting-history')) {
+                response.end(JSON.stringify({status: options.historyError || 'OK', data: options.history}));
+            } else if (/\/crafting-history\/\d+$/.test(resource)) {
+                response.end(JSON.stringify({status: options.historyError || 'OK', data: options.historyDetail}));
+            } else if (resource.endsWith('/settings')) {
+                const key = resource.includes(gridA) ? gridA : gridB;
+                if (request.method === 'PATCH' && !options.settingsError) options.settings[key] = options.settingsReply || options.requests.at(-1).body;
+                response.end(JSON.stringify({status: options.settingsError || 'OK', data: options.settings[key]}));
             } else if (resource.endsWith('/cancel')) {
                 if (options.cancelStatus === 'OK') {
                     const key = decodeURIComponent(resource.split('/').at(-2));
@@ -155,6 +170,227 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
     await page.getByRole('link', {name: 'Inspect CPU work', exact: true}).click({timeout: 3000});
     await page.getByRole('cell', {name: /Iron Ingot/}).waitFor();
     assert.match(page.url(), /\/cpus\/cpu-b$/);
+});
+
+// Public seam: history links retain runtime entry identity; completed detail is read-only
+// and its snapshot need not be refetched for unrelated preferences or ordinary polling.
+test('history preserves entry identity and opens measured cancelled work through direct routes', async t => {
+    const {page, options, base} = await fixture(t, '/ae2');
+    options.history = [{...historyEntry, id: 2}, historyEntry];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('link', {name: 'History', exact: true}).click({timeout: 3000});
+    await page.getByRole('link', {name: /Iron Ingot.*#2/}).click();
+    await page.getByRole('columnheader', {name: 'Crafted total', exact: true}).waitFor();
+    assert.match(page.url(), /\/history\/2$/);
+    await page.getByRole('status').filter({hasText: /cancelled/i}).waitFor();
+    assert.equal(await page.getByRole('cell', {name: '10', exact: true}).count(), 1);
+    await page.getByRole('combobox', {name: 'Appearance', exact: true}).selectOption('dark');
+    await (await page.waitForResponse(response => response.url().endsWith('/api/grids'))).finished();
+    assert.equal(options.requests.filter(request => request.path.endsWith('/crafting-history/2')).length, 1);
+    await page.reload();
+    await page.getByRole('columnheader', {name: 'Crafted total', exact: true}).waitFor();
+    assert.equal(options.requests.filter(request => request.method !== 'GET').length, 0);
+    assert.equal(options.requests.filter(request => request.path.endsWith('/cpus')).length, 0);
+});
+
+// Public seam: an authorized grid user edits a draft and saves one explicit PATCH. Access
+// sources are grouped informational server text, never markup or an ownership gate.
+test('grid settings preserve the draft and save explicitly while safely showing grouped access sources', async t => {
+    const {page, options, base} = await fixture(t, '/ae2');
+    const player = {name: '<img src=x onerror=alert(1)> Alex', uuid: '11111111-1111-1111-1111-111111111111'};
+    options.accessSources = {[player.uuid]: [{player, kind: 'security_terminal', reason: 'security_card',
+        position: {dimid: 'minecraft:overworld', x: 120, y: 64, z: -32}, side: 'north'}]};
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('link', {name: 'Grid settings', exact: true}).click({timeout: 3000});
+    const tracking = page.getByRole('checkbox', {name: 'Record crafting history', exact: true});
+    await tracking.check();
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await page.getByRole('combobox', {name: 'Language', exact: true}).selectOption('pl');
+    await page.getByRole('combobox', {name: 'Język', exact: true}).selectOption('en');
+    assert.equal(await tracking.isChecked(), true);
+    assert.equal(options.requests.filter(request => request.method === 'PATCH').length, 0);
+    await page.getByRole('heading', {name: player.name, exact: true}).waitFor();
+    await page.getByText(player.uuid, {exact: true}).waitFor();
+    await page.getByText(/minecraft:overworld.*120.*64.*-32/).waitFor();
+    assert.equal(await page.locator('img').count(), 0);
+    await page.getByRole('button', {name: 'Save settings', exact: true}).click();
+    await page.getByRole('status').filter({hasText: /settings saved/i}).waitFor();
+    const patches = options.requests.filter(request => request.method === 'PATCH');
+    assert.equal(patches.length, 1);
+    assert.deepEqual(patches[0].body, {isTracked: true});
+    assert.equal(patches[0].headers['x-ae2-request'], 'true');
+    assert.match(patches[0].headers['content-type'], /application\/json/);
+    assert.equal(await page.getByRole('button', {name: 'Save settings', exact: true}).isDisabled(), true);
+    await page.reload();
+    await tracking.waitFor();
+    assert.equal(await tracking.isChecked(), true);
+});
+
+// Public seam: interval details preserve each server resource row and provider group. Provider
+// positions belong to the group; interval bounds are absolute timestamps, even at zero duration.
+test('history exposes resource and provider intervals with their correct locations', async t => {
+    const {page, options, base} = await fixture(t);
+    options.historyDetail = {...historyDetail, items: [...historyDetail.items, {...historyDetail.items[0], timings: []}]};
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    const provider = page.getByRole('region', {name: 'Smelter', exact: true});
+    await provider.waitFor({timeout: 3000});
+    await provider.getByText(/minecraft:overworld.*120.*64.*-32/).waitFor();
+    await provider.getByText(/Intervals/).click();
+    assert.deepEqual(await provider.locator('time').evaluateAll(times => times.map(time => time.dateTime)),
+        ['2023-11-14T22:13:21.000Z', '2023-11-14T22:13:26.000Z']);
+    assert.equal(await page.getByRole('region', {name: 'Iron Ingot', exact: true}).count(), 2);
+    options.historyDetail = {...historyDetail, timeDone: historyDetail.timeStarted, items: [], interfaceShare: []};
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await provider.waitFor({state: 'hidden'});
+    assert.doesNotMatch(await page.locator('body').innerText(), /NaN|Infinity/);
+    await page.getByText(/No processing intervals/).waitFor();
+});
+
+// A failed persistence response can leave the in-memory value changed. GET agreement must
+// not be labelled a saved result; only a deliberate successful PATCH confirms saving.
+test('uncertain settings saves preserve the draft and remain unconfirmed until explicit retry succeeds', async t => {
+    const {page, options, base} = await fixture(t);
+    for (const status of ['INTERNAL_ERROR', 'TIMEOUT', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
+        options.settings[gridA] = {isTracked: false};
+        await page.goto(`${base}&case=${status}#/grids/${gridA}/settings`);
+        const tracking = page.getByRole('checkbox', {name: 'Record crafting history', exact: true});
+        await tracking.check();
+        options.settings[gridA] = {isTracked: true};
+        options.fault = {operation: 'settings', status};
+        await page.getByRole('button', {name: 'Save settings', exact: true}).click();
+        await page.getByRole('status').filter({hasText: /save.*not confirmed/i}).waitFor({timeout: 3000});
+        const count = options.requests.filter(request => request.method === 'PATCH').length;
+        await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+        await page.getByRole('link', {name: 'Back to resources', exact: true}).click();
+        await page.getByRole('button', {name: /Iron Ingot/}).waitFor();
+        await page.goBack();
+        await tracking.waitFor();
+        await page.getByRole('status').filter({hasText: /save.*not confirmed/i}).waitFor();
+        assert.equal(await tracking.isChecked(), true);
+        assert.equal(options.requests.filter(request => request.method === 'PATCH').length, count);
+        options.fault = null;
+        await page.getByRole('button', {name: 'Save settings', exact: true}).click();
+        await page.getByRole('status').filter({hasText: /settings saved/i}).waitFor();
+        assert.equal(options.requests.filter(request => request.method === 'PATCH').length, count + 1);
+    }
+});
+
+test('settings drafts survive transient discovery failures and pending saves recover after access loss', async t => {
+    const {page, options, base} = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    const tracking = page.getByRole('checkbox', {name: 'Record crafting history', exact: true});
+    await tracking.check();
+    options.gridError = 'NETWORK_ERROR';
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await page.getByRole('status').filter({hasText: /Cannot connect/}).first().waitFor();
+    options.gridError = null;
+    const recovered = page.waitForResponse(response => response.url().endsWith('/settings'));
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await (await recovered).finished();
+    await page.getByRole('button', {name: 'Save settings', exact: true}).waitFor();
+    assert.equal(await tracking.isChecked(), true);
+    let complete;
+    const pending = new Promise(resolve => { complete = resolve; });
+    await page.route('**/settings', route => route.request().method() === 'PATCH' ? complete(route) : route.continue());
+    await page.getByRole('button', {name: 'Save settings', exact: true}).click();
+    const save = await pending;
+    assert.equal(await page.getByRole('button', {name: 'Save settings', exact: true}).isDisabled(), true);
+    options.gridError = 'NO_PERMISSIONS';
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await tracking.waitFor({state: 'hidden'});
+    options.settings[gridA] = {isTracked: true};
+    await save.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify({status: 'OK', data: {isTracked: true}})});
+    assert.equal(await tracking.count(), 0);
+    options.gridError = null;
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await tracking.waitFor();
+    assert.equal(await tracking.isChecked(), true);
+});
+
+test('explicit history refresh is retained during grid discovery and unavailable entries clear their snapshot', async t => {
+    const {page, options, base} = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    await page.getByRole('columnheader', {name: 'Crafted total', exact: true}).waitFor();
+    let release;
+    const captured = new Promise(resolve => { release = resolve; });
+    let held = false;
+    await page.route('**/api/grids', route => { if (held) return route.continue(); held = true; release(route); });
+    const discovery = await captured;
+    options.historyError = 'TRACKING_NOT_FOUND';
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await discovery.continue();
+    await page.getByRole('status').filter({hasText: /history entry.*available/i}).waitFor({timeout: 3000});
+    assert.equal(await page.getByRole('columnheader', {name: 'Crafted total', exact: true}).count(), 0);
+    assert.equal(options.requests.filter(request => request.method !== 'GET').length, 0);
+});
+
+test('settings save remains single-flight across grids and uses the returned value on reentry', async t => {
+    const {page, options, base} = await fixture(t);
+    const player = {name: 'Alex', uuid: '11111111-1111-1111-1111-111111111111'};
+    options.accessSources = {[player.uuid]: [{player, kind: 'controller', reason: 'node_owner',
+        position: {dimid: 'minecraft:overworld', x: 1, y: 64, z: 2}, side: null}]};
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    const tracking = page.getByRole('checkbox', {name: 'Record crafting history', exact: true});
+    await tracking.check();
+    let capture;
+    const captured = new Promise(resolve => { capture = resolve; });
+    await page.route('**/settings', route => route.request().method() === 'PATCH' ? capture(route) : route.continue());
+    await page.getByRole('button', {name: 'Save settings', exact: true}).click();
+    const pending = await captured;
+    await page.goto(`${base}#/grids/${gridB}/settings`);
+    await tracking.waitFor();
+    assert.equal(await tracking.isChecked(), false);
+    await page.goBack();
+    await page.getByRole('status').filter({hasText: /Saving settings/i}).waitFor();
+    await pending.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify({status: 'OK', data: {isTracked: false}})});
+    await page.getByRole('status').filter({hasText: /Settings saved/i}).waitFor();
+    assert.equal(await tracking.isChecked(), false);
+    await page.getByRole('heading', {name: 'Alex', exact: true}).waitFor({timeout: 3000});
+    assert.equal(await page.getByRole('button', {name: 'Save settings', exact: true}).isDisabled(), true);
+});
+
+test('old settings reads cannot replace saved data and denied saves clear access sources', async t => {
+    const {page, options, base} = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    const tracking = page.getByRole('checkbox', {name: 'Record crafting history', exact: true});
+    await tracking.check();
+    let capture;
+    const captured = new Promise(resolve => { capture = resolve; });
+    let held = false;
+    await page.route('**/settings', route => { if (held || route.request().method() !== 'GET') return route.continue(); held = true; capture(route); });
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    const delayed = await captured;
+    await page.getByRole('button', {name: 'Save settings', exact: true}).click();
+    await page.getByRole('status').filter({hasText: /Settings saved/i}).waitFor();
+    await delayed.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify({status: 'OK', data: {isTracked: false}})});
+    await page.getByRole('combobox', {name: 'Appearance', exact: true}).selectOption('dark');
+    assert.equal(await tracking.isChecked(), true);
+    options.settingsError = 'NO_PERMISSIONS';
+    await tracking.uncheck();
+    await page.getByRole('button', {name: 'Save settings', exact: true}).click();
+    await page.getByRole('status').filter({hasText: /no longer have access/i}).waitFor();
+    assert.equal(await tracking.count(), 0);
+    assert.equal(await page.getByRole('heading', {name: 'Players with access', exact: true}).count(), 0);
+});
+
+test('late history details cannot enter another grid and denied reads remove the selected snapshot', async t => {
+    const {page, options, base} = await fixture(t);
+    let release;
+    const captured = new Promise(resolve => { release = resolve; });
+    await page.route(`**/${gridA}/crafting-history/1`, route => release(route));
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    const delayed = await captured;
+    options.historyDetail = {...historyDetail, finalOutput: {...quartz, quantity: 9}, items: [], interfaceShare: []};
+    await page.goto(`${base}#/grids/${gridB}/history/2`);
+    await page.getByRole('heading', {name: /Certus Quartz Crystal/}).waitFor();
+    await delayed.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify({status: 'OK', data: historyDetail})});
+    await page.getByRole('combobox', {name: 'Appearance', exact: true}).selectOption('dark');
+    assert.equal(await page.getByRole('heading', {name: /Iron Ingot/}).count(), 0);
+    options.historyError = 'NO_PERMISSIONS';
+    await page.getByRole('button', {name: 'Refresh', exact: true}).click();
+    await page.getByRole('status').filter({hasText: /no longer have access/i}).waitFor();
+    assert.equal(await page.getByRole('heading', {name: /Certus Quartz Crystal/}).count(), 0);
+    assert.equal(options.requests.some(request => request.method !== 'GET'), false);
 });
 
 test('pending CPU cancellation settles on the revisited CPU and older reads cannot override it', async t => {

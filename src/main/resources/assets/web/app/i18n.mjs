@@ -1,5 +1,18 @@
 const translations = {
     en: {
+        resourceTimings: 'Resource processing intervals', providerTimings: 'Pattern provider processing intervals',
+        historyNoTimings: 'No processing intervals were recorded.', noIntervals: 'No intervals measured.',
+        timingIntervals: 'Intervals: {count}', processingTotal: 'Total processing time: {count} s',
+        gridSettings: 'Grid settings', recordHistory: 'Record crafting history', saveSettings: 'Save settings',
+        settingsSaved: 'Settings saved.', settingsSaving: 'Saving settings…', settingsDraft: 'Unsaved changes.',
+        settingsUnconfirmed: 'Save was not confirmed. Refresh can show the current value but cannot confirm it was saved. Check your draft and use Save settings to retry deliberately.',
+        accessSources: 'Players with access', noAccessSources: 'No explicit player access sources are listed.',
+        accessController: 'Controller', accessWireless: 'Wireless access point', accessTerminal: 'Terminal', accessSecurity: 'Security terminal',
+        accessBlockOwner: 'Block owner', accessSecurityOwner: 'Security owner', accessCard: 'Security permissions',
+        accessSide: 'Side: {side}', position: '{dimension}: {x}, {y}, {z}',
+        history: 'History', historyEmpty: 'No crafting history has been recorded for this network.', historyBack: 'Back to history',
+        historyCancelled: 'Cancelled', historyCompleted: 'Completed', historyEnded: 'Finished: {time}',
+        TRACKING_NOT_FOUND: 'This history entry is no longer available.',
         cpus: 'CPUs', cpuWork: 'CPU work', selectCpuWork: 'Choose a CPU to inspect its current work.', noCpus: 'This network has no crafting CPUs.',
         cpuCapacity: 'Capacity: {count} B', cpuUsedStorage: 'Used: {count} B', cpuStorageUnknown: 'Used storage unavailable',
         cpuOutput: 'Current output', cpuOutputUnknown: 'Current output unavailable', cpuWorking: 'CPU is crafting.', cpuIdleMessage: 'CPU is idle.',
@@ -46,7 +59,7 @@ const translations = {
         craftableYes: 'Crafting available', craftableNo: 'Not craftable', identityUnavailable: 'This resource currently has no usable web identity.',
         resourceCount: { one: '{count} resource', other: '{count} resources' },
         language: 'Language', appearance: 'Appearance', light: 'Light', dark: 'Dark', system: 'System',
-        logout: 'Log out', previous: 'History and settings', previousHelp: 'Open these features in the previous interface.',
+        logout: 'Log out', previous: 'Previous interface', previousHelp: 'The previous interface remains available during this update.',
         updated: 'Updated {time}', unknownOwner: 'Unknown', invalidRoute: 'This view does not exist.',
         error: 'Could not load data.', NETWORK_ERROR: 'Cannot connect to the server.',
         NO_PERMISSIONS: 'You no longer have access to this network.', GRID_NOT_FOUND: 'This network is not available.',
@@ -55,6 +68,19 @@ const translations = {
         TIMEOUT: 'The request timed out.', INVALID_RESPONSE: 'The server returned an unreadable response.'
     },
     pl: {
+        resourceTimings: 'Przedziały przetwarzania zasobów', providerTimings: 'Przedziały pracy dostawców wzorców',
+        historyNoTimings: 'Nie zapisano przedziałów przetwarzania.', noIntervals: 'Nie zmierzono przedziałów.',
+        timingIntervals: 'Przedziały: {count}', processingTotal: 'Łączny czas przetwarzania: {count} s',
+        gridSettings: 'Ustawienia sieci', recordHistory: 'Zapisuj historię craftingu', saveSettings: 'Zapisz ustawienia',
+        settingsSaved: 'Ustawienia zapisane.', settingsSaving: 'Zapisywanie ustawień…', settingsDraft: 'Niezapisane zmiany.',
+        settingsUnconfirmed: 'Zapis nie został potwierdzony. Odświeżenie pokaże bieżącą wartość, ale nie potwierdzi jej zapisania. Sprawdź zmiany i świadomie ponów zapis przyciskiem Zapisz ustawienia.',
+        accessSources: 'Gracze z dostępem', noAccessSources: 'Brak wskazanych źródeł dostępu graczy.',
+        accessController: 'Kontroler', accessWireless: 'Bezprzewodowy punkt dostępu', accessTerminal: 'Terminal', accessSecurity: 'Terminal bezpieczeństwa',
+        accessBlockOwner: 'Właściciel bloku', accessSecurityOwner: 'Właściciel zabezpieczeń', accessCard: 'Uprawnienia zabezpieczeń',
+        accessSide: 'Strona: {side}', position: '{dimension}: {x}, {y}, {z}',
+        history: 'Historia', historyEmpty: 'Brak zapisanej historii craftingu dla tej sieci.', historyBack: 'Powrót do historii',
+        historyCancelled: 'Anulowano', historyCompleted: 'Ukończono', historyEnded: 'Zakończenie: {time}',
+        TRACKING_NOT_FOUND: 'Ten wpis historii jest już niedostępny.',
         cpus: 'CPU', cpuWork: 'Praca CPU', selectCpuWork: 'Wybierz CPU, aby sprawdzić jego bieżącą pracę.', noCpus: 'Ta sieć nie ma CPU craftingu.',
         cpuCapacity: 'Pojemność: {count} B', cpuUsedStorage: 'Używane: {count} B', cpuStorageUnknown: 'Zużycie pamięci niedostępne',
         cpuOutput: 'Bieżący produkt', cpuOutputUnknown: 'Bieżący produkt niedostępny', cpuWorking: 'CPU pracuje.', cpuIdleMessage: 'CPU jest wolny.',
@@ -101,7 +127,7 @@ const translations = {
         craftableYes: 'Dostępny crafting', craftableNo: 'Brak craftingu', identityUnavailable: 'Ten zasób nie ma obecnie dostępnego identyfikatora webowego.',
         resourceCount: { one: '{count} zasób', few: '{count} zasoby', many: '{count} zasobów', other: '{count} zasobu' },
         language: 'Język', appearance: 'Wygląd', light: 'Jasny', dark: 'Ciemny', system: 'Systemowy',
-        logout: 'Wyloguj', previous: 'Historia i ustawienia', previousHelp: 'Otwórz te funkcje w poprzednim interfejsie.',
+        logout: 'Wyloguj', previous: 'Poprzedni interfejs', previousHelp: 'Podczas tej aktualizacji poprzedni interfejs pozostaje dostępny.',
         updated: 'Aktualizacja: {time}', unknownOwner: 'Nieznany', invalidRoute: 'Ten widok nie istnieje.',
         error: 'Nie udało się pobrać danych.', NETWORK_ERROR: 'Brak połączenia z serwerem.',
         NO_PERMISSIONS: 'Nie masz już dostępu do tej sieci.', GRID_NOT_FOUND: 'Ta sieć jest niedostępna.',
@@ -115,11 +141,14 @@ export function createTranslator(language) {
     const locale = translations[language] || translations.en;
     const numbers = new Intl.NumberFormat(language);
     const plural = new Intl.PluralRules(language);
+    const times = new Intl.DateTimeFormat(language, {timeStyle: 'medium'});
+    const dates = new Intl.DateTimeFormat(language, {dateStyle: 'medium', timeStyle: 'medium'});
+    const preciseTimes = new Intl.DateTimeFormat(language, {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3});
     function t(key, values = {}) {
         let message = locale[key] || translations.en[key] || locale.error;
         if (typeof message === 'object') message = message[plural.select(values.count)] || message.other;
         return message.replace(/\{(\w+)\}/g, (_, name) => typeof values[name] === 'number' ? numbers.format(values[name]) : String(values[name] ?? ''));
     }
-    return { t, number: value => numbers.format(value), time: value => new Intl.DateTimeFormat(language, { timeStyle: 'medium' }).format(value),
-        dateTime: value => new Intl.DateTimeFormat(language, {dateStyle: 'medium', timeStyle: 'medium'}).format(value) };
+    return { t, number: value => numbers.format(value), time: value => times.format(value),
+        dateTime: value => dates.format(value), preciseTime: value => preciseTimes.format(value) };
 }

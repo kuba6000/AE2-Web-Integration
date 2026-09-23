@@ -1,5 +1,7 @@
 import { createCrafting } from './crafting.mjs';
 import { createCpuMonitor } from './cpus.mjs';
+import { createHistory } from './history.mjs';
+import { createGridSettings } from './settings.mjs';
 
 /** Shared state/actions for terminal renderers; a theme does not own requests or refresh timers. */
 export function createTerminal(api, preferences) {
@@ -20,6 +22,10 @@ export function createTerminal(api, preferences) {
     state.crafting = crafting.state;
     const cpus = createCpuMonitor(api, () => { notify(); schedule(); });
     state.cpus = cpus.state;
+    const history = createHistory(api, () => { notify(); schedule(); });
+    state.history = history.state;
+    const settings = createGridSettings(api, () => { notify(); schedule(); });
+    state.settings = settings.state;
 
     function invalidateItems() {
         serial++;
@@ -76,9 +82,22 @@ export function createTerminal(api, preferences) {
         if (!state.grids.some(grid => grid.key === state.route.gridKey)) cpus.block('GRID_NOT_FOUND');
         else return cpus.refresh();
     }
-    async function refresh() {
+    function loadHistory(reloadDetail = false) {
+        if (state.route.view !== 'history' || state.gridStatus !== 'ready') return;
+        if (!state.grids.some(grid => grid.key === state.route.gridKey)) history.block('GRID_NOT_FOUND');
+        else return history.refresh(reloadDetail);
+    }
+    function loadSettings() {
+        if (state.route.view !== 'settings') return;
+        if (state.gridStatus === 'error') { settings.block(state.gridError); return; }
+        if (state.gridStatus !== 'ready') return;
+        const grid = state.grids.find(grid => grid.key === state.route.gridKey);
+        if (!grid) settings.block('GRID_NOT_FOUND');
+        else return settings.refresh(grid.accessSources);
+    }
+    async function refresh({reloadDetail = false} = {}) {
         if (disposed) return;
-        if (refreshingGrids) return refreshingGrids;
+        if (refreshingGrids) return reloadDetail ? refreshingGrids.then(() => loadHistory(true)) : refreshingGrids;
         clearTimeout(timer);
         gridRequest = new AbortController();
         refreshingGrids = (async () => {
@@ -90,10 +109,12 @@ export function createTerminal(api, preferences) {
                 await loadItems();
                 await loadCrafting();
                 await loadCpus();
+                await loadHistory(reloadDetail);
+                await loadSettings();
             } catch (error) {
                 if (disposed || error.name === 'AbortError') return;
                 state.gridStatus = 'error'; state.gridError = error.status || 'NETWORK_ERROR';
-                invalidateItems(); crafting.block(state.gridError); cpus.block(state.gridError); notify();
+                invalidateItems(); crafting.block(state.gridError); cpus.block(state.gridError); history.block(state.gridError); settings.block(state.gridError); notify();
             } finally { refreshingGrids = null; schedule(); }
         })();
         return refreshingGrids;
@@ -102,12 +123,14 @@ export function createTerminal(api, preferences) {
         state,
         crafting,
         cpus,
+        history,
+        settings,
         subscribe(listener) { listeners.add(listener); listener(state); return () => listeners.delete(listener); },
         refresh,
-        route(route) { invalidateItems(); state.route = route; crafting.route(route); cpus.route(route); notify(); loadItems(); loadCrafting(); loadCpus(); schedule(); },
+        route(route) { invalidateItems(); state.route = route; crafting.route(route); cpus.route(route); history.route(route); settings.route(route); notify(); loadItems(); loadCrafting(); loadCpus(); loadHistory(); loadSettings(); schedule(); },
         search(value) { state.search = value; notify(); },
         select(item) { state.selected = item; notify(); },
         preference(name, value) { preferences.set(name, value); notify(); if (name === 'autoRefresh') schedule(); },
-        dispose() { disposed = true; clearTimeout(timer); gridRequest?.abort(); itemRequest?.abort(); crafting.dispose(); cpus.dispose(); listeners.clear(); }
+        dispose() { disposed = true; clearTimeout(timer); gridRequest?.abort(); itemRequest?.abort(); crafting.dispose(); cpus.dispose(); history.dispose(); settings.dispose(); listeners.clear(); }
     };
 }
