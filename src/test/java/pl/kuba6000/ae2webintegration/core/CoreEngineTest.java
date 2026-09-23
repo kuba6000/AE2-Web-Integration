@@ -21,7 +21,7 @@ class CoreEngineTest {
 
     @Test
     void initInitializesCoreConfigDirectoryFromPlatform() {
-        CoreEngine.init(new TestPlatform(configRoot), "test-version", "-forge-1.20.1");
+        CoreEngine.init(new TestPlatform(configRoot, false), "test-version", "-forge-1.20.1");
 
         assertEquals(new File(configRoot, "ae2webintegration"), Config.getConfigDirectory());
         assertEquals(
@@ -30,8 +30,19 @@ class CoreEngineTest {
         assertEquals("test-version", CoreEngine.getModVersion());
     }
 
+    @Test
+    void existingConfigStartsEvenWhenLegacyConfigCannotBeRead() {
+        Config.init(configRoot);
+        String password = Config.INSTANCE.general.password;
+
+        CoreEngine.init(new TestPlatform(configRoot, true), "test-version", "-forge-1.20.1");
+
+        assertEquals(password, Config.INSTANCE.general.password);
+        assertEquals(new File(configRoot, "ae2webintegration"), Config.getConfigDirectory());
+    }
+
     @Desugar
-    private record TestPlatform(File configDirectory) implements IServerPlatform {
+    private record TestPlatform(File configDirectory, boolean unreadableLegacyConfig) implements IServerPlatform {
 
         @Override
         public UUID getOnlinePlayerUUID(String username) {
@@ -40,6 +51,7 @@ class CoreEngineTest {
 
         @Override
         public ILegacyConfigProvider getLegacyConfig() {
+            if (unreadableLegacyConfig) throw new IllegalArgumentException("Malformed legacy configuration");
             return null;
         }
 

@@ -59,9 +59,10 @@ class ConfigFileTest {
         legacy.put("track_machine_crafting", true);
 
         MapLegacyConfig legacyConfig = new MapLegacyConfig(legacy);
-        Config.init(root.toFile(), legacyConfig);
+        Config.init(root.toFile(), () -> legacyConfig);
         assertTrue(legacyConfig.migrated);
-        Config.init(root.toFile(), new ThrowingLegacyConfig("Existing TOML must bypass migration"));
+        Config
+            .init(root.toFile(), () -> { throw new AssertionError("Existing TOML must bypass legacy file parsing"); });
 
         assertEquals(25432, Config.INSTANCE.general.port);
         assertEquals("existing-admin-password", Config.INSTANCE.general.password);
@@ -132,7 +133,7 @@ class ConfigFileTest {
         String password = Config.INSTANCE.general.password;
         assertThrows(
             IllegalArgumentException.class,
-            () -> Config.init(root.toFile(), new ThrowingLegacyConfig("Cannot read legacy configuration")));
+            () -> Config.init(root.toFile(), () -> new ThrowingLegacyConfig("Cannot read legacy configuration")));
         assertEquals(password, Config.INSTANCE.general.password);
         assertEquals(
             workingRoot.resolve("ae2webintegration")
@@ -144,7 +145,7 @@ class ConfigFileTest {
     @Test
     void migrationRejectsNumbersThatWouldOverflowAnIntegerSetting() {
         MapLegacyConfig legacy = new MapLegacyConfig(Collections.singletonMap("port", 4294992728L));
-        assertThrows(RuntimeException.class, () -> Config.init(root.toFile(), legacy));
+        assertThrows(RuntimeException.class, () -> Config.init(root.toFile(), () -> legacy));
         assertFalse(legacy.migrated);
         assertFalse(Files.exists(root.resolve("ae2webintegration/config.toml")));
     }
@@ -175,7 +176,7 @@ class ConfigFileTest {
     void savingSpecialCharactersPreservesTheirValues() {
         String password = "quotes ' and \" and backslash \\ and newline\n and CRLF\r\n and CR\r and tab\t"
             + " and backspace\b and formfeed\f and Unicode zażółć";
-        Config.init(root.toFile(), new MapLegacyConfig(Collections.singletonMap("password", password)));
+        Config.init(root.toFile(), () -> new MapLegacyConfig(Collections.singletonMap("password", password)));
         Config.reload();
         assertEquals(password, Config.INSTANCE.general.password);
     }

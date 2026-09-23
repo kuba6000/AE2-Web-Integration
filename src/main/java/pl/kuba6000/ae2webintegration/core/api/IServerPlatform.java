@@ -10,7 +10,7 @@ public interface IServerPlatform {
 
     File getConfigDirectory();
 
-    /** Reads the old loader configuration without changing it; absent files return an empty map. */
+    /** Opens legacy settings for migration; called only when the core configuration is absent. */
     @Deprecated // remove after a few versions
     ILegacyConfigProvider getLegacyConfig();
 

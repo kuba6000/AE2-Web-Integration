@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,24 +41,28 @@ public class Config {
     // --- Directory / file setup ---
 
     public static synchronized void init(File configDirectory) {
-        init(configDirectory, null);
+        init(configDirectory, () -> null);
     }
 
     /** Imports legacy settings only when the TOML configuration does not exist. */
-    public static synchronized void init(File configDirectory, ILegacyConfigProvider legacyReader) {
+    public static synchronized void init(File configDirectory, Supplier<ILegacyConfigProvider> legacyProvider) {
         File directory = new File(configDirectory, "ae2webintegration");
         File file = new File(directory, "config.toml");
         try {
             boolean wasMigrated = false;
+            ILegacyConfigProvider legacyReader = null;
             CommentedConfig document;
             if (file.exists()) {
                 document = read(file);
-            } else if (legacyReader != null && legacyReader.isAvailable()) {
-                document = migrate(legacyReader);
-                wasMigrated = true;
             } else {
-                document = newDocument();
-                CONVERTER.toConfig(new ConfigSettings(), document);
+                legacyReader = legacyProvider.get();
+                if (legacyReader != null && legacyReader.isAvailable()) {
+                    document = migrate(legacyReader);
+                    wasMigrated = true;
+                } else {
+                    document = newDocument();
+                    CONVERTER.toConfig(new ConfigSettings(), document);
+                }
             }
             publish(file, document);
             if (wasMigrated) {
