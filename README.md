@@ -222,8 +222,8 @@ Leave `ntfy.user` and `ntfy.password` empty when the topic is public. A private 
 ## Custom website and Automation
 
 If you already have a web server and want to host the panel there, you can! The
-[`example_website`](./example_website) directory contains a ready-to-use simple PHP
-proxy. It forwards API calls from your web server to the AE2 Web Integration endpoint.
+[`tools/php-proxy`](./tools/php-proxy) directory contains a PHP reverse
+proxy. It serves the mod's website, assets and API through your web server.
 
 If you want to use this mod as an API endpoint,
 website exposes the entire API at /api/ endpoint,

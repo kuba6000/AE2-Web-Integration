@@ -36,7 +36,7 @@ jobs:
       - name: Test PHP proxy
         run: |
           php --version
-          php -l example_website/index.php
+          php -l tools/php-proxy/index.php
           node --test src/test/php/*.test.cjs
 
       - name: Set up JDK

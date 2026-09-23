@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const { terminal } = require('./terminal-fixture.cjs');
 
 
-for (const page of ['../../main/resources/assets/webpage.html', '../../../example_website/index.php']) {
+for (const page of ['../../main/resources/assets/webpage.html']) {
 test(page + ': ordering sends the stable resource key', () => {
     const { context, requests } = terminal(page);
     const key = 'AAAAAAAAAAAAAAAAAAAAAA';

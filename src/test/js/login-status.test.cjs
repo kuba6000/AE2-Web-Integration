@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-for (const page of ['../../main/resources/assets/login.html', '../../../example_website/login.html']) {
+for (const page of ['../../main/resources/assets/login.html']) {
     for (const status of ['INVALID_USER', 'INVALID_PASSWORD', 'NOT_ONLINE']) {
         test(`${page}: displays ${status} and clears the error URL`, () => {
             const elements = new Map();
