@@ -1,5 +1,6 @@
 import { createTranslator } from '../../app/i18n.mjs';
 import { navigateToGrid } from '../../app/router.mjs';
+import { createCraftingView } from './crafting.mjs';
 
 const PAGE_SIZE = 100;
 
@@ -28,9 +29,10 @@ export function mount(root, application, { base, logout }) {
         <label><span data-text="sort"></span><select id="sort"><option value="name" data-text="name"></option><option value="quantity" data-text="quantity"></option><option value="id" data-text="id"></option></select></label></div>
         <p id="item-message" role="status"></p><div class="terminal-layout"><div><ul id="items"></ul>
         <div id="pages"><button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button></div>
-        <button id="clear" data-text="resetSearch" hidden></button></div><aside><h3 data-text="details"></h3><div id="details"></div></aside></div></section>
+        <button id="clear" data-text="resetSearch" hidden></button></div><aside><h3 data-text="details"></h3><div id="details"></div><div id="order"></div></aside></div></section>
         <p id="missing" data-text="invalidRoute" hidden></p><footer id="updated" aria-live="off"></footer>`;
     const find = selector => root.querySelector(selector);
+    const craftingView = createCraftingView(root, application);
     find('#legacy').href = base.href;
     const tooltip = element('div', '', 'tooltip');
     tooltip.id = 'resource-tooltip'; tooltip.role = 'tooltip'; tooltip.hidden = true;
@@ -159,11 +161,16 @@ export function mount(root, application, { base, logout }) {
     function renderDetails() {
         const details = find('#details');
         const item = state.selected;
+        find('#order').hidden = !item?.craftable || !item.itemKey;
         if (!item) {details.replaceChildren(element('p', locale.t('selectItem'))); return;}
         details.replaceChildren(element('h4', item.itemname), element('code', item.itemid),
             element('p', `${locale.t('quantity')}: ${locale.number(item.quantity)}`),
             element('p', locale.t(item.craftable ? 'craftableYes' : 'craftableNo')));
         if (!item.itemKey) details.append(element('p', locale.t('identityUnavailable'), 'hint'));
+        if (item.craftable && item.itemKey) {
+            const order = craftingView.order(item, state.crafting, locale);
+            if (order.parentNode !== find('#order')) find('#order').append(order);
+        }
     }
     function render(next) {
         state = next;
@@ -179,6 +186,7 @@ export function mount(root, application, { base, logout }) {
         find('#terminal').hidden = state.route.view !== 'items';
         find('#missing').hidden = state.route.view !== 'missing';
         renderNetworks(); renderItems(); renderDetails();
+        craftingView.render(state.route, state.crafting, locale);
         find('#updated').textContent = state.updatedAt ? locale.t('updated', { time: locale.time(state.updatedAt) }) : '';
     }
     find('#network').addEventListener('change', event => navigateToGrid(event.target.value));

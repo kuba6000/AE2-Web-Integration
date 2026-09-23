@@ -1,3 +1,5 @@
+import { createCrafting } from './crafting.mjs';
+
 /** Shared state/actions for terminal renderers; a theme does not own requests or refresh timers. */
 export function createTerminal(api, preferences) {
     const state = {
@@ -13,6 +15,8 @@ export function createTerminal(api, preferences) {
     let timer;
     let refreshingGrids = null;
     const notify = () => { if (!disposed) for (const listener of listeners) listener(state); };
+    const crafting = createCrafting(api, () => { notify(); schedule(); });
+    state.crafting = crafting.state;
 
     function invalidateItems() {
         serial++;
@@ -26,7 +30,7 @@ export function createTerminal(api, preferences) {
     }
     async function loadItems() {
         const key = state.route.gridKey;
-        if (disposed || !key || state.gridStatus !== 'ready') return;
+        if (disposed || state.route.view !== 'items' || !key || state.gridStatus !== 'ready') return;
         if (!state.grids.some(grid => grid.key === key)) {
             invalidateItems(); state.itemStatus = 'error'; state.itemError = 'GRID_NOT_FOUND'; notify(); return;
         }
@@ -55,7 +59,14 @@ export function createTerminal(api, preferences) {
     }
     function schedule() {
         clearTimeout(timer);
-        if (!disposed && state.preferences.autoRefresh) timer = setTimeout(refresh, 5000);
+        if (disposed) return;
+        if (crafting.pending) timer = setTimeout(() => crafting.refresh(), 1000);
+        else if (state.preferences.autoRefresh) timer = setTimeout(refresh, 5000);
+    }
+    function loadCrafting() {
+        if (state.route.view !== 'plan' || state.gridStatus !== 'ready') return;
+        if (!state.grids.some(grid => grid.key === state.route.gridKey)) crafting.block('GRID_NOT_FOUND');
+        else return crafting.refresh();
     }
     async function refresh() {
         if (disposed) return;
@@ -69,22 +80,24 @@ export function createTerminal(api, preferences) {
                 state.gridStatus = 'ready'; state.gridError = null;
                 notify();
                 await loadItems();
+                await loadCrafting();
             } catch (error) {
                 if (disposed || error.name === 'AbortError') return;
                 state.gridStatus = 'error'; state.gridError = error.status || 'NETWORK_ERROR';
-                invalidateItems(); notify();
+                invalidateItems(); crafting.block(state.gridError); notify();
             } finally { refreshingGrids = null; schedule(); }
         })();
         return refreshingGrids;
     }
     return {
         state,
+        crafting,
         subscribe(listener) { listeners.add(listener); listener(state); return () => listeners.delete(listener); },
         refresh,
-        route(route) { invalidateItems(); state.route = route; notify(); loadItems(); },
+        route(route) { invalidateItems(); state.route = route; crafting.route(route); notify(); loadItems(); loadCrafting(); schedule(); },
         search(value) { state.search = value; notify(); },
         select(item) { state.selected = item; notify(); },
         preference(name, value) { preferences.set(name, value); notify(); if (name === 'autoRefresh') schedule(); },
-        dispose() { disposed = true; clearTimeout(timer); gridRequest?.abort(); itemRequest?.abort(); listeners.clear(); }
+        dispose() { disposed = true; clearTimeout(timer); gridRequest?.abort(); itemRequest?.abort(); crafting.dispose(); listeners.clear(); }
     };
 }
