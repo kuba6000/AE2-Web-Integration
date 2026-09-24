@@ -45,7 +45,8 @@ export function mount(root, application, { base, logout }) {
         <section id="home"><h2 data-text="home"></h2><p data-text="homeHelp"></p><div id="networks"></div></section>
         <section id="terminal" hidden><div class="terminal-heading"><h2 data-text="terminal"></h2>
         <label class="search"><span class="sr-only" data-text="search"></span><input id="search" type="search"></label></div>
-        <div class="terminal-body"><p id="item-message" role="status"></p><ul id="items"></ul>
+        <div class="terminal-body"><p id="item-message" role="status"></p>
+        <div id="item-scroll" role="region" data-label="resources" tabindex="0"><ul id="items"></ul></div>
         <div id="pages"><button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button></div>
         <button id="clear" data-text="resetSearch" hidden></button></div></section>
         <p id="missing" data-text="invalidRoute" hidden></p></div>
@@ -168,7 +169,10 @@ export function mount(root, application, { base, logout }) {
         ].join('\0');
         const changed = !listInput || listInput.items !== state.items || listInput.signature !== signature;
         if (changed) {
-            if (listInput?.signature !== signature) page = 0;
+            if (listInput?.signature !== signature) {
+                page = 0;
+                find('#item-scroll').scrollTop = 0;
+            }
             const search = state.search.trim().toLocaleLowerCase(language);
             allFiltered = state.items
                 .filter((item) => `${item.itemname} ${item.itemid}`.toLocaleLowerCase(language).includes(search))
@@ -360,10 +364,12 @@ export function mount(root, application, { base, logout }) {
     find('#previous-page').addEventListener('click', () => {
         page--;
         renderPage();
+        find('#item-scroll').scrollTop = 0;
     });
     find('#next-page').addEventListener('click', () => {
         page++;
         renderPage();
+        find('#item-scroll').scrollTop = 0;
     });
     find('#logout').addEventListener('click', async () => {
         find('#logout').disabled = true;

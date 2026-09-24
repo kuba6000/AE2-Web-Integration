@@ -1381,6 +1381,57 @@ test('home network links keep keyboard focus when polling refreshes the list', a
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
 });
 
+test('terminal scrolls resources inside the viewport while search and navigation remain reachable', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.itemsA = Array.from({ length: 105 }, (_, index) => ({
+        ...iron,
+        itemname: `Resource ${String(index).padStart(3, '0')}`,
+        itemKey: `key-${index}`
+    }));
+    for (const viewport of [
+        { width: 1280, height: 800 },
+        { width: 390, height: 844 },
+        { width: 844, height: 390 }
+    ]) {
+        await page.setViewportSize(viewport);
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.getByRole('button', { name: /Resource 000/ }).waitFor();
+        await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
+        const resources = page.getByRole('region', { name: 'Resources', exact: true });
+        await resources.waitFor();
+        const search = page.getByRole('searchbox', { name: 'Search resources' });
+        const before = await search.boundingBox();
+        await resources.focus();
+        await page.keyboard.press('End');
+        const last = resources.getByRole('button').last();
+        await page.waitForFunction(
+            ([region, item]) => {
+                const bounds = region.getBoundingClientRect();
+                const target = item.getBoundingClientRect();
+                return bounds.height > 0 && target.bottom > bounds.top && target.bottom <= bounds.bottom + 1;
+            },
+            [await resources.elementHandle(), await last.elementHandle()]
+        );
+        assert.deepEqual(await search.boundingBox(), before, 'Scrolling items must not move the search field');
+        const documentSize = await page.evaluate(() => ({
+            width: document.documentElement.scrollWidth,
+            height: document.documentElement.scrollHeight,
+            top: window.scrollY,
+            left: window.scrollX
+        }));
+        assert.ok(documentSize.width <= viewport.width, 'The page must fit the viewport horizontally');
+        assert.ok(documentSize.height <= viewport.height, 'The page must fit the viewport vertically');
+        assert.equal(documentSize.top, 0);
+        assert.equal(documentSize.left, 0);
+        const next = page.getByRole('button', { name: 'Next page' });
+        const nextBounds = await next.boundingBox();
+        assert.ok(nextBounds.y >= 0 && nextBounds.y + nextBounds.height <= viewport.height);
+        await next.click();
+        await page.getByRole('button', { name: /Resource 104/ }).waitFor();
+        await page.getByRole('button', { name: 'Previous page' }).click();
+    }
+});
+
 test('resource details are text, keyboard accessible and paging does not require new requests', async (t) => {
     const { page, options, base } = await fixture(t);
     const untrustedName = '<img src=x onerror=alert(1)> Quartz';

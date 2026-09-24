@@ -293,14 +293,18 @@ nav {
 }
 body {
     margin: 0;
-    min-height: 100vh;
-    padding: 30px 34px 40px;
+    height: 100dvh;
+    overflow: hidden;
+    padding: 30px 34px 16px;
     background:
         radial-gradient(ellipse at 50% 0, #41414d80, transparent 70%),
         repeating-linear-gradient(0deg, #ffffff02 0 1px, transparent 1px 4px),
         repeating-linear-gradient(90deg, #0000000a 0 1px, transparent 1px 4px);
 }
 #app {
+    display: grid;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    height: 100%;
     margin: auto;
     max-width: 1320px;
     padding: 0;
@@ -473,16 +477,21 @@ label {
     padding-top: 13px;
 }
 .workspace {
+    min-height: 0;
     --tools-width: 42px;
     --details-width: 225px;
 }
 .workspace.with-terminal {
     display: grid;
     grid-template-columns: var(--tools-width) minmax(0, 1fr) var(--details-width);
+    grid-template-rows: minmax(0, 1fr);
     align-items: start;
 }
 .window-frame {
     min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow: auto;
     background: var(--panel);
     background-clip: padding-box;
     /* Fixed 2px pixels in the corners; only the straight edges stretch. */
@@ -490,9 +499,20 @@ label {
     border-image: var(--frame-image) 6 / 12px stretch;
     padding: 13px;
     filter: drop-shadow(0 5px 8px #08070d2e);
-    min-height: 490px;
+}
+.with-terminal > .window-frame {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+#terminal {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 .terminal-heading {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -517,9 +537,55 @@ label {
     font-size: 14px;
 }
 .terminal-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
     margin-top: 18px;
 }
+.terminal-body > :not(#item-scroll) {
+    flex-shrink: 0;
+}
+#item-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: scroll;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding-right: 10px;
+}
+#item-scroll:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+#item-scroll::-webkit-scrollbar {
+    width: 18px;
+}
+#item-scroll::-webkit-scrollbar-track {
+    background: var(--slot);
+    border: 2px solid;
+    border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
+}
+#item-scroll::-webkit-scrollbar-thumb {
+    min-height: 28px;
+    background: var(--panel);
+    border: 2px solid;
+    border-color: var(--edge-light) var(--edge-dark) var(--edge-dark) var(--edge-light);
+}
+#item-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--selected);
+}
+@supports not selector(::-webkit-scrollbar) {
+    #item-scroll {
+        scrollbar-color: var(--border) var(--slot);
+    }
+}
 .terminal-tools {
+    max-height: calc(100% - 26px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
     position: relative;
     z-index: 1;
     display: flex;
@@ -606,7 +672,13 @@ label {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
 }
+.item:focus-visible {
+    outline-offset: -2px;
+}
 aside {
+    max-height: calc(100% - 26px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     position: relative;
     z-index: 1;
     min-width: 0;
@@ -736,10 +808,12 @@ footer a {
 @media (max-width: 600px) {
     .workspace.with-terminal {
         grid-template-columns: var(--tools-width) minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) auto;
     }
     #resource-panel {
         grid-column: 2;
         margin-top: 0;
+        max-height: min(180px, 25dvh);
     }
 }
 @media (max-width: 560px) {
@@ -768,7 +842,6 @@ footer a {
     }
     .window-frame {
         padding: 4px 1px;
-        min-height: 400px;
     }
     .view-tabs {
         padding-left: 0;
@@ -828,5 +901,41 @@ footer a {
     }
     footer {
         font-size: 10px;
+    }
+}
+@media (max-height: 600px) {
+    body {
+        padding-block: 8px;
+    }
+    .site-header,
+    .network-bar {
+        margin-bottom: 8px;
+    }
+    .view-tabs a {
+        padding-block: 6px;
+    }
+    .view-tabs a[aria-current='page'] {
+        padding-top: 8px;
+    }
+    .window-frame {
+        padding: 4px 8px;
+    }
+    .terminal-heading {
+        padding-bottom: 4px;
+    }
+    .terminal-heading h2 {
+        font-size: 18px;
+    }
+    .search input {
+        padding-block: 5px;
+    }
+    .terminal-body {
+        margin-top: 4px;
+    }
+    #item-message {
+        margin-bottom: 4px;
+    }
+    footer {
+        margin-block: 6px;
     }
 }
