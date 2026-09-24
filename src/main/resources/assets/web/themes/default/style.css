@@ -553,8 +553,7 @@ label {
     font-weight: 400;
 }
 .search input:focus-visible {
-    outline: 1px solid var(--surface-text);
-    outline-offset: 2px;
+    outline: none;
 }
 .terminal-body {
     display: flex;
