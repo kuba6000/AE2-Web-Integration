@@ -36,18 +36,21 @@ export function mount(root, application, { base, logout }) {
         <section class="network-bar"><label><span data-text="network"></span><select id="network"></select></label>
         <button id="refresh" data-text="refresh"></button><label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label></section>
         <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a></nav>
+        <div class="workspace" id="workspace">
+        <div class="terminal-tools" id="terminal-tools" hidden>
+        <div role="group" data-label="resources">${['all', 'stored', 'craftable'].map((value) => iconButton('filter', value)).join('')}</div>
+        <div role="group" data-label="sort">${['name', 'quantity', 'id'].map((value) => iconButton('sort', value)).join('')}</div></div>
         <div class="window-frame" id="window">
         <div id="network-message" role="status"></div>
         <section id="home"><h2 data-text="home"></h2><p data-text="homeHelp"></p><div id="networks"></div></section>
         <section id="terminal" hidden><div class="terminal-heading"><h2 data-text="terminal"></h2>
         <label class="search"><span class="sr-only" data-text="search"></span><input id="search" type="search"></label></div>
-        <div class="terminal-body"><div class="terminal-tools">
-        <div role="group" data-label="resources">${['all', 'stored', 'craftable'].map((value) => iconButton('filter', value)).join('')}</div>
-        <div role="group" data-label="sort">${['name', 'quantity', 'id'].map((value) => iconButton('sort', value)).join('')}</div></div>
-        <div class="terminal-content"><p id="item-message" role="status"></p><div class="terminal-layout"><div><ul id="items"></ul>
+        <div class="terminal-body"><p id="item-message" role="status"></p><ul id="items"></ul>
         <div id="pages"><button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button></div>
-        <button id="clear" data-text="resetSearch" hidden></button></div><aside><h3 data-text="details"></h3><div id="details"></div><div id="order"></div></aside></div></div></div></section>
-        <p id="missing" data-text="invalidRoute" hidden></p></div><footer><span id="updated" aria-live="off"></span><a id="legacy" data-text="previous"></a></footer>`;
+        <button id="clear" data-text="resetSearch" hidden></button></div></section>
+        <p id="missing" data-text="invalidRoute" hidden></p></div>
+        <aside id="resource-panel" hidden><h3 data-text="details"></h3><div id="details"></div><div id="order"></div></aside></div>
+        <footer><span id="updated" aria-live="off"></span><a id="legacy" data-text="previous"></a></footer>`;
     const find = (selector) => root.querySelector(selector);
     const craftingView = createCraftingView(find('#window'), application);
     const cpuView = createCpuView(find('#window'), application);
@@ -300,6 +303,9 @@ export function mount(root, application, { base, logout }) {
         if (find('#search').value !== state.search) find('#search').value = state.search;
         find('#home').hidden = state.route.view !== 'home';
         find('#terminal').hidden = state.route.view !== 'items';
+        find('#terminal-tools').hidden = state.route.view !== 'items';
+        find('#resource-panel').hidden = state.route.view !== 'items';
+        find('#workspace').classList.toggle('with-terminal', state.route.view === 'items');
         find('#missing').hidden = state.route.view !== 'missing';
         renderNetworks();
         renderItems();

@@ -432,7 +432,17 @@ label {
     border-bottom-color: var(--panel);
     padding-top: 13px;
 }
+.workspace {
+    --tools-width: 42px;
+    --details-width: 225px;
+}
+.workspace.with-terminal {
+    display: grid;
+    grid-template-columns: var(--tools-width) minmax(0, 1fr) var(--details-width);
+    align-items: start;
+}
 .window-frame {
+    min-width: 0;
     background: var(--panel);
     background-clip: padding-box;
     /* Fixed 2px pixels in the corners; only the straight edges stretch. */
@@ -467,19 +477,15 @@ label {
     font-size: 14px;
 }
 .terminal-body {
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr);
-    gap: 17px;
     margin-top: 18px;
 }
-.terminal-content {
-    min-width: 0;
-}
 .terminal-tools {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
     gap: 22px;
-    padding-top: 32px;
+    margin-top: 26px;
 }
 .terminal-tools [role='group'] {
     display: flex;
@@ -510,11 +516,6 @@ label {
         inset -1px -1px var(--edge-light);
     border-left: 3px solid var(--accent);
     padding-left: 7px;
-}
-.terminal-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 225px;
-    gap: 18px;
 }
 #items {
     display: grid;
@@ -566,6 +567,10 @@ label {
     outline-offset: -2px;
 }
 aside {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    margin-top: 26px;
     overflow-wrap: anywhere;
     align-self: start;
     padding: 15px;
@@ -656,8 +661,8 @@ footer a {
     #items {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
-    .terminal-layout {
-        grid-template-columns: minmax(0, 1fr) 200px;
+    .workspace {
+        --details-width: 200px;
     }
 }
 @media (max-width: 900px) {
@@ -671,8 +676,11 @@ footer a {
         display: block;
         margin: 3px 0 0;
     }
-    .terminal-layout {
-        grid-template-columns: 1fr;
+    .workspace {
+        --details-width: 180px;
+    }
+    #items {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     aside {
         min-height: 0;
@@ -682,6 +690,15 @@ footer a {
     }
     .view-tabs a {
         padding: 10px 12px;
+    }
+}
+@media (max-width: 600px) {
+    .workspace.with-terminal {
+        grid-template-columns: var(--tools-width) minmax(0, 1fr);
+    }
+    #resource-panel {
+        grid-column: 2;
+        margin-top: 0;
     }
 }
 @media (max-width: 560px) {
@@ -734,9 +751,8 @@ footer a {
         font-size: 12px;
         padding: 8px;
     }
-    .terminal-body {
-        grid-template-columns: 35px minmax(0, 1fr);
-        gap: 8px;
+    .workspace {
+        --tools-width: 34px;
     }
     .tool-button {
         width: 34px;
