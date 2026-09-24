@@ -20,16 +20,21 @@
     background: var(--background);
     --background: #262830;
     --panel: #c6c6c6;
-    --surface: #e5e5e8;
-    --slot: #c1c2c7;
+    --surface: #8b8b8b;
+    --slot: #8b8b8b;
+    --surface-hover: #a3a3a3;
+    --surface-text: #1a1a1a;
+    --surface-muted: #242424;
+    --control-edge-light: #fff;
+    --control-edge-dark: #373737;
     --slot-edge-dark: #373737;
     --slot-edge-light: #fff;
     --terminal-title: #404040;
-    --tab-surface: #a8a7af;
-    --tab-text: #45414d;
-    --tab-edge-light: #d9d8df;
-    --tab-edge-dark: #66636d;
-    --tab-hover: #c3bbcf;
+    --tab-surface: var(--surface);
+    --tab-text: var(--surface-text);
+    --tab-edge-light: var(--control-edge-light);
+    --tab-edge-dark: var(--control-edge-dark);
+    --tab-hover: var(--surface-hover);
     --text: #34333b;
     --muted: #63616d;
     --border: #9a99a3;
@@ -46,6 +51,11 @@
     --background: #262830;
     --panel: #45434e;
     --surface: #514e5b;
+    --surface-hover: #625d6e;
+    --surface-text: #eeeaf4;
+    --surface-muted: #c0bacd;
+    --control-edge-light: #766e83;
+    --control-edge-dark: #26232e;
     --slot: #393842;
     --slot-edge-dark: #25232b;
     --slot-edge-light: #625d6e;
@@ -70,6 +80,11 @@
         --background: #262830;
         --panel: #45434e;
         --surface: #514e5b;
+        --surface-hover: #625d6e;
+        --surface-text: #eeeaf4;
+        --surface-muted: #c0bacd;
+        --control-edge-light: #766e83;
+        --control-edge-dark: #26232e;
         --slot: #393842;
         --slot-edge-dark: #25232b;
         --slot-edge-light: #625d6e;
@@ -347,10 +362,10 @@ select {
 button,
 select {
     background: var(--surface);
-    border: 1px solid var(--edge-dark);
-    box-shadow:
-        inset 1px 1px var(--edge-light),
-        inset -1px -1px var(--border);
+    color: var(--surface-text);
+    border: 2px solid;
+    border-color: var(--control-edge-light) var(--control-edge-dark) var(--control-edge-dark) var(--control-edge-light);
+    box-shadow: none;
     padding: 8px 12px;
 }
 button {
@@ -358,17 +373,22 @@ button {
     font-size: 13px;
 }
 button:hover {
-    background: var(--selected);
+    background: var(--surface-hover);
 }
 button:active {
-    box-shadow: inset 1px 1px var(--edge-dark);
+    border-color: var(--control-edge-dark) var(--control-edge-light) var(--control-edge-light) var(--control-edge-dark);
 }
 input {
     background: var(--surface);
+    color: var(--surface-text);
     border: 2px solid;
-    border-color: var(--edge-dark) var(--edge-light) var(--edge-light) var(--edge-dark);
+    border-color: var(--control-edge-dark) var(--control-edge-light) var(--control-edge-light) var(--control-edge-dark);
     padding: 9px 12px;
     min-width: 0;
+}
+input::placeholder {
+    color: var(--surface-muted);
+    opacity: 1;
 }
 input[type='checkbox'] {
     accent-color: var(--accent);
@@ -410,10 +430,6 @@ label {
 .preferences button {
     font-size: 12px;
     padding: 6px 9px;
-    background: #383640;
-    color: #e0dce8;
-    border: 1px solid #5d5869;
-    box-shadow: none;
 }
 .network-bar {
     margin: 0 0 24px;
@@ -427,16 +443,8 @@ label {
 .network-bar select {
     width: 100%;
     font-size: 13px;
-    background: #34323d;
-    color: #eeeaf4;
-    border: 1px solid #615a6d;
-    box-shadow: inset 1px 1px #1a1820;
 }
 .network-bar button {
-    background: #45414f;
-    color: #e5dfee;
-    border-color: #74697f;
-    box-shadow: inset 1px 1px #635b70;
     font-size: 12px;
 }
 .checkbox {
@@ -602,7 +610,6 @@ label {
     height: 42px;
     width: 42px;
     padding: 9px;
-    background-image: repeating-linear-gradient(0deg, #ffffff06 0 1px, transparent 1px 3px);
 }
 .tool-button svg {
     display: block;
@@ -615,13 +622,8 @@ label {
     stroke-linejoin: miter;
 }
 .tool-button[aria-pressed='true'] {
-    background-color: var(--selected);
-    color: var(--accent);
-    box-shadow:
-        inset 1px 1px var(--edge-dark),
-        inset -1px -1px var(--edge-light);
-    border-left: 3px solid var(--accent);
-    padding-left: 7px;
+    background-color: var(--slot);
+    border-color: var(--control-edge-dark) var(--control-edge-light) var(--control-edge-light) var(--control-edge-dark);
 }
 #items {
     display: grid;
@@ -641,12 +643,13 @@ label {
     padding: 10px;
     gap: 6px;
     background: var(--slot);
+    color: var(--surface-text);
     border: 2px solid;
     border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
     box-shadow: none;
 }
 .item:hover {
-    background: var(--surface);
+    background: var(--surface-hover);
 }
 .item strong {
     overflow-wrap: anywhere;
@@ -662,7 +665,7 @@ label {
     font-weight: 650;
 }
 .item small {
-    color: var(--muted);
+    color: var(--surface-muted);
     min-height: 1em;
     font-size: 9px;
     letter-spacing: 0.01em;
@@ -687,8 +690,9 @@ aside {
     align-self: start;
     padding: 15px;
     background: var(--surface);
-    border: 1px solid;
-    border-color: var(--edge-dark) var(--edge-light) var(--edge-light) var(--edge-dark);
+    color: var(--surface-text);
+    border: 2px solid;
+    border-color: var(--control-edge-light) var(--control-edge-dark) var(--control-edge-dark) var(--control-edge-light);
     font-size: 13px;
     line-height: 1.6;
     min-height: 170px;
@@ -698,7 +702,7 @@ aside h3 {
     border-bottom: 1px solid var(--border);
 }
 aside p {
-    color: var(--muted);
+    color: var(--surface-muted);
 }
 code {
     font-family: inherit;
@@ -872,9 +876,6 @@ footer a {
         width: 34px;
         height: 36px;
         padding: 6px;
-    }
-    .tool-button[aria-pressed='true'] {
-        padding-left: 4px;
     }
     .tool-button svg {
         width: 20px;
