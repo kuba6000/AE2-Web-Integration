@@ -637,7 +637,7 @@ label {
     display: grid;
     list-style: none;
     margin: 0;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 120px), 1fr));
     gap: 0;
     padding: 0;
 }
@@ -647,9 +647,9 @@ label {
     width: 100%;
     height: 100%;
     text-align: left;
-    min-height: 91px;
-    padding: 10px;
-    gap: 6px;
+    min-height: 68px;
+    padding: 6px;
+    gap: 4px;
     background: var(--slot);
     color: var(--surface-text);
     border: 2px solid;
@@ -660,12 +660,19 @@ label {
     background: var(--surface-hover);
 }
 .item strong {
-    overflow-wrap: anywhere;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 12px;
     font-weight: 400;
     line-height: 1.4;
 }
 .item .quantity {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--quantity-text);
     align-self: flex-end;
     margin-top: auto;
@@ -674,6 +681,9 @@ label {
     font-weight: 700;
 }
 .item small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--surface-muted);
     min-height: 1em;
     font-size: 9px;
@@ -848,9 +858,6 @@ footer a {
     }
 }
 @media (max-width: 1150px) {
-    #items {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
     #app {
         --details-width: 200px;
     }
@@ -868,9 +875,6 @@ footer a {
     }
     #app {
         --details-width: 180px;
-    }
-    #items {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     aside {
         min-height: 0;
@@ -957,13 +961,6 @@ footer a {
     }
     .terminal-tools {
         gap: 18px;
-    }
-    #items {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .item {
-        padding: 7px;
-        min-height: 93px;
     }
     .item strong {
         font-size: 11px;
