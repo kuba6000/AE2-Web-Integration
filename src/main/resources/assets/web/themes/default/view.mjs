@@ -105,8 +105,7 @@ export function mount(root, application, { base, logout, settings, i18n }) {
         <label class="search"><span class="sr-only" data-text="search"></span><input id="search" type="search"></label></div>
         <div class="terminal-body"><p id="item-message" role="status"></p>
         <div id="item-scroll" role="region" data-label="resources" tabindex="0"><ul id="items"></ul></div>
-        <div id="pages"><button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button></div>
-        <button id="clear" data-text="resetSearch" hidden></button></div></section>
+        <div id="pages"><button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button></div></div></section>
         <p id="missing" data-text="invalidRoute" hidden></p></div>
         <aside id="resource-panel" hidden><h3 data-text="details"></h3><div id="details"></div><div id="order"></div></aside></div>
         <footer><span id="updated" aria-live="off"></span><a id="legacy" data-text="previous"></a></footer>`;
@@ -138,7 +137,6 @@ export function mount(root, application, { base, logout, settings, i18n }) {
      *   '#previous-page': HTMLElementTagNameMap['button'],
      *   '#page-count': HTMLElementTagNameMap['span'],
      *   '#next-page': HTMLElementTagNameMap['button'],
-     *   '#clear': HTMLElementTagNameMap['button'],
      *   '#missing': HTMLElementTagNameMap['p'],
      *   '#resource-panel': HTMLElementTagNameMap['aside'],
      *   '#details': HTMLElementTagNameMap['div'],
@@ -367,16 +365,11 @@ export function mount(root, application, { base, logout, settings, i18n }) {
                     ? locale.common('loading')
                     : state.itemError
                       ? locale.common(state.itemError)
-                      : state.itemStatus === 'ready'
-                        ? !state.items.length
-                            ? locale.common('empty')
-                            : !allFiltered.length
-                              ? locale.common('noMatches')
-                              : ''
+                      : state.itemStatus === 'ready' && !state.items.length
+                        ? locale.common('empty')
                         : '';
         }
         find('#item-message').textContent = message;
-        find('#clear').hidden = state.itemStatus !== 'ready' || !state.items.length || !!allFiltered.length;
     }
     /**
      * @param {TerminalState['items'][number]} item
@@ -589,11 +582,6 @@ export function mount(root, application, { base, logout, settings, i18n }) {
     const autoRefresh = find('#auto-refresh');
     autoRefresh.addEventListener('change', () => application.preference('autoRefresh', autoRefresh.checked));
     find('#refresh').addEventListener('click', () => application.refresh({ reloadDetail: true }));
-    find('#clear').addEventListener('click', () => {
-        application.preference('filter', 'all');
-        application.search('');
-        find('#search').focus();
-    });
     find('#previous-page').addEventListener('click', () => {
         page--;
         renderPage();

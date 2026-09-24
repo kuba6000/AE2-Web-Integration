@@ -2059,9 +2059,11 @@ test('resource grid stays centered and stationary when scrolling becomes unneces
     const filtered = await first.boundingBox();
     assert.equal(filtered.x, before.x);
     assert.equal(filtered.width, before.width);
+    const populatedViewport = await resources.boundingBox();
     await page.getByRole('searchbox', { name: 'Search resources' }).fill('no matching resources');
     assert.equal(await resources.getByRole('button').count(), 0);
     assert.equal(await resources.evaluate((node) => node.scrollHeight > node.clientHeight), false);
+    assert.deepEqual(await resources.boundingBox(), populatedViewport, 'No matches must not move or shrink the grid');
     await page.getByRole('searchbox', { name: 'Search resources' }).fill('');
     const restored = await first.boundingBox();
     assert.equal(restored.x, before.x);
