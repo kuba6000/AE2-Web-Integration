@@ -689,7 +689,7 @@ label {
 .item .quantity {
     flex-shrink: 0;
     white-space: nowrap;
-    color: #fff;
+    color: #c6c6c6;
     text-shadow: 2px 2px 0 #373737;
     font-variant-numeric: tabular-nums;
     font-size: 14px;
