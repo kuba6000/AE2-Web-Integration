@@ -15,6 +15,22 @@ import { createSettingsView } from './settings.mjs';
 
 const PAGE_SIZE = 100;
 
+/** @param {number} quantity @param {Locale} locale */
+function slotQuantity(quantity, locale) {
+    if (quantity < 10000) return locale.number(quantity);
+    // AE2's wide slot format: four characters, SI suffixes, rounded down.
+    const suffixes = 'kMGTPE';
+    let divisor = 1000;
+    let index = 0;
+    while (quantity / divisor >= 1000 && index < suffixes.length - 1) {
+        divisor *= 1000;
+        index++;
+    }
+    const whole = Math.floor(quantity / divisor);
+    const value = whole < 10 ? Math.floor(quantity / (divisor / 10)) / 10 : whole;
+    return `${value}${suffixes[index]}`;
+}
+
 /**
  * @template {keyof HTMLElementTagNameMap} Tag
  * @param {Tag} tag
@@ -411,7 +427,7 @@ export function mount(root, application, { base, logout, settings, i18n }) {
             const row = previous.get(item.itemKey) || createItemRow(item);
             row.item = item;
             row.name.replaceChildren(renderMinecraftText(item.itemname));
-            row.quantity.textContent = locale.number(item.quantity);
+            row.quantity.textContent = slotQuantity(item.quantity, locale);
             row.craftable.hidden = !item.craftable;
             row.craftable.setAttribute('aria-label', locale.common('craftableYes'));
             row.button.classList.toggle('selected', item === state.selected);

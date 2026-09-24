@@ -530,6 +530,51 @@ test('craftable resources show an accessible hammer that follows refreshed avail
     await page.getByRole('tooltip').getByText('Not craftable', { exact: true }).waitFor();
 });
 
+test('resource quantities abbreviate from ten thousand and retain exact tooltip amounts', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const samples = [
+        [9999, '9,999'],
+        [10000, '10k'],
+        [128640, '128k'],
+        [999999, '999k'],
+        [1000000, '1M'],
+        [2457600, '2.4M'],
+        [1999999999, '1.9G'],
+        [1000000000000, '1T'],
+        [1000000000000000, '1P'],
+        [1000000000000000000, '1E']
+    ];
+    options.itemsA = samples.map(([quantity], index) => ({
+        ...iron,
+        quantity,
+        itemname: `Resource ${index}`,
+        itemKey: `resource-${index}`
+    }));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Resource 0/ }).waitFor();
+    await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
+    await page.evaluate(() => document.fonts.ready);
+    for (const [index, [quantity, display]] of samples.entries()) {
+        await page.getByRole('searchbox', { name: 'Search resources' }).fill(`Resource ${index}`);
+        const item = page.getByRole('button', { name: new RegExp(`^Resource ${index} `) });
+        assert.ok((await item.textContent()).endsWith(display));
+        const amount = item.getByText(display, { exact: true });
+        const hammer = item.getByRole('img');
+        await item.hover();
+        await page
+            .getByRole('tooltip')
+            .getByText(`Quantity: ${quantity.toLocaleString('en')}`, { exact: true })
+            .waitFor();
+        const itemBox = await item.boundingBox();
+        const amountBox = await amount.boundingBox();
+        const hammerBox = await hammer.boundingBox();
+        assert.ok(amountBox.x + amountBox.width < itemBox.x + itemBox.width, 'quantity stays inside its slot');
+        assert.ok(hammerBox.x + hammerBox.width < amountBox.x, 'hammer does not overlap the quantity');
+        assert.ok(await amount.evaluate((node) => node.scrollWidth <= node.clientWidth), 'quantity is not clipped');
+    }
+});
+
 test('terminal icon tools expose tooltips and support keyboard filtering and sorting', async (t) => {
     const { page, options, base } = await fixture(t);
     options.itemsA = [
