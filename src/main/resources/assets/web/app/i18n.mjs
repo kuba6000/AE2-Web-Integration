@@ -1,3 +1,5 @@
+/** @typedef {Partial<Record<Intl.LDMLPluralRule, string>> & {other: string}} PluralMessage */
+/** @type {Record<string, Record<string, string | PluralMessage>>} */
 const translations = {
     en: {
         resourceTimings: 'Resource processing intervals',
@@ -345,6 +347,7 @@ const translations = {
     }
 };
 
+/** @param {string} language */
 export function createTranslator(language) {
     const locale = translations[language] || translations.en;
     const numbers = new Intl.NumberFormat(language);
@@ -360,18 +363,19 @@ export function createTranslator(language) {
         second: '2-digit',
         fractionalSecondDigits: 3
     });
+    /** @param {string} key @param {{count?: number} & Record<string, string | number | undefined>} [values] */
     function t(key, values = {}) {
         let message = locale[key] || translations.en[key] || locale.error;
-        if (typeof message === 'object') message = message[plural.select(values.count)] || message.other;
+        if (typeof message === 'object') message = message[plural.select(values.count ?? NaN)] || message.other;
         return message.replace(/\{(\w+)\}/g, (_, name) =>
             typeof values[name] === 'number' ? numbers.format(values[name]) : String(values[name] ?? '')
         );
     }
     return {
         t,
-        number: (value) => numbers.format(value),
-        time: (value) => times.format(value),
-        dateTime: (value) => dates.format(value),
-        preciseTime: (value) => preciseTimes.format(value)
+        number: /** @param {number} value */ (value) => numbers.format(value),
+        time: /** @param {number} value */ (value) => times.format(value),
+        dateTime: /** @param {number} value */ (value) => dates.format(value),
+        preciseTime: /** @param {number} value */ (value) => preciseTimes.format(value)
     };
 }

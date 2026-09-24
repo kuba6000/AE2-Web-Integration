@@ -291,14 +291,19 @@ async function fixture(t, mount = '') {
         }
     });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-    let browser;
+    const closeServer = () => new Promise((resolve) => server.close(resolve));
+    const browser = await chromium
+        .launch({
+            headless: true,
+            ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {})
+        })
+        .catch(async (error) => {
+            await closeServer();
+            throw error;
+        });
     t.after(async () => {
-        await browser?.close();
-        await new Promise((resolve) => server.close(resolve));
-    });
-    browser = await chromium.launch({
-        headless: true,
-        ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {})
+        await browser.close();
+        await closeServer();
     });
     const page = await browser.newPage({ locale: 'en-US' });
     const errors = [];

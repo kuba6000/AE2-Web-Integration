@@ -1,11 +1,27 @@
+/**
+ * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
+ * @typedef {Terminal['state']} TerminalState
+ * @typedef {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} Locale
+ */
+
 import { cpuHref } from '../../app/router.mjs';
 
+/**
+ * @template {keyof HTMLElementTagNameMap} Tag
+ * @param {Tag} tag
+ * @param {string} [text]
+ * @returns {HTMLElementTagNameMap[Tag]}
+ */
 function element(tag, text = '') {
     const node = document.createElement(tag);
     node.textContent = text;
     return node;
 }
 
+/**
+ * @param {HTMLElement} root
+ * @param {Terminal} application
+ */
 export function createCraftingView(root, application) {
     const order = element('form');
     const quantityLabel = element('label');
@@ -23,6 +39,7 @@ export function createCraftingView(root, application) {
     const orderMessage = element('p');
     orderMessage.role = 'status';
     order.append(quantityLabel, calculate, orderMessage);
+    /** @type {import('../../app/api-types.mjs').Item} */
     let item;
     order.addEventListener('submit', (event) => {
         event.preventDefault();
@@ -64,10 +81,17 @@ export function createCraftingView(root, application) {
     actions.className = 'plan-actions';
     actions.append(start, remove, inspectCpu, back);
     planView.append(title, output, status, reason, bytes, tableScroll, mergeHint, cpuHint, cpuLabel, actions);
+    /** @type {TerminalState['crafting']['plan'] | undefined} */
     let lastPlan;
+    /** @type {Locale | undefined} */
     let lastLocale;
     root.append(planView);
     return {
+        /**
+         * @param {import('../../app/api-types.mjs').Item} selected
+         * @param {TerminalState['crafting']} state
+         * @param {Locale} locale
+         */
         order(selected, state, locale) {
             if (item?.itemKey !== selected?.itemKey) quantity.value = '1';
             item = selected;
@@ -81,10 +105,15 @@ export function createCraftingView(root, application) {
                   : '';
             return order;
         },
+        /**
+         * @param {TerminalState['route']} route
+         * @param {TerminalState['crafting']} state
+         * @param {Locale} locale
+         */
         render(route, state, locale) {
             const { t, number } = locale;
             planView.hidden = route.view !== 'plan';
-            if (planView.hidden) return;
+            if (route.view !== 'plan') return;
             title.textContent = t('craftingPlan');
             output.textContent = state.metadata
                 ? `${state.metadata.itemname} × ${number(state.metadata.quantity)}`

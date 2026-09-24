@@ -1,30 +1,50 @@
+/**
+ * @typedef {import('../../app/api-types.mjs').HistoryItem} HistoryItem
+ * @typedef {import('../../app/api-types.mjs').ProviderTiming} ProviderTiming
+ */
+
+/**
+ * @template {keyof HTMLElementTagNameMap} Tag
+ * @param {Tag} tag
+ * @param {string} [text]
+ * @returns {HTMLElementTagNameMap[Tag]}
+ */
 function element(tag, text = '') {
     const node = document.createElement(tag);
     node.textContent = text;
     return node;
 }
 
-/** Detached history intervals; each API row remains separate even when names/registry IDs repeat. */
+/**
+ * Detached history intervals; each API row remains separate even when names/registry IDs repeat.
+ * @param {import('../../app/api-types.mjs').HistoryDetail} snapshot
+ * @param {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} locale
+ */
 export function renderHistoryTimeline(snapshot, locale) {
     const { t, number, preciseTime } = locale;
     const container = element('div');
     container.className = 'history-timelines';
     const duration = snapshot.timeDone - snapshot.timeStarted;
     if (!snapshot.items.length && !snapshot.interfaceShare.length) return element('p', t('historyNoTimings'));
-    for (const [title, rows, providers] of [
+    /** @type {Array<[string, HistoryItem[], false] | [string, ProviderTiming[], true]>} */
+    const groups = [
         ['resourceTimings', snapshot.items, false],
         ['providerTimings', snapshot.interfaceShare, true]
-    ]) {
+    ];
+    for (const [title, rows, providers] of groups) {
         container.append(element('h3', t(title)));
         for (const row of rows) {
-            const name = providers ? row.name : row.itemname;
+            const name = providers
+                ? /** @type {ProviderTiming} */ (row).name
+                : /** @type {HistoryItem} */ (row).itemname;
             const section = element('section');
             section.setAttribute('aria-label', name);
             section.append(element('h4', name));
-            if (!providers) section.append(element('code', row.itemid));
+            if (!providers) section.append(element('code', /** @type {HistoryItem} */ (row).itemid));
             else {
-                section.append(element('p', t('processingTotal', { count: row.timingsCombined / 1000 })));
-                for (const position of row.location)
+                const provider = /** @type {ProviderTiming} */ (row);
+                section.append(element('p', t('processingTotal', { count: provider.timingsCombined / 1000 })));
+                for (const position of provider.location)
                     section.append(element('p', t('position', { dimension: position.dimid, ...position })));
             }
             if (duration > 0 && row.timings.length) {

@@ -1,3 +1,12 @@
+/**
+ * @typedef {{view: 'home' | 'missing', gridKey: null}
+ * | {view: 'items' | 'settings', gridKey: string}
+ * | {view: 'cpus', gridKey: string, cpuKey: string | null}
+ * | {view: 'history', gridKey: string, entryId: string | null}
+ * | {view: 'plan', gridKey: string, planId: string}} Route
+ */
+
+/** @returns {Route} */
 export function readRoute() {
     const hash = location.hash.replace(/^#/, '');
     if (!hash || hash === '/' || hash === '/home') return { view: 'home', gridKey: null };
@@ -48,18 +57,22 @@ export function readRoute() {
     return { view: 'missing', gridKey: null };
 }
 
+/** @param {string} gridKey @param {string | number} planId */
 export function navigateToPlan(gridKey, planId) {
     location.hash = `/grids/${encodeURIComponent(gridKey)}/plans/${planId}`;
 }
 
+/** @param {string | null} gridKey @param {string | null} [cpuKey] */
 export function cpuHref(gridKey, cpuKey = null) {
-    return `#/grids/${encodeURIComponent(gridKey)}/cpus${cpuKey ? '/' + encodeURIComponent(cpuKey) : ''}`;
+    return `#/grids/${encodeURIComponent(String(gridKey))}/cpus${cpuKey ? '/' + encodeURIComponent(cpuKey) : ''}`;
 }
 
+/** @param {string | null} gridKey @param {string | number | null} [entryId] */
 export function historyHref(gridKey, entryId = null) {
-    return `#/grids/${encodeURIComponent(gridKey)}/history${entryId === null ? '' : '/' + entryId}`;
+    return `#/grids/${encodeURIComponent(String(gridKey))}/history${entryId === null ? '' : '/' + entryId}`;
 }
 
+/** @param {string | null} key */
 export function navigateToGrid(key) {
     location.hash = key ? `/grids/${encodeURIComponent(key)}/items` : '/';
 }

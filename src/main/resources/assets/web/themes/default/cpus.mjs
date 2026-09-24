@@ -1,5 +1,17 @@
+/**
+ * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
+ * @typedef {Terminal['state']} TerminalState
+ * @typedef {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} Locale
+ */
+
 import { cpuHref } from '../../app/router.mjs';
 
+/**
+ * @template {keyof HTMLElementTagNameMap} Tag
+ * @param {Tag} tag
+ * @param {string} [text]
+ * @returns {HTMLElementTagNameMap[Tag]}
+ */
 function element(tag, text = '') {
     const node = document.createElement(tag);
     node.textContent = text;
@@ -7,6 +19,10 @@ function element(tag, text = '') {
 }
 
 /** Presentation only: CPU requests, cancellation and refresh lifetime belong to the application. */
+/**
+ * @param {HTMLElement} root
+ * @param {Terminal} application
+ */
 export function createCpuView(root, application) {
     const view = element('section');
     view.hidden = true;
@@ -30,13 +46,22 @@ export function createCpuView(root, application) {
     const resources = element('a');
     view.append(title, status, list, heading, output, timing, empty, tableScroll, cancel, resources);
     root.append(view);
+    /** @typedef {{li: HTMLLIElement, link: HTMLAnchorElement, summary: HTMLParagraphElement, output: HTMLParagraphElement}} CpuRow */
+    /** @type {Map<string, CpuRow>} */
     let rows = new Map();
+    /** @type {TerminalState['cpus']['detail'] | undefined} */
     let lastDetail;
+    /** @type {Locale | undefined} */
     let lastLocale;
     return {
+        /**
+         * @param {TerminalState['route']} route
+         * @param {TerminalState['cpus']} state
+         * @param {Locale} locale
+         */
         render(route, state, locale) {
             view.hidden = route.view !== 'cpus';
-            if (view.hidden) return;
+            if (route.view !== 'cpus') return;
             const { t, number } = locale;
             title.textContent = t('cpus');
             resources.textContent = t('backResources');
@@ -57,6 +82,7 @@ export function createCpuView(root, application) {
                           : t('noCpus');
             if (state.notice && state.notice !== state.error) status.textContent += ` ${t(state.notice)}`;
             if (state.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
+            /** @type {Map<string, CpuRow>} */
             const current = new Map();
             for (const cpu of state.cpus) {
                 const entry = rows.get(cpu.key) || {
@@ -122,7 +148,7 @@ export function createCpuView(root, application) {
                     name.append(element('code', item.itemid));
                     row.append(name);
                     const values = [number(item.active), number(item.pending), number(item.stored)];
-                    if (detail.hasTrackingInfo)
+                    if (detail?.hasTrackingInfo)
                         values.push(
                             t('seconds', { count: item.timeSpentCrafting / 1000 }),
                             number(item.craftedTotal),

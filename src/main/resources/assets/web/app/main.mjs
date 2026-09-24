@@ -5,7 +5,6 @@ import { readRoute } from './router.mjs';
 import { mount } from '../themes/default/view.mjs';
 
 const base = new URL('./', location.href);
-let application;
 let leaving = false;
 function returnToLogin() {
     if (leaving) return;
@@ -18,8 +17,8 @@ function returnToLogin() {
     else location.replace(target.href);
 }
 const api = createApi(base, returnToLogin);
-application = createTerminal(api, createPreferences(base));
-const unmount = mount(document.getElementById('app'), application, {
+const application = createTerminal(api, createPreferences(base));
+const unmount = mount(/** @type {HTMLElement} */ (document.getElementById('app')), application, {
     base,
     async logout() {
         await api.logout();

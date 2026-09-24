@@ -32,11 +32,12 @@ jobs:
       - name: Test web terminal behavior
         run: node --test src/test/js/*.test.cjs
 
-      - name: Check frontend formatting and lint
+      - name: Check frontend formatting, lint and types
         run: |
           npm ci
           npm run format:check
           npm run lint
+          npm run typecheck
 
       - name: Test new terminal in Chromium
         working-directory: tools/ui-tests

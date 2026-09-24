@@ -3,6 +3,10 @@ import globals from 'globals';
 
 export default [
     {
+        files: ['src/main/resources/assets/web/**/*.mjs', '*.config.mjs', 'tools/ui-tests/**/*.cjs'],
+        rules: { 'no-var': 'error', 'prefer-const': 'error' }
+    },
+    {
         files: ['src/main/resources/assets/web/**/*.mjs'],
         languageOptions: { globals: globals.browser },
         rules: js.configs.recommended.rules

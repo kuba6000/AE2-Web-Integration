@@ -1,12 +1,27 @@
+/**
+ * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
+ * @typedef {Terminal['state']} TerminalState
+ * @typedef {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} Locale
+ */
+
 import { historyHref } from '../../app/router.mjs';
 import { renderHistoryTimeline } from './history-timeline.mjs';
 
+/**
+ * @template {keyof HTMLElementTagNameMap} Tag
+ * @param {Tag} tag
+ * @param {string} [text]
+ * @returns {HTMLElementTagNameMap[Tag]}
+ */
 function element(tag, text = '') {
     const node = document.createElement(tag);
     node.textContent = text;
     return node;
 }
 
+/**
+ * @param {HTMLElement} root
+ */
 export function createHistoryView(root) {
     const view = element('section');
     view.hidden = true;
@@ -20,13 +35,22 @@ export function createHistoryView(root) {
     const back = element('a');
     view.append(title, status, list, detail, back);
     root.append(view);
+    /** @typedef {{li: HTMLLIElement, link: HTMLAnchorElement, time: HTMLParagraphElement}} HistoryRow */
+    /** @type {Map<import('../../app/api-types.mjs').HistoryEntry['id'], HistoryRow>} */
     let entries = new Map();
+    /** @type {TerminalState['history']['detail'] | undefined} */
     let lastDetail;
+    /** @type {Locale | undefined} */
     let lastLocale;
     return {
+        /**
+         * @param {TerminalState['route']} route
+         * @param {TerminalState['history']} state
+         * @param {Locale} locale
+         */
         render(route, state, locale) {
             view.hidden = route.view !== 'history';
-            if (view.hidden) return;
+            if (route.view !== 'history') return;
             const { t, number, dateTime } = locale;
             title.textContent = t('history');
             status.textContent = state.error
@@ -44,7 +68,8 @@ export function createHistoryView(root) {
                 route.entryId !== null
                     ? historyHref(route.gridKey)
                     : `#/grids/${encodeURIComponent(route.gridKey)}/items`;
-            const focused = document.activeElement;
+            const focused = /** @type {HTMLElement | null} */ (document.activeElement);
+            /** @type {Map<import('../../app/api-types.mjs').HistoryEntry['id'], HistoryRow>} */
             const current = new Map();
             state.entries.forEach((entry, index) => {
                 const row = entries.get(entry.id) || { li: element('li'), link: element('a'), time: element('p') };

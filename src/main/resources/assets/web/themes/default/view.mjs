@@ -1,3 +1,9 @@
+/**
+ * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
+ * @typedef {Terminal['state']} TerminalState
+ * @typedef {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} Locale
+ */
+
 import { createTranslator } from '../../app/i18n.mjs';
 import { navigateToGrid, cpuHref, historyHref } from '../../app/router.mjs';
 import { createCraftingView } from './crafting.mjs';
@@ -7,6 +13,13 @@ import { createSettingsView } from './settings.mjs';
 
 const PAGE_SIZE = 100;
 
+/**
+ * @template {keyof HTMLElementTagNameMap} Tag
+ * @param {Tag} tag
+ * @param {string} [text]
+ * @param {string} [className]
+ * @returns {HTMLElementTagNameMap[Tag]}
+ */
 function element(tag, text = '', className = '') {
     const node = document.createElement(tag);
     node.textContent = text;
@@ -23,11 +36,20 @@ const symbols = {
     quantity: '<path d="M3 5h16M3 12h11M3 19h6M19 10v11m-3-3 3 3 3-3"/>',
     id: '<path d="M9 3 6 21M18 3l-3 18M3 9h18M2 15h18"/>'
 };
+/**
+ * @param {'filter' | 'sort'} group
+ * @param {keyof typeof symbols} value
+ */
 function iconButton(group, value) {
     return `<button type="button" class="tool-button" data-preference="${group}" data-value="${value}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${symbols[value]}</svg></button>`;
 }
 
-/** Theme renderer. Server operations and preference ownership are supplied by the application. */
+/**
+ * Theme renderer. Server operations and preference ownership are supplied by the application.
+ * @param {HTMLElement} root
+ * @param {Terminal} application
+ * @param {{base: URL, logout: () => Promise<void>}} options
+ */
 export function mount(root, application, { base, logout }) {
     root.innerHTML = `<header class="site-header"><div class="brand"><span class="brand-mark" aria-hidden="true">ME</span><h1>AE2 <span>Web Integration</span></h1></div><div class="preferences">
         <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
@@ -38,8 +60,8 @@ export function mount(root, application, { base, logout }) {
         <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a></nav>
         <div class="workspace" id="workspace">
         <div class="terminal-tools" id="terminal-tools" hidden>
-        <div role="group" data-label="resources">${['all', 'stored', 'craftable'].map((value) => iconButton('filter', value)).join('')}</div>
-        <div role="group" data-label="sort">${['name', 'quantity', 'id'].map((value) => iconButton('sort', value)).join('')}</div></div>
+        <div role="group" data-label="resources">${/** @type {const} */ (['all', 'stored', 'craftable']).map((value) => iconButton('filter', value)).join('')}</div>
+        <div role="group" data-label="sort">${/** @type {const} */ (['name', 'quantity', 'id']).map((value) => iconButton('sort', value)).join('')}</div></div>
         <div class="window-frame" id="window">
         <div id="network-message" role="status"></div>
         <section id="home"><h2 data-text="home"></h2><p data-text="homeHelp"></p><div id="networks"></div></section>
@@ -52,7 +74,51 @@ export function mount(root, application, { base, logout }) {
         <p id="missing" data-text="invalidRoute" hidden></p></div>
         <aside id="resource-panel" hidden><h3 data-text="details"></h3><div id="details"></div><div id="order"></div></aside></div>
         <footer><span id="updated" aria-live="off"></span><a id="legacy" data-text="previous"></a></footer>`;
-    const find = (selector) => root.querySelector(selector);
+    /**
+     * IDs and element types belong to the static markup created above.
+     * @typedef {{
+     *   '#language': HTMLElementTagNameMap['select'],
+     *   '#appearance': HTMLElementTagNameMap['select'],
+     *   '#logout': HTMLElementTagNameMap['button'],
+     *   '#network': HTMLElementTagNameMap['select'],
+     *   '#refresh': HTMLElementTagNameMap['button'],
+     *   '#auto-refresh': HTMLElementTagNameMap['input'],
+     *   '#terminal-link': HTMLElementTagNameMap['a'],
+     *   '#cpu-link': HTMLElementTagNameMap['a'],
+     *   '#history-link': HTMLElementTagNameMap['a'],
+     *   '#settings-link': HTMLElementTagNameMap['a'],
+     *   '#workspace': HTMLElementTagNameMap['div'],
+     *   '#terminal-tools': HTMLElementTagNameMap['div'],
+     *   '#window': HTMLElementTagNameMap['div'],
+     *   '#network-message': HTMLElementTagNameMap['div'],
+     *   '#home': HTMLElementTagNameMap['section'],
+     *   '#networks': HTMLElementTagNameMap['div'],
+     *   '#terminal': HTMLElementTagNameMap['section'],
+     *   '#search': HTMLElementTagNameMap['input'],
+     *   '#item-message': HTMLElementTagNameMap['p'],
+     *   '#item-scroll': HTMLElementTagNameMap['div'],
+     *   '#items': HTMLElementTagNameMap['ul'],
+     *   '#pages': HTMLElementTagNameMap['div'],
+     *   '#previous-page': HTMLElementTagNameMap['button'],
+     *   '#page-count': HTMLElementTagNameMap['span'],
+     *   '#next-page': HTMLElementTagNameMap['button'],
+     *   '#clear': HTMLElementTagNameMap['button'],
+     *   '#missing': HTMLElementTagNameMap['p'],
+     *   '#resource-panel': HTMLElementTagNameMap['aside'],
+     *   '#details': HTMLElementTagNameMap['div'],
+     *   '#order': HTMLElementTagNameMap['div'],
+     *   '#updated': HTMLElementTagNameMap['span'],
+     *   '#legacy': HTMLElementTagNameMap['a'],
+     * }} ViewElements
+     */
+    /**
+     * @template {keyof ViewElements} Selector
+     * @param {Selector} selector
+     * @returns {ViewElements[Selector]}
+     */
+    const find = (selector) => /** @type {ViewElements[Selector]} */ (root.querySelector(selector));
+    /** @type {NodeListOf<HTMLButtonElement & {dataset: {preference: 'filter' | 'sort', value: keyof typeof symbols}}>} */
+    const toolButtons = root.querySelectorAll('.tool-button');
     const craftingView = createCraftingView(find('#window'), application);
     const cpuView = createCpuView(find('#window'), application);
     const historyView = createHistoryView(find('#window'));
@@ -63,24 +129,40 @@ export function mount(root, application, { base, logout }) {
     tooltip.role = 'tooltip';
     tooltip.hidden = true;
     root.append(tooltip);
+    /** @type {{row: ReturnType<typeof createItemRow>, x: number, y: number, pointer: boolean} | null | undefined} */
     let itemTooltip;
     let updatingRows = false;
+    /** @type {TerminalState['preferences']['language']} */
     let language;
+    /** @type {Locale} */
     let locale;
     let page = 0;
+    /** @type {{items: TerminalState['items'], signature: string} | undefined} */
     let listInput;
+    /** @type {TerminalState} */
     let state;
+    /** @type {ReturnType<typeof createItemRow>[]} */
     let rows = [];
+    /** @type {TerminalState['items']} */
     let allFiltered = [];
     function hideTooltip() {
         itemTooltip = null;
         tooltip.hidden = true;
     }
+    /**
+     * @param {number} x
+     * @param {number} y
+     */
     function positionTooltip(x, y) {
         const box = tooltip.getBoundingClientRect();
         tooltip.style.left = `${Math.max(8, Math.min(x + 14, innerWidth - box.width - 8))}px`;
         tooltip.style.top = `${Math.max(8, y + box.height + 24 > innerHeight ? y - box.height - 10 : y + 16)}px`;
     }
+    /**
+     * @param {TerminalState['items'][number]} item
+     * @param {number} x
+     * @param {number} y
+     */
     function showTooltip(item, x, y) {
         tooltip.replaceChildren(
             element('strong', item.itemname),
@@ -91,6 +173,12 @@ export function mount(root, application, { base, logout }) {
         tooltip.hidden = false;
         positionTooltip(x, y);
     }
+    /**
+     * @param {ReturnType<typeof createItemRow>} row
+     * @param {number} x
+     * @param {number} y
+     * @param {boolean} pointer
+     */
     function showItemTooltip(row, x, y, pointer) {
         itemTooltip = { row, x, y, pointer };
         showTooltip(row.item, x, y);
@@ -111,13 +199,15 @@ export function mount(root, application, { base, logout }) {
     function updateLabels() {
         locale = createTranslator(language);
         document.documentElement.lang = language;
-        root.querySelectorAll('[data-text]').forEach((node) => {
+        /** @type {NodeListOf<HTMLElement & {dataset: {text: string}}>} */ (
+            root.querySelectorAll('[data-text]')
+        ).forEach((node) => {
             node.textContent = locale.t(node.dataset.text);
         });
-        root.querySelectorAll('[data-label]').forEach((node) =>
-            node.setAttribute('aria-label', locale.t(node.dataset.label))
-        );
-        root.querySelectorAll('.tool-button').forEach((button) => {
+        /** @type {NodeListOf<HTMLElement & {dataset: {label: string}}>} */ (
+            root.querySelectorAll('[data-label]')
+        ).forEach((node) => node.setAttribute('aria-label', locale.t(node.dataset.label)));
+        toolButtons.forEach((button) => {
             const label =
                 button.dataset.preference === 'sort'
                     ? `${locale.t('sort')}: ${locale.t(button.dataset.value)}`
@@ -160,8 +250,12 @@ export function mount(root, application, { base, logout }) {
                     : '';
         find('#network-message').textContent = networkMessage;
         const networks = find('#networks');
-        const focused = networks.contains(document.activeElement) ? document.activeElement : null;
-        const links = new Map([...networks.children].map((link) => [link.dataset.key, link]));
+        const focused = /** @type {HTMLAnchorElement | null} */ (
+            networks.contains(document.activeElement) ? document.activeElement : null
+        );
+        const links = new Map(
+            /** @type {HTMLAnchorElement[]} */ ([...networks.children]).map((link) => [link.dataset.key, link])
+        );
         state.grids.forEach((grid, index) => {
             const link = links.get(grid.key) || element('a', '', 'network');
             link.dataset.key = grid.key;
@@ -233,6 +327,9 @@ export function mount(root, application, { base, logout }) {
         find('#item-message').textContent = message;
         find('#clear').hidden = state.itemStatus !== 'ready' || !state.items.length || !!allFiltered.length;
     }
+    /**
+     * @param {TerminalState['items'][number]} item
+     */
     function createItemRow(item) {
         const row = {
             item,
@@ -322,6 +419,9 @@ export function mount(root, application, { base, logout }) {
             if (order.parentNode !== find('#order')) find('#order').append(order);
         }
     }
+    /**
+     * @param {TerminalState} next
+     */
     function render(next) {
         state = next;
         if (language !== state.preferences.language) {
@@ -331,13 +431,13 @@ export function mount(root, application, { base, logout }) {
         document.documentElement.dataset.appearance = state.preferences.appearance;
         find('#language').value = language;
         find('#appearance').value = state.preferences.appearance;
-        root.querySelectorAll('.tool-button').forEach((button) =>
+        toolButtons.forEach((button) =>
             button.setAttribute(
                 'aria-pressed',
                 String(state.preferences[button.dataset.preference] === button.dataset.value)
             )
         );
-        root.querySelectorAll('[data-view]').forEach((link) => {
+        /** @type {NodeListOf<HTMLAnchorElement>} */ (root.querySelectorAll('[data-view]')).forEach((link) => {
             if (
                 link.dataset.view === state.route.view ||
                 (link.dataset.view === 'items' && state.route.view === 'plan')
@@ -362,21 +462,27 @@ export function mount(root, application, { base, logout }) {
         settingsView.render(state.route, state.settings, locale);
         find('#cpu-link').hidden = !state.route.gridKey;
         find('#terminal-link').hidden = !state.route.gridKey;
-        find('#terminal-link').href = `#/grids/${encodeURIComponent(state.route.gridKey)}/items`;
+        find('#terminal-link').href = `#/grids/${encodeURIComponent(String(state.route.gridKey))}/items`;
         find('#cpu-link').href = cpuHref(state.route.gridKey);
         find('#history-link').hidden = !state.route.gridKey;
         find('#history-link').href = historyHref(state.route.gridKey);
         find('#settings-link').hidden = !state.route.gridKey;
-        find('#settings-link').href = `#/grids/${encodeURIComponent(state.route.gridKey)}/settings`;
+        find('#settings-link').href = `#/grids/${encodeURIComponent(String(state.route.gridKey))}/settings`;
         find('#updated').textContent = state.updatedAt
             ? locale.t('updated', { time: locale.time(state.updatedAt) })
             : '';
     }
-    find('#network').addEventListener('change', (event) => navigateToGrid(event.target.value));
-    find('#search').addEventListener('input', (event) => application.search(event.target.value));
-    for (const name of ['language', 'appearance'])
-        find(`#${name}`).addEventListener('change', (event) => application.preference(name, event.target.value));
-    root.querySelectorAll('.tool-button').forEach((button) => {
+    const network = find('#network');
+    network.addEventListener('change', () => navigateToGrid(network.value));
+    const search = find('#search');
+    search.addEventListener('input', () => application.search(search.value));
+    for (const name of /** @type {const} */ (['language', 'appearance'])) {
+        const select = /** @type {HTMLSelectElement & {value: TerminalState['preferences'][typeof name]}} */ (
+            find(`#${name}`)
+        );
+        select.addEventListener('change', () => application.preference(name, select.value));
+    }
+    toolButtons.forEach((button) => {
         const show = () => {
             itemTooltip = null;
             tooltip.textContent = button.getAttribute('aria-label');
@@ -395,9 +501,8 @@ export function mount(root, application, { base, logout }) {
         button.addEventListener('focus', show);
         button.addEventListener('blur', hideTooltip);
     });
-    find('#auto-refresh').addEventListener('change', (event) =>
-        application.preference('autoRefresh', event.target.checked)
-    );
+    const autoRefresh = find('#auto-refresh');
+    autoRefresh.addEventListener('change', () => application.preference('autoRefresh', autoRefresh.checked));
     find('#refresh').addEventListener('click', () => application.refresh({ reloadDetail: true }));
     find('#clear').addEventListener('click', () => {
         application.preference('filter', 'all');
@@ -419,10 +524,13 @@ export function mount(root, application, { base, logout }) {
         try {
             await logout();
         } catch (error) {
-            find('#network-message').textContent = locale.t(error.status);
+            find('#network-message').textContent = locale.t(
+                /** @type {import('../../app/api.mjs').ApiError} */ (error).status
+            );
             find('#logout').disabled = false;
         }
     });
+    /** @param {KeyboardEvent} event */
     const keydown = (event) => {
         if (event.key === 'Escape') hideTooltip();
     };

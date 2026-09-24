@@ -1,5 +1,13 @@
-/** Grid CPU summaries and selected current work. The application owns refresh scheduling. */
+/**
+ * @typedef {{status: 'idle' | 'loading' | 'ready' | 'error', cpus: (import('./api-types.mjs').CpuInfo & {key: string})[], detail: import('./api-types.mjs').CpuDetail | null, error: string | null, cancelling: boolean, uncertain: boolean, notice: string | null}} CpuState
+ * @typedef {Partial<Pick<CpuState, 'cancelling' | 'uncertain' | 'notice'>>} CpuOutcome
+ */
+/** Grid CPU summaries and selected current work. The application owns refresh scheduling.
+ * @param {import('./api.mjs').Api} api
+ * @param {() => void} changed
+ */
 export function createCpuMonitor(api, changed) {
+    /** @type {CpuState} */
     const state = {
         status: 'idle',
         cpus: [],
@@ -9,19 +17,26 @@ export function createCpuMonitor(api, changed) {
         uncertain: false,
         notice: null
     };
+    /** @type {Map<string, CpuOutcome>} */
     const outcomes = new Map();
+    /** @type {import('./router.mjs').Route | {view?: undefined, gridKey?: undefined}} */
     let route = {};
     let generation = 0;
+    /** @type {AbortController | undefined} */
     let request;
     let reading = false;
     let disposed = false;
-    const identity = () => `${route.gridKey}/${route.cpuKey}`;
+    const identity = () => `${route.gridKey}/${route.view === 'cpus' ? route.cpuKey : undefined}`;
 
+    /** @param {string} status */
     function fail(status) {
         state.error = status;
         state.detail = null;
         state.status = 'error';
-        state.cpus = status === 'CPU_NOT_FOUND' ? state.cpus.filter((cpu) => cpu.key !== route.cpuKey) : [];
+        state.cpus =
+            status === 'CPU_NOT_FOUND'
+                ? state.cpus.filter((cpu) => cpu.key !== (route.view === 'cpus' ? route.cpuKey : undefined))
+                : [];
     }
 
     async function refresh() {
@@ -45,7 +60,8 @@ export function createCpuMonitor(api, changed) {
                 state.detail = detail;
             }
             state.status = 'ready';
-        } catch (error) {
+        } catch (caught) {
+            const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
             if (version !== generation || error.name === 'AbortError') return;
             fail(error.status || 'NETWORK_ERROR');
         } finally {
@@ -58,6 +74,7 @@ export function createCpuMonitor(api, changed) {
     return {
         state,
         refresh,
+        /** @param {import('./router.mjs').Route} next */
         route(next) {
             generation++;
             request?.abort();
@@ -77,6 +94,7 @@ export function createCpuMonitor(api, changed) {
                 outcomes.get(identity())
             );
         },
+        /** @param {string | null} error */
         block(error) {
             generation++;
             request?.abort();
@@ -103,11 +121,13 @@ export function createCpuMonitor(api, changed) {
             state.notice = null;
             changed();
             outcomes.set(key, { cancelling: true });
+            /** @type {CpuOutcome} */
             let outcome;
             try {
-                await api.cancelCpu(current.gridKey, current.cpuKey);
+                await api.cancelCpu(current.gridKey, /** @type {string} */ (current.cpuKey));
                 outcome = { notice: 'cpuCancelled' };
-            } catch (error) {
+            } catch (caught) {
+                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
                 outcome =
                     !error.status ||
                     ['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'].includes(error.status)
@@ -118,8 +138,9 @@ export function createCpuMonitor(api, changed) {
             outcomes.set(key, outcome);
             if (route.view !== 'cpus' || identity() !== key) return;
             Object.assign(state, { cancelling: false, detail: null }, outcome);
-            if (['CPU_NOT_FOUND', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(outcome.notice)) fail(outcome.notice);
-            else if (!['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.error)) await refresh();
+            if (['CPU_NOT_FOUND', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(outcome.notice ?? ''))
+                fail(/** @type {string} */ (outcome.notice));
+            else if (!['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.error ?? '')) await refresh();
             changed();
         },
         dispose() {

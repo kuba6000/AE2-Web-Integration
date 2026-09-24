@@ -1,17 +1,35 @@
+/**
+ * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
+ * @typedef {Terminal['state']} TerminalState
+ * @typedef {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} Locale
+ */
+
+/**
+ * @template {keyof HTMLElementTagNameMap} Tag
+ * @param {Tag} tag
+ * @param {string} [text]
+ * @returns {HTMLElementTagNameMap[Tag]}
+ */
 function element(tag, text = '') {
     const node = document.createElement(tag);
     node.textContent = text;
     return node;
 }
 
+/** @type {Record<string, string>} */
 const kinds = {
     controller: 'accessController',
     wireless_access_point: 'accessWireless',
     terminal: 'accessTerminal',
     security_terminal: 'accessSecurity'
 };
+/** @type {Record<string, string>} */
 const reasons = { node_owner: 'accessBlockOwner', security_owner: 'accessSecurityOwner', security_card: 'accessCard' };
 
+/**
+ * @param {HTMLElement} root
+ * @param {Terminal} application
+ */
 export function createSettingsView(root, application) {
     const view = element('section');
     view.hidden = true;
@@ -39,12 +57,19 @@ export function createSettingsView(root, application) {
     const back = element('a');
     view.append(title, status, form, accessTitle, sources, back);
     root.append(view);
+    /** @type {TerminalState['settings']['sources'] | undefined} */
     let lastSources;
+    /** @type {Locale | undefined} */
     let lastLocale;
     return {
+        /**
+         * @param {TerminalState['route']} route
+         * @param {TerminalState['settings']} state
+         * @param {Locale} locale
+         */
         render(route, state, locale) {
             view.hidden = route.view !== 'settings';
-            if (view.hidden) return;
+            if (route.view !== 'settings') return;
             const { t } = locale;
             title.textContent = t('gridSettings');
             labelText.textContent = t('recordHistory');

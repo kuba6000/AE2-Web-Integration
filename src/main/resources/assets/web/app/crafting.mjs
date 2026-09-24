@@ -1,7 +1,17 @@
+/**
+ * @typedef {{itemKey: string, itemname: string, quantity: number}} PlanMetadata
+ * @typedef {'create' | 'submit' | 'delete'} Mutation
+ * @typedef {{status: 'idle' | 'loading' | 'calculating' | 'ready' | 'submitted' | 'deleted' | 'unavailable' | 'error', plan: import('./api-types.mjs').Plan | null, cpus: (import('./api-types.mjs').CpuInfo & {key: string, eligible: boolean | undefined})[], selectedCpu: string, mutation: Mutation | null, uncertain: Mutation | null, error: string | null | undefined, errorDetail: string | null, metadata: PlanMetadata | null}} CraftingState
+ * @typedef {Partial<Pick<CraftingState, 'mutation' | 'uncertain' | 'status'>>} CraftingOutcome
+ */
 import { navigateToPlan } from './router.mjs';
 
-/** Calculation state and actions. The application supplies route lifetime and scheduling. */
+/** Calculation state and actions. The application supplies route lifetime and scheduling.
+ * @param {import('./api.mjs').Api} api
+ * @param {() => void} changed
+ */
 export function createCrafting(api, changed) {
+    /** @type {CraftingState} */
     const state = {
         status: 'idle',
         plan: null,
@@ -13,15 +23,20 @@ export function createCrafting(api, changed) {
         errorDetail: null,
         metadata: null
     };
+    /** @type {Map<string, PlanMetadata>} */
     const metadata = new Map();
+    /** @type {Map<string, CraftingOutcome>} */
     const outcomes = new Map();
+    /** @type {import('./router.mjs').Route | {view?: undefined, gridKey?: undefined}} */
     let route = {};
     let generation = 0;
+    /** @type {AbortController | undefined} */
     let request;
     let reading = false;
     let selectedOnce = false;
     let readFailed = false;
     const identity = () => `${route.gridKey}/${route.view === 'plan' ? route.planId : 'create'}`;
+    /** @param {string} key @param {CraftingOutcome | null} outcome */
     function finishMutation(key, outcome) {
         if (outcome) outcomes.set(key, outcome);
         else outcomes.delete(key);
@@ -30,8 +45,10 @@ export function createCrafting(api, changed) {
             changed();
         }
     }
+    /** @param {import('./api.mjs').ApiFailure} error */
     const isUncertain = (error) =>
         !error.status || ['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'].includes(error.status);
+    /** @param {import('./api-types.mjs').CpuInfo} cpu */
     const eligible = (cpu) =>
         state.plan?.isDone &&
         !state.plan.isSimulating &&
@@ -77,13 +94,14 @@ export function createCrafting(api, changed) {
                     selectedOnce = true;
                 }
             }
-        } catch (error) {
+        } catch (caught) {
+            const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
             if (version !== generation || error.name === 'AbortError') return;
             state.error = error.status;
             readFailed = true;
             state.cpus = [];
             state.selectedCpu = '';
-            if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status)) {
+            if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
                 state.plan = null;
                 state.metadata = null;
                 state.status = error.status === 'INVALID_ID' ? 'unavailable' : 'error';
@@ -100,6 +118,7 @@ export function createCrafting(api, changed) {
         get pending() {
             return route.view === 'plan' && state.status === 'calculating' && !state.error;
         },
+        /** @param {import('./router.mjs').Route} next */
         route(next) {
             generation++;
             request?.abort();
@@ -121,6 +140,7 @@ export function createCrafting(api, changed) {
             Object.assign(state, outcomes.get(identity()));
         },
         refresh,
+        /** @param {string | null} error */
         block(error) {
             generation++;
             request?.abort();
@@ -137,10 +157,12 @@ export function createCrafting(api, changed) {
             });
             changed();
         },
+        /** @param {string} key */
         selectCpu(key) {
             state.selectedCpu = state.cpus.find((cpu) => cpu.key === key && cpu.eligible)?.key || '';
             changed();
         },
+        /** @param {import('./api-types.mjs').Item | null} item @param {number} quantity */
         async create(item, quantity) {
             if (
                 route.view !== 'items' ||
@@ -165,7 +187,8 @@ export function createCrafting(api, changed) {
                 finishMutation(key, null);
                 if (version !== generation) return;
                 navigateToPlan(gridKey, jobID);
-            } catch (error) {
+            } catch (caught) {
+                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
                 finishMutation(key, isUncertain(error) ? { uncertain: 'create' } : null);
                 if (version === generation) state.error = error.status;
             } finally {
@@ -193,10 +216,13 @@ export function createCrafting(api, changed) {
             state.errorDetail = null;
             changed();
             try {
-                await api.submitPlan(route.gridKey, route.planId, state.selectedCpu);
+                // A ready plan and eligible CPU belong to the active plan route.
+                const current = /** @type {Extract<import('./router.mjs').Route, {view: 'plan'}>} */ (route);
+                await api.submitPlan(current.gridKey, current.planId, state.selectedCpu);
                 finishMutation(key, { status: 'submitted' });
                 if (version === generation) state.status = 'submitted';
-            } catch (error) {
+            } catch (caught) {
+                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
                 finishMutation(key, isUncertain(error) ? { uncertain: 'submit' } : null);
                 if (version === generation) {
                     if (isUncertain(error)) state.uncertain = 'submit';
@@ -215,7 +241,7 @@ export function createCrafting(api, changed) {
                         state.selectedCpu = '';
                         readFailed = true;
                     }
-                    if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status)) {
+                    if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
                         state.status = error.status === 'INVALID_ID' ? 'unavailable' : 'error';
                         state.plan = null;
                         state.metadata = null;
@@ -251,11 +277,12 @@ export function createCrafting(api, changed) {
                 await api.deletePlan(route.gridKey, route.planId);
                 finishMutation(key, { status: 'deleted' });
                 if (version === generation) state.status = 'deleted';
-            } catch (error) {
+            } catch (caught) {
+                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
                 finishMutation(key, isUncertain(error) ? { uncertain: 'delete' } : null);
                 if (version === generation) {
                     state.error = error.status;
-                    if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status)) {
+                    if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
                         state.status = error.status === 'INVALID_ID' ? 'unavailable' : 'error';
                         state.plan = null;
                         state.metadata = null;

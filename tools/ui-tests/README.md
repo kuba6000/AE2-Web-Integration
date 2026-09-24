@@ -25,7 +25,7 @@ grouped access information, and delayed reads or saves across navigation and acc
 Set `BROWSER_CHANNEL=msedge` to use an installed Microsoft Edge instead of downloaded
 Chromium. Playwright is a development dependency and is not included in mod JARs.
 
-## Formatting and lint
+## Frontend checks
 
 From the core repository root, using Node.js 22.13+ on the 22.x line, or Node.js 24+:
 
@@ -34,11 +34,14 @@ npm ci
 npm run format
 npm run format:check
 npm run lint
+npm run typecheck
 ```
 
 Prettier formats the new frontend in `src/main/resources/assets/web`, these browser tests,
 and their tooling configuration. ESLint checks JavaScript; Stylelint checks CSS. Formatting
-is owned by Prettier, with no formatting rules in the linters. CI runs both checks.
+is owned by Prettier, with no formatting rules in the linters. TypeScript checks the new
+frontend's JavaScript and JSDoc contracts in strict mode without generating files. CI runs
+formatting, lint and type checks.
 The legacy web assets are outside this scope. These dependencies stay outside `resources`
 and are not packaged in mod JARs. In IntelliJ IDEA, select the root
 `node_modules/prettier` package to use the same formatter and configuration on save.
