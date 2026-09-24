@@ -21,6 +21,7 @@
     --background: #262830;
     --panel: #c6c6c6;
     --surface: #8b8b8b;
+    --details-frame: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20shape-rendering%3D%22crispEdges%22%3E%3Cpath%20fill%3D%22%23373737%22%20d%3D%22M0%200H1V2H2V3H4V4H20V5H22V6H23V8H24V16H23V18H22V19H20V20H4V21H2V22H1V24H0Z%22%2F%3E%3Cpath%20fill%3D%22%23fff%22%20d%3D%22M0%200H1V2H2V3H4V4H20V5H22V6H23V8V16H22V18H20V19H4V20H2V21H1V24H0Z%22%2F%3E%3Cpath%20fill%3D%22%238b8b8b%22%20d%3D%22M0%202H1V3H2V4H4V5H20V6H22V8H23V16H22V18H20V19H4V20H2V21H1V22H0Z%22%2F%3E%3C%2Fsvg%3E');
     --slot: #8b8b8b;
     --surface-hover: #a3a3a3;
     --surface-text: #1a1a1a;
@@ -47,6 +48,7 @@
     --background: #262830;
     --panel: #45434e;
     --surface: #514e5b;
+    --details-frame: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20shape-rendering%3D%22crispEdges%22%3E%3Cpath%20fill%3D%22%2326232e%22%20d%3D%22M0%200H1V2H2V3H4V4H20V5H22V6H23V8H24V16H23V18H22V19H20V20H4V21H2V22H1V24H0Z%22%2F%3E%3Cpath%20fill%3D%22%23766e83%22%20d%3D%22M0%200H1V2H2V3H4V4H20V5H22V6H23V8V16H22V18H20V19H4V20H2V21H1V24H0Z%22%2F%3E%3Cpath%20fill%3D%22%23514e5b%22%20d%3D%22M0%202H1V3H2V4H4V5H20V6H22V8H23V16H22V18H20V19H4V20H2V21H1V22H0Z%22%2F%3E%3C%2Fsvg%3E');
     --surface-hover: #625d6e;
     --surface-text: #eeeaf4;
     --quantity-text: #b8d9bf;
@@ -72,6 +74,7 @@
         --background: #262830;
         --panel: #45434e;
         --surface: #514e5b;
+        --details-frame: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20shape-rendering%3D%22crispEdges%22%3E%3Cpath%20fill%3D%22%2326232e%22%20d%3D%22M0%200H1V2H2V3H4V4H20V5H22V6H23V8H24V16H23V18H22V19H20V20H4V21H2V22H1V24H0Z%22%2F%3E%3Cpath%20fill%3D%22%23766e83%22%20d%3D%22M0%200H1V2H2V3H4V4H20V5H22V6H23V8V16H22V18H20V19H4V20H2V21H1V24H0Z%22%2F%3E%3Cpath%20fill%3D%22%23514e5b%22%20d%3D%22M0%202H1V3H2V4H4V5H20V6H22V8H23V16H22V18H20V19H4V20H2V21H1V22H0Z%22%2F%3E%3C%2Fsvg%3E');
         --surface-hover: #625d6e;
         --surface-text: #eeeaf4;
         --quantity-text: #b8d9bf;
@@ -692,13 +695,14 @@ aside {
     z-index: 1;
     min-width: 0;
     margin-top: 26px;
+    margin-left: -12px;
     overflow-wrap: anywhere;
     align-self: start;
-    padding: 15px;
-    background: var(--surface);
+    padding: 5px;
+    background: none;
     color: var(--surface-text);
-    border: 2px solid;
-    border-color: var(--control-edge-light) var(--control-edge-dark) var(--control-edge-dark) var(--control-edge-light);
+    border: 16px solid transparent;
+    border-image: var(--details-frame) 8 fill / 16px stretch;
     font-size: 13px;
     line-height: 1.6;
     min-height: 170px;
@@ -886,6 +890,12 @@ footer a {
     #resource-panel {
         grid-column: 2;
         margin-top: 0;
+        margin-left: 0;
+        background: var(--surface);
+        background-clip: padding-box;
+        border-width: 12px;
+        padding: 9px;
+        border-image: var(--frame-image) 6 / 12px stretch;
         max-height: min(180px, 25dvh);
     }
 }
