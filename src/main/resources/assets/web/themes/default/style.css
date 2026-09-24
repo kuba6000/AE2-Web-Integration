@@ -565,11 +565,11 @@ label {
 #item-scroll {
     flex: 1;
     min-height: 0;
-    overflow-y: scroll;
+    overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-    padding-right: 10px;
+    scrollbar-gutter: stable both-edges;
+    padding-inline: 4px;
 }
 #item-scroll:focus-visible {
     outline: 2px solid var(--accent);

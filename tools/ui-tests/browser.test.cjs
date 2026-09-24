@@ -1955,6 +1955,38 @@ test('home network links keep keyboard focus when polling refreshes the list', a
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
 });
 
+test('resource grid stays centered and stationary when scrolling becomes unnecessary', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.itemsA = Array.from({ length: 90 }, (_, index) => ({
+        ...iron,
+        itemname: `Resource ${String(index).padStart(3, '0')}`,
+        itemKey: `key-${index}`
+    }));
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const resources = page.getByRole('region', { name: 'Resources', exact: true });
+    const first = resources.getByRole('button', { name: /Resource 000/ });
+    await first.waitFor();
+    const before = await first.boundingBox();
+    assert.equal(await resources.evaluate((node) => node.scrollHeight > node.clientHeight), true);
+    const bounds = await resources.boundingBox();
+    const grid = await resources.getByRole('list').boundingBox();
+    assert.ok(
+        Math.abs(grid.x + grid.width / 2 - (bounds.x + bounds.width / 2)) < 1,
+        'The resource grid must be centered independently of its scrollbar'
+    );
+    await page.getByRole('searchbox', { name: 'Search resources' }).fill('Resource 000');
+    assert.equal(await resources.getByRole('button').count(), 1);
+    assert.equal(await resources.evaluate((node) => node.scrollHeight > node.clientHeight), false);
+    const filtered = await first.boundingBox();
+    assert.equal(filtered.x, before.x);
+    assert.equal(filtered.width, before.width);
+    await page.getByRole('searchbox', { name: 'Search resources' }).fill('');
+    const restored = await first.boundingBox();
+    assert.equal(restored.x, before.x);
+    assert.equal(restored.width, before.width);
+});
+
 test('terminal scrolls resources inside the viewport while search and navigation remain reachable', async (t) => {
     const { page, options, base } = await fixture(t);
     options.itemsA = Array.from({ length: 105 }, (_, index) => ({
