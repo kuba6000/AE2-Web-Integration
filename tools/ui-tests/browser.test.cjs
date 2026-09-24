@@ -134,11 +134,52 @@ test('real page browses API resources under a proxy prefix, with search and filt
     await page.getByRole('button', {name: /Certus Quartz Crystal/}).waitFor();
     assert.equal(await page.getByRole('button', {name: /Iron Ingot/}).count(), 0);
     await page.getByRole('searchbox', {name: 'Search resources'}).fill('');
-    await page.getByRole('combobox', {name: 'Resources'}).selectOption('craftable');
+    await page.getByRole('button', {name: 'Craftable', exact: true}).click();
     await page.getByRole('button', {name: /Iron Ingot/}).waitFor();
     assert.equal(await page.getByRole('button', {name: /Certus Quartz Crystal/}).count(), 0);
     assert.equal(options.requests.filter(request => request.path.endsWith('/items')).length, 1,
         'Local search/filter changes reuse the loaded inventory');
+});
+
+test('terminal icon tools expose tooltips and support keyboard filtering and sorting', async t => {
+    const {page, options, base} = await fixture(t);
+    options.itemsA = [iron, quartz, {...iron, itemname: 'Gold Ingot', itemid: 'minecraft:gold_ingot', itemKey: 'gold', quantity: 0}];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', {name: /Iron Ingot/}).waitFor();
+    await page.getByRole('checkbox', {name: 'Refresh automatically'}).uncheck();
+    const all = page.getByRole('button', {name: 'All', exact: true});
+    const craftable = page.getByRole('button', {name: 'Craftable', exact: true});
+    const stored = page.getByRole('button', {name: 'In storage', exact: true});
+    const tooltip = page.getByRole('tooltip');
+    assert.equal(await all.getAttribute('aria-pressed'), 'true');
+    await craftable.hover();
+    await tooltip.waitFor({state: 'visible'});
+    assert.equal(await tooltip.textContent(), await craftable.getAttribute('aria-label'));
+    await page.keyboard.press('Escape');
+    await tooltip.waitFor({state: 'hidden'});
+    await craftable.focus();
+    await tooltip.waitFor({state: 'visible'});
+    await page.keyboard.press('Enter');
+    assert.equal(await craftable.getAttribute('aria-pressed'), 'true');
+    assert.equal(await all.getAttribute('aria-pressed'), 'false');
+    assert.equal(await page.getByRole('button', {name: /Certus Quartz Crystal/}).count(), 0);
+    await page.getByRole('button', {name: /Gold Ingot/}).waitFor();
+    await stored.focus();
+    await page.keyboard.press('Space');
+    assert.equal(await stored.getAttribute('aria-pressed'), 'true');
+    assert.equal(await craftable.getAttribute('aria-pressed'), 'false');
+    await page.getByRole('button', {name: /Certus Quartz Crystal/}).waitFor();
+    assert.equal(await page.getByRole('button', {name: /Gold Ingot/}).count(), 0);
+    const quantity = page.getByRole('button', {name: 'Sort by: Quantity', exact: true});
+    await quantity.focus();
+    await tooltip.waitFor({state: 'visible'});
+    assert.equal(await tooltip.textContent(), await quantity.getAttribute('aria-label'));
+    await page.keyboard.press('Enter');
+    assert.equal(await quantity.getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.getByRole('button', {name: 'Sort by: Name', exact: true}).getAttribute('aria-pressed'), 'false');
+    assert.match(await page.getByRole('button', {name: /Iron Ingot|Certus Quartz Crystal/}).first().textContent(), /Iron Ingot/);
+    assert.equal(options.requests.filter(request => request.path.endsWith('/items')).length, 1,
+        'Icon tools change the loaded inventory locally');
 });
 
 // Public seam: browser controls plus emitted HTTP. A calculation must be explicit, keep its
@@ -819,12 +860,12 @@ test('appearance, language and terminal preferences survive reload and direct li
     await page.getByRole('button', {name: /Iron Ingot/}).waitFor();
     await page.getByRole('checkbox', {name: 'Refresh automatically'}).uncheck();
     await page.getByRole('combobox', {name: 'Appearance'}).selectOption('dark');
-    await page.getByRole('combobox', {name: 'Sort by'}).selectOption('quantity');
+    await page.getByRole('button', {name: 'Sort by: Quantity', exact: true}).click();
     await page.getByRole('combobox', {name: 'Language'}).selectOption('pl');
     await page.reload();
     await page.getByRole('button', {name: /Iron Ingot/}).waitFor();
     assert.equal(await page.getByRole('combobox', {name: 'Wygląd'}).inputValue(), 'dark');
-    assert.equal(await page.getByRole('combobox', {name: 'Sortuj według'}).inputValue(), 'quantity');
+    assert.equal(await page.getByRole('button', {name: 'Sortuj według: Ilości', exact: true}).getAttribute('aria-pressed'), 'true');
     assert.equal(await page.getByRole('checkbox', {name: 'Odświeżaj automatycznie'}).isChecked(), false);
     assert.equal(await page.getByRole('combobox', {name: 'Sieć', exact: true}).inputValue(), gridA);
 });

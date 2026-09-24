@@ -14,31 +14,45 @@ function element(tag, text = '', className = '') {
     return node;
 }
 
-/** Temporary renderer. All server operations and preference ownership are supplied by the application. */
+// Original UI symbols, drawn on a 24px grid; no game textures or external icon assets.
+const symbols = {
+    all: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
+    stored: '<path d="M3 8h18v13H3zM2 3h20v5H2zM9 12h6"/>',
+    craftable: '<path d="m4 3 17 17-3 3L1 6zM14 3l7 7M18 2l4 4-9 9-4-4z"/>',
+    name: '<path d="M3 18 8 4l5 14M5 13h6M16 6h6l-6 12h6"/>',
+    quantity: '<path d="M3 5h16M3 12h11M3 19h6M19 10v11m-3-3 3 3 3-3"/>',
+    id: '<path d="M9 3 6 21M18 3l-3 18M3 9h18M2 15h18"/>'
+};
+function iconButton(group, value) {
+    return `<button type="button" class="tool-button" data-preference="${group}" data-value="${value}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${symbols[value]}</svg></button>`;
+}
+
+/** Theme renderer. Server operations and preference ownership are supplied by the application. */
 export function mount(root, application, { base, logout }) {
-    root.innerHTML = `<header><h1>AE2 Web Integration</h1><div class="preferences">
+    root.innerHTML = `<header class="site-header"><div class="brand"><span class="brand-mark" aria-hidden="true">ME</span><h1>AE2 <span>Web Integration</span></h1></div><div class="preferences">
         <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
         <label><span data-text="appearance"></span><select id="appearance"><option value="system" data-text="system"></option><option value="light" data-text="light"></option><option value="dark" data-text="dark"></option></select></label>
         <button id="logout" data-text="logout"></button></div></header>
-        <nav><a href="#/" data-text="home"></a><a id="cpu-link" data-text="cpus" hidden></a><a id="history-link" data-text="history" hidden></a><a id="settings-link" data-text="gridSettings" hidden></a><a id="legacy" data-text="previous"></a></nav>
-        <p class="hint" data-text="previousHelp"></p>
         <section class="network-bar"><label><span data-text="network"></span><select id="network"></select></label>
         <button id="refresh" data-text="refresh"></button><label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label></section>
+        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a></nav>
+        <div class="window-frame" id="window">
         <div id="network-message" role="status"></div>
         <section id="home"><h2 data-text="home"></h2><p data-text="homeHelp"></p><div id="networks"></div></section>
-        <section id="terminal" hidden><h2 data-text="terminal"></h2><div class="filters">
-        <label class="search"><span data-text="search"></span><input id="search" type="search"></label>
-        <label><span data-text="resources"></span><select id="filter"><option value="all" data-text="all"></option><option value="stored" data-text="stored"></option><option value="craftable" data-text="craftable"></option></select></label>
-        <label><span data-text="sort"></span><select id="sort"><option value="name" data-text="name"></option><option value="quantity" data-text="quantity"></option><option value="id" data-text="id"></option></select></label></div>
-        <p id="item-message" role="status"></p><div class="terminal-layout"><div><ul id="items"></ul>
+        <section id="terminal" hidden><div class="terminal-heading"><h2 data-text="terminal"></h2>
+        <label class="search"><span class="sr-only" data-text="search"></span><input id="search" type="search"></label></div>
+        <div class="terminal-body"><div class="terminal-tools">
+        <div role="group" data-label="resources">${['all','stored','craftable'].map(value => iconButton('filter', value)).join('')}</div>
+        <div role="group" data-label="sort">${['name','quantity','id'].map(value => iconButton('sort', value)).join('')}</div></div>
+        <div class="terminal-content"><p id="item-message" role="status"></p><div class="terminal-layout"><div><ul id="items"></ul>
         <div id="pages"><button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button></div>
-        <button id="clear" data-text="resetSearch" hidden></button></div><aside><h3 data-text="details"></h3><div id="details"></div><div id="order"></div></aside></div></section>
-        <p id="missing" data-text="invalidRoute" hidden></p><footer id="updated" aria-live="off"></footer>`;
+        <button id="clear" data-text="resetSearch" hidden></button></div><aside><h3 data-text="details"></h3><div id="details"></div><div id="order"></div></aside></div></div></div></section>
+        <p id="missing" data-text="invalidRoute" hidden></p></div><footer><span id="updated" aria-live="off"></span><a id="legacy" data-text="previous"></a></footer>`;
     const find = selector => root.querySelector(selector);
-    const craftingView = createCraftingView(root, application);
-    const cpuView = createCpuView(root, application);
-    const historyView = createHistoryView(root);
-    const settingsView = createSettingsView(root, application);
+    const craftingView = createCraftingView(find('#window'), application);
+    const cpuView = createCpuView(find('#window'), application);
+    const historyView = createHistoryView(find('#window'));
+    const settingsView = createSettingsView(find('#window'), application);
     find('#legacy').href = base.href;
     const tooltip = element('div', '', 'tooltip');
     tooltip.id = 'resource-tooltip'; tooltip.role = 'tooltip'; tooltip.hidden = true;
@@ -67,6 +81,11 @@ export function mount(root, application, { base, logout }) {
         locale = createTranslator(language);
         document.documentElement.lang = language;
         root.querySelectorAll('[data-text]').forEach(node => { node.textContent = locale.t(node.dataset.text); });
+        root.querySelectorAll('[data-label]').forEach(node => node.setAttribute('aria-label', locale.t(node.dataset.label)));
+        root.querySelectorAll('.tool-button').forEach(button => {
+            const label = button.dataset.preference === 'sort' ? `${locale.t('sort')}: ${locale.t(button.dataset.value)}` : locale.t(button.dataset.value);
+            button.setAttribute('aria-label', label);
+        });
         find('#search').placeholder = locale.t('searchHint');
         find('#previous-page').setAttribute('aria-label', locale.t('previousPage'));
         find('#next-page').setAttribute('aria-label', locale.t('nextPage'));
@@ -184,8 +203,11 @@ export function mount(root, application, { base, logout }) {
         document.documentElement.dataset.appearance = state.preferences.appearance;
         find('#language').value = language;
         find('#appearance').value = state.preferences.appearance;
-        find('#filter').value = state.preferences.filter;
-        find('#sort').value = state.preferences.sort;
+        root.querySelectorAll('.tool-button').forEach(button => button.setAttribute('aria-pressed', String(state.preferences[button.dataset.preference] === button.dataset.value)));
+        root.querySelectorAll('[data-view]').forEach(link => {
+            if (link.dataset.view === state.route.view || link.dataset.view === 'items' && state.route.view === 'plan') link.setAttribute('aria-current', 'page');
+            else link.removeAttribute('aria-current');
+        });
         find('#auto-refresh').checked = state.preferences.autoRefresh;
         if (find('#search').value !== state.search) find('#search').value = state.search;
         find('#home').hidden = state.route.view !== 'home';
@@ -197,6 +219,8 @@ export function mount(root, application, { base, logout }) {
         historyView.render(state.route, state.history, locale);
         settingsView.render(state.route, state.settings, locale);
         find('#cpu-link').hidden = !state.route.gridKey;
+        find('#terminal-link').hidden = !state.route.gridKey;
+        find('#terminal-link').href = `#/grids/${encodeURIComponent(state.route.gridKey)}/items`;
         find('#cpu-link').href = cpuHref(state.route.gridKey);
         find('#history-link').hidden = !state.route.gridKey;
         find('#history-link').href = historyHref(state.route.gridKey);
@@ -206,7 +230,19 @@ export function mount(root, application, { base, logout }) {
     }
     find('#network').addEventListener('change', event => navigateToGrid(event.target.value));
     find('#search').addEventListener('input', event => application.search(event.target.value));
-    for (const name of ['language', 'appearance', 'filter', 'sort']) find(`#${name}`).addEventListener('change', event => application.preference(name, event.target.value));
+    for (const name of ['language', 'appearance']) find(`#${name}`).addEventListener('change', event => application.preference(name, event.target.value));
+    root.querySelectorAll('.tool-button').forEach(button => {
+        const show = () => {
+            tooltip.textContent = button.getAttribute('aria-label');
+            tooltip.hidden = false;
+            const box = button.getBoundingClientRect(); positionTooltip(box.right, box.top);
+        };
+        button.addEventListener('click', () => { application.preference(button.dataset.preference, button.dataset.value); hideTooltip(); });
+        button.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') show(); });
+        button.addEventListener('pointerleave', hideTooltip);
+        button.addEventListener('focus', show);
+        button.addEventListener('blur', hideTooltip);
+    });
     find('#auto-refresh').addEventListener('change', event => application.preference('autoRefresh', event.target.checked));
     find('#refresh').addEventListener('click', () => application.refresh({reloadDetail: true}));
     find('#clear').addEventListener('click', () => {application.preference('filter', 'all'); application.search(''); find('#search').focus();});
