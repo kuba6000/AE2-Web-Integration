@@ -1348,6 +1348,122 @@ test('lost access clears resource data and manual retry recovers', async (t) => 
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
 });
 
+test('hovered resource tooltip stays current through polling and closes when the resource disappears', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const item = page.getByRole('button', { name: /Iron Ingot/ });
+    const tooltip = page.getByRole('tooltip');
+    await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
+    await item.hover();
+    await tooltip.waitFor({ state: 'visible' });
+    const updatedTooltip = page.evaluate(
+        () =>
+            new Promise((resolve) => {
+                const observer = new MutationObserver(() => {
+                    if (
+                        ![...document.querySelectorAll('button')].some((button) =>
+                            /Iron Ingot.*8,765/.test(button.textContent)
+                        )
+                    )
+                        return;
+                    const tooltip = document.querySelector('[role="tooltip"]');
+                    observer.disconnect();
+                    resolve({ visible: tooltip.checkVisibility(), content: tooltip.textContent });
+                });
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true,
+                    characterData: true,
+                    attributes: true
+                });
+            })
+    );
+    options.itemsA = [{ ...iron, quantity: 8765 }, quartz];
+    const refreshed = await updatedTooltip;
+    assert.equal(refreshed.visible, true, 'Polling must not dismiss a stationary pointer tooltip');
+    assert.match(refreshed.content, /8,765/);
+    options.itemsA = [{ ...iron, quantity: 1 }, quartz];
+    await page.getByRole('button', { name: /Iron Ingot.*\b1\b/ }).waitFor();
+    assert.ok(
+        !(await tooltip.isVisible()) || !(await tooltip.textContent()).includes('Iron Ingot'),
+        'A reordered resource must not retain its tooltip under the pointer at its old position'
+    );
+    await item.hover();
+    await tooltip.waitFor({ state: 'visible' });
+    options.itemsA = [quartz];
+    await item.waitFor({ state: 'detached' });
+    assert.equal(await tooltip.isVisible(), false, 'A removed resource must not leave its tooltip behind');
+});
+
+test('resource tooltips appear on the first hover frame and respect keyboard dismissal across refresh', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const item = page.getByRole('button', { name: /Iron Ingot/ });
+    const tooltip = page.getByRole('tooltip');
+    await item.waitFor();
+    const visibleOnHover = item.evaluate(
+        (button) =>
+            new Promise((resolve) => {
+                button.addEventListener(
+                    'pointerenter',
+                    () =>
+                        requestAnimationFrame(() => {
+                            resolve(document.querySelector('[role="tooltip"]').checkVisibility());
+                        }),
+                    { once: true }
+                );
+            })
+    );
+    await item.hover();
+    assert.equal(await visibleOnHover, true, 'An item tooltip should be visible on the first hover frame');
+    await page.mouse.move(0, 0);
+    await item.focus();
+    await tooltip.waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+    await tooltip.waitFor({ state: 'hidden' });
+    options.itemsA = [{ ...iron, itemname: 'A Iron Ingot', quantity: 3456 }, quartz];
+    await page.getByRole('button', { name: /Iron Ingot.*3,456/ }).waitFor();
+    assert.equal(await item.evaluate((button) => button === document.activeElement), true);
+    assert.equal(await tooltip.isVisible(), false, 'Reordering must not reopen a dismissed tooltip');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Shift+Tab');
+    await tooltip.waitFor({ state: 'visible' });
+    assert.match(await tooltip.textContent(), /3,456/);
+    options.gridError = 'NO_PERMISSIONS';
+    await item.waitFor({ state: 'detached' });
+    assert.equal(await tooltip.isVisible(), false, 'Access loss must remove private tooltip contents');
+});
+
+test('hovered tool keeps its tooltip when a keyboard-focused resource refreshes', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const item = page.getByRole('button', { name: /Iron Ingot/ });
+    const tooltip = page.getByRole('tooltip');
+    const tool = page.getByRole('button', { name: 'Sort by: Quantity', exact: true });
+    await item.focus();
+    await tool.hover();
+    const label = await tool.getAttribute('aria-label');
+    assert.equal(await tooltip.textContent(), label);
+    options.itemsA = [{ ...iron, quantity: 2345 }, quartz];
+    await page.getByRole('button', { name: /Iron Ingot.*2,345/ }).waitFor();
+    assert.equal(await item.evaluate((button) => button === document.activeElement), true);
+    assert.equal(await tooltip.isVisible(), true);
+    assert.equal(
+        await tooltip.textContent(),
+        label,
+        'Polling must not replace the hovered tool tooltip with resource details'
+    );
+    options.itemsA = [{ ...iron, itemname: 'A Iron Ingot', quantity: 1234 }, quartz];
+    await page.getByRole('button', { name: /Iron Ingot.*1,234/ }).waitFor();
+    assert.equal(await item.evaluate((button) => button === document.activeElement), true);
+    assert.equal(await tooltip.isVisible(), true);
+    assert.equal(
+        await tooltip.textContent(),
+        label,
+        'Restoring focus after reordering must not replace the hovered tooltip'
+    );
+});
+
 test('empty discovery and unavailable bookmarked networks stay usable', async (t) => {
     const { page, options, base } = await fixture(t);
     options.empty = true;

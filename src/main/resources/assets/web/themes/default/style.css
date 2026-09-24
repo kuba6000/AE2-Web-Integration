@@ -24,6 +24,7 @@
     --slot: #8b8b8b;
     --surface-hover: #a3a3a3;
     --surface-text: #1a1a1a;
+    --quantity-text: #10291d;
     --surface-muted: #242424;
     --control-edge-light: #fff;
     --control-edge-dark: #373737;
@@ -53,6 +54,7 @@
     --surface: #514e5b;
     --surface-hover: #625d6e;
     --surface-text: #eeeaf4;
+    --quantity-text: #b8d9bf;
     --surface-muted: #c0bacd;
     --control-edge-light: #766e83;
     --control-edge-dark: #26232e;
@@ -82,6 +84,7 @@
         --surface: #514e5b;
         --surface-hover: #625d6e;
         --surface-text: #eeeaf4;
+        --quantity-text: #b8d9bf;
         --surface-muted: #c0bacd;
         --control-edge-light: #766e83;
         --control-edge-dark: #26232e;
@@ -654,15 +657,16 @@ label {
 .item strong {
     overflow-wrap: anywhere;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 400;
     line-height: 1.4;
 }
 .item .quantity {
+    color: var(--quantity-text);
     align-self: flex-end;
     margin-top: auto;
     font-variant-numeric: tabular-nums;
     font-size: 14px;
-    font-weight: 650;
+    font-weight: 700;
 }
 .item small {
     color: var(--surface-muted);

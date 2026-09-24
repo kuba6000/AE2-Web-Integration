@@ -63,7 +63,8 @@ export function mount(root, application, { base, logout }) {
     tooltip.role = 'tooltip';
     tooltip.hidden = true;
     root.append(tooltip);
-    let hideTimer;
+    let itemTooltip;
+    let updatingRows = false;
     let language;
     let locale;
     let page = 0;
@@ -72,7 +73,7 @@ export function mount(root, application, { base, logout }) {
     let rows = [];
     let allFiltered = [];
     function hideTooltip() {
-        clearTimeout(hideTimer);
+        itemTooltip = null;
         tooltip.hidden = true;
     }
     function positionTooltip(x, y) {
@@ -89,6 +90,23 @@ export function mount(root, application, { base, logout }) {
         );
         tooltip.hidden = false;
         positionTooltip(x, y);
+    }
+    function showItemTooltip(row, x, y, pointer) {
+        itemTooltip = { row, x, y, pointer };
+        showTooltip(row.item, x, y);
+    }
+    function refreshItemTooltip() {
+        if (!itemTooltip) return;
+        const { row, x, y, pointer } = itemTooltip;
+        if (
+            !row.button.isConnected ||
+            (pointer ? !row.button.contains(document.elementFromPoint(x, y)) : document.activeElement !== row.button)
+        ) {
+            hideTooltip();
+            return;
+        }
+        const box = row.button.getBoundingClientRect();
+        showTooltip(row.item, pointer ? x : box.left, pointer ? y : box.bottom);
     }
     function updateLabels() {
         locale = createTranslator(language);
@@ -215,46 +233,70 @@ export function mount(root, application, { base, logout }) {
         find('#item-message').textContent = message;
         find('#clear').hidden = state.itemStatus !== 'ready' || !state.items.length || !!allFiltered.length;
     }
-    function renderPage() {
-        hideTooltip();
-        const list = find('#items');
-        const focused = rows.find((row) => row.button === document.activeElement)?.item.itemKey;
-        page = Math.min(page, Math.max(0, Math.ceil(allFiltered.length / PAGE_SIZE) - 1));
-        rows = [];
-        const children = allFiltered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((item) => {
-            const li = element('li');
-            const button = element('button', '', 'item');
-            button.type = 'button';
-            button.classList.toggle('selected', item === state.selected);
-            button.setAttribute('aria-pressed', String(item === state.selected));
-            button.append(
-                element('strong', item.itemname),
-                element('span', locale.number(item.quantity), 'quantity'),
-                element('small', item.craftable ? locale.t('craftableYes') : '')
-            );
-            button.addEventListener('click', () => {
-                application.select(item);
-                hideTooltip();
-            });
-            button.addEventListener('pointerenter', (event) => {
-                if (event.pointerType === 'touch') return;
-                hideTimer = setTimeout(() => showTooltip(item, event.clientX, event.clientY), 350);
-            });
-            button.addEventListener('pointermove', (event) => {
-                if (!tooltip.hidden) positionTooltip(event.clientX, event.clientY);
-            });
-            button.addEventListener('pointerleave', hideTooltip);
-            button.addEventListener('focus', () => {
-                const box = button.getBoundingClientRect();
-                showTooltip(item, box.left, box.bottom);
-            });
-            button.addEventListener('blur', hideTooltip);
-            rows.push({ item, button });
-            li.append(button);
-            return li;
+    function createItemRow(item) {
+        const row = {
+            item,
+            li: element('li'),
+            button: element('button', '', 'item'),
+            name: element('strong'),
+            quantity: element('span', '', 'quantity'),
+            craftable: element('small')
+        };
+        const { button } = row;
+        button.type = 'button';
+        button.append(row.name, row.quantity, row.craftable);
+        row.li.append(button);
+        button.addEventListener('click', () => {
+            application.select(row.item);
+            hideTooltip();
         });
-        list.replaceChildren(...children);
-        if (focused) rows.find((row) => row.item.itemKey === focused)?.button.focus({ preventScroll: true });
+        button.addEventListener('pointerenter', (event) => {
+            if (event.pointerType !== 'touch') showItemTooltip(row, event.clientX, event.clientY, true);
+        });
+        button.addEventListener('pointermove', (event) => {
+            if (itemTooltip?.row === row && itemTooltip.pointer) {
+                itemTooltip.x = event.clientX;
+                itemTooltip.y = event.clientY;
+                positionTooltip(event.clientX, event.clientY);
+            }
+        });
+        button.addEventListener('pointerleave', hideTooltip);
+        button.addEventListener('focus', () => {
+            if (updatingRows) return;
+            const box = button.getBoundingClientRect();
+            showItemTooltip(row, box.left, box.bottom, false);
+        });
+        button.addEventListener('blur', () => {
+            if (!updatingRows) hideTooltip();
+        });
+        return row;
+    }
+    function renderPage() {
+        const list = find('#items');
+        const focused = rows.find((row) => row.button === document.activeElement);
+        const previous = new Map(rows.filter((row) => row.item.itemKey).map((row) => [row.item.itemKey, row]));
+        page = Math.min(page, Math.max(0, Math.ceil(allFiltered.length / PAGE_SIZE) - 1));
+        // Reordering can blur a focused button; restoring focus must preserve tooltip dismissal.
+        updatingRows = true;
+        const next = allFiltered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((item, index) => {
+            const row = previous.get(item.itemKey) || createItemRow(item);
+            row.item = item;
+            row.name.textContent = item.itemname;
+            row.quantity.textContent = locale.number(item.quantity);
+            row.craftable.textContent = item.craftable ? locale.t('craftableYes') : '';
+            row.button.classList.toggle('selected', item === state.selected);
+            row.button.setAttribute('aria-pressed', String(item === state.selected));
+            if (list.children[index] !== row.li) list.insertBefore(row.li, list.children[index] || null);
+            return row;
+        });
+        const retained = new Set(next);
+        for (const row of rows) if (!retained.has(row)) row.li.remove();
+        rows = next;
+        if (focused?.button.isConnected && document.activeElement !== focused.button) {
+            focused.button.focus({ preventScroll: true });
+        }
+        updatingRows = false;
+        refreshItemTooltip();
         find('#pages').hidden = allFiltered.length <= PAGE_SIZE;
         find('#previous-page').disabled = page === 0;
         find('#next-page').disabled = (page + 1) * PAGE_SIZE >= allFiltered.length;
@@ -336,6 +378,7 @@ export function mount(root, application, { base, logout }) {
         find(`#${name}`).addEventListener('change', (event) => application.preference(name, event.target.value));
     root.querySelectorAll('.tool-button').forEach((button) => {
         const show = () => {
+            itemTooltip = null;
             tooltip.textContent = button.getAttribute('aria-label');
             tooltip.hidden = false;
             const box = button.getBoundingClientRect();
