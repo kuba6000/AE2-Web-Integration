@@ -22,6 +22,14 @@
     --panel: #c6c6c6;
     --surface: #e5e5e8;
     --slot: #c1c2c7;
+    --slot-edge-dark: #373737;
+    --slot-edge-light: #fff;
+    --terminal-title: #404040;
+    --tab-surface: #a8a7af;
+    --tab-text: #45414d;
+    --tab-edge-light: #d9d8df;
+    --tab-edge-dark: #66636d;
+    --tab-hover: #c3bbcf;
     --text: #34333b;
     --muted: #63616d;
     --border: #9a99a3;
@@ -39,6 +47,14 @@
     --panel: #45434e;
     --surface: #514e5b;
     --slot: #393842;
+    --slot-edge-dark: #25232b;
+    --slot-edge-light: #625d6e;
+    --terminal-title: #eeeaf4;
+    --tab-surface: #393842;
+    --tab-text: #d7d1e2;
+    --tab-edge-light: #766e83;
+    --tab-edge-dark: #26232e;
+    --tab-hover: #514e5b;
     --text: #eeeaf4;
     --muted: #c0bacd;
     --border: #696372;
@@ -55,6 +71,14 @@
         --panel: #45434e;
         --surface: #514e5b;
         --slot: #393842;
+        --slot-edge-dark: #25232b;
+        --slot-edge-light: #625d6e;
+        --terminal-title: #eeeaf4;
+        --tab-surface: #393842;
+        --tab-text: #d7d1e2;
+        --tab-edge-light: #766e83;
+        --tab-edge-dark: #26232e;
+        --tab-hover: #514e5b;
         --text: #eeeaf4;
         --muted: #c0bacd;
         --border: #696372;
@@ -430,16 +454,16 @@ label {
 .view-tabs a {
     text-decoration: none;
     white-space: nowrap;
-    background: #a8a7af;
-    color: #45414d;
+    background: var(--tab-surface);
+    color: var(--tab-text);
     border: 2px solid;
-    border-color: #d9d8df #66636d #66636d #d9d8df;
+    border-color: var(--tab-edge-light) var(--tab-edge-dark) var(--tab-edge-dark) var(--tab-edge-light);
     padding: 10px 19px;
     font-size: 13px;
     font-weight: 600;
 }
 .view-tabs a:hover {
-    background: #c3bbcf;
+    background: var(--tab-hover);
 }
 .view-tabs a[aria-current='page'] {
     background: var(--panel);
@@ -480,7 +504,7 @@ label {
 .terminal-heading h2 {
     margin: 0;
     letter-spacing: 0.02em;
-    color: #404040;
+    color: var(--terminal-title);
     text-shadow: none;
 }
 .search {
@@ -552,7 +576,7 @@ label {
     gap: 6px;
     background: var(--slot);
     border: 2px solid;
-    border-color: #373737 #fff #fff #373737;
+    border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
     box-shadow: none;
 }
 .item:hover {
