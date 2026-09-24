@@ -642,7 +642,6 @@ label {
     grid-auto-rows: var(--slot-height);
     gap: 0;
     padding: 0;
-    background-color: var(--slot);
     background-image:
         linear-gradient(
             to right,
@@ -651,14 +650,14 @@ label {
             transparent calc(100% - 2px),
             var(--slot-edge-light) calc(100% - 2px)
         ),
-        linear-gradient(
+        repeating-linear-gradient(
             to bottom,
-            var(--slot-edge-dark) 2px,
-            transparent 2px,
-            transparent calc(100% - 2px),
-            var(--slot-edge-light) calc(100% - 2px)
+            var(--slot-edge-dark) 0 2px,
+            var(--slot) 2px calc(var(--slot-height) - 2px),
+            var(--slot-edge-light) calc(var(--slot-height) - 2px) var(--slot-height)
         );
-    background-size: var(--slot-width, 120px) var(--slot-height);
+    background-size: var(--slot-width, 120px) round(down, 100%, var(--slot-height));
+    background-repeat: repeat-x;
 }
 .item {
     display: flex;
