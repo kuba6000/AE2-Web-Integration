@@ -31,11 +31,6 @@
     --slot-edge-dark: #373737;
     --slot-edge-light: #fff;
     --terminal-title: #404040;
-    --tab-surface: var(--surface);
-    --tab-text: var(--surface-text);
-    --tab-edge-light: var(--control-edge-light);
-    --tab-edge-dark: var(--control-edge-dark);
-    --tab-hover: var(--surface-hover);
     --text: #34333b;
     --muted: #63616d;
     --border: #9a99a3;
@@ -62,11 +57,6 @@
     --slot-edge-dark: #25232b;
     --slot-edge-light: #625d6e;
     --terminal-title: #eeeaf4;
-    --tab-surface: #393842;
-    --tab-text: #d7d1e2;
-    --tab-edge-light: #766e83;
-    --tab-edge-dark: #26232e;
-    --tab-hover: #514e5b;
     --text: #eeeaf4;
     --muted: #c0bacd;
     --border: #696372;
@@ -92,11 +82,6 @@
         --slot-edge-dark: #25232b;
         --slot-edge-light: #625d6e;
         --terminal-title: #eeeaf4;
-        --tab-surface: #393842;
-        --tab-text: #d7d1e2;
-        --tab-edge-light: #766e83;
-        --tab-edge-dark: #26232e;
-        --tab-hover: #514e5b;
         --text: #eeeaf4;
         --muted: #c0bacd;
         --border: #696372;
@@ -320,6 +305,8 @@ body {
         repeating-linear-gradient(90deg, #0000000a 0 1px, transparent 1px 4px);
 }
 #app {
+    --tools-width: 42px;
+    --details-width: 225px;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     height: 100%;
@@ -404,6 +391,7 @@ label {
 }
 .site-header {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     margin: 0 0 27px;
 }
@@ -440,8 +428,8 @@ label {
     gap: 14px;
 }
 .network-bar > label:first-child {
-    flex: 1;
-    max-width: 450px;
+    flex: 1 1 240px;
+    min-width: 0;
 }
 .network-bar select {
     width: 100%;
@@ -458,39 +446,35 @@ label {
     font-size: 12px;
 }
 .view-tabs {
-    gap: 5px;
-    padding: 0 0 0 18px;
+    gap: 6px 18px;
+    padding: 10px 0 0;
     margin: 0;
-    align-items: end;
-    border: 0;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    align-items: center;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
 }
 .view-tabs a {
     text-decoration: none;
     white-space: nowrap;
-    background: var(--tab-surface);
-    color: var(--tab-text);
-    border: 2px solid;
-    border-color: var(--tab-edge-light) var(--tab-edge-dark) var(--tab-edge-dark) var(--tab-edge-light);
-    padding: 10px 19px;
-    font-size: 13px;
-    font-weight: 600;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    padding: 4px 0;
+    font-size: 12px;
+    font-weight: 400;
 }
 .view-tabs a:hover {
-    background: var(--tab-hover);
+    color: var(--text);
 }
 .view-tabs a[aria-current='page'] {
-    background: var(--panel);
-    color: var(--accent);
-    border-top: 3px solid #9a7db5;
-    border-bottom-color: var(--panel);
-    padding-top: 13px;
+    color: var(--terminal-title);
+    border-bottom-color: var(--terminal-title);
+    font-weight: 700;
 }
 .workspace {
     min-height: 0;
-    --tools-width: 42px;
-    --details-width: 225px;
+}
+.workspace:not(.with-terminal) {
+    margin-inline: var(--tools-width) var(--details-width);
 }
 .workspace.with-terminal {
     display: grid;
@@ -518,6 +502,7 @@ label {
     height: auto;
     max-height: 45dvh;
     margin-bottom: 16px;
+    margin-inline: var(--tools-width) var(--details-width);
 }
 .control-panel .site-header,
 .control-panel .network-bar {
@@ -862,7 +847,7 @@ footer a {
     #items {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
-    .workspace {
+    #app {
         --details-width: 200px;
     }
 }
@@ -877,7 +862,7 @@ footer a {
         display: block;
         margin: 3px 0 0;
     }
-    .workspace {
+    #app {
         --details-width: 180px;
     }
     #items {
@@ -889,11 +874,11 @@ footer a {
     body {
         padding: 20px;
     }
-    .view-tabs a {
-        padding: 10px 12px;
-    }
 }
 @media (max-width: 600px) {
+    #app {
+        --details-width: 0px;
+    }
     .workspace.with-terminal {
         grid-template-columns: var(--tools-width) minmax(0, 1fr);
         grid-template-rows: minmax(0, 1fr) auto;
@@ -932,12 +917,7 @@ footer a {
         padding: 4px 1px;
     }
     .view-tabs {
-        padding-left: 0;
-        gap: 3px;
-    }
-    .view-tabs a {
-        padding: 9px;
-        font-size: 12px;
+        gap: 6px 14px;
     }
     .terminal-heading {
         gap: 12px;
@@ -953,7 +933,7 @@ footer a {
         font-size: 12px;
         padding: 8px;
     }
-    .workspace {
+    #app {
         --tools-width: 34px;
     }
     .tool-button {
@@ -998,9 +978,6 @@ footer a {
     }
     .view-tabs a {
         padding-block: 6px;
-    }
-    .view-tabs a[aria-current='page'] {
-        padding-top: 8px;
     }
     .window-frame {
         padding: 4px 8px;
