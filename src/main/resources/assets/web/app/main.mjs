@@ -21,14 +21,25 @@ const api = createApi(base, returnToLogin);
 application = createTerminal(api, createPreferences(base));
 const unmount = mount(document.getElementById('app'), application, {
     base,
-    async logout() { await api.logout(); returnToLogin(); }
+    async logout() {
+        await api.logout();
+        returnToLogin();
+    }
 });
 const route = () => application.route(readRoute());
 window.addEventListener('hashchange', route);
-window.addEventListener('pagehide', () => {
-    application.dispose(); unmount(); window.removeEventListener('hashchange', route);
-}, { once: true });
+window.addEventListener(
+    'pagehide',
+    () => {
+        application.dispose();
+        unmount();
+        window.removeEventListener('hashchange', route);
+    },
+    { once: true }
+);
 // A restored bfcache page has disposed subscriptions; obtain a fresh authenticated document.
-window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted) location.reload();
+});
 route();
 application.refresh();

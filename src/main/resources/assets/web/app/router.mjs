@@ -3,23 +3,47 @@ export function readRoute() {
     if (!hash || hash === '/' || hash === '/home') return { view: 'home', gridKey: null };
     const settings = /^\/grids\/([^/]+)\/settings$/.exec(hash);
     if (settings) {
-        try { return {view: 'settings', gridKey: decodeURIComponent(settings[1])}; } catch {}
+        try {
+            return { view: 'settings', gridKey: decodeURIComponent(settings[1]) };
+        } catch {
+            // Malformed URL encoding falls through to the missing-route view.
+        }
     }
     const history = /^\/grids\/([^/]+)\/history(?:\/(\d+))?$/.exec(hash);
     if (history) {
-        try { return {view: 'history', gridKey: decodeURIComponent(history[1]), entryId: history[2] ?? null}; } catch {}
+        try {
+            return { view: 'history', gridKey: decodeURIComponent(history[1]), entryId: history[2] ?? null };
+        } catch {
+            // Malformed URL encoding falls through to the missing-route view.
+        }
     }
     const cpu = /^\/grids\/([^/]+)\/cpus(?:\/([^/]+))?$/.exec(hash);
     if (cpu) {
-        try { return {view: 'cpus', gridKey: decodeURIComponent(cpu[1]), cpuKey: cpu[2] ? decodeURIComponent(cpu[2]) : null}; } catch {}
+        try {
+            return {
+                view: 'cpus',
+                gridKey: decodeURIComponent(cpu[1]),
+                cpuKey: cpu[2] ? decodeURIComponent(cpu[2]) : null
+            };
+        } catch {
+            // Malformed URL encoding falls through to the missing-route view.
+        }
     }
     const plan = /^\/grids\/([^/]+)\/plans\/([1-9]\d*)$/.exec(hash);
     if (plan) {
-        try { return { view: 'plan', gridKey: decodeURIComponent(plan[1]), planId: plan[2] }; } catch {}
+        try {
+            return { view: 'plan', gridKey: decodeURIComponent(plan[1]), planId: plan[2] };
+        } catch {
+            // Malformed URL encoding falls through to the missing-route view.
+        }
     }
     const match = /^\/grids\/([^/]+)\/items$/.exec(hash);
     if (match) {
-        try { return { view: 'items', gridKey: decodeURIComponent(match[1]) }; } catch {}
+        try {
+            return { view: 'items', gridKey: decodeURIComponent(match[1]) };
+        } catch {
+            // Malformed URL encoding falls through to the missing-route view.
+        }
     }
     return { view: 'missing', gridKey: null };
 }

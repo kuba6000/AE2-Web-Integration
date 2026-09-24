@@ -42,20 +42,22 @@ export function mount(root, application, { base, logout }) {
         <section id="terminal" hidden><div class="terminal-heading"><h2 data-text="terminal"></h2>
         <label class="search"><span class="sr-only" data-text="search"></span><input id="search" type="search"></label></div>
         <div class="terminal-body"><div class="terminal-tools">
-        <div role="group" data-label="resources">${['all','stored','craftable'].map(value => iconButton('filter', value)).join('')}</div>
-        <div role="group" data-label="sort">${['name','quantity','id'].map(value => iconButton('sort', value)).join('')}</div></div>
+        <div role="group" data-label="resources">${['all', 'stored', 'craftable'].map((value) => iconButton('filter', value)).join('')}</div>
+        <div role="group" data-label="sort">${['name', 'quantity', 'id'].map((value) => iconButton('sort', value)).join('')}</div></div>
         <div class="terminal-content"><p id="item-message" role="status"></p><div class="terminal-layout"><div><ul id="items"></ul>
         <div id="pages"><button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button></div>
         <button id="clear" data-text="resetSearch" hidden></button></div><aside><h3 data-text="details"></h3><div id="details"></div><div id="order"></div></aside></div></div></div></section>
         <p id="missing" data-text="invalidRoute" hidden></p></div><footer><span id="updated" aria-live="off"></span><a id="legacy" data-text="previous"></a></footer>`;
-    const find = selector => root.querySelector(selector);
+    const find = (selector) => root.querySelector(selector);
     const craftingView = createCraftingView(find('#window'), application);
     const cpuView = createCpuView(find('#window'), application);
     const historyView = createHistoryView(find('#window'));
     const settingsView = createSettingsView(find('#window'), application);
     find('#legacy').href = base.href;
     const tooltip = element('div', '', 'tooltip');
-    tooltip.id = 'resource-tooltip'; tooltip.role = 'tooltip'; tooltip.hidden = true;
+    tooltip.id = 'resource-tooltip';
+    tooltip.role = 'tooltip';
+    tooltip.hidden = true;
     root.append(tooltip);
     let hideTimer;
     let language;
@@ -65,25 +67,39 @@ export function mount(root, application, { base, logout }) {
     let state;
     let rows = [];
     let allFiltered = [];
-    function hideTooltip() { clearTimeout(hideTimer); tooltip.hidden = true; }
+    function hideTooltip() {
+        clearTimeout(hideTimer);
+        tooltip.hidden = true;
+    }
     function positionTooltip(x, y) {
         const box = tooltip.getBoundingClientRect();
         tooltip.style.left = `${Math.max(8, Math.min(x + 14, innerWidth - box.width - 8))}px`;
         tooltip.style.top = `${Math.max(8, y + box.height + 24 > innerHeight ? y - box.height - 10 : y + 16)}px`;
     }
     function showTooltip(item, x, y) {
-        tooltip.replaceChildren(element('strong', item.itemname), element('code', item.itemid),
+        tooltip.replaceChildren(
+            element('strong', item.itemname),
+            element('code', item.itemid),
             element('span', `${locale.t('quantity')}: ${locale.number(item.quantity)}`),
-            element('span', locale.t(item.craftable ? 'craftableYes' : 'craftableNo')));
-        tooltip.hidden = false; positionTooltip(x, y);
+            element('span', locale.t(item.craftable ? 'craftableYes' : 'craftableNo'))
+        );
+        tooltip.hidden = false;
+        positionTooltip(x, y);
     }
     function updateLabels() {
         locale = createTranslator(language);
         document.documentElement.lang = language;
-        root.querySelectorAll('[data-text]').forEach(node => { node.textContent = locale.t(node.dataset.text); });
-        root.querySelectorAll('[data-label]').forEach(node => node.setAttribute('aria-label', locale.t(node.dataset.label)));
-        root.querySelectorAll('.tool-button').forEach(button => {
-            const label = button.dataset.preference === 'sort' ? `${locale.t('sort')}: ${locale.t(button.dataset.value)}` : locale.t(button.dataset.value);
+        root.querySelectorAll('[data-text]').forEach((node) => {
+            node.textContent = locale.t(node.dataset.text);
+        });
+        root.querySelectorAll('[data-label]').forEach((node) =>
+            node.setAttribute('aria-label', locale.t(node.dataset.label))
+        );
+        root.querySelectorAll('.tool-button').forEach((button) => {
+            const label =
+                button.dataset.preference === 'sort'
+                    ? `${locale.t('sort')}: ${locale.t(button.dataset.value)}`
+                    : locale.t(button.dataset.value);
             button.setAttribute('aria-label', label);
         });
         find('#search').placeholder = locale.t('searchHint');
@@ -92,33 +108,47 @@ export function mount(root, application, { base, logout }) {
     }
     function renderNetworks() {
         const select = find('#network');
-        const current = new Map([...select.options].map(option => [option.value, option]));
-        const entries = [{ key: '', label: locale.t('chooseNetwork') }, ...state.grids.map(grid => ({
-            key: grid.key, label: `${grid.owner || locale.t('unknownOwner')} · ${grid.key}`
-        }))];
-        if (state.route.gridKey && !state.grids.some(grid => grid.key === state.route.gridKey)) {
+        const current = new Map([...select.options].map((option) => [option.value, option]));
+        const entries = [
+            { key: '', label: locale.t('chooseNetwork') },
+            ...state.grids.map((grid) => ({
+                key: grid.key,
+                label: `${grid.owner || locale.t('unknownOwner')} · ${grid.key}`
+            }))
+        ];
+        if (state.route.gridKey && !state.grids.some((grid) => grid.key === state.route.gridKey)) {
             entries.push({ key: state.route.gridKey, label: state.route.gridKey });
         }
         for (const entry of entries) {
             const option = current.get(entry.key) || document.createElement('option');
-            option.value = entry.key; option.textContent = entry.label;
+            option.value = entry.key;
+            option.textContent = entry.label;
             if (!option.parentNode) select.append(option);
             current.delete(entry.key);
         }
         for (const option of current.values()) option.remove();
         select.value = state.route.gridKey || '';
-        const networkMessage = state.gridStatus === 'loading' ? locale.t('loading') : state.gridError ? locale.t(state.gridError)
-            : !state.grids.length ? `${locale.t('noNetworks')}. ${locale.t('noNetworksHelp')}` : '';
+        const networkMessage =
+            state.gridStatus === 'loading'
+                ? locale.t('loading')
+                : state.gridError
+                  ? locale.t(state.gridError)
+                  : !state.grids.length
+                    ? `${locale.t('noNetworks')}. ${locale.t('noNetworksHelp')}`
+                    : '';
         find('#network-message').textContent = networkMessage;
         const networks = find('#networks');
         const focused = networks.contains(document.activeElement) ? document.activeElement : null;
-        const links = new Map([...networks.children].map(link => [link.dataset.key, link]));
+        const links = new Map([...networks.children].map((link) => [link.dataset.key, link]));
         state.grids.forEach((grid, index) => {
             const link = links.get(grid.key) || element('a', '', 'network');
             link.dataset.key = grid.key;
             link.href = `#/grids/${encodeURIComponent(grid.key)}/items`;
-            link.replaceChildren(element('strong', locale.t('gridOwner', { owner: grid.owner || locale.t('unknownOwner') })),
-                element('code', grid.key), element('span', locale.t('cpuCount', { count: grid.cpuCount })));
+            link.replaceChildren(
+                element('strong', locale.t('gridOwner', { owner: grid.owner || locale.t('unknownOwner') })),
+                element('code', grid.key),
+                element('span', locale.t('cpuCount', { count: grid.cpuCount }))
+            );
             if (networks.children[index] !== link) networks.insertBefore(link, networks.children[index] || null);
             links.delete(grid.key);
         });
@@ -126,15 +156,31 @@ export function mount(root, application, { base, logout }) {
         if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
     }
     function renderItems() {
-        const signature = [state.search, state.preferences.filter, state.preferences.sort, language, state.route.gridKey].join('\0');
+        const signature = [
+            state.search,
+            state.preferences.filter,
+            state.preferences.sort,
+            language,
+            state.route.gridKey
+        ].join('\0');
         const changed = !listInput || listInput.items !== state.items || listInput.signature !== signature;
         if (changed) {
             if (listInput?.signature !== signature) page = 0;
             const search = state.search.trim().toLocaleLowerCase(language);
-            allFiltered = state.items.filter(item => `${item.itemname} ${item.itemid}`.toLocaleLowerCase(language).includes(search))
-                .filter(item => state.preferences.filter === 'all' || (state.preferences.filter === 'stored' ? item.quantity > 0 : item.craftable))
-                .sort((a, b) => state.preferences.sort === 'quantity' ? b.quantity - a.quantity || a.itemname.localeCompare(b.itemname, language)
-                    : (state.preferences.sort === 'id' ? a.itemid.localeCompare(b.itemid, language) : a.itemname.localeCompare(b.itemname, language)));
+            allFiltered = state.items
+                .filter((item) => `${item.itemname} ${item.itemid}`.toLocaleLowerCase(language).includes(search))
+                .filter(
+                    (item) =>
+                        state.preferences.filter === 'all' ||
+                        (state.preferences.filter === 'stored' ? item.quantity > 0 : item.craftable)
+                )
+                .sort((a, b) =>
+                    state.preferences.sort === 'quantity'
+                        ? b.quantity - a.quantity || a.itemname.localeCompare(b.itemname, language)
+                        : state.preferences.sort === 'id'
+                          ? a.itemid.localeCompare(b.itemid, language)
+                          : a.itemname.localeCompare(b.itemname, language)
+                );
             listInput = { items: state.items, signature };
             renderPage();
         }
@@ -145,9 +191,18 @@ export function mount(root, application, { base, logout }) {
         }
         let message = '';
         if (state.gridStatus === 'ready') {
-            message = state.itemStatus === 'loading' ? locale.t('loading') : state.itemError ? locale.t(state.itemError)
-                : state.itemStatus === 'ready' ? !state.items.length ? locale.t('empty') : !allFiltered.length ? locale.t('noMatches')
-                    : locale.t('resourceCount', { count: allFiltered.length }) : '';
+            message =
+                state.itemStatus === 'loading'
+                    ? locale.t('loading')
+                    : state.itemError
+                      ? locale.t(state.itemError)
+                      : state.itemStatus === 'ready'
+                        ? !state.items.length
+                            ? locale.t('empty')
+                            : !allFiltered.length
+                              ? locale.t('noMatches')
+                              : locale.t('resourceCount', { count: allFiltered.length })
+                        : '';
             if (state.refreshing && state.itemStatus === 'ready') message += ` · ${locale.t('refreshing')}`;
         }
         find('#item-message').textContent = message;
@@ -156,28 +211,43 @@ export function mount(root, application, { base, logout }) {
     function renderPage() {
         hideTooltip();
         const list = find('#items');
-        const focused = rows.find(row => row.button === document.activeElement)?.item.itemKey;
+        const focused = rows.find((row) => row.button === document.activeElement)?.item.itemKey;
         page = Math.min(page, Math.max(0, Math.ceil(allFiltered.length / PAGE_SIZE) - 1));
         rows = [];
-        const children = allFiltered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(item => {
-            const li = element('li'); const button = element('button', '', 'item'); button.type = 'button';
+        const children = allFiltered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((item) => {
+            const li = element('li');
+            const button = element('button', '', 'item');
+            button.type = 'button';
             button.classList.toggle('selected', item === state.selected);
             button.setAttribute('aria-pressed', String(item === state.selected));
-            button.append(element('strong', item.itemname), element('span', locale.number(item.quantity), 'quantity'),
-                element('small', item.craftable ? locale.t('craftableYes') : ''));
-            button.addEventListener('click', () => { application.select(item); hideTooltip(); });
-            button.addEventListener('pointerenter', event => {
+            button.append(
+                element('strong', item.itemname),
+                element('span', locale.number(item.quantity), 'quantity'),
+                element('small', item.craftable ? locale.t('craftableYes') : '')
+            );
+            button.addEventListener('click', () => {
+                application.select(item);
+                hideTooltip();
+            });
+            button.addEventListener('pointerenter', (event) => {
                 if (event.pointerType === 'touch') return;
                 hideTimer = setTimeout(() => showTooltip(item, event.clientX, event.clientY), 350);
             });
-            button.addEventListener('pointermove', event => { if (!tooltip.hidden) positionTooltip(event.clientX, event.clientY); });
+            button.addEventListener('pointermove', (event) => {
+                if (!tooltip.hidden) positionTooltip(event.clientX, event.clientY);
+            });
             button.addEventListener('pointerleave', hideTooltip);
-            button.addEventListener('focus', () => {const box = button.getBoundingClientRect(); showTooltip(item, box.left, box.bottom);});
+            button.addEventListener('focus', () => {
+                const box = button.getBoundingClientRect();
+                showTooltip(item, box.left, box.bottom);
+            });
             button.addEventListener('blur', hideTooltip);
-            rows.push({ item, button }); li.append(button); return li;
+            rows.push({ item, button });
+            li.append(button);
+            return li;
         });
         list.replaceChildren(...children);
-        if (focused) rows.find(row => row.item.itemKey === focused)?.button.focus({ preventScroll: true });
+        if (focused) rows.find((row) => row.item.itemKey === focused)?.button.focus({ preventScroll: true });
         find('#pages').hidden = allFiltered.length <= PAGE_SIZE;
         find('#previous-page').disabled = page === 0;
         find('#next-page').disabled = (page + 1) * PAGE_SIZE >= allFiltered.length;
@@ -187,10 +257,16 @@ export function mount(root, application, { base, logout }) {
         const details = find('#details');
         const item = state.selected;
         find('#order').hidden = !item?.craftable || !item.itemKey;
-        if (!item) {details.replaceChildren(element('p', locale.t('selectItem'))); return;}
-        details.replaceChildren(element('h4', item.itemname), element('code', item.itemid),
+        if (!item) {
+            details.replaceChildren(element('p', locale.t('selectItem')));
+            return;
+        }
+        details.replaceChildren(
+            element('h4', item.itemname),
+            element('code', item.itemid),
             element('p', `${locale.t('quantity')}: ${locale.number(item.quantity)}`),
-            element('p', locale.t(item.craftable ? 'craftableYes' : 'craftableNo')));
+            element('p', locale.t(item.craftable ? 'craftableYes' : 'craftableNo'))
+        );
         if (!item.itemKey) details.append(element('p', locale.t('identityUnavailable'), 'hint'));
         if (item.craftable && item.itemKey) {
             const order = craftingView.order(item, state.crafting, locale);
@@ -199,13 +275,25 @@ export function mount(root, application, { base, logout }) {
     }
     function render(next) {
         state = next;
-        if (language !== state.preferences.language) {language = state.preferences.language; updateLabels();}
+        if (language !== state.preferences.language) {
+            language = state.preferences.language;
+            updateLabels();
+        }
         document.documentElement.dataset.appearance = state.preferences.appearance;
         find('#language').value = language;
         find('#appearance').value = state.preferences.appearance;
-        root.querySelectorAll('.tool-button').forEach(button => button.setAttribute('aria-pressed', String(state.preferences[button.dataset.preference] === button.dataset.value)));
-        root.querySelectorAll('[data-view]').forEach(link => {
-            if (link.dataset.view === state.route.view || link.dataset.view === 'items' && state.route.view === 'plan') link.setAttribute('aria-current', 'page');
+        root.querySelectorAll('.tool-button').forEach((button) =>
+            button.setAttribute(
+                'aria-pressed',
+                String(state.preferences[button.dataset.preference] === button.dataset.value)
+            )
+        );
+        root.querySelectorAll('[data-view]').forEach((link) => {
+            if (
+                link.dataset.view === state.route.view ||
+                (link.dataset.view === 'items' && state.route.view === 'plan')
+            )
+                link.setAttribute('aria-current', 'page');
             else link.removeAttribute('aria-current');
         });
         find('#auto-refresh').checked = state.preferences.autoRefresh;
@@ -213,7 +301,9 @@ export function mount(root, application, { base, logout }) {
         find('#home').hidden = state.route.view !== 'home';
         find('#terminal').hidden = state.route.view !== 'items';
         find('#missing').hidden = state.route.view !== 'missing';
-        renderNetworks(); renderItems(); renderDetails();
+        renderNetworks();
+        renderItems();
+        renderDetails();
         craftingView.render(state.route, state.crafting, locale);
         cpuView.render(state.route, state.cpus, locale);
         historyView.render(state.route, state.history, locale);
@@ -226,39 +316,68 @@ export function mount(root, application, { base, logout }) {
         find('#history-link').href = historyHref(state.route.gridKey);
         find('#settings-link').hidden = !state.route.gridKey;
         find('#settings-link').href = `#/grids/${encodeURIComponent(state.route.gridKey)}/settings`;
-        find('#updated').textContent = state.updatedAt ? locale.t('updated', { time: locale.time(state.updatedAt) }) : '';
+        find('#updated').textContent = state.updatedAt
+            ? locale.t('updated', { time: locale.time(state.updatedAt) })
+            : '';
     }
-    find('#network').addEventListener('change', event => navigateToGrid(event.target.value));
-    find('#search').addEventListener('input', event => application.search(event.target.value));
-    for (const name of ['language', 'appearance']) find(`#${name}`).addEventListener('change', event => application.preference(name, event.target.value));
-    root.querySelectorAll('.tool-button').forEach(button => {
+    find('#network').addEventListener('change', (event) => navigateToGrid(event.target.value));
+    find('#search').addEventListener('input', (event) => application.search(event.target.value));
+    for (const name of ['language', 'appearance'])
+        find(`#${name}`).addEventListener('change', (event) => application.preference(name, event.target.value));
+    root.querySelectorAll('.tool-button').forEach((button) => {
         const show = () => {
             tooltip.textContent = button.getAttribute('aria-label');
             tooltip.hidden = false;
-            const box = button.getBoundingClientRect(); positionTooltip(box.right, box.top);
+            const box = button.getBoundingClientRect();
+            positionTooltip(box.right, box.top);
         };
-        button.addEventListener('click', () => { application.preference(button.dataset.preference, button.dataset.value); hideTooltip(); });
-        button.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') show(); });
+        button.addEventListener('click', () => {
+            application.preference(button.dataset.preference, button.dataset.value);
+            hideTooltip();
+        });
+        button.addEventListener('pointerenter', (event) => {
+            if (event.pointerType !== 'touch') show();
+        });
         button.addEventListener('pointerleave', hideTooltip);
         button.addEventListener('focus', show);
         button.addEventListener('blur', hideTooltip);
     });
-    find('#auto-refresh').addEventListener('change', event => application.preference('autoRefresh', event.target.checked));
-    find('#refresh').addEventListener('click', () => application.refresh({reloadDetail: true}));
-    find('#clear').addEventListener('click', () => {application.preference('filter', 'all'); application.search(''); find('#search').focus();});
-    find('#previous-page').addEventListener('click', () => {page--; renderPage();});
-    find('#next-page').addEventListener('click', () => {page++; renderPage();});
+    find('#auto-refresh').addEventListener('change', (event) =>
+        application.preference('autoRefresh', event.target.checked)
+    );
+    find('#refresh').addEventListener('click', () => application.refresh({ reloadDetail: true }));
+    find('#clear').addEventListener('click', () => {
+        application.preference('filter', 'all');
+        application.search('');
+        find('#search').focus();
+    });
+    find('#previous-page').addEventListener('click', () => {
+        page--;
+        renderPage();
+    });
+    find('#next-page').addEventListener('click', () => {
+        page++;
+        renderPage();
+    });
     find('#logout').addEventListener('click', async () => {
         find('#logout').disabled = true;
-        try {await logout();} catch (error) {find('#network-message').textContent = locale.t(error.status); find('#logout').disabled = false;}
+        try {
+            await logout();
+        } catch (error) {
+            find('#network-message').textContent = locale.t(error.status);
+            find('#logout').disabled = false;
+        }
     });
-    const keydown = event => {if (event.key === 'Escape') hideTooltip();};
+    const keydown = (event) => {
+        if (event.key === 'Escape') hideTooltip();
+    };
     window.addEventListener('scroll', hideTooltip, true);
     window.addEventListener('resize', hideTooltip);
     window.addEventListener('keydown', keydown);
     const unsubscribe = application.subscribe(render);
     return () => {
-        unsubscribe(); hideTooltip();
+        unsubscribe();
+        hideTooltip();
         window.removeEventListener('scroll', hideTooltip, true);
         window.removeEventListener('resize', hideTooltip);
         window.removeEventListener('keydown', keydown);

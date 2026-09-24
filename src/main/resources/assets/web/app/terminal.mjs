@@ -6,9 +6,18 @@ import { createGridSettings } from './settings.mjs';
 /** Shared state/actions for terminal renderers; a theme does not own requests or refresh timers. */
 export function createTerminal(api, preferences) {
     const state = {
-        route: { view: 'home', gridKey: null }, grids: [], gridStatus: 'loading', gridError: null,
-        items: [], itemStatus: 'idle', itemError: null, refreshing: false, updatedAt: null,
-        search: '', selected: null, preferences: preferences.values
+        route: { view: 'home', gridKey: null },
+        grids: [],
+        gridStatus: 'loading',
+        gridError: null,
+        items: [],
+        itemStatus: 'idle',
+        itemError: null,
+        refreshing: false,
+        updatedAt: null,
+        search: '',
+        selected: null,
+        preferences: preferences.values
     };
     const listeners = new Set();
     let gridRequest;
@@ -17,14 +26,28 @@ export function createTerminal(api, preferences) {
     let disposed = false;
     let timer;
     let refreshingGrids = null;
-    const notify = () => { if (!disposed) for (const listener of listeners) listener(state); };
-    const crafting = createCrafting(api, () => { notify(); schedule(); });
+    const notify = () => {
+        if (!disposed) for (const listener of listeners) listener(state);
+    };
+    const crafting = createCrafting(api, () => {
+        notify();
+        schedule();
+    });
     state.crafting = crafting.state;
-    const cpus = createCpuMonitor(api, () => { notify(); schedule(); });
+    const cpus = createCpuMonitor(api, () => {
+        notify();
+        schedule();
+    });
     state.cpus = cpus.state;
-    const history = createHistory(api, () => { notify(); schedule(); });
+    const history = createHistory(api, () => {
+        notify();
+        schedule();
+    });
     state.history = history.state;
-    const settings = createGridSettings(api, () => { notify(); schedule(); });
+    const settings = createGridSettings(api, () => {
+        notify();
+        schedule();
+    });
     state.settings = settings.state;
 
     function invalidateItems() {
@@ -40,8 +63,12 @@ export function createTerminal(api, preferences) {
     async function loadItems() {
         const key = state.route.gridKey;
         if (disposed || state.route.view !== 'items' || !key || state.gridStatus !== 'ready') return;
-        if (!state.grids.some(grid => grid.key === key)) {
-            invalidateItems(); state.itemStatus = 'error'; state.itemError = 'GRID_NOT_FOUND'; notify(); return;
+        if (!state.grids.some((grid) => grid.key === key)) {
+            invalidateItems();
+            state.itemStatus = 'error';
+            state.itemError = 'GRID_NOT_FOUND';
+            notify();
+            return;
         }
         itemRequest?.abort();
         const request = new AbortController();
@@ -55,15 +82,23 @@ export function createTerminal(api, preferences) {
             const items = await api.items(key, request.signal);
             if (disposed || version !== serial) return;
             state.items = items;
-            state.selected = state.selected ? items.find(item => item.itemKey && item.itemKey === state.selected.itemKey) || null : null;
+            state.selected = state.selected
+                ? items.find((item) => item.itemKey && item.itemKey === state.selected.itemKey) || null
+                : null;
             state.itemStatus = 'ready';
             state.updatedAt = Date.now();
         } catch (error) {
             if (disposed || version !== serial || error.name === 'AbortError') return;
-            state.items = []; state.selected = null; state.updatedAt = null;
-            state.itemStatus = 'error'; state.itemError = error.status || 'NETWORK_ERROR';
+            state.items = [];
+            state.selected = null;
+            state.updatedAt = null;
+            state.itemStatus = 'error';
+            state.itemError = error.status || 'NETWORK_ERROR';
         } finally {
-            if (!disposed && version === serial) { state.refreshing = false; notify(); }
+            if (!disposed && version === serial) {
+                state.refreshing = false;
+                notify();
+            }
         }
     }
     function schedule() {
@@ -74,28 +109,31 @@ export function createTerminal(api, preferences) {
     }
     function loadCrafting() {
         if (state.route.view !== 'plan' || state.gridStatus !== 'ready') return;
-        if (!state.grids.some(grid => grid.key === state.route.gridKey)) crafting.block('GRID_NOT_FOUND');
+        if (!state.grids.some((grid) => grid.key === state.route.gridKey)) crafting.block('GRID_NOT_FOUND');
         else return crafting.refresh();
     }
     function loadCpus() {
         if (state.route.view !== 'cpus' || state.gridStatus !== 'ready') return;
-        if (!state.grids.some(grid => grid.key === state.route.gridKey)) cpus.block('GRID_NOT_FOUND');
+        if (!state.grids.some((grid) => grid.key === state.route.gridKey)) cpus.block('GRID_NOT_FOUND');
         else return cpus.refresh();
     }
     function loadHistory(reloadDetail = false) {
         if (state.route.view !== 'history' || state.gridStatus !== 'ready') return;
-        if (!state.grids.some(grid => grid.key === state.route.gridKey)) history.block('GRID_NOT_FOUND');
+        if (!state.grids.some((grid) => grid.key === state.route.gridKey)) history.block('GRID_NOT_FOUND');
         else return history.refresh(reloadDetail);
     }
     function loadSettings() {
         if (state.route.view !== 'settings') return;
-        if (state.gridStatus === 'error') { settings.block(state.gridError); return; }
+        if (state.gridStatus === 'error') {
+            settings.block(state.gridError);
+            return;
+        }
         if (state.gridStatus !== 'ready') return;
-        const grid = state.grids.find(grid => grid.key === state.route.gridKey);
+        const grid = state.grids.find((grid) => grid.key === state.route.gridKey);
         if (!grid) settings.block('GRID_NOT_FOUND');
         else return settings.refresh(grid.accessSources);
     }
-    async function refresh({reloadDetail = false} = {}) {
+    async function refresh({ reloadDetail = false } = {}) {
         if (disposed) return;
         if (refreshingGrids) return reloadDetail ? refreshingGrids.then(() => loadHistory(true)) : refreshingGrids;
         clearTimeout(timer);
@@ -104,7 +142,8 @@ export function createTerminal(api, preferences) {
             try {
                 state.grids = await api.grids(gridRequest.signal);
                 if (disposed) return;
-                state.gridStatus = 'ready'; state.gridError = null;
+                state.gridStatus = 'ready';
+                state.gridError = null;
                 notify();
                 await loadItems();
                 await loadCrafting();
@@ -113,9 +152,18 @@ export function createTerminal(api, preferences) {
                 await loadSettings();
             } catch (error) {
                 if (disposed || error.name === 'AbortError') return;
-                state.gridStatus = 'error'; state.gridError = error.status || 'NETWORK_ERROR';
-                invalidateItems(); crafting.block(state.gridError); cpus.block(state.gridError); history.block(state.gridError); settings.block(state.gridError); notify();
-            } finally { refreshingGrids = null; schedule(); }
+                state.gridStatus = 'error';
+                state.gridError = error.status || 'NETWORK_ERROR';
+                invalidateItems();
+                crafting.block(state.gridError);
+                cpus.block(state.gridError);
+                history.block(state.gridError);
+                settings.block(state.gridError);
+                notify();
+            } finally {
+                refreshingGrids = null;
+                schedule();
+            }
         })();
         return refreshingGrids;
     }
@@ -125,12 +173,50 @@ export function createTerminal(api, preferences) {
         cpus,
         history,
         settings,
-        subscribe(listener) { listeners.add(listener); listener(state); return () => listeners.delete(listener); },
+        subscribe(listener) {
+            listeners.add(listener);
+            listener(state);
+            return () => listeners.delete(listener);
+        },
         refresh,
-        route(route) { invalidateItems(); state.route = route; crafting.route(route); cpus.route(route); history.route(route); settings.route(route); notify(); loadItems(); loadCrafting(); loadCpus(); loadHistory(); loadSettings(); schedule(); },
-        search(value) { state.search = value; notify(); },
-        select(item) { state.selected = item; notify(); },
-        preference(name, value) { preferences.set(name, value); notify(); if (name === 'autoRefresh') schedule(); },
-        dispose() { disposed = true; clearTimeout(timer); gridRequest?.abort(); itemRequest?.abort(); crafting.dispose(); cpus.dispose(); history.dispose(); settings.dispose(); listeners.clear(); }
+        route(route) {
+            invalidateItems();
+            state.route = route;
+            crafting.route(route);
+            cpus.route(route);
+            history.route(route);
+            settings.route(route);
+            notify();
+            loadItems();
+            loadCrafting();
+            loadCpus();
+            loadHistory();
+            loadSettings();
+            schedule();
+        },
+        search(value) {
+            state.search = value;
+            notify();
+        },
+        select(item) {
+            state.selected = item;
+            notify();
+        },
+        preference(name, value) {
+            preferences.set(name, value);
+            notify();
+            if (name === 'autoRefresh') schedule();
+        },
+        dispose() {
+            disposed = true;
+            clearTimeout(timer);
+            gridRequest?.abort();
+            itemRequest?.abort();
+            crafting.dispose();
+            cpus.dispose();
+            history.dispose();
+            settings.dispose();
+            listeners.clear();
+        }
     };
 }

@@ -1,6 +1,10 @@
 {
   "name": "ae2-ui-browser-tests",
   "private": true,
-  "scripts": { "test": "node --test browser.test.cjs" },
-  "devDependencies": { "playwright": "1.62.1" }
+  "scripts": {
+    "test": "node --test browser.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
 }
