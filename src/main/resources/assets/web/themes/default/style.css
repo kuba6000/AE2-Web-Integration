@@ -680,7 +680,8 @@ label {
     border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
     box-shadow: none;
 }
-.item:hover {
+.item:hover,
+.item.selected {
     background: var(--surface-hover);
 }
 .item strong {
@@ -722,11 +723,6 @@ label {
     font-size: 14px;
     font-weight: 400;
     translate: 1px 1px;
-}
-.item.selected {
-    background: var(--selected);
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
 }
 .item:focus-visible {
     outline-offset: -2px;
