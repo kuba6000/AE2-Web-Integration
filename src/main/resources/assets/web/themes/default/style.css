@@ -454,7 +454,8 @@ label {
 .terminal-heading h2 {
     margin: 0;
     letter-spacing: 0.02em;
-    text-shadow: 1px 1px var(--edge-light);
+    color: #404040;
+    text-shadow: none;
 }
 .search {
     flex: none;
