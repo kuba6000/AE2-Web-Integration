@@ -510,6 +510,34 @@ test('Minecraft names search and sort as continuous plain text and keep tooltip 
     assert.equal((await textStyle(details, 'Alpha')).color, 'rgb(255, 85, 85)');
 });
 
+test('search explains its rules and combines mod identifiers with item text', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.itemsA = [
+        iron,
+        quartz,
+        { ...iron, itemname: 'Gold Ingot', itemKey: 'gold', itemid: 'minecraft:gold_ingot' }
+    ];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const search = page.getByRole('searchbox', { name: 'Search resources' });
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    await search.hover();
+    await page
+        .getByRole('tooltip')
+        .getByText(/@minecraft iron/)
+        .waitFor({ timeout: 3000 });
+    await search.fill('@MINECRAFT iron');
+    const resources = page.getByRole('region', { name: 'Resources', exact: true });
+    assert.equal(await resources.getByRole('button').count(), 1);
+    await resources.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    await search.fill('@ae2');
+    assert.equal(await resources.getByRole('button').count(), 1);
+    await resources.getByRole('button', { name: /Certus Quartz/ }).waitFor();
+    await search.fill('minecraft:gold_ingot');
+    await resources.getByRole('button', { name: /Gold Ingot/ }).waitFor();
+    await search.fill('@missing');
+    assert.equal(await resources.getByRole('button').count(), 0);
+});
+
 test('craftable resources show an accessible hammer that follows refreshed availability', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
@@ -2060,6 +2088,10 @@ test('terminal scrolls resources inside the viewport while search and navigation
         await resources.waitFor();
         const search = page.getByRole('searchbox', { name: 'Search resources' });
         const before = await search.boundingBox();
+        const grid = await resources.getByRole('list').boundingBox();
+        const heading = await page.getByRole('heading', { name: 'Terminal', exact: true }).boundingBox();
+        assert.ok(Math.abs(heading.x - grid.x) < 1, 'Terminal title aligns with the first slot');
+        assert.ok(Math.abs(before.x + before.width - grid.x - grid.width) < 1, 'Search aligns with the last slot');
         await resources.focus();
         await page.keyboard.press('End');
         const last = resources.getByRole('button').last();

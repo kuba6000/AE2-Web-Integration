@@ -258,6 +258,7 @@ export function mount(root, application, { base, logout, settings, i18n }) {
             button.setAttribute('aria-label', label);
         });
         find('#search').placeholder = locale.common('searchHint');
+        find('#search').setAttribute('aria-description', locale.common('searchHelp'));
         find('#previous-page').setAttribute('aria-label', locale.common('previousPage'));
         find('#next-page').setAttribute('aria-label', locale.common('nextPage'));
     }
@@ -328,10 +329,16 @@ export function mount(root, application, { base, logout, settings, i18n }) {
                 page = 0;
                 find('#item-scroll').scrollTop = 0;
             }
-            const search = state.search.trim().toLocaleLowerCase(language);
+            const terms = state.search.trim().toLocaleLowerCase(language).split(/\s+/);
             allFiltered = state.items
                 .map((item) => ({ item, name: plainMinecraftText(item.itemname) }))
-                .filter(({ item, name }) => `${name} ${item.itemid}`.toLocaleLowerCase(language).includes(search))
+                .filter(({ item, name }) => {
+                    const text = `${name} ${item.itemid}`.toLocaleLowerCase(language);
+                    const mod = item.itemid.split(':')[0].toLocaleLowerCase(language);
+                    return terms.every((term) =>
+                        term.startsWith('@') ? mod.includes(term.slice(1)) : text.includes(term)
+                    );
+                })
                 .filter(
                     ({ item }) =>
                         state.preferences.filter === 'all' ||
@@ -365,9 +372,8 @@ export function mount(root, application, { base, logout, settings, i18n }) {
                             ? locale.common('empty')
                             : !allFiltered.length
                               ? locale.common('noMatches')
-                              : locale.common('resourceCount', { count: allFiltered.length })
+                              : ''
                         : '';
-            if (state.refreshing && state.itemStatus === 'ready') message += ` · ${locale.common('refreshing')}`;
         }
         find('#item-message').textContent = message;
         find('#clear').hidden = state.itemStatus !== 'ready' || !state.items.length || !!allFiltered.length;
@@ -532,7 +538,26 @@ export function mount(root, application, { base, logout, settings, i18n }) {
     const network = find('#network');
     network.addEventListener('change', () => navigateToGrid(network.value));
     const search = find('#search');
-    search.addEventListener('input', () => application.search(search.value));
+    search.addEventListener('input', () => {
+        hideTooltip();
+        application.search(search.value);
+    });
+    const showSearchHelp = () => {
+        itemTooltip = null;
+        tooltip.replaceChildren(
+            ...locale
+                .common('searchHelp')
+                .split('\n')
+                .map((line) => element('span', line))
+        );
+        tooltip.hidden = false;
+        const box = search.getBoundingClientRect();
+        positionTooltip(box.left, box.bottom);
+    };
+    search.addEventListener('pointerenter', showSearchHelp);
+    search.addEventListener('focus', showSearchHelp);
+    search.addEventListener('pointerleave', hideTooltip);
+    search.addEventListener('blur', hideTooltip);
     const languageSelect = find('#language');
     languageSelect.addEventListener('change', () => application.preference('language', languageSelect.value));
     const appearanceSelect = find('#appearance');
@@ -603,6 +628,11 @@ export function mount(root, application, { base, logout, settings, i18n }) {
         if (!entry || entry.contentRect.width === 0) return;
         const columns = getComputedStyle(list).gridTemplateColumns.split(' ').length;
         list.style.setProperty('--slot-width', `${entry.contentRect.width / columns}px`);
+        const terminal = find('#terminal');
+        terminal.style.setProperty(
+            '--grid-inset',
+            `${list.getBoundingClientRect().left - terminal.getBoundingClientRect().left}px`
+        );
     });
     slotBackground.observe(list);
     const unsubscribe = application.subscribe(render);

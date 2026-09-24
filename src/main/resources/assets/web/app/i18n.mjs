@@ -125,7 +125,9 @@ const translations = {
         gridOwner: 'Owner: {owner}',
         cpuCount: { one: '{count} CPU', other: '{count} CPUs' },
         search: 'Search resources',
-        searchHint: 'Name or registry ID',
+        searchHint: 'Search…',
+        searchHelp:
+            'Search item names and registry IDs.\n@mod filters by mod ID, e.g. @minecraft.\nCombine terms, e.g. @minecraft iron. Every term must match.\nSearch ignores letter case and Minecraft color codes.',
         resources: 'Resources',
         all: 'All',
         stored: 'In storage',
@@ -293,7 +295,9 @@ const translations = {
             other: '{count} procesora CPU'
         },
         search: 'Szukaj zasobów',
-        searchHint: 'Nazwa lub identyfikator',
+        searchHint: 'Szukaj…',
+        searchHelp:
+            'Szukaj w nazwach i identyfikatorach przedmiotów.\n@mod filtruje po identyfikatorze moda, np. @minecraft.\nŁącz wyrażenia, np. @minecraft iron. Każde musi pasować.\nWyszukiwanie pomija wielkość liter i kody kolorów Minecrafta.',
         resources: 'Zasoby',
         all: 'Wszystkie',
         stored: 'W magazynie',
