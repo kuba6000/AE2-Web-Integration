@@ -71,13 +71,13 @@ export function mount(root, application, { base, logout, settings, i18n }) {
     }
     let appearance =
         typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
-    root.innerHTML = `<header class="site-header"><div class="brand"><span class="brand-mark" aria-hidden="true">ME</span><h1>AE2 <span>Web Integration</span></h1></div><div class="preferences">
+    root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark" aria-hidden="true">ME</span><h1>AE2 <span>Web Integration</span></h1></div><div class="preferences">
         <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
         <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label>
         <button id="logout" data-text="logout"></button></div></header>
         <section class="network-bar"><label><span data-text="network"></span><select id="network"></select></label>
         <button id="refresh" data-text="refresh"></button><label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label></section>
-        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a></nav>
+        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a></nav></div>
         <div class="workspace" id="workspace">
         <div class="terminal-tools" id="terminal-tools" hidden>
         <div role="group" data-label="resources">${/** @type {const} */ (['all', 'stored', 'craftable']).map((value) => iconButton('filter', value)).join('')}</div>
