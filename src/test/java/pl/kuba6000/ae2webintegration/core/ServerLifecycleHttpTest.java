@@ -37,6 +37,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.commons.io.IOUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -205,6 +206,31 @@ class ServerLifecycleHttpTest {
         }
         assertEquals(HttpURLConnection.HTTP_OK, get("/?ui=next", null).status());
         assertEquals(429, get("/?ui=next", null).status());
+    }
+
+    @Test
+    void themeFontsLoadWithBinaryContentAndSupportHeadWithoutConsumingLoginBudget() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        for (String weight : new String[] { "Regular", "Bold" }) {
+            String path = "/assets/web/themes/default/fonts/monocraft/Monocraft-" + weight + ".woff2";
+            HttpURLConnection font = connection(path, null);
+            assertEquals(HttpURLConnection.HTTP_OK, font.getResponseCode());
+            assertEquals("font/woff2", font.getHeaderField("Content-Type"));
+            assertEquals("nosniff", font.getHeaderField("X-Content-Type-Options"));
+            byte[] content;
+            try (InputStream input = font.getInputStream()) {
+                content = IOUtils.toByteArray(input);
+            }
+            assertEquals("wOF2", new String(content, 0, 4, StandardCharsets.US_ASCII));
+            HttpURLConnection head = connection(path, null);
+            head.setRequestMethod("HEAD");
+            Response metadata = read(head);
+            assertEquals(HttpURLConnection.HTTP_OK, metadata.status());
+            assertEquals("", metadata.body());
+            assertEquals(content.length, head.getContentLength());
+        }
+        assertEquals(HttpURLConnection.HTTP_OK, get("/?ui=next", null).status());
     }
 
     @Test

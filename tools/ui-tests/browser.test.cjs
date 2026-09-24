@@ -276,7 +276,13 @@ async function fixture(t, mount = '') {
         try {
             response.setHeader(
                 'Content-Type',
-                file.endsWith('.mjs') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html'
+                file.endsWith('.mjs')
+                    ? 'text/javascript'
+                    : file.endsWith('.css')
+                      ? 'text/css'
+                      : file.endsWith('.woff2')
+                        ? 'font/woff2'
+                        : 'text/html'
             );
             const content = await fs.readFile(file);
             response.end(login ? content.toString().replace('_REPLACE_ME_IS_PUBLIC_MODE', 'true') : content);

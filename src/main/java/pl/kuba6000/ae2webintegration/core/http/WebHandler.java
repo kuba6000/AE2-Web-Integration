@@ -90,7 +90,7 @@ public final class WebHandler implements HttpHandler {
             return;
         }
         String contentType = path.endsWith(".mjs") || path.endsWith(".js") ? "text/javascript; charset=UTF-8"
-            : path.endsWith(".css") ? "text/css; charset=UTF-8" : null;
+            : path.endsWith(".css") ? "text/css; charset=UTF-8" : path.endsWith(".woff2") ? "font/woff2" : null;
         if (contentType == null || !path.matches("/assets/web/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+")) {
             sendText(exchange, HttpURLConnection.HTTP_NOT_FOUND, "Not found");
             return;

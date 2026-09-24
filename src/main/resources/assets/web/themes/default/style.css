@@ -1,3 +1,18 @@
+@font-face {
+    font-family: Monocraft;
+    src: url('./fonts/monocraft/Monocraft-Regular.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: Monocraft;
+    src: url('./fonts/monocraft/Monocraft-Bold.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+}
+
 /* First terminal design: a bevelled light enclosure on a quiet, textured background. */
 :root {
     color-scheme: light;
@@ -15,7 +30,8 @@
     --accent: #6c508d;
     --selected: #e0d5ec;
     --frame-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20shape-rendering%3D%22crispEdges%22%3E%20%3Cpath%20fill%3D%22%23161616%22%20d%3D%22M4%200H20V1H22V2H23V4H24V20H23V22H22V23H20V24H4V23H2V22H1V20H0V4H1V2H2V1H4Z%22%20%2F%3E%20%3Cpath%20fill%3D%22%23fafafd%22%20d%3D%22M4%201H20V2H22V4H23V20H22V22H20V23H4V22H2V20H1V4H2V2H4Z%22%20%2F%3E%20%3Cpath%20fill%3D%22%23777680%22%20d%3D%22M20%202H22V4H23V20H22V22H20V23H4V22H2V20H4V21H20V20H21V4H20Z%22%20%2F%3E%20%3Cpath%20fill%3D%22%23c6c6c6%22%20d%3D%22M5%203H19V4H20V5H21V19H20V20H19V21H5V20H4V19H3V5H4V4H5Z%22%20%2F%3E%20%3C%2Fsvg%3E');
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-family: Monocraft, monospace;
+    font-variant-ligatures: none;
 }
 :root[data-appearance='dark'] {
     color-scheme: dark;
@@ -354,7 +370,7 @@ label {
     color: #2c2439;
     border: 2px solid;
     border-color: #ded5eb #64586f #64586f #ded5eb;
-    font-family: monospace;
+    font-family: inherit;
     font-weight: bold;
     font-size: 16px;
 }
@@ -589,6 +605,7 @@ aside p {
     color: var(--muted);
 }
 code {
+    font-family: inherit;
     overflow-wrap: anywhere;
     font-size: 11px;
 }
