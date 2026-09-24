@@ -597,9 +597,18 @@ export function mount(root, application, { base, logout, settings, i18n }) {
     window.addEventListener('scroll', hideTooltip, true);
     window.addEventListener('resize', hideTooltip);
     window.addEventListener('keydown', keydown);
+    // Paint empty slots using the same column width as the real resource grid.
+    const list = find('#items');
+    const slotBackground = new ResizeObserver(([entry]) => {
+        if (!entry || entry.contentRect.width === 0) return;
+        const columns = getComputedStyle(list).gridTemplateColumns.split(' ').length;
+        list.style.setProperty('--slot-width', `${entry.contentRect.width / columns}px`);
+    });
+    slotBackground.observe(list);
     const unsubscribe = application.subscribe(render);
     return () => {
         unsubscribe();
+        slotBackground.disconnect();
         hideTooltip();
         window.removeEventListener('scroll', hideTooltip, true);
         window.removeEventListener('resize', hideTooltip);

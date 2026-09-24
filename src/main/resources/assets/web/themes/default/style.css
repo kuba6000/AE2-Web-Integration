@@ -631,12 +631,34 @@ label {
     border-color: var(--control-edge-dark) var(--control-edge-light) var(--control-edge-light) var(--control-edge-dark);
 }
 #items {
+    --slot-height: 68px;
+
     display: grid;
     list-style: none;
     margin: 0;
+    min-height: 100%;
+    align-content: start;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 120px), 1fr));
+    grid-auto-rows: var(--slot-height);
     gap: 0;
     padding: 0;
+    background-color: var(--slot);
+    background-image:
+        linear-gradient(
+            to right,
+            var(--slot-edge-dark) 2px,
+            transparent 2px,
+            transparent calc(100% - 2px),
+            var(--slot-edge-light) calc(100% - 2px)
+        ),
+        linear-gradient(
+            to bottom,
+            var(--slot-edge-dark) 2px,
+            transparent 2px,
+            transparent calc(100% - 2px),
+            var(--slot-edge-light) calc(100% - 2px)
+        );
+    background-size: var(--slot-width, 120px) var(--slot-height);
 }
 .item {
     display: flex;
@@ -644,7 +666,7 @@ label {
     width: 100%;
     height: 100%;
     text-align: left;
-    min-height: 68px;
+    min-height: var(--slot-height);
     padding: 6px;
     gap: 4px;
     background: var(--slot);

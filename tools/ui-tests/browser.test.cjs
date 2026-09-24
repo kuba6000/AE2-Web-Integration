@@ -2023,9 +2023,17 @@ test('resource grid stays centered and stationary when scrolling becomes unneces
     await page.getByRole('searchbox', { name: 'Search resources' }).fill('Resource 000');
     assert.equal(await resources.getByRole('button').count(), 1);
     assert.equal(await resources.evaluate((node) => node.scrollHeight > node.clientHeight), false);
+    const filledGrid = await resources.getByRole('list').boundingBox();
+    assert.ok(
+        Math.abs(filledGrid.height - (await resources.evaluate((node) => node.clientHeight))) < 1,
+        'The empty grid continues to the bottom of the viewport without adding scrolling'
+    );
     const filtered = await first.boundingBox();
     assert.equal(filtered.x, before.x);
     assert.equal(filtered.width, before.width);
+    await page.getByRole('searchbox', { name: 'Search resources' }).fill('no matching resources');
+    assert.equal(await resources.getByRole('button').count(), 0);
+    assert.equal(await resources.evaluate((node) => node.scrollHeight > node.clientHeight), false);
     await page.getByRole('searchbox', { name: 'Search resources' }).fill('');
     const restored = await first.boundingBox();
     assert.equal(restored.x, before.x);
