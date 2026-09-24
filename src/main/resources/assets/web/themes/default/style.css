@@ -668,26 +668,34 @@ label {
     font-weight: 400;
     line-height: 1.4;
 }
+.item-amount {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+    margin-top: auto;
+}
+.craftable-marker {
+    order: -1;
+    flex: 0 0 16px;
+    height: 16px;
+    margin-right: auto;
+    /* The original crafting hammer from assets/favicon.ico. */
+    background: url('data:image/x-icon;base64,AAABAAEAEBAQAAEABAAoAQAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAcLzwASUlJADFSZwBgYGAAa2trAHBwcABQf58AiYmJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAiIiIiIiIiIiIiIiIiIiIiIggiIiIiIiIiGIIiIiIiIiIhiCIiIiIiIiIYgiIiIiIiIiGIIgRiIiIiIhiATQ4iIiIiIYTR1OIiIiIgTR1OIiIiIgTR1OIiIiIiBR1OIiIiIiIg1OIiIiIiIiIOIiIiIiIiIiIiIiIiIiIiIiIiIj//wAA//8AAM//AADH/wAA4/8AAPH/AAD4zwAA/AcAAP4DAAD+BwAA/A8AAPwfAAD+PwAA/38AAP//AAD//wAA')
+        center / 16px 16px no-repeat;
+    image-rendering: pixelated;
+}
 .item .quantity {
+    min-width: 0;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--quantity-text);
-    align-self: flex-end;
-    margin-top: auto;
     font-variant-numeric: tabular-nums;
     font-size: 14px;
     font-weight: 700;
-}
-.item small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--surface-muted);
-    min-height: 1em;
-    font-size: 9px;
-    letter-spacing: 0.01em;
 }
 .item.selected {
     background: var(--selected);
@@ -964,9 +972,6 @@ footer a {
     }
     .item strong {
         font-size: 11px;
-    }
-    .item small {
-        font-size: 9px;
     }
     .item .quantity {
         font-size: 13px;

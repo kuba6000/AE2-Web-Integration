@@ -366,11 +366,14 @@ export function mount(root, application, { base, logout, settings, i18n }) {
             button: element('button', '', 'item'),
             name: element('strong'),
             quantity: element('span', '', 'quantity'),
-            craftable: element('small')
+            craftable: element('span', '', 'craftable-marker')
         };
         const { button } = row;
         button.type = 'button';
-        button.append(row.name, row.quantity, row.craftable);
+        row.craftable.role = 'img';
+        const amount = element('span', '', 'item-amount');
+        amount.append(row.quantity, row.craftable);
+        button.append(row.name, amount);
         row.li.append(button);
         button.addEventListener('click', () => {
             application.select(row.item);
@@ -409,7 +412,8 @@ export function mount(root, application, { base, logout, settings, i18n }) {
             row.item = item;
             row.name.replaceChildren(renderMinecraftText(item.itemname));
             row.quantity.textContent = locale.number(item.quantity);
-            row.craftable.textContent = item.craftable ? locale.common('craftableYes') : '';
+            row.craftable.hidden = !item.craftable;
+            row.craftable.setAttribute('aria-label', locale.common('craftableYes'));
             row.button.classList.toggle('selected', item === state.selected);
             row.button.setAttribute('aria-pressed', String(item === state.selected));
             if (list.children[index] !== row.li) list.insertBefore(row.li, list.children[index] || null);

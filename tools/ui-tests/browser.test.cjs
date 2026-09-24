@@ -510,6 +510,26 @@ test('Minecraft names search and sort as continuous plain text and keep tooltip 
     assert.equal((await textStyle(details, 'Alpha')).color, 'rgb(255, 85, 85)');
 });
 
+test('craftable resources show an accessible hammer that follows refreshed availability', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const item = page.getByRole('button', { name: /Iron Ingot/ });
+    const hammer = item.getByRole('img', { name: 'Crafting available', exact: true });
+    await hammer.waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+        await page
+            .getByRole('button', { name: /Certus Quartz Crystal/ })
+            .getByRole('img')
+            .count(),
+        0
+    );
+    await item.hover();
+    await page.getByRole('tooltip').getByText('Crafting available', { exact: true }).waitFor();
+    options.itemsA = [{ ...iron, craftable: false }, quartz];
+    await hammer.waitFor({ state: 'hidden', timeout: 10000 });
+    await page.getByRole('tooltip').getByText('Not craftable', { exact: true }).waitFor();
+});
+
 test('terminal icon tools expose tooltips and support keyboard filtering and sorting', async (t) => {
     const { page, options, base } = await fixture(t);
     options.itemsA = [
