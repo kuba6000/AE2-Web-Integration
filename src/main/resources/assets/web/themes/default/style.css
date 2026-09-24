@@ -689,11 +689,12 @@ label {
 .item .quantity {
     flex-shrink: 0;
     white-space: nowrap;
-    color: #c6c6c6;
+    color: #d8d8d8;
     text-shadow: 2px 2px 0 #373737;
     font-variant-numeric: tabular-nums;
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 400;
+    translate: 1px 1px;
 }
 .item.selected {
     background: var(--selected);
