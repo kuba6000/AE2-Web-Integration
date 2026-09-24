@@ -757,17 +757,17 @@ footer a {
     display: flex;
     flex-direction: column;
     gap: 5px;
-    background: #171717;
+    background: #170817;
     background-clip: padding-box;
-    color: #f0f0f0;
-    padding: 2px 5px;
-    border: 12px solid transparent;
-    border-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' shape-rendering='crispEdges'%3E%3Cpath fill='%23090909' d='M4 0H20V1H22V2H23V4H24V20H23V22H22V23H20V24H4V23H2V22H1V20H0V4H1V2H2V1H4Z'/%3E%3Cpath fill='%23565656' d='M4 1H20V2H22V4H23V20H22V22H20V23H4V22H2V20H1V4H2V2H4Z'/%3E%3Cpath fill='%230b0b0b' d='M20 2H22V4H23V20H22V22H20V23H4V22H2V20H4V21H20V20H21V4H20Z'/%3E%3Cpath fill='%23171717' d='M5 3H19V4H20V5H21V19H20V20H19V21H5V20H4V19H3V5H4V4H5Z'/%3E%3C/svg%3E")
-        6 / 12px stretch;
+    color: #fff;
+    padding: 5px 7px;
+    border: 3px solid transparent;
+    border-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' shape-rendering='crispEdges'%3E%3Cdefs%3E%3ClinearGradient id='edge' x2='0' y2='1'%3E%3Cstop stop-color='%23290560'/%3E%3Cstop offset='1' stop-color='%231c0538'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath fill='%23100010' d='M1 0H11V1H12V11H11V12H1V11H0V1H1Z'/%3E%3Cpath fill='url(%23edge)' d='M1 1H11V11H1Z'/%3E%3Cpath fill='%23170817' d='M2 2H10V10H2Z'/%3E%3C/svg%3E")
+        3 / 3px stretch;
     font-size: 12px;
 }
 .tooltip code {
-    color: #bdbdbd;
+    color: #aaa;
 }
 @media (min-width: 1500px) {
     body {
