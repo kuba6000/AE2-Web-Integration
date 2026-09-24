@@ -1,7 +1,7 @@
 /**
  * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
  * @typedef {Terminal['state']} TerminalState
- * @typedef {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} Locale
+ * @typedef {import('../../app/i18n.mjs').Translator} Locale
  */
 
 /**
@@ -70,7 +70,7 @@ export function createSettingsView(root, application) {
         render(route, state, locale) {
             view.hidden = route.view !== 'settings';
             if (route.view !== 'settings') return;
-            const { t } = locale;
+            const { common: t } = locale;
             title.textContent = t('gridSettings');
             labelText.textContent = t('recordHistory');
             save.textContent = t('saveSettings');

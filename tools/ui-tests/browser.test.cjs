@@ -1320,6 +1320,206 @@ test('changing networks cannot publish a delayed response from the previous netw
     assert.equal(await page.getByRole('combobox', { name: 'Network' }).inputValue(), gridA);
 });
 
+// A sample theme consumes only public helpers; assertions observe its controls and rendered values.
+async function themeFixture(t, script, markup = '') {
+    const current = await fixture(t, '/ae2');
+    const url = new URL('theme-fixture', current.base).href;
+    await current.page.route(url, (route) =>
+        route.fulfill({
+            contentType: 'text/html',
+            body: `<!doctype html><html lang="en"><body>${markup}<output aria-label="Result"></output>
+                <script type="module">
+                    try {
+                        const { createThemeContext } = await import('./assets/web/app/theme-context.mjs');
+                        const base = new URL('./', location.href);
+                        const result = document.querySelector('output');
+                        ${script}
+                        document.body.dataset.ready = 'true';
+                    } catch (error) {
+                        document.querySelector('output').textContent = String(error);
+                        document.body.dataset.ready = 'error';
+                    }
+                </script></body></html>`
+        })
+    );
+    const open = async () => {
+        if (current.page.url() === url) await current.page.reload();
+        else await current.page.goto(url);
+        await current.page.locator('body[data-ready]').waitFor({ timeout: 3000 });
+        assert.equal(
+            await current.page.locator('body').getAttribute('data-ready'),
+            'true',
+            await current.page.getByLabel('Result').textContent()
+        );
+    };
+    return { ...current, open };
+}
+
+test('theme settings isolate deployments and themes and round-trip JSON through reload and removal', async (t) => {
+    const { page, open } = await themeFixture(
+        t,
+        `
+        const primary = createThemeContext(base, 'sample').settings;
+        const otherTheme = createThemeContext(base, 'other').settings;
+        const otherDeployment = createThemeContext(new URL('../second/', base), 'sample').settings;
+        function render() {
+            result.textContent = JSON.stringify([
+                primary.get('layout', 'default'), otherTheme.get('layout', 'default'),
+                otherDeployment.get('layout', 'default')
+            ]);
+        }
+        document.querySelector('#save').onclick = () => {
+            primary.set('layout', { compact: false, columns: 0, labels: ['ore', 'ingot'], note: null });
+            otherTheme.set('layout', 'other theme');
+            otherDeployment.set('layout', 'other deployment');
+            render();
+        };
+        document.querySelector('#remove').onclick = () => { primary.remove('layout'); render(); };
+        render();
+    `,
+        '<button id="save">Save layouts</button><button id="remove">Reset layout</button>'
+    );
+    await open();
+    assert.deepEqual(JSON.parse(await page.getByLabel('Result').textContent()), ['default', 'default', 'default']);
+    await page.getByRole('button', { name: 'Save layouts' }).click();
+    await open();
+    assert.deepEqual(JSON.parse(await page.getByLabel('Result').textContent()), [
+        { compact: false, columns: 0, labels: ['ore', 'ingot'], note: null },
+        'other theme',
+        'other deployment'
+    ]);
+    await page.getByRole('button', { name: 'Reset layout' }).click();
+    await open();
+    assert.deepEqual(JSON.parse(await page.getByLabel('Result').textContent()), [
+        'default',
+        'other theme',
+        'other deployment'
+    ]);
+});
+
+test('theme settings recover from corrupt storage and remain usable when browser storage is blocked', async (t) => {
+    for (const fault of ['corrupt', 'unavailable', 'quota']) {
+        await t.test(fault, async (t) => {
+            const { page, open } = await themeFixture(
+                t,
+                `
+                const settings = createThemeContext(base, 'sample').settings;
+                const render = () => { result.textContent = JSON.stringify([
+                    settings.get('layout', 'default'), settings.get('unset')
+                ]); };
+                document.querySelector('#save').onclick = () => { settings.set('layout', false); render(); };
+                document.querySelector('#remove').onclick = () => { settings.remove('layout'); render(); };
+                render();
+            `,
+                '<button id="save">Save layout</button><button id="remove">Reset layout</button>'
+            );
+            await page.addInitScript((fault) => {
+                if (fault === 'unavailable') {
+                    Object.defineProperty(window, 'localStorage', {
+                        get() {
+                            throw new DOMException('Blocked', 'SecurityError');
+                        }
+                    });
+                } else if (fault === 'quota') {
+                    Storage.prototype.setItem = () => {
+                        throw new DOMException('Full', 'QuotaExceededError');
+                    };
+                } else {
+                    const getItem = Storage.prototype.getItem;
+                    Storage.prototype.getItem = function (key) {
+                        return getItem.call(this, key) ?? '{invalid';
+                    };
+                }
+            }, fault);
+            await open();
+            assert.deepEqual(JSON.parse(await page.getByLabel('Result').textContent()), ['default', null]);
+            await page.getByRole('button', { name: 'Save layout' }).click();
+            assert.deepEqual(JSON.parse(await page.getByLabel('Result').textContent()), [false, null]);
+            await page.getByRole('button', { name: 'Reset layout' }).click();
+            assert.deepEqual(JSON.parse(await page.getByLabel('Result').textContent()), ['default', null]);
+        });
+    }
+});
+
+test('theme translations register independently and separate own and common fallbacks', async (t) => {
+    const { page, open } = await themeFixture(
+        t,
+        `
+        const own = createThemeContext(base, 'sample').i18n;
+        const other = createThemeContext(base, 'other').i18n;
+        const commonHome = own.forLanguage('pl').common('home');
+        document.querySelector('button').onclick = () => {
+            own.register({
+                en: { home: 'Theme home', greeting: 'Hello {name}', units: {one: '{count} item', other: '{count} items'} },
+                pl: { greeting: 'Witaj {name}', units: {one: '{count} rzecz', few: '{count} rzeczy', many: '{count} rzeczy', other: '{count} rzeczy'} }
+            });
+            own.register({en: {extra: 'Additional message'}});
+            const polish = own.forLanguage('pl');
+            const french = own.forLanguage('fr');
+            result.textContent = JSON.stringify({
+                ownHome: polish.t('home'), commonHome, afterRegister: polish.common('home'),
+                selected: polish.t('greeting', {name: 'Ada'}), plural: polish.t('units', {count: 2}),
+                englishFallback: french.t('units', {count: 0}), extra: polish.t('extra'),
+                missing: polish.t('missing-key'), commonMissing: polish.common('missing-key'),
+                isolated: other.forLanguage('pl').t('home'),
+                commonFallback: french.common('cpuCount', {count: 0}),
+                englishCommon: own.forLanguage('en').common('cpuCount', {count: 0}),
+                number: own.forLanguage('en').number(1234.5)
+            });
+        };
+    `,
+        '<button>Register theme translations</button>'
+    );
+    await open();
+    await page.getByRole('button', { name: 'Register theme translations' }).click();
+    const output = JSON.parse(await page.getByLabel('Result').textContent());
+    assert.equal(output.ownHome, 'Theme home');
+    assert.equal(output.afterRegister, output.commonHome, 'Theme keys cannot overwrite the common namespace');
+    assert.notEqual(output.afterRegister, output.ownHome);
+    assert.equal(output.selected, 'Witaj Ada');
+    assert.equal(output.plural, '2 rzeczy');
+    assert.equal(output.englishFallback, '0 items', 'English fallback uses English plural rules');
+    assert.equal(output.extra, 'Additional message');
+    assert.equal(output.missing, 'missing-key');
+    assert.equal(output.commonMissing, 'missing-key');
+    assert.equal(output.isolated, 'home');
+    assert.equal(output.commonFallback, output.englishCommon);
+    assert.equal(output.number, '1,234.5');
+});
+
+test('a theme can persist its own supported language in shared preferences', async (t) => {
+    const { page, open, base } = await themeFixture(
+        t,
+        `
+        const { createPreferences } = await import('./assets/web/app/preferences.mjs');
+        const preferences = createPreferences(base);
+        const i18n = createThemeContext(base, 'french-theme').i18n;
+        i18n.register({en: {welcome: 'Welcome'}, fr: {welcome: 'Bienvenue'}});
+        function render() {
+            const translator = i18n.forLanguage(preferences.values.language);
+            result.textContent = JSON.stringify([
+                translator.t('welcome'), translator.number(1234.5), translator.common('cpuCount', {count: 0})
+            ]);
+        }
+        document.querySelector('button').onclick = () => { preferences.set('language', 'fr'); render(); };
+        render();
+    `,
+        '<button>Use French</button>'
+    );
+    await open();
+    const englishCommon = JSON.parse(await page.getByLabel('Result').textContent())[2];
+    await page.getByRole('button', { name: 'Use French' }).click();
+    await open();
+    const output = JSON.parse(await page.getByLabel('Result').textContent());
+    assert.equal(output[0], 'Bienvenue');
+    assert.equal(output[1].replace(/\s/g, ' '), '1 234,5');
+    assert.equal(output[2], englishCommon);
+    await page.goto(base);
+    const language = page.getByRole('combobox', { name: 'Language' });
+    await language.waitFor();
+    assert.equal(await language.inputValue(), 'fr', 'Returning to the default theme retains the shared language');
+});
+
 test('appearance, language and terminal preferences survive reload and direct links', async (t) => {
     const { page, base } = await fixture(t, '/ae2');
     await page.goto(`${base}#/grids/${gridA}/items`);
@@ -1337,6 +1537,60 @@ test('appearance, language and terminal preferences survive reload and direct li
     );
     assert.equal(await page.getByRole('checkbox', { name: 'Odświeżaj automatycznie' }).isChecked(), false);
     assert.equal(await page.getByRole('combobox', { name: 'Sieć', exact: true }).inputValue(), gridA);
+});
+
+test('the default theme adopts saved appearance once and preserves subsequent choices and reset', async (t) => {
+    const { page, base, open } = await themeFixture(
+        t,
+        `
+        const settings = createThemeContext(base, 'default').settings;
+        document.querySelector('button').onclick = () => { settings.remove('appearance'); result.textContent = 'Reset'; };
+    `,
+        '<button>Reset default appearance</button>'
+    );
+    // This is the published browser data format from before themes owned appearance.
+    await page.addInitScript(() => {
+        const key = 'ae2web:/ae2/:ui';
+        if (localStorage.getItem(key) === null) {
+            localStorage.setItem(key, JSON.stringify({ appearance: 'dark', language: 'en', autoRefresh: false }));
+        }
+    });
+    await page.goto(base);
+    const appearance = page.getByRole('combobox', { name: 'Appearance' });
+    await appearance.waitFor();
+    assert.equal(await appearance.inputValue(), 'dark');
+    await appearance.selectOption('light');
+    await page.reload();
+    await appearance.waitFor();
+    assert.equal(await appearance.inputValue(), 'light');
+    await open();
+    await page.getByRole('button', { name: 'Reset default appearance' }).click();
+    await page.goto(base);
+    await appearance.waitFor();
+    assert.equal(await appearance.inputValue(), 'system', 'Reset must not resurrect the previously adopted appearance');
+});
+
+test('saved appearance remains recoverable when its first theme storage write fails', async (t) => {
+    const { page, base } = await fixture(t, '/ae2');
+    await page.addInitScript(() => {
+        if (sessionStorage.getItem('adoptionAttempted')) return;
+        sessionStorage.setItem('adoptionAttempted', 'true');
+        const legacyKey = 'ae2web:/ae2/:ui';
+        localStorage.setItem(legacyKey, JSON.stringify({ appearance: 'dark', language: 'en' }));
+        const setItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+            // Existing legacy data can be updated, but writing a new storage entry exceeds quota.
+            if (key === legacyKey) return setItem.call(this, key, value);
+            throw new DOMException('Full', 'QuotaExceededError');
+        };
+    });
+    await page.goto(base);
+    const appearance = page.getByRole('combobox', { name: 'Appearance' });
+    await appearance.waitFor();
+    assert.equal(await appearance.inputValue(), 'dark');
+    await page.reload();
+    await appearance.waitFor();
+    assert.equal(await appearance.inputValue(), 'dark', 'Failed adoption must preserve the recoverable saved choice');
 });
 
 test('lost access clears resource data and manual retry recovers', async (t) => {

@@ -1,7 +1,7 @@
 /**
  * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
  * @typedef {Terminal['state']} TerminalState
- * @typedef {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} Locale
+ * @typedef {import('../../app/i18n.mjs').Translator} Locale
  */
 
 import { cpuHref } from '../../app/router.mjs';
@@ -62,7 +62,7 @@ export function createCpuView(root, application) {
         render(route, state, locale) {
             view.hidden = route.view !== 'cpus';
             if (route.view !== 'cpus') return;
-            const { t, number } = locale;
+            const { common: t, number } = locale;
             title.textContent = t('cpus');
             resources.textContent = t('backResources');
             resources.href = `#/grids/${encodeURIComponent(route.gridKey)}/items`;

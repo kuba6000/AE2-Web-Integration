@@ -1,7 +1,7 @@
 /**
  * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
  * @typedef {Terminal['state']} TerminalState
- * @typedef {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} Locale
+ * @typedef {import('../../app/i18n.mjs').Translator} Locale
  */
 
 import { historyHref } from '../../app/router.mjs';
@@ -51,7 +51,7 @@ export function createHistoryView(root) {
         render(route, state, locale) {
             view.hidden = route.view !== 'history';
             if (route.view !== 'history') return;
-            const { t, number, dateTime } = locale;
+            const { common: t, number, dateTime } = locale;
             title.textContent = t('history');
             status.textContent = state.error
                 ? t(state.error)

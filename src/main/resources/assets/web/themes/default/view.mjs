@@ -1,10 +1,10 @@
 /**
  * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
  * @typedef {Terminal['state']} TerminalState
- * @typedef {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} Locale
+ * @typedef {import('../../app/i18n.mjs').Translator} Locale
  */
 
-import { createTranslator } from '../../app/i18n.mjs';
+import { createSettings } from '../../app/storage.mjs';
 import { navigateToGrid, cpuHref, historyHref } from '../../app/router.mjs';
 import { createCraftingView } from './crafting.mjs';
 import { createCpuView } from './cpus.mjs';
@@ -48,12 +48,30 @@ function iconButton(group, value) {
  * Theme renderer. Server operations and preference ownership are supplied by the application.
  * @param {HTMLElement} root
  * @param {Terminal} application
- * @param {{base: URL, logout: () => Promise<void>}} options
+ * @param {ReturnType<typeof import('../../app/theme-context.mjs').createThemeContext> & {base: URL, logout: () => Promise<void>}} options
  */
-export function mount(root, application, { base, logout }) {
+export function mount(root, application, { base, logout, settings, i18n }) {
+    i18n.register({
+        en: { appearance: 'Appearance', light: 'Light', dark: 'Dark', system: 'System' },
+        pl: { appearance: 'Wygląd', light: 'Jasny', dark: 'Ciemny', system: 'Systemowy' }
+    });
+    const appearances = ['light', 'dark', 'system'];
+    const previousSettings = createSettings(base, 'ui');
+    let savedAppearance = settings.get('appearance');
+    if (savedAppearance === null) {
+        // Adopt the previously shared preference; its meaning belongs only to this theme.
+        savedAppearance = previousSettings.get('appearance');
+        if (typeof savedAppearance === 'string' && appearances.includes(savedAppearance)) {
+            if (settings.set('appearance', savedAppearance)) previousSettings.remove('appearance');
+        }
+    } else {
+        previousSettings.remove('appearance');
+    }
+    let appearance =
+        typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
     root.innerHTML = `<header class="site-header"><div class="brand"><span class="brand-mark" aria-hidden="true">ME</span><h1>AE2 <span>Web Integration</span></h1></div><div class="preferences">
         <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
-        <label><span data-text="appearance"></span><select id="appearance"><option value="system" data-text="system"></option><option value="light" data-text="light"></option><option value="dark" data-text="dark"></option></select></label>
+        <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label>
         <button id="logout" data-text="logout"></button></div></header>
         <section class="network-bar"><label><span data-text="network"></span><select id="network"></select></label>
         <button id="refresh" data-text="refresh"></button><label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label></section>
@@ -167,8 +185,8 @@ export function mount(root, application, { base, logout }) {
         tooltip.replaceChildren(
             element('strong', item.itemname),
             element('code', item.itemid),
-            element('span', `${locale.t('quantity')}: ${locale.number(item.quantity)}`),
-            element('span', locale.t(item.craftable ? 'craftableYes' : 'craftableNo'))
+            element('span', `${locale.common('quantity')}: ${locale.number(item.quantity)}`),
+            element('span', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))
         );
         tooltip.hidden = false;
         positionTooltip(x, y);
@@ -197,35 +215,40 @@ export function mount(root, application, { base, logout }) {
         showTooltip(row.item, pointer ? x : box.left, pointer ? y : box.bottom);
     }
     function updateLabels() {
-        locale = createTranslator(language);
+        locale = i18n.forLanguage(language);
         document.documentElement.lang = language;
+        /** @type {NodeListOf<HTMLElement & {dataset: {themeText: string}}>} */ (
+            root.querySelectorAll('[data-theme-text]')
+        ).forEach((node) => {
+            node.textContent = locale.t(node.dataset.themeText);
+        });
         /** @type {NodeListOf<HTMLElement & {dataset: {text: string}}>} */ (
             root.querySelectorAll('[data-text]')
         ).forEach((node) => {
-            node.textContent = locale.t(node.dataset.text);
+            node.textContent = locale.common(node.dataset.text);
         });
         /** @type {NodeListOf<HTMLElement & {dataset: {label: string}}>} */ (
             root.querySelectorAll('[data-label]')
-        ).forEach((node) => node.setAttribute('aria-label', locale.t(node.dataset.label)));
+        ).forEach((node) => node.setAttribute('aria-label', locale.common(node.dataset.label)));
         toolButtons.forEach((button) => {
             const label =
                 button.dataset.preference === 'sort'
-                    ? `${locale.t('sort')}: ${locale.t(button.dataset.value)}`
-                    : locale.t(button.dataset.value);
+                    ? `${locale.common('sort')}: ${locale.common(button.dataset.value)}`
+                    : locale.common(button.dataset.value);
             button.setAttribute('aria-label', label);
         });
-        find('#search').placeholder = locale.t('searchHint');
-        find('#previous-page').setAttribute('aria-label', locale.t('previousPage'));
-        find('#next-page').setAttribute('aria-label', locale.t('nextPage'));
+        find('#search').placeholder = locale.common('searchHint');
+        find('#previous-page').setAttribute('aria-label', locale.common('previousPage'));
+        find('#next-page').setAttribute('aria-label', locale.common('nextPage'));
     }
     function renderNetworks() {
         const select = find('#network');
         const current = new Map([...select.options].map((option) => [option.value, option]));
         const entries = [
-            { key: '', label: locale.t('chooseNetwork') },
+            { key: '', label: locale.common('chooseNetwork') },
             ...state.grids.map((grid) => ({
                 key: grid.key,
-                label: `${grid.owner || locale.t('unknownOwner')} · ${grid.key}`
+                label: `${grid.owner || locale.common('unknownOwner')} · ${grid.key}`
             }))
         ];
         if (state.route.gridKey && !state.grids.some((grid) => grid.key === state.route.gridKey)) {
@@ -242,11 +265,11 @@ export function mount(root, application, { base, logout }) {
         select.value = state.route.gridKey || '';
         const networkMessage =
             state.gridStatus === 'loading'
-                ? locale.t('loading')
+                ? locale.common('loading')
                 : state.gridError
-                  ? locale.t(state.gridError)
+                  ? locale.common(state.gridError)
                   : !state.grids.length
-                    ? `${locale.t('noNetworks')}. ${locale.t('noNetworksHelp')}`
+                    ? `${locale.common('noNetworks')}. ${locale.common('noNetworksHelp')}`
                     : '';
         find('#network-message').textContent = networkMessage;
         const networks = find('#networks');
@@ -261,9 +284,9 @@ export function mount(root, application, { base, logout }) {
             link.dataset.key = grid.key;
             link.href = `#/grids/${encodeURIComponent(grid.key)}/items`;
             link.replaceChildren(
-                element('strong', locale.t('gridOwner', { owner: grid.owner || locale.t('unknownOwner') })),
+                element('strong', locale.common('gridOwner', { owner: grid.owner || locale.common('unknownOwner') })),
                 element('code', grid.key),
-                element('span', locale.t('cpuCount', { count: grid.cpuCount }))
+                element('span', locale.common('cpuCount', { count: grid.cpuCount }))
             );
             if (networks.children[index] !== link) networks.insertBefore(link, networks.children[index] || null);
             links.delete(grid.key);
@@ -312,17 +335,17 @@ export function mount(root, application, { base, logout }) {
         if (state.gridStatus === 'ready') {
             message =
                 state.itemStatus === 'loading'
-                    ? locale.t('loading')
+                    ? locale.common('loading')
                     : state.itemError
-                      ? locale.t(state.itemError)
+                      ? locale.common(state.itemError)
                       : state.itemStatus === 'ready'
                         ? !state.items.length
-                            ? locale.t('empty')
+                            ? locale.common('empty')
                             : !allFiltered.length
-                              ? locale.t('noMatches')
-                              : locale.t('resourceCount', { count: allFiltered.length })
+                              ? locale.common('noMatches')
+                              : locale.common('resourceCount', { count: allFiltered.length })
                         : '';
-            if (state.refreshing && state.itemStatus === 'ready') message += ` · ${locale.t('refreshing')}`;
+            if (state.refreshing && state.itemStatus === 'ready') message += ` · ${locale.common('refreshing')}`;
         }
         find('#item-message').textContent = message;
         find('#clear').hidden = state.itemStatus !== 'ready' || !state.items.length || !!allFiltered.length;
@@ -380,7 +403,7 @@ export function mount(root, application, { base, logout }) {
             row.item = item;
             row.name.textContent = item.itemname;
             row.quantity.textContent = locale.number(item.quantity);
-            row.craftable.textContent = item.craftable ? locale.t('craftableYes') : '';
+            row.craftable.textContent = item.craftable ? locale.common('craftableYes') : '';
             row.button.classList.toggle('selected', item === state.selected);
             row.button.setAttribute('aria-pressed', String(item === state.selected));
             if (list.children[index] !== row.li) list.insertBefore(row.li, list.children[index] || null);
@@ -404,16 +427,16 @@ export function mount(root, application, { base, logout }) {
         const item = state.selected;
         find('#order').hidden = !item?.craftable || !item.itemKey;
         if (!item) {
-            details.replaceChildren(element('p', locale.t('selectItem')));
+            details.replaceChildren(element('p', locale.common('selectItem')));
             return;
         }
         details.replaceChildren(
             element('h4', item.itemname),
             element('code', item.itemid),
-            element('p', `${locale.t('quantity')}: ${locale.number(item.quantity)}`),
-            element('p', locale.t(item.craftable ? 'craftableYes' : 'craftableNo'))
+            element('p', `${locale.common('quantity')}: ${locale.number(item.quantity)}`),
+            element('p', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))
         );
-        if (!item.itemKey) details.append(element('p', locale.t('identityUnavailable'), 'hint'));
+        if (!item.itemKey) details.append(element('p', locale.common('identityUnavailable'), 'hint'));
         if (item.craftable && item.itemKey) {
             const order = craftingView.order(item, state.crafting, locale);
             if (order.parentNode !== find('#order')) find('#order').append(order);
@@ -428,9 +451,15 @@ export function mount(root, application, { base, logout }) {
             language = state.preferences.language;
             updateLabels();
         }
-        document.documentElement.dataset.appearance = state.preferences.appearance;
-        find('#language').value = language;
-        find('#appearance').value = state.preferences.appearance;
+        document.documentElement.dataset.appearance = appearance;
+        const languageSelect = find('#language');
+        if (![...languageSelect.options].some((option) => option.value === language)) {
+            const option = element('option', language);
+            option.value = language;
+            languageSelect.append(option);
+        }
+        languageSelect.value = language;
+        find('#appearance').value = appearance;
         toolButtons.forEach((button) =>
             button.setAttribute(
                 'aria-pressed',
@@ -469,19 +498,22 @@ export function mount(root, application, { base, logout }) {
         find('#settings-link').hidden = !state.route.gridKey;
         find('#settings-link').href = `#/grids/${encodeURIComponent(String(state.route.gridKey))}/settings`;
         find('#updated').textContent = state.updatedAt
-            ? locale.t('updated', { time: locale.time(state.updatedAt) })
+            ? locale.common('updated', { time: locale.time(state.updatedAt) })
             : '';
     }
     const network = find('#network');
     network.addEventListener('change', () => navigateToGrid(network.value));
     const search = find('#search');
     search.addEventListener('input', () => application.search(search.value));
-    for (const name of /** @type {const} */ (['language', 'appearance'])) {
-        const select = /** @type {HTMLSelectElement & {value: TerminalState['preferences'][typeof name]}} */ (
-            find(`#${name}`)
-        );
-        select.addEventListener('change', () => application.preference(name, select.value));
-    }
+    const languageSelect = find('#language');
+    languageSelect.addEventListener('change', () => application.preference('language', languageSelect.value));
+    const appearanceSelect = find('#appearance');
+    appearanceSelect.addEventListener('change', () => {
+        if (!appearances.includes(appearanceSelect.value)) return;
+        appearance = appearanceSelect.value;
+        settings.set('appearance', appearance);
+        document.documentElement.dataset.appearance = appearance;
+    });
     toolButtons.forEach((button) => {
         const show = () => {
             itemTooltip = null;
@@ -524,7 +556,7 @@ export function mount(root, application, { base, logout }) {
         try {
             await logout();
         } catch (error) {
-            find('#network-message').textContent = locale.t(
+            find('#network-message').textContent = locale.common(
                 /** @type {import('../../app/api.mjs').ApiError} */ (error).status
             );
             find('#logout').disabled = false;
@@ -544,6 +576,7 @@ export function mount(root, application, { base, logout }) {
         window.removeEventListener('scroll', hideTooltip, true);
         window.removeEventListener('resize', hideTooltip);
         window.removeEventListener('keydown', keydown);
+        delete document.documentElement.dataset.appearance;
         root.replaceChildren();
     };
 }

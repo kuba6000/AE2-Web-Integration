@@ -1,7 +1,7 @@
 /**
  * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
  * @typedef {Terminal['state']} TerminalState
- * @typedef {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} Locale
+ * @typedef {import('../../app/i18n.mjs').Translator} Locale
  */
 
 import { cpuHref } from '../../app/router.mjs';
@@ -95,13 +95,13 @@ export function createCraftingView(root, application) {
         order(selected, state, locale) {
             if (item?.itemKey !== selected?.itemKey) quantity.value = '1';
             item = selected;
-            quantityText.textContent = locale.t('craftQuantity');
-            calculate.textContent = locale.t('calculatePlan');
+            quantityText.textContent = locale.common('craftQuantity');
+            calculate.textContent = locale.common('calculatePlan');
             calculate.disabled = !!state.mutation || !!state.uncertain;
             orderMessage.textContent = state.uncertain
-                ? locale.t('uncertainCreate')
+                ? locale.common('uncertainCreate')
                 : state.error
-                  ? locale.t(state.error)
+                  ? locale.common(state.error)
                   : '';
             return order;
         },
@@ -111,7 +111,7 @@ export function createCraftingView(root, application) {
          * @param {Locale} locale
          */
         render(route, state, locale) {
-            const { t, number } = locale;
+            const { common: t, number } = locale;
             planView.hidden = route.view !== 'plan';
             if (route.view !== 'plan') return;
             title.textContent = t('craftingPlan');

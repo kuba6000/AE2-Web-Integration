@@ -2,6 +2,7 @@ import { createApi } from './api.mjs';
 import { createPreferences } from './preferences.mjs';
 import { createTerminal } from './terminal.mjs';
 import { readRoute } from './router.mjs';
+import { createThemeContext } from './theme-context.mjs';
 import { mount } from '../themes/default/view.mjs';
 
 const base = new URL('./', location.href);
@@ -19,6 +20,7 @@ function returnToLogin() {
 const api = createApi(base, returnToLogin);
 const application = createTerminal(api, createPreferences(base));
 const unmount = mount(/** @type {HTMLElement} */ (document.getElementById('app')), application, {
+    ...createThemeContext(base, 'default'),
     base,
     async logout() {
         await api.logout();

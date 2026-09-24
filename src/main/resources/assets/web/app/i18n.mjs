@@ -1,5 +1,9 @@
 /** @typedef {Partial<Record<Intl.LDMLPluralRule, string>> & {other: string}} PluralMessage */
-/** @type {Record<string, Record<string, string | PluralMessage>>} */
+/** @typedef {Record<string, string | PluralMessage>} Dictionary */
+/** @typedef {Record<string, Dictionary>} Dictionaries */
+/** @typedef {{count?: number} & Record<string, string | number | undefined>} MessageValues */
+/** @typedef {ReturnType<typeof createTranslator>} Translator */
+/** @type {Dictionaries} */
 const translations = {
     en: {
         resourceTimings: 'Resource processing intervals',
@@ -147,10 +151,6 @@ const translations = {
         identityUnavailable: 'This resource currently has no usable web identity.',
         resourceCount: { one: '{count} resource', other: '{count} resources' },
         language: 'Language',
-        appearance: 'Appearance',
-        light: 'Light',
-        dark: 'Dark',
-        system: 'System',
         logout: 'Log out',
         previous: 'Previous interface',
         previousHelp: 'The previous interface remains available during this update.',
@@ -324,10 +324,6 @@ const translations = {
             other: '{count} zasobu'
         },
         language: 'Język',
-        appearance: 'Wygląd',
-        light: 'Jasny',
-        dark: 'Ciemny',
-        system: 'Systemowy',
         logout: 'Wyloguj',
         previous: 'Poprzedni interfejs',
         previousHelp: 'Podczas tej aktualizacji poprzedni interfejs pozostaje dostępny.',
@@ -347,11 +343,34 @@ const translations = {
     }
 };
 
-/** @param {string} language */
-export function createTranslator(language) {
-    const locale = translations[language] || translations.en;
+/** Each theme registers its dictionaries independently of the shared messages. */
+export function createI18n() {
+    /** @type {Dictionaries} */
+    const dictionaries = {};
+    return {
+        /** @param {Dictionaries} additions */
+        register(additions) {
+            for (const [language, messages] of Object.entries(additions)) {
+                Object.defineProperty(dictionaries, language, {
+                    value: { ...(Object.hasOwn(dictionaries, language) ? dictionaries[language] : {}), ...messages },
+                    configurable: true,
+                    enumerable: true,
+                    writable: true
+                });
+            }
+        },
+        /** @param {string} language */
+        forLanguage(language) {
+            return createTranslator(language, dictionaries);
+        }
+    };
+}
+
+/** @param {string} language @param {Dictionaries} dictionaries */
+function createTranslator(language, dictionaries) {
     const numbers = new Intl.NumberFormat(language);
     const plural = new Intl.PluralRules(language);
+    const englishPlural = new Intl.PluralRules('en');
     const times = new Intl.DateTimeFormat(language, { timeStyle: 'medium' });
     const dates = new Intl.DateTimeFormat(language, { dateStyle: 'medium', timeStyle: 'medium' });
     const preciseTimes = new Intl.DateTimeFormat(language, {
@@ -363,16 +382,25 @@ export function createTranslator(language) {
         second: '2-digit',
         fractionalSecondDigits: 3
     });
-    /** @param {string} key @param {{count?: number} & Record<string, string | number | undefined>} [values] */
-    function t(key, values = {}) {
-        let message = locale[key] || translations.en[key] || locale.error;
-        if (typeof message === 'object') message = message[plural.select(values.count ?? NaN)] || message.other;
+    /** @param {Dictionaries} source @param {string} key @param {MessageValues} values */
+    function translate(source, key, values) {
+        const selected = Object.hasOwn(source, language) ? source[language] : {};
+        const english = Object.hasOwn(source, 'en') ? source.en : {};
+        const localized = Object.hasOwn(selected, key);
+        let message = localized ? selected[key] : Object.hasOwn(english, key) ? english[key] : key;
+        if (typeof message === 'object') {
+            const form = (localized ? plural : englishPlural).select(values.count ?? NaN);
+            message = Object.hasOwn(message, form) ? (message[form] ?? message.other) : message.other;
+        }
         return message.replace(/\{(\w+)\}/g, (_, name) =>
             typeof values[name] === 'number' ? numbers.format(values[name]) : String(values[name] ?? '')
         );
     }
     return {
-        t,
+        t: /** @param {string} key @param {MessageValues} [values] */ (key, values = {}) =>
+            translate(dictionaries, key, values),
+        common: /** @param {string} key @param {MessageValues} [values] */ (key, values = {}) =>
+            translate(translations, key, values),
         number: /** @param {number} value */ (value) => numbers.format(value),
         time: /** @param {number} value */ (value) => times.format(value),
         dateTime: /** @param {number} value */ (value) => dates.format(value),

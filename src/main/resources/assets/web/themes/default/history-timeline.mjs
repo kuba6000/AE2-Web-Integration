@@ -18,10 +18,10 @@ function element(tag, text = '') {
 /**
  * Detached history intervals; each API row remains separate even when names/registry IDs repeat.
  * @param {import('../../app/api-types.mjs').HistoryDetail} snapshot
- * @param {ReturnType<typeof import('../../app/i18n.mjs').createTranslator>} locale
+ * @param {import('../../app/i18n.mjs').Translator} locale
  */
 export function renderHistoryTimeline(snapshot, locale) {
-    const { t, number, preciseTime } = locale;
+    const { common: t, number, preciseTime } = locale;
     const container = element('div');
     container.className = 'history-timelines';
     const duration = snapshot.timeDone - snapshot.timeStarted;
