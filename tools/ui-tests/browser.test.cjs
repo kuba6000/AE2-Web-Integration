@@ -331,6 +331,185 @@ test('real page browses API resources under a proxy prefix, with search and filt
     );
 });
 
+// Public seam: API names become readable, safely styled browser content; section codes
+// follow Minecraft's stable classic formatting rules rather than leaking into labels.
+async function textStyle(locator, text) {
+    return locator.evaluate((element, text) => {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+            if (!walker.currentNode.textContent.includes(text)) continue;
+            const style = getComputedStyle(walker.currentNode.parentElement);
+            return {
+                color: style.color,
+                weight: style.fontWeight,
+                italic: style.fontStyle,
+                decoration: style.textDecorationLine
+            };
+        }
+        throw new Error(`Visible text not found: ${text}`);
+    }, text);
+}
+
+test('Minecraft item formatting renders readable names and resets decorations on colors and reset codes', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.itemsA = [
+        {
+            ...iron,
+            itemname:
+                'Base §aGreen §lBold §oItalic §nUnderlined §mStruck §BColorCleared §L§O§N§MHeavy §RRestored §qUnknown tail§'
+        }
+    ];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const item = page.getByRole('button', {
+        name: /^Base Green Bold Italic Underlined Struck ColorCleared Heavy Restored §qUnknown tail§/
+    });
+    await item.waitFor({ timeout: 3000 });
+    const normal = await textStyle(item, 'Base');
+    assert.equal((await textStyle(item, 'Green')).color, 'rgb(85, 255, 85)');
+    assert.ok(Number((await textStyle(item, 'Bold')).weight) >= 700);
+    assert.equal((await textStyle(item, 'Italic')).italic, 'italic');
+    assert.match((await textStyle(item, 'Underlined')).decoration, /underline/);
+    const combined = await textStyle(item, 'Struck');
+    assert.equal(combined.color, 'rgb(85, 255, 85)');
+    assert.ok(Number(combined.weight) >= 700);
+    assert.equal(combined.italic, 'italic');
+    assert.match(combined.decoration, /underline/);
+    assert.match(combined.decoration, /line-through/);
+    assert.deepEqual(await textStyle(item, 'ColorCleared'), { ...normal, color: 'rgb(85, 255, 255)' });
+    assert.ok(Number((await textStyle(item, 'Heavy')).weight) >= 700);
+    assert.deepEqual(await textStyle(item, 'Restored'), normal);
+    assert.match(await item.innerText(), /§qUnknown tail§/);
+});
+
+test('Minecraft names retain formatting across crafting plans, CPU work and history', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const itemname = '§aCobalt §lIngot';
+    const finalOutput = { ...iron, itemname, quantity: 12 };
+    options.itemsA = [{ ...iron, itemname }];
+    options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], itemname }] };
+    options.cpuDetails = { 'cpu-a': { ...cpuWork, finalOutput, items: [{ ...cpuWork.items[0], itemname }] } };
+    options.history = [{ ...historyEntry, finalOutput }];
+    options.historyDetail = { ...historyDetail, finalOutput, items: [{ ...historyDetail.items[0], itemname }] };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
+    await page.getByRole('button', { name: /Cobalt.*Ingot/ }).click();
+    await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
+    await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    const resource = page.getByRole('cell', { name: /Cobalt Ingot/ });
+    await resource.waitFor({ timeout: 3000 });
+    async function assertFormatted(locator) {
+        assert.doesNotMatch(await locator.innerText(), /§[0-9a-fk-or]/i);
+        assert.equal((await textStyle(locator, 'Cobalt')).color, 'rgb(85, 255, 85)');
+        assert.ok(Number((await textStyle(locator, 'Ingot')).weight) >= 700);
+    }
+    await assertFormatted(resource);
+    const planOutput = page.getByRole('paragraph').filter({ hasText: /^Cobalt Ingot × 12$/ });
+    await assertFormatted(planOutput);
+    assert.notEqual((await textStyle(planOutput, '× 12')).color, 'rgb(85, 255, 85)');
+    options.cpus = { 'cpu-a': { ...cpu, isBusy: true, finalOutput } };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await resource.waitFor();
+    await assertFormatted(resource);
+    const cpuSummary = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: /cpu-a/ }) });
+    await assertFormatted(cpuSummary);
+    const cpuOutput = page.getByRole('paragraph').filter({ hasText: /^[^§]*: Cobalt Ingot × 12$/ });
+    await assertFormatted(cpuOutput);
+    await page.getByRole('link', { name: 'History', exact: true }).click();
+    const historyLink = page.getByRole('link', { name: /Cobalt Ingot.*#1/ });
+    await historyLink.waitFor();
+    await assertFormatted(historyLink);
+    await historyLink.click();
+    await resource.waitFor();
+    await assertFormatted(resource);
+    await assertFormatted(page.getByRole('heading', { name: 'Cobalt Ingot × 12', exact: true }));
+    const timeline = page.getByRole('region', { name: 'Cobalt Ingot', exact: true });
+    await timeline.waitFor();
+    await assertFormatted(timeline.getByRole('heading', { name: 'Cobalt Ingot', exact: true }));
+});
+
+test('Minecraft classic palette, obfuscation and literal HTML remain safe and readable', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const colors = [
+        ['0', 'rgb(0, 0, 0)'],
+        ['1', 'rgb(0, 0, 170)'],
+        ['2', 'rgb(0, 170, 0)'],
+        ['3', 'rgb(0, 170, 170)'],
+        ['4', 'rgb(170, 0, 0)'],
+        ['5', 'rgb(170, 0, 170)'],
+        ['6', 'rgb(255, 170, 0)'],
+        ['7', 'rgb(170, 170, 170)'],
+        ['8', 'rgb(85, 85, 85)'],
+        ['9', 'rgb(85, 85, 255)'],
+        ['A', 'rgb(85, 255, 85)'],
+        ['B', 'rgb(85, 255, 255)'],
+        ['C', 'rgb(255, 85, 85)'],
+        ['D', 'rgb(255, 85, 255)'],
+        ['E', 'rgb(255, 255, 85)'],
+        ['F', 'rgb(255, 255, 255)']
+    ];
+    const literal = '<img src=x onerror=alert(1)> & <script>alert(2)</script>';
+    options.itemsA = [
+        { ...iron, itemname: colors.map(([code]) => `§${code}Color${code}`).join(' ') },
+        { ...quartz, itemname: `§kSecret Words §aVisible §KMasked §rPlain §qUnknown tail§ ${literal}` }
+    ];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const palette = page.getByRole('button', { name: /^Color0/ });
+    await palette.waitFor();
+    for (const [code, color] of colors) assert.equal((await textStyle(palette, `Color${code}`)).color, color);
+    const masked = page.getByRole('button', { name: /^Secret Words Visible Masked Plain §qUnknown tail§/ });
+    await masked.waitFor();
+    const masks = masked.locator('[aria-hidden="true"]').filter({ hasText: '▒' });
+    assert.deepEqual(await masks.allTextContents(), ['▒▒▒▒▒▒ ▒▒▒▒▒ ', '▒▒▒▒▒▒ ']);
+    assert.equal((await textStyle(masked, 'Visible')).color, 'rgb(85, 255, 85)');
+    await masked.click();
+    const details = page.getByRole('heading', { name: /^Secret Words Visible Masked Plain §qUnknown tail§/ });
+    await details.waitFor();
+    assert.ok((await details.textContent()).includes(literal));
+    assert.equal(await page.locator('img').count(), 0, 'Markup in names must remain text');
+});
+
+test('Minecraft names search and sort as continuous plain text and keep tooltip formatting through polling', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.itemsA = [
+        { ...iron, itemname: '§fAl§apha' },
+        { ...quartz, itemname: '§0Beta §qliteral' }
+    ];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const alpha = page.getByRole('button', { name: /^Alpha/ });
+    await alpha.waitFor();
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    assert.match(
+        await page
+            .getByRole('button', { name: /^(Alpha|Beta)/ })
+            .first()
+            .innerText(),
+        /^Alpha/
+    );
+    const search = page.getByRole('searchbox', { name: 'Search resources' });
+    await search.fill('alpha');
+    await alpha.waitFor();
+    assert.equal(await page.getByRole('button', { name: /^Beta/ }).count(), 0);
+    await search.fill('§qliteral');
+    await page.getByRole('button', { name: /^Beta/ }).waitFor();
+    assert.equal(await alpha.count(), 0, 'Unknown codes remain part of the searchable literal name');
+    await search.fill('');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, 1);
+    await alpha.hover();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.waitFor({ state: 'visible' });
+    assert.equal((await textStyle(tooltip, 'pha')).color, 'rgb(85, 255, 85)');
+    options.itemsA = [{ ...iron, itemname: '§cAlpha', quantity: 8765 }, options.itemsA[1]];
+    await page.getByRole('button', { name: /^Alpha.*8,765/ }).waitFor();
+    assert.equal(await tooltip.isVisible(), true);
+    assert.match(await tooltip.innerText(), /8,765/);
+    assert.equal((await textStyle(tooltip, 'Alpha')).color, 'rgb(255, 85, 85)');
+    assert.doesNotMatch(await tooltip.innerText(), /§[0-9a-fk-or]/i);
+    await alpha.click();
+    const details = page.getByRole('heading', { name: 'Alpha', exact: true });
+    await details.waitFor();
+    assert.equal((await textStyle(details, 'Alpha')).color, 'rgb(255, 85, 85)');
+});
+
 test('terminal icon tools expose tooltips and support keyboard filtering and sorting', async (t) => {
     const { page, options, base } = await fixture(t);
     options.itemsA = [

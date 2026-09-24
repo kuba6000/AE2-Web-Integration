@@ -5,6 +5,8 @@
  */
 
 import { createSettings } from '../../app/storage.mjs';
+import { plainMinecraftText } from '../../app/minecraft-text.mjs';
+import { renderMinecraftText } from './minecraft-text.mjs';
 import { navigateToGrid, cpuHref, historyHref } from '../../app/router.mjs';
 import { createCraftingView } from './crafting.mjs';
 import { createCpuView } from './cpus.mjs';
@@ -182,8 +184,10 @@ export function mount(root, application, { base, logout, settings, i18n }) {
      * @param {number} y
      */
     function showTooltip(item, x, y) {
+        const name = element('strong');
+        name.append(renderMinecraftText(item.itemname));
         tooltip.replaceChildren(
-            element('strong', item.itemname),
+            name,
             element('code', item.itemid),
             element('span', `${locale.common('quantity')}: ${locale.number(item.quantity)}`),
             element('span', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))
@@ -310,19 +314,21 @@ export function mount(root, application, { base, logout, settings, i18n }) {
             }
             const search = state.search.trim().toLocaleLowerCase(language);
             allFiltered = state.items
-                .filter((item) => `${item.itemname} ${item.itemid}`.toLocaleLowerCase(language).includes(search))
+                .map((item) => ({ item, name: plainMinecraftText(item.itemname) }))
+                .filter(({ item, name }) => `${name} ${item.itemid}`.toLocaleLowerCase(language).includes(search))
                 .filter(
-                    (item) =>
+                    ({ item }) =>
                         state.preferences.filter === 'all' ||
                         (state.preferences.filter === 'stored' ? item.quantity > 0 : item.craftable)
                 )
                 .sort((a, b) =>
                     state.preferences.sort === 'quantity'
-                        ? b.quantity - a.quantity || a.itemname.localeCompare(b.itemname, language)
+                        ? b.item.quantity - a.item.quantity || a.name.localeCompare(b.name, language)
                         : state.preferences.sort === 'id'
-                          ? a.itemid.localeCompare(b.itemid, language)
-                          : a.itemname.localeCompare(b.itemname, language)
-                );
+                          ? a.item.itemid.localeCompare(b.item.itemid, language)
+                          : a.name.localeCompare(b.name, language)
+                )
+                .map(({ item }) => item);
             listInput = { items: state.items, signature };
             renderPage();
         }
@@ -401,7 +407,7 @@ export function mount(root, application, { base, logout, settings, i18n }) {
         const next = allFiltered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((item, index) => {
             const row = previous.get(item.itemKey) || createItemRow(item);
             row.item = item;
-            row.name.textContent = item.itemname;
+            row.name.replaceChildren(renderMinecraftText(item.itemname));
             row.quantity.textContent = locale.number(item.quantity);
             row.craftable.textContent = item.craftable ? locale.common('craftableYes') : '';
             row.button.classList.toggle('selected', item === state.selected);
@@ -430,8 +436,10 @@ export function mount(root, application, { base, logout, settings, i18n }) {
             details.replaceChildren(element('p', locale.common('selectItem')));
             return;
         }
+        const name = element('h4');
+        name.append(renderMinecraftText(item.itemname));
         details.replaceChildren(
-            element('h4', item.itemname),
+            name,
             element('code', item.itemid),
             element('p', `${locale.common('quantity')}: ${locale.number(item.quantity)}`),
             element('p', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))

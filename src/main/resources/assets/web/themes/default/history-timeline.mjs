@@ -3,6 +3,9 @@
  * @typedef {import('../../app/api-types.mjs').ProviderTiming} ProviderTiming
  */
 
+import { plainMinecraftText } from '../../app/minecraft-text.mjs';
+import { renderMinecraftText } from './minecraft-text.mjs';
+
 /**
  * @template {keyof HTMLElementTagNameMap} Tag
  * @param {Tag} tag
@@ -38,8 +41,10 @@ export function renderHistoryTimeline(snapshot, locale) {
                 ? /** @type {ProviderTiming} */ (row).name
                 : /** @type {HistoryItem} */ (row).itemname;
             const section = element('section');
-            section.setAttribute('aria-label', name);
-            section.append(element('h4', name));
+            section.setAttribute('aria-label', plainMinecraftText(name));
+            const heading = element('h4');
+            heading.append(renderMinecraftText(name));
+            section.append(heading);
             if (!providers) section.append(element('code', /** @type {HistoryItem} */ (row).itemid));
             else {
                 const provider = /** @type {ProviderTiming} */ (row);

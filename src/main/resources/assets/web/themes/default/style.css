@@ -753,6 +753,69 @@ footer a {
     white-space: nowrap;
     border: 0;
 }
+.mc-black {
+    color: #000;
+}
+.mc-dark_blue {
+    color: #00a;
+}
+.mc-dark_green {
+    color: #0a0;
+}
+.mc-dark_aqua {
+    color: #0aa;
+}
+.mc-dark_red {
+    color: #a00;
+}
+.mc-dark_purple {
+    color: #a0a;
+}
+.mc-gold {
+    color: #fa0;
+}
+.mc-gray {
+    color: #aaa;
+}
+.mc-dark_gray {
+    color: #555;
+}
+.mc-blue {
+    color: #55f;
+}
+.mc-green {
+    color: #5f5;
+}
+.mc-aqua {
+    color: #5ff;
+}
+.mc-red {
+    color: #f55;
+}
+.mc-light_purple {
+    color: #f5f;
+}
+.mc-yellow {
+    color: #ff5;
+}
+.mc-white {
+    color: #fff;
+}
+.mc-bold {
+    font-weight: 700;
+}
+.mc-italic {
+    font-style: italic;
+}
+.mc-underline {
+    text-decoration-line: underline;
+}
+.mc-strikethrough {
+    text-decoration-line: line-through;
+}
+.mc-underline.mc-strikethrough {
+    text-decoration-line: underline line-through;
+}
 .tooltip {
     position: fixed;
     z-index: 10;

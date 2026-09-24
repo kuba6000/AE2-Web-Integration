@@ -5,6 +5,8 @@
  */
 
 import { cpuHref } from '../../app/router.mjs';
+import { plainMinecraftText } from '../../app/minecraft-text.mjs';
+import { renderMinecraftText } from './minecraft-text.mjs';
 
 /**
  * @template {keyof HTMLElementTagNameMap} Tag
@@ -115,9 +117,9 @@ export function createCraftingView(root, application) {
             planView.hidden = route.view !== 'plan';
             if (route.view !== 'plan') return;
             title.textContent = t('craftingPlan');
-            output.textContent = state.metadata
-                ? `${state.metadata.itemname} × ${number(state.metadata.quantity)}`
-                : '';
+            output.replaceChildren();
+            if (state.metadata)
+                output.append(renderMinecraftText(state.metadata.itemname), ` × ${number(state.metadata.quantity)}`);
             status.textContent = state.uncertain
                 ? t(state.uncertain === 'delete' ? 'uncertainDelete' : 'uncertainSubmit')
                 : state.error
@@ -145,8 +147,8 @@ export function createCraftingView(root, application) {
                 body.replaceChildren(
                     ...(state.plan?.plan || []).map((row) => {
                         const tr = element('tr');
-                        const name = element('td', row.itemname);
-                        name.append(element('code', row.itemid));
+                        const name = element('td');
+                        name.append(renderMinecraftText(row.itemname), element('code', row.itemid));
                         tr.append(name);
                         for (const value of [row.stored, row.requested, row.missing, row.steps])
                             tr.append(element('td', number(value)));
@@ -164,7 +166,7 @@ export function createCraftingView(root, application) {
                 { key: '', label: t('chooseCpu'), eligible: true },
                 ...state.cpus.map((cpu) => ({
                     ...cpu,
-                    label: `${cpu.name} · ${cpu.key} · ${number(cpu.availableStorage)} B · ${t('coprocessors', { count: cpu.coProcessors })} · ${t(cpu.isBusy ? 'cpuBusy' : 'cpuIdle')}`
+                    label: `${plainMinecraftText(cpu.name)} · ${cpu.key} · ${number(cpu.availableStorage)} B · ${t('coprocessors', { count: cpu.coProcessors })} · ${t(cpu.isBusy ? 'cpuBusy' : 'cpuIdle')}`
                 }))
             ];
             const current = new Map([...select.options].map((option) => [option.value, option]));

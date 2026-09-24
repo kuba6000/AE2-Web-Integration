@@ -5,6 +5,7 @@
  */
 
 import { cpuHref } from '../../app/router.mjs';
+import { renderMinecraftText } from './minecraft-text.mjs';
 
 /**
  * @template {keyof HTMLElementTagNameMap} Tag
@@ -93,27 +94,37 @@ export function createCpuView(root, application) {
                 };
                 if (!entry.link.parentNode) entry.li.append(entry.link, entry.summary, entry.output);
                 entry.link.href = cpuHref(route.gridKey, cpu.key);
-                entry.link.textContent = `${cpu.name} · ${cpu.key}`;
+                entry.link.replaceChildren(renderMinecraftText(cpu.name), ` · ${cpu.key}`);
                 if (route.cpuKey === cpu.key) entry.link.setAttribute('aria-current', 'page');
                 else entry.link.removeAttribute('aria-current');
                 entry.summary.textContent = `${t(cpu.isBusy ? 'cpuBusy' : 'cpuIdle')} · ${t('cpuCapacity', { count: cpu.availableStorage })} · ${t('coprocessors', { count: cpu.coProcessors })} · ${cpu.usedStorage >= 0 ? t('cpuUsedStorage', { count: cpu.usedStorage }) : t('cpuStorageUnknown')}`;
-                entry.output.textContent = cpu.isBusy
-                    ? cpu.finalOutput
-                        ? `${cpu.finalOutput.itemname} × ${number(cpu.finalOutput.quantity)}`
-                        : t('cpuOutputUnknown')
-                    : '';
+                entry.output.replaceChildren();
+                if (cpu.isBusy) {
+                    if (cpu.finalOutput)
+                        entry.output.append(
+                            renderMinecraftText(cpu.finalOutput.itemname),
+                            ` × ${number(cpu.finalOutput.quantity)}`
+                        );
+                    else entry.output.append(t('cpuOutputUnknown'));
+                }
                 if (!entry.li.parentNode) list.append(entry.li);
                 current.set(cpu.key, entry);
             }
             for (const [key, entry] of rows) if (!current.has(key)) entry.li.remove();
             rows = current;
             const selected = state.cpus.find((cpu) => cpu.key === route.cpuKey);
-            heading.textContent = route.cpuKey ? `${t('cpuWork')} · ${selected?.name || route.cpuKey}` : '';
-            output.textContent = detail?.isBusy
-                ? detail.finalOutput
-                    ? `${t('cpuOutput')}: ${detail.finalOutput.itemname} × ${number(detail.finalOutput.quantity)}`
-                    : t('cpuOutputUnknown')
-                : '';
+            heading.replaceChildren();
+            if (route.cpuKey) heading.append(`${t('cpuWork')} · `, renderMinecraftText(selected?.name || route.cpuKey));
+            output.replaceChildren();
+            if (detail?.isBusy) {
+                if (detail.finalOutput)
+                    output.append(
+                        `${t('cpuOutput')}: `,
+                        renderMinecraftText(detail.finalOutput.itemname),
+                        ` × ${number(detail.finalOutput.quantity)}`
+                    );
+                else output.append(t('cpuOutputUnknown'));
+            }
             timing.textContent = detail?.isBusy
                 ? detail.hasTrackingInfo
                     ? `${t('cpuStarted', { time: locale.dateTime(detail.timeStarted) })} · ${t('cpuElapsed', { count: detail.timeElapsed / 1000 })}`
@@ -144,8 +155,8 @@ export function createCpuView(root, application) {
                 const body = element('tbody');
                 for (const item of detail?.items || []) {
                     const row = element('tr');
-                    const name = element('td', item.itemname);
-                    name.append(element('code', item.itemid));
+                    const name = element('td');
+                    name.append(renderMinecraftText(item.itemname), element('code', item.itemid));
                     row.append(name);
                     const values = [number(item.active), number(item.pending), number(item.stored)];
                     if (detail?.hasTrackingInfo)

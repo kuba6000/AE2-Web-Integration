@@ -6,6 +6,7 @@
 
 import { historyHref } from '../../app/router.mjs';
 import { renderHistoryTimeline } from './history-timeline.mjs';
+import { renderMinecraftText } from './minecraft-text.mjs';
 
 /**
  * @template {keyof HTMLElementTagNameMap} Tag
@@ -75,7 +76,10 @@ export function createHistoryView(root) {
                 const row = entries.get(entry.id) || { li: element('li'), link: element('a'), time: element('p') };
                 if (!row.link.parentNode) row.li.append(row.link, row.time);
                 row.link.href = historyHref(route.gridKey, entry.id);
-                row.link.textContent = `${entry.finalOutput.itemname} × ${number(entry.finalOutput.quantity)} · #${entry.id}`;
+                row.link.replaceChildren(
+                    renderMinecraftText(entry.finalOutput.itemname),
+                    ` × ${number(entry.finalOutput.quantity)} · #${entry.id}`
+                );
                 row.time.textContent = `${t(entry.wasCancelled ? 'historyCancelled' : 'historyCompleted')} · ${dateTime(entry.timeDone)}`;
                 if (list.children[index] !== row.li) list.insertBefore(row.li, list.children[index] || null);
                 current.set(entry.id, row);
@@ -90,8 +94,13 @@ export function createHistoryView(root) {
             detail.replaceChildren();
             const snapshot = state.detail;
             if (!snapshot) return;
+            const heading = element('h3');
+            heading.append(
+                renderMinecraftText(snapshot.finalOutput.itemname),
+                ` × ${number(snapshot.finalOutput.quantity)}`
+            );
             detail.append(
-                element('h3', `${snapshot.finalOutput.itemname} × ${number(snapshot.finalOutput.quantity)}`),
+                heading,
                 element('code', snapshot.finalOutput.itemid),
                 element('p', t('cpuStarted', { time: dateTime(snapshot.timeStarted) })),
                 element('p', t('historyEnded', { time: dateTime(snapshot.timeDone) })),
@@ -118,8 +127,8 @@ export function createHistoryView(root) {
             const body = element('tbody');
             for (const item of snapshot.items) {
                 const row = element('tr');
-                const name = element('td', item.itemname);
-                name.append(element('code', item.itemid));
+                const name = element('td');
+                name.append(renderMinecraftText(item.itemname), element('code', item.itemid));
                 row.append(name);
                 for (const value of [
                     number(item.craftedTotal),
