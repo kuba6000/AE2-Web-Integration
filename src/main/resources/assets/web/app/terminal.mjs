@@ -204,7 +204,6 @@ export function createTerminal(api, preferences) {
             invalidateItems();
             state.route = route;
             if (route.gridKey) state.selectedGridKey = route.gridKey;
-            else if (route.view === 'home') state.selectedGridKey = null;
             crafting.route(route);
             cpus.route(route);
             history.route(route);

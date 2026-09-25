@@ -105,8 +105,7 @@ export function mount(root, application, { base, user, modVersion, logout, setti
         typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
     root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><img class="brand-mark" src="./favicon.ico" width="32" height="32" alt=""><h1>AE2 <span>Web Integration</span></h1></div><div class="account-controls">
         <span id="username"></span><button id="logout" data-text="logout"></button></div></header>
-        <section class="network-bar"><label><span data-text="network"></span><select id="network"></select></label>
-        <button id="refresh" data-text="refresh"></button><label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label></section>
+        <dl class="network-summary"><dt><span data-text="network"></span>:</dt><dd id="selected-network"></dd></dl>
         <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav></div>
         <div class="workspace" id="workspace">
         <div class="terminal-tools" id="terminal-tools" hidden>
@@ -114,10 +113,12 @@ export function mount(root, application, { base, user, modVersion, logout, setti
         <div role="group" data-label="sort">${/** @type {const} */ (['name', 'quantity', 'id']).map((value) => iconButton('sort', value)).join('')}</div></div>
         <div class="window-frame" id="window">
         <div id="network-message" role="status"></div>
-        <section id="home"><h2 data-text="home"></h2><p data-text="homeHelp"></p><div id="networks"></div></section>
+        <section id="home"><h2 data-text="home"></h2><p data-text="homeHelp"></p>
+        <label class="home-network"><span data-text="network"></span><select id="network"></select></label><div id="networks"></div></section>
         <section id="server-settings" hidden><h2 data-text="serverSettings"></h2></section>
         <section id="web-settings" hidden><h2 data-text="webSettings"></h2><div class="web-preferences">
         <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
+        <label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label>
         <label><span data-text="theme"></span><select disabled><option value="default" data-theme-text="defaultTheme"></option></select></label>
         <section><h3 data-theme-text="themeOptions"></h3>
         <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label>
@@ -138,7 +139,7 @@ export function mount(root, application, { base, user, modVersion, logout, setti
      *   '#logout': HTMLElementTagNameMap['button'],
      *   '#username': HTMLElementTagNameMap['span'],
      *   '#network': HTMLElementTagNameMap['select'],
-     *   '#refresh': HTMLElementTagNameMap['button'],
+     *   '#selected-network': HTMLElementTagNameMap['dd'],
      *   '#auto-refresh': HTMLElementTagNameMap['input'],
      *   '#terminal-link': HTMLElementTagNameMap['a'],
      *   '#cpu-link': HTMLElementTagNameMap['a'],
@@ -288,6 +289,7 @@ export function mount(root, application, { base, user, modVersion, logout, setti
     }
     function renderNetworks() {
         const select = find('#network');
+        const gridKey = state.route.gridKey || state.selectedGridKey;
         const current = new Map([...select.options].map((option) => [option.value, option]));
         const entries = [
             { key: '', label: locale.common('chooseNetwork') },
@@ -296,18 +298,24 @@ export function mount(root, application, { base, user, modVersion, logout, setti
                 label: `${grid.owner || locale.common('unknownOwner')} · ${grid.key}`
             }))
         ];
-        if (state.route.gridKey && !state.grids.some((grid) => grid.key === state.route.gridKey)) {
-            entries.push({ key: state.route.gridKey, label: state.route.gridKey });
+        if (gridKey && !state.grids.some((grid) => grid.key === gridKey)) {
+            entries.push({ key: gridKey, label: gridKey });
         }
         for (const entry of entries) {
             const option = current.get(entry.key) || document.createElement('option');
             option.value = entry.key;
             option.textContent = entry.label;
+            option.disabled = !entry.key;
             if (!option.parentNode) select.append(option);
             current.delete(entry.key);
         }
         for (const option of current.values()) option.remove();
-        select.value = state.route.gridKey || state.selectedGridKey || '';
+        select.value = gridKey || '';
+        const selectedNetwork = find('#selected-network');
+        selectedNetwork.textContent = select.value
+            ? select.selectedOptions[0].textContent
+            : locale.common('noNetworkSelected');
+        selectedNetwork.title = selectedNetwork.textContent;
         const networkMessage =
             state.gridStatus === 'loading'
                 ? locale.common('loading')
@@ -611,7 +619,6 @@ export function mount(root, application, { base, user, modVersion, logout, setti
     });
     const autoRefresh = find('#auto-refresh');
     autoRefresh.addEventListener('change', () => application.preference('autoRefresh', autoRefresh.checked));
-    find('#refresh').addEventListener('click', () => application.refresh({ reloadDetail: true }));
     find('#previous-page').addEventListener('click', () => {
         page--;
         renderPage();

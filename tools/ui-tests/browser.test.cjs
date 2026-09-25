@@ -327,6 +327,7 @@ async function fixture(t, mount = '') {
         await closeServer();
     });
     const page = await browser.newPage({ locale: 'en-US' });
+    await page.clock.install();
     const errors = [];
     page.on('pageerror', (error) => errors.push(String(error)));
     t.after(() => assert.deepEqual(errors, []));
@@ -337,6 +338,22 @@ async function settleResponse(page, request) {
     const response = await request.response();
     if (response) await response.finished();
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+// Advance the browser's real polling timers; API traffic and UI updates still run normally.
+async function poll(page) {
+    const requested = page.waitForRequest((request) => request.url().endsWith('/api/grids'));
+    await page.clock.fastForward(6000);
+    await requested;
+}
+
+async function seedAutomaticRefresh(page, base, autoRefresh) {
+    await page.addInitScript(
+        ({ key, autoRefresh }) => {
+            if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify({ autoRefresh }));
+        },
+        { key: `ae2web:${new URL(base).pathname}:ui`, autoRefresh }
+    );
 }
 
 // Public seam: global settings are navigable without a grid, preserve the selected grid's
@@ -466,6 +483,43 @@ test('About opens without a grid and remains usable in a translated narrow viewp
     );
 });
 
+test('Home retains the selected network and owns switching while Web settings owns automatic refresh', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await page.getByRole('heading', { name: 'Home', exact: true }).waitFor();
+    const network = page.getByRole('combobox', { name: 'Network', exact: true });
+    assert.equal(await network.inputValue(), gridA);
+    assert.equal(
+        await page.getByRole('link', { name: 'Grid settings', exact: true }).getAttribute('href'),
+        `#/grids/${gridA}/settings`
+    );
+    assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Refresh', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('checkbox', { name: 'Refresh automatically' }).count(), 0);
+    assert.equal(await page.locator('header').getByRole('combobox').count(), 0);
+    assert.match(await page.getByRole('definition').innerText(), new RegExp(`Alpha.*${gridA}`));
+    const scopedReads = options.requests.filter((request) => request.path.startsWith('/api/grids/')).length;
+    const discovery = page.waitForResponse((response) => response.url().endsWith('/api/grids'));
+    await poll(page);
+    await settleResponse(page, (await discovery).request());
+    assert.equal(options.requests.filter((request) => request.path.startsWith('/api/grids/')).length, scopedReads);
+    await network.selectOption(gridB);
+    await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
+    assert.equal(await network.count(), 0, 'The network selector belongs only to Home');
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    const automatic = page.getByRole('checkbox', { name: 'Refresh automatically' });
+    await automatic.uncheck();
+    await page.reload();
+    await automatic.waitFor();
+    assert.equal(await automatic.isChecked(), false);
+    const apiReads = options.requests.filter((request) => request.path.startsWith('/api/')).length;
+    await page.clock.fastForward(6000);
+    assert.equal(options.requests.filter((request) => request.path.startsWith('/api/')).length, apiReads);
+    assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
+});
+
 test('real page browses API resources under a proxy prefix, with search and filters', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     await page.goto(base);
@@ -537,6 +591,7 @@ test('Minecraft item formatting renders readable names and resets decorations on
 
 test('Minecraft names retain formatting across crafting plans, CPU work and history', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
     const itemname = '§aCobalt §lIngot';
     const finalOutput = { ...iron, itemname, quantity: 12 };
     options.itemsA = [{ ...iron, itemname }];
@@ -545,7 +600,6 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
     options.history = [{ ...historyEntry, finalOutput }];
     options.historyDetail = { ...historyDetail, finalOutput, items: [{ ...historyDetail.items[0], itemname }] };
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
     await page.getByRole('button', { name: /Cobalt.*Ingot/ }).click();
     await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
@@ -714,6 +768,7 @@ test('craftable resources show an accessible hammer that follows refreshed avail
 
 test('resource quantities abbreviate from ten thousand and retain exact tooltip amounts', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
     const samples = [
         [9999, '9,999'],
         [10000, '10k'],
@@ -735,7 +790,6 @@ test('resource quantities abbreviate from ten thousand and retain exact tooltip 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Resource 0/ }).waitFor();
-    await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
     await page.evaluate(() => document.fonts.ready);
     for (const [index, [quantity, display]] of samples.entries()) {
         await page.getByRole('searchbox', { name: 'Search resources' }).fill(`Resource ${index}`);
@@ -759,6 +813,7 @@ test('resource quantities abbreviate from ten thousand and retain exact tooltip 
 
 test('terminal icon tools expose tooltips and support keyboard filtering and sorting', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
     options.itemsA = [
         iron,
         quartz,
@@ -766,7 +821,6 @@ test('terminal icon tools expose tooltips and support keyboard filtering and sor
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-    await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
     const all = page.getByRole('button', { name: 'All', exact: true });
     const craftable = page.getByRole('button', { name: 'Craftable', exact: true });
     const stored = page.getByRole('button', { name: 'In storage', exact: true });
@@ -818,18 +872,22 @@ test('terminal icon tools expose tooltips and support keyboard filtering and sor
 // quantity/identity, finish without inventory auto-refresh, and submit the chosen stable CPU key.
 test('crafting calculates a quantity, polls, preserves CPU identity and submits explicitly', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
+    await seedAutomaticRefresh(page, base, false);
     options.pendingReads = 1;
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor({ timeout: 5000 });
     assert.match(page.url(), /\/plans\/7$/);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Refresh automatically' }).check();
+    await page.goBack();
+    await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor();
     await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).selectOption('cpu-b');
     options.cpus = { 'cpu-b': cpu, 'cpu-a': cpu };
     const refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus'));
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await (await refreshed).finished();
     assert.equal(await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).inputValue(), 'cpu-b');
     await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
@@ -897,7 +955,7 @@ test('grid settings preserve the draft and save explicitly while safely showing 
     const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
     await tracking.check();
     const refreshed = page.waitForResponse((response) => response.url().endsWith('/settings'));
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await (await refreshed).finished();
     assert.equal(await tracking.isChecked(), true);
     assert.equal(options.requests.filter((request) => request.method === 'PATCH').length, 0);
@@ -940,7 +998,7 @@ test('history exposes resource and provider intervals with their correct locatio
     ]);
     assert.equal(await page.getByRole('region', { name: 'Iron Ingot', exact: true }).count(), 2);
     options.historyDetail = { ...historyDetail, timeDone: historyDetail.timeStarted, items: [], interfaceShare: [] };
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.reload();
     await provider.waitFor({ state: 'hidden' });
     assert.doesNotMatch(await page.locator('body').innerText(), /NaN|Infinity/);
     await page.getByText(/No processing intervals/).waitFor();
@@ -963,7 +1021,7 @@ test('uncertain settings saves preserve the draft and remain unconfirmed until e
             .filter({ hasText: /save.*not confirmed/i })
             .waitFor({ timeout: 3000 });
         const count = options.requests.filter((request) => request.method === 'PATCH').length;
-        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await poll(page);
         await page.getByRole('link', { name: 'Back to resources', exact: true }).click();
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.goBack();
@@ -990,7 +1048,7 @@ test('settings drafts survive transient discovery failures and pending saves rec
     const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
     await tracking.check();
     options.gridError = 'NETWORK_ERROR';
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await page
         .getByRole('status')
         .filter({ hasText: /Cannot connect/ })
@@ -998,7 +1056,7 @@ test('settings drafts survive transient discovery failures and pending saves rec
         .waitFor();
     options.gridError = null;
     const recovered = page.waitForResponse((response) => response.url().endsWith('/settings'));
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await (await recovered).finished();
     await page.getByRole('button', { name: 'Save settings', exact: true }).waitFor();
     assert.equal(await tracking.isChecked(), true);
@@ -1013,7 +1071,7 @@ test('settings drafts survive transient discovery failures and pending saves rec
     const save = await pending;
     assert.equal(await page.getByRole('button', { name: 'Save settings', exact: true }).isDisabled(), true);
     options.gridError = 'NO_PERMISSIONS';
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await tracking.waitFor({ state: 'hidden' });
     options.settings[gridA] = { isTracked: true };
     await save.fulfill({
@@ -1023,12 +1081,12 @@ test('settings drafts survive transient discovery failures and pending saves rec
     });
     assert.equal(await tracking.count(), 0);
     options.gridError = null;
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await tracking.waitFor();
     assert.equal(await tracking.isChecked(), true);
 });
 
-test('explicit history refresh is retained during grid discovery and unavailable entries clear their snapshot', async (t) => {
+test('history reentry during grid discovery clears unavailable snapshots', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/history/1`);
     await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).waitFor();
@@ -1042,9 +1100,12 @@ test('explicit history refresh is retained during grid discovery and unavailable
         held = true;
         release(route);
     });
+    await poll(page);
     const discovery = await captured;
+    await page.getByRole('link', { name: 'History', exact: true }).click();
+    await page.getByRole('link', { name: /Iron Ingot.*#1/ }).waitFor();
     options.historyError = 'TRACKING_NOT_FOUND';
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.getByRole('link', { name: /Iron Ingot.*#1/ }).click();
     await discovery.continue();
     await page
         .getByRole('status')
@@ -1117,7 +1178,7 @@ test('old settings reads cannot replace saved data and denied saves clear access
         held = true;
         capture(route);
     });
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     const delayed = await captured;
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     await page
@@ -1167,7 +1228,7 @@ test('late history details cannot enter another grid and denied reads remove the
     await settleResponse(page, delayed.request());
     assert.equal(await page.getByRole('heading', { name: /Iron Ingot/ }).count(), 0);
     options.historyError = 'NO_PERMISSIONS';
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.reload();
     await page
         .getByRole('status')
         .filter({ hasText: /no longer have access/i })
@@ -1209,7 +1270,7 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
             .getByRole('status')
             .filter({ hasText: result === 'OK' ? /CPU is idle/i : /outcome.*unknown/i })
             .waitFor();
-        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await poll(page);
         await page
             .getByRole('status')
             .filter({ hasText: result === 'OK' ? /CPU is idle/i : /outcome.*unknown/i })
@@ -1229,7 +1290,7 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
         held = true;
         capture(route);
     });
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     const delayed = await captured;
     await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
     await page
@@ -1250,6 +1311,7 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
 // explicit DELETE and navigation never repeats either mutation.
 test('direct plan entry only reads, and explicit cancellation stops calculation polling', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
     options.pendingReads = 100;
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     await page.getByRole('button', { name: 'Delete calculation', exact: true }).click({ timeout: 3000 });
@@ -1257,7 +1319,6 @@ test('direct plan entry only reads, and explicit cancellation stops calculation 
         .getByRole('status')
         .filter({ hasText: /calculation deleted/i })
         .waitFor();
-    await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
     const reads = options.requests.filter(
         (request) => request.path.endsWith('/crafting-plans/7') && request.method === 'GET'
     ).length;
@@ -1300,7 +1361,7 @@ test('busy CPU eligibility uses known output identity and missing selections req
     await cpus.selectOption('cpu-b');
     delete options.cpus['cpu-b'];
     const refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus'));
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await (await refreshed).finished();
     await cpus.getByRole('option', { name: /cpu-b/ }).waitFor({ state: 'detached' });
     assert.equal(await cpus.inputValue(), '');
@@ -1330,7 +1391,7 @@ test('CPU monitoring opens stable current work and explicitly cancels it without
     assert.equal(await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).count(), 1);
     options.cpus = { 'cpu-b': options.cpus['cpu-b'], 'cpu-a': options.cpus['cpu-a'] };
     const refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-b'));
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await (await refreshed).finished();
     assert.match(page.url(), /\/cpus\/cpu-b$/);
     await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
@@ -1355,7 +1416,7 @@ test('CPU removal and denied reads clear current work without selecting a replac
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-b`);
     await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
     delete options.cpus['cpu-b'];
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await page
         .getByRole('status')
         .filter({ hasText: /CPU.*available/i })
@@ -1366,7 +1427,7 @@ test('CPU removal and denied reads clear current work without selecting a replac
     await page.getByRole('link', { name: /Assembler.*cpu-a/ }).click();
     await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
     options.detailError = 'NO_PERMISSIONS';
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await page
         .getByRole('status')
         .filter({ hasText: /no longer have access/i })
@@ -1374,10 +1435,10 @@ test('CPU removal and denied reads clear current work without selecting a replac
     assert.equal(await page.getByRole('link', { name: /Assembler/ }).count(), 0);
     assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 0);
     options.detailError = null;
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
     options.cpuError = 'GRID_NOT_FOUND';
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await page
         .getByRole('status')
         .filter({ hasText: /network.*available/i })
@@ -1404,7 +1465,7 @@ test('known CPU cancellation rejections refresh stale work or clear unavailable 
     for (const status of ['CPU_NOT_FOUND', 'NO_PERMISSIONS', 'GRID_NOT_FOUND']) {
         options.cancelStatus = status;
         options.cpuDetails['cpu-a'] = cpuWork;
-        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await poll(page);
         await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
         await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor({ state: 'hidden' });
         assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).count(), 0);
@@ -1422,7 +1483,7 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
         release = resolve;
     });
     await page.route('**/cpus/cpu-a', (route) => release(route));
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     const delayed = await captured;
     await page.getByRole('link', { name: /Assembler.*cpu-b/ }).click();
     await page.getByText('Current output unavailable', { exact: true }).waitFor();
@@ -1439,7 +1500,7 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
     assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 0);
     assert.equal(await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isEnabled(), true);
-    await page.getByRole('combobox', { name: 'Network', exact: true }).selectOption(gridB);
+    await page.goto(`${base}#/grids/${gridB}/items`);
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).count(), 0);
     assert.equal(
@@ -1461,7 +1522,7 @@ test('uncertain CPU cancellation never replays after refresh or route reentry', 
             .filter({ hasText: /outcome.*unknown/i })
             .waitFor({ timeout: 3000 });
         const count = options.requests.filter((request) => request.path.endsWith('/cancel')).length;
-        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await poll(page);
         await page.getByRole('link', { name: 'Back to resources', exact: true }).click();
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.goBack();
@@ -1532,7 +1593,7 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
     await page.reload();
     await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor();
     options.cpuError = 'NO_PERMISSIONS';
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await page
         .getByRole('status')
         .filter({ hasText: /no longer have access/i })
@@ -1540,17 +1601,17 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
     assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).count(), 0);
     options.cpuError = null;
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
     options.gridError = 'NO_PERMISSIONS';
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor({ state: 'hidden' });
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
 });
 
 // The API has no idempotency receipt. Transport failures must never trigger mutation replay,
-// including explicit refresh and ordinary navigation back to the same runtime plan.
-test('uncertain submission outcomes cannot be retried by polling, refresh or route reentry', async (t) => {
+// including automatic polling and ordinary navigation back to the same runtime plan.
+test('uncertain submission outcomes cannot be retried by polling or route reentry', async (t) => {
     const { page, options, base } = await fixture(t);
     let planId = 7;
     for (const status of ['TIMEOUT', 'INTERNAL_ERROR', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
@@ -1562,7 +1623,7 @@ test('uncertain submission outcomes cannot be retried by polling, refresh or rou
             .filter({ hasText: /outcome.*unknown/i })
             .waitFor({ timeout: 3000 });
         const count = options.requests.filter((request) => request.path.endsWith('/submit')).length;
-        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await poll(page);
         await page.getByRole('link', { name: 'Back to resources' }).click();
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.goBack();
@@ -1586,8 +1647,8 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
         .filter({ hasText: /outcome.*unknown/i })
         .waitFor({ timeout: 3000 });
     assert.equal(await page.getByRole('button', { name: 'Calculate plan', exact: true }).isDisabled(), true);
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Network', exact: true }).selectOption(gridB);
+    await poll(page);
+    await page.goto(`${base}#/grids/${gridB}/items`);
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     await page.goBack();
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
@@ -1599,7 +1660,7 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
         .getByRole('status')
         .filter({ hasText: /outcome.*unknown/i })
         .waitFor();
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     assert.equal(await page.getByRole('button', { name: 'Delete calculation', exact: true }).isDisabled(), true);
     assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
     assert.deepEqual(
@@ -1615,7 +1676,7 @@ test('quantity editing survives refresh and only positive safe integer quantitie
     const quantity = page.getByRole('spinbutton', { name: 'Craft quantity' });
     await quantity.fill('37');
     const refreshed = page.waitForResponse((response) => response.url().endsWith('/items'));
-    await page.getByRole('button', { name: 'Refresh', exact: true }).evaluate((button) => button.click());
+    await poll(page);
     await (await refreshed).finished();
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await quantity.evaluate((input) => input === document.activeElement), true);
@@ -1673,7 +1734,7 @@ test('pending submission resolves after route reentry and older CPU reads cannot
             .getByRole('status')
             .filter({ hasText: status === 'OK' ? /submitted/i : /outcome.*unknown/i })
             .waitFor();
-        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await poll(page);
         await page
             .getByRole('status')
             .filter({ hasText: status === 'OK' ? /submitted/i : /outcome.*unknown/i })
@@ -1687,7 +1748,7 @@ test('pending submission resolves after route reentry and older CPU reads cannot
         releaseCpus = resolve;
     });
     await page.route('**/cpus', (route) => releaseCpus(route));
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     const cpuRequest = await captured;
     await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
     await page
@@ -1734,7 +1795,7 @@ test('changing networks cannot publish a delayed response from the previous netw
     const requested = page.waitForRequest((request) => request.url().includes(gridA + '/items'));
     await page.getByRole('combobox', { name: 'Network' }).selectOption(gridA);
     await requested;
-    await page.getByRole('combobox', { name: 'Network' }).selectOption(gridB);
+    await page.goto(`${base}#/grids/${gridB}/items`);
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     // Let the deliberately delayed old response reach the browser before observing the final view.
     await page.waitForTimeout(550);
@@ -1742,6 +1803,9 @@ test('changing networks cannot publish a delayed response from the previous netw
     assert.match(page.url(), new RegExp(gridB));
     await page.goBack();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    assert.match(page.url(), new RegExp(gridA));
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Network' }).waitFor();
     assert.equal(await page.getByRole('combobox', { name: 'Network' }).inputValue(), gridA);
 });
 
@@ -1949,21 +2013,23 @@ test('appearance, language and terminal preferences survive reload and direct li
     const { page, base } = await fixture(t, '/ae2');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-    await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
     await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
     await page.getByRole('combobox', { name: 'Appearance' }).selectOption('dark');
     await page.getByRole('combobox', { name: 'Language' }).selectOption('pl');
     await page.reload();
     await page.getByRole('combobox', { name: 'Wygląd' }).waitFor();
     assert.equal(await page.getByRole('combobox', { name: 'Wygląd' }).inputValue(), 'dark');
+    assert.equal(await page.getByRole('checkbox', { name: 'Odświeżaj automatycznie' }).isChecked(), false);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(
         await page.getByRole('button', { name: 'Sortuj według: Ilości', exact: true }).getAttribute('aria-pressed'),
         'true'
     );
-    assert.equal(await page.getByRole('checkbox', { name: 'Odświeżaj automatycznie' }).isChecked(), false);
+    await page.locator('a[href="#/"]').click();
+    await page.getByRole('combobox', { name: 'Sieć', exact: true }).waitFor();
     assert.equal(await page.getByRole('combobox', { name: 'Sieć', exact: true }).inputValue(), gridA);
 });
 
@@ -2021,17 +2087,17 @@ test('saved appearance remains recoverable when its first theme storage write fa
     assert.equal(await appearance.inputValue(), 'dark', 'Failed adoption must preserve the recoverable saved choice');
 });
 
-test('lost access clears resource data and manual retry recovers', async (t) => {
+test('lost access clears resource data and subsequent polling recovers', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     options.status = 403;
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await page.getByText('You no longer have access to this network.').waitFor();
     assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
     assert.equal(await page.getByRole('heading', { name: 'Iron Ingot' }).count(), 0);
     options.status = 200;
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
 });
 
@@ -2160,7 +2226,7 @@ test('empty discovery and unavailable bookmarked networks stay usable', async (t
     await page.getByRole('link', { name: 'Home', exact: true }).click();
     await page.getByText(/No accessible networks/).waitFor();
     options.empty = false;
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await poll(page);
     await page.getByRole('combobox', { name: 'Network' }).selectOption(gridA);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
 });
@@ -2228,6 +2294,7 @@ test('resource grid stays centered and stationary when scrolling becomes unneces
 
 test('terminal scrolls resources inside the viewport while search and navigation remain reachable', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
     options.itemsA = Array.from({ length: 105 }, (_, index) => ({
         ...iron,
         itemname: `Resource ${String(index).padStart(3, '0')}`,
@@ -2241,7 +2308,6 @@ test('terminal scrolls resources inside the viewport while search and navigation
         await page.setViewportSize(viewport);
         await page.goto(`${base}#/grids/${gridA}/items`);
         await page.getByRole('button', { name: /Resource 000/ }).waitFor();
-        await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
         const resources = page.getByRole('region', { name: 'Resources', exact: true });
         await resources.waitFor();
         const search = page.getByRole('searchbox', { name: 'Search resources' });

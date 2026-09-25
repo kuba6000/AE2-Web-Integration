@@ -121,13 +121,6 @@ header {
     justify-content: space-between;
     gap: 20px;
 }
-.account-controls,
-.network-bar {
-    display: flex;
-    align-items: end;
-    gap: 12px;
-    flex-wrap: wrap;
-}
 .hint {
     color: var(--muted);
     font-size: 13px;
@@ -412,7 +405,10 @@ label {
     image-rendering: pixelated;
 }
 .account-controls {
+    display: flex;
     align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
     min-width: 0;
     font-size: 12px;
 }
@@ -470,21 +466,33 @@ label {
     vertical-align: top;
     padding: 8px 12px 8px 0;
 }
-.network-bar {
-    margin: 0 0 24px;
-    color: var(--text);
-    gap: 14px;
-}
-.network-bar > label:first-child {
-    flex: 1 1 240px;
+.network-summary {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0;
     min-width: 0;
-}
-.network-bar select {
-    width: 100%;
-    font-size: 13px;
-}
-.network-bar button {
     font-size: 12px;
+}
+.network-summary dt {
+    flex-shrink: 0;
+}
+.network-summary dd {
+    margin: 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.home-network {
+    max-width: 540px;
+    margin-bottom: 20px;
+}
+.home-network select {
+    width: 100%;
+}
+.web-preferences > .checkbox {
+    align-self: flex-start;
 }
 .checkbox {
     flex-direction: row;
@@ -552,8 +560,7 @@ label {
     margin-bottom: 16px;
     margin-inline: var(--tools-width) var(--details-width);
 }
-.control-panel .site-header,
-.control-panel .network-bar {
+.control-panel .site-header {
     margin: 0;
     flex-shrink: 0;
 }
@@ -1010,14 +1017,6 @@ footer a {
         display: inline;
         margin-left: 4px;
     }
-    .network-bar {
-        gap: 10px;
-        margin-bottom: 18px;
-    }
-    .network-bar > label:first-child {
-        flex-basis: 100%;
-        max-width: none;
-    }
     .window-frame {
         padding: 4px 1px;
     }
@@ -1067,8 +1066,7 @@ footer a {
     body {
         padding-block: 8px;
     }
-    .site-header,
-    .network-bar {
+    .site-header {
         margin-bottom: 8px;
     }
     .view-tabs a {
