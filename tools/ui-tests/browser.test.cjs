@@ -1524,6 +1524,38 @@ test('CPU terminal filters categories, sorts their quantities and searches forma
     );
 });
 
+test('CPU resources omit zero counts and update visible categories during polling', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const item = { ...cpuWork.items[0], active: 0, pending: 12, stored: 0 };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, hasTrackingInfo: false, items: [item] };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const resource = page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ });
+    await resource.waitFor();
+    assert.match(await resource.innerText(), /Pending\s*12/);
+    assert.doesNotMatch(await resource.innerText(), /Active|Stored/);
+    assert.doesNotMatch(await resource.getAttribute('aria-label'), /Active|Stored/);
+    await resource.focus();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.waitFor({ state: 'visible' });
+    assert.match(await tooltip.innerText(), /Pending: 12/);
+    assert.doesNotMatch(await tooltip.innerText(), /Active|Stored/);
+
+    options.cpuDetails['cpu-a'].items = [{ ...item, active: 3, pending: 0, stored: 7 }];
+    const refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-a'));
+    await poll(page);
+    await settleResponse(page, (await refreshed).request());
+    assert.match(await resource.innerText(), /Active\s*3/);
+    assert.match(await resource.innerText(), /Stored[^\n]*\s+7/);
+    assert.doesNotMatch(await resource.innerText(), /Pending/);
+    assert.doesNotMatch(await resource.getAttribute('aria-label'), /Pending/);
+    assert.equal(await tooltip.isVisible(), true);
+    assert.match(await tooltip.innerText(), /Active: 3/);
+    assert.match(await tooltip.innerText(), /Stored[^\n]*: 7/);
+    assert.doesNotMatch(await tooltip.innerText(), /Pending/);
+});
+
 test('CPU resource tooltip preserves exact counts and tracking through polling and clears on route or access changes', async (t) => {
     const { page, options, base } = await fixture(t);
     const item = { ...cpuWork.items[0], active: 12345, pending: 23456, stored: 34567 };

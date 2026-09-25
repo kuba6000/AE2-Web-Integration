@@ -25,6 +25,7 @@
     --slot: #8b8b8b;
     --surface-hover: #a3a3a3;
     --slot-selected: #707070;
+    --cpu-pending-tint: rgb(255 247 170 / 35.3%);
     --surface-text: #1a1a1a;
     --surface-muted: #242424;
     --control-edge-light: #fff;
@@ -51,6 +52,7 @@
     --details-frame: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20shape-rendering%3D%22crispEdges%22%3E%3Cpath%20fill%3D%22%23161616%22%20d%3D%22M0%200H1V2H2V3H4V4H20V5H22V6H23V8H24V16H23V18H22V19H20V20H4V21H2V22H1V24H0Z%22%2F%3E%3Cpath%20fill%3D%22%23766e83%22%20d%3D%22M0%201H1V3H2V4H4V5H20V6H21V7H22V8H23V16H22V17H21V18H20V19H4V20H2V21H1V23H0Z%22%2F%3E%3Cpath%20fill%3D%22%2326232e%22%20d%3D%22M20%206H21V7H22V8H23V16H22V17H21V18H20V19H4V20H2V21H1V23H0V21H1V20H2V19H4V18H20V17H21V16H22V8H21V7H20Z%22%2F%3E%3Cpath%20fill%3D%22%23514e5b%22%20d%3D%22M0%203H1V4H2V5H4V6H20V7H21V8H22V16H21V17H20V18H4V19H2V20H1V21H0Z%22%2F%3E%3C%2Fsvg%3E');
     --surface-hover: #625d6e;
     --slot-selected: #292a30;
+    --cpu-pending-tint: rgb(255 247 170 / 18%);
     --surface-text: #eeeaf4;
     --surface-muted: #c0bacd;
     --control-edge-light: #766e83;
@@ -77,6 +79,7 @@
         --details-frame: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20shape-rendering%3D%22crispEdges%22%3E%3Cpath%20fill%3D%22%23161616%22%20d%3D%22M0%200H1V2H2V3H4V4H20V5H22V6H23V8H24V16H23V18H22V19H20V20H4V21H2V22H1V24H0Z%22%2F%3E%3Cpath%20fill%3D%22%23766e83%22%20d%3D%22M0%201H1V3H2V4H4V5H20V6H21V7H22V8H23V16H22V17H21V18H20V19H4V20H2V21H1V23H0Z%22%2F%3E%3Cpath%20fill%3D%22%2326232e%22%20d%3D%22M20%206H21V7H22V8H23V16H22V17H21V18H20V19H4V20H2V21H1V23H0V21H1V20H2V19H4V18H20V17H21V16H22V8H21V7H20Z%22%2F%3E%3Cpath%20fill%3D%22%23514e5b%22%20d%3D%22M0%203H1V4H2V5H4V6H20V7H21V8H22V16H21V17H20V18H4V19H2V20H1V21H0Z%22%2F%3E%3C%2Fsvg%3E');
         --surface-hover: #625d6e;
         --slot-selected: #292a30;
+        --cpu-pending-tint: rgb(255 247 170 / 18%);
         --surface-text: #eeeaf4;
         --surface-muted: #c0bacd;
         --control-edge-light: #766e83;
@@ -269,10 +272,24 @@ header {
     gap: 4px;
     font-size: 10px;
     line-height: 16px;
-    color: var(--surface-muted);
+    color: var(--surface-text);
 }
-.cpu-item .quantity {
+.item.cpu-item {
+    --crafting-tint: transparent;
+
+    background-image: linear-gradient(var(--crafting-tint), var(--crafting-tint));
+}
+.cpu-item[data-crafting='active'] {
+    --crafting-tint: rgb(69 160 33 / 35.3%);
+}
+.cpu-item[data-crafting='pending'] {
+    --crafting-tint: var(--cpu-pending-tint);
+}
+.item.cpu-item .quantity {
     font-size: 12px;
+    color: var(--surface-text);
+    text-shadow: none;
+    translate: none;
 }
 #cpu-panel .cpu-actions {
     flex-direction: column;

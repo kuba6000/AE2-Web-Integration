@@ -123,11 +123,9 @@ export function createCpuView(root, application, { workspace }) {
         const item = row.item;
         const name = element('strong');
         name.append(renderMinecraftText(item.itemname));
-        const values = [
-            ['cpuActive', locale.number(item.active)],
-            ['cpuPending', locale.number(item.pending)],
-            ['cpuStored', locale.number(item.stored)]
-        ];
+        const values = Object.entries({ cpuActive: item.active, cpuPending: item.pending, cpuStored: item.stored })
+            .filter(([, quantity]) => quantity > 0)
+            .map(([key, quantity]) => [key, locale.number(quantity)]);
         if (state.detail?.hasTrackingInfo)
             values.push(
                 ['cpuTimeSpent', locale.common('seconds', { count: item.timeSpentCrafting / 1000 })],
@@ -174,7 +172,7 @@ export function createCpuView(root, application, { workspace }) {
             const quantity = element('span', '', 'quantity');
             amount.append(label, quantity);
             amounts.append(amount);
-            return { key, label, quantity };
+            return { key, amount, label, quantity };
         });
         button.append(name, amounts);
         li.append(button);
@@ -286,14 +284,21 @@ export function createCpuView(root, application, { workspace }) {
             const row = itemRows.get(key) || createResourceRow(item);
             row.item = item;
             row.name.replaceChildren(renderMinecraftText(item.itemname));
+            row.button.dataset.crafting = item.active > 0 ? 'active' : item.pending > 0 ? 'pending' : 'stored';
             const quantities = [item.active, item.pending, item.stored];
             row.counts.forEach((count, i) => {
+                count.amount.hidden = quantities[i] <= 0;
                 count.label.textContent = locale.common(count.key);
                 count.quantity.textContent = slotQuantity(quantities[i], locale);
             });
             row.button.setAttribute(
                 'aria-label',
-                `${plainMinecraftText(item.itemname)} · ${row.counts.map((count, i) => `${locale.common(count.key)}: ${locale.number(quantities[i])}`).join(' · ')}`
+                [
+                    plainMinecraftText(item.itemname),
+                    ...row.counts.flatMap((count, i) =>
+                        quantities[i] > 0 ? [`${locale.common(count.key)}: ${locale.number(quantities[i])}`] : []
+                    )
+                ].join(' · ')
             );
             if (grid.children[index] !== row.li) grid.insertBefore(row.li, grid.children[index] || null);
             current.set(key, row);
