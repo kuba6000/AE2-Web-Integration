@@ -5,6 +5,9 @@ import { readRoute } from './router.mjs';
 import { createThemeContext } from './theme-context.mjs';
 import { mount } from '../themes/default/view.mjs';
 
+const identity = /** @type {HTMLScriptElement} */ (document.getElementById('ae2-user'));
+/** @type {{username: string, isAdmin: boolean}} */
+const user = JSON.parse(identity.text);
 const base = new URL('./', location.href);
 let leaving = false;
 function returnToLogin() {
@@ -22,6 +25,7 @@ const application = createTerminal(api, createPreferences(base));
 const unmount = mount(/** @type {HTMLElement} */ (document.getElementById('app')), application, {
     ...createThemeContext(base, 'default'),
     base,
+    user,
     async logout() {
         await api.logout();
         returnToLogin();

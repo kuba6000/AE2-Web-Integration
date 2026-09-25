@@ -1,6 +1,6 @@
 /**
  * @typedef {{route: import('./router.mjs').Route, grids: import('./api-types.mjs').Grid[], gridStatus: 'loading' | 'ready' | 'error', gridError: string | null, items: import('./api-types.mjs').Item[], itemStatus: 'idle' | 'loading' | 'ready' | 'error', itemError: string | null, refreshing: boolean, updatedAt: number | null, search: string, selected: import('./api-types.mjs').Item | null, preferences: import('./preferences.mjs').Preferences}} TerminalData
- * @typedef {TerminalData & {crafting: import('./crafting.mjs').CraftingState, cpus: import('./cpus.mjs').CpuState, history: import('./history.mjs').HistoryState, settings: import('./settings.mjs').SettingsState}} TerminalState
+ * @typedef {TerminalData & {selectedGridKey: string | null, crafting: import('./crafting.mjs').CraftingState, cpus: import('./cpus.mjs').CpuState, history: import('./history.mjs').HistoryState, settings: import('./settings.mjs').SettingsState}} TerminalState
  */
 import { createCrafting } from './crafting.mjs';
 import { createCpuMonitor } from './cpus.mjs';
@@ -48,6 +48,7 @@ export function createTerminal(api, preferences) {
     /** @type {TerminalState} */
     const state = {
         route: { view: 'home', gridKey: null },
+        selectedGridKey: null,
         grids: [],
         gridStatus: 'loading',
         gridError: null,
@@ -158,6 +159,7 @@ export function createTerminal(api, preferences) {
             try {
                 state.grids = await api.grids(gridRequest.signal);
                 if (disposed) return;
+                if (!state.grids.some((grid) => grid.key === state.selectedGridKey)) state.selectedGridKey = null;
                 state.gridStatus = 'ready';
                 state.gridError = null;
                 notify();
@@ -201,6 +203,8 @@ export function createTerminal(api, preferences) {
         route(route) {
             invalidateItems();
             state.route = route;
+            if (route.gridKey) state.selectedGridKey = route.gridKey;
+            else if (route.view === 'home') state.selectedGridKey = null;
             crafting.route(route);
             cpus.route(route);
             history.route(route);

@@ -66,12 +66,26 @@ function iconButton(group, value) {
  * Theme renderer. Server operations and preference ownership are supplied by the application.
  * @param {HTMLElement} root
  * @param {Terminal} application
- * @param {ReturnType<typeof import('../../app/theme-context.mjs').createThemeContext> & {base: URL, logout: () => Promise<void>}} options
+ * @param {ReturnType<typeof import('../../app/theme-context.mjs').createThemeContext> & {base: URL, user: {username: string, isAdmin: boolean}, logout: () => Promise<void>}} options
  */
-export function mount(root, application, { base, logout, settings, i18n }) {
+export function mount(root, application, { base, user, logout, settings, i18n }) {
     i18n.register({
-        en: { appearance: 'Appearance', light: 'Light', dark: 'Dark', system: 'System' },
-        pl: { appearance: 'Wygląd', light: 'Jasny', dark: 'Ciemny', system: 'Systemowy' }
+        en: {
+            appearance: 'Appearance',
+            light: 'Light',
+            dark: 'Dark',
+            system: 'System',
+            defaultTheme: 'Default',
+            themeOptions: 'Theme options'
+        },
+        pl: {
+            appearance: 'Wygląd',
+            light: 'Jasny',
+            dark: 'Ciemny',
+            system: 'Systemowy',
+            defaultTheme: 'Domyślny',
+            themeOptions: 'Opcje motywu'
+        }
     });
     const appearances = ['light', 'dark', 'system'];
     const previousSettings = createSettings(base, 'ui');
@@ -87,13 +101,11 @@ export function mount(root, application, { base, logout, settings, i18n }) {
     }
     let appearance =
         typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
-    root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><img class="brand-mark" src="./favicon.ico" width="32" height="32" alt=""><h1>AE2 <span>Web Integration</span></h1></div><div class="preferences">
-        <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
-        <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label>
-        <button id="logout" data-text="logout"></button></div></header>
+    root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><img class="brand-mark" src="./favicon.ico" width="32" height="32" alt=""><h1>AE2 <span>Web Integration</span></h1></div><div class="account-controls">
+        <span id="username"></span><button id="logout" data-text="logout"></button></div></header>
         <section class="network-bar"><label><span data-text="network"></span><select id="network"></select></label>
         <button id="refresh" data-text="refresh"></button><label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label></section>
-        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a></nav></div>
+        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a></nav></div>
         <div class="workspace" id="workspace">
         <div class="terminal-tools" id="terminal-tools" hidden>
         <div role="group" data-label="resources">${/** @type {const} */ (['all', 'stored', 'craftable']).map((value) => iconButton('filter', value)).join('')}</div>
@@ -101,6 +113,13 @@ export function mount(root, application, { base, logout, settings, i18n }) {
         <div class="window-frame" id="window">
         <div id="network-message" role="status"></div>
         <section id="home"><h2 data-text="home"></h2><p data-text="homeHelp"></p><div id="networks"></div></section>
+        <section id="server-settings" hidden><h2 data-text="serverSettings"></h2></section>
+        <section id="web-settings" hidden><h2 data-text="webSettings"></h2><div class="web-preferences">
+        <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
+        <label><span data-text="theme"></span><select disabled><option value="default" data-theme-text="defaultTheme"></option></select></label>
+        <section><h3 data-theme-text="themeOptions"></h3>
+        <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label>
+        </section></div></section>
         <section id="terminal" hidden><div class="terminal-heading"><h2 data-text="terminal"></h2>
         <label class="search"><span class="sr-only" data-text="search"></span><input id="search" type="search"></label></div>
         <div class="terminal-body"><p id="item-message" role="status"></p>
@@ -115,6 +134,7 @@ export function mount(root, application, { base, logout, settings, i18n }) {
      *   '#language': HTMLElementTagNameMap['select'],
      *   '#appearance': HTMLElementTagNameMap['select'],
      *   '#logout': HTMLElementTagNameMap['button'],
+     *   '#username': HTMLElementTagNameMap['span'],
      *   '#network': HTMLElementTagNameMap['select'],
      *   '#refresh': HTMLElementTagNameMap['button'],
      *   '#auto-refresh': HTMLElementTagNameMap['input'],
@@ -127,6 +147,8 @@ export function mount(root, application, { base, logout, settings, i18n }) {
      *   '#window': HTMLElementTagNameMap['div'],
      *   '#network-message': HTMLElementTagNameMap['div'],
      *   '#home': HTMLElementTagNameMap['section'],
+     *   '#web-settings': HTMLElementTagNameMap['section'],
+     *   '#server-settings': HTMLElementTagNameMap['section'],
      *   '#networks': HTMLElementTagNameMap['div'],
      *   '#terminal': HTMLElementTagNameMap['section'],
      *   '#search': HTMLElementTagNameMap['input'],
@@ -151,6 +173,7 @@ export function mount(root, application, { base, logout, settings, i18n }) {
      * @returns {ViewElements[Selector]}
      */
     const find = (selector) => /** @type {ViewElements[Selector]} */ (root.querySelector(selector));
+    find('#username').textContent = user.username;
     /** @type {NodeListOf<HTMLButtonElement & {dataset: {preference: 'filter' | 'sort', value: keyof typeof symbols}}>} */
     const toolButtons = root.querySelectorAll('.tool-button');
     const craftingView = createCraftingView(find('#window'), application);
@@ -281,7 +304,7 @@ export function mount(root, application, { base, logout, settings, i18n }) {
             current.delete(entry.key);
         }
         for (const option of current.values()) option.remove();
-        select.value = state.route.gridKey || '';
+        select.value = state.route.gridKey || state.selectedGridKey || '';
         const networkMessage =
             state.gridStatus === 'loading'
                 ? locale.common('loading')
@@ -504,6 +527,8 @@ export function mount(root, application, { base, logout, settings, i18n }) {
         find('#auto-refresh').checked = state.preferences.autoRefresh;
         if (find('#search').value !== state.search) find('#search').value = state.search;
         find('#home').hidden = state.route.view !== 'home';
+        find('#web-settings').hidden = state.route.view !== 'web-settings';
+        find('#server-settings').hidden = state.route.view !== 'server-settings';
         find('#terminal').hidden = state.route.view !== 'items';
         find('#terminal-tools').hidden = state.route.view !== 'items';
         find('#resource-panel').hidden = state.route.view !== 'items';
@@ -516,14 +541,15 @@ export function mount(root, application, { base, logout, settings, i18n }) {
         cpuView.render(state.route, state.cpus, locale);
         historyView.render(state.route, state.history, locale);
         settingsView.render(state.route, state.settings, locale);
-        find('#cpu-link').hidden = !state.route.gridKey;
-        find('#terminal-link').hidden = !state.route.gridKey;
-        find('#terminal-link').href = `#/grids/${encodeURIComponent(String(state.route.gridKey))}/items`;
-        find('#cpu-link').href = cpuHref(state.route.gridKey);
-        find('#history-link').hidden = !state.route.gridKey;
-        find('#history-link').href = historyHref(state.route.gridKey);
-        find('#settings-link').hidden = !state.route.gridKey;
-        find('#settings-link').href = `#/grids/${encodeURIComponent(String(state.route.gridKey))}/settings`;
+        const gridKey = state.route.gridKey || state.selectedGridKey;
+        find('#cpu-link').hidden = !gridKey;
+        find('#terminal-link').hidden = !gridKey;
+        find('#terminal-link').href = `#/grids/${encodeURIComponent(String(gridKey))}/items`;
+        find('#cpu-link').href = cpuHref(gridKey);
+        find('#history-link').hidden = !gridKey;
+        find('#history-link').href = historyHref(gridKey);
+        find('#settings-link').hidden = !gridKey;
+        find('#settings-link').href = `#/grids/${encodeURIComponent(String(gridKey))}/settings`;
         find('#updated').textContent = state.updatedAt
             ? locale.common('updated', { time: locale.time(state.updatedAt) })
             : '';

@@ -100,6 +100,8 @@ async function fixture(t, mount = '') {
         empty: false,
         reverseGrids: false,
         loggedOut: false,
+        username: 'ExamplePlayer',
+        isAdmin: false,
         itemsA: [iron, quartz],
         plan: readyPlan,
         pendingReads: 0,
@@ -285,7 +287,21 @@ async function fixture(t, mount = '') {
                         : 'text/html'
             );
             const content = await fs.readFile(file);
-            response.end(login ? content.toString().replace('_REPLACE_ME_IS_PUBLIC_MODE', 'true') : content);
+            response.end(
+                login
+                    ? content.toString().replace('_REPLACE_ME_IS_PUBLIC_MODE', 'true')
+                    : file.endsWith('.html')
+                      ? content
+                            .toString()
+                            .replace(
+                                '_REPLACE_ME_USER',
+                                JSON.stringify({ username: options.username, isAdmin: options.isAdmin }).replace(
+                                    /</g,
+                                    '\\u003c'
+                                )
+                            )
+                      : content
+            );
         } catch {
             response.writeHead(404).end('Missing asset');
         }
@@ -311,6 +327,70 @@ async function fixture(t, mount = '') {
     t.after(() => assert.deepEqual(errors, []));
     return { page, options, base: `http://127.0.0.1:${server.address().port}${mount}/?ui=next` };
 }
+
+async function settleResponse(page, request) {
+    const response = await request.response();
+    if (response) await response.finished();
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+// Public seam: global settings are navigable without a grid, preserve the selected grid's
+// links, and persist browser preferences without pretending to mutate server settings.
+test('global settings tabs preserve grid navigation and browser preferences', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click({ timeout: 3000 });
+    assert.match(page.url(), /#\/web-settings$/);
+    const header = page.locator('header');
+    await header.getByText(options.username, { exact: true }).waitFor();
+    await header.getByRole('button', { name: 'Log out', exact: true }).waitFor();
+    assert.equal(await header.getByRole('combobox').count(), 0);
+    const theme = page.getByRole('combobox', { name: 'Theme', exact: true });
+    assert.equal(await theme.isDisabled(), true);
+    assert.deepEqual(await theme.getByRole('option').allTextContents(), ['Default']);
+    const appearance = page.getByRole('combobox', { name: 'Appearance', exact: true });
+    await appearance.selectOption('dark');
+    await page.getByRole('link', { name: 'Server settings', exact: true }).click();
+    assert.match(page.url(), /#\/server-settings$/);
+    await page.getByRole('heading', { name: 'Server settings', exact: true }).waitFor();
+    assert.equal(await page.getByRole('combobox', { name: 'Appearance', exact: true }).isVisible(), false);
+    assert.equal(
+        await page.getByRole('link', { name: 'Grid settings', exact: true }).getAttribute('href'),
+        `#/grids/${gridA}/settings`
+    );
+    await page.getByRole('link', { name: 'Grid settings', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).waitFor();
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
+    await page.reload();
+    const language = page.getByRole('combobox', { name: 'Język', exact: true });
+    await language.waitFor();
+    assert.equal(await language.inputValue(), 'pl');
+    assert.equal(await page.getByRole('combobox', { name: 'Wygląd', exact: true }).inputValue(), 'dark');
+    assert.equal(
+        options.requests.filter((request) => request.path.startsWith('/api/') && request.method !== 'GET').length,
+        0
+    );
+});
+
+test('global settings direct routes work without an available grid', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.empty = true;
+    for (const [route, heading] of [
+        ['web-settings', 'Web settings'],
+        ['server-settings', 'Server settings']
+    ]) {
+        await page.goto(`${base}#/${route}`);
+        await page.getByRole('heading', { name: heading, exact: true }).waitFor({ timeout: 3000 });
+        assert.match(page.url(), new RegExp(`#/${route}$`));
+    }
+    assert.equal(options.requests.filter((request) => request.path.startsWith('/api/grids/')).length, 0);
+    assert.equal(
+        options.requests.filter((request) => request.path.startsWith('/api/') && request.method !== 'GET').length,
+        0
+    );
+});
 
 test('real page browses API resources under a proxy prefix, with search and filters', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
@@ -465,7 +545,7 @@ test('Minecraft classic palette, obfuscation and literal HTML remain safe and re
     const details = page.getByRole('heading', { name: /^Secret Words Visible Masked Plain §qUnknown tail§/ });
     await details.waitFor();
     assert.ok((await details.textContent()).includes(literal));
-    assert.equal(await page.locator('img').count(), 0, 'Markup in names must remain text');
+    assert.equal(await page.locator('img[src="x"]').count(), 0, 'Markup in names must remain text');
 });
 
 test('Minecraft names search and sort as continuous plain text and keep tooltip formatting through polling', async (t) => {
@@ -700,7 +780,7 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
 });
 
 // Public seam: history links retain runtime entry identity; completed detail is read-only
-// and its snapshot need not be refetched for unrelated preferences or ordinary polling.
+// and its snapshot need not be refetched for ordinary polling.
 test('history preserves entry identity and opens measured cancelled work through direct routes', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     options.history = [{ ...historyEntry, id: 2 }, historyEntry];
@@ -714,7 +794,6 @@ test('history preserves entry identity and opens measured cancelled work through
         .filter({ hasText: /cancelled/i })
         .waitFor();
     assert.equal(await page.getByRole('cell', { name: '10', exact: true }).count(), 1);
-    await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption('dark');
     await (await page.waitForResponse((response) => response.url().endsWith('/api/grids'))).finished();
     assert.equal(options.requests.filter((request) => request.path.endsWith('/crafting-history/2')).length, 1);
     await page.reload();
@@ -743,15 +822,15 @@ test('grid settings preserve the draft and save explicitly while safely showing 
     await page.getByRole('link', { name: 'Grid settings', exact: true }).click({ timeout: 3000 });
     const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
     await tracking.check();
+    const refreshed = page.waitForResponse((response) => response.url().endsWith('/settings'));
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
-    await page.getByRole('combobox', { name: 'Język', exact: true }).selectOption('en');
+    await (await refreshed).finished();
     assert.equal(await tracking.isChecked(), true);
     assert.equal(options.requests.filter((request) => request.method === 'PATCH').length, 0);
     await page.getByRole('heading', { name: player.name, exact: true }).waitFor();
     await page.getByText(player.uuid, { exact: true }).waitFor();
     await page.getByText(/minecraft:overworld.*120.*64.*-32/).waitFor();
-    assert.equal(await page.locator('img').count(), 0);
+    assert.equal(await page.locator('img[src="x"]').count(), 0);
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     await page
         .getByRole('status')
@@ -976,7 +1055,7 @@ test('old settings reads cannot replace saved data and denied saves clear access
         contentType: 'application/json',
         body: JSON.stringify({ status: 'OK', data: { isTracked: false } })
     });
-    await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption('dark');
+    await settleResponse(page, delayed.request());
     assert.equal(await tracking.isChecked(), true);
     options.settingsError = 'NO_PERMISSIONS';
     await tracking.uncheck();
@@ -1011,7 +1090,7 @@ test('late history details cannot enter another grid and denied reads remove the
         contentType: 'application/json',
         body: JSON.stringify({ status: 'OK', data: historyDetail })
     });
-    await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption('dark');
+    await settleResponse(page, delayed.request());
     assert.equal(await page.getByRole('heading', { name: /Iron Ingot/ }).count(), 0);
     options.historyError = 'NO_PERMISSIONS';
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
@@ -1088,7 +1167,7 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
         contentType: 'application/json',
         body: JSON.stringify({ status: 'OK', data: cpuWork })
     });
-    await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption('dark');
+    await settleResponse(page, delayed.request());
     assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).count(), 0);
 });
@@ -1282,7 +1361,7 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
         contentType: 'application/json',
         body: JSON.stringify({ status: 'OK', data: cpuWork })
     });
-    await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption('dark');
+    await settleResponse(page, delayed.request());
     assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 0);
     assert.equal(await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isEnabled(), true);
@@ -1331,7 +1410,7 @@ test('known submission rejection retains the plan and permits deliberate correct
     await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
     await page.getByText(options.submitReason, { exact: true }).waitFor({ timeout: 3000 });
     assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 1);
-    assert.equal(await page.locator('img').count(), 0);
+    assert.equal(await page.locator('img[src="x"]').count(), 0);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/submit')).length, 1);
     options.submitStatus = 'CPU_NOT_FOUND';
     await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
@@ -1786,7 +1865,7 @@ test('a theme can persist its own supported language in shared preferences', asy
     assert.equal(output[0], 'Bienvenue');
     assert.equal(output[1].replace(/\s/g, ' '), '1 234,5');
     assert.equal(output[2], englishCommon);
-    await page.goto(base);
+    await page.goto(`${base}#/web-settings`);
     const language = page.getByRole('combobox', { name: 'Language' });
     await language.waitFor();
     assert.equal(await language.inputValue(), 'fr', 'Returning to the default theme retains the shared language');
@@ -1797,12 +1876,15 @@ test('appearance, language and terminal preferences survive reload and direct li
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
-    await page.getByRole('combobox', { name: 'Appearance' }).selectOption('dark');
     await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Appearance' }).selectOption('dark');
     await page.getByRole('combobox', { name: 'Language' }).selectOption('pl');
     await page.reload();
-    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    await page.getByRole('combobox', { name: 'Wygląd' }).waitFor();
     assert.equal(await page.getByRole('combobox', { name: 'Wygląd' }).inputValue(), 'dark');
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(
         await page.getByRole('button', { name: 'Sortuj według: Ilości', exact: true }).getAttribute('aria-pressed'),
         'true'
@@ -1827,7 +1909,7 @@ test('the default theme adopts saved appearance once and preserves subsequent ch
             localStorage.setItem(key, JSON.stringify({ appearance: 'dark', language: 'en', autoRefresh: false }));
         }
     });
-    await page.goto(base);
+    await page.goto(`${base}#/web-settings`);
     const appearance = page.getByRole('combobox', { name: 'Appearance' });
     await appearance.waitFor();
     assert.equal(await appearance.inputValue(), 'dark');
@@ -1837,7 +1919,7 @@ test('the default theme adopts saved appearance once and preserves subsequent ch
     assert.equal(await appearance.inputValue(), 'light');
     await open();
     await page.getByRole('button', { name: 'Reset default appearance' }).click();
-    await page.goto(base);
+    await page.goto(`${base}#/web-settings`);
     await appearance.waitFor();
     assert.equal(await appearance.inputValue(), 'system', 'Reset must not resurrect the previously adopted appearance');
 });
@@ -1856,7 +1938,7 @@ test('saved appearance remains recoverable when its first theme storage write fa
             throw new DOMException('Full', 'QuotaExceededError');
         };
     });
-    await page.goto(base);
+    await page.goto(`${base}#/web-settings`);
     const appearance = page.getByRole('combobox', { name: 'Appearance' });
     await appearance.waitFor();
     assert.equal(await appearance.inputValue(), 'dark');
@@ -2144,7 +2226,7 @@ test('resource details are text, keyboard accessible and paging does not require
     await page.getByRole('tooltip').waitFor({ state: 'hidden' });
     await item.click();
     await page.getByRole('heading', { name: untrustedName, exact: true }).waitFor();
-    assert.equal(await page.locator('img').count(), 0);
+    assert.equal(await page.locator('img[src="x"]').count(), 0);
     await page.getByRole('button', { name: 'Next page' }).click();
     await page.getByRole('button', { name: /Resource 104/ }).waitFor();
     await page.getByRole('button', { name: 'Previous page' }).click();

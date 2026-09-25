@@ -36,6 +36,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.io.IOUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -326,6 +328,80 @@ class ServerLifecycleHttpTest {
         assertFalse(
             next.body()
                 .contains("type=\"password\""));
+    }
+
+    @Test
+    void nextUiBootstrapsOnlyTheAuthenticatedDisplayIdentity() throws Exception {
+        startApi();
+        String token = login();
+        HttpURLConnection connection = connection("/?ui=next", token);
+        Response response = read(connection);
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        JsonObject user = bootstrapUser(response.body());
+        assertEquals(
+            2,
+            user.entrySet()
+                .size(),
+            "the bootstrap must not expose session credentials or account IDs");
+        assertEquals(
+            "Admin",
+            user.get("username")
+                .getAsString());
+        assertTrue(
+            user.get("isAdmin")
+                .getAsBoolean());
+        assertFalse(
+            response.body()
+                .contains(token));
+        assertEquals("no-store", connection.getHeaderField("Cache-Control"));
+        assertFalse(
+            get("/?ui=next", null).body()
+                .contains("id=\"ae2-user\""));
+        assertFalse(
+            get("/", token).body()
+                .contains("id=\"ae2-user\""));
+    }
+
+    @Test
+    void nextUiKeepsHostilePlayerNamesInsideTheJsonBootstrap() throws Exception {
+        String username = "Player</script><img src=x onerror=\"alert(1)\">&'\u2028"
+            + "_REPLACE_ME_USERNAME_REPLACE_ME_IS_ADMIN_REPLACE_ME_USER";
+        config.set("general.public_mode", true);
+        CoreDataTestFixture.reset();
+        assertTrue(
+            CoreData.setPassword(
+                new PlayerIdentity(UUID.fromString("99999999-8888-7777-6666-555555555555"), username),
+                PasswordHelper.generateStrongPasswordHash("player-password")));
+        startApi();
+        String token = login(username, "player-password");
+        Response page = get("/?ui=next", token);
+        assertEquals(HttpURLConnection.HTTP_OK, page.status());
+        JsonObject user = bootstrapUser(page.body());
+        assertEquals(
+            username,
+            user.get("username")
+                .getAsString());
+        assertFalse(
+            user.get("isAdmin")
+                .getAsBoolean());
+        assertEquals(
+            2,
+            user.entrySet()
+                .size());
+        assertFalse(
+            page.body()
+                .contains("<img"),
+            "display names must not inject elements into the page");
+        assertFalse(
+            page.body()
+                .contains(token));
+    }
+
+    private static JsonObject bootstrapUser(String html) {
+        Matcher bootstrap = Pattern.compile("<script\\b[^>]*\\bid=\"ae2-user\"[^>]*>(.*?)</script>", Pattern.DOTALL)
+            .matcher(html);
+        assertTrue(bootstrap.find(), "the authenticated page must supply its display identity");
+        return new Gson().fromJson(bootstrap.group(1), JsonObject.class);
     }
 
     @Test

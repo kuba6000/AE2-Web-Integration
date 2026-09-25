@@ -1,5 +1,5 @@
 /**
- * @typedef {{view: 'home' | 'missing', gridKey: null}
+ * @typedef {{view: 'home' | 'missing' | 'web-settings' | 'server-settings', gridKey: null}
  * | {view: 'items' | 'settings', gridKey: string}
  * | {view: 'cpus', gridKey: string, cpuKey: string | null}
  * | {view: 'history', gridKey: string, entryId: string | null}
@@ -10,6 +10,8 @@
 export function readRoute() {
     const hash = location.hash.replace(/^#/, '');
     if (!hash || hash === '/' || hash === '/home') return { view: 'home', gridKey: null };
+    if (hash === '/web-settings') return { view: 'web-settings', gridKey: null };
+    if (hash === '/server-settings') return { view: 'server-settings', gridKey: null };
     const settings = /^\/grids\/([^/]+)\/settings$/.exec(hash);
     if (settings) {
         try {

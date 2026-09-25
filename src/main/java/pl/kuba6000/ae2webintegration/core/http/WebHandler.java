@@ -13,8 +13,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
@@ -25,10 +27,14 @@ import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService.LoginResult;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService.RegistrationResult;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 /** Serves browser pages and adapts shared authentication operations to forms, cookies and redirects. */
 public final class WebHandler implements HttpHandler {
+
+    @Desugar
+    private record DisplayUser(@NotNull String username, boolean isAdmin) {}
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -158,7 +164,8 @@ public final class WebHandler implements HttpHandler {
 
     private static void renderPage(HttpExchange exchange, @Nullable RequestContext context) throws IOException {
         String site = context == null ? "/assets/login.html" : "/assets/webpage.html";
-        if (context != null && usesNextUi(exchange)) {
+        boolean nextUi = context != null && usesNextUi(exchange);
+        if (nextUi) {
             site = "/assets/web/index.html";
         }
         String response;
@@ -180,6 +187,18 @@ public final class WebHandler implements HttpHandler {
                 context.getPrincipal()
                     .getUsername());
             response = response.replace("_REPLACE_ME_IS_ADMIN", context.isAdmin() ? "true" : "false");
+            if (nextUi) {
+                // Gson's default HTML escaping keeps names from terminating the JSON script element.
+                String user = GSONUtils.GSON_BUILDER.create()
+                    .toJson(
+                        new DisplayUser(
+                            context.getPrincipal()
+                                .getUsername(),
+                            context.isAdmin()));
+                response = response.replace("_REPLACE_ME_USER", user);
+                exchange.getResponseHeaders()
+                    .set("Cache-Control", "no-store");
+            }
         }
         exchange.getResponseHeaders()
             .set("Content-Type", "text/html; charset=UTF-8");

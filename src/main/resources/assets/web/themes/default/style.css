@@ -121,7 +121,7 @@ header {
     justify-content: space-between;
     gap: 20px;
 }
-.preferences,
+.account-controls,
 .network-bar {
     display: flex;
     align-items: end;
@@ -411,14 +411,31 @@ label {
     object-fit: contain;
     image-rendering: pixelated;
 }
-.preferences label {
-    color: var(--muted);
-    font-size: 11px;
+.account-controls {
+    align-items: center;
+    min-width: 0;
+    font-size: 12px;
 }
-.preferences select,
-.preferences button {
+#username {
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+.account-controls button {
+    flex-shrink: 0;
     font-size: 12px;
     padding: 6px 9px;
+}
+.web-preferences {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 380px;
+}
+.web-preferences select {
+    width: 100%;
+}
+.web-preferences h3 {
+    margin-bottom: 12px;
 }
 .network-bar {
     margin: 0 0 24px;
@@ -899,7 +916,7 @@ footer a {
     .site-header {
         align-items: start;
     }
-    .preferences {
+    .account-controls {
         justify-content: end;
     }
     .brand h1 span {
