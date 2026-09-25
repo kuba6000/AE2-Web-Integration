@@ -102,6 +102,7 @@ async function fixture(t, mount = '') {
         loggedOut: false,
         username: 'ExamplePlayer',
         isAdmin: false,
+        modVersion: '9.8.7-browser-fixture',
         itemsA: [iron, quartz],
         plan: readyPlan,
         pendingReads: 0,
@@ -300,6 +301,10 @@ async function fixture(t, mount = '') {
                                     '\\u003c'
                                 )
                             )
+                            .replace(
+                                '<!--_REPLACE_ME_MOD_VERSION-->',
+                                JSON.stringify(options.modVersion).replace(/</g, '\\u003c')
+                            )
                       : content
             );
         } catch {
@@ -386,6 +391,69 @@ test('global settings direct routes work without an available grid', async (t) =
         assert.match(page.url(), new RegExp(`#/${route}$`));
     }
     assert.equal(options.requests.filter((request) => request.path.startsWith('/api/grids/')).length, 0);
+    assert.equal(
+        options.requests.filter((request) => request.path.startsWith('/api/') && request.method !== 'GET').length,
+        0
+    );
+});
+
+// Public seam: About identifies the running mod and the resources actually included in
+// this theme; it is a read-only global destination and does not discard grid navigation.
+test('About shows runtime metadata and resource links while retaining the selected grid', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    await page.getByRole('link', { name: 'About', exact: true }).click({ timeout: 3000 });
+    assert.match(page.url(), /#\/about$/);
+    const about = page.getByRole('heading', { name: 'About', exact: true }).locator('..');
+    await about.getByText(options.modVersion).waitFor();
+    const headings = await about.getByRole('heading').allTextContents();
+    assert.ok(headings.indexOf('Mod') >= 0);
+    assert.ok(headings.indexOf('Mod') < headings.indexOf('Active theme'));
+    assert.ok(headings.indexOf('Active theme') < headings.indexOf('Included resources'));
+    await about.getByText('AE2 Web Integration', { exact: true }).waitFor();
+    assert.equal(await about.getByText('kuba6000').count(), 2);
+    assert.equal(await about.getByText('LGPL-3.0-or-later').count(), 2);
+    await about.getByText('Default', { exact: true }).waitFor();
+    await about.getByText('Monocraft', { exact: true }).waitFor();
+    await about.getByText(/SIL Open Font License\s*1\.1/).waitFor();
+    for (const href of [
+        'https://github.com/kuba6000/AE2-Web-Integration',
+        'https://github.com/kuba6000/AE2-Web-Integration/issues',
+        'https://github.com/IdreesInc/Monocraft'
+    ])
+        assert.ok(await about.locator(`a[href="${href}"]`).count(), `About must link to ${href}`);
+    assert.doesNotMatch(await about.innerText(), /Lucide|Font Awesome|Material Icons|TERMS AND CONDITIONS|PREAMBLE/i);
+    await page.getByRole('link', { name: 'Grid settings', exact: true }).click();
+    assert.match(page.url(), new RegExp(`#/grids/${gridA}/settings$`));
+    await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).waitFor();
+    assert.equal(
+        options.requests.filter((request) => request.path.startsWith('/api/') && request.method !== 'GET').length,
+        0
+    );
+});
+
+test('About opens without a grid and remains usable in a translated narrow viewport', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.empty = true;
+    await page.setViewportSize({ width: 375, height: 740 });
+    await page.goto(`${base}#/about`);
+    await page.getByRole('heading', { name: 'About', exact: true }).waitFor({ timeout: 3000 });
+    await page.getByText(options.modVersion).waitFor();
+    assert.equal(options.requests.filter((request) => request.path.startsWith('/api/grids/')).length, 0);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
+    const aboutLink = page.locator('a[href="#/about"]');
+    assert.notEqual(await aboutLink.innerText(), 'About');
+    await aboutLink.click();
+    await page.getByText(options.modVersion).waitFor();
+    assert.equal(await page.locator('html').getAttribute('lang'), 'pl');
+    assert.equal(await page.getByRole('heading', { name: 'Included resources', exact: true }).count(), 0);
+    assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        true,
+        'About metadata and navigation must fit a narrow viewport without page-level horizontal scrolling'
+    );
     assert.equal(
         options.requests.filter((request) => request.path.startsWith('/api/') && request.method !== 'GET').length,
         0

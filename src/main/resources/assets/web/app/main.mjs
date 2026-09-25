@@ -8,6 +8,9 @@ import { mount } from '../themes/default/view.mjs';
 const identity = /** @type {HTMLScriptElement} */ (document.getElementById('ae2-user'));
 /** @type {{username: string, isAdmin: boolean}} */
 const user = JSON.parse(identity.text);
+const version = /** @type {HTMLScriptElement} */ (document.getElementById('ae2-mod-version'));
+/** @type {string | null} */
+const modVersion = JSON.parse(version.text);
 const base = new URL('./', location.href);
 let leaving = false;
 function returnToLogin() {
@@ -26,6 +29,7 @@ const unmount = mount(/** @type {HTMLElement} */ (document.getElementById('app')
     ...createThemeContext(base, 'default'),
     base,
     user,
+    modVersion,
     async logout() {
         await api.logout();
         returnToLogin();

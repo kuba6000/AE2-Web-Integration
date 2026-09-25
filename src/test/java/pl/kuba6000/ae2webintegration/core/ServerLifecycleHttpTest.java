@@ -44,6 +44,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.github.bsideup.jabel.Desugar;
 import com.google.gson.Gson;
@@ -395,6 +398,69 @@ class ServerLifecycleHttpTest {
         assertFalse(
             page.body()
                 .contains(token));
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(
+        strings = { "2.7.4-native-test",
+            "Version</script><img src=x onerror=\"alert(1)\">&'\u2028_REPLACE_ME_USER<!--_REPLACE_ME_MOD_VERSION-->" })
+    void nextUiBootstrapsTheRuntimeModVersionAsSafeJson(String version) throws Exception {
+        String previousVersion = CoreEngine.getModVersion();
+        IServerPlatform platform = new IServerPlatform() {
+
+            @Override
+            public UUID getOnlinePlayerUUID(String username) {
+                return null;
+            }
+
+            @Override
+            public File getConfigDirectory() {
+                return tempDirectory;
+            }
+
+            @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
+            }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
+        };
+        try {
+            CoreEngine.init(platform, version, "-http-test");
+            startApi();
+            String token = login();
+            Response page = get("/?ui=next", token);
+            assertEquals(HttpURLConnection.HTTP_OK, page.status());
+            Matcher bootstrap = Pattern
+                .compile("<script\\b[^>]*\\bid=\"ae2-mod-version\"[^>]*>(.*?)</script>", Pattern.DOTALL)
+                .matcher(page.body());
+            assertTrue(bootstrap.find(), "the authenticated page must supply its runtime mod version");
+            assertEquals(version, new Gson().fromJson(bootstrap.group(1), String.class));
+            assertEquals(
+                "Admin",
+                bootstrapUser(page.body()).get("username")
+                    .getAsString());
+            assertFalse(
+                page.body()
+                    .contains("<img"),
+                "runtime metadata must not inject elements into the page");
+            assertFalse(
+                page.body()
+                    .contains(token));
+            assertFalse(
+                get("/?ui=next", null).body()
+                    .contains("id=\"ae2-mod-version\""));
+            assertFalse(
+                get("/", token).body()
+                    .contains("id=\"ae2-mod-version\""));
+        } finally {
+            CoreEngine.onServerStopped();
+            CoreEngine.init(platform, previousVersion, "-http-test");
+        }
     }
 
     private static JsonObject bootstrapUser(String html) {

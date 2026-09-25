@@ -196,6 +196,11 @@ public final class WebHandler implements HttpHandler {
                                 .getUsername(),
                             context.isAdmin()));
                 response = response.replace("_REPLACE_ME_USER", user);
+                // The HTML marker cannot occur in the already HTML-escaped user JSON.
+                response = response.replace(
+                    "<!--_REPLACE_ME_MOD_VERSION-->",
+                    GSONUtils.GSON_BUILDER.create()
+                        .toJson(CoreEngine.getModVersion()));
                 exchange.getResponseHeaders()
                     .set("Cache-Control", "no-store");
             }

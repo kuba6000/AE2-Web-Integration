@@ -12,6 +12,7 @@ import { createCraftingView } from './crafting.mjs';
 import { createCpuView } from './cpus.mjs';
 import { createHistoryView } from './history.mjs';
 import { createSettingsView } from './settings.mjs';
+import { createAboutView } from './about.mjs';
 
 const PAGE_SIZE = 100;
 
@@ -66,9 +67,9 @@ function iconButton(group, value) {
  * Theme renderer. Server operations and preference ownership are supplied by the application.
  * @param {HTMLElement} root
  * @param {Terminal} application
- * @param {ReturnType<typeof import('../../app/theme-context.mjs').createThemeContext> & {base: URL, user: {username: string, isAdmin: boolean}, logout: () => Promise<void>}} options
+ * @param {ReturnType<typeof import('../../app/theme-context.mjs').createThemeContext> & {base: URL, user: {username: string, isAdmin: boolean}, modVersion: string | null, logout: () => Promise<void>}} options
  */
-export function mount(root, application, { base, user, logout, settings, i18n }) {
+export function mount(root, application, { base, user, modVersion, logout, settings, i18n }) {
     i18n.register({
         en: {
             appearance: 'Appearance',
@@ -105,7 +106,7 @@ export function mount(root, application, { base, user, logout, settings, i18n })
         <span id="username"></span><button id="logout" data-text="logout"></button></div></header>
         <section class="network-bar"><label><span data-text="network"></span><select id="network"></select></label>
         <button id="refresh" data-text="refresh"></button><label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label></section>
-        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a></nav></div>
+        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav></div>
         <div class="workspace" id="workspace">
         <div class="terminal-tools" id="terminal-tools" hidden>
         <div role="group" data-label="resources">${/** @type {const} */ (['all', 'stored', 'craftable']).map((value) => iconButton('filter', value)).join('')}</div>
@@ -180,6 +181,7 @@ export function mount(root, application, { base, user, logout, settings, i18n })
     const cpuView = createCpuView(find('#window'), application);
     const historyView = createHistoryView(find('#window'));
     const settingsView = createSettingsView(find('#window'), application);
+    const aboutView = createAboutView(find('#window'), modVersion);
     find('#legacy').href = base.href;
     const tooltip = element('div', '', 'tooltip');
     tooltip.id = 'resource-tooltip';
@@ -541,6 +543,7 @@ export function mount(root, application, { base, user, logout, settings, i18n })
         cpuView.render(state.route, state.cpus, locale);
         historyView.render(state.route, state.history, locale);
         settingsView.render(state.route, state.settings, locale);
+        aboutView.render(state.route, locale);
         const gridKey = state.route.gridKey || state.selectedGridKey;
         find('#cpu-link').hidden = !gridKey;
         find('#terminal-link').hidden = !gridKey;

@@ -437,6 +437,39 @@ label {
 .web-preferences h3 {
     margin-bottom: 12px;
 }
+.about-view {
+    overflow-wrap: anywhere;
+}
+.about-view section + section {
+    margin-top: 28px;
+}
+.about-view h3 {
+    margin-bottom: 12px;
+}
+.about-view p {
+    margin: 8px 0;
+    font-size: 13px;
+}
+.about-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+}
+.about-view a {
+    font-size: 13px;
+}
+.about-view table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.about-view th,
+.about-view td {
+    text-align: left;
+    vertical-align: top;
+    padding: 8px 12px 8px 0;
+}
 .network-bar {
     margin: 0 0 24px;
     color: var(--text);
