@@ -684,6 +684,42 @@ label {
     width: 24px;
     height: 24px;
 }
+.pixel-icon {
+    color: light-dark(#283b4b, #1f2834);
+}
+.pixel-icon .icon-body {
+    fill: var(--icon-color);
+}
+.icon-grid {
+    --icon-color: #58b6ec;
+}
+.icon-archive {
+    --icon-color: #dda64c;
+}
+.icon-archive .icon-paper {
+    fill: #fff0ca;
+}
+.icon-cog {
+    --icon-color: #83c765;
+}
+.icon-cog .icon-hub {
+    fill: #d8efac;
+}
+.icon-tag {
+    --icon-color: #e79270;
+}
+.icon-tag polygon {
+    fill: #fff0d1;
+}
+.icon-numberedList {
+    color: light-dark(#684519, #ffd078);
+}
+.icon-numberedList rect {
+    fill: light-dark(#32566e, #94c9e7);
+}
+.icon-hashtag {
+    color: light-dark(#176a70, #6bd6d2);
+}
 .tool-button[aria-pressed='true'] {
     background-color: var(--slot);
     border-color: var(--control-edge-dark) var(--control-edge-light) var(--control-edge-light) var(--control-edge-dark);

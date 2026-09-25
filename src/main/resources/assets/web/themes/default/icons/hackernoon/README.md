@@ -17,3 +17,5 @@ The theme renders it as a filled blue circle with a white information symbol.
 | `tag`           | Sort by name                            |
 | `numbered-list` | Sort by quantity                        |
 | `hashtag`       | Sort by registry ID                     |
+
+The theme adds colored interior fills to the terminal icons; the original pixel outlines are retained.
