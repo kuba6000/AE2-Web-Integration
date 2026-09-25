@@ -20,6 +20,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
@@ -83,6 +84,10 @@ public final class GetCPUList extends ISyncedRequest {
          * @example true
          */
         public boolean isBusy;
+        /** Whether this CPU supports pausing the scheduling of its current job. */
+        public boolean supportsPause;
+        /** Whether the active job is paused; false for idle or unsupported CPUs. */
+        public boolean isPaused;
         /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
         public @Nullable JSON_Stack finalOutput;
         /**
@@ -151,6 +156,9 @@ public final class GetCPUList extends ISyncedRequest {
             cpuInfo.usedStorage = cluster.web$getUsedStorage();
             cpuInfo.coProcessors = cluster.web$getCoProcessors();
             cpuInfo.isBusy = cluster.web$isBusy();
+            cpuInfo.supportsPause = cluster instanceof IPausableCraftingCPU;
+            cpuInfo.isPaused = cpuInfo.isBusy && cluster instanceof IPausableCraftingCPU pausable
+                && pausable.web$isPaused();
             if (cpuInfo.isBusy) {
                 cpuInfo.finalOutput = JSON_Stack.capture(grid, cluster.web$getFinalOutput());
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cluster);

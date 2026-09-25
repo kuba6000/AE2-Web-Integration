@@ -37,6 +37,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Register;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.CancelCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPUList;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.PauseCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.CreateCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.DeleteCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
@@ -197,6 +198,7 @@ public class AE2Controller {
                 api.register(GetCPUList.class);
                 api.register(GetCPU.class);
                 api.register(CancelCPU.class);
+                api.register(PauseCPU.class);
                 api.register(GetItems.class);
                 api.register(GetGridSettings.class);
                 api.register(PatchGridSettings.class);
