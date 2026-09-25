@@ -14,9 +14,8 @@ import { createHistoryView } from './history.mjs';
 import { createSettingsView } from './settings.mjs';
 import { createAboutView } from './about.mjs';
 import { infoCircle } from './icons/hackernoon/info-circle.mjs';
-import { craftingHammer } from './icons/crafting-hammer.mjs';
+import { terminalIcons as symbols, craftingHammer } from './icons/ae2/terminal.mjs';
 import { userIcon } from './icons/hackernoon/user.mjs';
-import { grid, archive, tag, numberedList, hashtag } from './icons/hackernoon/terminal.mjs';
 
 const PAGE_SIZE = 100;
 
@@ -50,14 +49,6 @@ function element(tag, text = '', className = '') {
     return node;
 }
 
-const symbols = {
-    all: grid,
-    stored: archive,
-    craftable: craftingHammer,
-    name: tag,
-    quantity: numberedList,
-    id: hashtag
-};
 /**
  * @param {'filter' | 'sort'} group
  * @param {keyof typeof symbols} value

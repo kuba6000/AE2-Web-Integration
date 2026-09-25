@@ -690,40 +690,16 @@ label {
     place-items: center;
     padding: 0;
 }
-.tool-button svg {
+.ae2-icon {
     display: block;
-    width: 24px;
-    height: 24px;
+    image-rendering: pixelated;
+}
+.tool-button .ae2-icon {
+    width: 32px;
+    height: 32px;
 }
 .pixel-icon {
     color: light-dark(#283b4b, #1f2834);
-}
-.pixel-icon .icon-body {
-    fill: var(--icon-color);
-}
-.icon-grid {
-    --icon-color: #58b6ec;
-}
-.icon-archive {
-    --icon-color: #dda64c;
-}
-.icon-archive .icon-paper {
-    fill: #fff0ca;
-}
-.icon-tag {
-    --icon-color: #e79270;
-}
-.icon-tag polygon {
-    fill: #fff0d1;
-}
-.icon-numberedList {
-    color: light-dark(#684519, #ffd078);
-}
-.icon-numberedList rect {
-    fill: light-dark(#32566e, #94c9e7);
-}
-.icon-hashtag {
-    color: light-dark(#176a70, #6bd6d2);
 }
 .tool-button[aria-pressed='true'] {
     background-color: var(--slot);
@@ -805,7 +781,7 @@ label {
     height: 24px;
     margin-right: auto;
 }
-.craftable-marker svg {
+.craftable-marker .ae2-icon {
     display: block;
     width: 24px;
     height: 24px;
@@ -1082,6 +1058,10 @@ footer a {
     .tool-button {
         width: 34px;
         height: 36px;
+    }
+    .tool-button .ae2-icon {
+        width: 24px;
+        height: 24px;
     }
     .terminal-tools {
         gap: 18px;
