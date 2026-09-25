@@ -19,3 +19,7 @@ The theme renders it as a filled blue circle with a white information symbol.
 | `hashtag`       | Sort by registry ID                     |
 
 The theme adds colored interior fills to the terminal icons; the original pixel outlines are retained.
+
+`user.mjs` uses the original outlines from
+[`user.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/user.svg)
+with colored interior fills beside the signed-in user's name.

@@ -412,6 +412,17 @@ label {
     min-width: 0;
     font-size: 12px;
 }
+.account-user {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.user-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
 #username {
     overflow-wrap: anywhere;
     min-width: 0;
