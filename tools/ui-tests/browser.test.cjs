@@ -1536,6 +1536,63 @@ test('CPU terminal hides stored-only resources, sorts explicit quantities and pr
     );
 });
 
+test('CPU tiles show processing shares and sort by precise shares through refresh and tracking changes', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const items = [
+        { ...cpuWork.items[0], itemname: 'Alpha', itemid: 'example:alpha', shareInCraftingTime: 0.12441 },
+        { ...cpuWork.items[0], itemname: 'Beta', itemid: 'example:beta', shareInCraftingTime: 0.12449 },
+        {
+            ...cpuWork.items[0],
+            itemname: 'Stored',
+            itemid: 'example:stored',
+            active: 0,
+            pending: 0,
+            shareInCraftingTime: 0.7511
+        },
+        { ...cpuWork.items[0], itemname: 'Waiting', itemid: 'example:waiting', active: 0, shareInCraftingTime: 0 }
+    ];
+    options.cpuDetails['cpu-a'] = { ...cpuWork, items };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const resources = page.getByRole('region', { name: 'CPU resources', exact: true });
+    const alpha = resources.getByRole('button', { name: /^Alpha/ });
+    await alpha.waitFor();
+    assert.match(await alpha.innerText(), /12\.4%/);
+    assert.match(await alpha.getAttribute('aria-label'), /Share of processing time: 12\.4%/);
+    assert.match(await resources.getByRole('button', { name: /^Waiting/ }).innerText(), /0%/);
+    const names = async () =>
+        (await resources.getByRole('button').allTextContents()).map(
+            (text) => text.match(/Alpha|Beta|Stored|Waiting/)[0]
+        );
+    const sortShare = page.getByRole('button', { name: 'Sort by: Share of processing time', exact: true });
+    await sortShare.click();
+    assert.deepEqual(await names(), ['Stored', 'Beta', 'Alpha', 'Waiting']);
+    const activeFirst = page.getByRole('button', { name: 'Active first: active, pending, stored', exact: true });
+    await activeFirst.click();
+    assert.deepEqual(await names(), ['Beta', 'Alpha', 'Waiting', 'Stored']);
+    await activeFirst.click();
+    options.cpuDetails['cpu-a'].items = items.map((item, i) => ({
+        ...item,
+        shareInCraftingTime: [0.9, 0.01, 0.09, 0][i]
+    }));
+    let refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-a'));
+    await poll(page);
+    await settleResponse(page, (await refreshed).request());
+    assert.deepEqual(await names(), ['Alpha', 'Stored', 'Beta', 'Waiting']);
+    assert.match(await alpha.innerText(), /90%/);
+    options.cpuDetails['cpu-a'].hasTrackingInfo = false;
+    refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-a'));
+    await poll(page);
+    await settleResponse(page, (await refreshed).request());
+    assert.equal(await sortShare.isVisible(), false);
+    assert.doesNotMatch(await alpha.innerText(), /%/);
+    assert.doesNotMatch(await alpha.getAttribute('aria-label'), /Share/);
+    assert.deepEqual(await names(), ['Alpha', 'Beta', 'Stored', 'Waiting']);
+    assert.equal(
+        await page.getByRole('button', { name: 'Sort by: Name', exact: true }).getAttribute('aria-pressed'),
+        'true'
+    );
+});
+
 test('CPU resources omit zero counts and update visible categories during polling', async (t) => {
     const { page, options, base } = await fixture(t);
     const item = { ...cpuWork.items[0], active: 0, pending: 12, stored: 0 };

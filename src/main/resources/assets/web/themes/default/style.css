@@ -258,6 +258,9 @@ header {
     --slot-height: 100px;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr));
 }
+.resource-grid.cpu-items-tracked {
+    --slot-height: 120px;
+}
 .cpu-item-amounts {
     display: flex;
     flex-direction: column;

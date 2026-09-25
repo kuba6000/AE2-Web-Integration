@@ -3,7 +3,7 @@
  * @typedef {Terminal['state']} TerminalState
  * @typedef {import('../../app/i18n.mjs').Translator} Locale
  * @typedef {import('../../app/api-types.mjs').CpuItem} CpuItem
- * @typedef {'name' | 'active' | 'pending' | 'stored'} ResourceSort
+ * @typedef {'name' | 'active' | 'pending' | 'stored' | 'shareInCraftingTime'} ResourceSort
  */
 
 import { cpuHref } from '../../app/router.mjs';
@@ -174,9 +174,14 @@ export function createCpuView(root, application, { workspace }) {
             amounts.append(amount);
             return { key, amount, label, quantity };
         });
+        const share = element('span', '', 'cpu-amount');
+        const shareLabel = element('span');
+        const shareValue = element('span', '', 'quantity');
+        share.append(shareLabel, shareValue);
+        amounts.append(share);
         button.append(name, amounts);
         li.append(button);
-        const row = { item, li, button, name, counts };
+        const row = { item, li, button, name, counts, share, shareLabel, shareValue };
         button.addEventListener('pointerenter', (event) => {
             if (event.pointerType !== 'touch') showResourceTooltip(row, event.clientX, event.clientY, true);
         });
@@ -235,6 +240,7 @@ export function createCpuView(root, application, { workspace }) {
     addControl('active', 'cpuSortActive', 'sort', craftingHammer);
     addControl('pending', 'cpuSortPending', 'sort', craftingQueue);
     addControl('stored', 'cpuSortStored', 'sort', terminalIcons.quantity);
+    addControl('shareInCraftingTime', 'cpuProcessingShare', 'sort', '<span aria-hidden="true">%</span>');
 
     /** @param {CpuItem} item */
     function craftingPriority(item) {
@@ -242,9 +248,14 @@ export function createCpuView(root, application, { workspace }) {
     }
 
     function renderResources() {
+        const hasTracking = !!state.detail?.hasTrackingInfo && !state.error;
+        grid.classList.toggle('cpu-items-tracked', hasTracking);
+        if (!hasTracking && sort === 'shareInCraftingTime') sort = 'name';
         filterGroup.setAttribute('aria-label', locale.common('cpuShow'));
         sortGroup.setAttribute('aria-label', locale.common('sort'));
         for (const control of controls) {
+            control.button.hidden = control.value === 'shareInCraftingTime' && !hasTracking;
+            if (control.button.hidden && toolTooltip === control.button) hideTooltip();
             control.button.setAttribute(
                 'aria-label',
                 control.value === 'hideStored' || control.value === 'activeFirst'
@@ -304,13 +315,18 @@ export function createCpuView(root, application, { workspace }) {
                 count.label.textContent = locale.common(count.key);
                 count.quantity.textContent = slotQuantity(quantities[i], locale);
             });
+            row.share.hidden = !hasTracking;
+            const share = hasTracking ? `${locale.number(Math.round(item.shareInCraftingTime * 1000) / 10)}%` : '';
+            row.shareLabel.textContent = locale.common('cpuTimeShare');
+            row.shareValue.textContent = share;
             row.button.setAttribute(
                 'aria-label',
                 [
                     plainMinecraftText(item.itemname),
                     ...row.counts.flatMap((count, i) =>
                         quantities[i] > 0 ? [`${locale.common(count.key)}: ${locale.number(quantities[i])}`] : []
-                    )
+                    ),
+                    ...(hasTracking ? [`${locale.common('cpuProcessingShare')}: ${share}`] : [])
                 ].join(' · ')
             );
             if (grid.children[index] !== row.li) grid.insertBefore(row.li, grid.children[index] || null);
