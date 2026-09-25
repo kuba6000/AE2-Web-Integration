@@ -746,12 +746,12 @@ test('search explains its rules and combines mod identifiers with item text', as
     assert.equal(await resources.getByRole('button').count(), 0);
 });
 
-test('craftable resources show an accessible hammer that follows refreshed availability', async (t) => {
+test('craftable resources show an accessible crafting marker that follows refreshed availability', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
-    const hammer = item.getByRole('img', { name: 'Crafting available', exact: true });
-    await hammer.waitFor({ state: 'visible', timeout: 3000 });
+    const marker = item.getByRole('img', { name: 'Crafting available', exact: true });
+    await marker.waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(
         await page
             .getByRole('button', { name: /Certus Quartz Crystal/ })
@@ -762,7 +762,7 @@ test('craftable resources show an accessible hammer that follows refreshed avail
     await item.hover();
     await page.getByRole('tooltip').getByText('Crafting available', { exact: true }).waitFor();
     options.itemsA = [{ ...iron, craftable: false }, quartz];
-    await hammer.waitFor({ state: 'hidden', timeout: 10000 });
+    await marker.waitFor({ state: 'hidden', timeout: 10000 });
     await page.getByRole('tooltip').getByText('Not craftable', { exact: true }).waitFor();
 });
 
@@ -796,7 +796,7 @@ test('resource quantities abbreviate from ten thousand and retain exact tooltip 
         const item = page.getByRole('button', { name: new RegExp(`^Resource ${index} `) });
         assert.ok((await item.textContent()).endsWith(display));
         const amount = item.getByText(display, { exact: true });
-        const hammer = item.getByRole('img');
+        const marker = item.getByRole('img');
         await item.hover();
         await page
             .getByRole('tooltip')
@@ -804,9 +804,9 @@ test('resource quantities abbreviate from ten thousand and retain exact tooltip 
             .waitFor();
         const itemBox = await item.boundingBox();
         const amountBox = await amount.boundingBox();
-        const hammerBox = await hammer.boundingBox();
+        const markerBox = await marker.boundingBox();
         assert.ok(amountBox.x + amountBox.width < itemBox.x + itemBox.width, 'quantity stays inside its slot');
-        assert.ok(hammerBox.x + hammerBox.width < amountBox.x, 'hammer does not overlap the quantity');
+        assert.ok(markerBox.x + markerBox.width < amountBox.x, 'crafting marker does not overlap the quantity');
         assert.ok(await amount.evaluate((node) => node.scrollWidth <= node.clientWidth), 'quantity is not clipped');
     }
 });

@@ -14,6 +14,7 @@ import { createHistoryView } from './history.mjs';
 import { createSettingsView } from './settings.mjs';
 import { createAboutView } from './about.mjs';
 import { infoCircle } from './icons/hackernoon/info-circle.mjs';
+import { grid, archive, cog, tag, numberedList, hashtag } from './icons/hackernoon/terminal.mjs';
 
 const PAGE_SIZE = 100;
 
@@ -47,21 +48,20 @@ function element(tag, text = '', className = '') {
     return node;
 }
 
-// Original UI symbols, drawn on a 24px grid; no game textures or external icon assets.
 const symbols = {
-    all: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
-    stored: '<path d="M3 8h18v13H3zM2 3h20v5H2zM9 12h6"/>',
-    craftable: '<path d="m4 3 17 17-3 3L1 6zM14 3l7 7M18 2l4 4-9 9-4-4z"/>',
-    name: '<path d="M3 18 8 4l5 14M5 13h6M16 6h6l-6 12h6"/>',
-    quantity: '<path d="M3 5h16M3 12h11M3 19h6M19 10v11m-3-3 3 3 3-3"/>',
-    id: '<path d="M9 3 6 21M18 3l-3 18M3 9h18M2 15h18"/>'
+    all: grid,
+    stored: archive,
+    craftable: cog,
+    name: tag,
+    quantity: numberedList,
+    id: hashtag
 };
 /**
  * @param {'filter' | 'sort'} group
  * @param {keyof typeof symbols} value
  */
 function iconButton(group, value) {
-    return `<button type="button" class="tool-button" data-preference="${group}" data-value="${value}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${symbols[value]}</svg></button>`;
+    return `<button type="button" class="tool-button" data-preference="${group}" data-value="${value}">${symbols[value]}</button>`;
 }
 
 /**
@@ -420,6 +420,7 @@ export function mount(root, application, { base, user, modVersion, logout, setti
         const { button } = row;
         button.type = 'button';
         row.craftable.role = 'img';
+        row.craftable.innerHTML = cog;
         const amount = element('span', '', 'item-amount');
         amount.append(row.quantity, row.craftable);
         button.append(row.name, amount);

@@ -675,17 +675,14 @@ label {
 .tool-button {
     height: 42px;
     width: 42px;
-    padding: 9px;
+    display: grid;
+    place-items: center;
+    padding: 0;
 }
 .tool-button svg {
     display: block;
-    width: 22px;
-    height: 22px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    stroke-linecap: square;
-    stroke-linejoin: miter;
+    width: 24px;
+    height: 24px;
 }
 .tool-button[aria-pressed='true'] {
     background-color: var(--slot);
@@ -763,13 +760,14 @@ label {
 }
 .craftable-marker {
     order: -1;
-    flex: 0 0 20px;
-    height: 20px;
+    flex: 0 0 24px;
+    height: 24px;
     margin-right: auto;
-    /* The original crafting hammer from assets/favicon.ico. */
-    background: url('data:image/x-icon;base64,AAABAAEAEBAQAAEABAAoAQAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAcLzwASUlJADFSZwBgYGAAa2trAHBwcABQf58AiYmJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAiIiIiIiIiIiIiIiIiIiIiIggiIiIiIiIiGIIiIiIiIiIhiCIiIiIiIiIYgiIiIiIiIiGIIgRiIiIiIhiATQ4iIiIiIYTR1OIiIiIgTR1OIiIiIgTR1OIiIiIiBR1OIiIiIiIg1OIiIiIiIiIOIiIiIiIiIiIiIiIiIiIiIiIiIj//wAA//8AAM//AADH/wAA4/8AAPH/AAD4zwAA/AcAAP4DAAD+BwAA/A8AAPwfAAD+PwAA/38AAP//AAD//wAA')
-        center / 20px 20px no-repeat;
-    image-rendering: pixelated;
+}
+.craftable-marker svg {
+    display: block;
+    width: 24px;
+    height: 24px;
 }
 .item .quantity {
     flex-shrink: 0;
@@ -1043,11 +1041,6 @@ footer a {
     .tool-button {
         width: 34px;
         height: 36px;
-        padding: 6px;
-    }
-    .tool-button svg {
-        width: 20px;
-        height: 20px;
     }
     .terminal-tools {
         gap: 18px;
