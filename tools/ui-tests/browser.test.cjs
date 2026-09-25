@@ -417,10 +417,16 @@ test('About shows runtime metadata and resource links while retaining the select
     await about.getByText('Default', { exact: true }).waitFor();
     await about.getByText('Monocraft', { exact: true }).waitFor();
     await about.getByText(/SIL Open Font License\s*1\.1/).waitFor();
+    await about
+        .getByRole('row')
+        .filter({ hasText: 'HackerNoon Pixel Icon Library' })
+        .getByText('MIT', { exact: true })
+        .waitFor({ timeout: 3000 });
     for (const href of [
         'https://github.com/kuba6000/AE2-Web-Integration',
         'https://github.com/kuba6000/AE2-Web-Integration/issues',
-        'https://github.com/IdreesInc/Monocraft'
+        'https://github.com/IdreesInc/Monocraft',
+        'https://github.com/hackernoon/pixel-icon-library'
     ])
         assert.ok(await about.locator(`a[href="${href}"]`).count(), `About must link to ${href}`);
     assert.doesNotMatch(await about.innerText(), /Lucide|Font Awesome|Material Icons|TERMS AND CONDITIONS|PREAMBLE/i);

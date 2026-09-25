@@ -13,6 +13,7 @@ import { createCpuView } from './cpus.mjs';
 import { createHistoryView } from './history.mjs';
 import { createSettingsView } from './settings.mjs';
 import { createAboutView } from './about.mjs';
+import { infoCircle } from './icons/hackernoon/info-circle.mjs';
 
 const PAGE_SIZE = 100;
 
@@ -127,7 +128,7 @@ export function mount(root, application, { base, user, modVersion, logout, setti
         <div id="item-scroll" role="region" data-label="resources" tabindex="0"><ul id="items"></ul></div>
         <div id="pages"><button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button></div></div></section>
         <p id="missing" data-text="invalidRoute" hidden></p></div>
-        <aside id="resource-panel" hidden><h3 data-text="details"></h3><div id="details"></div><div id="order"></div></aside></div>
+        <aside id="resource-panel" hidden><h3>${infoCircle}<span data-text="details"></span></h3><div id="details"></div><div id="order"></div></aside></div>
         <footer><span id="updated" aria-live="off"></span><a id="legacy" data-text="previous"></a></footer>`;
     /**
      * IDs and element types belong to the static markup created above.

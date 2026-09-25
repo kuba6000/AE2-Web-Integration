@@ -798,8 +798,16 @@ aside {
     min-height: 170px;
 }
 aside h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding-bottom: 10px;
     border-bottom: 1px solid var(--border);
+}
+.info-icon {
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
 }
 aside p {
     color: var(--surface-muted);

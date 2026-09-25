@@ -58,11 +58,20 @@ export function createAboutView(root, modVersion) {
     headings.append(resourceLabel, licenseLabel);
     head.append(headings);
     const body = element('tbody');
-    const row = element('tr');
-    const resource = element('td');
-    resource.append(link('Monocraft', 'https://github.com/IdreesInc/Monocraft'));
-    row.append(resource, element('td', 'SIL Open Font License 1.1'));
-    body.append(row);
+    for (const resource of [
+        { name: 'Monocraft', url: 'https://github.com/IdreesInc/Monocraft', license: 'SIL Open Font License 1.1' },
+        {
+            name: 'HackerNoon Pixel Icon Library',
+            url: 'https://github.com/hackernoon/pixel-icon-library',
+            license: 'MIT'
+        }
+    ]) {
+        const row = element('tr');
+        const name = element('td');
+        name.append(link(resource.name, resource.url));
+        row.append(name, element('td', resource.license));
+        body.append(row);
+    }
     table.append(head, body);
     resources.append(resourcesTitle, table);
     view.append(title, mod, theme, resources);
