@@ -710,12 +710,6 @@ label {
 .icon-archive .icon-paper {
     fill: #fff0ca;
 }
-.icon-cog {
-    --icon-color: #83c765;
-}
-.icon-cog .icon-hub {
-    fill: #d8efac;
-}
 .icon-tag {
     --icon-color: #e79270;
 }

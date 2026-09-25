@@ -1,0 +1,2 @@
+// Original theme artwork: a steel hammer with a wooden handle.
+export const craftingHammer = `<svg viewBox="0 0 24 24" shape-rendering="crispEdges" aria-hidden="true" focusable="false"><path fill="#302e2b" d="M9 8h6v14H9z"/><path fill="#b97a43" d="M11 9h2v12h-2z"/><path fill="#edb66c" d="M11 10h1v10h-1z"/><path fill="#283540" d="M2 2h8v1h7v1h3v1h2v6h-2V9h-3V8h-7v3H2z"/><path fill="#9badb8" d="M4 4h4v5H4zM8 5h9v1h3v1h-5V6H8z"/><path fill="#dfedf0" d="M4 4h4v2H4zM8 5h8v1H8z"/><path fill="#657b89" d="M4 8h4v1H4z"/></svg>`;

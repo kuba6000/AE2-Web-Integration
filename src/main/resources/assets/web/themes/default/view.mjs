@@ -14,8 +14,9 @@ import { createHistoryView } from './history.mjs';
 import { createSettingsView } from './settings.mjs';
 import { createAboutView } from './about.mjs';
 import { infoCircle } from './icons/hackernoon/info-circle.mjs';
+import { craftingHammer } from './icons/crafting-hammer.mjs';
 import { userIcon } from './icons/hackernoon/user.mjs';
-import { grid, archive, cog, tag, numberedList, hashtag } from './icons/hackernoon/terminal.mjs';
+import { grid, archive, tag, numberedList, hashtag } from './icons/hackernoon/terminal.mjs';
 
 const PAGE_SIZE = 100;
 
@@ -52,7 +53,7 @@ function element(tag, text = '', className = '') {
 const symbols = {
     all: grid,
     stored: archive,
-    craftable: cog,
+    craftable: craftingHammer,
     name: tag,
     quantity: numberedList,
     id: hashtag
@@ -421,7 +422,7 @@ export function mount(root, application, { base, user, modVersion, logout, setti
         const { button } = row;
         button.type = 'button';
         row.craftable.role = 'img';
-        row.craftable.innerHTML = cog;
+        row.craftable.innerHTML = craftingHammer;
         const amount = element('span', '', 'item-amount');
         amount.append(row.quantity, row.craftable);
         button.append(row.name, amount);
