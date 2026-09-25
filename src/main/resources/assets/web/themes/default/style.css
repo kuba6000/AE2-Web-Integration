@@ -404,17 +404,12 @@ label {
     gap: 12px;
 }
 .brand-mark {
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    background: #aaa0bd;
-    color: #2c2439;
-    border: 2px solid;
-    border-color: #ded5eb #64586f #64586f #ded5eb;
-    font-family: inherit;
-    font-weight: bold;
-    font-size: 16px;
+    display: block;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    image-rendering: pixelated;
 }
 .preferences label {
     color: var(--muted);
