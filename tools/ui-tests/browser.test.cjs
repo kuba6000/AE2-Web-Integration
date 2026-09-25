@@ -638,11 +638,15 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
     await assertFormatted(planOutput);
     assert.notEqual((await textStyle(planOutput, '× 12')).color, 'rgb(85, 255, 85)');
     options.cpus = { 'cpu-a': { ...cpu, isBusy: true, finalOutput } };
-    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
-    await resource.waitFor();
-    await assertFormatted(resource);
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
     const cpuSummary = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: /cpu-a/ }) });
     await assertFormatted(cpuSummary);
+    await cpuSummary.getByRole('link').click();
+    const cpuResource = page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Cobalt Ingot/ });
+    await cpuResource.waitFor();
+    await assertFormatted(cpuResource);
     const cpuOutput = page.getByRole('paragraph').filter({ hasText: /^[^§]*: Cobalt Ingot × 12$/ });
     await assertFormatted(cpuOutput);
     await page.getByRole('link', { name: 'History', exact: true }).click();
@@ -930,7 +934,10 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
         [{ cpuKey: 'cpu-b' }]
     );
     await page.getByRole('link', { name: 'Inspect CPU work', exact: true }).click({ timeout: 3000 });
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
     assert.match(page.url(), /\/cpus\/cpu-b$/);
 });
 
@@ -1279,8 +1286,8 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
         await page.goto(`${base}&case=${result}#/grids/${gridA}/cpus/cpu-a`);
         await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
         assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isDisabled(), true);
-        await page.getByRole('link', { name: 'Back to resources', exact: true }).click();
-        await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+        await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
+        await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
         await page.goBack();
         await page
             .getByRole('status')
@@ -1302,7 +1309,10 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
     await page.unroute('**/cancel');
     options.cpuDetails['cpu-a'] = cpuWork;
     await page.goto(`${base}&case=late-read#/grids/${gridA}/cpus/cpu-a`);
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
     let capture;
     const captured = new Promise((resolve) => {
         capture = resolve;
@@ -1326,7 +1336,13 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
         body: JSON.stringify({ status: 'OK', data: cpuWork })
     });
     await settleResponse(page, delayed.request());
-    assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 0);
+    assert.equal(
+        await page
+            .getByRole('region', { name: 'CPU resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .count(),
+        0
+    );
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).count(), 0);
 });
 
@@ -1397,6 +1413,311 @@ test('busy CPU eligibility uses known output identity and missing selections req
     assert.equal(options.requests.filter((request) => request.method === 'POST').length, 1);
 });
 
+// Public seam: selecting a CPU opens its terminal, with separate resource tools and CPU controls.
+test('CPU terminal replaces the CPU list with selected resources and returns to the list', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus['cpu-b'] = {
+        ...cpu,
+        name: 'Selected assembler',
+        isBusy: true,
+        supportsPause: true,
+        usedStorage: 2048,
+        coProcessors: 3
+    };
+    options.cpuDetails['cpu-b'] = { ...cpuWork, supportsPause: true };
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    await page.getByRole('link', { name: /Selected assembler.*cpu-b/ }).click();
+    await page.getByRole('button', { name: 'Cancel current work', exact: true }).waitFor();
+    assert.equal(
+        await page.getByRole('link', { name: /Assembler.*cpu-a/ }).count(),
+        0,
+        'Opening current work must hide the CPU selection list'
+    );
+    const resources = page.getByRole('region', { name: 'CPU resources', exact: true });
+    await resources.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    assert.equal(await page.getByRole('searchbox', { name: 'Search CPU resources' }).isVisible(), true);
+    for (const name of [
+        'Show: All',
+        'Show: Active',
+        'Show: Pending',
+        'Show: Stored',
+        'Sort by: Name',
+        'Sort by: Quantity'
+    ]) {
+        assert.equal(await page.getByRole('button', { name, exact: true }).isVisible(), true);
+    }
+    const details = page.getByRole('complementary', { name: 'CPU details', exact: true });
+    assert.match(await details.textContent(), /Selected assembler/);
+    assert.match(await details.textContent(), /8,192/);
+    assert.match(await details.textContent(), /2,048/);
+    assert.match(await details.textContent(), /3 coprocessors/);
+    assert.match(await details.textContent(), /Iron Ingot.*12/);
+    assert.equal(await details.getByRole('button', { name: 'Pause current work', exact: true }).isEnabled(), true);
+    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
+    await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
+    assert.match(page.url(), /\/cpus$/);
+    assert.equal(await resources.isVisible(), false);
+    assert.equal(await details.isVisible(), false);
+});
+
+// Public seam: controls select and order the current job's actual categories without server mutations.
+test('CPU terminal filters categories, sorts their quantities and searches formatted names and resource IDs', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    options.cpuDetails['cpu-a'] = {
+        ...cpuWork,
+        items: [
+            { ...cpuWork.items[0], itemname: 'Zinc', itemid: 'minecraft:zinc', active: 10, pending: 0, stored: 0 },
+            {
+                ...cpuWork.items[0],
+                itemname: 'Alpha',
+                itemid: 'minecraft:unique_pending',
+                active: 0,
+                pending: 30,
+                stored: 0
+            },
+            { ...cpuWork.items[0], itemname: 'Beta', itemid: 'ae2:beta', active: 0, pending: 0, stored: 20 },
+            { ...cpuWork.items[0], itemname: '§aMixed', itemid: 'other:mixed', active: 3, pending: 8, stored: 50 }
+        ]
+    };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const resources = page.getByRole('region', { name: 'CPU resources', exact: true });
+    await resources.getByRole('button', { name: /Mixed/ }).waitFor();
+    const names = async () =>
+        (await resources.getByRole('button').allTextContents()).map((text) => text.match(/Alpha|Beta|Mixed|Zinc/)[0]);
+    const show = (category) => page.getByRole('button', { name: `Show: ${category}`, exact: true });
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    assert.deepEqual(await names(), ['Alpha', 'Beta', 'Mixed', 'Zinc']);
+    await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
+    assert.deepEqual(await names(), ['Mixed', 'Alpha', 'Beta', 'Zinc']);
+    for (const [category, expected] of [
+        ['Active', ['Zinc', 'Mixed']],
+        ['Pending', ['Alpha', 'Mixed']],
+        ['Stored', ['Mixed', 'Beta']]
+    ]) {
+        await show(category).click();
+        assert.equal(await show(category).getAttribute('aria-pressed'), 'true');
+        assert.deepEqual(await names(), expected, `${category} must sort by its own quantity`);
+    }
+    await show('All').click();
+    assert.equal(await resources.getByRole('button').count(), 4);
+    const search = page.getByRole('searchbox', { name: 'Search CPU resources' });
+    await search.fill('mIxEd');
+    assert.deepEqual(await names(), ['Mixed']);
+    await search.fill('unique_pending');
+    assert.deepEqual(await names(), ['Alpha']);
+    await search.fill('@ae2');
+    assert.deepEqual(await names(), ['Beta']);
+    await search.fill('@minecraft');
+    assert.deepEqual(await names(), ['Alpha', 'Zinc']);
+    await search.fill('no matching resource');
+    assert.equal(await resources.getByRole('button').count(), 0);
+    await search.fill('');
+    assert.equal(await resources.getByRole('button').count(), 4);
+    assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus/cpu-a')).length, 1);
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    assert.equal(
+        await page.getByRole('button', { name: 'Sort by: Name', exact: true }).getAttribute('aria-pressed'),
+        'true',
+        'CPU sort controls must not overwrite inventory preferences'
+    );
+});
+
+test('CPU resource tooltip preserves exact counts and tracking through polling and clears on route or access changes', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const item = { ...cpuWork.items[0], active: 12345, pending: 23456, stored: 34567 };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, items: [item] };
+    options.cpuDetails['cpu-b'] = {
+        ...cpuWork,
+        hasTrackingInfo: false,
+        items: [{ ...item, active: 91, pending: 0, stored: 0 }]
+    };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const resources = page.getByRole('region', { name: 'CPU resources', exact: true });
+    const resource = resources.getByRole('button', { name: /Iron Ingot/ });
+    const tooltip = page.getByRole('tooltip');
+    await resource.hover();
+    await tooltip.waitFor({ state: 'visible' });
+    for (const metric of [
+        /minecraft:iron_ingot/,
+        /Active.*12,345/,
+        /Pending.*23,456/,
+        /Stored.*34,567/,
+        /Processing time.*5/,
+        /Crafted total.*10/,
+        /Produced per second.*2\/s/,
+        /Share of elapsed time.*50%/,
+        /Share of processing time.*40%/
+    ]) {
+        assert.match(await tooltip.textContent(), metric);
+    }
+    options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...item, active: 45678, craftedTotal: 99 }] };
+    const refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-a'));
+    await poll(page);
+    await settleResponse(page, (await refreshed).request());
+    assert.equal(await tooltip.isVisible(), true, 'Polling must keep the hovered resource tooltip visible');
+    assert.match(await tooltip.textContent(), /Active.*45,678/);
+    assert.match(await tooltip.textContent(), /Crafted total.*99/);
+    await page.mouse.move(0, 0);
+    await resource.focus();
+    await tooltip.waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+    await tooltip.waitFor({ state: 'hidden' });
+    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
+    assert.equal(await tooltip.isVisible(), false);
+    await page.getByRole('link', { name: /Assembler.*cpu-b/ }).click();
+    await resource.focus();
+    await tooltip.waitFor({ state: 'visible' });
+    assert.match(await tooltip.textContent(), /Active.*91/);
+    assert.doesNotMatch(await tooltip.textContent(), /45,678|Crafted total|Processing time|Share of/);
+    options.detailError = 'NO_PERMISSIONS';
+    await poll(page);
+    await resource.waitFor({ state: 'detached' });
+    assert.equal(await tooltip.isVisible(), false, 'Lost access must clear private metrics');
+});
+
+test('CPU terminal scrolls resources within desktop and mobile viewports while controls remain usable', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    options.cpus['cpu-a'] = { ...cpu, isBusy: true, supportsPause: true };
+    options.cpuDetails['cpu-a'] = {
+        ...cpuWork,
+        supportsPause: true,
+        items: Array.from({ length: 120 }, (_, index) => ({
+            ...cpuWork.items[0],
+            itemid: `example:resource_${index}`,
+            itemname: `Resource ${String(index).padStart(3, '0')}`
+        }))
+    };
+    for (const viewport of [
+        { width: 1280, height: 800 },
+        { width: 390, height: 844 }
+    ]) {
+        await page.setViewportSize(viewport);
+        await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+        const resources = page.getByRole('region', { name: 'CPU resources', exact: true });
+        await resources.getByRole('button', { name: /Resource 000/ }).waitFor();
+        const search = page.getByRole('searchbox', { name: 'Search CPU resources' });
+        await search.fill('');
+        const before = await search.boundingBox();
+        const bounds = await resources.boundingBox();
+        const panel = await page.getByRole('complementary', { name: 'CPU details', exact: true }).boundingBox();
+        assert.ok(bounds.height > 100, 'Resources need a usable scroll viewport');
+        if (viewport.width > 600) assert.ok(panel.x >= bounds.x + bounds.width - 1, 'CPU details sit beside resources');
+        else assert.ok(panel.y >= bounds.y + bounds.height - 1, 'Mobile CPU details sit below resources');
+        await resources.getByRole('button').last().scrollIntoViewIfNeeded();
+        assert.ok(
+            await resources.evaluate((node) => node.scrollTop > 0),
+            `The resource region itself must scroll at ${viewport.width}px: ${JSON.stringify(await resources.evaluate((node) => ({ top: node.scrollTop, height: node.clientHeight, content: node.scrollHeight })))}`
+        );
+        assert.deepEqual(await search.boundingBox(), before);
+        const documentSize = await page.evaluate(() => ({
+            width: document.documentElement.scrollWidth,
+            height: document.documentElement.scrollHeight,
+            top: window.scrollY,
+            left: window.scrollX
+        }));
+        assert.ok(documentSize.width <= viewport.width, 'The CPU page must not overflow horizontally');
+        assert.ok(documentSize.height <= viewport.height, 'The CPU page must not overflow vertically');
+        assert.equal(documentSize.top, 0);
+        assert.equal(documentSize.left, 0);
+        for (const control of [
+            search,
+            page.getByRole('link', { name: 'Back to CPUs', exact: true }),
+            page.getByRole('button', { name: 'Show: Active', exact: true }),
+            page.getByRole('button', { name: 'Cancel current work', exact: true })
+        ]) {
+            await control.scrollIntoViewIfNeeded();
+            const box = await control.boundingBox();
+            assert.ok(
+                box.x >= 0 &&
+                    box.y >= 0 &&
+                    box.x + box.width <= viewport.width + 1 &&
+                    box.y + box.height <= viewport.height + 1,
+                `Navigation, filtering and actions must remain reachable at ${viewport.width}px: ${(await control.getAttribute('aria-label')) || (await control.textContent())} ${JSON.stringify(box)}`
+            );
+        }
+        assert.deepEqual(
+            await page.evaluate(() => ({ top: window.scrollY, left: window.scrollX })),
+            { top: 0, left: 0 },
+            'Reaching CPU actions may scroll the panel, but must not move the document'
+        );
+        const pause = page.getByRole('button', { name: /^(Pause|Resume) current work$/ });
+        const previous = await pause.textContent();
+        await pause.click();
+        await page
+            .getByRole('button', {
+                name: previous.startsWith('Pause') ? 'Resume current work' : 'Pause current work',
+                exact: true
+            })
+            .waitFor();
+        await search.fill('Resource 000');
+        assert.equal(await resources.getByRole('button').count(), 1);
+        assert.equal(await resources.evaluate((node) => node.scrollHeight > node.clientHeight), false);
+    }
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/pause')).length, 2);
+});
+
+test('CPU resource reordering does not leave a stale hover tooltip or reopen keyboard-dismissed metrics', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const second = {
+        ...cpuWork.items[0],
+        itemid: 'example:copper',
+        itemname: 'Copper',
+        active: 50,
+        pending: 0,
+        stored: 0
+    };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...cpuWork.items[0], active: 100 }, second] };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
+    const item = page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ });
+    const tooltip = page.getByRole('tooltip');
+    await item.hover();
+    const refreshedTooltip = page.evaluate(
+        () =>
+            new Promise((resolve) => {
+                const observer = new MutationObserver(() => {
+                    const item = [...document.querySelectorAll('button')].find((button) =>
+                        /Iron Ingot.*Active: 1 ·/.test(button.getAttribute('aria-label'))
+                    );
+                    if (!item) return;
+                    observer.disconnect();
+                    const tooltip = [...document.querySelectorAll('[role="tooltip"]')].find((node) =>
+                        node.checkVisibility()
+                    );
+                    resolve({ visible: !!tooltip, text: tooltip?.textContent || '' });
+                });
+                observer.observe(document.body, {
+                    subtree: true,
+                    childList: true,
+                    attributes: true,
+                    characterData: true
+                });
+            })
+    );
+    options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...cpuWork.items[0], active: 1 }, second] };
+    await poll(page);
+    const refreshed = await refreshedTooltip;
+    assert.ok(
+        !refreshed.visible || !refreshed.text.includes('Iron Ingot'),
+        'A resource that moves away from a stationary pointer must not keep its old hover tooltip'
+    );
+    await page.mouse.move(0, 0);
+    await item.focus();
+    await tooltip.waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+    options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...cpuWork.items[0], active: 200 }, second] };
+    const read = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-a'));
+    await poll(page);
+    await settleResponse(page, (await read).request());
+    assert.equal(await item.evaluate((button) => button === document.activeElement), true);
+    assert.equal(await tooltip.isVisible(), false, 'Polling and sorting must preserve keyboard dismissal');
+});
+
 // Public seam: CPU links and current-work controls plus HTTP. Display names may duplicate;
 // navigation and cancellation must continue to address the selected stable CPU key.
 test('CPU list and detail pause controls use capability, busy state and stable CPU identity', async (t) => {
@@ -1437,6 +1758,7 @@ test('CPU list and detail pause controls use capability, busy state and stable C
         ]
     );
     assert.ok(requests.every((request) => request.headers['x-ae2-request'] === 'true'));
+    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
     await row('unsupported').getByRole('link').click();
     await page.getByRole('button', { name: /^(Pause|Resume) current work$/ }).waitFor({ state: 'hidden' });
     assert.equal(await page.getByRole('button', { name: /^(Pause|Resume) current work$/ }).count(), 0);
@@ -1499,7 +1821,10 @@ test('pending and uncertain CPU pause stays locked across list, detail and grid 
     await row('cpu-a').getByRole('button', { name: /Pause/ }).click();
     const held = await pending;
     await row('cpu-a').getByRole('link').click();
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
     assert.equal(await page.getByRole('button', { name: 'Pause current work', exact: true }).isDisabled(), true);
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isDisabled(), true);
     await page.evaluate((key) => {
@@ -1537,7 +1862,10 @@ test('pending and uncertain CPU pause stays locked across list, detail and grid 
     );
     assert.equal(await row('cpu-b').getByRole('button', { name: /Pause/ }).isEnabled(), true);
     await row('cpu-a').getByRole('link').click();
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
     assert.equal(await page.getByRole('button', { name: 'Pause current work', exact: true }).isDisabled(), true);
     assert.equal(mutations, 1);
 });
@@ -1687,7 +2015,10 @@ test('a removed CPU mutation target cannot strand another CPU detail load', asyn
         contentType: 'application/json',
         body: JSON.stringify({ status: 'OK', data: options.cpuDetails['cpu-b'] })
     });
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor({ timeout: 3000 });
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor({ timeout: 3000 });
     assert.equal(await page.getByRole('button', { name: 'Pause current work', exact: true }).isEnabled(), true);
     assert.match(page.url(), /cpus\/cpu-b$/);
 });
@@ -1701,10 +2032,18 @@ test('CPU monitoring opens stable current work and explicitly cancels it without
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('link', { name: 'CPUs', exact: true }).click({ timeout: 3000 });
     await page.getByRole('link', { name: /Assembler.*cpu-b/ }).click();
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
     assert.match(page.url(), /\/cpus\/cpu-b$/);
-    assert.equal(await page.getByRole('columnheader', { name: 'Active', exact: true }).count(), 1);
-    assert.equal(await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).count(), 1);
+    const resource = page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ });
+    await resource.focus();
+    await page.getByRole('tooltip').waitFor({ state: 'visible' });
+    assert.match(await page.getByRole('tooltip').textContent(), /Active.*4/);
+    assert.match(await page.getByRole('tooltip').textContent(), /Crafted total.*10/);
     options.cpus = { 'cpu-b': options.cpus['cpu-b'], 'cpu-a': options.cpus['cpu-a'] };
     const refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-b'));
     await poll(page);
@@ -1715,7 +2054,13 @@ test('CPU monitoring opens stable current work and explicitly cancels it without
         .getByRole('status')
         .filter({ hasText: /CPU is idle/i })
         .waitFor();
-    assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 0);
+    assert.equal(
+        await page
+            .getByRole('region', { name: 'CPU resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .count(),
+        0
+    );
     const cancel = options.requests.filter((request) => request.path.endsWith('/cancel'));
     assert.equal(cancel.length, 1);
     assert.equal(cancel[0].path, `/api/grids/${gridA}/cpus/cpu-b/cancel`);
@@ -1730,7 +2075,10 @@ test('CPU monitoring opens stable current work and explicitly cancels it without
 test('CPU removal and denied reads clear current work without selecting a replacement', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-b`);
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
     delete options.cpus['cpu-b'];
     await poll(page);
     await page
@@ -1738,10 +2086,20 @@ test('CPU removal and denied reads clear current work without selecting a replac
         .filter({ hasText: /CPU.*available/i })
         .waitFor({ timeout: 3000 });
     assert.match(page.url(), /\/cpus\/cpu-b$/);
-    assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 0);
+    assert.equal(
+        await page
+            .getByRole('region', { name: 'CPU resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .count(),
+        0
+    );
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).count(), 0);
+    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
     await page.getByRole('link', { name: /Assembler.*cpu-a/ }).click();
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
     options.detailError = 'NO_PERMISSIONS';
     await poll(page);
     await page
@@ -1749,10 +2107,19 @@ test('CPU removal and denied reads clear current work without selecting a replac
         .filter({ hasText: /no longer have access/i })
         .waitFor();
     assert.equal(await page.getByRole('link', { name: /Assembler/ }).count(), 0);
-    assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 0);
+    assert.equal(
+        await page
+            .getByRole('region', { name: 'CPU resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .count(),
+        0
+    );
     options.detailError = null;
     await poll(page);
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
     options.cpuError = 'GRID_NOT_FOUND';
     await poll(page);
     await page
@@ -1769,7 +2136,10 @@ test('CPU removal and denied reads clear current work without selecting a replac
 test('known CPU cancellation rejections refresh stale work or clear unavailable private data', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
     options.cancelStatus = 'CPU_NOT_BUSY';
     options.cpuDetails['cpu-a'] = { ...cpuWork, isBusy: false, items: null, finalOutput: null, hasTrackingInfo: false };
     await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
@@ -1783,7 +2153,10 @@ test('known CPU cancellation rejections refresh stale work or clear unavailable 
         options.cpuDetails['cpu-a'] = cpuWork;
         await poll(page);
         await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
-        await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor({ state: 'hidden' });
+        await page
+            .getByRole('region', { name: 'CPU resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .waitFor({ state: 'hidden' });
         assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).count(), 0);
     }
     assert.equal(options.requests.filter((request) => request.path.endsWith('/cancel')).length, 4);
@@ -1793,7 +2166,10 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
     const { page, options, base } = await fixture(t);
     options.cpuDetails['cpu-b'] = { ...cpuWork, finalOutput: null, items: [], hasTrackingInfo: false };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
     let release;
     const captured = new Promise((resolve) => {
         release = resolve;
@@ -1801,6 +2177,7 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
     await page.route('**/cpus/cpu-a', (route) => release(route));
     await poll(page);
     const delayed = await captured;
+    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
     await page.getByRole('link', { name: /Assembler.*cpu-b/ }).click();
     await page.getByText('Current output unavailable', { exact: true }).waitFor();
     await page
@@ -1813,8 +2190,14 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
         body: JSON.stringify({ status: 'OK', data: cpuWork })
     });
     await settleResponse(page, delayed.request());
-    assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 0);
-    assert.equal(await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).count(), 0);
+    assert.equal(
+        await page
+            .getByRole('region', { name: 'CPU resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .count(),
+        0
+    );
+    assert.equal(await page.getByRole('tooltip').isVisible(), false);
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isEnabled(), true);
     await page.goto(`${base}#/grids/${gridB}/items`);
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
@@ -1839,14 +2222,17 @@ test('uncertain CPU cancellation never replays after refresh or route reentry', 
             .waitFor({ timeout: 3000 });
         const count = options.requests.filter((request) => request.path.endsWith('/cancel')).length;
         await poll(page);
-        await page.getByRole('link', { name: 'Back to resources', exact: true }).click();
-        await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+        await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
+        await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
         await page.goBack();
         await page
             .getByRole('status')
             .filter({ hasText: /outcome.*unknown/i })
             .waitFor();
-        await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+        await page
+            .getByRole('region', { name: 'CPU resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .waitFor();
         assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isDisabled(), true);
         assert.equal(options.requests.filter((request) => request.path.endsWith('/cancel')).length, count);
     }
@@ -2435,9 +2821,11 @@ test('hovered resource tooltip stays current through polling and closes when the
                         )
                     )
                         return;
-                    const tooltip = document.querySelector('[role="tooltip"]');
+                    const tooltip = [...document.querySelectorAll('[role="tooltip"]')].find((node) =>
+                        node.checkVisibility()
+                    );
                     observer.disconnect();
-                    resolve({ visible: tooltip.checkVisibility(), content: tooltip.textContent });
+                    resolve({ visible: !!tooltip, content: tooltip?.textContent || '' });
                 });
                 observer.observe(document.body, {
                     childList: true,
@@ -2477,7 +2865,11 @@ test('resource tooltips appear on the first hover frame and respect keyboard dis
                     'pointerenter',
                     () =>
                         requestAnimationFrame(() => {
-                            resolve(document.querySelector('[role="tooltip"]').checkVisibility());
+                            resolve(
+                                [...document.querySelectorAll('[role="tooltip"]')].some(
+                                    (node) => node.checkVisibility() && node.textContent.includes('Iron Ingot')
+                                )
+                            );
                         }),
                     { once: true }
                 );

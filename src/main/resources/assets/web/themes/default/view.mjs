@@ -13,27 +13,12 @@ import { createCpuView } from './cpus.mjs';
 import { createHistoryView } from './history.mjs';
 import { createSettingsView } from './settings.mjs';
 import { createAboutView } from './about.mjs';
+import { slotQuantity } from './resource-quantity.mjs';
 import { infoCircle } from './icons/hackernoon/info-circle.mjs';
 import { terminalIcons as symbols, craftingHammer } from './icons/ae2/terminal.mjs';
 import { userIcon } from './icons/hackernoon/user.mjs';
 
 const PAGE_SIZE = 100;
-
-/** @param {number} quantity @param {Locale} locale */
-function slotQuantity(quantity, locale) {
-    if (quantity < 10000) return locale.number(quantity);
-    // AE2's wide slot format: four characters, SI suffixes, rounded down.
-    const suffixes = 'kMGTPE';
-    let divisor = 1000;
-    let index = 0;
-    while (quantity / divisor >= 1000 && index < suffixes.length - 1) {
-        divisor *= 1000;
-        index++;
-    }
-    const whole = Math.floor(quantity / divisor);
-    const value = whole < 10 ? Math.floor(quantity / (divisor / 10)) / 10 : whole;
-    return `${value}${suffixes[index]}`;
-}
 
 /**
  * @template {keyof HTMLElementTagNameMap} Tag
@@ -173,7 +158,7 @@ export function mount(root, application, { base, user, modVersion, logout, setti
     /** @type {NodeListOf<HTMLButtonElement & {dataset: {preference: 'filter' | 'sort', value: keyof typeof symbols}}>} */
     const toolButtons = root.querySelectorAll('.tool-button');
     const craftingView = createCraftingView(find('#window'), application);
-    const cpuView = createCpuView(find('#window'), application);
+    const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace') });
     const historyView = createHistoryView(find('#window'));
     const settingsView = createSettingsView(find('#window'), application);
     const aboutView = createAboutView(find('#window'), modVersion);
@@ -537,7 +522,10 @@ export function mount(root, application, { base, user, modVersion, logout, setti
         find('#terminal').hidden = state.route.view !== 'items';
         find('#terminal-tools').hidden = state.route.view !== 'items';
         find('#resource-panel').hidden = state.route.view !== 'items';
-        find('#workspace').classList.toggle('with-terminal', state.route.view === 'items');
+        find('#workspace').classList.toggle(
+            'with-terminal',
+            state.route.view === 'items' || (state.route.view === 'cpus' && state.route.cpuKey !== null)
+        );
         find('#missing').hidden = state.route.view !== 'missing';
         renderNetworks();
         renderItems();
@@ -658,6 +646,7 @@ export function mount(root, application, { base, user, modVersion, logout, setti
     return () => {
         unsubscribe();
         slotBackground.disconnect();
+        cpuView.dispose();
         hideTooltip();
         window.removeEventListener('scroll', hideTooltip, true);
         window.removeEventListener('resize', hideTooltip);

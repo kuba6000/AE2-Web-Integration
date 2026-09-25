@@ -11,15 +11,16 @@ and [states.png atlas](https://github.com/GTNewHorizons/Applied-Energistics-2-Un
 `terminal.mjs` embeds unmodified 16 × 16 pixel crops as PNG data URLs.
 The theme scales them with nearest-neighbor rendering. Atlas indices count across 16 columns.
 
-| Use                                    | Atlas index |
-| -------------------------------------- | ----------- |
-| All resources                          | 18          |
-| Stored resources                       | 16          |
-| Craftable resources                    | 19          |
-| Sort by name                           | 64          |
-| Sort by quantity                       | 65          |
-| Sort by registry ID (AE2's mod symbol) | 69          |
-| Crafting marker                        | 178         |
+| Use                                                | Atlas index |
+| -------------------------------------------------- | ----------- |
+| All resources                                      | 18          |
+| Stored resources                                   | 16          |
+| Craftable resources                                | 19          |
+| Sort by name                                       | 64          |
+| Sort by quantity                                   | 65          |
+| Sort by registry ID (AE2's mod symbol)             | 69          |
+| Pending CPU resources (AE2 crafting status symbol) | 226         |
+| Crafting marker                                    | 178         |
 
 The existing `assets/favicon.ico`, also displayed in the site header, matches atlas tile 178
 and carries the same texture attribution and license.

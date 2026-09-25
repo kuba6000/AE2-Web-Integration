@@ -128,7 +128,8 @@ header {
 .checkbox input {
     margin: 0;
 }
-#items li {
+#items li,
+.resource-grid li {
     min-width: 0;
 }
 .network span {
@@ -216,14 +217,73 @@ header {
 .cpu-list p {
     font-size: 13px;
 }
-.cpu-list a[aria-current='page'] {
-    font-weight: bold;
-}
 .cpu-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     margin-block: 8px;
+}
+.cpu-terminal > .search {
+    width: auto;
+    flex: 0 0 auto;
+    margin: 10px var(--grid-inset, 22px) 0;
+}
+.cpu-terminal .terminal-heading {
+    gap: 12px;
+    align-items: start;
+}
+.cpu-terminal .terminal-heading h2 {
+    min-width: 0;
+    font-size: 20px;
+    overflow-wrap: anywhere;
+}
+.cpu-back {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--terminal-title);
+    padding-block: 5px;
+}
+.cpu-status {
+    margin: 8px var(--grid-inset, 22px) 0;
+    font-size: 12px;
+    color: var(--muted);
+}
+.cpu-status:empty {
+    display: none;
+}
+.resource-grid.cpu-items {
+    --slot-height: 100px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr));
+}
+.cpu-item-amounts {
+    display: flex;
+    flex-direction: column;
+    margin-top: auto;
+    gap: 2px;
+    width: 100%;
+}
+.cpu-amount {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px;
+    font-size: 10px;
+    line-height: 16px;
+    color: var(--surface-muted);
+}
+.cpu-item .quantity {
+    font-size: 12px;
+}
+#cpu-panel .cpu-actions {
+    flex-direction: column;
+}
+#cpu-panel .cpu-actions button {
+    width: 100%;
+    padding: 6px;
+    font-size: 11px;
+}
+#cpu-panel h3 {
+    margin-top: 0;
 }
 .history-view {
     min-width: 0;
@@ -587,7 +647,9 @@ label {
     flex-direction: column;
     overflow: hidden;
 }
-#terminal {
+#terminal,
+.cpu-view.cpu-detail-active,
+.cpu-terminal {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -631,10 +693,10 @@ label {
     min-height: 0;
     margin-top: 12px;
 }
-.terminal-body > :not(#item-scroll) {
+.terminal-body > :not(#item-scroll, .terminal-scroll) {
     flex-shrink: 0;
 }
-#item-scroll {
+:is(#item-scroll, .terminal-scroll) {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -643,29 +705,29 @@ label {
     scrollbar-gutter: stable both-edges;
     padding-inline: 4px;
 }
-#item-scroll:focus-visible {
+:is(#item-scroll, .terminal-scroll):focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
 }
-#item-scroll::-webkit-scrollbar {
+:is(#item-scroll, .terminal-scroll)::-webkit-scrollbar {
     width: 18px;
 }
-#item-scroll::-webkit-scrollbar-track {
+:is(#item-scroll, .terminal-scroll)::-webkit-scrollbar-track {
     background: var(--slot);
     border: 2px solid;
     border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
 }
-#item-scroll::-webkit-scrollbar-thumb {
+:is(#item-scroll, .terminal-scroll)::-webkit-scrollbar-thumb {
     min-height: 28px;
     background: var(--panel);
     border: 2px solid;
     border-color: var(--edge-light) var(--edge-dark) var(--edge-dark) var(--edge-light);
 }
-#item-scroll::-webkit-scrollbar-thumb:hover {
+:is(#item-scroll, .terminal-scroll)::-webkit-scrollbar-thumb:hover {
     background: var(--selected);
 }
 @supports not selector(::-webkit-scrollbar) {
-    #item-scroll {
+    :is(#item-scroll, .terminal-scroll) {
         scrollbar-color: var(--border) var(--slot);
     }
 }
@@ -708,7 +770,8 @@ label {
     background-color: var(--slot);
     border-color: var(--control-edge-dark) var(--control-edge-light) var(--control-edge-light) var(--control-edge-dark);
 }
-#items {
+#items,
+.resource-grid {
     --slot-height: 68px;
 
     display: grid;
@@ -1007,7 +1070,8 @@ footer a {
         grid-template-columns: var(--tools-width) minmax(0, 1fr);
         grid-template-rows: minmax(0, 1fr) auto;
     }
-    #resource-panel {
+    #resource-panel,
+    #cpu-panel {
         grid-column: 2;
         margin-top: 0;
         margin-left: 0;
