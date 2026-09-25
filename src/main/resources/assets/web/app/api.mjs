@@ -8,6 +8,7 @@
  * @property {(gridKey: string, signal?: AbortSignal) => Promise<Record<string, import('./api-types.mjs').CpuInfo>>} cpus
  * @property {(gridKey: string, cpuKey: string, signal?: AbortSignal) => Promise<import('./api-types.mjs').CpuDetail>} cpu
  * @property {(gridKey: string, cpuKey: string) => Promise<null>} cancelCpu
+ * @property {(gridKey: string, cpuKey: string, paused: boolean) => Promise<null>} pauseCpu
  * @property {(gridKey: string, signal?: AbortSignal) => Promise<import('./api-types.mjs').HistoryEntry[]>} history
  * @property {(gridKey: string, entryId: string | number, signal?: AbortSignal) => Promise<import('./api-types.mjs').HistoryDetail>} historyEntry
  * @property {(gridKey: string, signal?: AbortSignal) => Promise<import('./api-types.mjs').GridSettings>} settings
@@ -36,7 +37,7 @@ export function createApi(base, onUnauthorized) {
     /**
      * @template T
      * @param {string} path
-     * @param {{method?: string, signal?: AbortSignal, body?: {itemKey: string, quantity: number} | {cpuKey: string} | {isTracked: boolean}}} [options]
+     * @param {{method?: string, signal?: AbortSignal, body?: {itemKey: string, quantity: number} | {cpuKey: string} | {isTracked: boolean} | {paused: boolean}}} [options]
      * @returns {Promise<T>}
      */
     async function request(path, { method = 'GET', signal, body } = {}) {
@@ -87,6 +88,11 @@ export function createApi(base, onUnauthorized) {
         cancelCpu: (gridKey, cpuKey) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}/cancel`, {
                 method: 'POST'
+            }),
+        pauseCpu: (gridKey, cpuKey, paused) =>
+            request(`api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}/pause`, {
+                method: 'POST',
+                body: { paused }
             }),
         history: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/crafting-history`, { signal }),
         historyEntry: (gridKey, entryId, signal) =>

@@ -8,9 +8,9 @@
  * @typedef {Record<string, AccessSource[]>} AccessSources
  * @typedef {{key: string, cpuCount: number, owner: string, isOwned: boolean, isTrackingEnabled: boolean, accessSources: AccessSources}} Grid
  * @typedef {{isTracked: boolean}} GridSettings
- * @typedef {{name: string, isBusy: boolean, finalOutput: Stack | null, availableStorage: number, usedStorage: number, coProcessors: number, hasTrackingInfo: boolean, timeStarted: number}} CpuInfo
+ * @typedef {{name: string, isBusy: boolean, supportsPause: boolean, isPaused: boolean, finalOutput: Stack | null, availableStorage: number, usedStorage: number, coProcessors: number, hasTrackingInfo: boolean, timeStarted: number}} CpuInfo
  * @typedef {{itemid: string, itemname: string, active: number, pending: number, stored: number, timeSpentCrafting: number, craftedTotal: number, shareInCraftingTime: number, shareInCraftingTimeCombined: number, craftsPerSec: number}} CpuItem
- * @typedef {{size: number, isBusy: boolean, finalOutput: Stack | null, items: CpuItem[] | null, hasTrackingInfo: boolean, timeStarted: number, timeElapsed: number}} CpuDetail
+ * @typedef {{size: number, isBusy: boolean, supportsPause: boolean, isPaused: boolean, finalOutput: Stack | null, items: CpuItem[] | null, hasTrackingInfo: boolean, timeStarted: number, timeElapsed: number}} CpuDetail
  * @typedef {{itemid: string, itemname: string, stored: number, requested: number, missing: number, steps: number, usedPercent: number}} PlanItem
  * @typedef {{isDone: boolean, isSimulating: boolean, bytesTotal: number, plan: PlanItem[] | null}} Plan
  * @typedef {{timeStarted: number, timeDone: number, wasCancelled: boolean, finalOutput: Stack, id: number}} HistoryEntry

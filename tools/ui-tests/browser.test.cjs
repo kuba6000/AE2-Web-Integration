@@ -38,10 +38,20 @@ const readyPlan = {
         }
     ]
 };
-const cpu = { name: 'Assembler', isBusy: false, availableStorage: 8192, usedStorage: 0, coProcessors: 1 };
+const cpu = {
+    name: 'Assembler',
+    isBusy: false,
+    supportsPause: false,
+    isPaused: false,
+    availableStorage: 8192,
+    usedStorage: 0,
+    coProcessors: 1
+};
 const cpuWork = {
     size: 8192,
     isBusy: true,
+    supportsPause: false,
+    isPaused: false,
     finalOutput: { ...iron, quantity: 12 },
     hasTrackingInfo: true,
     timeStarted: 1700000000000,
@@ -111,6 +121,7 @@ async function fixture(t, mount = '') {
         submitStatus: 'OK',
         cpuDetails: { 'cpu-a': cpuWork, 'cpu-b': cpuWork },
         cancelStatus: 'OK',
+        pauseStatus: 'OK',
         history: [historyEntry],
         historyDetail,
         settings: { [gridA]: { isTracked: false }, [gridB]: { isTracked: false } },
@@ -138,13 +149,15 @@ async function fixture(t, mount = '') {
                     ? 'settings'
                     : request.method === 'DELETE'
                       ? 'delete'
-                      : resource.endsWith('/cancel')
-                        ? 'cancel'
-                        : resource.endsWith('/submit')
-                          ? 'submit'
-                          : request.method === 'POST' && resource.endsWith('/crafting-plans')
-                            ? 'create'
-                            : null;
+                      : resource.endsWith('/pause')
+                        ? 'pause'
+                        : resource.endsWith('/cancel')
+                          ? 'cancel'
+                          : resource.endsWith('/submit')
+                            ? 'submit'
+                            : request.method === 'POST' && resource.endsWith('/crafting-plans')
+                              ? 'create'
+                              : null;
             if (mutation && options.fault?.operation === mutation) {
                 if (options.fault.status === 'NETWORK_ERROR') {
                     response.destroy();
@@ -212,6 +225,15 @@ async function fixture(t, mount = '') {
                 if (request.method === 'PATCH' && !options.settingsError)
                     options.settings[key] = options.settingsReply || options.requests.at(-1).body;
                 response.end(JSON.stringify({ status: options.settingsError || 'OK', data: options.settings[key] }));
+            } else if (resource.endsWith('/pause')) {
+                if (options.pauseStatus === 'OK') {
+                    const key = decodeURIComponent(resource.split('/').at(-2));
+                    const isPaused = options.requests.at(-1).body.paused;
+                    options.cpus[key] = { ...options.cpus[key], isPaused };
+                    options.cpuDetails[key] = { ...options.cpuDetails[key], isPaused };
+                }
+                response.statusCode = options.pauseStatus === 'OK' ? 200 : 409;
+                response.end(JSON.stringify({ status: options.pauseStatus, data: null }));
             } else if (resource.endsWith('/cancel')) {
                 if (options.cancelStatus === 'OK') {
                     const key = decodeURIComponent(resource.split('/').at(-2));
@@ -327,6 +349,7 @@ async function fixture(t, mount = '') {
         await closeServer();
     });
     const page = await browser.newPage({ locale: 'en-US' });
+    page.on('dialog', (dialog) => dialog.accept());
     await page.clock.install();
     const errors = [];
     page.on('pageerror', (error) => errors.push(String(error)));
@@ -1376,6 +1399,299 @@ test('busy CPU eligibility uses known output identity and missing selections req
 
 // Public seam: CPU links and current-work controls plus HTTP. Display names may duplicate;
 // navigation and cancellation must continue to address the selected stable CPU key.
+test('CPU list and detail pause controls use capability, busy state and stable CPU identity', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    options.cpus = {
+        'cpu-a': { ...cpu, isBusy: true, supportsPause: true },
+        'cpu-b': { ...cpu, isBusy: true, supportsPause: true },
+        unsupported: { ...cpu, isBusy: true },
+        idle: { ...cpu, supportsPause: true }
+    };
+    options.cpuDetails['cpu-b'] = { ...cpuWork, supportsPause: true };
+    options.cpuDetails.unsupported = cpuWork;
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    const row = (key) => page.getByRole('listitem').filter({ has: page.getByRole('link', { name: new RegExp(key) }) });
+    await row('cpu-b').getByRole('button', { name: /Pause/ }).waitFor({ timeout: 3000 });
+    assert.equal(
+        await row('unsupported')
+            .getByRole('button', { name: /Pause|Resume/ })
+            .count(),
+        0
+    );
+    assert.equal(await row('idle').getByRole('button').count(), 0);
+    await row('cpu-b').getByRole('button', { name: /Pause/ }).click();
+    await row('cpu-b')
+        .getByRole('button', { name: /Resume/ })
+        .waitFor();
+    options.cpus = { ...Object.fromEntries(Object.entries(options.cpus).reverse()) };
+    await poll(page);
+    await row('cpu-b').getByRole('link').click();
+    await page.getByRole('button', { name: 'Resume current work', exact: true }).click();
+    await page.getByRole('button', { name: 'Pause current work', exact: true }).waitFor();
+    const requests = options.requests.filter((request) => request.path.endsWith('/pause'));
+    assert.deepEqual(
+        requests.map(({ path, method, body }) => ({ path, method, body })),
+        [
+            { path: `/api/grids/${gridA}/cpus/cpu-b/pause`, method: 'POST', body: { paused: true } },
+            { path: `/api/grids/${gridA}/cpus/cpu-b/pause`, method: 'POST', body: { paused: false } }
+        ]
+    );
+    assert.ok(requests.every((request) => request.headers['x-ae2-request'] === 'true'));
+    await row('unsupported').getByRole('link').click();
+    await page.getByRole('button', { name: /^(Pause|Resume) current work$/ }).waitFor({ state: 'hidden' });
+    assert.equal(await page.getByRole('button', { name: /^(Pause|Resume) current work$/ }).count(), 0);
+});
+
+test('CPU cancellation requires confirmation from both list rows and detail', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = { 'cpu-a': { ...cpu, isBusy: true }, 'cpu-b': { ...cpu, isBusy: true } };
+    page.removeAllListeners('dialog');
+    let accept = false;
+    const confirmations = [];
+    page.on('dialog', async (dialog) => {
+        confirmations.push(dialog.message());
+        if (accept) await dialog.accept();
+        else await dialog.dismiss();
+    });
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    const row = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: /cpu-b/ }) });
+    await row.getByRole('button', { name: /Cancel/ }).click();
+    assert.equal(confirmations.length, 1);
+    assert.match(confirmations[0], /cpu-b/);
+    assert.equal(options.requests.filter((request) => request.method === 'POST').length, 0);
+    accept = true;
+    await row.getByRole('button', { name: /Cancel/ }).click();
+    await row.getByRole('button', { name: /Cancel/ }).waitFor({ state: 'hidden' });
+    await page.getByRole('link', { name: /Assembler.*cpu-a/ }).click();
+    accept = false;
+    await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
+    assert.match(confirmations.at(-1), /cpu-a/);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cancel')).length, 1);
+    accept = true;
+    await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
+    await page.getByRole('button', { name: 'Cancel current work', exact: true }).waitFor({ state: 'hidden' });
+    assert.deepEqual(
+        options.requests.filter((request) => request.path.endsWith('/cancel')).map((request) => request.path),
+        [`/api/grids/${gridA}/cpus/cpu-b/cancel`, `/api/grids/${gridA}/cpus/cpu-a/cancel`]
+    );
+});
+
+// Public seam: a pending or uncertain operation follows its grid/CPU across views. Neither
+// a refreshed snapshot nor visiting another network authorizes a duplicate mutation.
+test('pending and uncertain CPU pause stays locked across list, detail and grid navigation', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = {
+        'cpu-a': { ...cpu, isBusy: true, supportsPause: true },
+        'cpu-b': { ...cpu, isBusy: true, supportsPause: true }
+    };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, supportsPause: true };
+    let release;
+    const pending = new Promise((resolve) => {
+        release = resolve;
+    });
+    let mutations = 0;
+    await page.route('**/pause', (route) => {
+        mutations++;
+        release(route);
+    });
+    const row = (key) => page.getByRole('listitem').filter({ has: page.getByRole('link', { name: new RegExp(key) }) });
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    await row('cpu-a').getByRole('button', { name: /Pause/ }).click();
+    const held = await pending;
+    await row('cpu-a').getByRole('link').click();
+    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Pause current work', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isDisabled(), true);
+    await page.evaluate((key) => {
+        location.hash = `#/grids/${key}/cpus`;
+    }, gridB);
+    await row('cpu-a').getByRole('button', { name: /Pause/ }).waitFor();
+    assert.equal(await row('cpu-a').getByRole('button', { name: /Pause/ }).isEnabled(), true);
+    await held.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'TIMEOUT', data: null })
+    });
+    await settleResponse(page, held.request());
+    assert.equal(
+        await page
+            .getByRole('status')
+            .filter({ hasText: /outcome.*unknown/i })
+            .count(),
+        0
+    );
+    await page.evaluate((key) => {
+        location.hash = `#/grids/${key}/cpus`;
+    }, gridA);
+    await row('cpu-a')
+        .getByRole('status')
+        .filter({ hasText: /outcome.*unknown/i })
+        .waitFor();
+    await poll(page);
+    assert.equal(await row('cpu-a').getByRole('button', { name: /Pause/ }).isDisabled(), true);
+    assert.equal(
+        await row('cpu-a')
+            .getByRole('button', { name: /Cancel/ })
+            .isDisabled(),
+        true
+    );
+    assert.equal(await row('cpu-b').getByRole('button', { name: /Pause/ }).isEnabled(), true);
+    await row('cpu-a').getByRole('link').click();
+    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Pause current work', exact: true }).isDisabled(), true);
+    assert.equal(mutations, 1);
+});
+
+test('CPU pause rejection refreshes capability and hides stale controls', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = { 'cpu-a': { ...cpu, isBusy: true, supportsPause: true } };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, supportsPause: true };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await page.getByRole('button', { name: 'Pause current work', exact: true }).waitFor();
+    options.pauseStatus = 'CPU_PAUSE_UNSUPPORTED';
+    options.cpus['cpu-a'] = { ...options.cpus['cpu-a'], supportsPause: false };
+    options.cpuDetails['cpu-a'] = cpuWork;
+    await page.getByRole('button', { name: 'Pause current work', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /does not support pausing/i })
+        .waitFor();
+    assert.equal(await page.getByRole('button', { name: /Pause|Resume/ }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isEnabled(), true);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/pause')).length, 1);
+});
+
+test('concurrent CPU pause results remain non-actionable until fresh CPU data arrives', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = {
+        'cpu-a': { ...cpu, isBusy: true, supportsPause: true },
+        'cpu-b': { ...cpu, isBusy: true, supportsPause: true }
+    };
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    const row = (key) => page.getByRole('listitem').filter({ has: page.getByRole('link', { name: new RegExp(key) }) });
+    const operations = {};
+    await page.route('**/pause', (route) => {
+        operations[route.request().url().split('/').at(-2)] = route;
+    });
+    await row('cpu-a').getByRole('button', { name: /Pause/ }).click();
+    await row('cpu-b').getByRole('button', { name: /Pause/ }).click();
+    let captureFirst;
+    let captureSecond;
+    const firstRead = new Promise((resolve) => {
+        captureFirst = resolve;
+    });
+    const secondRead = new Promise((resolve) => {
+        captureSecond = resolve;
+    });
+    let reads = 0;
+    await page.route('**/cpus', (route) => {
+        if (++reads === 1) captureFirst(route);
+        else captureSecond(route);
+    });
+    const successful = {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'OK', data: null })
+    };
+    await operations['cpu-a'].fulfill(successful);
+    const stale = await firstRead;
+    await operations['cpu-b'].fulfill(successful);
+    const fresh = await secondRead;
+    await stale.fulfill({ ...successful, body: JSON.stringify({ status: 'OK', data: options.cpus }) });
+    await settleResponse(page, stale.request());
+    assert.equal(await row('cpu-a').getByRole('button', { name: /Pause/ }).isDisabled(), true);
+    assert.equal(await row('cpu-b').getByRole('button', { name: /Pause/ }).isDisabled(), true);
+    assert.equal(
+        await row('cpu-b')
+            .getByRole('button', { name: /Cancel/ })
+            .isDisabled(),
+        true
+    );
+    const paused = Object.fromEntries(
+        Object.entries(options.cpus).map(([key, value]) => [key, { ...value, isPaused: true }])
+    );
+    await fresh.fulfill({ ...successful, body: JSON.stringify({ status: 'OK', data: paused }) });
+    await row('cpu-a')
+        .getByRole('button', { name: /Resume/ })
+        .waitFor();
+    assert.equal(
+        await row('cpu-b')
+            .getByRole('button', { name: /Resume/ })
+            .isEnabled(),
+        true
+    );
+});
+
+test('CPU list reports a removed action target without substituting another CPU', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = {
+        'cpu-a': { ...cpu, isBusy: true, supportsPause: true },
+        'cpu-b': { ...cpu, isBusy: true, supportsPause: true }
+    };
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    const row = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: /cpu-a/ }) });
+    await row.getByRole('button', { name: /Pause/ }).waitFor();
+    options.pauseStatus = 'CPU_NOT_FOUND';
+    delete options.cpus['cpu-a'];
+    await row.getByRole('button', { name: /Pause/ }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /CPU.*available/i })
+        .waitFor({ timeout: 3000 });
+    assert.equal(await row.count(), 0);
+    assert.equal(await page.getByRole('link', { name: /cpu-b/ }).count(), 1);
+    assert.deepEqual(
+        options.requests.filter((request) => request.method === 'POST').map((request) => request.path),
+        [`/api/grids/${gridA}/cpus/cpu-a/pause`]
+    );
+});
+
+test('a removed CPU mutation target cannot strand another CPU detail load', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = {
+        'cpu-a': { ...cpu, isBusy: true, supportsPause: true },
+        'cpu-b': { ...cpu, isBusy: true, supportsPause: true }
+    };
+    options.cpuDetails['cpu-b'] = { ...cpuWork, supportsPause: true };
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    let captureMutation;
+    const mutation = new Promise((resolve) => {
+        captureMutation = resolve;
+    });
+    await page.route('**/pause', captureMutation);
+    const row = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: /cpu-a/ }) });
+    await row.getByRole('button', { name: /Pause/ }).click();
+    const action = await mutation;
+    let captureDetail;
+    const detail = new Promise((resolve) => {
+        captureDetail = resolve;
+    });
+    let held = false;
+    await page.route('**/cpus/cpu-b', (route) => {
+        if (held) return route.continue();
+        held = true;
+        captureDetail(route);
+    });
+    await page.getByRole('link', { name: /cpu-b/ }).click();
+    const oldRead = await detail;
+    delete options.cpus['cpu-a'];
+    await action.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'CPU_NOT_FOUND', data: null })
+    });
+    await oldRead.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'OK', data: options.cpuDetails['cpu-b'] })
+    });
+    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor({ timeout: 3000 });
+    assert.equal(await page.getByRole('button', { name: 'Pause current work', exact: true }).isEnabled(), true);
+    assert.match(page.url(), /cpus\/cpu-b$/);
+});
+
 test('CPU monitoring opens stable current work and explicitly cancels it without unrelated requests', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     options.cpus = {

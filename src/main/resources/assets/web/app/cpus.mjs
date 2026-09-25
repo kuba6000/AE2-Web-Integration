@@ -1,6 +1,6 @@
 /**
- * @typedef {{status: 'idle' | 'loading' | 'ready' | 'error', cpus: (import('./api-types.mjs').CpuInfo & {key: string})[], detail: import('./api-types.mjs').CpuDetail | null, error: string | null, cancelling: boolean, uncertain: boolean, notice: string | null}} CpuState
- * @typedef {Partial<Pick<CpuState, 'cancelling' | 'uncertain' | 'notice'>>} CpuOutcome
+ * @typedef {{mutation?: 'cancel' | 'pause' | 'resume', uncertain?: boolean, notice?: string}} CpuOutcome
+ * @typedef {{status: 'idle' | 'loading' | 'ready' | 'error', cpus: (import('./api-types.mjs').CpuInfo & {key: string})[], detail: import('./api-types.mjs').CpuDetail | null, error: string | null, outcomes: Record<string, CpuOutcome>}} CpuState
  */
 /** Grid CPU summaries and selected current work. The application owns refresh scheduling.
  * @param {import('./api.mjs').Api} api
@@ -8,16 +8,9 @@
  */
 export function createCpuMonitor(api, changed) {
     /** @type {CpuState} */
-    const state = {
-        status: 'idle',
-        cpus: [],
-        detail: null,
-        error: null,
-        cancelling: false,
-        uncertain: false,
-        notice: null
-    };
-    /** @type {Map<string, CpuOutcome>} */
+    const state = { status: 'idle', cpus: [], detail: null, error: null, outcomes: {} };
+    /** Outcomes belong to a grid/CPU, regardless of which screen initiated the mutation.
+     * @type {Map<string, Record<string, CpuOutcome>>} */
     const outcomes = new Map();
     /** @type {import('./router.mjs').Route | {view?: undefined, gridKey?: undefined}} */
     let route = {};
@@ -26,21 +19,26 @@ export function createCpuMonitor(api, changed) {
     let request;
     let reading = false;
     let disposed = false;
-    const identity = () => `${route.gridKey}/${route.view === 'cpus' ? route.cpuKey : undefined}`;
 
-    /** @param {string} status */
-    function fail(status) {
+    function invalidateRead() {
+        generation++;
+        request?.abort();
+        reading = false;
+    }
+
+    /** @param {string} status @param {string | null | undefined} [cpuKey] */
+    function fail(status, cpuKey = route.view === 'cpus' ? route.cpuKey : undefined) {
+        if (status === 'CPU_NOT_FOUND') {
+            state.cpus = state.cpus.filter((cpu) => cpu.key !== cpuKey);
+            if (route.view === 'cpus' && route.cpuKey && route.cpuKey !== cpuKey) return;
+        } else state.cpus = [];
         state.error = status;
         state.detail = null;
         state.status = 'error';
-        state.cpus =
-            status === 'CPU_NOT_FOUND'
-                ? state.cpus.filter((cpu) => cpu.key !== (route.view === 'cpus' ? route.cpuKey : undefined))
-                : [];
     }
 
     async function refresh() {
-        if (route.view !== 'cpus' || reading || state.cancelling) return;
+        if (route.view !== 'cpus' || reading) return;
         const version = generation;
         const current = route;
         reading = true;
@@ -71,82 +69,77 @@ export function createCpuMonitor(api, changed) {
             }
         }
     }
+
+    /** @param {string} cpuKey @param {'cancel' | 'pause' | 'resume'} mutation */
+    async function mutate(cpuKey, mutation) {
+        if (route.view !== 'cpus' || state.status !== 'ready') return;
+        const cpu = route.cpuKey === cpuKey ? state.detail : state.cpus.find((cpu) => cpu.key === cpuKey);
+        const previous = state.outcomes[cpuKey];
+        if (!cpu?.isBusy || previous?.mutation || previous?.uncertain) return;
+        if (mutation !== 'cancel' && (!cpu.supportsPause || cpu.isPaused === (mutation === 'pause'))) return;
+        const gridKey = route.gridKey;
+        const gridOutcomes = state.outcomes;
+        invalidateRead();
+        gridOutcomes[cpuKey] = { mutation };
+        state.error = null;
+        changed();
+        /** @type {CpuOutcome} */
+        let outcome;
+        try {
+            if (mutation === 'cancel') await api.cancelCpu(gridKey, cpuKey);
+            else await api.pauseCpu(gridKey, cpuKey, mutation === 'pause');
+            outcome = mutation === 'cancel' ? { notice: 'cpuCancelled' } : {};
+        } catch (caught) {
+            const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+            outcome =
+                !error.status ||
+                ['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'].includes(error.status)
+                    ? { uncertain: true }
+                    : { notice: error.status };
+        }
+        if (disposed) return;
+        gridOutcomes[cpuKey] = outcome;
+        if (route.view !== 'cpus' || route.gridKey !== gridKey) return;
+        invalidateRead();
+        // Settled mutations still need a fresh snapshot before these observations authorize another action.
+        state.status = 'loading';
+        if (outcome.notice === 'CPU_NOT_FOUND' && route.cpuKey && route.cpuKey !== cpuKey) await refresh();
+        else if (['CPU_NOT_FOUND', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(outcome.notice ?? ''))
+            fail(/** @type {string} */ (outcome.notice), cpuKey);
+        else if (!['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.error ?? '')) await refresh();
+        changed();
+    }
+
     return {
         state,
         refresh,
         /** @param {import('./router.mjs').Route} next */
         route(next) {
-            generation++;
-            request?.abort();
-            reading = false;
+            invalidateRead();
             route = next;
-            Object.assign(
-                state,
-                {
-                    status: next.view === 'cpus' ? 'loading' : 'idle',
-                    cpus: [],
-                    detail: null,
-                    error: null,
-                    cancelling: false,
-                    uncertain: false,
-                    notice: null
-                },
-                outcomes.get(identity())
-            );
+            const gridOutcomes = next.view === 'cpus' ? outcomes.get(next.gridKey) || {} : {};
+            if (next.view === 'cpus') outcomes.set(next.gridKey, gridOutcomes);
+            Object.assign(state, {
+                status: next.view === 'cpus' ? 'loading' : 'idle',
+                cpus: [],
+                detail: null,
+                error: null,
+                outcomes: gridOutcomes
+            });
         },
         /** @param {string | null} error */
         block(error) {
-            generation++;
-            request?.abort();
-            reading = false;
+            invalidateRead();
             Object.assign(state, { status: 'error', cpus: [], detail: null, error });
             changed();
         },
-        async cancel() {
-            if (
-                route.view !== 'cpus' ||
-                state.cancelling ||
-                state.uncertain ||
-                state.status !== 'ready' ||
-                !state.detail?.isBusy
-            )
-                return;
-            const current = route;
-            const key = identity();
-            generation++;
-            request?.abort();
-            reading = false;
-            state.cancelling = true;
-            state.error = null;
-            state.notice = null;
-            changed();
-            outcomes.set(key, { cancelling: true });
-            /** @type {CpuOutcome} */
-            let outcome;
-            try {
-                await api.cancelCpu(current.gridKey, /** @type {string} */ (current.cpuKey));
-                outcome = { notice: 'cpuCancelled' };
-            } catch (caught) {
-                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
-                outcome =
-                    !error.status ||
-                    ['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'].includes(error.status)
-                        ? { uncertain: true }
-                        : { notice: error.status };
-            }
-            if (disposed) return;
-            outcomes.set(key, outcome);
-            if (route.view !== 'cpus' || identity() !== key) return;
-            Object.assign(state, { cancelling: false, detail: null }, outcome);
-            if (['CPU_NOT_FOUND', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(outcome.notice ?? ''))
-                fail(/** @type {string} */ (outcome.notice));
-            else if (!['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.error ?? '')) await refresh();
-            changed();
-        },
+        /** @param {string} cpuKey */
+        cancel: (cpuKey) => mutate(cpuKey, 'cancel'),
+        /** @param {string} cpuKey @param {boolean} paused */
+        pause: (cpuKey, paused) => mutate(cpuKey, paused ? 'pause' : 'resume'),
         dispose() {
             disposed = true;
-            generation++;
-            request?.abort();
+            invalidateRead();
             outcomes.clear();
         }
     };

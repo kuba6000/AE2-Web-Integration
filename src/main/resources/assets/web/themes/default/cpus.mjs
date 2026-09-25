@@ -6,6 +6,7 @@
 
 import { cpuHref } from '../../app/router.mjs';
 import { renderMinecraftText } from './minecraft-text.mjs';
+import { plainMinecraftText } from '../../app/minecraft-text.mjs';
 
 /**
  * @template {keyof HTMLElementTagNameMap} Tag
@@ -41,19 +42,54 @@ export function createCpuView(root, application) {
     tableScroll.className = 'plan-table';
     const table = element('table');
     tableScroll.append(table);
-    const cancel = element('button');
-    cancel.type = 'button';
-    cancel.addEventListener('click', () => application.cpus.cancel());
+    const actions = element('div');
     const resources = element('a');
-    view.append(title, status, list, heading, output, timing, empty, tableScroll, cancel, resources);
+    view.append(title, status, list, heading, output, timing, empty, tableScroll, actions, resources);
     root.append(view);
-    /** @typedef {{li: HTMLLIElement, link: HTMLAnchorElement, summary: HTMLParagraphElement, output: HTMLParagraphElement}} CpuRow */
+    /** @typedef {{li: HTMLLIElement, link: HTMLAnchorElement, summary: HTMLParagraphElement, output: HTMLParagraphElement, actions: HTMLDivElement, notice: HTMLParagraphElement}} CpuRow */
     /** @type {Map<string, CpuRow>} */
     let rows = new Map();
     /** @type {TerminalState['cpus']['detail'] | undefined} */
     let lastDetail;
     /** @type {Locale | undefined} */
     let lastLocale;
+    /** @param {import('../../app/cpus.mjs').CpuOutcome | undefined} outcome @param {Locale} locale */
+    const outcomeText = (outcome, locale) =>
+        outcome?.uncertain
+            ? locale.common('cpuMutationUncertain')
+            : outcome?.mutation
+              ? locale.common(outcome.mutation === 'cancel' ? 'cpuCancelling' : 'cpuUpdating')
+              : outcome?.notice
+                ? locale.common(outcome.notice)
+                : '';
+    /** @param {HTMLDivElement} root @param {string} key @param {TerminalState['cpus']['detail'] | TerminalState['cpus']['cpus'][number] | null} cpu @param {TerminalState['cpus']} state @param {Locale} locale @param {string} [label] */
+    function renderActions(root, key, cpu, state, locale, label = '') {
+        root.className = 'cpu-actions';
+        if (!root.firstChild) {
+            const pause = element('button');
+            pause.type = 'button';
+            const cancel = element('button');
+            cancel.type = 'button';
+            root.append(pause, cancel);
+        }
+        const [pause, cancel] = /** @type {HTMLButtonElement[]} */ ([...root.children]);
+        const outcome = state.outcomes[key];
+        const disabled = !!outcome?.mutation || !!outcome?.uncertain || state.status !== 'ready';
+        pause.hidden = !cpu?.isBusy || !cpu.supportsPause;
+        pause.textContent = locale.common(cpu?.isPaused ? 'resumeCpuWork' : 'pauseCpuWork');
+        pause.disabled = disabled;
+        pause.onclick = () => application.cpus.pause(key, !cpu?.isPaused);
+        cancel.hidden = !cpu?.isBusy;
+        cancel.textContent = locale.common('cancelCpuWork');
+        cancel.disabled = disabled;
+        cancel.onclick = () => {
+            if (window.confirm(locale.common('confirmCancelCpu', { cpu: label || key }))) application.cpus.cancel(key);
+        };
+        for (const button of [pause, cancel]) {
+            if (label) button.setAttribute('aria-label', `${button.textContent} · ${label}`);
+            else button.removeAttribute('aria-label');
+        }
+    }
     return {
         /**
          * @param {TerminalState['route']} route
@@ -68,21 +104,22 @@ export function createCpuView(root, application) {
             resources.textContent = t('backResources');
             resources.href = `#/grids/${encodeURIComponent(route.gridKey)}/items`;
             const detail = state.detail;
-            status.textContent = state.uncertain
-                ? t('cpuCancelUncertain')
-                : state.cancelling
-                  ? t('cpuCancelling')
-                  : state.error
-                    ? t(state.error)
-                    : state.status === 'loading'
-                      ? t('loading')
-                      : detail
-                        ? t(detail.isBusy ? 'cpuWorking' : 'cpuIdleMessage')
-                        : state.cpus.length
-                          ? t('selectCpuWork')
-                          : t('noCpus');
-            if (state.notice && state.notice !== state.error) status.textContent += ` ${t(state.notice)}`;
-            if (state.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
+            const selectedOutcome = route.cpuKey ? state.outcomes[route.cpuKey] : undefined;
+            status.textContent =
+                selectedOutcome?.uncertain || selectedOutcome?.mutation
+                    ? outcomeText(selectedOutcome, locale)
+                    : state.error
+                      ? t(state.error)
+                      : state.status === 'loading'
+                        ? t('loading')
+                        : detail
+                          ? t(detail.isBusy ? (detail.isPaused ? 'cpuPaused' : 'cpuWorking') : 'cpuIdleMessage')
+                          : state.cpus.length
+                            ? t('selectCpuWork')
+                            : t('noCpus');
+            if (selectedOutcome?.notice && selectedOutcome.notice !== state.error)
+                status.textContent += ` ${t(selectedOutcome.notice)}`;
+            if (selectedOutcome?.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
             /** @type {Map<string, CpuRow>} */
             const current = new Map();
             for (const cpu of state.cpus) {
@@ -90,14 +127,28 @@ export function createCpuView(root, application) {
                     li: element('li'),
                     link: element('a'),
                     summary: element('p'),
-                    output: element('p')
+                    output: element('p'),
+                    actions: element('div'),
+                    notice: element('p')
                 };
-                if (!entry.link.parentNode) entry.li.append(entry.link, entry.summary, entry.output);
+                if (!entry.link.parentNode) {
+                    entry.li.append(entry.link, entry.summary, entry.output, entry.actions, entry.notice);
+                    entry.notice.role = 'status';
+                }
                 entry.link.href = cpuHref(route.gridKey, cpu.key);
                 entry.link.replaceChildren(renderMinecraftText(cpu.name), ` · ${cpu.key}`);
                 if (route.cpuKey === cpu.key) entry.link.setAttribute('aria-current', 'page');
                 else entry.link.removeAttribute('aria-current');
-                entry.summary.textContent = `${t(cpu.isBusy ? 'cpuBusy' : 'cpuIdle')} · ${t('cpuCapacity', { count: cpu.availableStorage })} · ${t('coprocessors', { count: cpu.coProcessors })} · ${cpu.usedStorage >= 0 ? t('cpuUsedStorage', { count: cpu.usedStorage }) : t('cpuStorageUnknown')}`;
+                entry.summary.textContent = `${t(cpu.isBusy ? (cpu.isPaused ? 'cpuPaused' : 'cpuBusy') : 'cpuIdle')} · ${t('cpuCapacity', { count: cpu.availableStorage })} · ${t('coprocessors', { count: cpu.coProcessors })} · ${cpu.usedStorage >= 0 ? t('cpuUsedStorage', { count: cpu.usedStorage }) : t('cpuStorageUnknown')}`;
+                renderActions(
+                    entry.actions,
+                    cpu.key,
+                    cpu,
+                    state,
+                    locale,
+                    `${plainMinecraftText(cpu.name)} · ${cpu.key}`
+                );
+                entry.notice.textContent = route.cpuKey === cpu.key ? '' : outcomeText(state.outcomes[cpu.key], locale);
                 entry.output.replaceChildren();
                 if (cpu.isBusy) {
                     if (cpu.finalOutput)
@@ -172,9 +223,7 @@ export function createCpuView(root, application) {
                 }
                 table.replaceChildren(header, body);
             }
-            cancel.textContent = t('cancelCpuWork');
-            cancel.hidden = !detail?.isBusy;
-            cancel.disabled = state.cancelling || state.uncertain || state.status !== 'ready';
+            renderActions(actions, route.cpuKey || '', detail, state, locale);
         }
     };
 }

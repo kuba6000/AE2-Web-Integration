@@ -219,8 +219,11 @@ header {
 .cpu-list a[aria-current='page'] {
     font-weight: bold;
 }
-.cpu-view > button {
-    margin-right: 16px;
+.cpu-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-block: 8px;
 }
 .history-view {
     min-width: 0;
