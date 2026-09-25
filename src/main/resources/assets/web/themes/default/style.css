@@ -279,6 +279,12 @@ header {
 
     background-image: linear-gradient(var(--crafting-tint), var(--crafting-tint));
 }
+.item.cpu-item:hover {
+    background-color: var(--slot);
+    background-image:
+        linear-gradient(rgb(255 255 255 / 10%), rgb(255 255 255 / 10%)),
+        linear-gradient(var(--crafting-tint), var(--crafting-tint));
+}
 .cpu-item[data-crafting='active'] {
     --crafting-tint: rgb(69 160 33 / 35.3%);
 }

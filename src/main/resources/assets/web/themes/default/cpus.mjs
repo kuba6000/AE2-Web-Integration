@@ -3,7 +3,7 @@
  * @typedef {Terminal['state']} TerminalState
  * @typedef {import('../../app/i18n.mjs').Translator} Locale
  * @typedef {import('../../app/api-types.mjs').CpuItem} CpuItem
- * @typedef {'all' | 'active' | 'pending' | 'stored'} ResourceFilter
+ * @typedef {'name' | 'active' | 'pending' | 'stored'} ResourceSort
  */
 
 import { cpuHref } from '../../app/router.mjs';
@@ -86,9 +86,9 @@ export function createCpuView(root, application, { workspace }) {
     let rows = new Map();
     /** @type {Map<string, ReturnType<typeof createResourceRow>>} */
     let itemRows = new Map();
-    /** @type {ResourceFilter} */
-    let filter = 'all';
-    /** @type {'name' | 'quantity'} */
+    let hideStored = false;
+    let activeFirst = false;
+    /** @type {ResourceSort} */
     let sort = 'name';
     /** @type {Locale} */
     let locale;
@@ -203,16 +203,17 @@ export function createCpuView(root, application, { workspace }) {
         });
         return row;
     }
-    /** @type {Array<{button: HTMLButtonElement, value: ResourceFilter | 'name' | 'quantity', key: string, group: 'filter' | 'sort'}>} */
+    /** @type {Array<{button: HTMLButtonElement, value: ResourceSort | 'hideStored' | 'activeFirst', key: string}>} */
     const controls = [];
-    /** @param {ResourceFilter | 'name' | 'quantity'} value @param {string} key @param {'filter' | 'sort'} group @param {string} icon */
+    /** @param {ResourceSort | 'hideStored' | 'activeFirst'} value @param {string} key @param {'filter' | 'sort'} group @param {string} icon */
     function addControl(value, key, group, icon) {
         const button = element('button', '', 'tool-button');
         button.type = 'button';
         button.innerHTML = icon;
         button.addEventListener('click', () => {
-            if (group === 'filter') filter = /** @type {ResourceFilter} */ (value);
-            else sort = /** @type {'name' | 'quantity'} */ (value);
+            if (value === 'hideStored') hideStored = !hideStored;
+            else if (value === 'activeFirst') activeFirst = !activeFirst;
+            else sort = value;
             scroll.scrollTop = 0;
             hideTooltip();
             renderResources();
@@ -226,14 +227,19 @@ export function createCpuView(root, application, { workspace }) {
             if (toolTooltip === button) hideTooltip();
         });
         (group === 'filter' ? filterGroup : sortGroup).append(button);
-        controls.push({ button, value, key, group });
+        controls.push({ button, value, key });
     }
-    addControl('all', 'all', 'filter', terminalIcons.all);
-    addControl('active', 'cpuActive', 'filter', craftingHammer);
-    addControl('pending', 'cpuPending', 'filter', craftingQueue);
-    addControl('stored', 'cpuStoredFilter', 'filter', terminalIcons.stored);
+    addControl('hideStored', 'cpuHideStored', 'filter', terminalIcons.stored);
+    addControl('activeFirst', 'cpuActiveFirst', 'sort', terminalIcons.craftable);
     addControl('name', 'name', 'sort', terminalIcons.name);
-    addControl('quantity', 'quantity', 'sort', terminalIcons.quantity);
+    addControl('active', 'cpuSortActive', 'sort', craftingHammer);
+    addControl('pending', 'cpuSortPending', 'sort', craftingQueue);
+    addControl('stored', 'cpuSortStored', 'sort', terminalIcons.quantity);
+
+    /** @param {CpuItem} item */
+    function craftingPriority(item) {
+        return item.active > 0 ? 0 : item.pending > 0 ? 1 : 2;
+    }
 
     function renderResources() {
         filterGroup.setAttribute('aria-label', locale.common('cpuShow'));
@@ -241,11 +247,19 @@ export function createCpuView(root, application, { workspace }) {
         for (const control of controls) {
             control.button.setAttribute(
                 'aria-label',
-                `${locale.common(control.group === 'sort' ? 'sort' : 'cpuShow')}: ${locale.common(control.key)}`
+                control.value === 'hideStored' || control.value === 'activeFirst'
+                    ? locale.common(control.key)
+                    : `${locale.common('sort')}: ${locale.common(control.key)}`
             );
             control.button.setAttribute(
                 'aria-pressed',
-                String(control.value === (control.group === 'sort' ? sort : filter))
+                String(
+                    control.value === 'hideStored'
+                        ? hideStored
+                        : control.value === 'activeFirst'
+                          ? activeFirst
+                          : control.value === sort
+                )
             );
         }
         const terms = search.value.trim().toLocaleLowerCase(document.documentElement.lang).split(/\s+/);
@@ -265,15 +279,14 @@ export function createCpuView(root, application, { workspace }) {
                 const text = `${name} ${item.itemid}`.toLocaleLowerCase(language);
                 const mod = item.itemid.split(':')[0].toLocaleLowerCase(language);
                 return (
-                    (filter === 'all' || item[filter] > 0) &&
+                    (!hideStored || item.active > 0 || item.pending > 0) &&
                     terms.every((term) => (term.startsWith('@') ? mod.includes(term.slice(1)) : text.includes(term)))
                 );
             })
             .sort((a, b) => {
-                const quantity = (/** @type {CpuItem} */ item) =>
-                    filter === 'all' ? item.active + item.pending + item.stored : item[filter];
                 return (
-                    (sort === 'quantity' ? quantity(b.item) - quantity(a.item) : 0) ||
+                    (activeFirst ? craftingPriority(a.item) - craftingPriority(b.item) : 0) ||
+                    (sort === 'name' ? 0 : b.item[sort] - a.item[sort]) ||
                     a.name.localeCompare(b.name, language)
                 );
             });

@@ -1437,12 +1437,12 @@ test('CPU terminal replaces the CPU list with selected resources and returns to 
     await resources.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await page.getByRole('searchbox', { name: 'Search CPU resources' }).isVisible(), true);
     for (const name of [
-        'Show: All',
-        'Show: Active',
-        'Show: Pending',
-        'Show: Stored',
+        'Hide stored-only resources',
+        'Active first: active, pending, stored',
         'Sort by: Name',
-        'Sort by: Quantity'
+        'Sort by: Active quantity',
+        'Sort by: Pending quantity',
+        'Sort by: Stored quantity'
     ]) {
         assert.equal(await page.getByRole('button', { name, exact: true }).isVisible(), true);
     }
@@ -1461,7 +1461,7 @@ test('CPU terminal replaces the CPU list with selected resources and returns to 
 });
 
 // Public seam: controls select and order the current job's actual categories without server mutations.
-test('CPU terminal filters categories, sorts their quantities and searches formatted names and resource IDs', async (t) => {
+test('CPU terminal hides stored-only resources, sorts explicit quantities and prioritizes crafting states', async (t) => {
     const { page, options, base } = await fixture(t);
     await seedAutomaticRefresh(page, base, false);
     options.cpuDetails['cpu-a'] = {
@@ -1485,21 +1485,33 @@ test('CPU terminal filters categories, sorts their quantities and searches forma
     await resources.getByRole('button', { name: /Mixed/ }).waitFor();
     const names = async () =>
         (await resources.getByRole('button').allTextContents()).map((text) => text.match(/Alpha|Beta|Mixed|Zinc/)[0]);
-    const show = (category) => page.getByRole('button', { name: `Show: ${category}`, exact: true });
+    const hideStored = page.getByRole('button', { name: 'Hide stored-only resources', exact: true });
+    const activeFirst = page.getByRole('button', { name: 'Active first: active, pending, stored', exact: true });
     await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
     assert.deepEqual(await names(), ['Alpha', 'Beta', 'Mixed', 'Zinc']);
-    await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
-    assert.deepEqual(await names(), ['Mixed', 'Alpha', 'Beta', 'Zinc']);
     for (const [category, expected] of [
-        ['Active', ['Zinc', 'Mixed']],
-        ['Pending', ['Alpha', 'Mixed']],
-        ['Stored', ['Mixed', 'Beta']]
+        ['Active', ['Zinc', 'Mixed', 'Alpha', 'Beta']],
+        ['Pending', ['Alpha', 'Mixed', 'Beta', 'Zinc']],
+        ['Stored', ['Mixed', 'Beta', 'Alpha', 'Zinc']]
     ]) {
-        await show(category).click();
-        assert.equal(await show(category).getAttribute('aria-pressed'), 'true');
+        const sort = page.getByRole('button', { name: `Sort by: ${category} quantity`, exact: true });
+        await sort.click();
+        assert.equal(await sort.getAttribute('aria-pressed'), 'true');
         assert.deepEqual(await names(), expected, `${category} must sort by its own quantity`);
     }
-    await show('All').click();
+    await activeFirst.click();
+    assert.equal(await activeFirst.getAttribute('aria-pressed'), 'true');
+    assert.deepEqual(await names(), ['Mixed', 'Zinc', 'Alpha', 'Beta']);
+    await page.getByRole('button', { name: 'Sort by: Active quantity', exact: true }).click();
+    assert.deepEqual(await names(), ['Zinc', 'Mixed', 'Alpha', 'Beta']);
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    assert.deepEqual(await names(), ['Mixed', 'Zinc', 'Alpha', 'Beta']);
+    await hideStored.click();
+    assert.equal(await hideStored.getAttribute('aria-pressed'), 'true');
+    assert.deepEqual(await names(), ['Mixed', 'Zinc', 'Alpha'], 'Mixed resources must remain visible');
+    await activeFirst.click();
+    assert.deepEqual(await names(), ['Alpha', 'Mixed', 'Zinc']);
+    await hideStored.click();
     assert.equal(await resources.getByRole('button').count(), 4);
     const search = page.getByRole('searchbox', { name: 'Search CPU resources' });
     await search.fill('mIxEd');
@@ -1657,7 +1669,7 @@ test('CPU terminal scrolls resources within desktop and mobile viewports while c
         for (const control of [
             search,
             page.getByRole('link', { name: 'Back to CPUs', exact: true }),
-            page.getByRole('button', { name: 'Show: Active', exact: true }),
+            page.getByRole('button', { name: 'Hide stored-only resources', exact: true }),
             page.getByRole('button', { name: 'Cancel current work', exact: true })
         ]) {
             await control.scrollIntoViewIfNeeded();
@@ -1703,7 +1715,7 @@ test('CPU resource reordering does not leave a stale hover tooltip or reopen key
     };
     options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...cpuWork.items[0], active: 100 }, second] };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
-    await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
+    await page.getByRole('button', { name: 'Sort by: Active quantity', exact: true }).click();
     const item = page
         .getByRole('region', { name: 'CPU resources', exact: true })
         .getByRole('button', { name: /Iron Ingot/ });
