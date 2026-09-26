@@ -251,13 +251,12 @@ A few additional compatibility notes:
 
 ## License
 
-Project code, including the web interface, is licensed under **LGPL-3.0-or-later**.
+Project code and original interface icons are licensed under **LGPL-3.0-or-later**.
 Bundled third-party assets retain their own licenses:
 
 | Component | Author / source | License |
 | --- | --- | --- |
-| Project code | kuba6000 | [LGPL-3.0-or-later](LICENSE) |
-| AE2 terminal icons and hammer favicon/logo | [AlgorithmX2 et al. / Applied Energistics 2 (GTNH)](https://github.com/GTNewHorizons/Applied-Energistics-2-Unofficial) | [CC BY-NC-SA 3.0](src/main/resources/assets/web/themes/default/icons/ae2/LICENSE.txt) |
+| Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](LICENSE) |
 | User and information icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
 | Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
 

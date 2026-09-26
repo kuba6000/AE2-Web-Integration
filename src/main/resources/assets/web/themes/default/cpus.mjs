@@ -9,7 +9,7 @@
 import { cpuHref } from '../../app/router.mjs';
 import { renderMinecraftText } from './minecraft-text.mjs';
 import { plainMinecraftText } from '../../app/minecraft-text.mjs';
-import { terminalIcons, craftingHammer, craftingQueue } from './icons/ae2/terminal.mjs';
+import { terminalIcons, craftingHammer, craftingQueue, craftingPriorityIcon } from './icons/pixel/terminal.mjs';
 import { slotQuantity } from './resource-quantity.mjs';
 
 /** @template {keyof HTMLElementTagNameMap} Tag
@@ -235,7 +235,7 @@ export function createCpuView(root, application, { workspace }) {
         controls.push({ button, value, key });
     }
     addControl('hideStored', 'cpuHideStored', 'filter', terminalIcons.stored);
-    addControl('activeFirst', 'cpuActiveFirst', 'sort', terminalIcons.craftable);
+    addControl('activeFirst', 'cpuActiveFirst', 'sort', craftingPriorityIcon);
     addControl('name', 'name', 'sort', terminalIcons.name);
     addControl('active', 'cpuSortActive', 'sort', craftingHammer);
     addControl('pending', 'cpuSortPending', 'sort', craftingQueue);

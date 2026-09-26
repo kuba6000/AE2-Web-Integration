@@ -781,11 +781,11 @@ label {
     place-items: center;
     padding: 0;
 }
-.ae2-icon {
+.theme-icon {
     display: block;
     image-rendering: pixelated;
 }
-.tool-button .ae2-icon {
+.tool-button .theme-icon {
     width: 32px;
     height: 32px;
 }
@@ -869,14 +869,14 @@ label {
 }
 .craftable-marker {
     order: -1;
-    flex: 0 0 24px;
-    height: 24px;
+    flex: 0 0 32px;
+    height: 32px;
     margin-right: auto;
 }
-.craftable-marker .ae2-icon {
+.craftable-marker .theme-icon {
     display: block;
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
 }
 .item .quantity {
     flex-shrink: 0;
@@ -1151,10 +1151,6 @@ footer a {
     .tool-button {
         width: 34px;
         height: 36px;
-    }
-    .tool-button .ae2-icon {
-        width: 24px;
-        height: 24px;
     }
     .terminal-tools {
         gap: 18px;

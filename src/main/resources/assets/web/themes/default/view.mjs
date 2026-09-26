@@ -15,7 +15,7 @@ import { createSettingsView } from './settings.mjs';
 import { createAboutView } from './about.mjs';
 import { slotQuantity } from './resource-quantity.mjs';
 import { infoCircle } from './icons/hackernoon/info-circle.mjs';
-import { terminalIcons as symbols, craftingHammer } from './icons/ae2/terminal.mjs';
+import { terminalIcons as symbols, craftingHammer } from './icons/pixel/terminal.mjs';
 import { userIcon } from './icons/hackernoon/user.mjs';
 
 const PAGE_SIZE = 100;
@@ -81,7 +81,7 @@ export function mount(root, application, { base, user, modVersion, logout, setti
     }
     let appearance =
         typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
-    root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><img class="brand-mark" src="./favicon.ico" width="32" height="32" alt=""><h1>AE2 <span>Web Integration</span></h1></div><div class="account-controls">
+    root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1>AE2 <span>Web Integration</span></h1></div><div class="account-controls">
         <span class="account-user">${userIcon}<span id="username"></span></span><button id="logout" data-text="logout"></button></div></header>
         <dl class="network-summary"><dt><span data-text="network"></span>:</dt><dd id="selected-network"></dd></dl>
         <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav></div>

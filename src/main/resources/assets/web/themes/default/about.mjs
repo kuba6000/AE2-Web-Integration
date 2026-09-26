@@ -64,11 +64,6 @@ export function createAboutView(root, modVersion) {
             name: 'HackerNoon Pixel Icon Library',
             url: 'https://github.com/hackernoon/pixel-icon-library',
             license: 'MIT'
-        },
-        {
-            name: 'Applied Energistics 2 textures — AlgorithmX2 et al.',
-            url: 'https://github.com/GTNewHorizons/Applied-Energistics-2-Unofficial',
-            license: 'CC BY-NC-SA 3.0'
         }
     ]) {
         const row = element('tr');
