@@ -11,6 +11,7 @@ import { renderMinecraftText } from './minecraft-text.mjs';
 import { plainMinecraftText } from '../../app/minecraft-text.mjs';
 import { terminalIcons, craftingHammer, craftingQueue, craftingPriorityIcon } from './icons/pixel/terminal.mjs';
 import { slotQuantity } from './resource-quantity.mjs';
+import { infoCircle } from './icons/hackernoon/info-circle.mjs';
 
 /** @template {keyof HTMLElementTagNameMap} Tag
  * @param {Tag} tag @param {string} [text] @param {string} [className]
@@ -69,6 +70,9 @@ export function createCpuView(root, application, { workspace }) {
     const panel = element('aside');
     panel.id = 'cpu-panel';
     const panelTitle = element('h3');
+    panelTitle.innerHTML = infoCircle;
+    const panelTitleText = element('span');
+    panelTitle.append(panelTitleText);
     const panelName = element('h4');
     const summary = element('div', '', 'cpu-summary');
     const output = element('p');
@@ -518,7 +522,7 @@ export function createCpuView(root, application, { workspace }) {
             if (selectedOutcome?.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
             status.hidden = !status.textContent;
             panel.setAttribute('aria-label', t('cpuDetails'));
-            panelTitle.textContent = t('cpuDetails');
+            panelTitleText.textContent = t('cpuDetails');
             panelName.replaceChildren(renderMinecraftText(cpu?.name || route.cpuKey || ''));
             summary.textContent = cpu ? summaryText(cpu) : '';
             output.replaceChildren();
