@@ -869,14 +869,14 @@ label {
 }
 .craftable-marker {
     order: -1;
-    flex: 0 0 32px;
-    height: 32px;
+    flex: 0 0 16px;
+    height: 16px;
     margin-right: auto;
 }
 .craftable-marker .theme-icon {
     display: block;
-    width: 32px;
-    height: 32px;
+    width: 16px;
+    height: 16px;
 }
 .item .quantity {
     flex-shrink: 0;
