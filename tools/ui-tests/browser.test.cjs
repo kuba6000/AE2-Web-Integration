@@ -821,8 +821,8 @@ test('resource quantities abbreviate from ten thousand and retain exact tooltip 
     for (const [index, [quantity, display]] of samples.entries()) {
         await page.getByRole('searchbox', { name: 'Search resources' }).fill(`Resource ${index}`);
         const item = page.getByRole('button', { name: new RegExp(`^Resource ${index} `) });
-        assert.ok((await item.textContent()).endsWith(display));
         const amount = item.getByText(display, { exact: true });
+        await amount.waitFor({ state: 'visible' });
         const marker = item.getByRole('img');
         await item.hover();
         await page
