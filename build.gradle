@@ -105,6 +105,7 @@ test {
             includeTestsMatching '*ApiRoutingHttpTest'
             includeTestsMatching '*ServerLifecycleHttpTest'
             includeTestsMatching '*RequestCompletionTest'
+            includeTestsMatching '*IconPackTest'
         }
         shouldRunAfter tasks.named('test')
     }
@@ -149,6 +150,20 @@ tasks.withType(JavaCompile).configureEach {
     sourceCompatibility = JavaVersion.VERSION_17
     // Jabel enables newer syntax; --release keeps both JDK API usage and bytecode at Java 8.
     options.release = 8
+}
+
+// Client tools share the canonical key implementation without bundling the server or web assets.
+def iconPackJar = tasks.register('iconPackJar', Jar) {
+    archiveClassifier = 'icon-pack'
+    from(sourceSets.main.output) {
+        include 'pl/kuba6000/ae2webintegration/core/identity/StableKey*.class'
+        include 'pl/kuba6000/ae2webintegration/core/icons/**'
+    }
+}
+configurations.create('iconPackElements') {
+    canBeResolved = false
+    canBeConsumed = true
+    outgoing.artifact(iconPackJar)
 }
 
 // This submodule is pure Java (no Minecraft/Forge references).
