@@ -865,8 +865,8 @@ label {
     place-items: center;
     font-size: 24px;
     color: var(--surface-muted);
-    width: 32px;
-    height: 32px;
+    width: var(--resource-icon-size, 32px);
+    height: var(--resource-icon-size, 32px);
     flex-shrink: 0;
     image-rendering: auto;
     background-repeat: no-repeat;
@@ -955,6 +955,7 @@ label {
 }
 #items[data-display='icons'] {
     --slot-height: var(--slot-width, 64px);
+    --resource-icon-size: 40px;
 
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 64px), 1fr));
 }
@@ -969,8 +970,6 @@ label {
     display: grid;
     place-items: center;
     position: absolute;
-    width: 32px;
-    height: 32px;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -982,21 +981,20 @@ label {
 }
 #items[data-display='icons'] .item-amount {
     position: absolute;
-    left: 3px;
-    right: 3px;
-    bottom: 3px;
+    inset: 0;
     margin: 0;
 }
 #items[data-display='icons'] .quantity {
-    font-size: 11px;
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
 }
 #items[data-display='icons'] .craftable-marker {
-    flex-basis: 12px;
-    height: 12px;
-}
-#items[data-display='icons'] .craftable-marker .theme-icon {
-    width: 12px;
-    height: 12px;
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 16px;
+    margin: 0;
 }
 aside {
     max-height: calc(100% - 26px);

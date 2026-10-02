@@ -755,8 +755,8 @@ for (const deviceScaleFactor of [1, 1.25, 1.5, 1.75, 2]) {
             await items.first().hover();
             assert.deepEqual(await read(), before, 'hover does not move or scale sprites');
             for (const icon of before) {
-                assert.equal(icon.width, 32);
-                assert.equal(icon.height, 32);
+                assert.equal(icon.width, 40);
+                assert.equal(icon.height, 40);
                 assert.ok(Math.abs(icon.slotWidth - icon.slotHeight) < 0.02, 'slots remain square');
             }
             await items.nth(35).scrollIntoViewIfNeeded();
@@ -798,9 +798,17 @@ test('compact terminal keeps quantities and craftability readable with missing i
                 quantityBox.x + quantityBox.width < itemBox.x + itemBox.width,
                 'quantity stays inside the right edge'
             );
-            assert.ok(markerBox.x + markerBox.width < quantityBox.x, 'craftability never overlaps the quantity');
+            assert.ok(markerBox.y + markerBox.height < quantityBox.y, 'craftability never overlaps the quantity');
             assert.ok(quantityBox.y > itemBox.y + itemBox.height / 2, 'quantity overlays the bottom of the slot');
-            assert.ok(markerBox.y > itemBox.y + itemBox.height / 2, 'craftability overlays the bottom of the slot');
+            assert.ok(
+                markerBox.y >= itemBox.y && markerBox.y < itemBox.y + itemBox.height / 2,
+                'craftability overlays the top of the slot'
+            );
+            assert.ok(
+                markerBox.x > itemBox.x + itemBox.width / 2 &&
+                    markerBox.x + markerBox.width < itemBox.x + itemBox.width,
+                'craftability stays inside the right edge'
+            );
         }
     }
     await missing.focus();
