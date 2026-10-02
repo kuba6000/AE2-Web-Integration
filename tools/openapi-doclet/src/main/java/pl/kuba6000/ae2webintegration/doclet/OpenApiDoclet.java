@@ -254,30 +254,12 @@ public final class OpenApiDoclet implements Doclet {
             if (!(tag instanceof UnknownBlockTagTree block)) continue;
             if (block.getTagName()
                 .equals("responseMedia")) {
-                String[] media = text(block.getContent()).split("\\s+", 2);
-                if (media.length != 2 || !media[0].matches("[1-5][0-9]{2}")
-                    || !media[1].matches("[a-zA-Z0-9!#$&^_.+-]+/[a-zA-Z0-9!#$&^_.+-]+")) {
-                    throw problem(endpoint, "Expected @responseMedia <status> <media-type>");
-                }
-                if (responseMedia.putIfAbsent(media[0], media[1]) != null) {
-                    throw problem(endpoint, "Duplicate @responseMedia status: " + media[0]);
-                }
+                readResponseMedia(endpoint, block, responseMedia);
                 continue;
             }
             if (block.getTagName()
                 .equals("responseHeader")) {
-                String[] header = text(block.getContent()).split("\\s+", 3);
-                if (header.length != 3 || !header[0].matches("[1-5][0-9]{2}")
-                    || !header[1].matches("[!#$%&'*+.^_`|~a-zA-Z0-9-]+")
-                    || header[2].isBlank()) {
-                    throw problem(endpoint, "Expected @responseHeader <status> <name> <description>");
-                }
-                Map<String, Object> headers = responseHeaders
-                    .computeIfAbsent(header[0], ignored -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER));
-                if (headers.putIfAbsent(header[1], object("description", header[2], "schema", object("type", "string")))
-                    != null) {
-                    throw problem(endpoint, "Duplicate @responseHeader: " + header[1]);
-                }
+                readResponseHeader(endpoint, block, responseHeaders);
                 continue;
             }
             if (block.getTagName()
@@ -365,29 +347,7 @@ public final class OpenApiDoclet implements Doclet {
         if (responses.isEmpty()) throw problem(endpoint, "Missing @response declarations");
         JsonObject documentedResponses = JSON.toJsonTree(responses)
             .getAsJsonObject();
-        for (Map.Entry<String, String> media : responseMedia.entrySet()) {
-            JsonObject response = documentedResponses.getAsJsonObject(media.getKey());
-            if (response == null || response.has("content")
-                || media.getKey()
-                    .equals("204")
-                || media.getKey()
-                    .equals("304")
-                || media.getKey()
-                    .startsWith("1")
-                || media.getValue()
-                    .equalsIgnoreCase("application/json")) {
-                throw problem(
-                    endpoint,
-                    "@responseMedia requires a body-bearing response without a JSON schema: " + media.getKey());
-            }
-            response.add("content", JSON.toJsonTree(object(media.getValue(), object())));
-        }
-        for (Map.Entry<String, Map<String, Object>> headers : responseHeaders.entrySet()) {
-            JsonObject response = documentedResponses.getAsJsonObject(headers.getKey());
-            if (response == null)
-                throw problem(endpoint, "@responseHeader requires a declared response: " + headers.getKey());
-            response.add("headers", JSON.toJsonTree(headers.getValue()));
-        }
+        applyResponseMetadata(endpoint, documentedResponses, responseMedia, responseHeaders);
         for (Map.Entry<String, JsonElement> example : responseExamples.entrySet()) {
             JsonObject response = documentedResponses.getAsJsonObject(example.getKey());
             if (response == null || !response.has("content")
@@ -412,6 +372,60 @@ public final class OpenApiDoclet implements Doclet {
         addInputs(endpoint, routePath, pathDescriptions, operation);
         if (Boolean.FALSE.equals(annotationValue(route, "authenticated"))) operation.put("security", List.of());
         return operation;
+    }
+
+    private void readResponseMedia(TypeElement endpoint, UnknownBlockTagTree block, Map<String, String> responseMedia) {
+        String[] media = text(block.getContent()).split("\\s+", 2);
+        if (media.length != 2 || !media[0].matches("[1-5][0-9]{2}")
+            || !media[1].matches("[a-zA-Z0-9!#$&^_.+-]+/[a-zA-Z0-9!#$&^_.+-]+")) {
+            throw problem(endpoint, "Expected @responseMedia <status> <media-type>");
+        }
+        if (responseMedia.putIfAbsent(media[0], media[1]) != null) {
+            throw problem(endpoint, "Duplicate @responseMedia status: " + media[0]);
+        }
+    }
+
+    private void readResponseHeader(TypeElement endpoint, UnknownBlockTagTree block,
+        Map<String, Map<String, Object>> responseHeaders) {
+        String[] header = text(block.getContent()).split("\\s+", 3);
+        if (header.length != 3 || !header[0].matches("[1-5][0-9]{2}")
+            || !header[1].matches("[!#$%&'*+.^_`|~a-zA-Z0-9-]+")
+            || header[2].isBlank()) {
+            throw problem(endpoint, "Expected @responseHeader <status> <name> <description>");
+        }
+        Map<String, Object> headers = responseHeaders
+            .computeIfAbsent(header[0], ignored -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER));
+        if (headers.putIfAbsent(header[1], object("description", header[2], "schema", object("type", "string")))
+            != null) {
+            throw problem(endpoint, "Duplicate @responseHeader: " + header[1]);
+        }
+    }
+
+    private void applyResponseMetadata(TypeElement endpoint, JsonObject documentedResponses,
+        Map<String, String> responseMedia, Map<String, Map<String, Object>> responseHeaders) {
+        for (Map.Entry<String, String> media : responseMedia.entrySet()) {
+            JsonObject response = documentedResponses.getAsJsonObject(media.getKey());
+            if (response == null || response.has("content")
+                || media.getKey()
+                    .equals("204")
+                || media.getKey()
+                    .equals("304")
+                || media.getKey()
+                    .startsWith("1")
+                || media.getValue()
+                    .equalsIgnoreCase("application/json")) {
+                throw problem(
+                    endpoint,
+                    "@responseMedia requires a body-bearing response without a JSON schema: " + media.getKey());
+            }
+            response.add("content", JSON.toJsonTree(object(media.getValue(), object())));
+        }
+        for (Map.Entry<String, Map<String, Object>> headers : responseHeaders.entrySet()) {
+            JsonObject response = documentedResponses.getAsJsonObject(headers.getKey());
+            if (response == null)
+                throw problem(endpoint, "@responseHeader requires a declared response: " + headers.getKey());
+            response.add("headers", JSON.toJsonTree(headers.getValue()));
+        }
     }
 
     private void addInputs(TypeElement endpoint, String path, Map<String, String> descriptions,
