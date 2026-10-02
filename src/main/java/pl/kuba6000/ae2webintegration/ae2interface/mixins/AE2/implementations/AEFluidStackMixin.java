@@ -1,9 +1,14 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import net.minecraftforge.fluids.Fluid;
+import net.minecraftforge.fluids.FluidStack;
+
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.storage.data.IAEFluidStack;
+import appeng.fluids.util.AEFluidStack;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -16,6 +21,14 @@ public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStac
     @Override
     default @NotNull StableKey web$getKey() {
         return LegacyItemIdentity.encode(this);
+    }
+
+    @Override
+    default @Nullable StableKey web$getIconBaseKey() {
+        IAEFluidStack stack = this;
+        if (!(stack instanceof AEFluidStack)) return null;
+        AEFluidStack baseline = AEFluidStack.fromFluidStack(new FluidStack(getFluid(), Fluid.BUCKET_VOLUME));
+        return baseline == null ? null : LegacyItemIdentity.encode(baseline);
     }
 
     @Override
