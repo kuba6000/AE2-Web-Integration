@@ -30,6 +30,10 @@ jobs:
           repository: GTNewHorizons/GTNH-Actions-Workflows
           path: .gtnh-workflows
           fetch-depth: 0
+      - name: Set up Node.js for frontend compilation
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Set up JDK versions
         uses: actions/setup-java@v4
         with:

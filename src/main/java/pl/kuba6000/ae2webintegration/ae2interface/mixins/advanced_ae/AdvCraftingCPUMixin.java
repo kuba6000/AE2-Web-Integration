@@ -23,12 +23,12 @@ import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = AdvCraftingCPU.class, remap = false)
 @SuppressWarnings("UnstableApiUsage")
-public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNameIndex {
+public class AdvCraftingCPUMixin implements IPausableCraftingCPU, ICraftingCPUNameIndex {
 
     @Shadow
     @Final
@@ -96,6 +96,16 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNam
     @Override
     public boolean web$isBusy() {
         return ((ICraftingCPU) this).isBusy();
+    }
+
+    @Override
+    public boolean web$isPaused() {
+        return ((AdvCraftingCPU) (Object) this).craftingLogic.isJobSuspended();
+    }
+
+    @Override
+    public void web$setPaused(boolean paused) {
+        ((AdvCraftingCPU) (Object) this).craftingLogic.setJobSuspended(paused);
     }
 
     @Override
