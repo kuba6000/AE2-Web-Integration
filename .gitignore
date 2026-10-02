@@ -39,3 +39,5 @@ addon.late.local.gradle
 addon.late.local.gradle.kts
 layout.json
 /node_modules/
+__pycache__/
+*.pyc
