@@ -33,6 +33,7 @@ final class LegacyIconRenderer implements AutoCloseable {
     private static final int GL_QUERY_BUFFER_SIZE = 16;
     private final Minecraft minecraft;
     private final RenderItem renderItem = new AlphaPreservingRenderItem();
+    private final ByteBuffer rgba = BufferUtils.createByteBuffer(ICON_SIZE * ICON_SIZE * Integer.BYTES);
     private @Nullable Framebuffer target;
 
     LegacyIconRenderer(@NotNull Minecraft minecraft) {
@@ -141,8 +142,8 @@ final class LegacyIconRenderer implements AutoCloseable {
     }
 
     @SuppressWarnings("PMD.AvoidMagicNumbers") // GL RGBA bytes become packed Java ARGB.
-    private static int @NotNull [] readPixels(int size) {
-        ByteBuffer rgba = BufferUtils.createByteBuffer(size * size * Integer.BYTES);
+    private int @NotNull [] readPixels(int size) {
+        rgba.clear();
         GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
         GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, 0);
         GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS, 0);
