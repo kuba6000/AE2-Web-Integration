@@ -36,11 +36,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import org.apache.commons.io.IOUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.github.bsideup.jabel.Desugar;
 import com.google.gson.Gson;
@@ -189,6 +195,295 @@ class ServerLifecycleHttpTest {
         CoreEngine.onServerStopped();
         AE2Controller.serverPlatform = previousServerPlatform;
         config.close();
+    }
+
+    @Test
+    void compiledFrontendModulesAreAvailableThroughTheWebServer() throws Exception {
+        startApi();
+        for (String path : new String[] { "/assets/web/app/main.js", "/assets/web/app/api.js",
+            "/assets/web/themes/default/view.js" }) {
+            HttpURLConnection module = connection(path, null);
+            Response response = read(module);
+            assertEquals(HttpURLConnection.HTTP_OK, response.status(), path);
+            assertEquals("text/javascript; charset=UTF-8", module.getHeaderField("Content-Type"));
+            assertFalse(
+                response.body()
+                    .isEmpty(),
+                path);
+        }
+    }
+
+    @Test
+    void browserModulesAndStylesLoadWithoutConsumingTheLoginRequestBudget() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        for (int i = 0; i < 3; i++) {
+            HttpURLConnection module = connection("/assets/web/http-test.mjs", null);
+            assertEquals(HttpURLConnection.HTTP_OK, read(module).status());
+            assertEquals("text/javascript; charset=UTF-8", module.getHeaderField("Content-Type"));
+            HttpURLConnection style = connection("/assets/web/http-test.css", null);
+            assertEquals(HttpURLConnection.HTTP_OK, read(style).status());
+            assertEquals("text/css; charset=UTF-8", style.getHeaderField("Content-Type"));
+        }
+        assertEquals(HttpURLConnection.HTTP_OK, get("/?ui=next", null).status());
+        assertEquals(429, get("/?ui=next", null).status());
+    }
+
+    @Test
+    void themeFontsLoadWithBinaryContentAndSupportHeadWithoutConsumingLoginBudget() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        for (String weight : new String[] { "Regular", "Bold" }) {
+            String path = "/assets/web/themes/default/fonts/monocraft/Monocraft-" + weight + ".woff2";
+            HttpURLConnection font = connection(path, null);
+            assertEquals(HttpURLConnection.HTTP_OK, font.getResponseCode());
+            assertEquals("font/woff2", font.getHeaderField("Content-Type"));
+            assertEquals("nosniff", font.getHeaderField("X-Content-Type-Options"));
+            byte[] content;
+            try (InputStream input = font.getInputStream()) {
+                content = IOUtils.toByteArray(input);
+            }
+            assertEquals("wOF2", new String(content, 0, 4, StandardCharsets.US_ASCII));
+            HttpURLConnection head = connection(path, null);
+            head.setRequestMethod("HEAD");
+            Response metadata = read(head);
+            assertEquals(HttpURLConnection.HTTP_OK, metadata.status());
+            assertEquals("", metadata.body());
+            assertEquals(content.length, head.getContentLength());
+        }
+        assertEquals(HttpURLConnection.HTTP_OK, get("/?ui=next", null).status());
+    }
+
+    @Test
+    void browserAssetsSupportHeadAndRejectWritesMissingFilesAndPrivateResources() throws Exception {
+        startApi();
+        HttpURLConnection get = connection("/assets/web/http-test.mjs", null);
+        Response content = read(get);
+        HttpURLConnection head = connection("/assets/web/http-test.mjs", null);
+        head.setRequestMethod("HEAD");
+        Response metadata = read(head);
+        assertEquals(HttpURLConnection.HTTP_OK, metadata.status());
+        assertEquals("", metadata.body());
+        assertEquals(
+            content.body()
+                .getBytes(StandardCharsets.UTF_8).length,
+            head.getContentLength());
+        assertEquals(get.getHeaderField("Content-Type"), head.getHeaderField("Content-Type"));
+        HttpURLConnection write = connection("/assets/web/http-test.mjs", null);
+        write.setRequestMethod("POST");
+        assertEquals(HttpURLConnection.HTTP_BAD_METHOD, read(write).status());
+        assertEquals("GET, HEAD", write.getHeaderField("Allow"));
+        for (String path : new String[] { "/assets/web/missing.mjs", "/assets/web/index.html",
+            "/assets/web/../login.html", "/assets/web/%2e%2e/login.html", "/assets/web/../../junit-platform.properties",
+            "/assets/web/%2e%2e%5clogin.html", "/assets/web/config.toml" }) {
+            assertEquals(HttpURLConnection.HTTP_NOT_FOUND, get(path, null).status(), path);
+        }
+    }
+
+    @Test
+    void browserLoginKeepsTheRequestedUiOnSuccessAndFailure() throws Exception {
+        startApi();
+        for (String selector : new String[] { "", "?ui=next" }) {
+            HttpURLConnection failure = browserForm("/" + selector, "username=admin&password=wrong");
+            assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(failure).status());
+            assertEquals(
+                "?INVALID_PASSWORD" + (selector.isEmpty() ? "" : "&ui=next"),
+                failure.getHeaderField("Location"));
+            HttpURLConnection success = browserForm("/" + selector, "username=admin&password=lifecycle-password");
+            assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(success).status());
+            assertEquals(selector.isEmpty() ? "." : "?ui=next", success.getHeaderField("Location"));
+            assertTrue(
+                success.getHeaderField("Set-Cookie")
+                    .contains("HttpOnly"));
+        }
+    }
+
+    @Test
+    void browserRegistrationKeepsTheRequestedUiOnTheConfirmationPage() throws Exception {
+        BlockingPlayerLookup platform = new BlockingPlayerLookup(
+            UUID.fromString("11111111-2222-3333-4444-555555555555"));
+        platform.release.countDown();
+        AE2Controller.serverPlatform = platform;
+        config.set("general.public_mode", true);
+        startApi();
+        HttpURLConnection registration = browserForm("/?ui=next", "register=Player&password=player-password");
+        assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, performSyncedRequest(() -> read(registration)).status());
+        String location = registration.getHeaderField("Location");
+        assertTrue(location.startsWith("?confirmregistration&token="));
+        assertTrue(location.endsWith("&ui=next"));
+        Response confirmation = get("/" + location, null);
+        assertEquals(HttpURLConnection.HTTP_OK, confirmation.status());
+        assertTrue(
+            confirmation.body()
+                .contains("type=\"password\""));
+        assertFalse(
+            confirmation.body()
+                .contains("type=\"module\""));
+    }
+
+    @Test
+    void nextUiRequiresAuthenticationAndLeavesTheExistingPageAsDefault() throws Exception {
+        startApi();
+        Response loginPage = get("/?ui=next", null);
+        assertEquals(HttpURLConnection.HTTP_OK, loginPage.status());
+        assertTrue(
+            loginPage.body()
+                .contains("type=\"password\""));
+        assertFalse(
+            loginPage.body()
+                .contains("type=\"module\""));
+
+        String token = login();
+        Response legacy = get("/", token);
+        assertEquals(HttpURLConnection.HTTP_OK, legacy.status());
+        assertFalse(
+            legacy.body()
+                .contains("type=\"module\""));
+        Response next = get("/?ui=next", token);
+        assertEquals(HttpURLConnection.HTTP_OK, next.status());
+        assertTrue(
+            next.body()
+                .contains("type=\"module\""));
+        assertFalse(
+            next.body()
+                .contains("type=\"password\""));
+    }
+
+    @Test
+    void nextUiBootstrapsOnlyTheAuthenticatedDisplayIdentity() throws Exception {
+        startApi();
+        String token = login();
+        HttpURLConnection connection = connection("/?ui=next", token);
+        Response response = read(connection);
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        JsonObject user = bootstrapUser(response.body());
+        assertEquals(
+            2,
+            user.entrySet()
+                .size(),
+            "the bootstrap must not expose session credentials or account IDs");
+        assertEquals(
+            "Admin",
+            user.get("username")
+                .getAsString());
+        assertTrue(
+            user.get("isAdmin")
+                .getAsBoolean());
+        assertFalse(
+            response.body()
+                .contains(token));
+        assertEquals("no-store", connection.getHeaderField("Cache-Control"));
+        assertFalse(
+            get("/?ui=next", null).body()
+                .contains("id=\"ae2-user\""));
+        assertFalse(
+            get("/", token).body()
+                .contains("id=\"ae2-user\""));
+    }
+
+    @Test
+    void nextUiKeepsHostilePlayerNamesInsideTheJsonBootstrap() throws Exception {
+        String username = "Player</script><img src=x onerror=\"alert(1)\">&'\u2028"
+            + "_REPLACE_ME_USERNAME_REPLACE_ME_IS_ADMIN_REPLACE_ME_USER";
+        config.set("general.public_mode", true);
+        CoreDataTestFixture.reset();
+        assertTrue(
+            CoreData.setPassword(
+                new PlayerIdentity(UUID.fromString("99999999-8888-7777-6666-555555555555"), username),
+                PasswordHelper.generateStrongPasswordHash("player-password")));
+        startApi();
+        String token = login(username, "player-password");
+        Response page = get("/?ui=next", token);
+        assertEquals(HttpURLConnection.HTTP_OK, page.status());
+        JsonObject user = bootstrapUser(page.body());
+        assertEquals(
+            username,
+            user.get("username")
+                .getAsString());
+        assertFalse(
+            user.get("isAdmin")
+                .getAsBoolean());
+        assertEquals(
+            2,
+            user.entrySet()
+                .size());
+        assertFalse(
+            page.body()
+                .contains("<img"),
+            "display names must not inject elements into the page");
+        assertFalse(
+            page.body()
+                .contains(token));
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(
+        strings = { "2.7.4-native-test",
+            "Version</script><img src=x onerror=\"alert(1)\">&'\u2028_REPLACE_ME_USER<!--_REPLACE_ME_MOD_VERSION-->" })
+    void nextUiBootstrapsTheRuntimeModVersionAsSafeJson(String version) throws Exception {
+        String previousVersion = CoreEngine.getModVersion();
+        IServerPlatform platform = new IServerPlatform() {
+
+            @Override
+            public UUID getOnlinePlayerUUID(String username) {
+                return null;
+            }
+
+            @Override
+            public File getConfigDirectory() {
+                return tempDirectory;
+            }
+
+            @Override
+            public ILegacyConfigProvider getLegacyConfig() {
+                return null;
+            }
+
+            @Override
+            public File getWorldDirectory() {
+                return new File(tempDirectory, "test-save");
+            }
+        };
+        try {
+            CoreEngine.init(platform, version, "-http-test");
+            startApi();
+            String token = login();
+            Response page = get("/?ui=next", token);
+            assertEquals(HttpURLConnection.HTTP_OK, page.status());
+            Matcher bootstrap = Pattern
+                .compile("<script\\b[^>]*\\bid=\"ae2-mod-version\"[^>]*>(.*?)</script>", Pattern.DOTALL)
+                .matcher(page.body());
+            assertTrue(bootstrap.find(), "the authenticated page must supply its runtime mod version");
+            assertEquals(version, new Gson().fromJson(bootstrap.group(1), String.class));
+            assertEquals(
+                "Admin",
+                bootstrapUser(page.body()).get("username")
+                    .getAsString());
+            assertFalse(
+                page.body()
+                    .contains("<img"),
+                "runtime metadata must not inject elements into the page");
+            assertFalse(
+                page.body()
+                    .contains(token));
+            assertFalse(
+                get("/?ui=next", null).body()
+                    .contains("id=\"ae2-mod-version\""));
+            assertFalse(
+                get("/", token).body()
+                    .contains("id=\"ae2-mod-version\""));
+        } finally {
+            CoreEngine.onServerStopped();
+            CoreEngine.init(platform, previousVersion, "-http-test");
+        }
+    }
+
+    private static JsonObject bootstrapUser(String html) {
+        Matcher bootstrap = Pattern.compile("<script\\b[^>]*\\bid=\"ae2-user\"[^>]*>(.*?)</script>", Pattern.DOTALL)
+            .matcher(html);
+        assertTrue(bootstrap.find(), "the authenticated page must supply its display identity");
+        return new Gson().fromJson(bootstrap.group(1), JsonObject.class);
     }
 
     @Test
@@ -1002,6 +1297,18 @@ class ServerLifecycleHttpTest {
         byte[] encoded = body.getBytes(StandardCharsets.UTF_8);
         try (OutputStream output = connection.getOutputStream()) {
             output.write(encoded);
+        }
+        return connection;
+    }
+
+    private HttpURLConnection browserForm(String path, String body) throws IOException {
+        HttpURLConnection connection = connection(path, null);
+        connection.setInstanceFollowRedirects(false);
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+        connection.setDoOutput(true);
+        try (OutputStream output = connection.getOutputStream()) {
+            output.write(body.getBytes(StandardCharsets.UTF_8));
         }
         return connection;
     }

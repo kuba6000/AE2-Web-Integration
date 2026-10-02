@@ -42,7 +42,10 @@ If you only want to use the mod, download a version-specific JAR from
 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/ae2-web-integration), or
 [Modrinth](https://modrinth.com/mod/ae2-web-integration). Do not try to install the `core` branch by itself.
 
-For development, run core checks with `./gradlew test spotlessCheck`. The two shipped web interfaces
+For development, install Node.js 22.13+ on the 22.x line or Node.js 24+ with npm on PATH, then run
+core checks with `./gradlew test spotlessCheck`. Gradle compiles the TypeScript frontend and packages
+its JavaScript output; Node.js is not required to run the mod. See [frontend development](tools/ui-tests/README.md).
+The two shipped web interfaces
 also have dependency-free behavioral checks: `node --test src/test/js/item-identity.test.cjs`
 (Node.js 18 or newer).
 
@@ -222,8 +225,8 @@ Leave `ntfy.user` and `ntfy.password` empty when the topic is public. A private 
 ## Custom website and Automation
 
 If you already have a web server and want to host the panel there, you can! The
-[`example_website`](./example_website) directory contains a ready-to-use simple PHP
-proxy. It forwards API calls from your web server to the AE2 Web Integration endpoint.
+[`tools/php-proxy`](./tools/php-proxy) directory contains a PHP reverse
+proxy. It serves the mod's website, assets and API through your web server.
 
 If you want to use this mod as an API endpoint,
 website exposes the entire API at /api/ endpoint,
@@ -248,3 +251,17 @@ A few additional compatibility notes:
   [AE2FC for 1.12.2](https://github.com/AE2-UEL/AE2FluidCraft-Rework/).
 - The 1.20.1 and 1.21.1 builds include optional
   [AdvancedAE](https://www.curseforge.com/minecraft/mc-mods/advancedae) integration.
+
+## License
+
+Project code and original interface icons are licensed under **LGPL-3.0-or-later**.
+Bundled third-party assets retain their own licenses:
+
+| Component | Author / source | License |
+| --- | --- | --- |
+| Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](LICENSE) |
+| User and information icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
+| Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
+
+Asset source details and modification notices are included alongside each resource.
+The LGPL license for the code does not replace the licenses of these assets.

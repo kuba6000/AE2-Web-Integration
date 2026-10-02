@@ -1,3 +1,6 @@
+import javax.inject.Inject
+import org.gradle.api.file.FileSystemOperations
+
 plugins {
     id 'java-library'
     // Deliberately no version: when this module is included as a submodule of an integration branch that
@@ -35,6 +38,44 @@ if (project == rootProject) {
 
 group = 'pl.kuba6000.ae2webintegration'
 version = '1.0-SNAPSHOT'
+
+def npmCommand = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows') ? 'npm.cmd' : 'npm'
+def installFrontendDependencies = tasks.register('installFrontendDependencies', Exec) {
+    group = 'build'
+    description = 'Installs the locked build-time frontend tools.'
+    workingDir = projectDir
+    commandLine npmCommand, 'ci', '--include=dev', '--no-audit', '--no-fund'
+    inputs.files('package.json', 'package-lock.json')
+    outputs.dir('node_modules')
+}
+def compiledFrontendResources = layout.buildDirectory.dir('generated/frontend')
+def compileFrontend = tasks.register('compileFrontend', Exec) {
+    group = 'build'
+    description = 'Compiles the TypeScript frontend into packaged JavaScript resources.'
+    dependsOn installFrontendDependencies
+    workingDir = projectDir
+    commandLine npmCommand, 'run', 'build', '--', layout.buildDirectory.get().asFile.absolutePath
+    inputs.dir('src/main/typescript')
+    inputs.files('package.json', 'package-lock.json', 'tsconfig.json', 'tools/build-frontend.mjs')
+    outputs.dir(compiledFrontendResources)
+}
+sourceSets.main.resources.srcDir(compileFrontend)
+
+abstract class FrontendResourceFiles {
+    @Inject
+    abstract FileSystemOperations getOperations()
+}
+def frontendResourceFiles = objects.newInstance(FrontendResourceFiles)
+tasks.named('processResources') {
+    // Copy's stale-output tracking can be lost when switching the core checkout or build directory.
+    // Recreate this resource subtree whenever processing runs, including all static web assets.
+    doFirst { task ->
+        def webResources = new File(task.destinationDir, 'assets/web')
+        frontendResourceFiles.operations.delete {
+            delete(webResources)
+        }
+    }
+}
 
 repositories {
     mavenCentral()
@@ -105,6 +146,7 @@ test {
             includeTestsMatching '*ApiRoutingHttpTest'
             includeTestsMatching '*ServerLifecycleHttpTest'
             includeTestsMatching '*RequestCompletionTest'
+            includeTestsMatching '*IconPackTest'
         }
         shouldRunAfter tasks.named('test')
     }
@@ -149,6 +191,20 @@ tasks.withType(JavaCompile).configureEach {
     sourceCompatibility = JavaVersion.VERSION_17
     // Jabel enables newer syntax; --release keeps both JDK API usage and bytecode at Java 8.
     options.release = 8
+}
+
+// Client tools share the canonical key implementation without bundling the server or web assets.
+def iconPackJar = tasks.register('iconPackJar', Jar) {
+    archiveClassifier = 'icon-pack'
+    from(sourceSets.main.output) {
+        include 'pl/kuba6000/ae2webintegration/core/identity/StableKey*.class'
+        include 'pl/kuba6000/ae2webintegration/core/icons/**'
+    }
+}
+configurations.create('iconPackElements') {
+    canBeResolved = false
+    canBeConsumed = true
+    outgoing.artifact(iconPackJar)
 }
 
 // This submodule is pure Java (no Minecraft/Forge references).

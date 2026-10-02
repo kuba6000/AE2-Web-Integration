@@ -13,8 +13,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
@@ -25,21 +27,30 @@ import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService.LoginResult;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService.RegistrationResult;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 /** Serves browser pages and adapts shared authentication operations to forms, cookies and redirects. */
 public final class WebHandler implements HttpHandler {
 
+    @Desugar
+    private record DisplayUser(@NotNull String username, boolean isAdmin) {}
+
     @Override
     public void handle(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI()
+            .getPath();
+        if (path.startsWith("/assets/web/")) {
+            // Loading public modules must not consume the unauthenticated login request budget.
+            serveAsset(exchange, path);
+            return;
+        }
         if (AuthService.isRateLimited(exchange)) {
             exchange.getResponseHeaders()
                 .set("Content-Type", "text/plain");
             sendText(exchange, 429, "Too Many Requests"); // NOPMD - HTTP Too Many Requests.
             return;
         }
-        String path = exchange.getRequestURI()
-            .getPath();
         if (path.equals("/favicon.ico")) {
             exchange.getResponseHeaders()
                 .set("Content-Type", "image/x-icon");
@@ -74,6 +85,33 @@ public final class WebHandler implements HttpHandler {
                 }
         }
         renderPage(exchange, authenticated);
+    }
+
+    private static void serveAsset(HttpExchange exchange, String path) throws IOException {
+        String method = exchange.getRequestMethod();
+        if (!method.equals("GET") && !method.equals("HEAD")) {
+            exchange.getResponseHeaders()
+                .set("Allow", "GET, HEAD");
+            sendText(exchange, HttpURLConnection.HTTP_BAD_METHOD, "Method not allowed");
+            return;
+        }
+        String contentType = path.endsWith(".mjs") || path.endsWith(".js") ? "text/javascript; charset=UTF-8"
+            : path.endsWith(".css") ? "text/css; charset=UTF-8" : path.endsWith(".woff2") ? "font/woff2" : null;
+        if (contentType == null || !path.matches("/assets/web/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+")) {
+            sendText(exchange, HttpURLConnection.HTTP_NOT_FOUND, "Not found");
+            return;
+        }
+        try (InputStream input = WebHandler.class.getResourceAsStream(path)) {
+            if (input == null) {
+                sendText(exchange, HttpURLConnection.HTTP_NOT_FOUND, "Not found");
+                return;
+            }
+            exchange.getResponseHeaders()
+                .set("Content-Type", contentType);
+            exchange.getResponseHeaders()
+                .set("X-Content-Type-Options", "nosniff");
+            sendBytes(exchange, HttpURLConnection.HTTP_OK, IOUtils.toByteArray(input));
+        }
     }
 
     /** Returns whether the form produced its own response instead of rendering the login page. */
@@ -126,6 +164,10 @@ public final class WebHandler implements HttpHandler {
 
     private static void renderPage(HttpExchange exchange, @Nullable RequestContext context) throws IOException {
         String site = context == null ? "/assets/login.html" : "/assets/webpage.html";
+        boolean nextUi = context != null && usesNextUi(exchange);
+        if (nextUi) {
+            site = "/assets/web/index.html";
+        }
         String response;
         try (InputStream input = WebHandler.class.getResourceAsStream(site)) {
             if (input == null) return;
@@ -145,6 +187,23 @@ public final class WebHandler implements HttpHandler {
                 context.getPrincipal()
                     .getUsername());
             response = response.replace("_REPLACE_ME_IS_ADMIN", context.isAdmin() ? "true" : "false");
+            if (nextUi) {
+                // Gson's default HTML escaping keeps names from terminating the JSON script element.
+                String user = GSONUtils.GSON_BUILDER.create()
+                    .toJson(
+                        new DisplayUser(
+                            context.getPrincipal()
+                                .getUsername(),
+                            context.isAdmin()));
+                response = response.replace("_REPLACE_ME_USER", user);
+                // The HTML marker cannot occur in the already HTML-escaped user JSON.
+                response = response.replace(
+                    "<!--_REPLACE_ME_MOD_VERSION-->",
+                    GSONUtils.GSON_BUILDER.create()
+                        .toJson(CoreEngine.getModVersion()));
+                exchange.getResponseHeaders()
+                    .set("Cache-Control", "no-store");
+            }
         }
         exchange.getResponseHeaders()
             .set("Content-Type", "text/html; charset=UTF-8");
@@ -152,9 +211,20 @@ public final class WebHandler implements HttpHandler {
     }
 
     private static void redirect(HttpExchange exchange, String location) throws IOException {
+        if (usesNextUi(exchange)) {
+            location = location.equals(".") ? "?ui=next" : location + "&ui=next";
+        }
         exchange.getResponseHeaders()
             .add("Location", location);
         exchange.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
+    }
+
+    private static boolean usesNextUi(HttpExchange exchange) {
+        return "next".equals(
+            HTTPUtils.parseQueryString(
+                exchange.getRequestURI()
+                    .getRawQuery())
+                .get("ui"));
     }
 
     private static void sendText(HttpExchange exchange, int status, String text) throws IOException {
@@ -162,6 +232,14 @@ public final class WebHandler implements HttpHandler {
     }
 
     private static void sendBytes(HttpExchange exchange, int status, byte[] bytes) throws IOException {
+        if (exchange.getRequestMethod()
+            .equals("HEAD")) {
+            exchange.getResponseHeaders()
+                .set("Content-Length", Integer.toString(bytes.length));
+            exchange.sendResponseHeaders(status, -1);
+            exchange.close();
+            return;
+        }
         exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream output = exchange.getResponseBody()) {
             output.write(bytes);

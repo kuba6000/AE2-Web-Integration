@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { terminal } = require('./terminal-fixture.cjs');
 
-for (const page of ['../../main/resources/assets/webpage.html', '../../../example_website/index.php']) {
+for (const page of ['../../main/resources/assets/webpage.html']) {
     test(`${page}: grouped permission sources retain every player's access explanation`, () => {
         const { context } = terminal(page);
         function element(tag) {

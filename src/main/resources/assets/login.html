@@ -205,19 +205,20 @@
         document.getElementById("username").readOnly = true;
     }
 
-    var url = new URL(window.location.href);
+    const url = new URL(window.location.href);
+    const cleanUrl = url.pathname + (url.searchParams.get('ui') === 'next' ? '?ui=next' : '') + url.hash;
     if (url.searchParams.get("NOT_ONLINE") !== null){
         document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>You have to be on the server (online) to perform this action!</b><br><br>";
-        window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
+        window.history.replaceState(null, document.title, cleanUrl); // Clear transient status without losing the selected view.
     } else if (url.searchParams.get("INVALID_PASSWORD") !== null) {
         document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>Invalid password!</b><br><br>";
-        window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
+        window.history.replaceState(null, document.title, cleanUrl); // Clear transient status without losing the selected view.
     } else if (url.searchParams.get("INVALID_USER") !== null) {
         document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>Invalid username!</b><br><br>";
-        window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
+        window.history.replaceState(null, document.title, cleanUrl); // Clear transient status without losing the selected view.
     } else if (url.searchParams.get("confirmregistration") !== null) {
         document.getElementById("maininfo").innerHTML = "<b style='color: #78b83d;'>Please enter this command in the game to finish registration:<br>/ae2webintegration auth " + url.searchParams.get("token") + "</b><br><br>";
-        window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
+        window.history.replaceState(null, document.title, cleanUrl); // Clear transient status without losing the selected view.
     }
 
     function acceptCookies(){

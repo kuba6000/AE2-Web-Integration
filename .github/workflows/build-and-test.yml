@@ -1,11 +1,10 @@
-
 name: Build and test core
 
 on:
   pull_request:
-    branches: [ core ]
+    branches: [core]
   push:
-    branches: [ core ]
+    branches: [core]
   workflow_dispatch:
 
 concurrency:
@@ -33,10 +32,24 @@ jobs:
       - name: Test web terminal behavior
         run: node --test src/test/js/*.test.cjs
 
+      - name: Check frontend formatting, lint and types
+        run: |
+          npm ci
+          npm run format:check
+          npm run lint
+          npm run typecheck
+
+      - name: Test new terminal in Chromium
+        working-directory: tools/ui-tests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm test
+
       - name: Test PHP proxy
         run: |
           php --version
-          php -l example_website/index.php
+          php -l tools/php-proxy/index.php
           node --test src/test/php/*.test.cjs
 
       - name: Set up JDK

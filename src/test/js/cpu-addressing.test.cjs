@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { terminal } = require('./terminal-fixture.cjs');
 
-for (const page of ['../../main/resources/assets/webpage.html', '../../../example_website/index.php']) {
+for (const page of ['../../main/resources/assets/webpage.html']) {
 test(page + ': duplicate CPU names remain separate and requests use stable IDs', () => {
     const { context, requests, elements } = terminal(page);
     const first = 'ae2:minecraft:overworld:1:2:3';
