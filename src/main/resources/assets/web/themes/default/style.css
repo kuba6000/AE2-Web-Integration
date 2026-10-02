@@ -868,7 +868,7 @@ label {
     width: 32px;
     height: 32px;
     flex-shrink: 0;
-    image-rendering: pixelated;
+    image-rendering: auto;
     background-repeat: no-repeat;
     outline: 1px dashed var(--border);
 }
