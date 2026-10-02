@@ -63,7 +63,10 @@ export function mount(
             system: 'System',
             defaultTheme: 'Default',
             themeOptions: 'Theme options',
-            resourceIcons: 'Resource icons'
+            resourceIcons: 'Resource icons',
+            terminalDisplay: 'Terminal display',
+            detailedItems: 'Icons and names',
+            compactItems: 'Compact icons'
         },
         pl: {
             appearance: 'Wygląd',
@@ -72,7 +75,10 @@ export function mount(
             system: 'Systemowy',
             defaultTheme: 'Domyślny',
             themeOptions: 'Opcje motywu',
-            resourceIcons: 'Ikony zasobów'
+            resourceIcons: 'Ikony zasobów',
+            terminalDisplay: 'Wyświetlanie terminala',
+            detailedItems: 'Ikony i nazwy',
+            compactItems: 'Kompaktowe ikony'
         }
     });
     const appearances = ['light', 'dark', 'system'];
@@ -90,6 +96,7 @@ export function mount(
     let appearance =
         typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
     let displayIcons = settings.get('resourceIcons', true) !== false;
+    let terminalDisplay = settings.get('terminalDisplay') === 'compact' ? 'compact' : 'detailed';
     application.displayIcons(displayIcons);
     root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1>AE2 <span>Web Integration</span></h1></div><div class="account-controls">
         <span class="account-user">${userIcon}<span id="username"></span></span><button id="logout" data-text="logout"></button></div></header>
@@ -110,6 +117,7 @@ export function mount(
         <label><span data-text="theme"></span><select disabled><option value="default" data-theme-text="defaultTheme"></option></select></label>
         <section><h3 data-theme-text="themeOptions"></h3>
         <label class="checkbox"><input type="checkbox" id="resource-icons"><span data-theme-text="resourceIcons"></span></label>
+        <label><span data-theme-text="terminalDisplay"></span><select id="terminal-display"><option value="detailed" data-theme-text="detailedItems"></option><option value="compact" data-theme-text="compactItems"></option></select></label>
         <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label>
         </section></div></section>
         <section id="terminal" hidden><div class="terminal-heading"><h2 data-text="terminal"></h2>
@@ -123,6 +131,7 @@ export function mount(
     /* IDs and element types belong to the static markup created above. */
     type ViewElements = {
         '#resource-icons': HTMLInputElement;
+        '#terminal-display': HTMLSelectElement;
         '#language': HTMLElementTagNameMap['select'];
         '#appearance': HTMLElementTagNameMap['select'];
         '#logout': HTMLElementTagNameMap['button'];
@@ -439,6 +448,14 @@ export function mount(
             row.item = item;
             row.name.replaceChildren(renderMinecraftText(item.itemname));
             row.quantity.textContent = slotQuantity(item.quantity, locale);
+            if (terminalDisplay === 'compact') {
+                row.button.setAttribute(
+                    'aria-label',
+                    `${plainMinecraftText(item.itemname)}, ${locale.common('quantity')}: ${locale.number(item.quantity)}, ${locale.common(item.craftable ? 'craftableYes' : 'craftableNo')}`
+                );
+            } else {
+                row.button.removeAttribute('aria-label');
+            }
             row.craftable.hidden = !item.craftable;
             row.craftable.setAttribute('aria-label', locale.common('craftableYes'));
             row.button.classList.toggle('selected', item === state.selected);
@@ -575,6 +592,18 @@ export function mount(
     const languageSelect = find('#language');
     languageSelect.addEventListener('change', () => application.preference('language', languageSelect.value));
     const appearanceSelect = find('#appearance');
+    const displaySelect = find('#terminal-display');
+    displaySelect.value = terminalDisplay;
+    find('#items').dataset.display = terminalDisplay;
+    displaySelect.addEventListener('change', () => {
+        if (displaySelect.value !== 'compact' && displaySelect.value !== 'detailed') return;
+        terminalDisplay = displaySelect.value;
+        settings.set('terminalDisplay', terminalDisplay);
+        find('#items').dataset.display = terminalDisplay;
+        renderPage();
+        updateSlotBackground();
+        hideTooltip();
+    });
     const iconToggle = find('#resource-icons');
     iconToggle.checked = displayIcons;
     root.classList.toggle('resource-icons-enabled', displayIcons);
@@ -639,16 +668,18 @@ export function mount(
     window.addEventListener('keydown', keydown);
     // Paint empty slots using the same column width as the real resource grid.
     const list = find('#items');
-    const slotBackground = new ResizeObserver(([entry]) => {
-        if (!entry || entry.contentRect.width === 0) return;
+    function updateSlotBackground() {
+        const width = list.getBoundingClientRect().width;
+        if (width === 0) return;
         const columns = getComputedStyle(list).gridTemplateColumns.split(' ').length;
-        list.style.setProperty('--slot-width', `${entry.contentRect.width / columns}px`);
+        list.style.setProperty('--slot-width', `${width / columns}px`);
         const terminal = find('#terminal');
         terminal.style.setProperty(
             '--grid-inset',
             `${list.getBoundingClientRect().left - terminal.getBoundingClientRect().left}px`
         );
-    });
+    }
+    const slotBackground = new ResizeObserver(updateSlotBackground);
     slotBackground.observe(list);
     const unsubscribe = application.subscribe(render);
     return () => {

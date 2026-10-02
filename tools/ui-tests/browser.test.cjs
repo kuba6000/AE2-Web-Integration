@@ -426,6 +426,112 @@ async function atlasFixture(page, options) {
     };
 }
 
+// Public browser seam: compact presentation persists without changing resource identity or CPU presentation.
+test('compact terminal mode persists and preserves accessible selection and crafting', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }, quartz];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const item = page.getByRole('button', { name: /Iron Ingot/ });
+    await item.waitFor();
+    const original = await item.boundingBox();
+    assert.ok(original.width > original.height);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
+    await mode.waitFor({ timeout: 3000 });
+    assert.equal(await mode.inputValue(), 'detailed');
+    await mode.selectOption('compact');
+    await page.reload();
+    await mode.waitFor();
+    assert.equal(await mode.inputValue(), 'compact');
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await item.waitFor();
+    const compact = await item.boundingBox();
+    assert.ok(Math.abs(compact.width - compact.height) < 1, 'compact item slots are square');
+    assert.ok(compact.width < original.width);
+    const nameBox = await item.getByText(iron.itemname, { exact: true }).boundingBox();
+    assert.ok(!nameBox || nameBox.width <= 1, 'the item name is not permanently painted in the slot');
+    await item.hover();
+    await page.getByRole('tooltip').getByText(iron.itemname, { exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    await item.focus();
+    await page.getByRole('tooltip').getByText(iron.itemname, { exact: true }).waitFor();
+    await page.keyboard.press('Enter');
+    assert.equal(await item.getAttribute('aria-pressed'), 'true');
+    await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
+    await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor();
+    assert.deepEqual(
+        options.requests.find((request) => request.method === 'POST' && request.path.endsWith('/crafting-plans')).body,
+        { itemKey: 'iron', quantity: 12 }
+    );
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const cpuItem = page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ });
+    await cpuItem.waitFor();
+    const cpuBox = await cpuItem.boundingBox();
+    assert.ok(cpuBox.width > cpuBox.height, 'CPU resources retain their rectangular layout');
+    assert.equal(await cpuItem.getByText(iron.itemname, { exact: true }).isVisible(), true);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await mode.selectOption('detailed');
+    await page.reload();
+    await mode.waitFor();
+    assert.equal(await mode.inputValue(), 'detailed');
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await item.waitFor();
+    assert.equal(await item.getByText(iron.itemname, { exact: true }).isVisible(), true);
+});
+
+test('compact terminal keeps quantities and craftability readable with missing or disabled icons', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    options.itemsA = [
+        { ...iron, quantity: 9999, icon: { page: 0, x: 0, y: 0 } },
+        { ...quartz, quantity: 1e18, craftable: true }
+    ];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('compact');
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    const missing = page.getByRole('button', { name: /Certus Quartz Crystal/ });
+    await missing.waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    for (const width of [390, 1024]) {
+        await page.setViewportSize({ width, height: 844 });
+        for (const [name, amount] of [
+            [iron.itemname, '9,999'],
+            [quartz.itemname, '1E']
+        ]) {
+            const item = page.getByRole('button', { name: new RegExp(name) });
+            const itemBox = await item.boundingBox();
+            const quantityBox = await item.getByText(amount, { exact: true }).boundingBox();
+            const markerBox = await item.getByRole('img').boundingBox();
+            assert.ok(Math.abs(itemBox.width - itemBox.height) < 1, 'resized slots remain square');
+            assert.ok(
+                quantityBox.x + quantityBox.width < itemBox.x + itemBox.width,
+                'quantity stays inside the right edge'
+            );
+            assert.ok(markerBox.x + markerBox.width < quantityBox.x, 'craftability never overlaps the quantity');
+            assert.ok(quantityBox.y > itemBox.y + itemBox.height / 2, 'quantity overlays the bottom of the slot');
+            assert.ok(markerBox.y > itemBox.y + itemBox.height / 2, 'craftability overlays the bottom of the slot');
+        }
+    }
+    await missing.focus();
+    await page.getByRole('tooltip').getByText(quartz.itemname, { exact: true }).waitFor();
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Resource icons', exact: true }).uncheck();
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await page.getByRole('button', { name: /Iron Ingot/ }).focus();
+    await page.getByRole('tooltip').getByText(iron.itemname, { exact: true }).waitFor();
+    await page.keyboard.press('Enter');
+    await page.getByRole('spinbutton', { name: 'Craft quantity' }).waitFor();
+    await page.getByRole('searchbox', { name: 'Search resources' }).fill('quartz');
+    await missing.waitFor();
+    assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
+});
+
 // Public browser seam: atlas delivery, rendered sprites and the persistent display preference.
 // Shared pages must not be fetched per item or again for quantity-only polling updates.
 test('resource atlas is shared across visible items and CPU rows and can be disabled persistently', async (t) => {

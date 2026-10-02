@@ -916,6 +916,51 @@ label {
 .item:focus-visible {
     outline-offset: -2px;
 }
+#items[data-display='compact'] {
+    --slot-height: var(--slot-width, 64px);
+
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 64px), 1fr));
+}
+#items[data-display='compact'] .item {
+    position: relative;
+    padding: 0;
+}
+#items[data-display='compact'] .item strong {
+    display: none;
+}
+#items[data-display='compact'] .resource-icon {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 24px;
+    color: var(--surface-muted);
+}
+#items[data-display='compact'] .resource-icon:not(.resource-icon-ready)::before {
+    content: '?';
+}
+#items[data-display='compact'] .item-amount {
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    bottom: 3px;
+    margin: 0;
+}
+#items[data-display='compact'] .quantity {
+    font-size: 11px;
+}
+#items[data-display='compact'] .craftable-marker {
+    flex-basis: 12px;
+    height: 12px;
+}
+#items[data-display='compact'] .craftable-marker .theme-icon {
+    width: 12px;
+    height: 12px;
+}
 aside {
     max-height: calc(100% - 26px);
     overflow-y: auto;
