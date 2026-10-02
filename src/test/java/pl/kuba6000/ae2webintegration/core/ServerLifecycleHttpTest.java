@@ -230,6 +230,32 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    void themeFrameLoadsAsSvgAndSupportsHeadWithoutConsumingLoginBudget() throws Exception {
+        config.set("general.max_requests_before_logged_in_per_minute", 1);
+        startApi();
+        String path = "/assets/web/themes/default/window-frame.svg";
+        HttpURLConnection image = connection(path, null);
+        Response content = read(image);
+        assertEquals(HttpURLConnection.HTTP_OK, content.status());
+        assertEquals("image/svg+xml", image.getHeaderField("Content-Type"));
+        assertEquals("nosniff", image.getHeaderField("X-Content-Type-Options"));
+        assertTrue(
+            content.body()
+                .startsWith("<svg"));
+        HttpURLConnection head = connection(path, null);
+        head.setRequestMethod("HEAD");
+        Response metadata = read(head);
+        assertEquals(HttpURLConnection.HTTP_OK, metadata.status());
+        assertEquals("image/svg+xml", head.getHeaderField("Content-Type"));
+        assertEquals("", metadata.body());
+        assertEquals(
+            content.body()
+                .getBytes(StandardCharsets.UTF_8).length,
+            head.getContentLength());
+        assertEquals(HttpURLConnection.HTTP_OK, get("/?ui=next", null).status());
+    }
+
+    @Test
     void themeFontsLoadWithBinaryContentAndSupportHeadWithoutConsumingLoginBudget() throws Exception {
         config.set("general.max_requests_before_logged_in_per_minute", 1);
         startApi();
