@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -32,6 +33,8 @@ import javax.imageio.ImageIO;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -239,6 +242,61 @@ class IconPackTest {
                         0xff000000 | i,
                         ImageIO.read(stream)
                             .getRGB(location.x + 63, location.y + 63));
+                }
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 64, 512, 1024, 2048 })
+    void patternedPixelsAndExtrudedEdgesSurviveAtlasPlacement(int pageSize) throws Exception {
+        int columns = pageSize == 64 ? 1 : pageSize / 66;
+        int count = columns * columns + 1;
+        int[][] expected = new int[count][4096];
+        Random colors = new Random(1947);
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), pageSize)) {
+            for (int i = 0; i < count; i++) {
+                for (int pixel = 0; pixel < 4096; pixel++) expected[i][pixel] = colors.nextInt();
+                // Exercise transparent RGB, partial alpha and opaque corners without premultiplication.
+                expected[i][0] = 0x00123456;
+                expected[i][63] = 0x017f23a1;
+                expected[i][4032] = 0x807f23a1;
+                expected[i][4095] = 0xff7f23a1;
+                final int identity = i;
+                int[] supplied = expected[i].clone();
+                writer.add(StableKey.create(sink -> sink.putInt(identity)), supplied);
+                Arrays.fill(supplied, 0);
+            }
+            output = writer.finish();
+        }
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+            assertEquals(
+                2,
+                pack.pages()
+                    .size());
+            for (IconPack.Page page : pack.pages()) {
+                BufferedImage atlas;
+                try (InputStream stream = pack.openPage(page.digest)) {
+                    atlas = ImageIO.read(stream);
+                }
+                for (int i = 0; i < count; i++) {
+                    final int identity = i;
+                    Location location = pack.find(StableKey.create(sink -> sink.putInt(identity)));
+                    assertNotNull(location);
+                    if (!page.digest.equals(location.page.digest)) continue;
+                    assertArrayEquals(expected[i], atlas.getRGB(location.x, location.y, 64, 64, null, 0, 64));
+                    if (pageSize == 64) continue;
+                    for (int offset = 0; offset < 64; offset++) {
+                        assertEquals(expected[i][offset], atlas.getRGB(location.x + offset, location.y - 1));
+                        assertEquals(expected[i][4032 + offset], atlas.getRGB(location.x + offset, location.y + 64));
+                        assertEquals(expected[i][offset * 64], atlas.getRGB(location.x - 1, location.y + offset));
+                        assertEquals(expected[i][offset * 64 + 63], atlas.getRGB(location.x + 64, location.y + offset));
+                    }
+                    assertEquals(0x00123456, atlas.getRGB(location.x - 1, location.y - 1));
+                    assertEquals(0x017f23a1, atlas.getRGB(location.x + 64, location.y - 1));
+                    assertEquals(0x807f23a1, atlas.getRGB(location.x - 1, location.y + 64));
+                    assertEquals(0xff7f23a1, atlas.getRGB(location.x + 64, location.y + 64));
                 }
             }
         }

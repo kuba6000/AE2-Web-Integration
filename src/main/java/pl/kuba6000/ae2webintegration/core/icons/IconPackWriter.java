@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.icons;
 
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
@@ -22,6 +23,7 @@ import java.util.function.BooleanSupplier;
 import java.util.zip.ZipOutputStream;
 
 import javax.imageio.ImageIO;
+import javax.imageio.stream.MemoryCacheImageOutputStream;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -113,21 +115,29 @@ public final class IconPackWriter implements Closeable {
         if (image == null) image = new BufferedImage(pageSize, pageSize, BufferedImage.TYPE_INT_ARGB);
         int x = pageSize == PackFormat.ICON_SIZE ? 0 : (occupied % columns) * PackFormat.CELL_PITCH + PackFormat.GUTTER;
         int y = pageSize == PackFormat.ICON_SIZE ? 0 : (occupied / columns) * PackFormat.CELL_PITCH + PackFormat.GUTTER;
-        image.setRGB(x, y, PackFormat.ICON_SIZE, PackFormat.ICON_SIZE, pixels, 0, PackFormat.ICON_SIZE);
-        if (pageSize != PackFormat.ICON_SIZE) extrudeGutter(image, pixels, x, y);
+        // This writer owns a fresh, contiguous, non-premultiplied ARGB raster.
+        int[] atlas = ((DataBufferInt) image.getRaster()
+            .getDataBuffer()).getData();
+        for (int row = 0; row < PackFormat.ICON_SIZE; row++) {
+            System.arraycopy(pixels, row * PackFormat.ICON_SIZE, atlas, (y + row) * pageSize + x, PackFormat.ICON_SIZE);
+        }
+        if (pageSize != PackFormat.ICON_SIZE) extrudeGutter(atlas, pixels, x, y);
         return new int[] { pages.size(), x, y };
     }
 
-    private static void extrudeGutter(@NotNull BufferedImage image, int @NotNull [] pixels, int x, int y) {
+    private void extrudeGutter(int @NotNull [] atlas, int @NotNull [] pixels, int x, int y) {
         int last = PackFormat.ICON_SIZE - 1;
+        int top = (y - PackFormat.GUTTER) * pageSize + x;
+        int bottom = (y + PackFormat.ICON_SIZE) * pageSize + x;
         for (int dx = -PackFormat.GUTTER; dx <= PackFormat.ICON_SIZE; dx++) {
             int sourceX = Math.max(0, Math.min(last, dx));
-            image.setRGB(x + dx, y - PackFormat.GUTTER, pixels[sourceX]);
-            image.setRGB(x + dx, y + PackFormat.ICON_SIZE, pixels[last * PackFormat.ICON_SIZE + sourceX]);
+            atlas[top + dx] = pixels[sourceX];
+            atlas[bottom + dx] = pixels[last * PackFormat.ICON_SIZE + sourceX];
         }
         for (int dy = 0; dy < PackFormat.ICON_SIZE; dy++) {
-            image.setRGB(x - PackFormat.GUTTER, y + dy, pixels[dy * PackFormat.ICON_SIZE]);
-            image.setRGB(x + PackFormat.ICON_SIZE, y + dy, pixels[dy * PackFormat.ICON_SIZE + last]);
+            int row = (y + dy) * pageSize + x;
+            atlas[row - PackFormat.GUTTER] = pixels[dy * PackFormat.ICON_SIZE];
+            atlas[row + PackFormat.ICON_SIZE] = pixels[dy * PackFormat.ICON_SIZE + last];
         }
     }
 
@@ -181,7 +191,9 @@ public final class IconPackWriter implements Closeable {
     private void flushPage() throws IOException {
         if (image == null) return;
         ByteArrayOutputStream encoded = new ByteArrayOutputStream();
-        if (!ImageIO.write(image, "PNG", encoded)) throw new IOException("PNG encoder unavailable");
+        try (MemoryCacheImageOutputStream stream = new MemoryCacheImageOutputStream(encoded)) {
+            if (!ImageIO.write(image, "PNG", stream)) throw new IOException("PNG encoder unavailable");
+        }
         byte[] bytes = encoded.toByteArray();
         if (bytes.length > PackFormat.MAX_PAGE) throw new IOException("Encoded atlas too large");
         String digest = PackFormat.hash(bytes);
