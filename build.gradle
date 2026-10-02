@@ -145,6 +145,7 @@ test {
         filter {
             includeTestsMatching '*ApiRoutingHttpTest'
             includeTestsMatching '*ServerLifecycleHttpTest'
+            includeTestsMatching '*IconDeliveryHttpTest'
             includeTestsMatching '*RequestCompletionTest'
             includeTestsMatching '*IconPackTest'
         }
@@ -170,6 +171,7 @@ tasks.register('testNightConfig383', Test) {
         includeTestsMatching '*ConfigDirectoryTest'
         includeTestsMatching '*CommandProcessorTest'
         includeTestsMatching '*ServerLifecycleHttpTest'
+        includeTestsMatching '*IconDeliveryHttpTest'
     }
     shouldRunAfter tasks.named('test')
 }

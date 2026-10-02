@@ -7,16 +7,21 @@ import java.util.List;
 import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.JSON_DetailedItem;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -66,7 +71,12 @@ public final class GetItems extends ISyncedRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull List<JSON_DetailedItem> data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull List<JSON_DetailedItem> data,
+        @Nullable IconMappings icons) {}
+
+    /** Include atlas references. Absent or false skips all native icon normalization. */
+    @QueryParam("icons")
+    private boolean icons;
 
     @Override
     protected void handle(IAEGrid grid) {
@@ -80,9 +90,11 @@ public final class GetItems extends ISyncedRequest {
         ArrayList<JSON_DetailedItem> items = new ArrayList<>();
         Set<IAEKey> listed = new HashSet<>();
         ItemIdentityRegistry.Listing listing = AE2Controller.itemIdentities.beginListing(grid);
+        IconPack pack = icons ? CoreEngine.getIconPack() : null;
+        IconMappings mappings = pack == null ? null : new IconMappings(pack);
 
         for (IAEGenericStack stack : storageList.web$stacks()) {
-            addItem(items, stack, grid, listing);
+            addItem(items, stack, grid, listing, mappings);
             listed.add(stack.web$what());
         }
 
@@ -90,15 +102,18 @@ public final class GetItems extends ISyncedRequest {
             if (!listed.add(craftable)) {
                 continue;
             }
-            addItem(items, AE2Controller.AE2Interface.web$stackOf(craftable, 0), grid, listing);
+            addItem(items, AE2Controller.AE2Interface.web$stackOf(craftable, 0), grid, listing, mappings);
         }
 
         listing.commit();
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items));
+        context.getExchange()
+            .getResponseHeaders()
+            .set("Cache-Control", "private, no-store");
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
     }
 
     private static void addItem(ArrayList<JSON_DetailedItem> items, IAEGenericStack stack, IAEGrid grid,
-        ItemIdentityRegistry.Listing listing) {
+        ItemIdentityRegistry.Listing listing, @Nullable IconMappings mappings) {
         IAEKey key = stack.web$what();
 
         JSON_DetailedItem detailedItem = new JSON_DetailedItem();
@@ -110,6 +125,7 @@ public final class GetItems extends ISyncedRequest {
         try {
             StableKey identity = listing.remember(key);
             detailedItem.itemKey = identity.toString();
+            if (mappings != null) detailedItem.icon = mappings.resolve(identity, AE2Controller.itemIdentities);
 
         } catch (ItemIdentityRegistry.Ambiguous e) {
             detailedItem.identityStatus = "AMBIGUOUS";

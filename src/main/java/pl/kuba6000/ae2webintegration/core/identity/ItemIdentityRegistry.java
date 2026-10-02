@@ -11,12 +11,13 @@ import com.google.common.cache.CacheBuilder;
 
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 
-/** Server-thread-only shared identities retained by the grids that last reported them. */
+/** Server-thread-only shared identities retained by the grids and CPUs that last reported them. */
 public final class ItemIdentityRegistry {
 
-    // Values must not refer back to their grid: that would defeat the weak owner key.
-    private final Cache<IAEGrid, Set<Entry>> owners = CacheBuilder.newBuilder()
+    // Values must not refer back to their owner: that would defeat the weak owner key.
+    private final Cache<Object, Set<Entry>> owners = CacheBuilder.newBuilder()
         .weakKeys()
         .build();
     private final Cache<StableKey, Entry> entries = CacheBuilder.newBuilder()
@@ -42,6 +43,30 @@ public final class ItemIdentityRegistry {
     public @NotNull Listing beginListing(@NotNull IAEGrid grid) {
         cleanUp();
         return new Listing(grid);
+    }
+
+    /** CPU resources have independent ownership: polling inventory must not discard their base memo. */
+    public @NotNull Listing beginListing(@NotNull ICraftingCPUCluster cpu) {
+        cleanUp();
+        return new Listing(cpu);
+    }
+
+    /** Resolve only after an exact icon miss; absence is memoized for the retained identity too. */
+    public @Nullable StableKey resolveIconBase(@NotNull StableKey key) {
+        cleanUp();
+        if (ambiguous.contains(key)) throw new Ambiguous();
+        Entry entry = entries.getIfPresent(key);
+        if (entry == null) return null;
+        if (!entry.baseComputed) {
+            try {
+                entry.base = entry.identity.web$getIconBaseKey();
+            } catch (RuntimeException unavailable) {
+                // A failing optional native normalizer must neither break the listing nor run every poll.
+                entry.base = null;
+            }
+            entry.baseComputed = true;
+        }
+        return entry.base;
     }
 
     public @Nullable IAEKey resolve(@NotNull StableKey key) {
@@ -94,10 +119,10 @@ public final class ItemIdentityRegistry {
     /** Temporary ownership for one synchronous server-thread traversal; never retain across world cleanup. */
     public final class Listing {
 
-        private IAEGrid grid;
+        private Object grid;
         private Set<Entry> collected = new HashSet<>();
 
-        private Listing(@NotNull IAEGrid grid) {
+        private Listing(@NotNull Object grid) {
             this.grid = grid;
         }
 
@@ -135,6 +160,8 @@ public final class ItemIdentityRegistry {
 
         private final StableKey key;
         private final IAEKey identity;
+        private boolean baseComputed;
+        private @Nullable StableKey base;
 
         private Entry(@NotNull StableKey key, @NotNull IAEKey identity) {
             this.key = key;

@@ -33,9 +33,119 @@ class OpenApiDocletTest {
     Path directory;
 
     @Test
+    void documentsOptionalIconQueryWithoutChangingResponseShape() throws Exception {
+        List<Path> sources = fixture("""
+            /** Lists stored resources.
+             * @response 200 {@link Response} Resources.
+             */
+            @Endpoint(method = HttpMethod.GET, path = "/api/items")
+            public class Grids {
+                /** Include icon references; omitted means false. */
+                @QueryParam("icons") private boolean icons;
+                public record Response(String status, java.util.List<String> data) {}
+            }
+            """);
+        Path output = directory.resolve("query.json");
+        Result result = generate(sources, output);
+        assertTrue(result.success(), result.diagnostics());
+        JsonObject operation = JsonParser.parseString(Files.readString(output))
+            .getAsJsonObject()
+            .getAsJsonObject("paths")
+            .getAsJsonObject("/api/items")
+            .getAsJsonObject("get");
+        assertTrue(operation.has("parameters"));
+        JsonObject query = operation.getAsJsonArray("parameters")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            "icons",
+            query.get("name")
+                .getAsString());
+        assertEquals(
+            "query",
+            query.get("in")
+                .getAsString());
+        assertFalse(
+            query.get("required")
+                .getAsBoolean());
+        assertEquals(
+            "boolean",
+            query.getAsJsonObject("schema")
+                .get("type")
+                .getAsString());
+        assertFalse(
+            query.get("description")
+                .getAsString()
+                .isBlank());
+        assertFalse(operation.has("requestBody"));
+    }
+
+    @Test
+    void documentsBinaryPagesAndConditionalResponsesWithoutJsonSamples() throws Exception {
+        List<Path> sources = fixture("""
+            /** Reads an icon atlas page.
+             * @response 200 Encoded PNG page.
+             * @responseMedia 200 image/png
+             * @responseHeader 200 ETag Strong page digest.
+             * @responseHeader 200 Cache-Control Private immutable caching.
+             * @response 304 The cached page is current.
+             * @responseHeader 304 ETag Strong page digest.
+             * @response 404 {@link Failure} Page unavailable.
+             */
+            @Endpoint(method = HttpMethod.GET, path = "/api/icon-page")
+            public class Grids {
+                public record Failure(String status, @org.jetbrains.annotations.Nullable Void data) {}
+            }
+            """);
+        Path output = directory.resolve("binary.json");
+        Result result = generate(sources, output);
+        assertTrue(result.success(), result.diagnostics());
+        JsonObject responses = JsonParser.parseString(Files.readString(output))
+            .getAsJsonObject()
+            .getAsJsonObject("paths")
+            .getAsJsonObject("/api/icon-page")
+            .getAsJsonObject("get")
+            .getAsJsonObject("responses");
+        assertEquals(
+            JsonParser.parseString("{\"image/png\":{}}"),
+            responses.getAsJsonObject("200")
+                .get("content"));
+        assertEquals(
+            "string",
+            responses.getAsJsonObject("200")
+                .getAsJsonObject("headers")
+                .getAsJsonObject("ETag")
+                .getAsJsonObject("schema")
+                .get("type")
+                .getAsString());
+        assertTrue(
+            responses.getAsJsonObject("200")
+                .getAsJsonObject("headers")
+                .has("Cache-Control"));
+        assertFalse(
+            responses.getAsJsonObject("304")
+                .has("content"));
+        assertTrue(
+            responses.getAsJsonObject("304")
+                .getAsJsonObject("headers")
+                .has("ETag"));
+        assertTrue(
+            responses.getAsJsonObject("404")
+                .getAsJsonObject("content")
+                .getAsJsonObject("application/json")
+                .has("example"));
+        SwaggerParseResult parsed = new OpenAPIV3Parser().readContents(Files.readString(output));
+        assertTrue(
+            parsed.getMessages()
+                .isEmpty(),
+            parsed.getMessages()
+                .toString());
+    }
+
+    @Test
     void groupsOperationsByEndpointPackageWithOrderedTagDescriptions() throws Exception {
         List<Path> sources = fixture("public class Grids {}");
-        for (String category : List.of("auth", "tracking", "crafting", "cpu", "grid")) {
+        for (String category : List.of("auth", "tracking", "crafting", "cpu", "grid", "icons")) {
             String className = Character.toUpperCase(category.charAt(0)) + category.substring(1);
             String packageName = "pl.kuba6000.ae2webintegration.core.http.endpoint." + category;
             sources.add(source(packageName.replace('.', '/') + "/" + className + ".java", """
@@ -54,8 +164,8 @@ class OpenApiDocletTest {
         assertTrue(result.success(), result.diagnostics());
         JsonObject document = JsonParser.parseString(Files.readString(output))
             .getAsJsonObject();
-        List<String> names = List.of("Grids", "CPUs", "Crafting plans", "Crafting history", "Authentication");
-        List<String> packages = List.of("grid", "cpu", "crafting", "tracking", "auth");
+        List<String> names = List.of("Grids", "CPUs", "Icons", "Crafting plans", "Crafting history", "Authentication");
+        List<String> packages = List.of("grid", "cpu", "icons", "crafting", "tracking", "auth");
         assertNotNull(document.getAsJsonArray("tags"));
         assertEquals(
             names.size(),
@@ -1063,7 +1173,7 @@ class OpenApiDocletTest {
             package pl.kuba6000.ae2webintegration.core.http.contract;
             public enum HttpMethod { GET, POST }
             """));
-        for (String name : List.of("PathParam", "Body", "OptionalInput")) {
+        for (String name : List.of("PathParam", "QueryParam", "Body", "OptionalInput")) {
             files.add(
                 source(
                     "pl/kuba6000/ae2webintegration/core/http/contract/" + name + ".java",
@@ -1072,7 +1182,7 @@ class OpenApiDocletTest {
                         + "public @interface "
                         + name
                         + " { "
-                        + (name.equals("PathParam") ? "String value();" : "")
+                        + (name.equals("PathParam") || name.equals("QueryParam") ? "String value();" : "")
                         + " }"));
         }
         files.add(source("pl/kuba6000/ae2webintegration/core/identity/StableKey.java", """

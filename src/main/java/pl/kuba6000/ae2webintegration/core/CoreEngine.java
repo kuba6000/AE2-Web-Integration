@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -16,6 +17,7 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
@@ -47,6 +49,7 @@ public class CoreEngine {
     private static String versionIdentifier;
     private static volatile @Nullable VersionChecker versionChecker;
     private static boolean serverRunning;
+    private static volatile @Nullable IconPack iconPack;
 
     public static void init(IServerPlatform serverPlatform, String modVersion, String versionIdentifier) {
         serverRunning = false;
@@ -69,6 +72,7 @@ public class CoreEngine {
             LOG.error("Failed to load grid identities; grid requests remain unavailable", e);
         }
         serverRunning = true;
+        loadIconPack();
         AE2Controller.init();
         StartupHandler.logOpenAdminAccessWarning();
         maintainVersionChecker();
@@ -174,6 +178,7 @@ public class CoreEngine {
         serverRunning = false;
         stopVersionChecker();
         AE2Controller.stopHTTPServer();
+        closeIconPack();
         // Authorization must not survive into the next world loaded in this JVM.
         GRID_IDENTITIES.clear();
     }
@@ -183,6 +188,7 @@ public class CoreEngine {
         stopVersionChecker();
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.
         AE2Controller.stopHTTPServer();
+        closeIconPack();
         AE2Controller.clearWorldState();
         AE2JobTracker.clearActiveJobs();
         GridData.clearRuntimeState();
@@ -192,5 +198,43 @@ public class CoreEngine {
 
     public static String getModVersion() {
         return modVersion;
+    }
+
+    /** Immutable metadata is safe to read on either thread; page streams lease the archive until closed. */
+    public static @Nullable IconPack getIconPack() {
+        return iconPack;
+    }
+
+    private static void loadIconPack() {
+        closeIconPack();
+        IconPack.Target target = AE2Controller.serverPlatform.getIconPackTarget();
+        if (target == null) return;
+        File file = Config.getConfigFile("icons.ae2wi-icons");
+        if (!file.isFile()) return;
+        try {
+            iconPack = IconPack.open(
+                file.toPath(),
+                target.minecraftVersion,
+                target.loader,
+                target.identityContract,
+                target.basePolicy);
+        } catch (IOException e) {
+            LOG.error(
+                "Cannot load icon pack {}. Terminal remains available without icons; replace the pack while stopped.",
+                file,
+                e);
+        }
+    }
+
+    private static void closeIconPack() {
+        IconPack previous = iconPack;
+        iconPack = null;
+        if (previous != null) {
+            try {
+                previous.close();
+            } catch (IOException e) {
+                LOG.error("Cannot close icon pack", e);
+            }
+        }
     }
 }

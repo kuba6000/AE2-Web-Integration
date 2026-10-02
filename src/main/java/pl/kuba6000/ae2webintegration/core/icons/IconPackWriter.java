@@ -186,7 +186,7 @@ public final class IconPackWriter implements Closeable {
         if (bytes.length > PackFormat.MAX_PAGE) throw new IOException("Encoded atlas too large");
         String digest = PackFormat.hash(bytes);
         Files.write(scratch.resolve(digest + ".png"), bytes);
-        pages.add(new Page(digest, "pages/" + digest + ".png", pageSize, pageSize));
+        pages.add(new Page(digest, "pages/" + digest + ".png", pageSize, pageSize, bytes.length));
         image = null;
         occupied = 0;
     }

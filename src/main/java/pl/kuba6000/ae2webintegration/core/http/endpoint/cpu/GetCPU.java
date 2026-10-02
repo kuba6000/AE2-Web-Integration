@@ -12,6 +12,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.JSON_CompactedItem;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
@@ -20,6 +21,10 @@ import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
+import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -71,7 +76,11 @@ public final class GetCPU extends ISyncedRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull ClusterData data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull ClusterData data, @Nullable IconMappings icons) {}
+
+    /** Include atlas references. Absent or false skips all native icon normalization. */
+    @QueryParam("icons")
+    private boolean icons;
 
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
     public static class ClusterData {
@@ -136,6 +145,9 @@ public final class GetCPU extends ISyncedRequest {
         }
 
         ClusterData clusterData = new ClusterData();
+        IconPack pack = icons ? CoreEngine.getIconPack() : null;
+        IconMappings mappings = pack == null ? null : new IconMappings(pack);
+        ItemIdentityRegistry.Listing listing = AE2Controller.itemIdentities.beginListing(cpu);
         clusterData.size = cpu.web$getAvailableStorage();
         clusterData.isBusy = cpu.web$isBusy();
         clusterData.supportsPause = cpu instanceof IPausableCraftingCPU;
@@ -175,6 +187,16 @@ public final class GetCPU extends ISyncedRequest {
                 }
             }
 
+            for (Map.Entry<IAEKey, JSON_CompactedItem> entry : prep.entrySet()) {
+                JSON_CompactedItem row = entry.getValue();
+                try {
+                    StableKey key = listing.remember(entry.getKey());
+                    row.itemKey = key.toString();
+                    if (mappings != null) row.icon = mappings.resolve(key, AE2Controller.itemIdentities);
+                } catch (RuntimeException unavailable) {
+                    // Optional identity must not change CPU aggregation or hide current work.
+                }
+            }
             clusterData.items = new ArrayList<>(prep.values());
             clusterData.items.sort((i1, i2) -> {
                 if (i1.active > 0 && i2.active > 0) return Long.compare(i2.active, i1.active);
@@ -188,7 +210,11 @@ public final class GetCPU extends ISyncedRequest {
 
         }
 
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, clusterData));
+        listing.commit();
+        context.getExchange()
+            .getResponseHeaders()
+            .set("Cache-Control", "private, no-store");
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, clusterData, mappings));
     }
 
 }

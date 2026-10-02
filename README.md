@@ -82,6 +82,23 @@ password accordingly!
 
 ## Current features
 
+### Optional item icons
+
+The new web UI can display item icons in the inventory and crafting CPU resource list. Generate an
+`.ae2wi-icons` archive with the icon generator for the server's Minecraft version and matching modpack,
+then stop the server and copy it to `config/ae2webintegration/icons.ae2wi-icons`. Start the server to load
+the archive. Replacing or removing a pack also requires stopping and restarting the server.
+
+The client icon generator is currently available for Minecraft 1.7.10 (GTNH). Packs must match the
+server's Minecraft version, loader and item identity contract; a 1.7.10 pack cannot be used on another
+version. Generate with the resource packs whose appearance you want in the browser.
+
+Icons are optional. A missing, invalid or incompatible archive leaves the terminal usable without
+icons; invalid archives are reported in the server log. The browser's icon toggle controls image
+loading. Missing individual icons use placeholders and do not affect crafting controls.
+
+### Terminal
+
 - Browse, sort, and filter the contents of AE2 networks
 - Monitor as many networks as you want
 - Public mode for servers with multiple independent players

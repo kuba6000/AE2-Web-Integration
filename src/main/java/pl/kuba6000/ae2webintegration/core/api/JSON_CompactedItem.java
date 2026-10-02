@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.api;
 
+import org.jetbrains.annotations.Nullable;
+
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 /**
@@ -8,6 +11,11 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
  */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class JSON_CompactedItem {
+
+    /** Exact resource identity, or null when the native identity cannot be captured. */
+    public @Nullable String itemKey;
+    /** Atlas location within the response's page table; null when unavailable. */
+    public @Nullable IconMappings.Reference icon;
 
     /**
      * Registry resource identifier.

@@ -2,6 +2,8 @@ package pl.kuba6000.ae2webintegration.core.api;
 
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+
 /** A stored or craftable resource with its currently available web identity. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class JSON_DetailedItem {
@@ -42,4 +44,6 @@ public class JSON_DetailedItem {
      * @example null
      */
     public @Nullable String identityStatus;
+    /** Atlas location within the response's page table; null when icons were not requested or unavailable. */
+    public @Nullable IconMappings.Reference icon;
 }

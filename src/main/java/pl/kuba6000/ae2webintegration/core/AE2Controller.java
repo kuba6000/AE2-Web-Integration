@@ -46,6 +46,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGrids;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPack;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTrackingHistory;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
@@ -195,6 +196,8 @@ public class AE2Controller {
                     AuthService::isRateLimited,
                     AE2Controller::sendRequest);
                 api.register(GetGrids.class);
+                api.register(GetIconPack.class);
+                api.registerIconPages();
                 api.register(GetCPUList.class);
                 api.register(GetCPU.class);
                 api.register(CancelCPU.class);

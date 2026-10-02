@@ -35,6 +35,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPage;
 
 /** Complete method/path dispatch with bounded JSON input and explicit request execution threads. */
 public final class ApiRouter implements HttpHandler {
@@ -84,6 +85,17 @@ public final class ApiRouter implements HttpHandler {
         } catch (NoSuchMethodException exception) {
             throw new IllegalArgumentException("Endpoint requires public constructor", exception);
         }
+    }
+
+    /** Icon bytes use the same routing and authentication boundary, without JSON request completion. */
+    public void registerIconPages() {
+        Endpoint endpoint = GetIconPage.class.getAnnotation(Endpoint.class);
+        routes.add(
+            new Route(
+                endpoint,
+                null,
+                endpoint.path()
+                    .split("/", -1)));
     }
 
     @Override
@@ -176,6 +188,10 @@ public final class ApiRouter implements HttpHandler {
                 credentials == null ? WebPrincipal.anonymous() : credentials.getPrincipal(),
                 parameters,
                 body);
+            if (selected.factory() == null) {
+                GetIconPage.handle(context);
+                return;
+            }
             IRequest request = selected.factory()
                 .newInstance();
             if (request.init(context)) {

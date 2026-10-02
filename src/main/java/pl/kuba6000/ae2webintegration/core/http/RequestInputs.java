@@ -14,8 +14,10 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
+import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
+import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 /** Binds only the fields declared by the endpoint; JSON strings are never coerced into numbers. */
 public final class RequestInputs {
@@ -29,6 +31,20 @@ public final class RequestInputs {
         boolean hasBody = false;
         for (Class<?> type = request.getClass(); type != Object.class; type = type.getSuperclass()) {
             for (Field field : type.getDeclaredFields()) {
+                QueryParam query = field.getAnnotation(QueryParam.class);
+                if (query != null) {
+                    if (field.getType() != boolean.class) throw new IllegalStateException("Unsupported query type");
+                    String value = HTTPUtils.parseQueryString(
+                        context.getExchange()
+                            .getRequestURI()
+                            .getRawQuery())
+                        .get(query.value());
+                    if (value != null) {
+                        if (!value.equals("true") && !value.equals("false"))
+                            throw new IllegalArgumentException("Expected boolean query parameter");
+                        set(field, request, value.equals("true"));
+                    }
+                }
                 PathParam path = field.getAnnotation(PathParam.class);
                 if (path != null && endpoint.path()
                     .contains("{" + path.value() + "}")) {

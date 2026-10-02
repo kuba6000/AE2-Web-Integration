@@ -88,6 +88,28 @@ class IconPackTest {
     }
 
     @Test
+    void closingArchiveDrainsExistingReadersAndRejectsNewOnes() throws Exception {
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+            writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
+            output = writer.finish();
+        }
+        IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1");
+        String digest = pack.pages()
+            .get(0).digest;
+        try (InputStream first = pack.openPage(digest); InputStream second = pack.openPage(digest)) {
+            pack.close();
+            assertThrows(IOException.class, () -> pack.openPage(digest));
+            assertNotNull(ImageIO.read(first));
+            first.close();
+            assertNotNull(ImageIO.read(second));
+            pack.close();
+        }
+        // In particular, no live ZIP handle prevents replacement on Windows after the final reader drains.
+        Files.move(output, directory.resolve("replacement.ae2wi-icons"));
+    }
+
+    @Test
     void duplicatePixelsShareRectangleAndConflictingKeysFail() throws Exception {
         StableKey exact = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         StableKey base = StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ");

@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.icons;
 
 import java.io.Closeable;
 import java.io.FileNotFoundException;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -32,6 +33,8 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 /** Validated immutable archive index. Close after all page readers have finished. */
 public final class IconPack implements Closeable {
 
+    public static final int CONTENT_SIZE = PackFormat.ICON_SIZE;
+
     private static final long PNG_SIGNATURE = 0x89504e470d0a1a0aL;
     private static final int PNG_IHDR_TYPE = 0x49484452;
     private static final int PNG_IHDR_DATA_LENGTH = 13;
@@ -46,6 +49,8 @@ public final class IconPack implements Closeable {
     private final @NotNull List<Page> pages;
     private final @NotNull Map<StableKey, Location> entries;
     private final int failures;
+    private int readers;
+    private boolean closing;
 
     private IconPack(@NotNull ZipFile zip, @NotNull Metadata metadata, @NotNull String packId,
         @NotNull List<Page> pages, @NotNull Map<StableKey, Location> entries, int failures) {
@@ -132,7 +137,7 @@ public final class IconPack implements Closeable {
             byte[] png = bytes(zip, entry, PackFormat.MAX_PAGE);
             if (!digest.equals(PackFormat.hash(png))) throw new IOException("Page digest mismatch");
             checkPng(png, width, height);
-            pages.add(new Page(digest, entry, width, height));
+            pages.add(new Page(digest, entry, width, height, png.length));
         }
         return pages;
     }
@@ -282,14 +287,52 @@ public final class IconPack implements Closeable {
         return failures;
     }
 
-    public @NotNull InputStream openPage(@NotNull String digest) throws IOException {
-        for (Page page : pages) if (page.digest.equals(digest)) return zip.getInputStream(zip.getEntry(page.path));
+    public synchronized @NotNull InputStream openPage(@NotNull String digest) throws IOException {
+        if (closing) throw new IOException("Icon pack is closed");
+        for (Page page : pages) if (page.digest.equals(digest)) {
+            InputStream input = zip.getInputStream(zip.getEntry(page.path));
+            readers++;
+            return new FilterInputStream(input) {
+
+                private boolean released;
+
+                @Override
+                public void close() throws IOException {
+                    synchronized (IconPack.this) {
+                        if (released) return;
+                        released = true;
+                        try {
+                            super.close();
+                        } finally {
+                            readers--;
+                            if (closing && readers == 0) zip.close();
+                        }
+                    }
+                }
+            };
+        }
         throw new FileNotFoundException("Unknown atlas page");
     }
 
     @Override
-    public void close() throws IOException {
-        zip.close();
+    public synchronized void close() throws IOException {
+        if (closing) return;
+        closing = true;
+        if (readers == 0) zip.close();
+    }
+
+    /** Native platform compatibility requirements, independent of a generated pack's provenance. */
+    public static final class Target {
+
+        public final @NotNull String minecraftVersion, loader, identityContract, basePolicy;
+
+        public Target(@NotNull String minecraftVersion, @NotNull String loader, @NotNull String identityContract,
+            @NotNull String basePolicy) {
+            this.minecraftVersion = minecraftVersion;
+            this.loader = loader;
+            this.identityContract = identityContract;
+            this.basePolicy = basePolicy;
+        }
     }
 
     public static final class Metadata {
@@ -317,12 +360,14 @@ public final class IconPack implements Closeable {
 
         public final @NotNull String digest, path;
         public final int width, height;
+        public final transient long bytes;
 
-        Page(@NotNull String digest, @NotNull String path, int width, int height) {
+        Page(@NotNull String digest, @NotNull String path, int width, int height, long bytes) {
             this.digest = digest;
             this.path = path;
             this.width = width;
             this.height = height;
+            this.bytes = bytes;
         }
     }
 
