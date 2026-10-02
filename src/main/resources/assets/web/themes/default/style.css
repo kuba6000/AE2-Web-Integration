@@ -647,7 +647,7 @@ label {
     border: 12px solid transparent;
     border-image: var(--frame-image) 6 / 12px stretch;
     padding: 13px;
-    filter: drop-shadow(0 5px 8px #08070d2e);
+    box-shadow: 0 5px 8px #08070d2e;
 }
 .control-panel {
     display: flex;
