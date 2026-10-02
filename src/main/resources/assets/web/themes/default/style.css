@@ -956,11 +956,7 @@ label {
 #items[data-display='icons'] {
     --slot-height: var(--slot-width, 64px);
 
-    position: relative;
-    left: var(--pixel-left, 0px);
-    top: var(--pixel-top, 0px);
-    width: calc(var(--slot-columns, 1) * var(--slot-width, 64px));
-    grid-template-columns: repeat(var(--slot-columns, 1), var(--slot-width, 64px));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 64px), 1fr));
 }
 #items[data-display='icons'] .item {
     position: relative;
@@ -975,9 +971,9 @@ label {
     position: absolute;
     width: 32px;
     height: 32px;
-    top: calc(var(--icon-inset, 16px) - 2px);
-    left: calc(var(--icon-inset, 16px) - 2px);
-    transform: none;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     font-size: 24px;
     color: var(--surface-muted);
 }

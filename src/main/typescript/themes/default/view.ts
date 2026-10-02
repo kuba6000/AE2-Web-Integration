@@ -743,27 +743,10 @@ export function mount(
     // Paint empty slots using the same column width as the real resource grid.
     const list = find('#items');
     function updateSlotBackground() {
-        const scroll = find('#item-scroll');
-        const scrollStyle = getComputedStyle(scroll);
-        const width = scroll.clientWidth - parseFloat(scrollStyle.paddingLeft) - parseFloat(scrollStyle.paddingRight);
-        if (width <= 0) return;
-        if (effectiveDisplay === 'icons') {
-            const columns = Math.max(1, Math.floor(width / 64));
-            const scale = window.devicePixelRatio;
-            // Whole CSS tracks avoid accumulated layout rounding at quarter-step display scales.
-            const slotWidth = Math.floor(width / columns / 4) * 4;
-            list.style.setProperty('--slot-columns', String(columns));
-            list.style.setProperty('--slot-width', `${slotWidth}px`);
-            list.style.setProperty('--icon-inset', `${Math.round(((slotWidth - 32) / 2) * scale) / scale}px`);
-            const box = scroll.getBoundingClientRect();
-            const x = box.left + scroll.clientLeft + parseFloat(scrollStyle.paddingLeft);
-            const y = box.top + scroll.clientTop + parseFloat(scrollStyle.paddingTop);
-            list.style.setProperty('--pixel-left', `${Math.ceil(x * scale) / scale - x}px`);
-            list.style.setProperty('--pixel-top', `${Math.ceil(y * scale) / scale - y}px`);
-        } else {
-            const columns = getComputedStyle(list).gridTemplateColumns.split(' ').length;
-            list.style.setProperty('--slot-width', `${list.getBoundingClientRect().width / columns}px`);
-        }
+        const width = list.getBoundingClientRect().width;
+        if (width === 0) return;
+        const columns = getComputedStyle(list).gridTemplateColumns.split(' ').length;
+        list.style.setProperty('--slot-width', `${width / columns}px`);
         const terminal = find('#terminal');
         terminal.style.setProperty(
             '--grid-inset',
@@ -772,8 +755,6 @@ export function mount(
     }
     const slotBackground = new ResizeObserver(updateSlotBackground);
     slotBackground.observe(list);
-    slotBackground.observe(find('#item-scroll'));
-    window.addEventListener('resize', updateSlotBackground);
     const unsubscribe = application.subscribe(render);
     return () => {
         unsubscribe();
@@ -783,7 +764,6 @@ export function mount(
         hideTooltip();
         window.removeEventListener('scroll', hideTooltip, true);
         window.removeEventListener('resize', hideTooltip);
-        window.removeEventListener('resize', updateSlotBackground);
         window.removeEventListener('keydown', keydown);
         delete document.documentElement.dataset.appearance;
         root.replaceChildren();
