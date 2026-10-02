@@ -162,7 +162,9 @@ export function createTerminal(
             const pack = await api.iconPack(request.signal);
             if (disposed || request !== iconRequest) return;
             if (typeof pack?.available !== 'boolean') throw new Error('Invalid icon availability');
-            const changed = state.iconPack.available !== pack.available || iconPackId !== pack.packId;
+            const changed =
+                (state.iconPack.available === true) !== pack.available ||
+                (pack.available && iconPackId !== pack.packId);
             state.iconPack = { available: pack.available, status: 'ready' };
             iconPackId = pack.packId;
             icons.enabled(pack.available);

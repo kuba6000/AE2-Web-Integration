@@ -103,7 +103,7 @@ const historyDetail = {
     ]
 };
 
-async function fixture(t, mount = '') {
+async function fixture(t, mount = '', contextOptions = {}) {
     const options = {
         delayA: 0,
         status: 200,
@@ -375,7 +375,7 @@ async function fixture(t, mount = '') {
         await browser.close();
         await closeServer();
     });
-    const page = await browser.newPage({ locale: 'en-US' });
+    const page = await browser.newPage({ locale: 'en-US', ...contextOptions });
     page.on('dialog', (dialog) => dialog.accept());
     await page.clock.install();
     const errors = [];
@@ -488,6 +488,20 @@ test('pending icon discovery leaves inventory usable and failures preserve confi
     await page.getByText(/could not check.*icon/i).waitFor();
     assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'both');
 });
+
+for (const view of ['items', 'cpus/cpu-a']) {
+    test(`late confirmation of absent icons does not reload already usable ${view}`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        options.packDelay = 750;
+        const discovery = page.waitForRequest((request) => request.url().endsWith('/api/icon-pack'));
+        await page.goto(`${base}#/grids/${gridA}/${view}`);
+        await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+        const reads = () => options.requests.filter((request) => request.path.endsWith(`/${view}`));
+        assert.equal(reads().length, 1);
+        await settleResponse(page, await discovery);
+        assert.equal(reads().length, 1);
+    });
+}
 
 test('initial icon discovery error stays distinct from absence and recovers', async (t) => {
     const { page, options, base } = await fixture(t);
@@ -684,6 +698,91 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await item.waitFor();
     assert.equal(await item.getByText(iron.itemname, { exact: true }).isVisible(), true);
 });
+
+// Public rendered geometry seam: resizing and hovering must not put compact sprites between device pixels.
+for (const deviceScaleFactor of [1, 1.25, 1.5, 1.75, 2]) {
+    test(`compact sprite layout aligns pixels and stays stable on hover at DPR ${deviceScaleFactor}`, async (t) => {
+        const { page, options, base } = await fixture(t, '', { deviceScaleFactor });
+        await atlasFixture(page, options);
+        options.itemsA = Array.from({ length: 80 }, (_, index) => ({
+            ...iron,
+            itemname: `Resource ${index}`,
+            itemKey: `resource-${index}`,
+            icon: { page: 0, x: 0, y: 0 }
+        }));
+        await page.goto(`${base}#/web-settings`);
+        await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('icons');
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        const items = page.locator('#items').getByRole('button');
+        await items.first().waitFor();
+        await page.evaluate(() => document.fonts.ready);
+        const failures = [];
+        for (const width of [997, 1031, 1003, 391]) {
+            await page.setViewportSize({ width, height: 844 });
+            await items.first().scrollIntoViewIfNeeded();
+            await page.evaluate(
+                () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+            );
+            const bounds = await items.first().evaluate((button) => {
+                const slot = button.getBoundingClientRect();
+                const list = button.closest('ul').getBoundingClientRect();
+                const viewport = document.querySelector('#item-scroll');
+                const clip = viewport.getBoundingClientRect();
+                return {
+                    firstTop: slot.top,
+                    gridRight: list.right,
+                    viewportTop: clip.top + viewport.clientTop,
+                    viewportRight: clip.left + viewport.clientLeft + viewport.clientWidth
+                };
+            });
+            assert.ok(bounds.firstTop >= bounds.viewportTop - 0.03, 'the first slot border is not clipped');
+            assert.ok(bounds.gridRight <= bounds.viewportRight + 0.03, 'the last column stays inside the viewport');
+            const read = () =>
+                items.evaluateAll((buttons) =>
+                    buttons.slice(0, 8).map((button) => {
+                        const slot = button.getBoundingClientRect();
+                        const icon = button.querySelector('.resource-icon').getBoundingClientRect();
+                        return {
+                            x: icon.x,
+                            y: icon.y,
+                            width: icon.width,
+                            height: icon.height,
+                            slotWidth: slot.width,
+                            slotHeight: slot.height
+                        };
+                    })
+                );
+            const before = await read();
+            await items.first().hover();
+            assert.deepEqual(await read(), before, 'hover does not move or scale sprites');
+            for (const icon of before) {
+                assert.equal(icon.width, 32);
+                assert.equal(icon.height, 32);
+                assert.ok(Math.abs(icon.slotWidth - icon.slotHeight) < 0.02, 'slots remain square');
+                for (const axis of ['x', 'y']) {
+                    const physical = icon[axis] * deviceScaleFactor;
+                    if (Math.abs(physical - Math.round(physical)) > 0.03) failures.push({ width, axis, physical });
+                }
+            }
+            await items.nth(35).scrollIntoViewIfNeeded();
+            const scrolledIcon = items.nth(35).locator('.resource-icon');
+            const beforeHover = await scrolledIcon.boundingBox();
+            await items.nth(35).hover();
+            assert.deepEqual(await scrolledIcon.boundingBox(), beforeHover, 'scrolled hover does not move sprites');
+            // Browser-owned scroll offsets are not quantized; verify content alignment and stable hover.
+            const scrolled = await scrolledIcon.evaluate((icon) => {
+                const box = icon.getBoundingClientRect();
+                return { x: box.x, y: box.y + document.querySelector('#item-scroll').scrollTop };
+            });
+            for (const axis of ['x', 'y']) {
+                const physical = scrolled[axis] * deviceScaleFactor;
+                if (Math.abs(physical - Math.round(physical)) > 0.03)
+                    failures.push({ width, scrolled: true, axis, physical });
+            }
+        }
+        assert.deepEqual(failures, [], 'sprite edges lie on physical pixels');
+    });
+}
 
 test('compact terminal keeps quantities and craftability readable with missing icons', async (t) => {
     const { page, options, base } = await fixture(t);
