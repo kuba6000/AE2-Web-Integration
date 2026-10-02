@@ -1,10 +1,8 @@
-import { parseMinecraftText } from '../../app/minecraft-text.mjs';
+import { parseMinecraftText } from '../../app/minecraft-text.js';
 
-/** Render game text using this theme's palette, without interpreting it as HTML.
- * @param {string} text
- * @returns {DocumentFragment}
- */
-export function renderMinecraftText(text) {
+/* Render game text using this theme's palette, without interpreting it as HTML. */
+
+export function renderMinecraftText(text: string): DocumentFragment {
     const fragment = document.createDocumentFragment();
     for (const segment of parseMinecraftText(text)) {
         const span = document.createElement('span');

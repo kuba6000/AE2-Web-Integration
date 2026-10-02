@@ -36,6 +36,28 @@ if (project == rootProject) {
 group = 'pl.kuba6000.ae2webintegration'
 version = '1.0-SNAPSHOT'
 
+def npmCommand = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows') ? 'npm.cmd' : 'npm'
+def installFrontendDependencies = tasks.register('installFrontendDependencies', Exec) {
+    group = 'build'
+    description = 'Installs the locked build-time frontend tools.'
+    workingDir = projectDir
+    commandLine npmCommand, 'ci', '--include=dev', '--no-audit', '--no-fund'
+    inputs.files('package.json', 'package-lock.json')
+    outputs.dir('node_modules')
+}
+def compiledFrontendResources = layout.buildDirectory.dir('generated/frontend')
+def compileFrontend = tasks.register('compileFrontend', Exec) {
+    group = 'build'
+    description = 'Compiles the TypeScript frontend into packaged JavaScript resources.'
+    dependsOn installFrontendDependencies
+    workingDir = projectDir
+    commandLine npmCommand, 'run', 'build', '--', layout.buildDirectory.get().asFile.absolutePath
+    inputs.dir('src/main/typescript')
+    inputs.files('package.json', 'package-lock.json', 'tsconfig.json', 'tools/build-frontend.mjs')
+    outputs.dir(compiledFrontendResources)
+}
+sourceSets.main.resources.srcDir(compileFrontend)
+
 repositories {
     mavenCentral()
     maven {

@@ -1,29 +1,18 @@
-/**
- * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
- * @typedef {Terminal['state']} TerminalState
- * @typedef {import('../../app/i18n.mjs').Translator} Locale
- */
+import type { HistoryEntry } from '../../app/api-types.js';
+import type { TerminalState } from '../../app/terminal.js';
+import type { Translator as Locale } from '../../app/i18n.js';
 
-import { historyHref } from '../../app/router.mjs';
-import { renderHistoryTimeline } from './history-timeline.mjs';
-import { renderMinecraftText } from './minecraft-text.mjs';
+import { historyHref } from '../../app/router.js';
+import { renderHistoryTimeline } from './history-timeline.js';
+import { renderMinecraftText } from './minecraft-text.js';
 
-/**
- * @template {keyof HTMLElementTagNameMap} Tag
- * @param {Tag} tag
- * @param {string} [text]
- * @returns {HTMLElementTagNameMap[Tag]}
- */
-function element(tag, text = '') {
+function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
     node.textContent = text;
     return node;
 }
 
-/**
- * @param {HTMLElement} root
- */
-export function createHistoryView(root) {
+export function createHistoryView(root: HTMLElement) {
     const view = element('section');
     view.hidden = true;
     view.className = 'history-view';
@@ -36,20 +25,15 @@ export function createHistoryView(root) {
     const back = element('a');
     view.append(title, status, list, detail, back);
     root.append(view);
-    /** @typedef {{li: HTMLLIElement, link: HTMLAnchorElement, time: HTMLParagraphElement}} HistoryRow */
-    /** @type {Map<import('../../app/api-types.mjs').HistoryEntry['id'], HistoryRow>} */
-    let entries = new Map();
-    /** @type {TerminalState['history']['detail'] | undefined} */
-    let lastDetail;
-    /** @type {Locale | undefined} */
-    let lastLocale;
+    type HistoryRow = { li: HTMLLIElement; link: HTMLAnchorElement; time: HTMLParagraphElement };
+
+    let entries: Map<HistoryEntry['id'], HistoryRow> = new Map();
+
+    let lastDetail: TerminalState['history']['detail'] | undefined;
+
+    let lastLocale: Locale | undefined;
     return {
-        /**
-         * @param {TerminalState['route']} route
-         * @param {TerminalState['history']} state
-         * @param {Locale} locale
-         */
-        render(route, state, locale) {
+        render(route: TerminalState['route'], state: TerminalState['history'], locale: Locale) {
             view.hidden = route.view !== 'history';
             if (route.view !== 'history') return;
             const { common: t, number, dateTime } = locale;
@@ -69,9 +53,9 @@ export function createHistoryView(root) {
                 route.entryId !== null
                     ? historyHref(route.gridKey)
                     : `#/grids/${encodeURIComponent(route.gridKey)}/items`;
-            const focused = /** @type {HTMLElement | null} */ (document.activeElement);
-            /** @type {Map<import('../../app/api-types.mjs').HistoryEntry['id'], HistoryRow>} */
-            const current = new Map();
+            const focused = document.activeElement as HTMLElement | null;
+
+            const current: Map<HistoryEntry['id'], HistoryRow> = new Map();
             state.entries.forEach((entry, index) => {
                 const row = entries.get(entry.id) || { li: element('li'), link: element('a'), time: element('p') };
                 if (!row.link.parentNode) row.li.append(row.link, row.time);

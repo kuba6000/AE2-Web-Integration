@@ -1,13 +1,11 @@
-/**
- * @typedef {{view: 'home' | 'missing' | 'web-settings' | 'server-settings' | 'about', gridKey: null}
- * | {view: 'items' | 'settings', gridKey: string}
- * | {view: 'cpus', gridKey: string, cpuKey: string | null}
- * | {view: 'history', gridKey: string, entryId: string | null}
- * | {view: 'plan', gridKey: string, planId: string}} Route
- */
+export type Route =
+    | { view: 'home' | 'missing' | 'web-settings' | 'server-settings' | 'about'; gridKey: null }
+    | { view: 'items' | 'settings'; gridKey: string }
+    | { view: 'cpus'; gridKey: string; cpuKey: string | null }
+    | { view: 'history'; gridKey: string; entryId: string | null }
+    | { view: 'plan'; gridKey: string; planId: string };
 
-/** @returns {Route} */
-export function readRoute() {
+export function readRoute(): Route {
     const hash = location.hash.replace(/^#/, '');
     if (!hash || hash === '/' || hash === '/home') return { view: 'home', gridKey: null };
     if (hash === '/web-settings') return { view: 'web-settings', gridKey: null };
@@ -60,22 +58,18 @@ export function readRoute() {
     return { view: 'missing', gridKey: null };
 }
 
-/** @param {string} gridKey @param {string | number} planId */
-export function navigateToPlan(gridKey, planId) {
+export function navigateToPlan(gridKey: string, planId: string | number) {
     location.hash = `/grids/${encodeURIComponent(gridKey)}/plans/${planId}`;
 }
 
-/** @param {string | null} gridKey @param {string | null} [cpuKey] */
-export function cpuHref(gridKey, cpuKey = null) {
+export function cpuHref(gridKey: string | null, cpuKey: string | null = null) {
     return `#/grids/${encodeURIComponent(String(gridKey))}/cpus${cpuKey ? '/' + encodeURIComponent(cpuKey) : ''}`;
 }
 
-/** @param {string | null} gridKey @param {string | number | null} [entryId] */
-export function historyHref(gridKey, entryId = null) {
+export function historyHref(gridKey: string | null, entryId: string | number | null = null) {
     return `#/grids/${encodeURIComponent(String(gridKey))}/history${entryId === null ? '' : '/' + entryId}`;
 }
 
-/** @param {string | null} key */
-export function navigateToGrid(key) {
+export function navigateToGrid(key: string | null) {
     location.hash = key ? `/grids/${encodeURIComponent(key)}/items` : '/';
 }

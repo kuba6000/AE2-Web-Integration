@@ -6,6 +6,7 @@ const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_PACKAGE || 'playwright');
 
 const resources = path.resolve(__dirname, '../../src/main/resources');
+const compiledResources = path.resolve(__dirname, '../../build/generated/frontend');
 const gridA = 'AAAAAAAAAAAAAAAAAAAAAA';
 const gridB = 'BBBBBBBBBBBBBBBBBBBBBA';
 const iron = {
@@ -293,15 +294,16 @@ async function fixture(t, mount = '') {
                 url.searchParams.has('INVALID_PASSWORD') ||
                 url.searchParams.has('confirmregistration'));
         const relative = resource === '/' ? (login ? 'assets/login.html' : 'assets/web/index.html') : resource.slice(1);
-        const file = path.resolve(resources, relative);
-        if (!file.startsWith(resources + path.sep)) {
+        const resourceRoot = relative.endsWith('.js') ? compiledResources : resources;
+        const file = path.resolve(resourceRoot, relative);
+        if (!file.startsWith(resourceRoot + path.sep)) {
             response.writeHead(404).end();
             return;
         }
         try {
             response.setHeader(
                 'Content-Type',
-                file.endsWith('.mjs')
+                file.endsWith('.js') || file.endsWith('.mjs')
                     ? 'text/javascript'
                     : file.endsWith('.css')
                       ? 'text/css'
@@ -2622,7 +2624,7 @@ async function themeFixture(t, script, markup = '') {
             body: `<!doctype html><html lang="en"><body>${markup}<output aria-label="Result"></output>
                 <script type="module">
                     try {
-                        const { createThemeContext } = await import('./assets/web/app/theme-context.mjs');
+                        const { createThemeContext } = await import('./assets/web/app/theme-context.js');
                         const base = new URL('./', location.href);
                         const result = document.querySelector('output');
                         ${script}
@@ -2783,7 +2785,7 @@ test('a theme can persist its own supported language in shared preferences', asy
     const { page, open, base } = await themeFixture(
         t,
         `
-        const { createPreferences } = await import('./assets/web/app/preferences.mjs');
+        const { createPreferences } = await import('./assets/web/app/preferences.js');
         const preferences = createPreferences(base);
         const i18n = createThemeContext(base, 'french-theme').i18n;
         i18n.register({en: {welcome: 'Welcome'}, fr: {welcome: 'Bienvenue'}});

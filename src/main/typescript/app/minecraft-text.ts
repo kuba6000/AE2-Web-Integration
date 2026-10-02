@@ -1,4 +1,4 @@
-const colors = /** @type {const} */ ({
+const colors = {
     0: 'black',
     1: 'dark_blue',
     2: 'dark_green',
@@ -15,21 +15,32 @@ const colors = /** @type {const} */ ({
     d: 'light_purple',
     e: 'yellow',
     f: 'white'
-});
+} as const;
 
-/** @typedef {{color: typeof colors[keyof typeof colors] | null, bold: boolean, italic: boolean, underline: boolean, strikethrough: boolean, obfuscated: boolean}} TextStyle */
-/** @typedef {TextStyle & {text: string}} TextSegment */
-/** @type {TextStyle} */
-const defaults = { color: null, bold: false, italic: false, underline: false, strikethrough: false, obfuscated: false };
+export type TextStyle = {
+    color: (typeof colors)[keyof typeof colors] | null;
+    bold: boolean;
+    italic: boolean;
+    underline: boolean;
+    strikethrough: boolean;
+    obfuscated: boolean;
+};
+export type TextSegment = TextStyle & { text: string };
+const defaults: TextStyle = {
+    color: null,
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: false,
+    obfuscated: false
+};
 
-/** Decode classic Minecraft section-sign codes without choosing a rendering format.
+/**
+ * Decode classic Minecraft section-sign codes without choosing a rendering format.
  * Unknown codes and a trailing section sign remain literal text.
- * @param {string} text
- * @returns {TextSegment[]}
  */
-export function parseMinecraftText(text) {
-    /** @type {TextSegment[]} */
-    const segments = [];
+export function parseMinecraftText(text: string): TextSegment[] {
+    const segments: TextSegment[] = [];
     let style = { ...defaults };
     let content = '';
     function flush() {
@@ -46,7 +57,7 @@ export function parseMinecraftText(text) {
         index++;
         if (Object.hasOwn(colors, code)) {
             // A color code clears decorations as well as changing the color in Java Edition.
-            style = { ...defaults, color: colors[/** @type {keyof typeof colors} */ (code)] };
+            style = { ...defaults, color: colors[code as keyof typeof colors] };
         } else if (code === 'r') style = { ...defaults };
         else if (code === 'k') style.obfuscated = true;
         else if (code === 'l') style.bold = true;
@@ -58,10 +69,8 @@ export function parseMinecraftText(text) {
     return segments;
 }
 
-/** Readable text for search, sorting and controls without rich text support.
- * @param {string} text
- */
-export function plainMinecraftText(text) {
+/** Readable text for search, sorting and controls without rich text support. */
+export function plainMinecraftText(text: string) {
     return parseMinecraftText(text)
         .map((segment) => segment.text)
         .join('');

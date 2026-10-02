@@ -1,14 +1,28 @@
-/**
- * @typedef {{status: 'idle' | 'loading' | 'ready' | 'error', current: boolean | null, draft: boolean, edited: boolean, sources: import('./api-types.mjs').AccessSources, saving: boolean, uncertain: boolean, error: string | null | undefined, notice: string | null}} SettingsState
- * @typedef {{pending: boolean, desired: boolean, uncertain: boolean, result?: import('./api-types.mjs').GridSettings, error?: string}} SaveOperation
- */
-/** The saved setting and the edited draft have separate ownership across refreshes.
- * @param {import('./api.mjs').Api} api
- * @param {() => void} changed
- */
-export function createGridSettings(api, changed) {
-    /** @type {SettingsState} */
-    const state = {
+import type { AccessSources, GridSettings } from './api-types.js';
+import type { Api, ApiFailure } from './api.js';
+import type { Route } from './router.js';
+
+export type SettingsState = {
+    status: 'idle' | 'loading' | 'ready' | 'error';
+    current: boolean | null;
+    draft: boolean;
+    edited: boolean;
+    sources: AccessSources;
+    saving: boolean;
+    uncertain: boolean;
+    error: string | null | undefined;
+    notice: string | null;
+};
+export type SaveOperation = {
+    pending: boolean;
+    desired: boolean;
+    uncertain: boolean;
+    result?: GridSettings;
+    error?: string;
+};
+/** The saved setting and the edited draft have separate ownership across refreshes. */
+export function createGridSettings(api: Api, changed: () => void) {
+    const state: SettingsState = {
         status: 'idle',
         current: null,
         draft: false,
@@ -19,19 +33,14 @@ export function createGridSettings(api, changed) {
         error: null,
         notice: null
     };
-    /** @type {Map<string | null | undefined, SaveOperation>} */
-    const saves = new Map();
-    /** @type {import('./router.mjs').Route | {view?: undefined, gridKey?: undefined}} */
-    let route = {};
+    const saves = new Map<string | null | undefined, SaveOperation>();
+    let route: Route | { view?: undefined; gridKey?: undefined } = {};
     let generation = 0;
-    /** @type {AbortController | undefined} */
-    let request;
+    let request: AbortController | undefined;
     let reading = false;
     let disposed = false;
-    /** @type {import('./api-types.mjs').AccessSources} */
-    let sourcesForRoute = {};
-    /** @param {string | null | undefined} error */
-    function clear(error) {
+    let sourcesForRoute: AccessSources = {};
+    function clear(error: string | null | undefined) {
         sourcesForRoute = {};
         Object.assign(state, {
             status: 'error',
@@ -43,8 +52,7 @@ export function createGridSettings(api, changed) {
             notice: null
         });
     }
-    /** @param {string | null} error */
-    function readFailure(error) {
+    function readFailure(error: string | null) {
         sourcesForRoute = {};
         if (['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error ?? '')) clear(error);
         else {
@@ -55,8 +63,7 @@ export function createGridSettings(api, changed) {
     }
     return {
         state,
-        /** @param {import('./router.mjs').Route} next */
-        route(next) {
+        route(next: Route) {
             generation++;
             request?.abort();
             reading = false;
@@ -75,8 +82,7 @@ export function createGridSettings(api, changed) {
                 notice: null
             });
         },
-        /** @param {import('./api-types.mjs').AccessSources} sources */
-        async refresh(sources) {
+        async refresh(sources: AccessSources) {
             if (route.view !== 'settings') return;
             sourcesForRoute = sources;
             if (reading || state.saving) return;
@@ -92,7 +98,7 @@ export function createGridSettings(api, changed) {
                 state.status = 'ready';
                 state.error = null;
             } catch (caught) {
-                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+                const error = caught as ApiFailure;
                 if (version !== generation || error.name === 'AbortError') return;
                 readFailure(error.status || 'NETWORK_ERROR');
             } finally {
@@ -102,8 +108,7 @@ export function createGridSettings(api, changed) {
                 }
             }
         },
-        /** @param {boolean} value */
-        edit(value) {
+        edit(value: boolean) {
             if (state.status !== 'ready' || state.saving) return;
             state.draft = value;
             state.edited = true;
@@ -120,8 +125,7 @@ export function createGridSettings(api, changed) {
                 return;
             const version = ++generation;
             const key = route.gridKey;
-            /** @type {SaveOperation} */
-            const operation = { pending: true, desired: state.draft, uncertain: state.uncertain };
+            const operation: SaveOperation = { pending: true, desired: state.draft, uncertain: state.uncertain };
             saves.set(key, operation);
             request?.abort();
             reading = false;
@@ -133,7 +137,7 @@ export function createGridSettings(api, changed) {
                 operation.result = await api.saveSettings(key, { isTracked: operation.desired });
                 operation.uncertain = false;
             } catch (caught) {
-                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+                const error = caught as ApiFailure;
                 operation.error = error.status || 'NETWORK_ERROR';
                 if (['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'].includes(operation.error))
                     operation.uncertain = true;
@@ -143,7 +147,7 @@ export function createGridSettings(api, changed) {
             state.saving = false;
             state.uncertain = operation.uncertain;
             // A route refresh can change the status while the save is awaiting its response.
-            if (version === generation || /** @type {SettingsState['status']} */ (state.status) !== 'error') {
+            if (version === generation || (state.status as SettingsState['status']) !== 'error') {
                 if (operation.result)
                     Object.assign(state, {
                         status: 'ready',
@@ -162,8 +166,7 @@ export function createGridSettings(api, changed) {
             }
             changed();
         },
-        /** @param {string | null} error */
-        block(error) {
+        block(error: string | null) {
             generation++;
             request?.abort();
             reading = false;

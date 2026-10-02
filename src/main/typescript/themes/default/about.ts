@@ -1,18 +1,14 @@
-import { project } from '../../app/project.mjs';
+import type { Translator } from '../../app/i18n.js';
+import type { Route } from '../../app/router.js';
+import { project } from '../../app/project.js';
 
-/**
- * @template {keyof HTMLElementTagNameMap} Tag
- * @param {Tag} tag
- * @param {string} [text]
- */
-function element(tag, text = '') {
+function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = '') {
     const node = document.createElement(tag);
     node.textContent = text;
     return node;
 }
 
-/** @param {string} text @param {string} url */
-function link(text, url) {
+function link(text: string, url: string) {
     const node = element('a', text);
     node.href = url;
     node.target = '_blank';
@@ -20,8 +16,7 @@ function link(text, url) {
     return node;
 }
 
-/** @param {HTMLElement} root @param {string | null} modVersion */
-export function createAboutView(root, modVersion) {
+export function createAboutView(root: HTMLElement, modVersion: string | null) {
     const view = element('section');
     view.className = 'about-view';
     view.hidden = true;
@@ -78,8 +73,7 @@ export function createAboutView(root, modVersion) {
     root.append(view);
 
     return {
-        /** @param {import('../../app/router.mjs').Route} route @param {import('../../app/i18n.mjs').Translator} locale */
-        render(route, locale) {
+        render(route: Route, locale: Translator) {
             view.hidden = route.view !== 'about';
             if (view.hidden) return;
             title.textContent = locale.common('about');

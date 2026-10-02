@@ -1,53 +1,40 @@
-/**
- * @typedef {import('../../app/api-types.mjs').HistoryItem} HistoryItem
- * @typedef {import('../../app/api-types.mjs').ProviderTiming} ProviderTiming
- */
+import type { Translator } from '../../app/i18n.js';
+import type { HistoryDetail, HistoryItem, ProviderTiming } from '../../app/api-types.js';
 
-import { plainMinecraftText } from '../../app/minecraft-text.mjs';
-import { renderMinecraftText } from './minecraft-text.mjs';
+import { plainMinecraftText } from '../../app/minecraft-text.js';
+import { renderMinecraftText } from './minecraft-text.js';
 
-/**
- * @template {keyof HTMLElementTagNameMap} Tag
- * @param {Tag} tag
- * @param {string} [text]
- * @returns {HTMLElementTagNameMap[Tag]}
- */
-function element(tag, text = '') {
+function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
     node.textContent = text;
     return node;
 }
 
-/**
- * Detached history intervals; each API row remains separate even when names/registry IDs repeat.
- * @param {import('../../app/api-types.mjs').HistoryDetail} snapshot
- * @param {import('../../app/i18n.mjs').Translator} locale
- */
-export function renderHistoryTimeline(snapshot, locale) {
+/* Detached history intervals; each API row remains separate even when names/registry IDs repeat. */
+
+export function renderHistoryTimeline(snapshot: HistoryDetail, locale: Translator) {
     const { common: t, number, preciseTime } = locale;
     const container = element('div');
     container.className = 'history-timelines';
     const duration = snapshot.timeDone - snapshot.timeStarted;
     if (!snapshot.items.length && !snapshot.interfaceShare.length) return element('p', t('historyNoTimings'));
-    /** @type {Array<[string, HistoryItem[], false] | [string, ProviderTiming[], true]>} */
-    const groups = [
+
+    const groups: Array<[string, HistoryItem[], false] | [string, ProviderTiming[], true]> = [
         ['resourceTimings', snapshot.items, false],
         ['providerTimings', snapshot.interfaceShare, true]
     ];
     for (const [title, rows, providers] of groups) {
         container.append(element('h3', t(title)));
         for (const row of rows) {
-            const name = providers
-                ? /** @type {ProviderTiming} */ (row).name
-                : /** @type {HistoryItem} */ (row).itemname;
+            const name = providers ? (row as ProviderTiming).name : (row as HistoryItem).itemname;
             const section = element('section');
             section.setAttribute('aria-label', plainMinecraftText(name));
             const heading = element('h4');
             heading.append(renderMinecraftText(name));
             section.append(heading);
-            if (!providers) section.append(element('code', /** @type {HistoryItem} */ (row).itemid));
+            if (!providers) section.append(element('code', (row as HistoryItem).itemid));
             else {
-                const provider = /** @type {ProviderTiming} */ (row);
+                const provider = row as ProviderTiming;
                 section.append(element('p', t('processingTotal', { count: provider.timingsCombined / 1000 })));
                 for (const position of provider.location)
                     section.append(element('p', t('position', { dimension: position.dimid, ...position })));

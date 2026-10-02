@@ -1,18 +1,26 @@
-/**
- * @typedef {{itemKey: string, itemname: string, quantity: number}} PlanMetadata
- * @typedef {'create' | 'submit' | 'delete'} Mutation
- * @typedef {{status: 'idle' | 'loading' | 'calculating' | 'ready' | 'submitted' | 'deleted' | 'unavailable' | 'error', plan: import('./api-types.mjs').Plan | null, cpus: (import('./api-types.mjs').CpuInfo & {key: string, eligible: boolean | undefined})[], selectedCpu: string, mutation: Mutation | null, uncertain: Mutation | null, error: string | null | undefined, errorDetail: string | null, metadata: PlanMetadata | null}} CraftingState
- * @typedef {Partial<Pick<CraftingState, 'mutation' | 'uncertain' | 'status'>>} CraftingOutcome
- */
-import { navigateToPlan } from './router.mjs';
+import type { Plan, CpuInfo, Item } from './api-types.js';
+import type { Api, ApiFailure } from './api.js';
+import type { Route } from './router.js';
+import { navigateToPlan } from './router.js';
 
-/** Calculation state and actions. The application supplies route lifetime and scheduling.
- * @param {import('./api.mjs').Api} api
- * @param {() => void} changed
- */
-export function createCrafting(api, changed) {
-    /** @type {CraftingState} */
-    const state = {
+export type PlanMetadata = { itemKey: string; itemname: string; quantity: number };
+export type Mutation = 'create' | 'submit' | 'delete';
+export type CraftingState = {
+    status: 'idle' | 'loading' | 'calculating' | 'ready' | 'submitted' | 'deleted' | 'unavailable' | 'error';
+    plan: Plan | null;
+    cpus: (CpuInfo & { key: string; eligible: boolean | undefined })[];
+    selectedCpu: string;
+    mutation: Mutation | null;
+    uncertain: Mutation | null;
+    error: string | null | undefined;
+    errorDetail: string | null;
+    metadata: PlanMetadata | null;
+};
+export type CraftingOutcome = Partial<Pick<CraftingState, 'mutation' | 'uncertain' | 'status'>>;
+
+/** Calculation state and actions. The application supplies route lifetime and scheduling. */
+export function createCrafting(api: Api, changed: () => void) {
+    const state: CraftingState = {
         status: 'idle',
         plan: null,
         cpus: [],
@@ -23,21 +31,16 @@ export function createCrafting(api, changed) {
         errorDetail: null,
         metadata: null
     };
-    /** @type {Map<string, PlanMetadata>} */
-    const metadata = new Map();
-    /** @type {Map<string, CraftingOutcome>} */
-    const outcomes = new Map();
-    /** @type {import('./router.mjs').Route | {view?: undefined, gridKey?: undefined}} */
-    let route = {};
+    const metadata = new Map<string, PlanMetadata>();
+    const outcomes = new Map<string, CraftingOutcome>();
+    let route: Route | { view?: undefined; gridKey?: undefined } = {};
     let generation = 0;
-    /** @type {AbortController | undefined} */
-    let request;
+    let request: AbortController | undefined;
     let reading = false;
     let selectedOnce = false;
     let readFailed = false;
     const identity = () => `${route.gridKey}/${route.view === 'plan' ? route.planId : 'create'}`;
-    /** @param {string} key @param {CraftingOutcome | null} outcome */
-    function finishMutation(key, outcome) {
+    function finishMutation(key: string, outcome: CraftingOutcome | null) {
         if (outcome) outcomes.set(key, outcome);
         else outcomes.delete(key);
         if (identity() === key && state.mutation) {
@@ -45,11 +48,9 @@ export function createCrafting(api, changed) {
             changed();
         }
     }
-    /** @param {import('./api.mjs').ApiFailure} error */
-    const isUncertain = (error) =>
+    const isUncertain = (error: ApiFailure) =>
         !error.status || ['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'].includes(error.status);
-    /** @param {import('./api-types.mjs').CpuInfo} cpu */
-    const eligible = (cpu) =>
+    const eligible = (cpu: CpuInfo) =>
         state.plan?.isDone &&
         !state.plan.isSimulating &&
         !state.plan.plan?.some((row) => row.missing > 0) &&
@@ -95,7 +96,7 @@ export function createCrafting(api, changed) {
                 }
             }
         } catch (caught) {
-            const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+            const error = caught as ApiFailure;
             if (version !== generation || error.name === 'AbortError') return;
             state.error = error.status;
             readFailed = true;
@@ -118,8 +119,7 @@ export function createCrafting(api, changed) {
         get pending() {
             return route.view === 'plan' && state.status === 'calculating' && !state.error;
         },
-        /** @param {import('./router.mjs').Route} next */
-        route(next) {
+        route(next: Route) {
             generation++;
             request?.abort();
             reading = false;
@@ -140,8 +140,7 @@ export function createCrafting(api, changed) {
             Object.assign(state, outcomes.get(identity()));
         },
         refresh,
-        /** @param {string | null} error */
-        block(error) {
+        block(error: string | null) {
             generation++;
             request?.abort();
             reading = false;
@@ -157,13 +156,11 @@ export function createCrafting(api, changed) {
             });
             changed();
         },
-        /** @param {string} key */
-        selectCpu(key) {
+        selectCpu(key: string) {
             state.selectedCpu = state.cpus.find((cpu) => cpu.key === key && cpu.eligible)?.key || '';
             changed();
         },
-        /** @param {import('./api-types.mjs').Item | null} item @param {number} quantity */
-        async create(item, quantity) {
+        async create(item: Item | null, quantity: number) {
             if (
                 route.view !== 'items' ||
                 state.mutation ||
@@ -188,7 +185,7 @@ export function createCrafting(api, changed) {
                 if (version !== generation) return;
                 navigateToPlan(gridKey, jobID);
             } catch (caught) {
-                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+                const error = caught as ApiFailure;
                 finishMutation(key, isUncertain(error) ? { uncertain: 'create' } : null);
                 if (version === generation) state.error = error.status;
             } finally {
@@ -217,12 +214,12 @@ export function createCrafting(api, changed) {
             changed();
             try {
                 // A ready plan and eligible CPU belong to the active plan route.
-                const current = /** @type {Extract<import('./router.mjs').Route, {view: 'plan'}>} */ (route);
+                const current = route as Extract<Route, { view: 'plan' }>;
                 await api.submitPlan(current.gridKey, current.planId, state.selectedCpu);
                 finishMutation(key, { status: 'submitted' });
                 if (version === generation) state.status = 'submitted';
             } catch (caught) {
-                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+                const error = caught as ApiFailure;
                 finishMutation(key, isUncertain(error) ? { uncertain: 'submit' } : null);
                 if (version === generation) {
                     if (isUncertain(error)) state.uncertain = 'submit';
@@ -278,7 +275,7 @@ export function createCrafting(api, changed) {
                 finishMutation(key, { status: 'deleted' });
                 if (version === generation) state.status = 'deleted';
             } catch (caught) {
-                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+                const error = caught as ApiFailure;
                 finishMutation(key, isUncertain(error) ? { uncertain: 'delete' } : null);
                 if (version === generation) {
                     state.error = error.status;

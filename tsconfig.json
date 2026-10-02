@@ -1,14 +1,15 @@
 {
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
     "strict": true,
-    "noEmit": true,
+    "noEmitOnError": true,
+    "verbatimModuleSyntax": true,
+    "rootDir": "src/main/typescript",
+    "outDir": "build/generated/frontend/assets/web",
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": []
   },
-  "include": ["src/main/resources/assets/web/**/*.mjs"]
+  "include": ["src/main/typescript/**/*.ts"]
 }

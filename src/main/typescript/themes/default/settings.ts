@@ -1,36 +1,27 @@
-/**
- * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
- * @typedef {Terminal['state']} TerminalState
- * @typedef {import('../../app/i18n.mjs').Translator} Locale
- */
+import type { TerminalState, createTerminal } from '../../app/terminal.js';
+import type { Translator as Locale } from '../../app/i18n.js';
+type Terminal = ReturnType<typeof createTerminal>;
 
-/**
- * @template {keyof HTMLElementTagNameMap} Tag
- * @param {Tag} tag
- * @param {string} [text]
- * @returns {HTMLElementTagNameMap[Tag]}
- */
-function element(tag, text = '') {
+function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
     node.textContent = text;
     return node;
 }
 
-/** @type {Record<string, string>} */
-const kinds = {
+const kinds: Record<string, string> = {
     controller: 'accessController',
     wireless_access_point: 'accessWireless',
     terminal: 'accessTerminal',
     security_terminal: 'accessSecurity'
 };
-/** @type {Record<string, string>} */
-const reasons = { node_owner: 'accessBlockOwner', security_owner: 'accessSecurityOwner', security_card: 'accessCard' };
 
-/**
- * @param {HTMLElement} root
- * @param {Terminal} application
- */
-export function createSettingsView(root, application) {
+const reasons: Record<string, string> = {
+    node_owner: 'accessBlockOwner',
+    security_owner: 'accessSecurityOwner',
+    security_card: 'accessCard'
+};
+
+export function createSettingsView(root: HTMLElement, application: Terminal) {
     const view = element('section');
     view.hidden = true;
     view.className = 'settings-view';
@@ -57,17 +48,12 @@ export function createSettingsView(root, application) {
     const back = element('a');
     view.append(title, status, form, accessTitle, sources, back);
     root.append(view);
-    /** @type {TerminalState['settings']['sources'] | undefined} */
-    let lastSources;
-    /** @type {Locale | undefined} */
-    let lastLocale;
+
+    let lastSources: TerminalState['settings']['sources'] | undefined;
+
+    let lastLocale: Locale | undefined;
     return {
-        /**
-         * @param {TerminalState['route']} route
-         * @param {TerminalState['settings']} state
-         * @param {Locale} locale
-         */
-        render(route, state, locale) {
+        render(route: TerminalState['route'], state: TerminalState['settings'], locale: Locale) {
             view.hidden = route.view !== 'settings';
             if (route.view !== 'settings') return;
             const { common: t } = locale;

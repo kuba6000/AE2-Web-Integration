@@ -1,30 +1,47 @@
-/**
- * @typedef {{route: import('./router.mjs').Route, grids: import('./api-types.mjs').Grid[], gridStatus: 'loading' | 'ready' | 'error', gridError: string | null, items: import('./api-types.mjs').Item[], itemStatus: 'idle' | 'loading' | 'ready' | 'error', itemError: string | null, refreshing: boolean, updatedAt: number | null, search: string, selected: import('./api-types.mjs').Item | null, preferences: import('./preferences.mjs').Preferences}} TerminalData
- * @typedef {TerminalData & {selectedGridKey: string | null, crafting: import('./crafting.mjs').CraftingState, cpus: import('./cpus.mjs').CpuState, history: import('./history.mjs').HistoryState, settings: import('./settings.mjs').SettingsState}} TerminalState
- */
-import { createCrafting } from './crafting.mjs';
-import { createCpuMonitor } from './cpus.mjs';
-import { createHistory } from './history.mjs';
-import { createGridSettings } from './settings.mjs';
+import type { Route } from './router.js';
+import type { Grid, Item } from './api-types.js';
+import type { Preferences, createPreferences } from './preferences.js';
+import type { CraftingState } from './crafting.js';
+import type { CpuState } from './cpus.js';
+import type { HistoryState } from './history.js';
+import type { SettingsState } from './settings.js';
+import type { Api, ApiFailure } from './api.js';
+import { createCrafting } from './crafting.js';
+import { createCpuMonitor } from './cpus.js';
+import { createHistory } from './history.js';
+import { createGridSettings } from './settings.js';
 
-/**
- * Shared state/actions for terminal renderers; a theme does not own requests or refresh timers.
- * @param {import('./api.mjs').Api} api
- * @param {ReturnType<typeof import('./preferences.mjs').createPreferences>} preferences
- */
-export function createTerminal(api, preferences) {
-    /** @type {Set<(state: TerminalState) => void>} */
-    const listeners = new Set();
-    /** @type {AbortController | undefined} */
-    let gridRequest;
-    /** @type {AbortController | undefined} */
-    let itemRequest;
+export type TerminalData = {
+    route: Route;
+    grids: Grid[];
+    gridStatus: 'loading' | 'ready' | 'error';
+    gridError: string | null;
+    items: Item[];
+    itemStatus: 'idle' | 'loading' | 'ready' | 'error';
+    itemError: string | null;
+    refreshing: boolean;
+    updatedAt: number | null;
+    search: string;
+    selected: Item | null;
+    preferences: Preferences;
+};
+export type TerminalState = TerminalData & {
+    selectedGridKey: string | null;
+    crafting: CraftingState;
+    cpus: CpuState;
+    history: HistoryState;
+    settings: SettingsState;
+};
+
+/** Shared state/actions for terminal renderers; a theme does not own requests or refresh timers. */
+export function createTerminal(api: Api, preferences: ReturnType<typeof createPreferences>) {
+    const listeners = new Set<(state: TerminalState) => void>();
+    let gridRequest: AbortController | undefined;
+    let itemRequest: AbortController | undefined;
     let serial = 0;
     let disposed = false;
-    /** @type {ReturnType<typeof setTimeout> | undefined} */
-    let timer;
-    /** @type {Promise<void> | null} */
-    let refreshingGrids = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let refreshingGrids: Promise<void> | null = null;
     const notify = () => {
         if (!disposed) for (const listener of listeners) listener(state);
     };
@@ -45,8 +62,7 @@ export function createTerminal(api, preferences) {
         schedule();
     });
 
-    /** @type {TerminalState} */
-    const state = {
+    const state: TerminalState = {
         route: { view: 'home', gridKey: null },
         selectedGridKey: null,
         grids: [],
@@ -104,7 +120,7 @@ export function createTerminal(api, preferences) {
             state.itemStatus = 'ready';
             state.updatedAt = Date.now();
         } catch (caught) {
-            const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+            const error = caught as ApiFailure;
             if (disposed || version !== serial || error.name === 'AbortError') return;
             state.items = [];
             state.selected = null;
@@ -169,7 +185,7 @@ export function createTerminal(api, preferences) {
                 await loadHistory(reloadDetail);
                 await loadSettings();
             } catch (caught) {
-                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+                const error = caught as ApiFailure;
                 if (disposed || error.name === 'AbortError') return;
                 state.gridStatus = 'error';
                 state.gridError = error.status || 'NETWORK_ERROR';
@@ -192,15 +208,13 @@ export function createTerminal(api, preferences) {
         cpus,
         history,
         settings,
-        /** @param {(state: TerminalState) => void} listener */
-        subscribe(listener) {
+        subscribe(listener: (state: TerminalState) => void) {
             listeners.add(listener);
             listener(state);
             return () => listeners.delete(listener);
         },
         refresh,
-        /** @param {import('./router.mjs').Route} route */
-        route(route) {
+        route(route: Route) {
             invalidateItems();
             state.route = route;
             if (route.gridKey) state.selectedGridKey = route.gridKey;
@@ -216,18 +230,15 @@ export function createTerminal(api, preferences) {
             loadSettings();
             schedule();
         },
-        /** @param {string} value */
-        search(value) {
+        search(value: string) {
             state.search = value;
             notify();
         },
-        /** @param {import('./api-types.mjs').Item | null} item */
-        select(item) {
+        select(item: Item | null) {
             state.selected = item;
             notify();
         },
-        /** @template {keyof import('./preferences.mjs').Preferences} K @param {K} name @param {import('./preferences.mjs').Preferences[K]} value */
-        preference(name, value) {
+        preference<K extends keyof Preferences>(name: K, value: Preferences[K]) {
             preferences.set(name, value);
             notify();
             if (name === 'autoRefresh') schedule();

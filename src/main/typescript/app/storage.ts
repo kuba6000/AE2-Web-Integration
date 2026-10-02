@@ -1,13 +1,9 @@
-/** @typedef {null | boolean | number | string | JsonValue[] | {[key: string]: JsonValue}} JsonValue */
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
-/** JSON settings scoped to one deployment and consumer.
- * @param {URL} base
- * @param {string} scope
- */
-export function createSettings(base, scope) {
+/** JSON settings scoped to one deployment and consumer. */
+export function createSettings(base: URL, scope: string) {
     const storageKey = `ae2web:${base.pathname}:${scope}`;
-    /** @type {Record<string, JsonValue>} */
-    let saved = {};
+    let saved: Record<string, JsonValue> = {};
     let available = true;
 
     function read() {
@@ -20,7 +16,7 @@ export function createSettings(base, scope) {
             return saved;
         }
         try {
-            const value = /** @type {JsonValue} */ (JSON.parse(raw ?? '{}'));
+            const value = JSON.parse(raw ?? '{}') as JsonValue;
             saved = value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {};
         } catch {
             saved = {};
@@ -41,18 +37,16 @@ export function createSettings(base, scope) {
     }
 
     return {
-        /** @param {string} key @param {JsonValue} [fallback] @returns {JsonValue} */
-        get(key, fallback = null) {
+        get(key: string, fallback: JsonValue = null): JsonValue {
             const values = read();
             return Object.hasOwn(values, key) ? values[key] : fallback;
         },
-        /** @param {string} key @param {JsonValue} value @returns {boolean} Whether the value was persisted. */
-        set(key, value) {
+        /** Returns whether the value was persisted. */
+        set(key: string, value: JsonValue): boolean {
             saved = { ...read(), [key]: value };
             return write();
         },
-        /** @param {string} key */
-        remove(key) {
+        remove(key: string) {
             read();
             if (!Object.hasOwn(saved, key)) return;
             delete saved[key];

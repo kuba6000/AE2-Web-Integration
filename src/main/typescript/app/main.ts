@@ -1,16 +1,14 @@
-import { createApi } from './api.mjs';
-import { createPreferences } from './preferences.mjs';
-import { createTerminal } from './terminal.mjs';
-import { readRoute } from './router.mjs';
-import { createThemeContext } from './theme-context.mjs';
-import { mount } from '../themes/default/view.mjs';
+import { createApi } from './api.js';
+import { createPreferences } from './preferences.js';
+import { createTerminal } from './terminal.js';
+import { readRoute } from './router.js';
+import { createThemeContext } from './theme-context.js';
+import { mount } from '../themes/default/view.js';
 
-const identity = /** @type {HTMLScriptElement} */ (document.getElementById('ae2-user'));
-/** @type {{username: string, isAdmin: boolean}} */
-const user = JSON.parse(identity.text);
-const version = /** @type {HTMLScriptElement} */ (document.getElementById('ae2-mod-version'));
-/** @type {string | null} */
-const modVersion = JSON.parse(version.text);
+const identity = document.getElementById('ae2-user') as HTMLScriptElement;
+const user: { username: string; isAdmin: boolean } = JSON.parse(identity.text);
+const version = document.getElementById('ae2-mod-version') as HTMLScriptElement;
+const modVersion: string | null = JSON.parse(version.text);
 const base = new URL('./', location.href);
 let leaving = false;
 function returnToLogin() {
@@ -25,7 +23,7 @@ function returnToLogin() {
 }
 const api = createApi(base, returnToLogin);
 const application = createTerminal(api, createPreferences(base));
-const unmount = mount(/** @type {HTMLElement} */ (document.getElementById('app')), application, {
+const unmount = mount(document.getElementById('app') as HTMLElement, application, {
     ...createThemeContext(base, 'default'),
     base,
     user,

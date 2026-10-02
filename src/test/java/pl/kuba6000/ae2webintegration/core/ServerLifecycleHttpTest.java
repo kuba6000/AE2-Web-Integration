@@ -198,6 +198,22 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
+    void compiledFrontendModulesAreAvailableThroughTheWebServer() throws Exception {
+        startApi();
+        for (String path : new String[] { "/assets/web/app/main.js", "/assets/web/app/api.js",
+            "/assets/web/themes/default/view.js" }) {
+            HttpURLConnection module = connection(path, null);
+            Response response = read(module);
+            assertEquals(HttpURLConnection.HTTP_OK, response.status(), path);
+            assertEquals("text/javascript; charset=UTF-8", module.getHeaderField("Content-Type"));
+            assertFalse(
+                response.body()
+                    .isEmpty(),
+                path);
+        }
+    }
+
+    @Test
     void browserModulesAndStylesLoadWithoutConsumingTheLoginRequestBudget() throws Exception {
         config.set("general.max_requests_before_logged_in_per_minute", 1);
         startApi();

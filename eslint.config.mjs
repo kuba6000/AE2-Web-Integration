@@ -1,18 +1,21 @@
 import js from '@eslint/js';
 import globals from 'globals';
+import tseslint from 'typescript-eslint';
+import { defineConfig } from 'eslint/config';
 
-export default [
+export default defineConfig([
     {
-        files: ['src/main/resources/assets/web/**/*.mjs', '*.config.mjs', 'tools/ui-tests/**/*.cjs'],
+        files: ['src/main/typescript/**/*.ts', '*.config.mjs', 'tools/build-frontend.mjs', 'tools/ui-tests/**/*.cjs'],
         rules: { 'no-var': 'error', 'prefer-const': 'error' }
     },
     {
-        files: ['src/main/resources/assets/web/**/*.mjs'],
+        files: ['src/main/typescript/**/*.ts'],
+        extends: [tseslint.configs.recommended],
         languageOptions: { globals: globals.browser },
-        rules: js.configs.recommended.rules
+        rules: { '@typescript-eslint/no-explicit-any': 'error' }
     },
     {
-        files: ['*.config.mjs'],
+        files: ['*.config.mjs', 'tools/build-frontend.mjs'],
         languageOptions: { globals: globals.node },
         rules: js.configs.recommended.rules
     },
@@ -22,4 +25,4 @@ export default [
         languageOptions: { globals: { ...globals.node, ...globals.browser } },
         rules: js.configs.recommended.rules
     }
-];
+]);

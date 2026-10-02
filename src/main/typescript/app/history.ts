@@ -1,21 +1,23 @@
-/** @typedef {{status: 'idle' | 'loading' | 'ready' | 'error', entries: import('./api-types.mjs').HistoryEntry[], detail: import('./api-types.mjs').HistoryDetail | null, error: string | null}} HistoryState */
-/** Completed history snapshots are read on entry or explicit refresh, not on each polling tick.
- * @param {import('./api.mjs').Api} api
- * @param {() => void} changed
- */
-export function createHistory(api, changed) {
-    /** @type {HistoryState} */
-    const state = { status: 'idle', entries: [], detail: null, error: null };
-    /** @type {import('./router.mjs').Route | {view?: undefined, gridKey?: undefined}} */
-    let route = {};
+import type { HistoryEntry, HistoryDetail } from './api-types.js';
+import type { Api, ApiFailure } from './api.js';
+import type { Route } from './router.js';
+
+export type HistoryState = {
+    status: 'idle' | 'loading' | 'ready' | 'error';
+    entries: HistoryEntry[];
+    detail: HistoryDetail | null;
+    error: string | null;
+};
+/** Completed history snapshots are read on entry or explicit refresh, not on each polling tick. */
+export function createHistory(api: Api, changed: () => void) {
+    const state: HistoryState = { status: 'idle', entries: [], detail: null, error: null };
+    let route: Route | { view?: undefined; gridKey?: undefined } = {};
     let generation = 0;
-    /** @type {AbortController | undefined} */
-    let request;
+    let request: AbortController | undefined;
     let reading = false;
     return {
         state,
-        /** @param {import('./router.mjs').Route} next */
-        route(next) {
+        route(next: Route) {
             generation++;
             request?.abort();
             reading = false;
@@ -47,7 +49,7 @@ export function createHistory(api, changed) {
                 state.status = 'ready';
                 state.error = null;
             } catch (caught) {
-                const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+                const error = caught as ApiFailure;
                 if (version !== generation || error.name === 'AbortError') return;
                 Object.assign(state, {
                     status: 'error',
@@ -62,8 +64,7 @@ export function createHistory(api, changed) {
                 }
             }
         },
-        /** @param {string | null} error */
-        block(error) {
+        block(error: string | null) {
             generation++;
             request?.abort();
             reading = false;

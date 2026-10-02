@@ -1,22 +1,23 @@
-/**
- * @typedef {{mutation?: 'cancel' | 'pause' | 'resume', uncertain?: boolean, notice?: string}} CpuOutcome
- * @typedef {{status: 'idle' | 'loading' | 'ready' | 'error', cpus: (import('./api-types.mjs').CpuInfo & {key: string})[], detail: import('./api-types.mjs').CpuDetail | null, error: string | null, outcomes: Record<string, CpuOutcome>}} CpuState
- */
-/** Grid CPU summaries and selected current work. The application owns refresh scheduling.
- * @param {import('./api.mjs').Api} api
- * @param {() => void} changed
- */
-export function createCpuMonitor(api, changed) {
-    /** @type {CpuState} */
-    const state = { status: 'idle', cpus: [], detail: null, error: null, outcomes: {} };
-    /** Outcomes belong to a grid/CPU, regardless of which screen initiated the mutation.
-     * @type {Map<string, Record<string, CpuOutcome>>} */
-    const outcomes = new Map();
-    /** @type {import('./router.mjs').Route | {view?: undefined, gridKey?: undefined}} */
-    let route = {};
+import type { CpuInfo, CpuDetail } from './api-types.js';
+import type { Api, ApiFailure } from './api.js';
+import type { Route } from './router.js';
+
+export type CpuOutcome = { mutation?: 'cancel' | 'pause' | 'resume'; uncertain?: boolean; notice?: string };
+export type CpuState = {
+    status: 'idle' | 'loading' | 'ready' | 'error';
+    cpus: (CpuInfo & { key: string })[];
+    detail: CpuDetail | null;
+    error: string | null;
+    outcomes: Record<string, CpuOutcome>;
+};
+/** Grid CPU summaries and selected current work. The application owns refresh scheduling. */
+export function createCpuMonitor(api: Api, changed: () => void) {
+    const state: CpuState = { status: 'idle', cpus: [], detail: null, error: null, outcomes: {} };
+    /** Outcomes belong to a grid/CPU, regardless of which screen initiated the mutation. */
+    const outcomes = new Map<string, Record<string, CpuOutcome>>();
+    let route: Route | { view?: undefined; gridKey?: undefined } = {};
     let generation = 0;
-    /** @type {AbortController | undefined} */
-    let request;
+    let request: AbortController | undefined;
     let reading = false;
     let disposed = false;
 
@@ -26,8 +27,10 @@ export function createCpuMonitor(api, changed) {
         reading = false;
     }
 
-    /** @param {string} status @param {string | null | undefined} [cpuKey] */
-    function fail(status, cpuKey = route.view === 'cpus' ? route.cpuKey : undefined) {
+    function fail(
+        status: string,
+        cpuKey: string | null | undefined = route.view === 'cpus' ? route.cpuKey : undefined
+    ) {
         if (status === 'CPU_NOT_FOUND') {
             state.cpus = state.cpus.filter((cpu) => cpu.key !== cpuKey);
             if (route.view === 'cpus' && route.cpuKey && route.cpuKey !== cpuKey) return;
@@ -59,7 +62,7 @@ export function createCpuMonitor(api, changed) {
             }
             state.status = 'ready';
         } catch (caught) {
-            const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+            const error = caught as ApiFailure;
             if (version !== generation || error.name === 'AbortError') return;
             fail(error.status || 'NETWORK_ERROR');
         } finally {
@@ -70,8 +73,7 @@ export function createCpuMonitor(api, changed) {
         }
     }
 
-    /** @param {string} cpuKey @param {'cancel' | 'pause' | 'resume'} mutation */
-    async function mutate(cpuKey, mutation) {
+    async function mutate(cpuKey: string, mutation: 'cancel' | 'pause' | 'resume') {
         if (route.view !== 'cpus' || state.status !== 'ready') return;
         const cpu = route.cpuKey === cpuKey ? state.detail : state.cpus.find((cpu) => cpu.key === cpuKey);
         const previous = state.outcomes[cpuKey];
@@ -83,14 +85,13 @@ export function createCpuMonitor(api, changed) {
         gridOutcomes[cpuKey] = { mutation };
         state.error = null;
         changed();
-        /** @type {CpuOutcome} */
-        let outcome;
+        let outcome: CpuOutcome;
         try {
             if (mutation === 'cancel') await api.cancelCpu(gridKey, cpuKey);
             else await api.pauseCpu(gridKey, cpuKey, mutation === 'pause');
             outcome = mutation === 'cancel' ? { notice: 'cpuCancelled' } : {};
         } catch (caught) {
-            const error = /** @type {import('./api.mjs').ApiFailure} */ (caught);
+            const error = caught as ApiFailure;
             outcome =
                 !error.status ||
                 ['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'].includes(error.status)
@@ -105,7 +106,7 @@ export function createCpuMonitor(api, changed) {
         state.status = 'loading';
         if (outcome.notice === 'CPU_NOT_FOUND' && route.cpuKey && route.cpuKey !== cpuKey) await refresh();
         else if (['CPU_NOT_FOUND', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(outcome.notice ?? ''))
-            fail(/** @type {string} */ (outcome.notice), cpuKey);
+            fail(outcome.notice as string, cpuKey);
         else if (!['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.error ?? '')) await refresh();
         changed();
     }
@@ -113,8 +114,7 @@ export function createCpuMonitor(api, changed) {
     return {
         state,
         refresh,
-        /** @param {import('./router.mjs').Route} next */
-        route(next) {
+        route(next: Route) {
             invalidateRead();
             route = next;
             const gridOutcomes = next.view === 'cpus' ? outcomes.get(next.gridKey) || {} : {};
@@ -127,16 +127,13 @@ export function createCpuMonitor(api, changed) {
                 outcomes: gridOutcomes
             });
         },
-        /** @param {string | null} error */
-        block(error) {
+        block(error: string | null) {
             invalidateRead();
             Object.assign(state, { status: 'error', cpus: [], detail: null, error });
             changed();
         },
-        /** @param {string} cpuKey */
-        cancel: (cpuKey) => mutate(cpuKey, 'cancel'),
-        /** @param {string} cpuKey @param {boolean} paused */
-        pause: (cpuKey, paused) => mutate(cpuKey, paused ? 'pause' : 'resume'),
+        cancel: (cpuKey: string) => mutate(cpuKey, 'cancel'),
+        pause: (cpuKey: string, paused: boolean) => mutate(cpuKey, paused ? 'pause' : 'resume'),
         dispose() {
             disposed = true;
             invalidateRead();

@@ -1,25 +1,29 @@
-/**
- * @typedef {Error & {status?: string, data?: unknown}} ApiFailure
- * @typedef {object} Api
- * @property {(signal?: AbortSignal) => Promise<import('./api-types.mjs').Grid[]>} grids
- * @property {(gridKey: string, signal?: AbortSignal) => Promise<import('./api-types.mjs').Item[]>} items
- * @property {(gridKey: string, body: {itemKey: string, quantity: number}) => Promise<{jobID: number}>} createPlan
- * @property {(gridKey: string, planId: string | number, signal?: AbortSignal) => Promise<import('./api-types.mjs').Plan>} plan
- * @property {(gridKey: string, signal?: AbortSignal) => Promise<Record<string, import('./api-types.mjs').CpuInfo>>} cpus
- * @property {(gridKey: string, cpuKey: string, signal?: AbortSignal) => Promise<import('./api-types.mjs').CpuDetail>} cpu
- * @property {(gridKey: string, cpuKey: string) => Promise<null>} cancelCpu
- * @property {(gridKey: string, cpuKey: string, paused: boolean) => Promise<null>} pauseCpu
- * @property {(gridKey: string, signal?: AbortSignal) => Promise<import('./api-types.mjs').HistoryEntry[]>} history
- * @property {(gridKey: string, entryId: string | number, signal?: AbortSignal) => Promise<import('./api-types.mjs').HistoryDetail>} historyEntry
- * @property {(gridKey: string, signal?: AbortSignal) => Promise<import('./api-types.mjs').GridSettings>} settings
- * @property {(gridKey: string, body: {isTracked: boolean}) => Promise<import('./api-types.mjs').GridSettings>} saveSettings
- * @property {(gridKey: string, planId: string | number, cpuKey: string) => Promise<null>} submitPlan
- * @property {(gridKey: string, planId: string | number) => Promise<null>} deletePlan
- * @property {() => Promise<null>} logout
- */
+import type { Grid, Item, Plan, CpuInfo, CpuDetail, HistoryEntry, HistoryDetail, GridSettings } from './api-types.js';
+
+export type ApiFailure = Error & { status?: string; data?: unknown };
+export type Api = {
+    grids: (signal?: AbortSignal) => Promise<Grid[]>;
+    items: (gridKey: string, signal?: AbortSignal) => Promise<Item[]>;
+    createPlan: (gridKey: string, body: { itemKey: string; quantity: number }) => Promise<{ jobID: number }>;
+    plan: (gridKey: string, planId: string | number, signal?: AbortSignal) => Promise<Plan>;
+    cpus: (gridKey: string, signal?: AbortSignal) => Promise<Record<string, CpuInfo>>;
+    cpu: (gridKey: string, cpuKey: string, signal?: AbortSignal) => Promise<CpuDetail>;
+    cancelCpu: (gridKey: string, cpuKey: string) => Promise<null>;
+    pauseCpu: (gridKey: string, cpuKey: string, paused: boolean) => Promise<null>;
+    history: (gridKey: string, signal?: AbortSignal) => Promise<HistoryEntry[]>;
+    historyEntry: (gridKey: string, entryId: string | number, signal?: AbortSignal) => Promise<HistoryDetail>;
+    settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettings>;
+    saveSettings: (gridKey: string, body: { isTracked: boolean }) => Promise<GridSettings>;
+    submitPlan: (gridKey: string, planId: string | number, cpuKey: string) => Promise<null>;
+    deletePlan: (gridKey: string, planId: string | number) => Promise<null>;
+    logout: () => Promise<null>;
+};
 export class ApiError extends Error {
-    /** @param {string} status @param {number} httpStatus @param {unknown} [data] */
-    constructor(status, httpStatus, data = null) {
+    declare status: string;
+    declare httpStatus: number;
+    declare data: unknown;
+
+    constructor(status: string, httpStatus: number, data: unknown = null) {
         super(status);
         this.status = status;
         this.httpStatus = httpStatus;
@@ -27,20 +31,24 @@ export class ApiError extends Error {
     }
 }
 
-/**
- * One transport for the application. Authentication remains in the server's HttpOnly cookie.
- * @param {URL} base
- * @param {() => void} onUnauthorized
- * @returns {Api}
- */
-export function createApi(base, onUnauthorized) {
-    /**
-     * @template T
-     * @param {string} path
-     * @param {{method?: string, signal?: AbortSignal, body?: {itemKey: string, quantity: number} | {cpuKey: string} | {isTracked: boolean} | {paused: boolean}}} [options]
-     * @returns {Promise<T>}
-     */
-    async function request(path, { method = 'GET', signal, body } = {}) {
+/** One transport for the application. Authentication remains in the server's HttpOnly cookie. */
+export function createApi(base: URL, onUnauthorized: () => void): Api {
+    async function request<T>(
+        path: string,
+        {
+            method = 'GET',
+            signal,
+            body
+        }: {
+            method?: string;
+            signal?: AbortSignal;
+            body?:
+                | { itemKey: string; quantity: number }
+                | { cpuKey: string }
+                | { isTracked: boolean }
+                | { paused: boolean };
+        } = {}
+    ): Promise<T> {
         let response;
         try {
             response = await fetch(new URL(path, base), {
@@ -63,8 +71,7 @@ export function createApi(base, onUnauthorized) {
             onUnauthorized();
             throw new ApiError('UNAUTHORIZED', 401);
         }
-        /** @type {{status: string, data: T}} */
-        let envelope;
+        let envelope: { status: string; data: T };
         try {
             envelope = await response.json();
         } catch {

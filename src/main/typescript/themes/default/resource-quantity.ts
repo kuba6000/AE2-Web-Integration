@@ -1,7 +1,6 @@
-/** @typedef {import('../../app/i18n.mjs').Translator} Locale */
+import type { Translator as Locale } from '../../app/i18n.js';
 
-/** @param {number} quantity @param {Locale} locale */
-export function slotQuantity(quantity, locale) {
+export function slotQuantity(quantity: number, locale: Locale) {
     if (quantity < 10000) return locale.number(quantity);
     // AE2's wide slot format: four characters, SI suffixes, rounded down.
     const suffixes = 'kMGTPE';

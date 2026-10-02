@@ -1,54 +1,59 @@
-/**
- * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
- * @typedef {Terminal['state']} TerminalState
- * @typedef {import('../../app/i18n.mjs').Translator} Locale
- */
+import type { ApiError } from '../../app/api.js';
+import type { createThemeContext } from '../../app/theme-context.js';
+import type { TerminalState, createTerminal } from '../../app/terminal.js';
+import type { Translator as Locale } from '../../app/i18n.js';
+type Terminal = ReturnType<typeof createTerminal>;
 
-import { createSettings } from '../../app/storage.mjs';
-import { plainMinecraftText } from '../../app/minecraft-text.mjs';
-import { renderMinecraftText } from './minecraft-text.mjs';
-import { navigateToGrid, cpuHref, historyHref } from '../../app/router.mjs';
-import { createCraftingView } from './crafting.mjs';
-import { createCpuView } from './cpus.mjs';
-import { createHistoryView } from './history.mjs';
-import { createSettingsView } from './settings.mjs';
-import { createAboutView } from './about.mjs';
-import { slotQuantity } from './resource-quantity.mjs';
-import { infoCircle } from './icons/hackernoon/info-circle.mjs';
-import { terminalIcons as symbols, craftingHammer } from './icons/pixel/terminal.mjs';
-import { userIcon } from './icons/hackernoon/user.mjs';
+import { createSettings } from '../../app/storage.js';
+import { plainMinecraftText } from '../../app/minecraft-text.js';
+import { renderMinecraftText } from './minecraft-text.js';
+import { navigateToGrid, cpuHref, historyHref } from '../../app/router.js';
+import { createCraftingView } from './crafting.js';
+import { createCpuView } from './cpus.js';
+import { createHistoryView } from './history.js';
+import { createSettingsView } from './settings.js';
+import { createAboutView } from './about.js';
+import { slotQuantity } from './resource-quantity.js';
+import { infoCircle } from './icons/hackernoon/info-circle.js';
+import { terminalIcons as symbols, craftingHammer } from './icons/pixel/terminal.js';
+import { userIcon } from './icons/hackernoon/user.js';
 
 const PAGE_SIZE = 100;
 
-/**
- * @template {keyof HTMLElementTagNameMap} Tag
- * @param {Tag} tag
- * @param {string} [text]
- * @param {string} [className]
- * @returns {HTMLElementTagNameMap[Tag]}
- */
-function element(tag, text = '', className = '') {
+function element<Tag extends keyof HTMLElementTagNameMap>(
+    tag: Tag,
+    text = '',
+    className = ''
+): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
     node.textContent = text;
     if (className) node.className = className;
     return node;
 }
 
-/**
- * @param {'filter' | 'sort'} group
- * @param {keyof typeof symbols} value
- */
-function iconButton(group, value) {
+function iconButton(group: 'filter' | 'sort', value: keyof typeof symbols) {
     return `<button type="button" class="tool-button" data-preference="${group}" data-value="${value}">${symbols[value]}</button>`;
 }
 
-/**
- * Theme renderer. Server operations and preference ownership are supplied by the application.
- * @param {HTMLElement} root
- * @param {Terminal} application
- * @param {ReturnType<typeof import('../../app/theme-context.mjs').createThemeContext> & {base: URL, user: {username: string, isAdmin: boolean}, modVersion: string | null, logout: () => Promise<void>}} options
- */
-export function mount(root, application, { base, user, modVersion, logout, settings, i18n }) {
+/* Theme renderer. Server operations and preference ownership are supplied by the application. */
+
+export function mount(
+    root: HTMLElement,
+    application: Terminal,
+    {
+        base,
+        user,
+        modVersion,
+        logout,
+        settings,
+        i18n
+    }: ReturnType<typeof createThemeContext> & {
+        base: URL;
+        user: { username: string; isAdmin: boolean };
+        modVersion: string | null;
+        logout: () => Promise<void>;
+    }
+) {
     i18n.register({
         en: {
             appearance: 'Appearance',
@@ -87,8 +92,8 @@ export function mount(root, application, { base, user, modVersion, logout, setti
         <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav></div>
         <div class="workspace" id="workspace">
         <div class="terminal-tools" id="terminal-tools" hidden>
-        <div role="group" data-label="resources">${/** @type {const} */ (['all', 'stored', 'craftable']).map((value) => iconButton('filter', value)).join('')}</div>
-        <div role="group" data-label="sort">${/** @type {const} */ (['name', 'quantity', 'id']).map((value) => iconButton('sort', value)).join('')}</div></div>
+        <div role="group" data-label="resources">${(['all', 'stored', 'craftable'] as const).map((value) => iconButton('filter', value)).join('')}</div>
+        <div role="group" data-label="sort">${(['name', 'quantity', 'id'] as const).map((value) => iconButton('sort', value)).join('')}</div></div>
         <div class="window-frame" id="window">
         <div id="network-message" role="status"></div>
         <section id="home"><h2 data-text="home"></h2><p data-text="homeHelp"></p>
@@ -109,54 +114,51 @@ export function mount(root, application, { base, user, modVersion, logout, setti
         <p id="missing" data-text="invalidRoute" hidden></p></div>
         <aside id="resource-panel" hidden><h3>${infoCircle}<span data-text="details"></span></h3><div id="details"></div><div id="order"></div></aside></div>
         <footer><span id="updated" aria-live="off"></span><a id="legacy" data-text="previous"></a></footer>`;
-    /**
-     * IDs and element types belong to the static markup created above.
-     * @typedef {{
-     *   '#language': HTMLElementTagNameMap['select'],
-     *   '#appearance': HTMLElementTagNameMap['select'],
-     *   '#logout': HTMLElementTagNameMap['button'],
-     *   '#username': HTMLElementTagNameMap['span'],
-     *   '#network': HTMLElementTagNameMap['select'],
-     *   '#selected-network': HTMLElementTagNameMap['dd'],
-     *   '#auto-refresh': HTMLElementTagNameMap['input'],
-     *   '#terminal-link': HTMLElementTagNameMap['a'],
-     *   '#cpu-link': HTMLElementTagNameMap['a'],
-     *   '#history-link': HTMLElementTagNameMap['a'],
-     *   '#settings-link': HTMLElementTagNameMap['a'],
-     *   '#workspace': HTMLElementTagNameMap['div'],
-     *   '#terminal-tools': HTMLElementTagNameMap['div'],
-     *   '#window': HTMLElementTagNameMap['div'],
-     *   '#network-message': HTMLElementTagNameMap['div'],
-     *   '#home': HTMLElementTagNameMap['section'],
-     *   '#web-settings': HTMLElementTagNameMap['section'],
-     *   '#server-settings': HTMLElementTagNameMap['section'],
-     *   '#networks': HTMLElementTagNameMap['div'],
-     *   '#terminal': HTMLElementTagNameMap['section'],
-     *   '#search': HTMLElementTagNameMap['input'],
-     *   '#item-message': HTMLElementTagNameMap['p'],
-     *   '#item-scroll': HTMLElementTagNameMap['div'],
-     *   '#items': HTMLElementTagNameMap['ul'],
-     *   '#pages': HTMLElementTagNameMap['div'],
-     *   '#previous-page': HTMLElementTagNameMap['button'],
-     *   '#page-count': HTMLElementTagNameMap['span'],
-     *   '#next-page': HTMLElementTagNameMap['button'],
-     *   '#missing': HTMLElementTagNameMap['p'],
-     *   '#resource-panel': HTMLElementTagNameMap['aside'],
-     *   '#details': HTMLElementTagNameMap['div'],
-     *   '#order': HTMLElementTagNameMap['div'],
-     *   '#updated': HTMLElementTagNameMap['span'],
-     *   '#legacy': HTMLElementTagNameMap['a'],
-     * }} ViewElements
-     */
-    /**
-     * @template {keyof ViewElements} Selector
-     * @param {Selector} selector
-     * @returns {ViewElements[Selector]}
-     */
-    const find = (selector) => /** @type {ViewElements[Selector]} */ (root.querySelector(selector));
+    /* IDs and element types belong to the static markup created above. */
+    type ViewElements = {
+        '#language': HTMLElementTagNameMap['select'];
+        '#appearance': HTMLElementTagNameMap['select'];
+        '#logout': HTMLElementTagNameMap['button'];
+        '#username': HTMLElementTagNameMap['span'];
+        '#network': HTMLElementTagNameMap['select'];
+        '#selected-network': HTMLElementTagNameMap['dd'];
+        '#auto-refresh': HTMLElementTagNameMap['input'];
+        '#terminal-link': HTMLElementTagNameMap['a'];
+        '#cpu-link': HTMLElementTagNameMap['a'];
+        '#history-link': HTMLElementTagNameMap['a'];
+        '#settings-link': HTMLElementTagNameMap['a'];
+        '#workspace': HTMLElementTagNameMap['div'];
+        '#terminal-tools': HTMLElementTagNameMap['div'];
+        '#window': HTMLElementTagNameMap['div'];
+        '#network-message': HTMLElementTagNameMap['div'];
+        '#home': HTMLElementTagNameMap['section'];
+        '#web-settings': HTMLElementTagNameMap['section'];
+        '#server-settings': HTMLElementTagNameMap['section'];
+        '#networks': HTMLElementTagNameMap['div'];
+        '#terminal': HTMLElementTagNameMap['section'];
+        '#search': HTMLElementTagNameMap['input'];
+        '#item-message': HTMLElementTagNameMap['p'];
+        '#item-scroll': HTMLElementTagNameMap['div'];
+        '#items': HTMLElementTagNameMap['ul'];
+        '#pages': HTMLElementTagNameMap['div'];
+        '#previous-page': HTMLElementTagNameMap['button'];
+        '#page-count': HTMLElementTagNameMap['span'];
+        '#next-page': HTMLElementTagNameMap['button'];
+        '#missing': HTMLElementTagNameMap['p'];
+        '#resource-panel': HTMLElementTagNameMap['aside'];
+        '#details': HTMLElementTagNameMap['div'];
+        '#order': HTMLElementTagNameMap['div'];
+        '#updated': HTMLElementTagNameMap['span'];
+        '#legacy': HTMLElementTagNameMap['a'];
+    };
+
+    const find = <Selector extends keyof ViewElements>(selector: Selector): ViewElements[Selector] =>
+        root.querySelector(selector) as ViewElements[Selector];
     find('#username').textContent = user.username;
-    /** @type {NodeListOf<HTMLButtonElement & {dataset: {preference: 'filter' | 'sort', value: keyof typeof symbols}}>} */
-    const toolButtons = root.querySelectorAll('.tool-button');
+
+    const toolButtons: NodeListOf<
+        HTMLButtonElement & { dataset: { preference: 'filter' | 'sort'; value: keyof typeof symbols } }
+    > = root.querySelectorAll('.tool-button');
     const craftingView = createCraftingView(find('#window'), application);
     const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace') });
     const historyView = createHistoryView(find('#window'));
@@ -168,41 +170,35 @@ export function mount(root, application, { base, user, modVersion, logout, setti
     tooltip.role = 'tooltip';
     tooltip.hidden = true;
     root.append(tooltip);
-    /** @type {{row: ReturnType<typeof createItemRow>, x: number, y: number, pointer: boolean} | null | undefined} */
-    let itemTooltip;
+
+    let itemTooltip:
+        { row: ReturnType<typeof createItemRow>; x: number; y: number; pointer: boolean } | null | undefined;
     let updatingRows = false;
-    /** @type {TerminalState['preferences']['language']} */
-    let language;
-    /** @type {Locale} */
-    let locale;
+
+    let language: TerminalState['preferences']['language'];
+
+    let locale: Locale;
     let page = 0;
-    /** @type {{items: TerminalState['items'], signature: string} | undefined} */
-    let listInput;
-    /** @type {TerminalState} */
-    let state;
-    /** @type {ReturnType<typeof createItemRow>[]} */
-    let rows = [];
-    /** @type {TerminalState['items']} */
-    let allFiltered = [];
+
+    let listInput: { items: TerminalState['items']; signature: string } | undefined;
+
+    let state: TerminalState;
+
+    let rows: ReturnType<typeof createItemRow>[] = [];
+
+    let allFiltered: TerminalState['items'] = [];
     function hideTooltip() {
         itemTooltip = null;
         tooltip.hidden = true;
     }
-    /**
-     * @param {number} x
-     * @param {number} y
-     */
-    function positionTooltip(x, y) {
+
+    function positionTooltip(x: number, y: number) {
         const box = tooltip.getBoundingClientRect();
         tooltip.style.left = `${Math.max(8, Math.min(x + 14, innerWidth - box.width - 8))}px`;
         tooltip.style.top = `${Math.max(8, y + box.height + 24 > innerHeight ? y - box.height - 10 : y + 16)}px`;
     }
-    /**
-     * @param {TerminalState['items'][number]} item
-     * @param {number} x
-     * @param {number} y
-     */
-    function showTooltip(item, x, y) {
+
+    function showTooltip(item: TerminalState['items'][number], x: number, y: number) {
         const name = element('strong');
         name.append(renderMinecraftText(item.itemname));
         tooltip.replaceChildren(
@@ -214,13 +210,8 @@ export function mount(root, application, { base, user, modVersion, logout, setti
         tooltip.hidden = false;
         positionTooltip(x, y);
     }
-    /**
-     * @param {ReturnType<typeof createItemRow>} row
-     * @param {number} x
-     * @param {number} y
-     * @param {boolean} pointer
-     */
-    function showItemTooltip(row, x, y, pointer) {
+
+    function showItemTooltip(row: ReturnType<typeof createItemRow>, x: number, y: number, pointer: boolean) {
         itemTooltip = { row, x, y, pointer };
         showTooltip(row.item, x, y);
     }
@@ -240,19 +231,19 @@ export function mount(root, application, { base, user, modVersion, logout, setti
     function updateLabels() {
         locale = i18n.forLanguage(language);
         document.documentElement.lang = language;
-        /** @type {NodeListOf<HTMLElement & {dataset: {themeText: string}}>} */ (
-            root.querySelectorAll('[data-theme-text]')
+        (
+            root.querySelectorAll('[data-theme-text]') as NodeListOf<HTMLElement & { dataset: { themeText: string } }>
         ).forEach((node) => {
             node.textContent = locale.t(node.dataset.themeText);
         });
-        /** @type {NodeListOf<HTMLElement & {dataset: {text: string}}>} */ (
-            root.querySelectorAll('[data-text]')
-        ).forEach((node) => {
-            node.textContent = locale.common(node.dataset.text);
-        });
-        /** @type {NodeListOf<HTMLElement & {dataset: {label: string}}>} */ (
-            root.querySelectorAll('[data-label]')
-        ).forEach((node) => node.setAttribute('aria-label', locale.common(node.dataset.label)));
+        (root.querySelectorAll('[data-text]') as NodeListOf<HTMLElement & { dataset: { text: string } }>).forEach(
+            (node) => {
+                node.textContent = locale.common(node.dataset.text);
+            }
+        );
+        (root.querySelectorAll('[data-label]') as NodeListOf<HTMLElement & { dataset: { label: string } }>).forEach(
+            (node) => node.setAttribute('aria-label', locale.common(node.dataset.label))
+        );
         toolButtons.forEach((button) => {
             const label =
                 button.dataset.preference === 'sort'
@@ -304,12 +295,10 @@ export function mount(root, application, { base, user, modVersion, logout, setti
                     : '';
         find('#network-message').textContent = networkMessage;
         const networks = find('#networks');
-        const focused = /** @type {HTMLAnchorElement | null} */ (
+        const focused = (
             networks.contains(document.activeElement) ? document.activeElement : null
-        );
-        const links = new Map(
-            /** @type {HTMLAnchorElement[]} */ ([...networks.children]).map((link) => [link.dataset.key, link])
-        );
+        ) as HTMLAnchorElement | null;
+        const links = new Map(([...networks.children] as HTMLAnchorElement[]).map((link) => [link.dataset.key, link]));
         state.grids.forEach((grid, index) => {
             const link = links.get(grid.key) || element('a', '', 'network');
             link.dataset.key = grid.key;
@@ -383,10 +372,8 @@ export function mount(root, application, { base, user, modVersion, logout, setti
         }
         find('#item-message').textContent = message;
     }
-    /**
-     * @param {TerminalState['items'][number]} item
-     */
-    function createItemRow(item) {
+
+    function createItemRow(item: TerminalState['items'][number]) {
         const row = {
             item,
             li: element('li'),
@@ -482,10 +469,8 @@ export function mount(root, application, { base, user, modVersion, logout, setti
             if (order.parentNode !== find('#order')) find('#order').append(order);
         }
     }
-    /**
-     * @param {TerminalState} next
-     */
-    function render(next) {
+
+    function render(next: TerminalState) {
         state = next;
         if (language !== state.preferences.language) {
             language = state.preferences.language;
@@ -506,7 +491,7 @@ export function mount(root, application, { base, user, modVersion, logout, setti
                 String(state.preferences[button.dataset.preference] === button.dataset.value)
             )
         );
-        /** @type {NodeListOf<HTMLAnchorElement>} */ (root.querySelectorAll('[data-view]')).forEach((link) => {
+        (root.querySelectorAll('[data-view]') as NodeListOf<HTMLAnchorElement>).forEach((link) => {
             if (
                 link.dataset.view === state.route.view ||
                 (link.dataset.view === 'items' && state.route.view === 'plan')
@@ -616,14 +601,12 @@ export function mount(root, application, { base, user, modVersion, logout, setti
         try {
             await logout();
         } catch (error) {
-            find('#network-message').textContent = locale.common(
-                /** @type {import('../../app/api.mjs').ApiError} */ (error).status
-            );
+            find('#network-message').textContent = locale.common((error as ApiError).status);
             find('#logout').disabled = false;
         }
     });
-    /** @param {KeyboardEvent} event */
-    const keydown = (event) => {
+
+    const keydown = (event: KeyboardEvent) => {
         if (event.key === 'Escape') hideTooltip();
     };
     window.addEventListener('scroll', hideTooltip, true);

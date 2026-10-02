@@ -1,6 +1,6 @@
 // Original interface artwork. SPDX-License-Identifier: LGPL-3.0-or-later.
-/** @param {string} body */
-function icon(body) {
+
+function icon(body: string) {
     return `<svg class="theme-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges" aria-hidden="true" focusable="false">${body}</svg>`;
 }
 

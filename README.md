@@ -42,7 +42,10 @@ If you only want to use the mod, download a version-specific JAR from
 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/ae2-web-integration), or
 [Modrinth](https://modrinth.com/mod/ae2-web-integration). Do not try to install the `core` branch by itself.
 
-For development, run core checks with `./gradlew test spotlessCheck`. The two shipped web interfaces
+For development, install Node.js 22.13+ on the 22.x line or Node.js 24+ with npm on PATH, then run
+core checks with `./gradlew test spotlessCheck`. Gradle compiles the TypeScript frontend and packages
+its JavaScript output; Node.js is not required to run the mod. See [frontend development](tools/ui-tests/README.md).
+The two shipped web interfaces
 also have dependency-free behavioral checks: `node --test src/test/js/item-identity.test.cjs`
 (Node.js 18 or newer).
 

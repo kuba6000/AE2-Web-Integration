@@ -1,30 +1,19 @@
-/**
- * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
- * @typedef {Terminal['state']} TerminalState
- * @typedef {import('../../app/i18n.mjs').Translator} Locale
- */
+import type { Item } from '../../app/api-types.js';
+import type { TerminalState, createTerminal } from '../../app/terminal.js';
+import type { Translator as Locale } from '../../app/i18n.js';
+type Terminal = ReturnType<typeof createTerminal>;
 
-import { cpuHref } from '../../app/router.mjs';
-import { plainMinecraftText } from '../../app/minecraft-text.mjs';
-import { renderMinecraftText } from './minecraft-text.mjs';
+import { cpuHref } from '../../app/router.js';
+import { plainMinecraftText } from '../../app/minecraft-text.js';
+import { renderMinecraftText } from './minecraft-text.js';
 
-/**
- * @template {keyof HTMLElementTagNameMap} Tag
- * @param {Tag} tag
- * @param {string} [text]
- * @returns {HTMLElementTagNameMap[Tag]}
- */
-function element(tag, text = '') {
+function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
     node.textContent = text;
     return node;
 }
 
-/**
- * @param {HTMLElement} root
- * @param {Terminal} application
- */
-export function createCraftingView(root, application) {
+export function createCraftingView(root: HTMLElement, application: Terminal) {
     const order = element('form');
     const quantityLabel = element('label');
     const quantityText = element('span');
@@ -41,8 +30,8 @@ export function createCraftingView(root, application) {
     const orderMessage = element('p');
     orderMessage.role = 'status';
     order.append(quantityLabel, calculate, orderMessage);
-    /** @type {import('../../app/api-types.mjs').Item} */
-    let item;
+
+    let item: Item;
     order.addEventListener('submit', (event) => {
         event.preventDefault();
         application.crafting.create(item, Number(quantity.value));
@@ -83,18 +72,13 @@ export function createCraftingView(root, application) {
     actions.className = 'plan-actions';
     actions.append(start, remove, inspectCpu, back);
     planView.append(title, output, status, reason, bytes, tableScroll, mergeHint, cpuHint, cpuLabel, actions);
-    /** @type {TerminalState['crafting']['plan'] | undefined} */
-    let lastPlan;
-    /** @type {Locale | undefined} */
-    let lastLocale;
+
+    let lastPlan: TerminalState['crafting']['plan'] | undefined;
+
+    let lastLocale: Locale | undefined;
     root.append(planView);
     return {
-        /**
-         * @param {import('../../app/api-types.mjs').Item} selected
-         * @param {TerminalState['crafting']} state
-         * @param {Locale} locale
-         */
-        order(selected, state, locale) {
+        order(selected: Item, state: TerminalState['crafting'], locale: Locale) {
             if (item?.itemKey !== selected?.itemKey) quantity.value = '1';
             item = selected;
             quantityText.textContent = locale.common('craftQuantity');
@@ -107,12 +91,8 @@ export function createCraftingView(root, application) {
                   : '';
             return order;
         },
-        /**
-         * @param {TerminalState['route']} route
-         * @param {TerminalState['crafting']} state
-         * @param {Locale} locale
-         */
-        render(route, state, locale) {
+
+        render(route: TerminalState['route'], state: TerminalState['crafting'], locale: Locale) {
             const { common: t, number } = locale;
             planView.hidden = route.view !== 'plan';
             if (route.view !== 'plan') return;

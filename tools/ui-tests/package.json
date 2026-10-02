@@ -2,6 +2,7 @@
   "name": "ae2-ui-browser-tests",
   "private": true,
   "scripts": {
+    "pretest": "npm --prefix ../.. run build",
     "test": "node --test browser.test.cjs"
   },
   "devDependencies": {

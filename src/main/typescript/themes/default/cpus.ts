@@ -1,32 +1,31 @@
-/**
- * @typedef {ReturnType<typeof import('../../app/terminal.mjs').createTerminal>} Terminal
- * @typedef {Terminal['state']} TerminalState
- * @typedef {import('../../app/i18n.mjs').Translator} Locale
- * @typedef {import('../../app/api-types.mjs').CpuItem} CpuItem
- * @typedef {'name' | 'active' | 'pending' | 'stored' | 'shareInCraftingTime'} ResourceSort
- */
+import type { CpuOutcome } from '../../app/cpus.js';
+import type { TerminalState, createTerminal } from '../../app/terminal.js';
+import type { CpuItem } from '../../app/api-types.js';
+import type { Translator as Locale } from '../../app/i18n.js';
+type Terminal = ReturnType<typeof createTerminal>;
+type ResourceSort = 'name' | 'active' | 'pending' | 'stored' | 'shareInCraftingTime';
 
-import { cpuHref } from '../../app/router.mjs';
-import { renderMinecraftText } from './minecraft-text.mjs';
-import { plainMinecraftText } from '../../app/minecraft-text.mjs';
-import { terminalIcons, craftingHammer, craftingQueue, craftingPriorityIcon } from './icons/pixel/terminal.mjs';
-import { slotQuantity } from './resource-quantity.mjs';
-import { infoCircle } from './icons/hackernoon/info-circle.mjs';
+import { cpuHref } from '../../app/router.js';
+import { renderMinecraftText } from './minecraft-text.js';
+import { plainMinecraftText } from '../../app/minecraft-text.js';
+import { terminalIcons, craftingHammer, craftingQueue, craftingPriorityIcon } from './icons/pixel/terminal.js';
+import { slotQuantity } from './resource-quantity.js';
+import { infoCircle } from './icons/hackernoon/info-circle.js';
 
-/** @template {keyof HTMLElementTagNameMap} Tag
- * @param {Tag} tag @param {string} [text] @param {string} [className]
- * @returns {HTMLElementTagNameMap[Tag]} */
-function element(tag, text = '', className = '') {
+function element<Tag extends keyof HTMLElementTagNameMap>(
+    tag: Tag,
+    text = '',
+    className = ''
+): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
     node.textContent = text;
     node.className = className;
     return node;
 }
 
-/** Presentation only: CPU requests, mutations and refresh lifetime belong to the application.
- * @param {HTMLElement} root @param {Terminal} application
- * @param {{workspace: HTMLElement}} options */
-export function createCpuView(root, application, { workspace }) {
+/* Presentation only: CPU requests, mutations and refresh lifetime belong to the application. */
+
+export function createCpuView(root: HTMLElement, application: Terminal, { workspace }: { workspace: HTMLElement }) {
     const lifetime = new AbortController();
     const view = element('section', '', 'cpu-view');
     view.hidden = true;
@@ -85,25 +84,33 @@ export function createCpuView(root, application, { workspace }) {
     tooltip.role = 'tooltip';
     tooltip.hidden = true;
     workspace.append(tooltip);
-    /** @typedef {{li: HTMLLIElement, link: HTMLAnchorElement, summary: HTMLParagraphElement, output: HTMLParagraphElement, actions: HTMLDivElement, notice: HTMLParagraphElement}} CpuRow */
-    /** @type {Map<string, CpuRow>} */
-    let rows = new Map();
-    /** @type {Map<string, ReturnType<typeof createResourceRow>>} */
-    let itemRows = new Map();
+    type CpuRow = {
+        li: HTMLLIElement;
+        link: HTMLAnchorElement;
+        summary: HTMLParagraphElement;
+        output: HTMLParagraphElement;
+        actions: HTMLDivElement;
+        notice: HTMLParagraphElement;
+    };
+
+    let rows: Map<string, CpuRow> = new Map();
+
+    let itemRows: Map<string, ReturnType<typeof createResourceRow>> = new Map();
     let hideStored = false;
     let activeFirst = false;
-    /** @type {ResourceSort} */
-    let sort = 'name';
-    /** @type {Locale} */
-    let locale;
-    /** @type {TerminalState['cpus']} */
-    let state;
+
+    let sort: ResourceSort = 'name';
+
+    let locale: Locale;
+
+    let state: TerminalState['cpus'];
     let selectedRoute = '';
     let updatingRows = false;
-    /** @type {{row: ReturnType<typeof createResourceRow>, x: number, y: number, pointer: boolean} | null} */
-    let selectedTooltip = null;
-    /** @type {HTMLButtonElement | null} */
-    let toolTooltip = null;
+
+    let selectedTooltip: { row: ReturnType<typeof createResourceRow>; x: number; y: number; pointer: boolean } | null =
+        null;
+
+    let toolTooltip: HTMLButtonElement | null = null;
 
     function hideTooltip() {
         selectedTooltip?.row.button.removeAttribute('aria-describedby');
@@ -111,8 +118,8 @@ export function createCpuView(root, application, { workspace }) {
         toolTooltip = null;
         tooltip.hidden = true;
     }
-    /** @param {number} x @param {number} y */
-    function positionTooltip(x, y) {
+
+    function positionTooltip(x: number, y: number) {
         const box = tooltip.getBoundingClientRect();
         tooltip.style.left = `${Math.max(8, Math.min(x + 14, innerWidth - box.width - 8))}px`;
         tooltip.style.top = `${Math.max(8, y + box.height + 24 > innerHeight ? y - box.height - 10 : y + 16)}px`;
@@ -147,15 +154,15 @@ export function createCpuView(root, application, { workspace }) {
         const box = row.button.getBoundingClientRect();
         positionTooltip(pointer ? x : box.left, pointer ? y : box.bottom);
     }
-    /** @param {ReturnType<typeof createResourceRow>} row @param {number} x @param {number} y @param {boolean} pointer */
-    function showResourceTooltip(row, x, y, pointer) {
+
+    function showResourceTooltip(row: ReturnType<typeof createResourceRow>, x: number, y: number, pointer: boolean) {
         hideTooltip();
         selectedTooltip = { row, x, y, pointer };
         row.button.setAttribute('aria-describedby', tooltip.id);
         refreshTooltip();
     }
-    /** @param {HTMLButtonElement} button */
-    function showToolTooltip(button) {
+
+    function showToolTooltip(button: HTMLButtonElement) {
         hideTooltip();
         toolTooltip = button;
         tooltip.textContent = button.getAttribute('aria-label');
@@ -163,8 +170,8 @@ export function createCpuView(root, application, { workspace }) {
         const box = button.getBoundingClientRect();
         positionTooltip(box.right, box.top);
     }
-    /** @param {CpuItem} item */
-    function createResourceRow(item) {
+
+    function createResourceRow(item: CpuItem) {
         const li = element('li');
         const button = element('button', '', 'item cpu-item');
         button.type = 'button';
@@ -212,10 +219,19 @@ export function createCpuView(root, application, { workspace }) {
         });
         return row;
     }
-    /** @type {Array<{button: HTMLButtonElement, value: ResourceSort | 'hideStored' | 'activeFirst', key: string}>} */
-    const controls = [];
-    /** @param {ResourceSort | 'hideStored' | 'activeFirst'} value @param {string} key @param {'filter' | 'sort'} group @param {string} icon */
-    function addControl(value, key, group, icon) {
+
+    const controls: Array<{
+        button: HTMLButtonElement;
+        value: ResourceSort | 'hideStored' | 'activeFirst';
+        key: string;
+    }> = [];
+
+    function addControl(
+        value: ResourceSort | 'hideStored' | 'activeFirst',
+        key: string,
+        group: 'filter' | 'sort',
+        icon: string
+    ) {
         const button = element('button', '', 'tool-button');
         button.type = 'button';
         button.innerHTML = icon;
@@ -246,8 +262,7 @@ export function createCpuView(root, application, { workspace }) {
     addControl('stored', 'cpuSortStored', 'sort', terminalIcons.quantity);
     addControl('shareInCraftingTime', 'cpuProcessingShare', 'sort', '<span aria-hidden="true">%</span>');
 
-    /** @param {CpuItem} item */
-    function craftingPriority(item) {
+    function craftingPriority(item: CpuItem) {
         return item.active > 0 ? 0 : item.pending > 0 ? 1 : 2;
     }
 
@@ -280,8 +295,8 @@ export function createCpuView(root, application, { workspace }) {
         const terms = search.value.trim().toLocaleLowerCase(document.documentElement.lang).split(/\s+/);
         const language = document.documentElement.lang;
         const focused = [...itemRows.values()].find((row) => row.button === document.activeElement);
-        /** @type {Map<string, number>} */
-        const occurrences = new Map();
+
+        const occurrences: Map<string, number> = new Map();
         // The CPU API does not expose variant keys. Retain repeated rows by occurrence; never merge by registry ID.
         const items = (state.detail?.isBusy && !state.error ? state.detail.items || [] : []).map((item) => {
             const identity = JSON.stringify([item.itemid, item.itemname]);
@@ -305,8 +320,8 @@ export function createCpuView(root, application, { workspace }) {
                     a.name.localeCompare(b.name, language)
                 );
             });
-        /** @type {Map<string, ReturnType<typeof createResourceRow>>} */
-        const current = new Map();
+
+        const current: Map<string, ReturnType<typeof createResourceRow>> = new Map();
         updatingRows = true;
         for (const [index, { item, key }] of visible.entries()) {
             const row = itemRows.get(key) || createResourceRow(item);
@@ -379,8 +394,7 @@ export function createCpuView(root, application, { workspace }) {
     });
     slotBackground.observe(grid);
 
-    /** @param {import('../../app/cpus.mjs').CpuOutcome | undefined} outcome */
-    const outcomeText = (outcome) =>
+    const outcomeText = (outcome: CpuOutcome | undefined) =>
         outcome?.uncertain
             ? locale.common('cpuMutationUncertain')
             : outcome?.mutation
@@ -388,8 +402,13 @@ export function createCpuView(root, application, { workspace }) {
               : outcome?.notice
                 ? locale.common(outcome.notice)
                 : '';
-    /** @param {HTMLDivElement} target @param {string} key @param {TerminalState['cpus']['detail'] | TerminalState['cpus']['cpus'][number] | null} cpu @param {string} [label] */
-    function renderActions(target, key, cpu, label = '') {
+
+    function renderActions(
+        target: HTMLDivElement,
+        key: string,
+        cpu: TerminalState['cpus']['detail'] | TerminalState['cpus']['cpus'][number] | null,
+        label = ''
+    ) {
         target.className = 'cpu-actions';
         if (!target.firstChild) {
             const pause = element('button');
@@ -398,7 +417,7 @@ export function createCpuView(root, application, { workspace }) {
             cancel.type = 'button';
             target.append(pause, cancel);
         }
-        const [pause, cancel] = /** @type {HTMLButtonElement[]} */ ([...target.children]);
+        const [pause, cancel] = [...target.children] as HTMLButtonElement[];
         const outcome = state.outcomes[key];
         const disabled = !!outcome?.mutation || !!outcome?.uncertain || state.status !== 'ready';
         pause.hidden = !cpu?.isBusy || !cpu.supportsPause;
@@ -416,13 +435,16 @@ export function createCpuView(root, application, { workspace }) {
             else button.removeAttribute('aria-label');
         }
     }
-    /** @param {TerminalState['cpus']['cpus'][number]} cpu */
-    function summaryText(cpu) {
+
+    function summaryText(cpu: TerminalState['cpus']['cpus'][number]) {
         const t = locale.common;
         return `${t(cpu.isBusy ? (cpu.isPaused ? 'cpuPaused' : 'cpuBusy') : 'cpuIdle')} · ${t('cpuCapacity', { count: cpu.availableStorage })} · ${t('coprocessors', { count: cpu.coProcessors })} · ${cpu.usedStorage >= 0 ? t('cpuUsedStorage', { count: cpu.usedStorage }) : t('cpuStorageUnknown')}`;
     }
-    /** @param {HTMLParagraphElement} target @param {TerminalState['cpus']['detail'] | TerminalState['cpus']['cpus'][number]} cpu */
-    function renderOutput(target, cpu) {
+
+    function renderOutput(
+        target: HTMLParagraphElement,
+        cpu: TerminalState['cpus']['detail'] | TerminalState['cpus']['cpus'][number]
+    ) {
         target.replaceChildren();
         if (!cpu?.isBusy) return;
         if (cpu.finalOutput)
@@ -434,8 +456,7 @@ export function createCpuView(root, application, { workspace }) {
         else target.append(locale.common('cpuOutputUnknown'));
     }
     return {
-        /** @param {TerminalState['route']} route @param {TerminalState['cpus']} nextState @param {Locale} nextLocale */
-        render(route, nextState, nextLocale) {
+        render(route: TerminalState['route'], nextState: TerminalState['cpus'], nextLocale: Locale) {
             state = nextState;
             locale = nextLocale;
             const selected = route.view === 'cpus' && !!route.cpuKey;
@@ -465,8 +486,7 @@ export function createCpuView(root, application, { workspace }) {
                   ? t('loading')
                   : t(state.cpus.length ? 'selectCpuWork' : 'noCpus');
             if (!selected) {
-                /** @type {Map<string, CpuRow>} */
-                const current = new Map();
+                const current: Map<string, CpuRow> = new Map();
                 for (const cpu of state.cpus) {
                     const entry = rows.get(cpu.key) || {
                         li: element('li'),

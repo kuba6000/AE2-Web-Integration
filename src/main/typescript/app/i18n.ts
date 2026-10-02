@@ -1,10 +1,9 @@
-/** @typedef {Partial<Record<Intl.LDMLPluralRule, string>> & {other: string}} PluralMessage */
-/** @typedef {Record<string, string | PluralMessage>} Dictionary */
-/** @typedef {Record<string, Dictionary>} Dictionaries */
-/** @typedef {{count?: number} & Record<string, string | number | undefined>} MessageValues */
-/** @typedef {ReturnType<typeof createTranslator>} Translator */
-/** @type {Dictionaries} */
-const translations = {
+export type PluralMessage = Partial<Record<Intl.LDMLPluralRule, string>> & { other: string };
+export type Dictionary = Record<string, string | PluralMessage>;
+export type Dictionaries = Record<string, Dictionary>;
+export type MessageValues = { count?: number } & Record<string, string | number | undefined>;
+export type Translator = ReturnType<typeof createTranslator>;
+const translations: Dictionaries = {
     en: {
         resourceTimings: 'Resource processing intervals',
         providerTimings: 'Pattern provider processing intervals',
@@ -415,11 +414,9 @@ const translations = {
 
 /** Each theme registers its dictionaries independently of the shared messages. */
 export function createI18n() {
-    /** @type {Dictionaries} */
-    const dictionaries = {};
+    const dictionaries: Dictionaries = {};
     return {
-        /** @param {Dictionaries} additions */
-        register(additions) {
+        register(additions: Dictionaries) {
             for (const [language, messages] of Object.entries(additions)) {
                 Object.defineProperty(dictionaries, language, {
                     value: { ...(Object.hasOwn(dictionaries, language) ? dictionaries[language] : {}), ...messages },
@@ -429,15 +426,13 @@ export function createI18n() {
                 });
             }
         },
-        /** @param {string} language */
-        forLanguage(language) {
+        forLanguage(language: string) {
             return createTranslator(language, dictionaries);
         }
     };
 }
 
-/** @param {string} language @param {Dictionaries} dictionaries */
-function createTranslator(language, dictionaries) {
+function createTranslator(language: string, dictionaries: Dictionaries) {
     const numbers = new Intl.NumberFormat(language);
     const plural = new Intl.PluralRules(language);
     const englishPlural = new Intl.PluralRules('en');
@@ -452,8 +447,7 @@ function createTranslator(language, dictionaries) {
         second: '2-digit',
         fractionalSecondDigits: 3
     });
-    /** @param {Dictionaries} source @param {string} key @param {MessageValues} values */
-    function translate(source, key, values) {
+    function translate(source: Dictionaries, key: string, values: MessageValues) {
         const selected = Object.hasOwn(source, language) ? source[language] : {};
         const english = Object.hasOwn(source, 'en') ? source.en : {};
         const localized = Object.hasOwn(selected, key);
@@ -467,13 +461,11 @@ function createTranslator(language, dictionaries) {
         );
     }
     return {
-        t: /** @param {string} key @param {MessageValues} [values] */ (key, values = {}) =>
-            translate(dictionaries, key, values),
-        common: /** @param {string} key @param {MessageValues} [values] */ (key, values = {}) =>
-            translate(translations, key, values),
-        number: /** @param {number} value */ (value) => numbers.format(value),
-        time: /** @param {number} value */ (value) => times.format(value),
-        dateTime: /** @param {number} value */ (value) => dates.format(value),
-        preciseTime: /** @param {number} value */ (value) => preciseTimes.format(value)
+        t: (key: string, values: MessageValues = {}) => translate(dictionaries, key, values),
+        common: (key: string, values: MessageValues = {}) => translate(translations, key, values),
+        number: (value: number) => numbers.format(value),
+        time: (value: number) => times.format(value),
+        dateTime: (value: number) => dates.format(value),
+        preciseTime: (value: number) => preciseTimes.format(value)
     };
 }

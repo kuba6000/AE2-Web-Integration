@@ -1,12 +1,20 @@
 # Browser tests
 
-Run the new terminal against a controlled HTTP API in a real browser from `tools/ui-tests`:
+Install the frontend build tools from the core repository root:
+
+```sh
+npm ci
+```
+
+Then run the new terminal against a controlled HTTP API in a real browser from `tools/ui-tests`:
 
 ```sh
 npm ci
 npx playwright install chromium
 npm test
 ```
+
+`npm test` compiles the frontend before starting the browser tests.
 
 Tests cover discovery, item browsing, navigation, preferences, delayed responses,
 access failures and login destination preservation. Crafting coverage uses visible
@@ -35,13 +43,19 @@ npm run format
 npm run format:check
 npm run lint
 npm run typecheck
+npm run build
 ```
 
-Prettier formats the new frontend in `src/main/resources/assets/web`, these browser tests,
-and their tooling configuration. ESLint checks JavaScript; Stylelint checks CSS. Formatting
-is owned by Prettier, with no formatting rules in the linters. TypeScript checks the new
-frontend's JavaScript and JSDoc contracts in strict mode without generating files. CI runs
-formatting, lint and type checks.
+TypeScript source lives in `src/main/typescript`; static web assets live in
+`src/main/resources/assets/web`. `npm run build` writes JavaScript to
+`build/generated/frontend/assets/web`. Use `npm run watch` to compile while editing.
+Gradle automatically installs the locked frontend tools and compiles TypeScript before
+processing resources, including when core is built as a native branch's submodule.
+Node.js and npm must be available on PATH when building; the Minecraft server needs neither.
+
+Prettier formats TypeScript, static assets, browser tests and tooling configuration.
+ESLint checks TypeScript and JavaScript; Stylelint checks CSS. `npm run typecheck`
+checks strict types without writing output. CI runs formatting, lint and type checks.
 The legacy web assets are outside this scope. These dependencies stay outside `resources`
 and are not packaged in mod JARs. In IntelliJ IDEA, select the root
 `node_modules/prettier` package to use the same formatter and configuration on save.
