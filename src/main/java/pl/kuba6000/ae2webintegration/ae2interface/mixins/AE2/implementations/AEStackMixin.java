@@ -24,7 +24,7 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
 
     @Override
     default @NotNull IAEKey web$copyIdentity() {
-        return LegacyItemIdentity.copy(this);
+        return (IAEKey) LegacyItemIdentity.copy(this);
     }
 
     @Override
