@@ -63,10 +63,16 @@ export function mount(
             system: 'System',
             defaultTheme: 'Default',
             themeOptions: 'Theme options',
-            resourceIcons: 'Resource icons',
             terminalDisplay: 'Terminal display',
             detailedItems: 'Icons and names',
-            compactItems: 'Compact icons'
+            compactItems: 'Icons only',
+            namesOnly: 'Names only',
+            iconsUnavailable: 'The server does not provide an icon pack.',
+            iconsLoading: 'Checking server icon availability…',
+            iconsError: 'Could not check server icon availability.',
+            iconsOffer: 'The server provides item icons.',
+            enableIcons: 'Enable icons',
+            dismissIcons: 'Dismiss icon suggestion'
         },
         pl: {
             appearance: 'Wygląd',
@@ -75,10 +81,16 @@ export function mount(
             system: 'Systemowy',
             defaultTheme: 'Domyślny',
             themeOptions: 'Opcje motywu',
-            resourceIcons: 'Ikony zasobów',
             terminalDisplay: 'Wyświetlanie terminala',
             detailedItems: 'Ikony i nazwy',
-            compactItems: 'Kompaktowe ikony'
+            compactItems: 'Same ikony',
+            namesOnly: 'Same nazwy',
+            iconsUnavailable: 'Serwer nie udostępnia paczki ikon.',
+            iconsLoading: 'Sprawdzanie dostępności ikon na serwerze…',
+            iconsError: 'Nie udało się sprawdzić dostępności ikon na serwerze.',
+            iconsOffer: 'Serwer udostępnia ikony przedmiotów.',
+            enableIcons: 'Włącz ikony',
+            dismissIcons: 'Zamknij podpowiedź o ikonach'
         }
     });
     const appearances = ['light', 'dark', 'system'];
@@ -95,13 +107,30 @@ export function mount(
     }
     let appearance =
         typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
-    let displayIcons = settings.get('resourceIcons', true) !== false;
-    let terminalDisplay = settings.get('terminalDisplay') === 'compact' ? 'compact' : 'detailed';
-    application.displayIcons(displayIcons);
+    type TerminalDisplay = 'names' | 'both' | 'icons';
+    const savedDisplay = settings.get('terminalDisplay');
+    let terminalDisplay: TerminalDisplay =
+        savedDisplay === 'names' || savedDisplay === 'both' || savedDisplay === 'icons'
+            ? savedDisplay
+            : settings.get('resourceIcons', true) === false
+              ? 'names'
+              : savedDisplay === 'compact'
+                ? 'icons'
+                : 'both';
+    if (savedDisplay !== terminalDisplay || settings.get('resourceIcons') !== null) {
+        if (settings.set('terminalDisplay', terminalDisplay)) settings.remove('resourceIcons');
+    }
+    application.displayIcons(terminalDisplay !== 'names');
+    let effectiveDisplay: TerminalDisplay = 'names';
+    let iconSuggestionDismissed = settings.get('iconSuggestionDismissed') === true;
     root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1>AE2 <span>Web Integration</span></h1></div><div class="account-controls">
         <span class="account-user">${userIcon}<span id="username"></span></span><button id="logout" data-text="logout"></button></div></header>
         <dl class="network-summary"><dt><span data-text="network"></span>:</dt><dd id="selected-network"></dd></dl>
         <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav></div>
+        <section class="window-frame icon-notice" id="icon-notice" aria-labelledby="icon-notice-text" hidden>
+        ${infoCircle}<p id="icon-notice-text" data-theme-text="iconsOffer"></p>
+        <button type="button" id="enable-icons" data-theme-text="enableIcons"></button>
+        <button type="button" id="dismiss-icons">×</button></section>
         <div class="workspace" id="workspace">
         <div class="terminal-tools" id="terminal-tools" hidden>
         <div role="group" data-label="resources">${(['all', 'stored', 'craftable'] as const).map((value) => iconButton('filter', value)).join('')}</div>
@@ -116,8 +145,8 @@ export function mount(
         <label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label>
         <label><span data-text="theme"></span><select disabled><option value="default" data-theme-text="defaultTheme"></option></select></label>
         <section><h3 data-theme-text="themeOptions"></h3>
-        <label class="checkbox"><input type="checkbox" id="resource-icons"><span data-theme-text="resourceIcons"></span></label>
-        <label><span data-theme-text="terminalDisplay"></span><select id="terminal-display"><option value="detailed" data-theme-text="detailedItems"></option><option value="compact" data-theme-text="compactItems"></option></select></label>
+        <label><span data-theme-text="terminalDisplay"></span><select id="terminal-display" aria-describedby="icon-availability"><option value="names" data-theme-text="namesOnly"></option><option value="both" data-theme-text="detailedItems"></option><option value="icons" data-theme-text="compactItems"></option></select></label>
+        <p class="hint" id="icon-availability" role="status"></p>
         <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label>
         </section></div></section>
         <section id="terminal" hidden><div class="terminal-heading"><h2 data-text="terminal"></h2>
@@ -130,8 +159,11 @@ export function mount(
         <footer><span id="updated" aria-live="off"></span><a id="legacy" data-text="previous"></a></footer>`;
     /* IDs and element types belong to the static markup created above. */
     type ViewElements = {
-        '#resource-icons': HTMLInputElement;
         '#terminal-display': HTMLSelectElement;
+        '#icon-availability': HTMLParagraphElement;
+        '#icon-notice': HTMLElement;
+        '#enable-icons': HTMLButtonElement;
+        '#dismiss-icons': HTMLButtonElement;
         '#language': HTMLElementTagNameMap['select'];
         '#appearance': HTMLElementTagNameMap['select'];
         '#logout': HTMLElementTagNameMap['button'];
@@ -268,6 +300,7 @@ export function mount(
                     : locale.common(button.dataset.value);
             button.setAttribute('aria-label', label);
         });
+        find('#dismiss-icons').setAttribute('aria-label', locale.t('dismissIcons'));
         find('#search').placeholder = locale.common('searchHint');
         find('#search').setAttribute('aria-description', locale.common('searchHelp'));
         find('#previous-page').setAttribute('aria-label', locale.common('previousPage'));
@@ -372,7 +405,9 @@ export function mount(
             renderPage();
         }
         itemIcons.update(
-            state.route.view === 'items' ? rows.map((row) => ({ element: row.button, icon: row.item.icon })) : [],
+            state.route.view === 'items' && effectiveDisplay !== 'names'
+                ? rows.map((row) => ({ element: row.button, icon: row.item.icon }))
+                : [],
             state.itemIcons
         );
         for (const row of rows) {
@@ -448,7 +483,7 @@ export function mount(
             row.item = item;
             row.name.replaceChildren(renderMinecraftText(item.itemname));
             row.quantity.textContent = slotQuantity(item.quantity, locale);
-            if (terminalDisplay === 'compact') {
+            if (effectiveDisplay === 'icons') {
                 row.button.setAttribute(
                     'aria-label',
                     `${plainMinecraftText(item.itemname)}, ${locale.common('quantity')}: ${locale.number(item.quantity)}, ${locale.common(item.craftable ? 'craftableYes' : 'craftableNo')}`
@@ -467,7 +502,9 @@ export function mount(
         for (const row of rows) if (!retained.has(row)) row.li.remove();
         rows = next;
         itemIcons.update(
-            state.route.view === 'items' ? rows.map((row) => ({ element: row.button, icon: row.item.icon })) : [],
+            state.route.view === 'items' && effectiveDisplay !== 'names'
+                ? rows.map((row) => ({ element: row.button, icon: row.item.icon }))
+                : [],
             state.itemIcons
         );
         if (focused?.button.isConnected && document.activeElement !== focused.button) {
@@ -503,12 +540,44 @@ export function mount(
         }
     }
 
+    function renderDisplay() {
+        const { available, status } = state.iconPack;
+        const nextDisplay = available === true ? terminalDisplay : 'names';
+        const changed = effectiveDisplay !== nextDisplay;
+        effectiveDisplay = nextDisplay;
+        const select = find('#terminal-display');
+        select.value = effectiveDisplay;
+        for (const option of select.options) option.disabled = option.value !== 'names' && available !== true;
+        find('#icon-availability').textContent =
+            status === 'error'
+                ? locale.t('iconsError')
+                : available === false
+                  ? locale.t('iconsUnavailable')
+                  : status === 'loading'
+                    ? locale.t('iconsLoading')
+                    : '';
+        find('#items').dataset.display = effectiveDisplay;
+        find('#items').classList.toggle('resource-icons-enabled', effectiveDisplay !== 'names');
+        find('#workspace').classList.toggle('cpu-icons-enabled', available === true);
+        find('#icon-notice').hidden =
+            state.route.view !== 'items' ||
+            effectiveDisplay !== 'names' ||
+            available !== true ||
+            iconSuggestionDismissed;
+        if (changed) {
+            renderPage();
+            updateSlotBackground();
+            hideTooltip();
+        }
+    }
+
     function render(next: TerminalState) {
         state = next;
         if (language !== state.preferences.language) {
             language = state.preferences.language;
             updateLabels();
         }
+        renderDisplay();
         document.documentElement.dataset.appearance = appearance;
         const languageSelect = find('#language');
         if (![...languageSelect.options].some((option) => option.value === language)) {
@@ -593,25 +662,30 @@ export function mount(
     languageSelect.addEventListener('change', () => application.preference('language', languageSelect.value));
     const appearanceSelect = find('#appearance');
     const displaySelect = find('#terminal-display');
-    displaySelect.value = terminalDisplay;
-    find('#items').dataset.display = terminalDisplay;
-    displaySelect.addEventListener('change', () => {
-        if (displaySelect.value !== 'compact' && displaySelect.value !== 'detailed') return;
-        terminalDisplay = displaySelect.value;
+    function acknowledgeIconSuggestion() {
+        iconSuggestionDismissed = true;
+        settings.set('iconSuggestionDismissed', true);
+    }
+    function selectDisplay(value: TerminalDisplay) {
+        terminalDisplay = value;
         settings.set('terminalDisplay', terminalDisplay);
-        find('#items').dataset.display = terminalDisplay;
-        renderPage();
-        updateSlotBackground();
-        hideTooltip();
+        acknowledgeIconSuggestion();
+        application.displayIcons(terminalDisplay !== 'names');
+        renderDisplay();
+    }
+    displaySelect.addEventListener('change', () => {
+        if (!['names', 'both', 'icons'].includes(displaySelect.value)) return;
+        if (displaySelect.value !== 'names' && state.iconPack.available !== true) return;
+        selectDisplay(displaySelect.value as TerminalDisplay);
     });
-    const iconToggle = find('#resource-icons');
-    iconToggle.checked = displayIcons;
-    root.classList.toggle('resource-icons-enabled', displayIcons);
-    iconToggle.addEventListener('change', () => {
-        displayIcons = iconToggle.checked;
-        settings.set('resourceIcons', displayIcons);
-        root.classList.toggle('resource-icons-enabled', displayIcons);
-        application.displayIcons(displayIcons);
+    find('#enable-icons').addEventListener('click', () => {
+        selectDisplay('both');
+        find('#search').focus();
+    });
+    find('#dismiss-icons').addEventListener('click', () => {
+        acknowledgeIconSuggestion();
+        renderDisplay();
+        find('#search').focus();
     });
     appearanceSelect.addEventListener('change', () => {
         if (!appearances.includes(appearanceSelect.value)) return;

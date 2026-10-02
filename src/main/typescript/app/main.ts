@@ -26,10 +26,7 @@ const api = createApi(base, returnToLogin);
 const application = createTerminal(
     api,
     createPreferences(base),
-    createIconLoader(base, returnToLogin, async (packId) => {
-        const pack = await api.iconPack();
-        if (!pack.available || pack.packId !== packId) await application.refresh();
-    })
+    createIconLoader(base, returnToLogin, () => application.refresh())
 );
 const unmount = mount(document.getElementById('app') as HTMLElement, application, {
     ...createThemeContext(base, 'default'),

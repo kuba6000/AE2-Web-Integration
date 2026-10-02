@@ -19,6 +19,7 @@ export type TerminalData = {
     gridError: string | null;
     items: Item[];
     itemIcons: IconMetadata | null;
+    iconPack: { available: boolean | null; status: 'loading' | 'ready' | 'error' };
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';
     itemError: string | null;
     refreshing: boolean;
@@ -45,6 +46,8 @@ export function createTerminal(
     const listeners = new Set<(state: TerminalState) => void>();
     let gridRequest: AbortController | undefined;
     let itemRequest: AbortController | undefined;
+    let iconRequest: AbortController | undefined;
+    let iconPackId: string | null = null;
     let serial = 0;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -62,7 +65,7 @@ export function createTerminal(
             notify();
             schedule();
         },
-        () => iconsEnabled
+        () => state.iconPack.available === true
     );
     const history = createHistory(api, () => {
         notify();
@@ -81,6 +84,7 @@ export function createTerminal(
         gridError: null,
         items: [],
         itemIcons: null,
+        iconPack: { available: null, status: 'loading' },
         itemStatus: 'idle',
         itemError: null,
         refreshing: false,
@@ -124,7 +128,7 @@ export function createTerminal(
         state.itemError = null;
         notify();
         try {
-            const result = await api.items(key, request.signal, iconsEnabled);
+            const result = await api.items(key, request.signal, iconsEnabled && state.iconPack.available === true);
             if (disposed || version !== serial) return;
             const items = result.data;
             state.itemIcons = result.icons;
@@ -148,6 +152,39 @@ export function createTerminal(
                 state.refreshing = false;
                 notify();
             }
+        }
+    }
+    async function loadIconPack() {
+        iconRequest?.abort();
+        const request = new AbortController();
+        iconRequest = request;
+        try {
+            const pack = await api.iconPack(request.signal);
+            if (disposed || request !== iconRequest) return;
+            if (typeof pack?.available !== 'boolean') throw new Error('Invalid icon availability');
+            const changed = state.iconPack.available !== pack.available || iconPackId !== pack.packId;
+            state.iconPack = { available: pack.available, status: 'ready' };
+            iconPackId = pack.packId;
+            icons.enabled(pack.available);
+            if (!pack.available) {
+                state.itemIcons = null;
+                state.cpus.icons = null;
+            }
+            notify();
+            if (changed) {
+                void loadItems();
+                if (
+                    state.gridStatus === 'ready' &&
+                    state.route.view === 'cpus' &&
+                    state.grids.some((grid) => grid.key === state.route.gridKey)
+                )
+                    void cpus.refreshIcons();
+            }
+        } catch (caught) {
+            if (disposed || request !== iconRequest || (caught as ApiFailure).name === 'AbortError') return;
+            // A transient discovery failure must not replace the last confirmed capability.
+            state.iconPack = { ...state.iconPack, status: 'error' };
+            notify();
         }
     }
     function schedule() {
@@ -187,10 +224,12 @@ export function createTerminal(
         if (refreshingGrids) return reloadDetail ? refreshingGrids.then(() => loadHistory(true)) : refreshingGrids;
         clearTimeout(timer);
         gridRequest = new AbortController();
+        void loadIconPack();
         refreshingGrids = (async () => {
             try {
-                state.grids = await api.grids(gridRequest.signal);
+                const grids = await api.grids(gridRequest.signal);
                 if (disposed) return;
+                state.grids = grids;
                 if (!state.grids.some((grid) => grid.key === state.selectedGridKey)) state.selectedGridKey = null;
                 state.gridStatus = 'ready';
                 state.gridError = null;
@@ -228,9 +267,7 @@ export function createTerminal(
         displayIcons(enabled: boolean) {
             if (iconsEnabled === enabled) return;
             iconsEnabled = enabled;
-            icons.enabled(enabled);
             state.itemIcons = null;
-            cpus.refreshIcons();
             loadItems();
             notify();
         },
@@ -274,6 +311,7 @@ export function createTerminal(
             clearTimeout(timer);
             gridRequest?.abort();
             itemRequest?.abort();
+            iconRequest?.abort();
             crafting.dispose();
             cpus.dispose();
             history.dispose();

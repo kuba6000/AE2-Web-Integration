@@ -3,7 +3,9 @@ import type { ResourceResponse, IconMetadata } from './api-types.js';
 
 export type ApiFailure = Error & { status?: string; data?: unknown };
 export type Api = {
-    iconPack: () => Promise<{ available: boolean; packId: string | null; width: number; height: number }>;
+    iconPack: (
+        signal?: AbortSignal
+    ) => Promise<{ available: boolean; packId: string | null; width: number; height: number }>;
     grids: (signal?: AbortSignal) => Promise<Grid[]>;
     items: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<Item[]>>;
     createPlan: (gridKey: string, body: { itemKey: string; quantity: number }) => Promise<{ jobID: number }>;
@@ -93,7 +95,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
         return read<T>(path, options).then((result) => result.data);
     }
     return {
-        iconPack: () => request('api/icon-pack'),
+        iconPack: (signal) => request('api/icon-pack', { signal }),
         grids: (signal) => request('api/grids', { signal }),
         items: (gridKey, signal, icons = false) =>
             read(`api/grids/${encodeURIComponent(gridKey)}/items${icons ? '?icons=true' : ''}`, { signal }),

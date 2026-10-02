@@ -183,12 +183,13 @@ async function fixture(t, mount = '') {
                 return;
             }
             if (resource === '/api/icon-pack') {
-                response.end(
-                    JSON.stringify({
-                        status: 'OK',
-                        data: options.pack || { available: false, packId: null, width: 0, height: 0 }
-                    })
-                );
+                if (options.packError) {
+                    response.writeHead(503).end(JSON.stringify({ status: 'INTERNAL_ERROR', data: null }));
+                    return;
+                }
+                const pack = options.pack || { available: false, packId: null, width: 0, height: 0 };
+                if (options.packDelay) await new Promise((resolve) => setTimeout(resolve, options.packDelay));
+                response.end(JSON.stringify({ status: 'OK', data: pack }));
             } else if (resource === '/api/auth/logout') {
                 options.loggedOut = true;
                 response.end(JSON.stringify({ status: 'OK', data: null }));
@@ -276,7 +277,7 @@ async function fixture(t, mount = '') {
                     JSON.stringify({
                         status,
                         data: status === 'OK' ? options.cpuDetails[key] : null,
-                        icons: options.icons
+                        icons: url.searchParams.get('icons') === 'true' ? options.icons : null
                     })
                 );
             } else if (resource.endsWith('/items')) {
@@ -288,7 +289,7 @@ async function fixture(t, mount = '') {
                             options.status === 200
                                 ? {
                                       status: 'OK',
-                                      icons: options.icons,
+                                      icons: url.searchParams.get('icons') === 'true' ? options.icons : null,
                                       data: first
                                           ? options.itemsA
                                           : [
@@ -424,9 +425,210 @@ async function atlasFixture(page, options) {
         height: 64,
         pages: [{ digest: 'b'.repeat(64), width: 128, height: 64 }]
     };
+    options.pack = { available: true, packId: options.icons.packId, width: 64, height: 64 };
 }
 
+// Public UI/HTTP seam: server capability overrides presentation without overwriting user intent.
+test('unavailable icons override the saved mode and recover without losing it', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, true);
+    await atlasFixture(page, options);
+    await page.goto(`${base}#/web-settings`);
+    const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
+    await mode.selectOption('icons');
+    options.pack = { available: false, packId: null, width: 0, height: 0 };
+    await page.reload();
+    await page.getByText(/server.*not.*icon pack/i).waitFor({ timeout: 3000 });
+    assert.equal(await mode.inputValue(), 'names');
+    assert.equal(
+        await mode.getByRole('option', { name: 'Icons only', exact: true }).evaluate((option) => option.disabled),
+        true
+    );
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const item = page.getByRole('button', { name: /Iron Ingot/ });
+    await item.waitFor();
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
+    assert.equal(await item.getByText(iron.itemname, { exact: true }).isVisible(), true);
+    options.pack = { available: true, packId: 'a'.repeat(64), width: 64, height: 64 };
+    await poll(page);
+    await page.waitForFunction(
+        () => {
+            const item = document.querySelector('#items button');
+            const rect = item.getBoundingClientRect();
+            return Math.abs(rect.width - rect.height) < 1;
+        },
+        null,
+        { timeout: 3000 }
+    );
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    assert.equal(await mode.inputValue(), 'icons');
+    await page.reload();
+    await mode.waitFor();
+    await page.waitForFunction(() => document.querySelector('#terminal-display').value === 'icons');
+});
+
+test('pending icon discovery leaves inventory usable and failures preserve confirmed availability', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, true);
+    await atlasFixture(page, options);
+    options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
+    options.packDelay = 2000;
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const item = page.getByRole('button', { name: /Iron Ingot/ });
+    await item.waitFor({ timeout: 1000 });
+    assert.equal(await item.getByText(iron.itemname, { exact: true }).isVisible(), true);
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
+    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage, null, {
+        timeout: 4000
+    });
+    options.packDelay = 0;
+    options.packError = true;
+    await poll(page);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByText(/could not check.*icon/i).waitFor();
+    assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'both');
+});
+
+test('initial icon discovery error stays distinct from absence and recovers', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, true);
+    await atlasFixture(page, options);
+    options.packError = true;
+    await page.goto(`${base}#/web-settings`);
+    const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
+    await page.getByText(/could not check.*icon/i).waitFor();
+    assert.equal(await page.getByText(/server.*not.*icon pack/i).isVisible(), false);
+    assert.equal(await mode.inputValue(), 'names');
+    options.packError = false;
+    await poll(page);
+    await page.waitForFunction(() => document.querySelector('#terminal-display').value === 'both', null, {
+        timeout: 3000
+    });
+    options.pack = { available: false, packId: null, width: 0, height: 0 };
+    await poll(page);
+    await page.getByText(/server.*not.*icon pack/i).waitFor();
+    options.packError = true;
+    await poll(page);
+    await page.getByText(/could not check.*icon/i).waitFor({ timeout: 3000 });
+    assert.equal(await page.getByText(/server.*not.*icon pack/i).isVisible(), false);
+    assert.equal(await mode.inputValue(), 'names');
+});
+
+test('superseded slow discovery cannot overwrite recovered availability after a grid failure', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, true);
+    await atlasFixture(page, options);
+    options.pack = { available: false, packId: null, width: 0, height: 0 };
+    options.packDelay = 2000;
+    options.gridError = 'NO_PERMISSIONS';
+    const firstDiscovery = page.waitForRequest((r) => r.url().endsWith('/api/icon-pack'));
+    await page.goto(`${base}#/web-settings`);
+    const oldRequest = await firstDiscovery;
+    await page.waitForFunction(() => document.querySelector('#network-message').textContent.length > 0);
+    options.gridError = null;
+    options.packDelay = 0;
+    options.pack = { available: true, packId: 'a'.repeat(64), width: 64, height: 64 };
+    await poll(page);
+    await page.waitForFunction(() => document.querySelector('#terminal-display').value === 'both', null, {
+        timeout: 3000
+    });
+    await settleResponse(page, oldRequest);
+    await new Promise((resolve) => setTimeout(resolve, 2100));
+    assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'both');
+    assert.equal(await page.getByText(/server.*not.*icon pack/i).isVisible(), false);
+});
+
+test('legacy compact icon choice migrates once and survives reload', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    await page.addInitScript(() => {
+        const key = 'ae2web:/:theme:default';
+        if (!localStorage.getItem(key))
+            localStorage.setItem(key, JSON.stringify({ resourceIcons: true, terminalDisplay: 'compact' }));
+    });
+    await page.goto(`${base}#/web-settings`);
+    const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
+    await page.waitForFunction(() => document.querySelector('#terminal-display').value === 'icons');
+    await mode.selectOption('names');
+    await page.reload();
+    await mode.waitFor();
+    assert.equal(await mode.inputValue(), 'names');
+});
+
+test('legacy names choice receives a dismissible icon notice outside the terminal', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    await page.addInitScript(() => {
+        const key = 'ae2web:/:theme:default';
+        if (!localStorage.getItem(key))
+            localStorage.setItem(key, JSON.stringify({ resourceIcons: false, terminalDisplay: 'compact' }));
+    });
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const enable = page.getByRole('button', { name: 'Enable icons', exact: true });
+    await enable.waitFor({ timeout: 3000 });
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
+    const panel = await page.getByRole('navigation').boundingBox();
+    const notice = await enable.boundingBox();
+    const terminal = await page.getByRole('searchbox').boundingBox();
+    assert.ok(notice.y > panel.y + panel.height && notice.y + notice.height < terminal.y);
+    await page.getByRole('button', { name: 'Dismiss icon suggestion', exact: true }).click();
+    await page.reload();
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    assert.equal(await enable.isVisible(), false);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'names');
+});
+
 // Public browser seam: compact presentation persists without changing resource identity or CPU presentation.
+test('enabling suggested icons persists and a later names choice does not nag', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    await page.addInitScript(() => {
+        const key = 'ae2web:/:theme:default';
+        if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ resourceIcons: false }));
+    });
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const enable = page.getByRole('button', { name: 'Enable icons', exact: true });
+    await enable.click({ timeout: 3000 });
+    await page.reload();
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    assert.equal(await enable.isVisible(), false);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
+    assert.equal(await mode.inputValue(), 'both');
+    await mode.selectOption('names');
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await page.reload();
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    assert.equal(await enable.isVisible(), false);
+});
+
+test('missing resource sprites share a question mark in detailed inventory and CPU', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const item = page.getByRole('button', { name: /Iron Ingot/ });
+    await item.waitFor();
+    const fallback = () =>
+        item.locator('.resource-icon').evaluate((icon) => getComputedStyle(icon, '::before').content);
+    assert.equal(await fallback(), '"?"');
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    assert.equal(await item.locator('.resource-icon').isVisible(), false);
+    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const cpuItem = page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ });
+    await cpuItem.waitFor();
+    assert.equal(
+        await cpuItem.locator('.resource-icon').evaluate((icon) => getComputedStyle(icon, '::before').content),
+        '"?"'
+    );
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/cpus/cpu-a')).at(-1).query, '?icons=true');
+});
+
 test('compact terminal mode persists and preserves accessible selection and crafting', async (t) => {
     const { page, options, base } = await fixture(t);
     await atlasFixture(page, options);
@@ -439,11 +641,11 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
     await mode.waitFor({ timeout: 3000 });
-    assert.equal(await mode.inputValue(), 'detailed');
-    await mode.selectOption('compact');
+    assert.equal(await mode.inputValue(), 'both');
+    await mode.selectOption('icons');
     await page.reload();
     await mode.waitFor();
-    assert.equal(await mode.inputValue(), 'compact');
+    assert.equal(await mode.inputValue(), 'icons');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await item.waitFor();
     const compact = await item.boundingBox();
@@ -474,16 +676,16 @@ test('compact terminal mode persists and preserves accessible selection and craf
     assert.ok(cpuBox.width > cpuBox.height, 'CPU resources retain their rectangular layout');
     assert.equal(await cpuItem.getByText(iron.itemname, { exact: true }).isVisible(), true);
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
-    await mode.selectOption('detailed');
+    await mode.selectOption('both');
     await page.reload();
     await mode.waitFor();
-    assert.equal(await mode.inputValue(), 'detailed');
+    assert.equal(await mode.inputValue(), 'both');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await item.waitFor();
     assert.equal(await item.getByText(iron.itemname, { exact: true }).isVisible(), true);
 });
 
-test('compact terminal keeps quantities and craftability readable with missing or disabled icons', async (t) => {
+test('compact terminal keeps quantities and craftability readable with missing icons', async (t) => {
     const { page, options, base } = await fixture(t);
     await atlasFixture(page, options);
     options.itemsA = [
@@ -493,7 +695,7 @@ test('compact terminal keeps quantities and craftability readable with missing o
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('compact');
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('icons');
     await page.getByRole('link', { name: 'Terminal', exact: true }).click();
     const missing = page.getByRole('button', { name: /Certus Quartz Crystal/ });
     await missing.waitFor();
@@ -521,7 +723,7 @@ test('compact terminal keeps quantities and craftability readable with missing o
     await missing.focus();
     await page.getByRole('tooltip').getByText(quartz.itemname, { exact: true }).waitFor();
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
-    await page.getByRole('checkbox', { name: 'Resource icons', exact: true }).uncheck();
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
     await page.getByRole('link', { name: 'Terminal', exact: true }).click();
     await page.getByRole('button', { name: /Iron Ingot/ }).focus();
     await page.getByRole('tooltip').getByText(iron.itemname, { exact: true }).waitFor();
@@ -573,7 +775,7 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
             .evaluateAll((icons) => icons.map((icon) => getComputedStyle(icon).backgroundPosition)),
         ['-32px 0px', '0px 0px']
     );
-    assert.equal(options.requests.find((request) => request.path.endsWith('/items')).query, '?icons=true');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query, '?icons=true');
     options.itemsA = options.itemsA.map((item) => ({ ...item, quantity: item.quantity + 1 }));
     await poll(page);
     await page.getByRole('button', { name: /Certus Quartz/ }).waitFor();
@@ -589,9 +791,9 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
     );
     assert.equal(pages().length, 1);
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
-    await page.getByRole('checkbox', { name: 'Resource icons', exact: true }).uncheck();
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
     await page.reload();
-    assert.equal(await page.getByRole('checkbox', { name: 'Resource icons', exact: true }).isChecked(), false);
+    assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'names');
     const before = pages().length;
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -665,9 +867,9 @@ test('a stale atlas discovers the replacement pack and reloads resource mappings
     await atlasFixture(page, options);
     options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
     options.pageStatus = 404;
-    options.pack = { available: true, packId: 'c'.repeat(64), width: 64, height: 64 };
     page.on('response', (response) => {
-        if (new URL(response.url()).pathname.endsWith('/api/icon-pack')) {
+        if (new URL(response.url()).pathname.includes('/api/icon-packs/') && response.status() === 404) {
+            options.pack = { available: true, packId: 'c'.repeat(64), width: 64, height: 64 };
             options.icons = { ...options.icons, packId: 'c'.repeat(64) };
             options.pageStatus = 200;
         }
@@ -679,7 +881,7 @@ test('a stale atlas discovers the replacement pack and reloads resource mappings
     const requests = options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
     assert.equal(requests.length, 2);
     assert.ok(requests[1].path.includes('c'.repeat(64)));
-    assert.equal(options.requests.filter((request) => request.path === '/api/icon-pack').length, 1);
+    assert.equal(options.requests.filter((request) => request.path === '/api/icon-pack').length, 2);
 });
 
 test('failed atlas pages keep resources usable without repeated requests during polling', async (t) => {
