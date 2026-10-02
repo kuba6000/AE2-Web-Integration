@@ -11,10 +11,13 @@ import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.util.ChatComponentText;
 import net.minecraftforge.client.ClientCommandHandler;
+import net.minecraftforge.client.event.GuiOpenEvent;
+import net.minecraftforge.common.MinecraftForge;
 
 import org.jetbrains.annotations.Nullable;
 
 import cpw.mods.fml.common.FMLCommonHandler;
+import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import pl.kuba6000.ae2webintegration.icongenerator.GeneratorProxy;
@@ -23,6 +26,7 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
 
     private static final long PROGRESS_MESSAGE_INTERVAL = TimeUnit.SECONDS.toNanos(5);
     private @Nullable ExportSession session;
+    private @Nullable ExportProgressScreen progressScreen;
     private long lastProgressMessage;
     private String lastStatus = "No icon export started";
 
@@ -32,23 +36,63 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
         FMLCommonHandler.instance()
             .bus()
             .register(this);
+        MinecraftForge.EVENT_BUS.register(this);
         ((IReloadableResourceManager) Minecraft.getMinecraft()
             .getResourceManager()).registerReloadListener(this);
     }
 
     @SubscribeEvent
     public void renderTick(TickEvent.RenderTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || session == null) return;
+        if (event.phase != TickEvent.Phase.START || session == null) return;
         Minecraft minecraft = Minecraft.getMinecraft();
-        if (session.tick(minecraft)) {
-            lastStatus = session.status();
+        boolean complete = session.tick(minecraft);
+        String status = session.status();
+        if (complete) {
+            lastStatus = status;
             session = null;
-            if (minecraft.thePlayer != null) minecraft.thePlayer.addChatMessage(new ChatComponentText(lastStatus));
-        } else
-            if (minecraft.thePlayer != null && System.nanoTime() - lastProgressMessage >= PROGRESS_MESSAGE_INTERVAL) {
-                minecraft.thePlayer.addChatMessage(new ChatComponentText(session.status()));
-                lastProgressMessage = System.nanoTime();
-            }
+            if (progressScreen != null) progressScreen.complete(status);
+        } else if (progressScreen != null) {
+            progressScreen.setStatus(status);
+        }
+        if (minecraft.thePlayer != null
+            && (complete || System.nanoTime() - lastProgressMessage >= PROGRESS_MESSAGE_INTERVAL)) {
+            minecraft.thePlayer.addChatMessage(new ChatComponentText(status));
+            lastProgressMessage = System.nanoTime();
+        }
+    }
+
+    @SubscribeEvent
+    public void clientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.START || session == null) return;
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (!session.isCurrentWorld(minecraft)) {
+            session.cancel("world closed or changed");
+            ExportProgressScreen previous = progressScreen;
+            progressScreen = null;
+            if (previous != null && minecraft.currentScreen == previous) minecraft.displayGuiScreen(null);
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void guiOpened(GuiOpenEvent event) {
+        if (progressScreen == null || event.gui == progressScreen) return;
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (session != null && session.isCurrentWorld(minecraft)) {
+            // GuiChat closes itself immediately after submitting the export command.
+            event.setCanceled(true);
+        } else {
+            progressScreen = null;
+        }
+    }
+
+    private void cancel() {
+        if (session != null) session.cancel("requested");
+    }
+
+    private void closeScreen() {
+        Minecraft minecraft = Minecraft.getMinecraft();
+        progressScreen = null;
+        minecraft.displayGuiScreen(null);
     }
 
     @Override
@@ -99,9 +143,18 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
             if (!OpenGlHelper.isFramebufferEnabled()) return "Enable framebuffer rendering before exporting";
             try {
                 session = new ExportSession(minecraft);
+                progressScreen = new ExportProgressScreen(
+                    session.status(),
+                    ClientBootstrap.this::cancel,
+                    ClientBootstrap.this::closeScreen);
+                minecraft.displayGuiScreen(progressScreen);
+                if (minecraft.currentScreen != progressScreen)
+                    throw new IllegalStateException("Another mod prevented the export screen from opening");
                 lastProgressMessage = System.nanoTime();
-                return "Started full 64px icon export; progress every 5 seconds, /ae2webicons status for details";
+                return "Started full 64px icon export; use the export screen to view progress or cancel";
             } catch (RuntimeException exception) {
+                if (session != null) session.cancel("could not open export screen");
+                progressScreen = null;
                 lastStatus = "Could not start icon export: " + exception;
                 return lastStatus;
             }

@@ -29,7 +29,9 @@ The generator waits while NEI is loading. Arbitrary NBT combinations are not enu
 The resulting `AE2WebIntegration-icons-1.7.10-<packId>.ae2wi-icons` file is saved under `ae2webicons/`
 in the game directory. It contains 64x64 icons grouped into atlas pages, resource keys and an export
 report. Individual rendering failures are recorded and the remaining candidates are processed.
-Progress is posted in chat every five seconds. After discovery, `/ae2webicons status` shows
-processed and remaining icons with an approximate render time. Export prioritizes throughput and can
-reduce the game's frame rate. Use `/ae2webicons cancel` to stop. Changing the world or reloading
-resources cancels an active export.
+An exclusive centered dialog over the dimmed world shows discovery, rendering, saving and the final result.
+Export prioritizes throughput, refreshing roughly once per second during rendering, with time reserved
+for input between batches. Individual mod renderers can take longer. Gameplay controls stay blocked
+while images are rendered or saved, but the world keeps
+running. Use **Cancel export** or Esc to stop, then **Done** to return to the game after cleanup finishes.
+Chat progress is also posted every five seconds. Changing the world or reloading resources cancels an active export.

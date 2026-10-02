@@ -38,7 +38,8 @@ final class ExportSession {
     private static final int ETA_MIN_SAMPLES = 20;
     private static final int PERCENT_SCALE = 100;
     private static final long ETA_MIN_ELAPSED = TimeUnit.SECONDS.toNanos(2);
-    private static final long FRAME_BUDGET = TimeUnit.MILLISECONDS.toNanos(100);
+    // Leave headroom below Timer.updateTimer's one-second clock reset, which otherwise starves GUI input ticks.
+    private static final long FRAME_BUDGET = TimeUnit.MILLISECONDS.toNanos(800);
     private final WorldClient world;
     private final LegacyIconRenderer renderer;
     private final PackExportWriter writer;
@@ -78,7 +79,7 @@ final class ExportSession {
 
     boolean tick(@NotNull Minecraft minecraft) {
         try {
-            if (!canceling && minecraft.theWorld != world) cancel("world closed or changed");
+            if (!canceling && !isCurrentWorld(minecraft)) cancel("world closed or changed");
             if (!writer.ready()) return false;
             if (canceling) return true;
             if (finishing) {
@@ -106,11 +107,16 @@ final class ExportSession {
                 .interrupt();
             return fail(exception);
         } catch (ExecutionException exception) {
+            rethrowFatal(exception.getCause());
             return fail(exception.getCause());
         } catch (Throwable exception) {
             rethrowFatal(exception);
             return fail(exception);
         }
+    }
+
+    boolean isCurrentWorld(@NotNull Minecraft minecraft) {
+        return minecraft.theWorld == world;
     }
 
     private @Nullable IconCatalogue readyCatalogue(@NotNull Minecraft minecraft) {
@@ -380,6 +386,7 @@ final class ExportSession {
             return true;
         }
         cancel("export failed: " + failure);
+        if (canceling) status = "Icon export failed: " + failure;
         return false;
     }
 }
