@@ -4,9 +4,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 
+import appeng.api.stacks.AEFluidKey;
+import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.me.Grid;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.NativeItemIdentity;
@@ -20,6 +23,14 @@ public abstract class AEItemMixin implements IAEKey {
     @Override
     public @NotNull StableKey web$getKey() {
         return NativeItemIdentity.getKey((AEKey) (Object) this);
+    }
+
+    @Override
+    public @Nullable StableKey web$getIconBaseKey() {
+        AEKey key = (AEKey) (Object) this;
+        if (!(key instanceof AEItemKey) && !(key instanceof AEFluidKey)) return null;
+        AEKey baseline = key.dropSecondary();
+        return baseline == null ? null : NativeItemIdentity.getKey(baseline);
     }
 
     @Override
