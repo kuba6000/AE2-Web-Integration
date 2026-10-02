@@ -1,13 +1,20 @@
 import type { Grid, Item, Plan, CpuInfo, CpuDetail, HistoryEntry, HistoryDetail, GridSettings } from './api-types.js';
+import type { ResourceResponse, IconMetadata } from './api-types.js';
 
 export type ApiFailure = Error & { status?: string; data?: unknown };
 export type Api = {
+    iconPack: () => Promise<{ available: boolean; packId: string | null; width: number; height: number }>;
     grids: (signal?: AbortSignal) => Promise<Grid[]>;
-    items: (gridKey: string, signal?: AbortSignal) => Promise<Item[]>;
+    items: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<Item[]>>;
     createPlan: (gridKey: string, body: { itemKey: string; quantity: number }) => Promise<{ jobID: number }>;
     plan: (gridKey: string, planId: string | number, signal?: AbortSignal) => Promise<Plan>;
     cpus: (gridKey: string, signal?: AbortSignal) => Promise<Record<string, CpuInfo>>;
-    cpu: (gridKey: string, cpuKey: string, signal?: AbortSignal) => Promise<CpuDetail>;
+    cpu: (
+        gridKey: string,
+        cpuKey: string,
+        signal?: AbortSignal,
+        icons?: boolean
+    ) => Promise<ResourceResponse<CpuDetail>>;
     cancelCpu: (gridKey: string, cpuKey: string) => Promise<null>;
     pauseCpu: (gridKey: string, cpuKey: string, paused: boolean) => Promise<null>;
     history: (gridKey: string, signal?: AbortSignal) => Promise<HistoryEntry[]>;
@@ -33,7 +40,7 @@ export class ApiError extends Error {
 
 /** One transport for the application. Authentication remains in the server's HttpOnly cookie. */
 export function createApi(base: URL, onUnauthorized: () => void): Api {
-    async function request<T>(
+    async function read<T>(
         path: string,
         {
             method = 'GET',
@@ -48,7 +55,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
                 | { isTracked: boolean }
                 | { paused: boolean };
         } = {}
-    ): Promise<T> {
+    ): Promise<ResourceResponse<T>> {
         let response;
         try {
             response = await fetch(new URL(path, base), {
@@ -71,7 +78,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             onUnauthorized();
             throw new ApiError('UNAUTHORIZED', 401);
         }
-        let envelope: { status: string; data: T };
+        let envelope: { status: string; data: T; icons?: IconMetadata | null };
         try {
             envelope = await response.json();
         } catch {
@@ -80,18 +87,26 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
         if (!response.ok || envelope.status !== 'OK') {
             throw new ApiError(envelope.status || 'INVALID_RESPONSE', response.status, envelope.data);
         }
-        return envelope.data;
+        return { data: envelope.data, icons: envelope.icons ?? null };
+    }
+    function request<T>(path: string, options?: Parameters<typeof read>[1]): Promise<T> {
+        return read<T>(path, options).then((result) => result.data);
     }
     return {
+        iconPack: () => request('api/icon-pack'),
         grids: (signal) => request('api/grids', { signal }),
-        items: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/items`, { signal }),
+        items: (gridKey, signal, icons = false) =>
+            read(`api/grids/${encodeURIComponent(gridKey)}/items${icons ? '?icons=true' : ''}`, { signal }),
         createPlan: (gridKey, body) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans`, { method: 'POST', body }),
         plan: (gridKey, planId, signal) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${planId}`, { signal }),
         cpus: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/cpus`, { signal }),
-        cpu: (gridKey, cpuKey, signal) =>
-            request(`api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}`, { signal }),
+        cpu: (gridKey, cpuKey, signal, icons = false) =>
+            read(
+                `api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}${icons ? '?icons=true' : ''}`,
+                { signal }
+            ),
         cancelCpu: (gridKey, cpuKey) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}/cancel`, {
                 method: 'POST'

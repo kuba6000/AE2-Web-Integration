@@ -1,4 +1,4 @@
-import type { CpuInfo, CpuDetail } from './api-types.js';
+import type { CpuInfo, CpuDetail, IconMetadata } from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
 
@@ -7,12 +7,13 @@ export type CpuState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     cpus: (CpuInfo & { key: string })[];
     detail: CpuDetail | null;
+    icons: IconMetadata | null;
     error: string | null;
     outcomes: Record<string, CpuOutcome>;
 };
 /** Grid CPU summaries and selected current work. The application owns refresh scheduling. */
-export function createCpuMonitor(api: Api, changed: () => void) {
-    const state: CpuState = { status: 'idle', cpus: [], detail: null, error: null, outcomes: {} };
+export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: () => boolean) {
+    const state: CpuState = { status: 'idle', cpus: [], detail: null, icons: null, error: null, outcomes: {} };
     /** Outcomes belong to a grid/CPU, regardless of which screen initiated the mutation. */
     const outcomes = new Map<string, Record<string, CpuOutcome>>();
     let route: Route | { view?: undefined; gridKey?: undefined } = {};
@@ -37,6 +38,7 @@ export function createCpuMonitor(api: Api, changed: () => void) {
         } else state.cpus = [];
         state.error = status;
         state.detail = null;
+        state.icons = null;
         state.status = 'error';
     }
 
@@ -56,9 +58,10 @@ export function createCpuMonitor(api: Api, changed: () => void) {
                     fail('CPU_NOT_FOUND');
                     return;
                 }
-                const detail = await api.cpu(current.gridKey, current.cpuKey, request.signal);
+                const detail = await api.cpu(current.gridKey, current.cpuKey, request.signal, iconsEnabled());
                 if (version !== generation) return;
-                state.detail = detail;
+                state.detail = detail.data;
+                state.icons = detail.icons;
             }
             state.status = 'ready';
         } catch (caught) {
@@ -114,6 +117,11 @@ export function createCpuMonitor(api: Api, changed: () => void) {
     return {
         state,
         refresh,
+        refreshIcons() {
+            invalidateRead();
+            state.icons = null;
+            return refresh();
+        },
         route(next: Route) {
             invalidateRead();
             route = next;
@@ -123,13 +131,14 @@ export function createCpuMonitor(api: Api, changed: () => void) {
                 status: next.view === 'cpus' ? 'loading' : 'idle',
                 cpus: [],
                 detail: null,
+                icons: null,
                 error: null,
                 outcomes: gridOutcomes
             });
         },
         block(error: string | null) {
             invalidateRead();
-            Object.assign(state, { status: 'error', cpus: [], detail: null, error });
+            Object.assign(state, { status: 'error', cpus: [], detail: null, icons: null, error });
             changed();
         },
         cancel: (cpuKey: string) => mutate(cpuKey, 'cancel'),

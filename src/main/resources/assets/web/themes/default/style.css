@@ -826,6 +826,31 @@ label {
     background-size: var(--slot-width, 120px) round(down, 100%, var(--slot-height));
     background-repeat: repeat-x;
 }
+.resource-icon {
+    display: none;
+}
+.resource-icons-enabled .resource-icon {
+    display: block;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    image-rendering: pixelated;
+    background-repeat: no-repeat;
+    outline: 1px dashed var(--border);
+}
+.resource-icons-enabled .resource-icon-ready {
+    outline: none;
+}
+.resource-icons-enabled .item {
+    position: relative;
+    padding-left: 44px;
+}
+.resource-icons-enabled .item .resource-icon {
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+}
 .item {
     display: flex;
     flex-direction: column;

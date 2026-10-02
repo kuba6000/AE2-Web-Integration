@@ -3,7 +3,15 @@
  * These declarations describe the wire format; they do not validate responses at runtime.
  */
 export type Stack = { itemid: string; itemname: string; quantity: number; itemKey: string | null };
-export type Item = Stack & { craftable: boolean; identityStatus: string | null };
+export type IconReference = { page: number; x: number; y: number };
+export type IconMetadata = {
+    packId: string;
+    width: number;
+    height: number;
+    pages: { digest: string; width: number; height: number }[];
+};
+export type ResourceResponse<T> = { data: T; icons: IconMetadata | null };
+export type Item = Stack & { craftable: boolean; identityStatus: string | null; icon?: IconReference | null };
 export type Position = { dimid: string; x: number; y: number; z: number };
 export type AccessSource = {
     player: { uuid: string; name: string };
@@ -35,6 +43,8 @@ export type CpuInfo = {
     timeStarted: number;
 };
 export type CpuItem = {
+    itemKey?: string | null;
+    icon?: IconReference | null;
     itemid: string;
     itemname: string;
     active: number;

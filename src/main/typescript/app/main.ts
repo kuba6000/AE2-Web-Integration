@@ -1,4 +1,5 @@
 import { createApi } from './api.js';
+import { createIconLoader } from './icons.js';
 import { createPreferences } from './preferences.js';
 import { createTerminal } from './terminal.js';
 import { readRoute } from './router.js';
@@ -22,7 +23,14 @@ function returnToLogin() {
     else location.replace(target.href);
 }
 const api = createApi(base, returnToLogin);
-const application = createTerminal(api, createPreferences(base));
+const application = createTerminal(
+    api,
+    createPreferences(base),
+    createIconLoader(base, returnToLogin, async (packId) => {
+        const pack = await api.iconPack();
+        if (!pack.available || pack.packId !== packId) await application.refresh();
+    })
+);
 const unmount = mount(document.getElementById('app') as HTMLElement, application, {
     ...createThemeContext(base, 'default'),
     base,

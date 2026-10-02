@@ -6,6 +6,7 @@ type Terminal = ReturnType<typeof createTerminal>;
 type ResourceSort = 'name' | 'active' | 'pending' | 'stored' | 'shareInCraftingTime';
 
 import { cpuHref } from '../../app/router.js';
+import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { terminalIcons, craftingHammer, craftingQueue, craftingPriorityIcon } from './icons/pixel/terminal.js';
@@ -53,6 +54,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     scroll.role = 'region';
     scroll.tabIndex = 0;
     const grid = element('ul', '', 'resource-grid cpu-items');
+    const icons = application.icons.observe(scroll, paintResourceIcon);
     const empty = element('p', '', 'cpu-empty');
     scroll.append(grid);
     body.append(scroll);
@@ -190,7 +192,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         const shareValue = element('span', '', 'quantity');
         share.append(shareLabel, shareValue);
         amounts.append(share);
-        button.append(name, amounts);
+        button.append(createResourceIcon(), name, amounts);
         li.append(button);
         const row = { item, li, button, name, counts, share, shareLabel, shareValue };
         button.addEventListener('pointerenter', (event) => {
@@ -297,9 +299,9 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         const focused = [...itemRows.values()].find((row) => row.button === document.activeElement);
 
         const occurrences: Map<string, number> = new Map();
-        // The CPU API does not expose variant keys. Retain repeated rows by occurrence; never merge by registry ID.
+        // Unsupported identities retain repeated rows by occurrence; never merge by registry ID.
         const items = (state.detail?.isBusy && !state.error ? state.detail.items || [] : []).map((item) => {
-            const identity = JSON.stringify([item.itemid, item.itemname]);
+            const identity = item.itemKey || JSON.stringify([item.itemid, item.itemname]);
             const occurrence = occurrences.get(identity) || 0;
             occurrences.set(identity, occurrence + 1);
             return { item, key: `${identity}:${occurrence}`, name: plainMinecraftText(item.itemname) };
@@ -353,6 +355,10 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         }
         for (const [key, row] of itemRows) if (!current.has(key)) row.li.remove();
         itemRows = current;
+        icons.update(
+            [...itemRows.values()].map((row) => ({ element: row.button, icon: row.item.icon })),
+            state.icons
+        );
         if (focused?.button.isConnected && document.activeElement !== focused.button)
             focused.button.focus({ preventScroll: true });
         updatingRows = false;
@@ -475,6 +481,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                 search.value = '';
                 scroll.scrollTop = 0;
             }
+            if (!selected) icons.update([], null);
             if (route.view !== 'cpus') return;
             const t = locale.common;
             title.textContent = t('cpus');
@@ -557,6 +564,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         },
         dispose() {
             lifetime.abort();
+            icons.dispose();
             slotBackground.disconnect();
             hideTooltip();
             view.remove();

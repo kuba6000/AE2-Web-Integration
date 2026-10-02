@@ -17,6 +17,7 @@ import { slotQuantity } from './resource-quantity.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 import { terminalIcons as symbols, craftingHammer } from './icons/pixel/terminal.js';
 import { userIcon } from './icons/hackernoon/user.js';
+import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 
 const PAGE_SIZE = 100;
 
@@ -61,7 +62,8 @@ export function mount(
             dark: 'Dark',
             system: 'System',
             defaultTheme: 'Default',
-            themeOptions: 'Theme options'
+            themeOptions: 'Theme options',
+            resourceIcons: 'Resource icons'
         },
         pl: {
             appearance: 'Wygląd',
@@ -69,7 +71,8 @@ export function mount(
             dark: 'Ciemny',
             system: 'Systemowy',
             defaultTheme: 'Domyślny',
-            themeOptions: 'Opcje motywu'
+            themeOptions: 'Opcje motywu',
+            resourceIcons: 'Ikony zasobów'
         }
     });
     const appearances = ['light', 'dark', 'system'];
@@ -86,6 +89,8 @@ export function mount(
     }
     let appearance =
         typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
+    let displayIcons = settings.get('resourceIcons', true) !== false;
+    application.displayIcons(displayIcons);
     root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1>AE2 <span>Web Integration</span></h1></div><div class="account-controls">
         <span class="account-user">${userIcon}<span id="username"></span></span><button id="logout" data-text="logout"></button></div></header>
         <dl class="network-summary"><dt><span data-text="network"></span>:</dt><dd id="selected-network"></dd></dl>
@@ -104,6 +109,7 @@ export function mount(
         <label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label>
         <label><span data-text="theme"></span><select disabled><option value="default" data-theme-text="defaultTheme"></option></select></label>
         <section><h3 data-theme-text="themeOptions"></h3>
+        <label class="checkbox"><input type="checkbox" id="resource-icons"><span data-theme-text="resourceIcons"></span></label>
         <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label>
         </section></div></section>
         <section id="terminal" hidden><div class="terminal-heading"><h2 data-text="terminal"></h2>
@@ -116,6 +122,7 @@ export function mount(
         <footer><span id="updated" aria-live="off"></span><a id="legacy" data-text="previous"></a></footer>`;
     /* IDs and element types belong to the static markup created above. */
     type ViewElements = {
+        '#resource-icons': HTMLInputElement;
         '#language': HTMLElementTagNameMap['select'];
         '#appearance': HTMLElementTagNameMap['select'];
         '#logout': HTMLElementTagNameMap['button'];
@@ -160,6 +167,7 @@ export function mount(
         HTMLButtonElement & { dataset: { preference: 'filter' | 'sort'; value: keyof typeof symbols } }
     > = root.querySelectorAll('.tool-button');
     const craftingView = createCraftingView(find('#window'), application);
+    const itemIcons = application.icons.observe(find('#item-scroll'), paintResourceIcon);
     const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace') });
     const historyView = createHistoryView(find('#window'));
     const settingsView = createSettingsView(find('#window'), application);
@@ -354,6 +362,10 @@ export function mount(
             listInput = { items: state.items, signature };
             renderPage();
         }
+        itemIcons.update(
+            state.route.view === 'items' ? rows.map((row) => ({ element: row.button, icon: row.item.icon })) : [],
+            state.itemIcons
+        );
         for (const row of rows) {
             const selected = row.item === state.selected;
             row.button.classList.toggle('selected', selected);
@@ -388,7 +400,7 @@ export function mount(
         row.craftable.innerHTML = craftingHammer;
         const amount = element('span', '', 'item-amount');
         amount.append(row.quantity, row.craftable);
-        button.append(row.name, amount);
+        button.append(createResourceIcon(), row.name, amount);
         row.li.append(button);
         button.addEventListener('click', () => {
             application.select(row.item);
@@ -437,6 +449,10 @@ export function mount(
         const retained = new Set(next);
         for (const row of rows) if (!retained.has(row)) row.li.remove();
         rows = next;
+        itemIcons.update(
+            state.route.view === 'items' ? rows.map((row) => ({ element: row.button, icon: row.item.icon })) : [],
+            state.itemIcons
+        );
         if (focused?.button.isConnected && document.activeElement !== focused.button) {
             focused.button.focus({ preventScroll: true });
         }
@@ -559,6 +575,15 @@ export function mount(
     const languageSelect = find('#language');
     languageSelect.addEventListener('change', () => application.preference('language', languageSelect.value));
     const appearanceSelect = find('#appearance');
+    const iconToggle = find('#resource-icons');
+    iconToggle.checked = displayIcons;
+    root.classList.toggle('resource-icons-enabled', displayIcons);
+    iconToggle.addEventListener('change', () => {
+        displayIcons = iconToggle.checked;
+        settings.set('resourceIcons', displayIcons);
+        root.classList.toggle('resource-icons-enabled', displayIcons);
+        application.displayIcons(displayIcons);
+    });
     appearanceSelect.addEventListener('change', () => {
         if (!appearances.includes(appearanceSelect.value)) return;
         appearance = appearanceSelect.value;
@@ -630,6 +655,7 @@ export function mount(
         unsubscribe();
         slotBackground.disconnect();
         cpuView.dispose();
+        itemIcons.dispose();
         hideTooltip();
         window.removeEventListener('scroll', hideTooltip, true);
         window.removeEventListener('resize', hideTooltip);

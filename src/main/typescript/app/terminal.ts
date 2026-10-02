@@ -1,5 +1,6 @@
 import type { Route } from './router.js';
-import type { Grid, Item } from './api-types.js';
+import type { Grid, Item, IconMetadata } from './api-types.js';
+import type { createIconLoader } from './icons.js';
 import type { Preferences, createPreferences } from './preferences.js';
 import type { CraftingState } from './crafting.js';
 import type { CpuState } from './cpus.js';
@@ -17,6 +18,7 @@ export type TerminalData = {
     gridStatus: 'loading' | 'ready' | 'error';
     gridError: string | null;
     items: Item[];
+    itemIcons: IconMetadata | null;
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';
     itemError: string | null;
     refreshing: boolean;
@@ -34,7 +36,12 @@ export type TerminalState = TerminalData & {
 };
 
 /** Shared state/actions for terminal renderers; a theme does not own requests or refresh timers. */
-export function createTerminal(api: Api, preferences: ReturnType<typeof createPreferences>) {
+export function createTerminal(
+    api: Api,
+    preferences: ReturnType<typeof createPreferences>,
+    icons: ReturnType<typeof createIconLoader>
+) {
+    let iconsEnabled = false;
     const listeners = new Set<(state: TerminalState) => void>();
     let gridRequest: AbortController | undefined;
     let itemRequest: AbortController | undefined;
@@ -49,10 +56,14 @@ export function createTerminal(api: Api, preferences: ReturnType<typeof createPr
         notify();
         schedule();
     });
-    const cpus = createCpuMonitor(api, () => {
-        notify();
-        schedule();
-    });
+    const cpus = createCpuMonitor(
+        api,
+        () => {
+            notify();
+            schedule();
+        },
+        () => iconsEnabled
+    );
     const history = createHistory(api, () => {
         notify();
         schedule();
@@ -69,6 +80,7 @@ export function createTerminal(api: Api, preferences: ReturnType<typeof createPr
         gridStatus: 'loading',
         gridError: null,
         items: [],
+        itemIcons: null,
         itemStatus: 'idle',
         itemError: null,
         refreshing: false,
@@ -86,6 +98,7 @@ export function createTerminal(api: Api, preferences: ReturnType<typeof createPr
         serial++;
         itemRequest?.abort();
         state.items = [];
+        state.itemIcons = null;
         state.selected = null;
         state.itemStatus = 'idle';
         state.itemError = null;
@@ -111,8 +124,10 @@ export function createTerminal(api: Api, preferences: ReturnType<typeof createPr
         state.itemError = null;
         notify();
         try {
-            const items = await api.items(key, request.signal);
+            const result = await api.items(key, request.signal, iconsEnabled);
             if (disposed || version !== serial) return;
+            const items = result.data;
+            state.itemIcons = result.icons;
             state.items = items;
             state.selected = state.selected
                 ? items.find((item) => item.itemKey && item.itemKey === state.selected?.itemKey) || null
@@ -123,6 +138,7 @@ export function createTerminal(api: Api, preferences: ReturnType<typeof createPr
             const error = caught as ApiFailure;
             if (disposed || version !== serial || error.name === 'AbortError') return;
             state.items = [];
+            state.itemIcons = null;
             state.selected = null;
             state.updatedAt = null;
             state.itemStatus = 'error';
@@ -208,6 +224,16 @@ export function createTerminal(api: Api, preferences: ReturnType<typeof createPr
         cpus,
         history,
         settings,
+        icons,
+        displayIcons(enabled: boolean) {
+            if (iconsEnabled === enabled) return;
+            iconsEnabled = enabled;
+            icons.enabled(enabled);
+            state.itemIcons = null;
+            cpus.refreshIcons();
+            loadItems();
+            notify();
+        },
         subscribe(listener: (state: TerminalState) => void) {
             listeners.add(listener);
             listener(state);
@@ -252,6 +278,7 @@ export function createTerminal(api: Api, preferences: ReturnType<typeof createPr
             cpus.dispose();
             history.dispose();
             settings.dispose();
+            icons.dispose();
             listeners.clear();
         }
     };

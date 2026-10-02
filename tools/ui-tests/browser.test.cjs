@@ -139,11 +139,21 @@ async function fixture(t, mount = '') {
         for await (const chunk of request) body.push(chunk);
         options.requests.push({
             path: resource,
+            query: url.search,
             method: request.method,
             headers: request.headers,
             body: body.length ? JSON.parse(Buffer.concat(body).toString()) : null
         });
         if (resource.startsWith('/api/')) {
+            if (resource.startsWith('/api/icon-packs/')) {
+                options.activePages = (options.activePages || 0) + 1;
+                options.maxActivePages = Math.max(options.maxActivePages || 0, options.activePages);
+                response.once('close', () => options.activePages--);
+                response.writeHead(options.pageStatus || 200, { 'Content-Type': 'image/png' });
+                if (options.pageDelay) setTimeout(() => response.end(options.atlas), options.pageDelay);
+                else response.end(options.atlas);
+                return;
+            }
             response.setHeader('Content-Type', 'application/json');
             const mutation =
                 request.method === 'PATCH'
@@ -172,7 +182,14 @@ async function fixture(t, mount = '') {
                 response.end(JSON.stringify({ status: options.fault.status, data: null }));
                 return;
             }
-            if (resource === '/api/auth/logout') {
+            if (resource === '/api/icon-pack') {
+                response.end(
+                    JSON.stringify({
+                        status: 'OK',
+                        data: options.pack || { available: false, packId: null, width: 0, height: 0 }
+                    })
+                );
+            } else if (resource === '/api/auth/logout') {
                 options.loggedOut = true;
                 response.end(JSON.stringify({ status: 'OK', data: null }));
             } else if (resource === '/api/grids') {
@@ -255,7 +272,13 @@ async function fixture(t, mount = '') {
                 const key = decodeURIComponent(resource.split('/').at(-1));
                 const status = options.detailError || (options.cpuDetails[key] ? 'OK' : 'CPU_NOT_FOUND');
                 response.statusCode = status === 'OK' ? 200 : 404;
-                response.end(JSON.stringify({ status, data: status === 'OK' ? options.cpuDetails[key] : null }));
+                response.end(
+                    JSON.stringify({
+                        status,
+                        data: status === 'OK' ? options.cpuDetails[key] : null,
+                        icons: options.icons
+                    })
+                );
             } else if (resource.endsWith('/items')) {
                 const first = resource.includes(gridA);
                 const send = () => {
@@ -265,6 +288,7 @@ async function fixture(t, mount = '') {
                             options.status === 200
                                 ? {
                                       status: 'OK',
+                                      icons: options.icons,
                                       data: first
                                           ? options.itemsA
                                           : [
@@ -380,6 +404,248 @@ async function seedAutomaticRefresh(page, base, autoRefresh) {
         { key: `ae2web:${new URL(base).pathname}:ui`, autoRefresh }
     );
 }
+
+async function atlasFixture(page, options) {
+    options.atlas = await page.evaluate(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 64;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#ff0000';
+        context.fillRect(0, 0, 64, 64);
+        context.fillStyle = '#00ff00';
+        context.fillRect(64, 0, 64, 64);
+        return canvas.toDataURL().split(',')[1];
+    });
+    options.atlas = Buffer.from(options.atlas, 'base64');
+    options.icons = {
+        packId: 'a'.repeat(64),
+        width: 64,
+        height: 64,
+        pages: [{ digest: 'b'.repeat(64), width: 128, height: 64 }]
+    };
+}
+
+// Public browser seam: atlas delivery, rendered sprites and the persistent display preference.
+// Shared pages must not be fetched per item or again for quantity-only polling updates.
+test('resource atlas is shared across visible items and CPU rows and can be disabled persistently', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    await seedAutomaticRefresh(page, base, true);
+    await atlasFixture(page, options);
+    options.itemsA = [
+        { ...iron, icon: { page: 0, x: 0, y: 0 } },
+        { ...quartz, icon: { page: 0, x: 64, y: 0 } }
+    ];
+    options.cpuDetails = {
+        'cpu-a': { ...cpuWork, items: [{ ...cpuWork.items[0], itemKey: 'iron', icon: { page: 0, x: 0, y: 0 } }] }
+    };
+    const pages = () => options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.waitForFunction(
+        () =>
+            [...document.querySelectorAll('#items .resource-icon')].filter(
+                (icon) => getComputedStyle(icon).backgroundImage !== 'none'
+            ).length === 2,
+        null,
+        { timeout: 3000 }
+    );
+    assert.equal(
+        await page
+            .locator('#items .resource-icon')
+            .first()
+            .evaluate((icon) => {
+                const box = icon.getBoundingClientRect();
+                const row = icon.closest('button').getBoundingClientRect();
+                return box.left >= row.left && box.right <= row.right && box.top >= row.top && box.bottom <= row.bottom;
+            }),
+        true
+    );
+    assert.equal(pages().length, 1);
+    assert.deepEqual(
+        await page
+            .locator('#items .resource-icon')
+            .evaluateAll((icons) => icons.map((icon) => getComputedStyle(icon).backgroundPosition)),
+        ['-32px 0px', '0px 0px']
+    );
+    assert.equal(options.requests.find((request) => request.path.endsWith('/items')).query, '?icons=true');
+    options.itemsA = options.itemsA.map((item) => ({ ...item, quantity: item.quantity + 1 }));
+    await poll(page);
+    await page.getByRole('button', { name: /Certus Quartz/ }).waitFor();
+    assert.equal(pages().length, 1);
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await page.waitForFunction(
+        () =>
+            [...document.querySelectorAll('.cpu-item .resource-icon')].some(
+                (icon) => getComputedStyle(icon).backgroundImage !== 'none'
+            ),
+        null,
+        { timeout: 3000 }
+    );
+    assert.equal(pages().length, 1);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Resource icons', exact: true }).uncheck();
+    await page.reload();
+    assert.equal(await page.getByRole('checkbox', { name: 'Resource icons', exact: true }).isChecked(), false);
+    const before = pages().length;
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    assert.equal(pages().length, before);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query, '');
+});
+
+// Public seam: global settings are navigable without a grid, preserve the selected grid's
+test('atlas pages are limited to nearby rows and malformed mappings never become image URLs', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    await atlasFixture(page, options);
+    await page.setViewportSize({ width: 1000, height: 650 });
+    options.icons.pages = Array.from({ length: 90 }, (_, i) => ({
+        digest: i.toString(16).padStart(64, '0'),
+        width: 128,
+        height: 64
+    }));
+    options.itemsA = options.icons.pages.map((_, i) => ({
+        ...iron,
+        itemname: `Resource ${String(i).padStart(2, '0')}`,
+        itemKey: `item-${i}`,
+        icon: { page: i, x: 0, y: 0 }
+    }));
+    const pages = () => options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage, null, {
+        timeout: 3000
+    });
+    assert.ok(pages().length > 0 && pages().length < 50);
+    assert.equal(
+        await page
+            .locator('#items .resource-icon')
+            .last()
+            .evaluate((icon) => getComputedStyle(icon).backgroundImage),
+        'none'
+    );
+    await page.locator('#item-scroll').evaluate((scroll) => {
+        scroll.scrollTop = scroll.scrollHeight;
+    });
+    await page.waitForFunction(
+        () => [...document.querySelectorAll('#items .resource-icon')].at(-1)?.style.backgroundImage,
+        null,
+        { timeout: 3000 }
+    );
+    assert.equal(
+        await page
+            .locator('#items .resource-icon')
+            .first()
+            .evaluate((icon) => getComputedStyle(icon).backgroundImage),
+        'none'
+    );
+    const before = pages().length;
+    options.icons = { ...options.icons, packId: '../evil.example' };
+    await page.reload();
+    await page.getByRole('button', { name: /Resource 00/ }).waitFor();
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(pages().length, before);
+    assert.equal(
+        await page
+            .locator('#items .resource-icon')
+            .first()
+            .evaluate((icon) => getComputedStyle(icon).backgroundImage),
+        'none'
+    );
+});
+
+test('a stale atlas discovers the replacement pack and reloads resource mappings', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    await atlasFixture(page, options);
+    options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
+    options.pageStatus = 404;
+    options.pack = { available: true, packId: 'c'.repeat(64), width: 64, height: 64 };
+    page.on('response', (response) => {
+        if (new URL(response.url()).pathname.endsWith('/api/icon-pack')) {
+            options.icons = { ...options.icons, packId: 'c'.repeat(64) };
+            options.pageStatus = 200;
+        }
+    });
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage, null, {
+        timeout: 3000
+    });
+    const requests = options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
+    assert.equal(requests.length, 2);
+    assert.ok(requests[1].path.includes('c'.repeat(64)));
+    assert.equal(options.requests.filter((request) => request.path === '/api/icon-pack').length, 1);
+});
+
+test('failed atlas pages keep resources usable without repeated requests during polling', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, true);
+    await atlasFixture(page, options);
+    options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
+    options.pageStatus = 503;
+    const failed = page.waitForResponse((response) => new URL(response.url()).pathname.startsWith('/api/icon-packs/'));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await (await failed).finished();
+    await page.getByRole('button', { name: /Iron Ingot/ }).click();
+    assert.equal(await page.getByRole('spinbutton').isEnabled(), true);
+    for (let i = 0; i < 2; i++) {
+        options.itemsA = options.itemsA.map((item) => ({ ...item, quantity: item.quantity + 1 }));
+        const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/items'));
+        await poll(page);
+        await (await refreshed).finished();
+    }
+    assert.equal(options.requests.filter((request) => request.path.startsWith('/api/icon-packs/')).length, 1);
+    assert.equal(
+        await page.locator('#items .resource-icon').evaluate((icon) => getComputedStyle(icon).backgroundImage),
+        'none'
+    );
+});
+
+test('late atlas responses cannot repaint another grid after navigation', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    await atlasFixture(page, options);
+    options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
+    options.pageDelay = 300;
+    const started = page.waitForRequest((request) => new URL(request.url()).pathname.startsWith('/api/icon-packs/'));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await started;
+    await page.goto(`${base}#/grids/${gridB}/items`);
+    await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
+    await page.waitForTimeout(400);
+    assert.equal(
+        await page.locator('#items .resource-icon').evaluate((icon) => getComputedStyle(icon).backgroundImage),
+        'none'
+    );
+    assert.equal(options.requests.filter((request) => request.path.startsWith('/api/icon-packs/')).length, 1);
+});
+
+test('visible atlas requests have bounded concurrency', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    await atlasFixture(page, options);
+    await page.setViewportSize({ width: 1200, height: 1000 });
+    options.pageDelay = 150;
+    options.icons.pages = Array.from({ length: 30 }, (_, i) => ({
+        digest: i.toString(16).padStart(64, '0'),
+        width: 128,
+        height: 64
+    }));
+    options.itemsA = options.icons.pages.map((_, i) => ({
+        ...iron,
+        itemname: `Resource ${i}`,
+        itemKey: `item-${i}`,
+        icon: { page: i, x: 0, y: 0 }
+    }));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.waitForFunction(
+        () =>
+            [...document.querySelectorAll('#items .resource-icon')].filter((icon) => icon.style.backgroundImage)
+                .length > 4,
+        null,
+        { timeout: 3000 }
+    );
+    assert.ok(options.maxActivePages > 1 && options.maxActivePages <= 4);
+});
 
 // Public seam: global settings are navigable without a grid, preserve the selected grid's
 // links, and persist browser preferences without pretending to mutate server settings.
@@ -526,7 +792,7 @@ test('Home retains the selected network and owns switching while Web settings ow
     assert.equal(await page.locator('header').getByRole('combobox').count(), 0);
     assert.match(await page.getByRole('definition').innerText(), new RegExp(`Alpha.*${gridA}`));
     const scopedReads = options.requests.filter((request) => request.path.startsWith('/api/grids/')).length;
-    const discovery = page.waitForResponse((response) => response.url().endsWith('/api/grids'));
+    const discovery = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'));
     await poll(page);
     await settleResponse(page, (await discovery).request());
     assert.equal(options.requests.filter((request) => request.path.startsWith('/api/grids/')).length, scopedReads);
@@ -915,7 +1181,7 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
     await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor();
     await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).selectOption('cpu-b');
     options.cpus = { 'cpu-b': cpu, 'cpu-a': cpu };
-    const refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus'));
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus'));
     await poll(page);
     await (await refreshed).finished();
     assert.equal(await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).inputValue(), 'cpu-b');
@@ -958,7 +1224,9 @@ test('history preserves entry identity and opens measured cancelled work through
         .filter({ hasText: /cancelled/i })
         .waitFor();
     assert.equal(await page.getByRole('cell', { name: '10', exact: true }).count(), 1);
-    await (await page.waitForResponse((response) => response.url().endsWith('/api/grids'))).finished();
+    await (
+        await page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'))
+    ).finished();
     assert.equal(options.requests.filter((request) => request.path.endsWith('/crafting-history/2')).length, 1);
     await page.reload();
     await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).waitFor();
@@ -986,7 +1254,7 @@ test('grid settings preserve the draft and save explicitly while safely showing 
     await page.getByRole('link', { name: 'Grid settings', exact: true }).click({ timeout: 3000 });
     const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
     await tracking.check();
-    const refreshed = page.waitForResponse((response) => response.url().endsWith('/settings'));
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/settings'));
     await poll(page);
     await (await refreshed).finished();
     assert.equal(await tracking.isChecked(), true);
@@ -1087,7 +1355,7 @@ test('settings drafts survive transient discovery failures and pending saves rec
         .first()
         .waitFor();
     options.gridError = null;
-    const recovered = page.waitForResponse((response) => response.url().endsWith('/settings'));
+    const recovered = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/settings'));
     await poll(page);
     await (await recovered).finished();
     await page.getByRole('button', { name: 'Save settings', exact: true }).waitFor();
@@ -1320,11 +1588,14 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
         capture = resolve;
     });
     let held = false;
-    await page.route('**/cpus/cpu-a', (route) => {
-        if (held) return route.continue();
-        held = true;
-        capture(route);
-    });
+    await page.route(
+        (url) => url.pathname.endsWith('/cpus/cpu-a'),
+        (route) => {
+            if (held) return route.continue();
+            held = true;
+            capture(route);
+        }
+    );
     await poll(page);
     const delayed = await captured;
     await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
@@ -1401,7 +1672,7 @@ test('busy CPU eligibility uses known output identity and missing selections req
     );
     await cpus.selectOption('cpu-b');
     delete options.cpus['cpu-b'];
-    const refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus'));
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus'));
     await poll(page);
     await (await refreshed).finished();
     await cpus.getByRole('option', { name: /cpu-b/ }).waitFor({ state: 'detached' });
@@ -1576,13 +1847,13 @@ test('CPU tiles show processing shares and sort by precise shares through refres
         ...item,
         shareInCraftingTime: [0.9, 0.01, 0.09, 0][i]
     }));
-    let refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-a'));
+    let refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus/cpu-a'));
     await poll(page);
     await settleResponse(page, (await refreshed).request());
     assert.deepEqual(await names(), ['Alpha', 'Stored', 'Beta', 'Waiting']);
     assert.match(await alpha.innerText(), /90%/);
     options.cpuDetails['cpu-a'].hasTrackingInfo = false;
-    refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-a'));
+    refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus/cpu-a'));
     await poll(page);
     await settleResponse(page, (await refreshed).request());
     assert.equal(await sortShare.isVisible(), false);
@@ -1614,7 +1885,7 @@ test('CPU resources omit zero counts and update visible categories during pollin
     assert.doesNotMatch(await tooltip.innerText(), /Active|Stored/);
 
     options.cpuDetails['cpu-a'].items = [{ ...item, active: 3, pending: 0, stored: 7 }];
-    const refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-a'));
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus/cpu-a'));
     await poll(page);
     await settleResponse(page, (await refreshed).request());
     assert.match(await resource.innerText(), /Active\s*3/);
@@ -1656,7 +1927,7 @@ test('CPU resource tooltip preserves exact counts and tracking through polling a
         assert.match(await tooltip.textContent(), metric);
     }
     options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...item, active: 45678, craftedTotal: 99 }] };
-    const refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-a'));
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus/cpu-a'));
     await poll(page);
     await settleResponse(page, (await refreshed).request());
     assert.equal(await tooltip.isVisible(), true, 'Polling must keep the hovered resource tooltip visible');
@@ -1814,7 +2085,7 @@ test('CPU resource reordering does not leave a stale hover tooltip or reopen key
     await tooltip.waitFor({ state: 'visible' });
     await page.keyboard.press('Escape');
     options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...cpuWork.items[0], active: 200 }, second] };
-    const read = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-a'));
+    const read = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus/cpu-a'));
     await poll(page);
     await settleResponse(page, (await read).request());
     assert.equal(await item.evaluate((button) => button === document.activeElement), true);
@@ -2100,11 +2371,14 @@ test('a removed CPU mutation target cannot strand another CPU detail load', asyn
         captureDetail = resolve;
     });
     let held = false;
-    await page.route('**/cpus/cpu-b', (route) => {
-        if (held) return route.continue();
-        held = true;
-        captureDetail(route);
-    });
+    await page.route(
+        (url) => url.pathname.endsWith('/cpus/cpu-b'),
+        (route) => {
+            if (held) return route.continue();
+            held = true;
+            captureDetail(route);
+        }
+    );
     await page.getByRole('link', { name: /cpu-b/ }).click();
     const oldRead = await detail;
     delete options.cpus['cpu-a'];
@@ -2148,7 +2422,7 @@ test('CPU monitoring opens stable current work and explicitly cancels it without
     assert.match(await page.getByRole('tooltip').textContent(), /Active.*4/);
     assert.match(await page.getByRole('tooltip').textContent(), /Crafted total.*10/);
     options.cpus = { 'cpu-b': options.cpus['cpu-b'], 'cpu-a': options.cpus['cpu-a'] };
-    const refreshed = page.waitForResponse((response) => response.url().endsWith('/cpus/cpu-b'));
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus/cpu-b'));
     await poll(page);
     await (await refreshed).finished();
     assert.match(page.url(), /\/cpus\/cpu-b$/);
@@ -2277,7 +2551,10 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
     const captured = new Promise((resolve) => {
         release = resolve;
     });
-    await page.route('**/cpus/cpu-a', (route) => release(route));
+    await page.route(
+        (url) => url.pathname.endsWith('/cpus/cpu-a'),
+        (route) => release(route)
+    );
     await poll(page);
     const delayed = await captured;
     await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
@@ -2480,7 +2757,7 @@ test('quantity editing survives refresh and only positive safe integer quantitie
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     const quantity = page.getByRole('spinbutton', { name: 'Craft quantity' });
     await quantity.fill('37');
-    const refreshed = page.waitForResponse((response) => response.url().endsWith('/items'));
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/items'));
     await poll(page);
     await (await refreshed).finished();
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -3047,14 +3324,16 @@ test('home network links keep keyboard focus when polling refreshes the list', a
     await page.goto(base);
     const network = page.getByRole('link', { name: /Alpha/ });
     await network.focus();
-    const refreshed = page.waitForResponse((response) => response.url().endsWith('/api/grids'));
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'));
     await (await refreshed).finished();
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await network.evaluate((link) => link === document.activeElement), true);
     const secondNetwork = page.getByRole('link', { name: /Beta/ });
     await secondNetwork.focus();
     options.reverseGrids = true;
-    await (await page.waitForResponse((response) => response.url().endsWith('/api/grids'))).finished();
+    await (
+        await page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'))
+    ).finished();
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await secondNetwork.evaluate((link) => link === document.activeElement), true);
     await page.keyboard.press('Enter');
