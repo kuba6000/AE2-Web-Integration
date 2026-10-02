@@ -1,3 +1,6 @@
+import javax.inject.Inject
+import org.gradle.api.file.FileSystemOperations
+
 plugins {
     id 'java-library'
     // Deliberately no version: when this module is included as a submodule of an integration branch that
@@ -57,6 +60,22 @@ def compileFrontend = tasks.register('compileFrontend', Exec) {
     outputs.dir(compiledFrontendResources)
 }
 sourceSets.main.resources.srcDir(compileFrontend)
+
+abstract class FrontendResourceFiles {
+    @Inject
+    abstract FileSystemOperations getOperations()
+}
+def frontendResourceFiles = objects.newInstance(FrontendResourceFiles)
+tasks.named('processResources') {
+    // Copy's stale-output tracking can be lost when switching the core checkout or build directory.
+    // Recreate this resource subtree whenever processing runs, including all static web assets.
+    doFirst { task ->
+        def webResources = new File(task.destinationDir, 'assets/web')
+        frontendResourceFiles.operations.delete {
+            delete(webResources)
+        }
+    }
+}
 
 repositories {
     mavenCentral()
