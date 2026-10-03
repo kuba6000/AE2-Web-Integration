@@ -18,6 +18,7 @@ import net.neoforged.neoforge.resource.ResourcePackLoader;
 
 import org.jetbrains.annotations.NotNull;
 
+import pl.kuba6000.ae2webintegration.ae2interface.platform.PlatformConstants;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.export.IMetadataSource;
 import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
@@ -53,7 +54,10 @@ final class ExportEnvironment {
                         }
             });
         return IMetadataSource.fromFilesystem(
-            new IconPack.Target("1.21.1", "neoforge", "ae2wi-modern-1.21.1-v1", "ae2wi-modern-1.21.1-base-v1"),
+            new IconPack.Target(
+                PlatformConstants.MINECRAFT_VERSION,
+                PlatformConstants.LOADER,
+                PlatformConstants.ICON_PACK_COMPATIBILITY_VERSION),
             mods.get(IconGeneratorMod.MOD_ID),
             mods,
             paths);

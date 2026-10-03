@@ -45,6 +45,7 @@ def generatorJar = tasks.register('iconGeneratorJar', shadowJarType) {
     relocate('pl.kuba6000.ae2webintegration.core.icons', 'pl.kuba6000.ae2webintegration.icongenerator.internal.icons')
     relocate('pl.kuba6000.ae2webintegration.core.identity', 'pl.kuba6000.ae2webintegration.icongenerator.internal.identity')
     relocate('pl.kuba6000.ae2webintegration.core.utils', 'pl.kuba6000.ae2webintegration.icongenerator.internal.utils')
+    relocate('pl.kuba6000.ae2webintegration.ae2interface.platform', 'pl.kuba6000.ae2webintegration.icongenerator.internal.platform')
     relocate('pl.kuba6000.ae2webintegration.ae2interface.implementations', 'pl.kuba6000.ae2webintegration.icongenerator.internal.identitynative')
 }
 
