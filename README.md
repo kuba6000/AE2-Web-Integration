@@ -254,6 +254,12 @@ You can also generate the entire documentation yourself,
 see the [OpenAPI generator guide](tools/openapi-doclet/README.md) for generating the API
 specification from endpoint annotations and Javadocs.
 
+## IntelliJ IDEA
+
+Open this checkout as a Gradle project. The versioned `.idea/inspectionProfiles` files select the
+**AE2 Web Integration** project inspection profile. Gradle supplies the source sets and dependencies;
+SDK locations and personal workspace settings stay local. Commit shared inspection changes with the code.
+
 ## Compatibility
 
 The mod currently supports Minecraft 1.21.1 (NeoForge), 1.20.1 (Forge), 1.12.2 (Forge), and 1.7.10 (Forge/GTNH).
