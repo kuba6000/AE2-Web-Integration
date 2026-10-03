@@ -225,6 +225,7 @@ final class ExportSession {
             longestStep = Math.max(longestStep, System.nanoTime() - before);
             if (System.nanoTime() - started >= FRAME_BUDGET) break;
         }
+        renderer.drain(captures);
         captureWorkNanos += System.nanoTime() - started;
         if (!captures.isEmpty() || !failures.isEmpty()) {
             writer.write(captures, failures);
@@ -305,7 +306,7 @@ final class ExportSession {
 
     private void capture(@NotNull QueuedIcon queued, @NotNull List<Capture> captures) {
         try {
-            captures.add(new Capture(queued.key, queued.candidate.render(renderer)));
+            queued.candidate.render(renderer, queued.key, captures);
             captured++;
         } catch (LegacyIconRenderer.RenderFailure failure) {
             renderFailures++;

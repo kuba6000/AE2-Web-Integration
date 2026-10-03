@@ -9,6 +9,8 @@ import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.ARBFramebufferObject;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GLContext;
 
@@ -22,6 +24,8 @@ final class RenderState implements AutoCloseable {
     private int drawFramebuffer;
     private boolean separateFramebuffers;
     private int readFramebuffer;
+    private boolean packBindingSupported;
+    private int packBuffer;
     private float brightnessX;
     private float brightnessY;
     private final Matrix projection = new Matrix(
@@ -34,6 +38,8 @@ final class RenderState implements AutoCloseable {
     /** Refresh values in owner-local storage; captures and framebuffer cleanup never overlap. */
     @NotNull
     RenderState snapshot() {
+        packBindingSupported = PixelReadback.supportsPackBinding();
+        packBuffer = packBindingSupported ? GL11.glGetInteger(GL21.GL_PIXEL_PACK_BUFFER_BINDING) : 0;
         matrixMode = GL11.glGetInteger(GL11.GL_MATRIX_MODE);
         activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
         renderbuffer = GL11.glGetInteger(ARBFramebufferObject.GL_RENDERBUFFER_BINDING);
@@ -87,6 +93,7 @@ final class RenderState implements AutoCloseable {
             // Restore the target first so saved draw/read-buffer attributes apply to the original FBO.
             GL11.glPopClientAttrib();
             GL11.glPopAttrib();
+            if (packBindingSupported) GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, packBuffer);
             OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, brightnessX, brightnessY);
             OpenGlHelper.setActiveTexture(activeTexture);
             GL11.glMatrixMode(matrixMode);

@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import java.util.List;
+
 import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -12,6 +14,7 @@ import org.jetbrains.annotations.Nullable;
 import appeng.util.Platform;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyIconBaseline;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** One owned native candidate; it never crosses the writer thread boundary. */
@@ -29,7 +32,8 @@ abstract class IconCandidate {
 
     abstract @NotNull IconCandidate baseline();
 
-    abstract int @NotNull [] render(@NotNull LegacyIconRenderer renderer) throws LegacyIconRenderer.RenderFailure;
+    abstract void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
+        throws LegacyIconRenderer.RenderFailure;
 
     static @NotNull IconCandidate item(@NotNull String context, @NotNull ItemStack stack) {
         if (stack.getItem() == null) throw new IllegalArgumentException("Catalogue item has no registered item");
@@ -82,8 +86,9 @@ abstract class IconCandidate {
         }
 
         @Override
-        int @NotNull [] render(@NotNull LegacyIconRenderer renderer) throws LegacyIconRenderer.RenderFailure {
-            return renderer.item(stack, LegacyIconRenderer.ICON_SIZE);
+        void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
+            throws LegacyIconRenderer.RenderFailure {
+            renderer.item(stack, LegacyIconRenderer.ICON_SIZE, key, captures);
         }
     }
 
@@ -115,8 +120,9 @@ abstract class IconCandidate {
         }
 
         @Override
-        int @NotNull [] render(@NotNull LegacyIconRenderer renderer) throws LegacyIconRenderer.RenderFailure {
-            return renderer.fluid(stack, LegacyIconRenderer.ICON_SIZE);
+        void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
+            throws LegacyIconRenderer.RenderFailure {
+            renderer.fluid(stack, LegacyIconRenderer.ICON_SIZE, key, captures);
         }
     }
 }

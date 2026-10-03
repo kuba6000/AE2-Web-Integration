@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.Map;
 
 import net.minecraft.client.Minecraft;
@@ -21,8 +22,13 @@ import org.jetbrains.annotations.Nullable;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL21;
 
 import com.gtnewhorizon.gtnhlib.client.renderer.TessellatorManager;
+
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Client-thread inventory capture. Each call restores the caller's GL state, including on failure. */
 final class LegacyIconRenderer implements AutoCloseable {
@@ -34,7 +40,7 @@ final class LegacyIconRenderer implements AutoCloseable {
     private static final int GL_QUERY_BUFFER_SIZE = 16;
     private final Minecraft minecraft;
     private final RenderItem renderItem = new AlphaPreservingRenderItem();
-    private final ByteBuffer rgba = BufferUtils.createByteBuffer(ICON_SIZE * ICON_SIZE * Integer.BYTES);
+    private final PixelReadback readback = new PixelReadback();
     private final RenderState state = new RenderState();
     private @Nullable Framebuffer target;
     private long snapshotNanos;
@@ -43,10 +49,6 @@ final class LegacyIconRenderer implements AutoCloseable {
     private long setupCount;
     private long drawNanos;
     private long drawCount;
-    private long readbackNanos;
-    private long readbackCount;
-    private long conversionNanos;
-    private long conversionCount;
     private long restoreNanos;
     private long restoreCount;
 
@@ -55,8 +57,9 @@ final class LegacyIconRenderer implements AutoCloseable {
         renderItem.renderWithColor = true;
     }
 
-    int @NotNull [] item(@NotNull ItemStack stack, int size) throws RenderFailure {
-        return capture(size, () -> {
+    void item(@NotNull ItemStack stack, int size, @NotNull StableKey key, @NotNull List<Capture> captures)
+        throws RenderFailure {
+        capture(size, key, captures, () -> {
             RenderHelper.enableGUIStandardItemLighting();
             // GuiContainer enables this for RenderItem's scaled 3D block normals.
             GL11.glEnable(GL12.GL_RESCALE_NORMAL);
@@ -70,8 +73,9 @@ final class LegacyIconRenderer implements AutoCloseable {
         });
     }
 
-    int @NotNull [] fluid(@NotNull FluidStack stack, int size) throws RenderFailure {
-        return capture(size, () -> {
+    void fluid(@NotNull FluidStack stack, int size, @NotNull StableKey key, @NotNull List<Capture> captures)
+        throws RenderFailure {
+        capture(size, key, captures, () -> {
             IIcon icon = stack.getFluid()
                 .getIcon(stack);
             if (icon == null) throw new IllegalArgumentException("Fluid has no inventory sprite");
@@ -94,7 +98,8 @@ final class LegacyIconRenderer implements AutoCloseable {
         });
     }
 
-    private int @NotNull [] capture(int size, @NotNull Runnable draw) throws RenderFailure {
+    private void capture(int size, @NotNull StableKey key, @NotNull List<Capture> captures, @NotNull Runnable draw)
+        throws RenderFailure {
         if (!OpenGlHelper.isFramebufferEnabled())
             throw new IllegalStateException("Framebuffer rendering is unavailable");
         Throwable renderFailure = null;
@@ -120,7 +125,10 @@ final class LegacyIconRenderer implements AutoCloseable {
                     drawNanos += System.nanoTime() - drawStarted;
                     drawCount++;
                 }
-                if (renderFailure == null) return readPixels(size);
+                if (renderFailure == null) {
+                    readback.submit(key, captures);
+                    return;
+                }
             } finally {
                 restoreStarted = System.nanoTime();
             }
@@ -144,6 +152,7 @@ final class LegacyIconRenderer implements AutoCloseable {
     private void setup(int size) {
         long started = System.nanoTime();
         try {
+            if (PixelReadback.supportsPackBinding()) GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, 0);
             Framebuffer framebuffer = framebuffer(size);
             GL11.glDisable(GL11.GL_SCISSOR_TEST);
             GL11.glColorMask(true, true, true, true);
@@ -188,37 +197,8 @@ final class LegacyIconRenderer implements AutoCloseable {
         }
     }
 
-    @SuppressWarnings("PMD.AvoidMagicNumbers") // GL RGBA bytes become packed Java ARGB.
-    private int @NotNull [] readPixels(int size) {
-        rgba.clear();
-        GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
-        GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, 0);
-        GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS, 0);
-        GL11.glPixelStorei(GL11.GL_PACK_SKIP_PIXELS, 0);
-        long started = System.nanoTime();
-        try {
-            GL11.glReadPixels(0, 0, size, size, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, rgba);
-        } finally {
-            readbackNanos += System.nanoTime() - started;
-            readbackCount++;
-        }
-        started = System.nanoTime();
-        try {
-            int[] pixels = new int[size * size];
-            for (int y = 0; y < size; y++) {
-                for (int x = 0; x < size; x++) {
-                    int red = rgba.get() & 255;
-                    int green = rgba.get() & 255;
-                    int blue = rgba.get() & 255;
-                    int alpha = rgba.get() & 255;
-                    pixels[(size - y - 1) * size + x] = alpha == 0 ? 0 : alpha << 24 | red << 16 | green << 8 | blue;
-                }
-            }
-            return pixels;
-        } finally {
-            conversionNanos += System.nanoTime() - started;
-            conversionCount++;
-        }
+    void drain(@NotNull List<Capture> captures) {
+        readback.drain(captures);
     }
 
     /** Per-attempt wall times include pauses and deferred GPU work charged to the synchronizing call. */
@@ -229,12 +209,9 @@ final class LegacyIconRenderer implements AutoCloseable {
         counts.put("renderSetupCount", setupCount);
         counts.put("renderDrawNanos", drawNanos);
         counts.put("renderDrawCount", drawCount);
-        counts.put("renderReadbackNanos", readbackNanos);
-        counts.put("renderReadbackCount", readbackCount);
-        counts.put("renderConversionNanos", conversionNanos);
-        counts.put("renderConversionCount", conversionCount);
         counts.put("renderRestoreNanos", restoreNanos);
         counts.put("renderRestoreCount", restoreCount);
+        readback.statistics(counts);
     }
 
     private @NotNull Framebuffer framebuffer(int size) {
@@ -245,11 +222,16 @@ final class LegacyIconRenderer implements AutoCloseable {
 
     @Override
     public void close() {
-        if (target == null) return;
-        try (RenderState ignored = state.snapshot()) {
-            target.deleteFramebuffer();
+        try {
+            readback.close();
         } finally {
-            target = null;
+            if (target != null) {
+                try (RenderState ignored = state.snapshot()) {
+                    target.deleteFramebuffer();
+                } finally {
+                    target = null;
+                }
+            }
         }
     }
 
