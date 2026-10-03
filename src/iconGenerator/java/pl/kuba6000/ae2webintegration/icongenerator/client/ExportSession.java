@@ -70,11 +70,11 @@ final class ExportSession {
     private boolean canceling;
     private String status = "Preparing full icon export";
 
-    ExportSession(@NotNull Minecraft minecraft) {
+    ExportSession(@NotNull Minecraft minecraft, boolean allowPbo) {
         world = minecraft.theWorld;
         neiInstalled = Loader.isModLoaded("NotEnoughItems");
         ExportEnvironment environment = ExportEnvironment.capture(minecraft);
-        renderer = new LegacyIconRenderer(minecraft);
+        renderer = new LegacyIconRenderer(minecraft, allowPbo);
         try {
             writer = new PackExportWriter(
                 minecraft.mcDataDir.toPath()

@@ -40,7 +40,7 @@ final class LegacyIconRenderer implements AutoCloseable {
     private static final int GL_QUERY_BUFFER_SIZE = 16;
     private final Minecraft minecraft;
     private final RenderItem renderItem = new AlphaPreservingRenderItem();
-    private final PixelReadback readback = new PixelReadback();
+    private final PixelReadback readback;
     private final RenderState state = new RenderState();
     private @Nullable Framebuffer target;
     private long snapshotNanos;
@@ -52,8 +52,9 @@ final class LegacyIconRenderer implements AutoCloseable {
     private long restoreNanos;
     private long restoreCount;
 
-    LegacyIconRenderer(@NotNull Minecraft minecraft) {
+    LegacyIconRenderer(@NotNull Minecraft minecraft, boolean allowPbo) {
         this.minecraft = minecraft;
+        readback = new PixelReadback(allowPbo);
         renderItem.renderWithColor = true;
     }
 

@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import net.minecraft.client.Minecraft;
@@ -109,7 +111,15 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
 
         @Override
         public String getCommandUsage(ICommandSender sender) {
-            return "/ae2webicons <export|status|cancel>";
+            return "/ae2webicons <export [nopbo]|status|cancel>";
+        }
+
+        @Override
+        public List<String> addTabCompletionOptions(ICommandSender sender, String[] arguments) {
+            if (arguments.length == 1) return getListOfStringsMatchingLastWord(arguments, "export", "status", "cancel");
+            if (arguments.length == 2 && "export".equals(arguments[0]))
+                return getListOfStringsMatchingLastWord(arguments, "nopbo");
+            return Collections.emptyList();
         }
 
         @Override
@@ -120,29 +130,30 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
         @Override
         public void processCommand(ICommandSender sender, String[] arguments) {
             String response;
-            if (arguments.length != 1) {
+            if (arguments.length >= 1 && "export".equals(arguments[0])
+                && (arguments.length == 1 || arguments.length == 2 && "nopbo".equals(arguments[1]))) {
+                response = start(arguments.length == 1);
+            } else if (arguments.length != 1) {
                 response = getCommandUsage(sender);
             } else if ("status".equals(arguments[0])) {
                 response = session == null ? lastStatus : session.status();
             } else if ("cancel".equals(arguments[0])) {
                 if (session != null) session.cancel("requested");
                 response = session == null ? lastStatus : session.status();
-            } else if ("export".equals(arguments[0])) {
-                response = start();
             } else {
                 response = getCommandUsage(sender);
             }
             sender.addChatMessage(new ChatComponentText(response));
         }
 
-        private String start() {
+        private String start(boolean allowPbo) {
             if (session != null) return "An export is already active: " + session.status();
             Minecraft minecraft = Minecraft.getMinecraft();
             if (minecraft.theWorld == null || minecraft.thePlayer == null)
                 return "Open a client world before exporting";
             if (!OpenGlHelper.isFramebufferEnabled()) return "Enable framebuffer rendering before exporting";
             try {
-                session = new ExportSession(minecraft);
+                session = new ExportSession(minecraft, allowPbo);
                 progressScreen = new ExportProgressScreen(
                     session.status(),
                     ClientBootstrap.this::cancel,

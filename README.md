@@ -26,6 +26,9 @@ In a loaded world, `/ae2webicons export` exports registered items, their publish
 using the game's inventory renderer. If NEI is installed and enabled, its complete loaded catalogue is included.
 The generator waits while NEI is loading. Arbitrary NBT combinations are not enumerated.
 
+Use `/ae2webicons export nopbo` to disable PBO readback for a single export when checking graphics
+compatibility. Plain `/ae2webicons export` uses PBO when supported. Tab completion suggests `nopbo`.
+
 The resulting `AE2WebIntegration-icons-1.7.10-<packId>.ae2wi-icons` file is saved under `ae2webicons/`
 in the game directory. It contains 64x64 icons grouped into atlas pages, resource keys and an export
 report. Individual rendering failures are recorded and the remaining candidates are processed.

@@ -29,7 +29,7 @@ final class PixelReadback implements AutoCloseable {
     private static final int ICON_BYTES = SIZE * SIZE * Integer.BYTES;
     private static final int PAGE_BYTES = ICONS_PER_PAGE * ICON_BYTES;
     private static final int MAX_PRIOR_ERRORS = 16;
-    private final boolean requested = requested();
+    private final boolean requested;
     private final ByteBuffer rgba = BufferUtils.createByteBuffer(ICON_BYTES);
     private final List<Page> owned = new ArrayList<>(PAGE_COUNT);
     private final Deque<Page> free = new ArrayDeque<>(PAGE_COUNT);
@@ -44,11 +44,8 @@ final class PixelReadback implements AutoCloseable {
     private long conversionNanos;
     private long conversionCount;
 
-    private static boolean requested() {
-        String mode = System.getProperty("ae2webicons.readback", "pbo");
-        if ("pbo".equals(mode)) return true;
-        if ("direct".equals(mode)) return false;
-        throw new IllegalArgumentException("ae2webicons.readback must be direct or pbo");
+    PixelReadback(boolean allowPbo) {
+        requested = allowPbo;
     }
 
     static boolean supportsPackBinding() {
