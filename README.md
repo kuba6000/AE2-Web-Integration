@@ -42,3 +42,9 @@ Changing worlds or reloading resources cancels an active export.
 The exporter captures one still frame per icon. Partially transparent textures
 drawn by nonblending cutout shaders may appear different against a web page's
 background than they do in the game's inventory.
+
+## IntelliJ IDEA
+
+Open this checkout as a Gradle project. The versioned `.idea/inspectionProfiles` files select the
+**AE2 Web Integration** project inspection profile. Gradle supplies the source sets and dependencies;
+SDK locations and personal workspace settings stay local. Commit shared inspection changes with the code.
