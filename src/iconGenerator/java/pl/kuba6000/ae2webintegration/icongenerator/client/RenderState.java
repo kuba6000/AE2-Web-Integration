@@ -4,6 +4,7 @@ import java.nio.FloatBuffer;
 
 import net.minecraft.client.renderer.OpenGlHelper;
 
+import org.jetbrains.annotations.NotNull;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.ARBFramebufferObject;
 import org.lwjgl.opengl.GL11;
@@ -15,33 +16,52 @@ import org.lwjgl.opengl.GLContext;
 final class RenderState implements AutoCloseable {
 
     private static final int MATRIX_COMPONENTS = 16;
-    private final int matrixMode = GL11.glGetInteger(GL11.GL_MATRIX_MODE);
-    private final int activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
-    private final int renderbuffer = GL11.glGetInteger(ARBFramebufferObject.GL_RENDERBUFFER_BINDING);
-    private final int drawFramebuffer = GL11.glGetInteger(ARBFramebufferObject.GL_DRAW_FRAMEBUFFER_BINDING);
-    private final boolean separateFramebuffers = GLContext.getCapabilities().OpenGL30
-        || GLContext.getCapabilities().GL_ARB_framebuffer_object;
-    private final int readFramebuffer = separateFramebuffers
-        ? GL11.glGetInteger(ARBFramebufferObject.GL_READ_FRAMEBUFFER_BINDING)
-        : drawFramebuffer;
-    private final float brightnessX = OpenGlHelper.lastBrightnessX;
-    private final float brightnessY = OpenGlHelper.lastBrightnessY;
+    private int matrixMode;
+    private int activeTexture;
+    private int renderbuffer;
+    private int drawFramebuffer;
+    private boolean separateFramebuffers;
+    private int readFramebuffer;
+    private float brightnessX;
+    private float brightnessY;
     private final Matrix projection = new Matrix(
         GL11.GL_PROJECTION,
         GL11.GL_PROJECTION_MATRIX,
         GL11.GL_PROJECTION_STACK_DEPTH);
     private final Matrix model = new Matrix(GL11.GL_MODELVIEW, GL11.GL_MODELVIEW_MATRIX, GL11.GL_MODELVIEW_STACK_DEPTH);
-    private final Matrix[] textures = new Matrix[GL11.glGetInteger(GL13.GL_MAX_TEXTURE_UNITS)];
+    private Matrix[] textures = new Matrix[0];
 
-    RenderState() {
+    /** Refresh values in owner-local storage; captures and framebuffer cleanup never overlap. */
+    @NotNull
+    RenderState snapshot() {
+        matrixMode = GL11.glGetInteger(GL11.GL_MATRIX_MODE);
+        activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+        renderbuffer = GL11.glGetInteger(ARBFramebufferObject.GL_RENDERBUFFER_BINDING);
+        drawFramebuffer = GL11.glGetInteger(ARBFramebufferObject.GL_DRAW_FRAMEBUFFER_BINDING);
+        separateFramebuffers = GLContext.getCapabilities().OpenGL30
+            || GLContext.getCapabilities().GL_ARB_framebuffer_object;
+        readFramebuffer = separateFramebuffers ? GL11.glGetInteger(ARBFramebufferObject.GL_READ_FRAMEBUFFER_BINDING)
+            : drawFramebuffer;
+        brightnessX = OpenGlHelper.lastBrightnessX;
+        brightnessY = OpenGlHelper.lastBrightnessY;
+        // Delay context-dependent initialization until the first capture, not session construction.
+        if (textures.length == 0) {
+            textures = new Matrix[GL11.glGetInteger(GL13.GL_MAX_TEXTURE_UNITS)];
+            for (int index = 0; index < textures.length; index++) {
+                textures[index] = new Matrix(GL11.GL_TEXTURE, GL11.GL_TEXTURE_MATRIX, GL11.GL_TEXTURE_STACK_DEPTH);
+            }
+        }
+        projection.snapshot();
+        model.snapshot();
         GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
         GL11.glPushClientAttrib(GL11.GL_CLIENT_PIXEL_STORE_BIT | GL11.GL_CLIENT_VERTEX_ARRAY_BIT);
         for (int index = 0; index < textures.length; index++) {
             OpenGlHelper.setActiveTexture(GL13.GL_TEXTURE0 + index);
-            textures[index] = new Matrix(GL11.GL_TEXTURE, GL11.GL_TEXTURE_MATRIX, GL11.GL_TEXTURE_STACK_DEPTH);
+            textures[index].snapshot();
         }
         OpenGlHelper.setActiveTexture(activeTexture);
         GL11.glMatrixMode(matrixMode);
+        return this;
     }
 
     @Override
@@ -76,16 +96,23 @@ final class RenderState implements AutoCloseable {
     private static final class Matrix {
 
         private final int mode;
+        private final int name;
         private final int depthName;
-        private final int depth;
+        private int depth;
         private final FloatBuffer contents = BufferUtils.createFloatBuffer(MATRIX_COMPONENTS);
 
         private Matrix(int mode, int name, int depthName) {
             this.mode = mode;
+            this.name = name;
             this.depthName = depthName;
+        }
+
+        private void snapshot() {
             GL11.glMatrixMode(mode);
             depth = GL11.glGetInteger(depthName);
+            contents.clear();
             GL11.glGetFloat(name, contents);
+            contents.rewind();
         }
 
         private void restore() {
@@ -96,6 +123,7 @@ final class RenderState implements AutoCloseable {
                 current--;
             }
             if (current < depth) throw new IllegalStateException("Renderer consumed the caller's matrix stack");
+            contents.rewind();
             GL11.glLoadMatrix(contents);
         }
     }

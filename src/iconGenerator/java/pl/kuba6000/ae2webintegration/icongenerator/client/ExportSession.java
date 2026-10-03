@@ -248,6 +248,7 @@ final class ExportSession {
         counts.put("longestNativeStepNanos", longestStep);
         counts.put("captureWorkNanos", captureWorkNanos);
         counts.put("captureBackpressureNanos", captureBackpressureNanos);
+        renderer.statistics(counts);
         String neiSource = useNei ? "nei"
             : neiUnavailable ? "nei-unavailable" : neiDisabled ? "nei-disabled" : "nei-absent";
         writer.finish(counts, Arrays.asList("native", neiSource, "fluids"));

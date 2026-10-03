@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.OpenGlHelper;
@@ -34,7 +35,20 @@ final class LegacyIconRenderer implements AutoCloseable {
     private final Minecraft minecraft;
     private final RenderItem renderItem = new AlphaPreservingRenderItem();
     private final ByteBuffer rgba = BufferUtils.createByteBuffer(ICON_SIZE * ICON_SIZE * Integer.BYTES);
+    private final RenderState state = new RenderState();
     private @Nullable Framebuffer target;
+    private long snapshotNanos;
+    private long snapshotCount;
+    private long setupNanos;
+    private long setupCount;
+    private long drawNanos;
+    private long drawCount;
+    private long readbackNanos;
+    private long readbackCount;
+    private long conversionNanos;
+    private long conversionCount;
+    private long restoreNanos;
+    private long restoreCount;
 
     LegacyIconRenderer(@NotNull Minecraft minecraft) {
         this.minecraft = minecraft;
@@ -84,7 +98,52 @@ final class LegacyIconRenderer implements AutoCloseable {
         if (!OpenGlHelper.isFramebufferEnabled())
             throw new IllegalStateException("Framebuffer rendering is unavailable");
         Throwable renderFailure = null;
-        try (TessellatorState ignoredTessellator = new TessellatorState(); RenderState ignored = new RenderState()) {
+        long snapshotStarted = System.nanoTime();
+        boolean snapshotComplete = false;
+        long restoreStarted = 0;
+        try (TessellatorState ignoredTessellator = new TessellatorState(); RenderState ignored = state.snapshot()) {
+            snapshotNanos += System.nanoTime() - snapshotStarted;
+            snapshotCount++;
+            snapshotComplete = true;
+            try {
+                setup(size);
+                long drawStarted = System.nanoTime();
+                try {
+                    draw.run();
+                } catch (Throwable failure) {
+                    // RenderItem wraps even fatal renderer errors in a native crash report.
+                    Throwable cause = failure instanceof ReportedException ? failure.getCause() : failure;
+                    if (cause instanceof VirtualMachineError fatal) throw fatal;
+                    if (cause instanceof ThreadDeath fatal) throw fatal;
+                    renderFailure = failure;
+                } finally {
+                    drawNanos += System.nanoTime() - drawStarted;
+                    drawCount++;
+                }
+                if (renderFailure == null) return readPixels(size);
+            } finally {
+                restoreStarted = System.nanoTime();
+            }
+        } catch (RuntimeException | Error failure) {
+            if (renderFailure != null) failure.addSuppressed(renderFailure);
+            throw failure;
+        } finally {
+            if (snapshotComplete) {
+                restoreNanos += System.nanoTime() - restoreStarted;
+                restoreCount++;
+            } else {
+                // A failed resource initializer can also close already-acquired Tessellator state.
+                snapshotNanos += System.nanoTime() - snapshotStarted;
+                snapshotCount++;
+            }
+        }
+        // Only a draw failure followed by successful state restoration is safe to skip.
+        throw new RenderFailure(renderFailure);
+    }
+
+    private void setup(int size) {
+        long started = System.nanoTime();
+        try {
             Framebuffer framebuffer = framebuffer(size);
             GL11.glDisable(GL11.GL_SCISSOR_TEST);
             GL11.glColorMask(true, true, true, true);
@@ -113,22 +172,10 @@ final class LegacyIconRenderer implements AutoCloseable {
             GL11.glAlphaFunc(GL11.GL_GREATER, 0);
             GL11.glDisable(GL11.GL_CULL_FACE);
             GL11.glColor4f(1, 1, 1, 1);
-            try {
-                draw.run();
-            } catch (Throwable failure) {
-                // RenderItem wraps even fatal renderer errors in a native crash report.
-                Throwable cause = failure instanceof ReportedException ? failure.getCause() : failure;
-                if (cause instanceof VirtualMachineError fatal) throw fatal;
-                if (cause instanceof ThreadDeath fatal) throw fatal;
-                renderFailure = failure;
-            }
-            if (renderFailure == null) return readPixels(size);
-        } catch (RuntimeException | Error failure) {
-            if (renderFailure != null) failure.addSuppressed(renderFailure);
-            throw failure;
+        } finally {
+            setupNanos += System.nanoTime() - started;
+            setupCount++;
         }
-        // Only a draw failure followed by successful state restoration is safe to skip.
-        throw new RenderFailure(renderFailure);
     }
 
     static final class RenderFailure extends Exception {
@@ -148,18 +195,46 @@ final class LegacyIconRenderer implements AutoCloseable {
         GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, 0);
         GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS, 0);
         GL11.glPixelStorei(GL11.GL_PACK_SKIP_PIXELS, 0);
-        GL11.glReadPixels(0, 0, size, size, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, rgba);
-        int[] pixels = new int[size * size];
-        for (int y = 0; y < size; y++) {
-            for (int x = 0; x < size; x++) {
-                int red = rgba.get() & 255;
-                int green = rgba.get() & 255;
-                int blue = rgba.get() & 255;
-                int alpha = rgba.get() & 255;
-                pixels[(size - y - 1) * size + x] = alpha == 0 ? 0 : alpha << 24 | red << 16 | green << 8 | blue;
-            }
+        long started = System.nanoTime();
+        try {
+            GL11.glReadPixels(0, 0, size, size, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, rgba);
+        } finally {
+            readbackNanos += System.nanoTime() - started;
+            readbackCount++;
         }
-        return pixels;
+        started = System.nanoTime();
+        try {
+            int[] pixels = new int[size * size];
+            for (int y = 0; y < size; y++) {
+                for (int x = 0; x < size; x++) {
+                    int red = rgba.get() & 255;
+                    int green = rgba.get() & 255;
+                    int blue = rgba.get() & 255;
+                    int alpha = rgba.get() & 255;
+                    pixels[(size - y - 1) * size + x] = alpha == 0 ? 0 : alpha << 24 | red << 16 | green << 8 | blue;
+                }
+            }
+            return pixels;
+        } finally {
+            conversionNanos += System.nanoTime() - started;
+            conversionCount++;
+        }
+    }
+
+    /** Per-attempt wall times include pauses and deferred GPU work charged to the synchronizing call. */
+    void statistics(@NotNull Map<String, Long> counts) {
+        counts.put("renderSnapshotNanos", snapshotNanos);
+        counts.put("renderSnapshotCount", snapshotCount);
+        counts.put("renderSetupNanos", setupNanos);
+        counts.put("renderSetupCount", setupCount);
+        counts.put("renderDrawNanos", drawNanos);
+        counts.put("renderDrawCount", drawCount);
+        counts.put("renderReadbackNanos", readbackNanos);
+        counts.put("renderReadbackCount", readbackCount);
+        counts.put("renderConversionNanos", conversionNanos);
+        counts.put("renderConversionCount", conversionCount);
+        counts.put("renderRestoreNanos", restoreNanos);
+        counts.put("renderRestoreCount", restoreCount);
     }
 
     private @NotNull Framebuffer framebuffer(int size) {
@@ -171,7 +246,7 @@ final class LegacyIconRenderer implements AutoCloseable {
     @Override
     public void close() {
         if (target == null) return;
-        try (RenderState ignored = new RenderState()) {
+        try (RenderState ignored = state.snapshot()) {
             target.deleteFramebuffer();
         } finally {
             target = null;
@@ -180,11 +255,13 @@ final class LegacyIconRenderer implements AutoCloseable {
 
     private static final class AlphaPreservingRenderItem extends RenderItem {
 
+        private final ByteBuffer mask = BufferUtils.createByteBuffer(GL_QUERY_BUFFER_SIZE);
+
         @Override
         @SuppressWarnings("PMD.AvoidMagicNumbers") // Four positional RGBA mask channels.
         public void renderEffect(TextureManager manager, int x, int y) {
             // LWJGL 2 requires room for sixteen values even for the four-component write mask.
-            ByteBuffer mask = BufferUtils.createByteBuffer(GL_QUERY_BUFFER_SIZE);
+            mask.clear();
             GL11.glGetBoolean(GL11.GL_COLOR_WRITEMASK, mask);
             GL11.glColorMask(mask.get(0) != 0, mask.get(1) != 0, mask.get(2) != 0, false);
             try {
