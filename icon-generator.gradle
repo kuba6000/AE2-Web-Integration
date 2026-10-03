@@ -1,0 +1,89 @@
+sourceSets {
+    main.java.srcDir('src/identityCommon/java')
+    iconGenerator {
+        java.srcDir('src/identityCommon/java')
+    }
+}
+
+neoForge.addModdingDependenciesTo(sourceSets.iconGenerator)
+neoForge.accessTransformers.from('src/iconGenerator/resources/META-INF/accesstransformer.cfg')
+
+configurations {
+    iconGeneratorShared {
+        canBeConsumed = false
+    }
+    iconGeneratorImplementation.extendsFrom(iconGeneratorShared)
+}
+
+dependencies {
+    iconGeneratorShared(project(path: ':core', configuration: 'iconPackElements')) {
+        transitive = false
+    }
+    iconGeneratorImplementation(neoforge.ae2)
+    iconGeneratorCompileOnly(neoforge.emi)
+    iconGeneratorCompileOnly(libs.jetbrains.annotations)
+}
+
+tasks.named('processIconGeneratorResources') {
+    inputs.property('version', project.version)
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+def shadowJarType = tasks.named('shadowJar').get().class.classLoader.loadClass(
+    'com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar')
+def generatorJar = tasks.register('iconGeneratorJar', shadowJarType) {
+    group = 'build'
+    description = 'Builds the standalone client icon generator in NeoForge production mappings.'
+    archiveBaseName = 'ae2webintegration-icon-generator'
+    archiveVersion = project.version
+    archiveClassifier = ''
+    from(sourceSets.iconGenerator.output)
+    from('LICENSE')
+    configurations = [project.configurations.iconGeneratorShared]
+    relocate('pl.kuba6000.ae2webintegration.core.icons', 'pl.kuba6000.ae2webintegration.icongenerator.internal.icons')
+    relocate('pl.kuba6000.ae2webintegration.core.identity', 'pl.kuba6000.ae2webintegration.icongenerator.internal.identity')
+    relocate('pl.kuba6000.ae2webintegration.core.utils', 'pl.kuba6000.ae2webintegration.icongenerator.internal.utils')
+    relocate('pl.kuba6000.ae2webintegration.ae2interface.implementations', 'pl.kuba6000.ae2webintegration.icongenerator.internal.identitynative')
+}
+
+tasks.named('assemble') {
+    dependsOn(generatorJar)
+}
+
+afterEvaluate {
+    generatorJar.configure {
+        // The server mod's manifest declares its own integration mixins.
+        manifest.attributes.clear()
+        manifest.attributes('Manifest-Version': '1.0', 'Implementation-Version': project.version)
+    }
+}
+
+// Preserve the normal integration's existing runs; the generator has independent mod/source bindings.
+neoForge.runs.each { run ->
+    run.loadedMods.set([neoForge.mods.getByName(project.mod_id)])
+}
+neoForge.mods.create('ae2webintegration_icon_generator') {
+    sourceSet(sourceSets.iconGenerator)
+}
+neoForge.runs.create('iconGeneratorClient') {
+    client()
+    sourceSet = sourceSets.iconGenerator
+    // Do not inherit the normal mod's additionalRuntimeClasspath full core dependency.
+    additionalRuntimeClasspathConfiguration.setExtendsFrom([configurations.iconGeneratorShared])
+    loadedMods.set([neoForge.mods.getByName('ae2webintegration_icon_generator')])
+    gameDirectory.set(file('run/icon-generator'))
+    ideName = 'Standalone icon generator'
+}
+
+spotless.java {
+    target('src/main/java/**/*.java', 'src/test/java/**/*.java', 'src/identityCommon/java/**/*.java',
+        'src/iconGenerator/java/**/*.java')
+}
+
+idea.module {
+    sourceDirs += sourceSets.iconGenerator.java.srcDirs
+    resourceDirs += sourceSets.iconGenerator.resources.srcDirs
+    scopes.COMPILE.plus += [configurations.iconGeneratorCompileClasspath]
+}

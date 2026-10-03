@@ -2,6 +2,7 @@
   <!-- Forge constructs these mod entry points and sided proxies reflectively. -->
   <entry_points version="2.0">
     <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration AE2WebIntegration()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod IconGeneratorMod()" />
   </entry_points>
   <list size="3">
     <item index="0" class="java.lang.String" itemvalue="net.neoforged.fml.common.Mod" />

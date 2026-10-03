@@ -24,6 +24,11 @@ public final class NativeItemIdentity {
     private NativeItemIdentity() {}
 
     public static @NotNull StableKey getKey(@NotNull AEKey key) {
+        return getKey(key, registries());
+    }
+
+    /** Uses the owning world's registries for the same codec on clients and servers. */
+    public static @NotNull StableKey getKey(@NotNull AEKey key, @NotNull HolderLookup.Provider registries) {
         if (key instanceof AEItemKey item) {
             checkPersistent(
                 item.getReadOnlyStack()
@@ -34,7 +39,6 @@ public final class NativeItemIdentity {
                 fluid.toStack(1)
                     .getComponentsPatch());
         }
-        HolderLookup.Provider registries = registries();
         CompoundTag tag = key.toTagGeneric(registries);
         // The native codec allocates its tag first. Bounds cover only the subsequent traversal.
         return StableKey.create(sink -> {
