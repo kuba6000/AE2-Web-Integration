@@ -203,6 +203,7 @@ def iconPackJar = tasks.register('iconPackJar', Jar) {
         // Only portable format types: server response mappings depend on the live identity registry.
         include 'pl/kuba6000/ae2webintegration/core/icons/IconPack*.class'
         include 'pl/kuba6000/ae2webintegration/core/icons/PackFormat*.class'
+        include 'pl/kuba6000/ae2webintegration/core/icons/export/**'
     }
 }
 configurations.create('iconPackElements') {
