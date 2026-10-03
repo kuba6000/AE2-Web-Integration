@@ -40,6 +40,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.io.IOUtils;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -76,22 +77,22 @@ class ServerLifecycleHttpTest {
     private static final class BlockingPlayerLookup implements IServerPlatform {
 
         @Override
-        public String getModVersion() {
+        public @NotNull String getModVersion() {
             return "test-version";
         }
 
         @Override
-        public String getLoader() {
+        public @NotNull String getLoader() {
             return "forge";
         }
 
         @Override
-        public String getMinecraftVersion() {
+        public @NotNull String getMinecraftVersion() {
             return "1.20.1";
         }
 
         @Override
-        public String getIconPackCompatibilityVersion() {
+        public @NotNull String getIconPackCompatibilityVersion() {
             return "test-compatibility";
         }
 
@@ -469,22 +470,22 @@ class ServerLifecycleHttpTest {
         IServerPlatform platform = new IServerPlatform() {
 
             @Override
-            public String getModVersion() {
+            public @NotNull String getModVersion() {
                 return version;
             }
 
             @Override
-            public String getLoader() {
+            public @NotNull String getLoader() {
                 return "forge";
             }
 
             @Override
-            public String getMinecraftVersion() {
+            public @NotNull String getMinecraftVersion() {
                 return "1.20.1";
             }
 
             @Override
-            public String getIconPackCompatibilityVersion() {
+            public @NotNull String getIconPackCompatibilityVersion() {
                 return "test-compatibility";
             }
 
@@ -650,22 +651,22 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public String getModVersion() {
+            public @NotNull String getModVersion() {
                 return "test-version";
             }
 
             @Override
-            public String getLoader() {
+            public @NotNull String getLoader() {
                 return "forge";
             }
 
             @Override
-            public String getMinecraftVersion() {
+            public @NotNull String getMinecraftVersion() {
                 return "1.20.1";
             }
 
             @Override
-            public String getIconPackCompatibilityVersion() {
+            public @NotNull String getIconPackCompatibilityVersion() {
                 return "test-compatibility";
             }
 
@@ -746,22 +747,22 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public String getModVersion() {
+            public @NotNull String getModVersion() {
                 return "test-version";
             }
 
             @Override
-            public String getLoader() {
+            public @NotNull String getLoader() {
                 return "forge";
             }
 
             @Override
-            public String getMinecraftVersion() {
+            public @NotNull String getMinecraftVersion() {
                 return "1.20.1";
             }
 
             @Override
-            public String getIconPackCompatibilityVersion() {
+            public @NotNull String getIconPackCompatibilityVersion() {
                 return "test-compatibility";
             }
 
@@ -828,22 +829,22 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public String getModVersion() {
+            public @NotNull String getModVersion() {
                 return "test-version";
             }
 
             @Override
-            public String getLoader() {
+            public @NotNull String getLoader() {
                 return "forge";
             }
 
             @Override
-            public String getMinecraftVersion() {
+            public @NotNull String getMinecraftVersion() {
                 return "1.20.1";
             }
 
             @Override
-            public String getIconPackCompatibilityVersion() {
+            public @NotNull String getIconPackCompatibilityVersion() {
                 return "test-compatibility";
             }
 
@@ -1056,22 +1057,22 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public String getModVersion() {
+            public @NotNull String getModVersion() {
                 return "test-version";
             }
 
             @Override
-            public String getLoader() {
+            public @NotNull String getLoader() {
                 return "forge";
             }
 
             @Override
-            public String getMinecraftVersion() {
+            public @NotNull String getMinecraftVersion() {
                 return "1.20.1";
             }
 
             @Override
-            public String getIconPackCompatibilityVersion() {
+            public @NotNull String getIconPackCompatibilityVersion() {
                 return "test-compatibility";
             }
 

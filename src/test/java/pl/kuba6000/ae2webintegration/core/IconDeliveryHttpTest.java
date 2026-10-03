@@ -73,7 +73,7 @@ class IconDeliveryHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public String getModVersion() {
+            public @NotNull String getModVersion() {
                 return "test-version";
             }
 
@@ -94,15 +94,15 @@ class IconDeliveryHttpTest {
                     .toFile();
             }
 
-            public String getMinecraftVersion() {
+            public @NotNull String getMinecraftVersion() {
                 return "1.7.10";
             }
 
-            public String getLoader() {
+            public @NotNull String getLoader() {
                 return "forge";
             }
 
-            public String getIconPackCompatibilityVersion() {
+            public @NotNull String getIconPackCompatibilityVersion() {
                 return "test-identity";
             }
         };
@@ -223,7 +223,7 @@ class IconDeliveryHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
-            public String getModVersion() {
+            public @NotNull String getModVersion() {
                 return "test-version";
             }
 
@@ -243,15 +243,15 @@ class IconDeliveryHttpTest {
                 return platform.getWorldDirectory();
             }
 
-            public String getMinecraftVersion() {
+            public @NotNull String getMinecraftVersion() {
                 return "1.21.1";
             }
 
-            public String getLoader() {
+            public @NotNull String getLoader() {
                 return "neoforge";
             }
 
-            public String getIconPackCompatibilityVersion() {
+            public @NotNull String getIconPackCompatibilityVersion() {
                 return "other";
             }
         };

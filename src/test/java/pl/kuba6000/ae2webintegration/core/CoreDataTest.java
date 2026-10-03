@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.UUID;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -213,22 +214,22 @@ class CoreDataTest {
     private record TestPlatform(File configDirectory) implements IServerPlatform {
 
         @Override
-        public String getModVersion() {
+        public @NotNull String getModVersion() {
             return "test-version";
         }
 
         @Override
-        public String getLoader() {
+        public @NotNull String getLoader() {
             return "forge";
         }
 
         @Override
-        public String getMinecraftVersion() {
+        public @NotNull String getMinecraftVersion() {
             return "1.20.1";
         }
 
         @Override
-        public String getIconPackCompatibilityVersion() {
+        public @NotNull String getIconPackCompatibilityVersion() {
             return "test-compatibility";
         }
 

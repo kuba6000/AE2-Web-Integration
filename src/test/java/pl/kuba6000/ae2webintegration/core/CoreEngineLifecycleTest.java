@@ -80,22 +80,22 @@ class CoreEngineLifecycleTest extends GridTestScope {
             IServerPlatform processPlatform = new IServerPlatform() {
 
                 @Override
-                public String getModVersion() {
+                public @NotNull String getModVersion() {
                     return "test-version";
                 }
 
                 @Override
-                public String getLoader() {
+                public @NotNull String getLoader() {
                     return "forge";
                 }
 
                 @Override
-                public String getMinecraftVersion() {
+                public @NotNull String getMinecraftVersion() {
                     return "1.20.1";
                 }
 
                 @Override
-                public String getIconPackCompatibilityVersion() {
+                public @NotNull String getIconPackCompatibilityVersion() {
                     return "test-compatibility";
                 }
 

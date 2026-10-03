@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.io.File;
 import java.util.UUID;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -45,22 +46,22 @@ class CoreEngineTest {
     private record TestPlatform(File configDirectory, boolean unreadableLegacyConfig) implements IServerPlatform {
 
         @Override
-        public String getModVersion() {
+        public @NotNull String getModVersion() {
             return "test-version";
         }
 
         @Override
-        public String getLoader() {
+        public @NotNull String getLoader() {
             return "forge";
         }
 
         @Override
-        public String getMinecraftVersion() {
+        public @NotNull String getMinecraftVersion() {
             return "1.20.1";
         }
 
         @Override
-        public String getIconPackCompatibilityVersion() {
+        public @NotNull String getIconPackCompatibilityVersion() {
             return "test-compatibility";
         }
 
