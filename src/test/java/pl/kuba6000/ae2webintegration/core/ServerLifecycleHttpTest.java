@@ -45,7 +45,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.github.bsideup.jabel.Desugar;
@@ -75,6 +74,26 @@ class ServerLifecycleHttpTest {
     private record Response(int status, String body) {}
 
     private static final class BlockingPlayerLookup implements IServerPlatform {
+
+        @Override
+        public String getModVersion() {
+            return "test-version";
+        }
+
+        @Override
+        public String getLoader() {
+            return "forge";
+        }
+
+        @Override
+        public String getMinecraftVersion() {
+            return "1.20.1";
+        }
+
+        @Override
+        public String getIconPackCompatibilityVersion() {
+            return "test-compatibility";
+        }
 
         private final UUID playerUuid;
         private final CountDownLatch entered = new CountDownLatch(1);
@@ -443,13 +462,31 @@ class ServerLifecycleHttpTest {
     }
 
     @ParameterizedTest
-    @NullSource
     @ValueSource(
         strings = { "2.7.4-native-test",
             "Version</script><img src=x onerror=\"alert(1)\">&'\u2028_REPLACE_ME_USER<!--_REPLACE_ME_MOD_VERSION-->" })
     void nextUiBootstrapsTheRuntimeModVersionAsSafeJson(String version) throws Exception {
-        String previousVersion = CoreEngine.getModVersion();
         IServerPlatform platform = new IServerPlatform() {
+
+            @Override
+            public String getModVersion() {
+                return version;
+            }
+
+            @Override
+            public String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
 
             @Override
             public UUID getOnlinePlayerUUID(String username) {
@@ -472,7 +509,7 @@ class ServerLifecycleHttpTest {
             }
         };
         try {
-            CoreEngine.init(platform, version, "-http-test");
+            CoreEngine.init(platform);
             startApi();
             String token = login();
             Response page = get("/?ui=next", token);
@@ -501,7 +538,6 @@ class ServerLifecycleHttpTest {
                     .contains("id=\"ae2-mod-version\""));
         } finally {
             CoreEngine.onServerStopped();
-            CoreEngine.init(platform, previousVersion, "-http-test");
         }
     }
 
@@ -614,6 +650,26 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
+            public String getModVersion() {
+                return "test-version";
+            }
+
+            @Override
+            public String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
+
+            @Override
             public UUID getOnlinePlayerUUID(String username) {
                 playerListLookups.incrementAndGet();
                 return null;
@@ -690,6 +746,26 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
+            public String getModVersion() {
+                return "test-version";
+            }
+
+            @Override
+            public String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
+
+            @Override
             public UUID getOnlinePlayerUUID(String username) {
                 playerListLookups.incrementAndGet();
                 return null;
@@ -750,6 +826,26 @@ class ServerLifecycleHttpTest {
     void registrationFormPreservesTheNotOnlineRedirectAfterTheServerThreadLookup() throws Exception {
         AtomicInteger playerListLookups = new AtomicInteger();
         AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public String getModVersion() {
+                return "test-version";
+            }
+
+            @Override
+            public String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
 
             @Override
             public UUID getOnlinePlayerUUID(String username) {
@@ -958,6 +1054,26 @@ class ServerLifecycleHttpTest {
     void registrationReturnsAnAcceptedTokenWithoutInstallingACookie() throws Exception {
         UUID player = UUID.fromString("12121212-3434-5656-7878-909090909090");
         AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public String getModVersion() {
+                return "test-version";
+            }
+
+            @Override
+            public String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
 
             @Override
             public UUID getOnlinePlayerUUID(String username) {

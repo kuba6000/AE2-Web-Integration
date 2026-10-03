@@ -63,11 +63,11 @@ public final class IconPack implements Closeable {
     }
 
     public static @NotNull IconPack open(@NotNull Path path, @NotNull String minecraftVersion, @NotNull String loader,
-        @NotNull String identityContract, @NotNull String basePolicy) throws IOException {
+        @NotNull String compatibilityVersion) throws IOException {
         if (Files.size(path) > PackFormat.MAX_ARCHIVE) throw new IOException("Icon archive exceeds size limit");
         ZipFile zip = new ZipFile(path.toFile());
         try {
-            return load(zip, minecraftVersion, loader, identityContract, basePolicy);
+            return load(zip, minecraftVersion, loader, compatibilityVersion);
         } catch (IOException | RuntimeException | Error e) {
             try {
                 zip.close();
@@ -81,7 +81,7 @@ public final class IconPack implements Closeable {
     }
 
     private static @NotNull IconPack load(@NotNull ZipFile zip, @NotNull String minecraftVersion,
-        @NotNull String loader, @NotNull String identityContract, @NotNull String basePolicy) throws IOException {
+        @NotNull String loader, @NotNull String compatibilityVersion) throws IOException {
         int archiveEntries = validateArchiveEntries(zip);
         JsonObject root = PackFormat.parse(bytes(zip, "manifest.json", PackFormat.MAX_MANIFEST));
         if (PackFormat.integer(root.get("formatVersion")) != PackFormat.VERSION
@@ -90,9 +90,8 @@ public final class IconPack implements Closeable {
             throw new IOException("Unsupported icon format");
         Metadata metadata = metadata(root);
         if (!minecraftVersion.equals(metadata.minecraftVersion) || !loader.equals(metadata.loader)
-            || !identityContract.equals(metadata.identityContract)
-            || !basePolicy.equals(metadata.basePolicy))
-            throw new IOException("Icon pack target or identity contract mismatch");
+            || !compatibilityVersion.equals(metadata.compatibilityVersion))
+            throw new IOException("Icon pack compatibility mismatch");
         String packId = PackFormat.text(root, "packId");
         PackFormat.digest(packId);
         if (!packId.equals(PackFormat.packId(root))) throw new IOException("Pack digest mismatch");
@@ -229,8 +228,7 @@ public final class IconPack implements Closeable {
         return new Metadata(
             PackFormat.text(root, "minecraftVersion"),
             PackFormat.text(root, "loader"),
-            PackFormat.text(root, "identityContract"),
-            PackFormat.text(root, "basePolicy"),
+            PackFormat.text(root, "compatibilityVersion"),
             PackFormat.text(root, "generatorVersion"),
             PackFormat.text(root, "generatedAt"),
             mods,
@@ -324,31 +322,27 @@ public final class IconPack implements Closeable {
     /** Native platform compatibility requirements, independent of a generated pack's provenance. */
     public static final class Target {
 
-        public final @NotNull String minecraftVersion, loader, identityContract, basePolicy;
+        public final @NotNull String minecraftVersion, loader, compatibilityVersion;
 
-        public Target(@NotNull String minecraftVersion, @NotNull String loader, @NotNull String identityContract,
-            @NotNull String basePolicy) {
+        public Target(@NotNull String minecraftVersion, @NotNull String loader, @NotNull String compatibilityVersion) {
             this.minecraftVersion = minecraftVersion;
             this.loader = loader;
-            this.identityContract = identityContract;
-            this.basePolicy = basePolicy;
+            this.compatibilityVersion = compatibilityVersion;
         }
     }
 
     public static final class Metadata {
 
-        public final @NotNull String minecraftVersion, loader, identityContract, basePolicy, generatorVersion,
-            generatedAt;
+        public final @NotNull String minecraftVersion, loader, compatibilityVersion, generatorVersion, generatedAt;
         public final @NotNull Map<String, String> mods;
         public final @NotNull List<String> resourcePacks;
 
-        public Metadata(@NotNull String minecraftVersion, @NotNull String loader, @NotNull String identityContract,
-            @NotNull String basePolicy, @NotNull String generatorVersion, @NotNull String generatedAt,
-            @NotNull Map<String, String> mods, @NotNull List<String> resourcePacks) {
+        public Metadata(@NotNull String minecraftVersion, @NotNull String loader, @NotNull String compatibilityVersion,
+            @NotNull String generatorVersion, @NotNull String generatedAt, @NotNull Map<String, String> mods,
+            @NotNull List<String> resourcePacks) {
             this.minecraftVersion = minecraftVersion;
             this.loader = loader;
-            this.identityContract = identityContract;
-            this.basePolicy = basePolicy;
+            this.compatibilityVersion = compatibilityVersion;
             this.generatorVersion = generatorVersion;
             this.generatedAt = generatedAt;
             this.mods = Collections.unmodifiableMap(new TreeMap<>(mods));

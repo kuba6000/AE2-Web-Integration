@@ -19,8 +19,10 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
@@ -37,6 +39,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -54,11 +57,90 @@ class IconPackTest {
             "1.7.10",
             "forge",
             "legacy-v1",
-            "base-v1",
             "test",
             time,
             Collections.singletonMap("example", "1"),
             Collections.singletonList("0000000000000000000000000000000000000000000000000000000000000000"));
+    }
+
+    @Test
+    void manifestUsesOneOpaqueCompatibilityVersion() throws Exception {
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+            writer.add(StableKey.random(), new int[4096]);
+            output = writer.finish();
+        }
+        try (ZipFile zip = new ZipFile(output.toFile())) {
+            JsonObject manifest = new JsonParser()
+                .parse(new String(entryBytes(zip, "manifest.json"), StandardCharsets.UTF_8))
+                .getAsJsonObject();
+            assertEquals(
+                2,
+                manifest.get("formatVersion")
+                    .getAsInt());
+            assertEquals(
+                "legacy-v1",
+                manifest.get("compatibilityVersion")
+                    .getAsString());
+            assertFalse(manifest.has("identityContract"));
+            assertFalse(manifest.has("basePolicy"));
+        }
+    }
+
+    @Test
+    void compatibilityRequiresExactLoaderGameAndOpaqueVersion() throws Exception {
+        for (String version : new String[] { "1", "01", "release-candidate", "RELEASE-CANDIDATE" }) {
+            Metadata provenance = metadata("today");
+            Metadata metadata = new Metadata(
+                "1.7.10",
+                "forge",
+                version,
+                provenance.generatorVersion,
+                provenance.generatedAt,
+                provenance.mods,
+                provenance.resourcePacks);
+            Path output;
+            try (IconPackWriter writer = new IconPackWriter(directory, metadata, 64)) {
+                output = writer.finish();
+            }
+            try (IconPack pack = IconPack.open(output, "1.7.10", "forge", version)) {
+                assertEquals(version, pack.metadata().compatibilityVersion);
+            }
+            for (String other : new String[] { "1", "01", "release-candidate", "RELEASE-CANDIDATE" }) {
+                if (!version.equals(other)) assertRejectedPack(output, "1.7.10", "forge", other);
+            }
+            assertRejectedPack(output, "1.12.2", "forge", version);
+            assertRejectedPack(output, "1.7.10", "neoforge", version);
+        }
+    }
+
+    @Test
+    void rejectsOldTwoVersionManifestAndNonStringCompatibility() throws Exception {
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+            output = writer.finish();
+        }
+        for (int mutation = 0; mutation < 3; mutation++) {
+            Path changed = directory.resolve("old-contract-" + mutation + ".zip");
+            try (ZipFile source = new ZipFile(output.toFile());
+                ZipOutputStream target = new ZipOutputStream(Files.newOutputStream(changed))) {
+                JsonObject manifest = new JsonParser()
+                    .parse(new String(entryBytes(source, "manifest.json"), StandardCharsets.UTF_8))
+                    .getAsJsonObject();
+                if (mutation < 2) {
+                    manifest.addProperty("formatVersion", mutation == 0 ? 1 : 2);
+                    manifest.remove("compatibilityVersion");
+                    manifest.addProperty("identityContract", "legacy-v1");
+                    manifest.addProperty("basePolicy", "base-v1");
+                } else manifest.addProperty("compatibilityVersion", 1);
+                writeEntry(
+                    target,
+                    "manifest.json",
+                    reseal(manifest.toString()).getBytes(StandardCharsets.UTF_8),
+                    false);
+            }
+            assertRejectedPack(changed, "1.7.10");
+        }
     }
 
     @Test
@@ -72,7 +154,7 @@ class IconPackTest {
             writer.failure(key.toString(), "renderer failed");
             output = writer.finish();
         }
-        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
             assertEquals("today", pack.metadata().generatedAt);
             assertEquals(1, pack.failureCount());
             assertEquals(
@@ -97,7 +179,7 @@ class IconPackTest {
             writer.add(StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA"), new int[4096]);
             output = writer.finish();
         }
-        IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1");
+        IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1");
         String digest = pack.pages()
             .get(0).digest;
         try (InputStream first = pack.openPage(digest); InputStream second = pack.openPage(digest)) {
@@ -127,7 +209,7 @@ class IconPackTest {
             assertThrows(IOException.class, () -> writer.add(exact, pixels));
             output = writer.finish();
         }
-        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
             assertEquals(
                 1,
                 pack.pages()
@@ -166,7 +248,7 @@ class IconPackTest {
             Arrays.fill(supplied, 0);
             output = writer.finish();
         }
-        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
             Location firstLocation = pack.find(first);
             Location secondLocation = pack.find(second);
             Location duplicateLocation = pack.find(duplicate);
@@ -205,7 +287,7 @@ class IconPackTest {
     @ValueSource(ints = { 0, 1, Integer.MAX_VALUE })
     void manifestIntegerFieldsAcceptCanonicalNonnegativeIntRange(int count) throws Exception {
         try (IconPack pack = IconPack
-            .open(packWithFailureCount(Integer.toString(count)), "1.7.10", "forge", "legacy-v1", "base-v1")) {
+            .open(packWithFailureCount(Integer.toString(count)), "1.7.10", "forge", "legacy-v1")) {
             assertEquals(count, pack.failureCount());
         }
     }
@@ -217,7 +299,7 @@ class IconPackTest {
         try (IconPackWriter writer = new IconPackWriter(directory, metadata(text), 64)) {
             output = writer.finish();
         }
-        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
             assertEquals(text, pack.metadata().generatedAt);
         }
     }
@@ -295,7 +377,7 @@ class IconPackTest {
                 for (int j = 0; j < i; j++) writer.failure("example", "failure");
                 output = writer.finish();
             }
-            try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+            try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
                 ids[i] = pack.packId();
             }
         }
@@ -308,9 +390,10 @@ class IconPackTest {
         try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 1024)) {
             output = writer.finish();
         }
-        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
-            // SHA-256 calculated with .NET from the specification's compact, alphabetically ordered projection.
-            assertEquals("eb4a860e4027e8dd0ce793020aee411544ca5dd56a70d60b68e72fbb67147077", pack.packId());
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
+            // SHA-256 calculated with Python hashlib from the specification's compact, alphabetically ordered
+            // projection.
+            assertEquals("d2cc077101bea2074360e1ba61eb17f0b1ece3f23a62c8af3d5e13f83c5cf0df", pack.packId());
             assertThrows(FileNotFoundException.class, () -> pack.openPage("unknown"));
         }
         assertRejectedPack(output, "1.12.2");
@@ -328,7 +411,7 @@ class IconPackTest {
             }
             output = writer.finish();
         }
-        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
             assertEquals(
                 2,
                 pack.pages()
@@ -370,7 +453,7 @@ class IconPackTest {
             }
             output = writer.finish();
         }
-        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
             assertEquals(
                 2,
                 pack.pages()
@@ -450,7 +533,7 @@ class IconPackTest {
                         .equals("manifest.json")) {
                         String json = new String(data, StandardCharsets.UTF_8);
                         if (mutation == 0)
-                            json = json.replace("\"formatVersion\":1", "\"formatVersion\":1,\"formatVersion\":1");
+                            json = json.replace("\"formatVersion\":2", "\"formatVersion\":2,\"formatVersion\":2");
                         if (mutation == 1) json = reseal(json.replace("[0,0,0]", "[0,2147483647,0]"));
                         data = json.getBytes(StandardCharsets.UTF_8);
                         if (mutation == 4) data[json.indexOf("today")] = (byte) 0xff;
@@ -481,19 +564,26 @@ class IconPackTest {
         projection.remove("generatedAt");
         projection.remove("failures");
         projection.remove("statistics");
+        Map<String, JsonElement> sorted = new TreeMap<>();
+        for (Map.Entry<String, JsonElement> field : projection.entrySet()) sorted.put(field.getKey(), field.getValue());
         byte[] digest = MessageDigest.getInstance("SHA-256")
             .digest(
                 new GsonBuilder().disableHtmlEscaping()
                     .create()
-                    .toJson(projection)
+                    .toJson(sorted)
                     .getBytes(StandardCharsets.UTF_8));
         manifest.addProperty("packId", String.format(Locale.ROOT, "%064x", new BigInteger(1, digest)));
         return manifest.toString();
     }
 
     private static IOException assertRejectedPack(Path path, String minecraftVersion) {
+        return assertRejectedPack(path, minecraftVersion, "forge", "legacy-v1");
+    }
+
+    private static IOException assertRejectedPack(Path path, String minecraftVersion, String loader,
+        String compatibilityVersion) {
         return assertThrows(IOException.class, () -> {
-            try (IconPack unexpected = IconPack.open(path, minecraftVersion, "forge", "legacy-v1", "base-v1")) {
+            try (IconPack unexpected = IconPack.open(path, minecraftVersion, loader, compatibilityVersion)) {
                 fail("Unexpectedly accepted pack " + unexpected.packId());
             }
         });
@@ -609,7 +699,7 @@ class IconPackTest {
         assertEquals(1, modified);
         Files.write(oversized, bytes);
         IOException failure = assertThrows(IOException.class, () -> {
-            try (IconPack ignored = IconPack.open(oversized, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+            try (IconPack ignored = IconPack.open(oversized, "1.7.10", "forge", "legacy-v1")) {
                 fail("Oversized manifest must be rejected");
             }
         });
@@ -649,7 +739,6 @@ class IconPackTest {
             "1.7.10",
             "forge",
             "legacy-v1",
-            "base-v1",
             "test",
             "today",
             Collections.emptyMap(),
@@ -672,7 +761,6 @@ class IconPackTest {
                 "1.7.10",
                 "forge",
                 "legacy-v1",
-                "base-v1",
                 "test",
                 "today",
                 Collections.emptyMap(),
@@ -685,7 +773,7 @@ class IconPackTest {
                 writer.add(key, pixels);
                 output = writer.finish();
             }
-            try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+            try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
                 ids.add(pack.packId());
             }
         }

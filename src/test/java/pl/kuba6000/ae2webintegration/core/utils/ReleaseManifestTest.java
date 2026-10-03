@@ -16,25 +16,23 @@ class ReleaseManifestTest {
                 feed("1.1.0", "1.2.0").replace("1.7.10", target)
                     .replace("forge", loader),
                 target);
-            assertEquals("1.1.0", requireUpdate(manifest, "1.0.9" + identifier, identifier).version);
-            assertEquals("1.1.0", requireUpdate(manifest, "1.0.9", identifier).version);
-            assertEquals("1.2.0", requireUpdate(manifest, "0.2.1-alpha" + identifier + "-pre", identifier).version);
-            assertEquals(
-                "1.1.0",
-                requireUpdate(manifest, "1.0.9" + identifier + "-19-gabcdef.dirty", identifier).version);
-            assertNull(manifest.findUpdate("1.1.0" + identifier + "-19-gabcdef.dirty", identifier));
-            assertNull(manifest.findUpdate("NO-GIT-TAG-SET", identifier));
+            assertEquals("1.1.0", requireUpdate(manifest, "1.0.9" + identifier, loader).version);
+            assertEquals("1.1.0", requireUpdate(manifest, "1.0.9", loader).version);
+            assertEquals("1.2.0", requireUpdate(manifest, "0.2.1-alpha" + identifier + "-pre", loader).version);
+            assertEquals("1.1.0", requireUpdate(manifest, "1.0.9" + identifier + "-19-gabcdef.dirty", loader).version);
+            assertNull(manifest.findUpdate("1.1.0" + identifier + "-19-gabcdef.dirty", loader));
+            assertNull(manifest.findUpdate("NO-GIT-TAG-SET", loader));
         }
         ReleaseManifest manifest = ReleaseManifest.parse(feed("1.1.0", "1.1.0"), "1.7.10");
-        assertNull(manifest.findUpdate("1.1.0-forge-pre-1.7.10-1-7-10+28363aee73-dirty", "-forge-1.7.10"));
-        assertNull(manifest.findUpdate("0.0.1-neoforge-1.21.1", "-forge-1.7.10"));
+        assertNull(manifest.findUpdate("1.1.0-forge-pre-1.7.10-1-7-10+28363aee73-dirty", "forge"));
+        assertNull(manifest.findUpdate("0.0.1-neoforge-1.21.1", "forge"));
     }
 
     @Test
     void rejectsInvalidMetadataAndSupportsEmptyChannels() {
         assertNull(
             ReleaseManifest.parse(feed(null, null), "1.7.10")
-                .findUpdate("1.0.0", "-forge-1.7.10"));
+                .findUpdate("1.0.0", "forge"));
         for (String invalid : new String[] { feed("1.1.0", null).replace("1786902605", "\"1786902605\""),
             feed("1.1.0", null).replace("1786902605", "1786902605.5"),
             feed("1.1.0", null).replace("https://github.com", "javascript:evil"),
@@ -46,50 +44,48 @@ class ReleaseManifestTest {
     @Test
     void treatsBuildMetadataAsUnorderedAndChecksWholePlatformTarget() {
         ReleaseManifest manifest = ReleaseManifest.parse(feed("1.2.0+build.1", "1.3.0-beta.2+build.3"), "1.7.10");
-        assertEquals("1.2.0+build.1", requireUpdate(manifest, "1.1.0+build.9", "-forge-1.7.10").version);
-        assertNull(manifest.findUpdate("1.2.0+build.9", "-forge-1.7.10"));
-        assertNull(manifest.findUpdate("1.0.0-forge-1.7.100", "-forge-1.7.10"));
+        assertEquals("1.2.0+build.1", requireUpdate(manifest, "1.1.0+build.9", "forge").version);
+        assertNull(manifest.findUpdate("1.2.0+build.9", "forge"));
+        assertNull(manifest.findUpdate("1.0.0-forge-1.7.100", "forge"));
         assertEquals(
             "1.3.0-beta.2+build.3",
-            requireUpdate(manifest, "1.2.0-forge-1.7.10-pre-19-gabcdef", "-forge-1.7.10").version);
+            requireUpdate(manifest, "1.2.0-forge-1.7.10-pre-19-gabcdef", "forge").version);
     }
 
     @Test
     void prereleasesFollowBothChannelsWithoutDowngradesOrInventedOrdering() {
-        String identifier = "-forge-1.7.10";
+        String loader = "forge";
         ReleaseManifest manifest = ReleaseManifest.parse(feed("1.1.0", "1.2.0-beta.2"), "1.7.10");
-        assertEquals("1.2.0-beta.2", requireUpdate(manifest, "1.1.0-forge-pre-1.7.10", identifier).version);
-        assertEquals("1.2.0-beta.2", requireUpdate(manifest, "1.2.0-beta.1-forge-1.7.10", identifier).version);
-        assertNull(manifest.findUpdate("1.2.0-beta.10-forge-1.7.10", identifier));
+        assertEquals("1.2.0-beta.2", requireUpdate(manifest, "1.1.0-forge-pre-1.7.10", loader).version);
+        assertEquals("1.2.0-beta.2", requireUpdate(manifest, "1.2.0-beta.1-forge-1.7.10", loader).version);
+        assertNull(manifest.findUpdate("1.2.0-beta.10-forge-1.7.10", loader));
         manifest = ReleaseManifest.parse(feed("1.1.0", "1.1.0"), "1.7.10");
-        assertEquals(
-            ReleaseManifest.Channel.STABLE,
-            requireUpdate(manifest, "1.1.0-forge-pre-1.7.10", identifier).channel);
-        assertNull(manifest.findUpdate("1.2.0-forge-pre-1.7.10", identifier));
+        assertEquals(ReleaseManifest.Channel.STABLE, requireUpdate(manifest, "1.1.0-forge-pre-1.7.10", loader).channel);
+        assertNull(manifest.findUpdate("1.2.0-forge-pre-1.7.10", loader));
         manifest = ReleaseManifest.parse(feed("1.0.2", "1.1.0"), "1.7.10");
-        assertNull(manifest.findUpdate("1.1.0-other-feature-forge-pre-1.7.10", identifier));
+        assertNull(manifest.findUpdate("1.1.0-other-feature-forge-pre-1.7.10", loader));
         assertEquals(
             "1.1.0",
-            requireUpdate(manifest, "1.0.3-GTNH-Native-Fluids-Support-forge-pre-1.7.10", identifier).version);
+            requireUpdate(manifest, "1.0.3-GTNH-Native-Fluids-Support-forge-pre-1.7.10", loader).version);
     }
 
     @Test
     void stableInstallOnlySelectsNewerStableAndPreservesMetadata() {
         ReleaseManifest manifest = ReleaseManifest.parse(feed("1.0.2", "1.1.0"), "1.7.10");
-        ReleaseManifest.Release update = manifest.findUpdate("1.0.1-forge-1.7.10", "-forge-1.7.10");
+        ReleaseManifest.Release update = manifest.findUpdate("1.0.1-forge-1.7.10", "forge");
         assertNotNull(update);
         assertEquals("1.0.2", update.version);
         assertEquals(ReleaseManifest.Channel.STABLE, update.channel);
         assertEquals(1786902605L, update.timestamp);
         assertTrue(update.releaseUrl.endsWith("/1.0.2-forge-1.7.10"));
         assertTrue(update.downloadUrl.endsWith("/mod.jar"));
-        assertNull(manifest.findUpdate("1.0.2-forge-1.7.10", "-forge-1.7.10"));
-        assertNull(manifest.findUpdate("1.0.3-forge-1.7.10", "-forge-1.7.10"));
+        assertNull(manifest.findUpdate("1.0.2-forge-1.7.10", "forge"));
+        assertNull(manifest.findUpdate("1.0.3-forge-1.7.10", "forge"));
     }
 
     private static @NotNull ReleaseManifest.Release requireUpdate(@NotNull ReleaseManifest manifest,
-        @NotNull String currentVersion, @NotNull String identifier) {
-        ReleaseManifest.Release update = manifest.findUpdate(currentVersion, identifier);
+        @NotNull String currentVersion, @NotNull String loader) {
+        ReleaseManifest.Release update = manifest.findUpdate(currentVersion, loader);
         assertNotNull(update, "Expected an update for " + currentVersion);
         return update;
     }

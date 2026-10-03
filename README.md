@@ -89,13 +89,14 @@ The new web UI can display item icons in the inventory and crafting CPU resource
 then stop the server and copy it to `config/ae2webintegration/icons.ae2wi-icons`. Start the server to load
 the archive. Replacing or removing a pack also requires stopping and restarting the server.
 
-The client icon generator is currently available for Minecraft 1.7.10 (GTNH). Packs must match the
-server's Minecraft version, loader and item identity contract; a 1.7.10 pack cannot be used on another
-version. Generate with the resource packs whose appearance you want in the browser.
+The client icon generator is available for Minecraft 1.7.10 (GTNH), 1.12.2 (AE2UEL), 1.20.1 (Forge)
+and 1.21.1 (NeoForge). Packs must match the server's Minecraft version, loader and icon-pack compatibility
+version; a 1.7.10 pack cannot be used on another version. Generate with the resource packs whose appearance you want in the browser.
 
 Icons are optional. A missing, invalid or incompatible archive leaves the terminal usable without
-icons; invalid archives are reported in the server log. The browser's icon toggle controls image
-loading. Missing individual icons use placeholders and do not affect crafting controls.
+icons; invalid archives are reported in the server log. The terminal display setting offers names only,
+icons and names, or icons only. Without a server icon pack, the terminal displays names without changing
+the saved preference. Missing individual icons use placeholders and do not affect crafting controls.
 
 ### Terminal
 

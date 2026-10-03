@@ -33,7 +33,7 @@ import com.google.gson.stream.JsonToken;
 
 final class PackFormat {
 
-    static final int VERSION = 1;
+    static final int VERSION = 2;
     static final int ICON_SIZE = 64;
     static final int ICON_PIXELS = ICON_SIZE * ICON_SIZE;
     static final int ICON_BYTES = ICON_PIXELS * Integer.BYTES;

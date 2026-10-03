@@ -3,9 +3,7 @@ package pl.kuba6000.ae2webintegration.core.api;
 import java.io.File;
 import java.util.UUID;
 
-import org.jetbrains.annotations.Nullable;
-
-import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import org.jetbrains.annotations.NotNull;
 
 public interface IServerPlatform {
 
@@ -21,8 +19,16 @@ public interface IServerPlatform {
     /** Root of the active server save, available after server startup. */
     File getWorldDirectory();
 
-    /** Archive compatibility for this native platform; null when icons are unsupported. */
-    default @Nullable IconPack.Target getIconPackTarget() {
-        return null;
-    }
+    @NotNull
+    String getModVersion();
+
+    @NotNull
+    String getLoader();
+
+    @NotNull
+    String getMinecraftVersion();
+
+    /** Opaque version compared by exact equality when loading icon packs. */
+    @NotNull
+    String getIconPackCompatibilityVersion();
 }

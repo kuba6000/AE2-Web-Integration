@@ -27,7 +27,7 @@ class IMetadataSourceTest {
         Path high = directory.resolve("high.zip");
         Instant before = Instant.now();
         IMetadataSource source = IMetadataSource.fromFilesystem(
-            new IconPack.Target("game", "loader", "identity", "base"),
+            new IconPack.Target("game", "loader", "identity"),
             "generator",
             Collections.singletonMap("mod", "version"),
             Arrays.asList(low, high));
@@ -38,8 +38,7 @@ class IMetadataSourceTest {
         IconPack.Metadata metadata = source.create(() -> false);
         assertEquals("game", metadata.minecraftVersion);
         assertEquals("loader", metadata.loader);
-        assertEquals("identity", metadata.identityContract);
-        assertEquals("base", metadata.basePolicy);
+        assertEquals("identity", metadata.compatibilityVersion);
         assertEquals("generator", metadata.generatorVersion);
         assertEquals(Collections.singletonMap("mod", "version"), metadata.mods);
         assertEquals(
@@ -56,7 +55,7 @@ class IMetadataSourceTest {
     void missingAndCanceledResourcePacksFailMetadataCreation() throws Exception {
         Path pack = directory.resolve("pack.zip");
         IMetadataSource source = IMetadataSource.fromFilesystem(
-            new IconPack.Target("game", "loader", "identity", "base"),
+            new IconPack.Target("game", "loader", "identity"),
             "generator",
             Collections.emptyMap(),
             Collections.singletonList(pack));

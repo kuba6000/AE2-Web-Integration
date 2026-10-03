@@ -37,7 +37,6 @@ class IconPackWriterCleanupTest {
             "1.7.10",
             "forge",
             "legacy-v1",
-            "base-v1",
             "test",
             "today",
             Collections.emptyMap(),
@@ -67,7 +66,7 @@ class IconPackWriterCleanupTest {
             Path output = completion.get(15, TimeUnit.SECONDS);
             assertFalse(Files.exists(scratch));
             if (publish) {
-                try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+                try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
                     assertNotNull(pack.find(key));
                 }
             }

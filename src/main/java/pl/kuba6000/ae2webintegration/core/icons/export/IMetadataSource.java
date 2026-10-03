@@ -36,8 +36,7 @@ public interface IMetadataSource {
             return new IconPack.Metadata(
                 target.minecraftVersion,
                 target.loader,
-                target.identityContract,
-                target.basePolicy,
+                target.compatibilityVersion,
                 generatorVersion,
                 generatedAt,
                 mods,

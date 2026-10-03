@@ -375,7 +375,6 @@ class IconPackWriterConcurrencyTest {
             "1.7.10",
             "forge",
             "legacy-v1",
-            "base-v1",
             "test",
             "today",
             Collections.emptyMap(),
@@ -383,7 +382,7 @@ class IconPackWriterConcurrencyTest {
     }
 
     private static IconPack open(Path output) throws IOException {
-        return IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1");
+        return IconPack.open(output, "1.7.10", "forge", "legacy-v1");
     }
 
     private static void await(CountDownLatch latch) throws IOException {

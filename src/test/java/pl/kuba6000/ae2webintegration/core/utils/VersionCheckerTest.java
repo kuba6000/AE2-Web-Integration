@@ -34,7 +34,8 @@ class VersionCheckerTest {
             VersionChecker checker = new VersionChecker(
                 new URL("http://127.0.0.1:" + server.getLocalPort() + "/"),
                 "1.0.0-forge-1.7.10",
-                "-forge-1.7.10")) {
+                "forge",
+                "1.7.10")) {
             server.setSoTimeout(5000);
             CompletableFuture<ReleaseManifest.Release> first = checker.checkForUpdates();
             try (Socket stalled = server.accept()) {
@@ -87,7 +88,8 @@ class VersionCheckerTest {
                 "http://127.0.0.1:" + server.getAddress()
                     .getPort() + "/"),
             "1.0.0-forge-1.7.10",
-            "-forge-1.7.10")) {
+            "forge",
+            "1.7.10")) {
             assertEquals(
                 "1.1.0",
                 checker.checkForUpdates()
@@ -126,7 +128,8 @@ class VersionCheckerTest {
                 "http://127.0.0.1:" + server.getAddress()
                     .getPort() + "/"),
             "1.0.0-forge-1.7.10",
-            "-forge-1.7.10")) {
+            "forge",
+            "1.7.10")) {
             assertEquals(
                 "1.1.0",
                 checker.checkForUpdates()
@@ -198,7 +201,8 @@ class VersionCheckerTest {
                 "http://127.0.0.1:" + server.getAddress()
                     .getPort() + "/"),
             "1.0.0-forge-1.7.10",
-            "-forge-1.7.10");
+            "forge",
+            "1.7.10");
         try {
             CompletableFuture<ReleaseManifest.Release> result = checker.checkForUpdates();
             assertTrue(entered.await(5, TimeUnit.SECONDS));
@@ -254,7 +258,8 @@ class VersionCheckerTest {
                 "http://127.0.0.1:" + server.getAddress()
                     .getPort() + "/"),
             "1.0.0-forge-1.7.10",
-            "-forge-1.7.10")) {
+            "forge",
+            "1.7.10")) {
             CompletableFuture<ReleaseManifest.Release> result = checker.checkForUpdates();
             assertTrue(entered.await(5, TimeUnit.SECONDS));
             assertFalse(result.isDone());

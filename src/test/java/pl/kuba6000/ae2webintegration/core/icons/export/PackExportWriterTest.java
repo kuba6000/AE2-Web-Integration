@@ -251,7 +251,6 @@ class PackExportWriterTest {
                 "test",
                 "loader",
                 "identity",
-                "base",
                 "generator",
                 "today",
                 Collections.emptyMap(),
@@ -266,7 +265,7 @@ class PackExportWriterTest {
         writer.close();
         Path completed = writer.completedPath();
         assertNotNull(completed, "Finished export must publish a pack");
-        try (IconPack pack = IconPack.open(completed, "test", "loader", "identity", "base")) {
+        try (IconPack pack = IconPack.open(completed, "test", "loader", "identity")) {
             assertEquals(expected, pack.metadata().resourcePacks);
         }
     }
@@ -284,7 +283,7 @@ class PackExportWriterTest {
         writer.close();
         Path completed = writer.completedPath();
         assertNotNull(completed, "Finished export must publish a pack");
-        try (IconPack pack = IconPack.open(completed, "test", "loader", "identity", "base")) {
+        try (IconPack pack = IconPack.open(completed, "test", "loader", "identity")) {
             assertNotNull(pack.find(key));
             assertEquals(1, pack.failureCount());
         }
@@ -295,7 +294,6 @@ class PackExportWriterTest {
             "test",
             "loader",
             "identity",
-            "base",
             "generator",
             "today",
             Collections.emptyMap(),

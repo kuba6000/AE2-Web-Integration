@@ -37,6 +37,26 @@ final class RegistrationTestFixture implements AutoCloseable {
         AE2Controller.serverPlatform = new IServerPlatform() {
 
             @Override
+            public String getModVersion() {
+                return "test-version";
+            }
+
+            @Override
+            public String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
+
+            @Override
             public UUID getOnlinePlayerUUID(String username) {
                 return player.name.equals(username) ? player.uuid : null;
             }

@@ -72,6 +72,11 @@ class IconDeliveryHttpTest {
         Config.reload();
         AE2Controller.serverPlatform = new IServerPlatform() {
 
+            @Override
+            public String getModVersion() {
+                return "test-version";
+            }
+
             public UUID getOnlinePlayerUUID(String username) {
                 return null;
             }
@@ -89,8 +94,16 @@ class IconDeliveryHttpTest {
                     .toFile();
             }
 
-            public IconPack.Target getIconPackTarget() {
-                return new IconPack.Target("1.7.10", "forge", "test-identity", "test-base");
+            public String getMinecraftVersion() {
+                return "1.7.10";
+            }
+
+            public String getLoader() {
+                return "forge";
+            }
+
+            public String getIconPackCompatibilityVersion() {
+                return "test-identity";
             }
         };
         AE2Controller.AE2Interface = TestGridFixtures.ae();
@@ -209,6 +222,11 @@ class IconDeliveryHttpTest {
         IServerPlatform platform = AE2Controller.serverPlatform;
         AE2Controller.serverPlatform = new IServerPlatform() {
 
+            @Override
+            public String getModVersion() {
+                return "test-version";
+            }
+
             public UUID getOnlinePlayerUUID(String username) {
                 return null;
             }
@@ -225,8 +243,16 @@ class IconDeliveryHttpTest {
                 return platform.getWorldDirectory();
             }
 
-            public IconPack.Target getIconPackTarget() {
-                return new IconPack.Target("1.21.1", "neoforge", "other", "other");
+            public String getMinecraftVersion() {
+                return "1.21.1";
+            }
+
+            public String getLoader() {
+                return "neoforge";
+            }
+
+            public String getIconPackCompatibilityVersion() {
+                return "other";
             }
         };
         CoreEngine.onServerStarted();
@@ -475,7 +501,6 @@ class IconDeliveryHttpTest {
             "1.7.10",
             "forge",
             "test-identity",
-            "test-base",
             "test",
             "today",
             Collections.emptyMap(),
@@ -487,7 +512,7 @@ class IconDeliveryHttpTest {
             for (StableKey key : keys) writer.add(key, pixels);
             generated = writer.finish();
         }
-        try (IconPack pack = IconPack.open(generated, "1.7.10", "forge", "test-identity", "test-base")) {
+        try (IconPack pack = IconPack.open(generated, "1.7.10", "forge", "test-identity")) {
             packId = pack.packId();
             digest = pack.pages()
                 .get(0).digest;

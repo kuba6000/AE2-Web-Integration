@@ -53,7 +53,8 @@ class UpdateNotifierTest {
                     "http://127.0.0.1:" + server.getAddress()
                         .getPort() + "/"),
                 "1.0.0-forge-1.7.10",
-                "-forge-1.7.10")) {
+                "forge",
+                "1.7.10")) {
             activeChecker.set(null, checker);
             config.set("general.check_for_updates", true);
             RecordingMessenger messenger = new RecordingMessenger();

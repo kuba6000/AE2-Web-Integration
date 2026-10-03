@@ -9,6 +9,7 @@ import java.util.function.LongSupplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
@@ -46,18 +47,16 @@ public class CoreEngine {
 
     // Populated by the interface layer from the buildscript-generated mod version.
     private static volatile String modVersion;
-    private static String versionIdentifier;
     private static volatile @Nullable VersionChecker versionChecker;
     private static boolean serverRunning;
     private static volatile @Nullable IconPack iconPack;
 
-    public static void init(IServerPlatform serverPlatform, String modVersion, String versionIdentifier) {
+    public static void init(@NotNull IServerPlatform serverPlatform) {
         serverRunning = false;
         stopVersionChecker();
-        CoreEngine.versionIdentifier = versionIdentifier;
         AE2Controller.serverPlatform = serverPlatform;
         Config.init(serverPlatform.getConfigDirectory(), serverPlatform::getLegacyConfig);
-        CoreEngine.modVersion = modVersion;
+        CoreEngine.modVersion = serverPlatform.getModVersion();
         loadData();
     }
 
@@ -99,7 +98,8 @@ public class CoreEngine {
                 VersionChecker checker = new VersionChecker(
                     new URL("https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/version/"),
                     modVersion,
-                    versionIdentifier);
+                    AE2Controller.serverPlatform.getLoader(),
+                    AE2Controller.serverPlatform.getMinecraftVersion());
                 versionChecker = checker;
                 checker.checkForUpdates();
             } catch (MalformedURLException e) {
@@ -207,17 +207,15 @@ public class CoreEngine {
 
     private static void loadIconPack() {
         closeIconPack();
-        IconPack.Target target = AE2Controller.serverPlatform.getIconPackTarget();
-        if (target == null) return;
+        IServerPlatform platform = AE2Controller.serverPlatform;
         File file = Config.getConfigFile("icons.ae2wi-icons");
         if (!file.isFile()) return;
         try {
             iconPack = IconPack.open(
                 file.toPath(),
-                target.minecraftVersion,
-                target.loader,
-                target.identityContract,
-                target.basePolicy);
+                platform.getMinecraftVersion(),
+                platform.getLoader(),
+                platform.getIconPackCompatibilityVersion());
         } catch (IOException e) {
             LOG.error(
                 "Cannot load icon pack {}. Terminal remains available without icons; replace the pack while stopped.",

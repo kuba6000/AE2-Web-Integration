@@ -340,12 +340,8 @@ public final class IconPackWriter implements Closeable {
                 }
             }
             checkCanceled(canceled);
-            try (IconPack verified = IconPack.open(
-                temporary,
-                metadata.minecraftVersion,
-                metadata.loader,
-                metadata.identityContract,
-                metadata.basePolicy)) {
+            try (IconPack verified = IconPack
+                .open(temporary, metadata.minecraftVersion, metadata.loader, metadata.compatibilityVersion)) {
                 if (!packId.equals(verified.packId())) throw new IOException("Finished pack identity mismatch");
             }
             Path output = outputDirectory
@@ -387,8 +383,7 @@ public final class IconPackWriter implements Closeable {
         root.put("formatVersion", PackFormat.VERSION);
         root.put("minecraftVersion", metadata.minecraftVersion);
         root.put("loader", metadata.loader);
-        root.put("identityContract", metadata.identityContract);
-        root.put("basePolicy", metadata.basePolicy);
+        root.put("compatibilityVersion", metadata.compatibilityVersion);
         root.put("generatorVersion", metadata.generatorVersion);
         root.put("generatedAt", metadata.generatedAt);
         root.put("contentWidth", PackFormat.ICON_SIZE);

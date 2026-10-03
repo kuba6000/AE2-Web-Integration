@@ -310,8 +310,7 @@ class IconExportSessionTest {
                     .orElseThrow(() -> new AssertionError("No published pack")),
                 "test",
                 "loader",
-                "identity",
-                "base");
+                "identity");
         }
     }
 
@@ -328,7 +327,6 @@ class IconExportSessionTest {
             "test",
             "loader",
             "identity",
-            "base",
             "generator",
             "today",
             Collections.emptyMap(),
