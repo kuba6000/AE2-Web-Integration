@@ -14,3 +14,9 @@ git submodule update --init --recursive
 
 If you only want to install the mod, download the appropriate JAR from the
 [Releases page](https://github.com/kuba6000/AE2-Web-Integration/releases).
+
+## IntelliJ IDEA
+
+Open this checkout as a Gradle project. The versioned `.idea/inspectionProfiles` files select the
+**AE2 Web Integration** project inspection profile. Gradle supplies the source sets and dependencies;
+SDK locations and personal workspace settings stay local. Commit shared inspection changes with the code.
