@@ -36,7 +36,7 @@ final class ExportProgressScreen extends GuiScreen {
         List<String> lines = fontRendererObj.listFormattedStringToWidth(status, Math.max(1, panelWidth - 32));
         int lineHeight = fontRendererObj.FONT_HEIGHT + 3;
         int visibleLines = Math.min(lines.size(), Math.max(1, (height - 120) / lineHeight));
-        int panelHeight = 94 + visibleLines * lineHeight;
+        int panelHeight = 74 + visibleLines * lineHeight;
         int left = (width - panelWidth) / 2;
         int top = (height - panelHeight) / 2;
         drawRect(left - 1, top - 1, left + panelWidth + 1, top + panelHeight + 1, 0xFF777777);
@@ -48,9 +48,6 @@ final class ExportProgressScreen extends GuiScreen {
                 : lines.get(index);
             drawCenteredString(fontRendererObj, line, width / 2, y, 0xDDDDDD);
             y += lineHeight;
-        }
-        if (!complete) {
-            drawCenteredString(fontRendererObj, "The world continues running.", width / 2, y + 8, 0xAAAAAA);
         }
         buttonList.get(0).yPosition = top + panelHeight - 32;
         super.drawScreen(mouseX, mouseY, partialTicks);
