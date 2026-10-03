@@ -38,3 +38,9 @@ for input between batches. Individual mod renderers can take longer. Gameplay co
 while images are rendered or saved, but the world keeps
 running. Use **Cancel export** or Esc to stop, then **Done** to return to the game after cleanup finishes.
 Chat progress is also posted every five seconds. Changing the world or reloading resources cancels an active export.
+
+## IntelliJ IDEA
+
+Open this checkout as a Gradle project. The versioned `.idea/inspectionProfiles` files select the
+**AE2 Web Integration** project inspection profile. Gradle supplies the source sets and dependencies;
+SDK locations and personal workspace settings stay local. Commit shared inspection changes with the code.
