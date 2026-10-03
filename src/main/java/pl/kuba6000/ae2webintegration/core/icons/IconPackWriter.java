@@ -11,6 +11,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -19,6 +20,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.BooleanSupplier;
 import java.util.zip.ZipOutputStream;
 
@@ -32,8 +39,12 @@ import pl.kuba6000.ae2webintegration.core.icons.IconPack.Metadata;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack.Page;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
-/** Single-worker export writer. add consumes pixels synchronously; close removes unfinished scratch files. */
+/** Single-owner assembly with bounded parallel PNG encoding. add consumes caller pixels synchronously. */
 public final class IconPackWriter implements Closeable {
+
+    private static final int PNG_BUFFER_BUDGET = 160 * 1024 * 1024;
+    private static final int MAX_PENDING_PAGES = 10;
+    private static final int PNG_BUFFERS_PER_PAGE = 4;
 
     private final @NotNull Path outputDirectory;
     private final @NotNull Path scratch;
@@ -47,6 +58,19 @@ public final class IconPackWriter implements Closeable {
     private final @NotNull Map<String, PixelRecord> keyPixels = new HashMap<>();
     private final @NotNull RandomAccessFile pixelSpool;
     private final @NotNull Map<String, Object> statistics = new TreeMap<>();
+    private final @NotNull Map<String, Long> statisticCounts = new TreeMap<>();
+    private final int pngWorkers = Math.max(
+        4,
+        Runtime.getRuntime()
+            .availableProcessors() / 2);
+    private final int pendingPageLimit;
+    private final @NotNull ExecutorService pngExecutor;
+    private final @NotNull ArrayDeque<Future<EncodedPage>> pendingPages = new ArrayDeque<>();
+    private long pngWorkNanosSum;
+    private long pngQueueWaitNanosSum;
+    private long pngBackpressureNanos;
+    private int peakPendingPages;
+    private @Nullable Throwable reportedPngFailure;
     private @Nullable BufferedImage image;
     private int occupied;
     private int failureCount;
@@ -61,6 +85,9 @@ public final class IconPackWriter implements Closeable {
         this.outputDirectory = outputDirectory;
         this.metadata = metadata;
         this.pageSize = pageSize;
+        // Four raw ARGB buffers per PNG job estimate encoder/output storage; one assembly page is separate.
+        pendingPageLimit = Math
+            .min(MAX_PENDING_PAGES, PNG_BUFFER_BUDGET / (pageSize * pageSize * Integer.BYTES * PNG_BUFFERS_PER_PAGE));
         columns = pageSize == PackFormat.ICON_SIZE ? 1 : pageSize / PackFormat.CELL_PITCH;
         Files.createDirectories(outputDirectory);
         scratch = Files.createTempDirectory(outputDirectory, ".ae2wi-export-");
@@ -77,6 +104,7 @@ public final class IconPackWriter implements Closeable {
             }
             throw failure;
         }
+        pngExecutor = Executors.newFixedThreadPool(pngWorkers, task -> new Thread(task, "AE2WI icon PNG"));
     }
 
     public void add(@NotNull StableKey key, int @NotNull [] pixels) throws IOException {
@@ -122,7 +150,7 @@ public final class IconPackWriter implements Closeable {
             System.arraycopy(pixels, row * PackFormat.ICON_SIZE, atlas, (y + row) * pageSize + x, PackFormat.ICON_SIZE);
         }
         if (pageSize != PackFormat.ICON_SIZE) extrudeGutter(atlas, pixels, x, y);
-        return new int[] { pages.size(), x, y };
+        return new int[] { pages.size() + pendingPages.size(), x, y };
     }
 
     private void extrudeGutter(int @NotNull [] atlas, int @NotNull [] pixels, int x, int y) {
@@ -184,23 +212,81 @@ public final class IconPackWriter implements Closeable {
             throw new IllegalArgumentException("Invalid statistic");
         for (String source : sources)
             if (!source.matches("[A-Za-z0-9._-]{1,64}")) throw new IllegalArgumentException("Invalid source name");
-        statistics.put("counts", new TreeMap<>(counts));
+        statisticCounts.clear();
+        statisticCounts.putAll(counts);
+        statistics.put("counts", statisticCounts);
         statistics.put("sources", new ArrayList<>(sources));
     }
 
     private void flushPage() throws IOException {
         if (image == null) return;
+        if (pendingPages.size() == pendingPageLimit) {
+            long started = System.nanoTime();
+            collectPage(() -> false);
+            pngBackpressureNanos += System.nanoTime() - started;
+        }
+        BufferedImage completed = image;
+        long submitted = System.nanoTime();
+        pendingPages.addLast(pngExecutor.submit(() -> encodePage(completed, submitted)));
+        peakPendingPages = Math.max(peakPendingPages, pendingPages.size());
+        image = null;
+        occupied = 0;
+    }
+
+    private @NotNull EncodedPage encodePage(@NotNull BufferedImage completed, long submitted) throws IOException {
+        long started = System.nanoTime();
         ByteArrayOutputStream encoded = new ByteArrayOutputStream();
         try (MemoryCacheImageOutputStream stream = new MemoryCacheImageOutputStream(encoded)) {
-            if (!ImageIO.write(image, "PNG", stream)) throw new IOException("PNG encoder unavailable");
+            if (!ImageIO.write(completed, "PNG", stream)) throw new IOException("PNG encoder unavailable");
         }
         byte[] bytes = encoded.toByteArray();
         if (bytes.length > PackFormat.MAX_PAGE) throw new IOException("Encoded atlas too large");
         String digest = PackFormat.hash(bytes);
         Files.write(scratch.resolve(digest + ".png"), bytes);
-        pages.add(new Page(digest, "pages/" + digest + ".png", pageSize, pageSize, bytes.length));
-        image = null;
-        occupied = 0;
+        return new EncodedPage(
+            new Page(digest, "pages/" + digest + ".png", pageSize, pageSize, bytes.length),
+            System.nanoTime() - started,
+            started - submitted);
+    }
+
+    private void collectPage(@NotNull BooleanSupplier canceled) throws IOException {
+        Future<EncodedPage> pending = pendingPages.getFirst();
+        try {
+            while (true) {
+                checkCanceled(canceled);
+                try {
+                    EncodedPage result = pending.get(50, TimeUnit.MILLISECONDS);
+                    pendingPages.removeFirst();
+                    pages.add(result.page);
+                    pngWorkNanosSum += result.workNanos;
+                    pngQueueWaitNanosSum += result.queueNanos;
+                    return;
+                } catch (TimeoutException waiting) {
+                    // Cancellation is checked while a codec owns the page.
+                }
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread()
+                .interrupt();
+            throw new IOException("Interrupted awaiting PNG page", interrupted);
+        } catch (ExecutionException failed) {
+            pendingPages.removeFirst();
+            reportedPngFailure = failed.getCause();
+            throw encodingFailure(failed.getCause());
+        }
+    }
+
+    private static final class EncodedPage {
+
+        final @NotNull Page page;
+        final long workNanos;
+        final long queueNanos;
+
+        EncodedPage(@NotNull Page page, long workNanos, long queueNanos) {
+            this.page = page;
+            this.workNanos = workNanos;
+            this.queueNanos = queueNanos;
+        }
     }
 
     public @NotNull Path finish() throws IOException {
@@ -214,9 +300,24 @@ public final class IconPackWriter implements Closeable {
     /** beginCommit atomically claims publication against cancellation and is called once, after validation. */
     public @NotNull Path finish(@NotNull BooleanSupplier canceled, @NotNull BooleanSupplier beginCommit)
         throws IOException {
+        try {
+            return finishPack(canceled, beginCommit);
+        } catch (IOException | RuntimeException | Error failure) {
+            try {
+                close();
+            } catch (IOException | RuntimeException | Error cleanup) {
+                if (combineFailures(failure, cleanup) != failure) throw encodingFailure(cleanup);
+            }
+            throw failure;
+        }
+    }
+
+    private @NotNull Path finishPack(@NotNull BooleanSupplier canceled, @NotNull BooleanSupplier beginCommit)
+        throws IOException {
         checkOpen();
         checkCanceled(canceled);
         flushPage();
+        while (!pendingPages.isEmpty()) collectPage(canceled);
         List<Page> sorted = new ArrayList<>(pages);
         sorted.sort(Comparator.comparing(page -> page.digest));
         Map<String, Object> root = manifest(sorted);
@@ -264,6 +365,13 @@ public final class IconPackWriter implements Closeable {
     }
 
     private @NotNull Map<String, Object> manifest(@NotNull List<Page> sorted) {
+        recordStatistic("pngWorkers", pngWorkers);
+        recordStatistic("pngPeakPendingPages", peakPendingPages);
+        recordStatistic("pngWorkNanosSum", pngWorkNanosSum);
+        recordStatistic("pngQueueWaitNanosSum", pngQueueWaitNanosSum);
+        recordStatistic("pngBackpressureNanos", pngBackpressureNanos);
+        statistics.put("counts", statisticCounts);
+        statistics.putIfAbsent("sources", new ArrayList<String>());
         Map<String, Integer> indices = new HashMap<>();
         for (int i = 0; i < sorted.size(); i++) indices.put(sorted.get(i).digest, i);
         Map<String, int[]> mapping = new TreeMap<>();
@@ -306,12 +414,21 @@ public final class IconPackWriter implements Closeable {
         return root;
     }
 
+    private void recordStatistic(@NotNull String name, long value) {
+        // Preserve the existing 64-count caller allowance; optional diagnostics use available slots.
+        if (statisticCounts.size() < PackFormat.MAX_STATISTICS || statisticCounts.containsKey(name))
+            statisticCounts.put(name, value);
+    }
+
     private static void checkCanceled(@NotNull BooleanSupplier canceled) {
         if (canceled.getAsBoolean()) throw new CancellationException("Icon export canceled");
     }
 
     private void checkOpen() throws IOException {
         if (closed) throw new IOException("Icon writer is closed");
+        if (reportedPngFailure != null) throw encodingFailure(reportedPngFailure);
+        while (!pendingPages.isEmpty() && pendingPages.getFirst()
+            .isDone()) collectPage(() -> false);
     }
 
     @Override
@@ -319,19 +436,60 @@ public final class IconPackWriter implements Closeable {
         if (closed) return;
         closed = true;
         image = null;
-        IOException failure = null;
+        Throwable failure = null;
+        pngExecutor.shutdown();
+        boolean interrupted = false;
+        while (!pendingPages.isEmpty()) {
+            Future<EncodedPage> pending = pendingPages.removeFirst();
+            boolean settled = false;
+            while (!settled) try {
+                pending.get();
+                settled = true;
+            } catch (InterruptedException interruption) {
+                interrupted = true;
+            } catch (ExecutionException encoding) {
+                Throwable cause = encoding.getCause();
+                if (cause != reportedPngFailure) failure = combineFailures(failure, cause);
+                settled = true;
+            }
+        }
+        while (!pngExecutor.isTerminated()) try {
+            pngExecutor.awaitTermination(1, TimeUnit.SECONDS);
+        } catch (InterruptedException interruption) {
+            interrupted = true;
+        }
+        if (interrupted) Thread.currentThread()
+            .interrupt();
         try {
             pixelSpool.close();
         } catch (IOException close) {
-            failure = close;
+            failure = combineFailures(failure, close);
         }
         try {
             deleteScratch();
         } catch (IOException cleanup) {
-            if (failure == null) failure = cleanup;
-            else failure.addSuppressed(cleanup);
+            failure = combineFailures(failure, cleanup);
         }
-        if (failure != null) throw failure;
+        if (failure != null) throw encodingFailure(failure);
+    }
+
+    private static @NotNull Throwable combineFailures(@Nullable Throwable first, @NotNull Throwable next) {
+        if (first == null) return next;
+        if (first == next) return first;
+        boolean firstFatal = first instanceof VirtualMachineError || first instanceof ThreadDeath;
+        boolean nextFatal = next instanceof VirtualMachineError || next instanceof ThreadDeath;
+        if (nextFatal && !firstFatal || next instanceof Error && !(first instanceof Error)) {
+            next.addSuppressed(first);
+            return next;
+        }
+        first.addSuppressed(next);
+        return first;
+    }
+
+    private static @NotNull IOException encodingFailure(@NotNull Throwable cause) {
+        if (cause instanceof Error) throw (Error) cause;
+        if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+        return new IOException("PNG page encoding failed", cause);
     }
 
     private void deleteScratch() throws IOException {
