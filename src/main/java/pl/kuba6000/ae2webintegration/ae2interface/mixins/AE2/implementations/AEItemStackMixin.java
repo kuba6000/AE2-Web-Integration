@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -10,6 +9,7 @@ import org.spongepowered.asm.mixin.Shadow;
 
 import appeng.api.storage.data.IAEItemStack;
 import appeng.util.item.AEItemStack;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyIconBaseline;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -27,22 +27,14 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
     @Override
     default @Nullable StableKey web$getIconBaseKey() {
         IAEItemStack stack = this;
-        if (!(stack instanceof AEItemStack)) return null;
-        Item item = getItem();
-        // Fresh construction initializes default Forge capabilities without the original state.
-        ItemStack baseline = new ItemStack(item, 1, getItemDamage());
-        if (!item.getHasSubtypes() && item.isDamageable()
-            && baseline.isItemStackDamageable()
-            && item.getMaxDamage(baseline) == item.getMaxDamage(asItemStackRepresentation())) {
-            baseline.setItemDamage(0);
-        }
-        AEItemStack key = AEItemStack.fromItemStack(baseline);
-        return key == null ? null : LegacyItemIdentity.encode(key);
+        if (!(stack instanceof AEItemStack nativeStack)) return null;
+        AEItemStack baseline = LegacyIconBaseline.item(nativeStack);
+        return baseline == null ? null : LegacyItemIdentity.encode(baseline);
     }
 
     @Override
     default @NotNull IAEKey web$copyIdentity() {
-        return LegacyItemIdentity.copy(this);
+        return (IAEKey) LegacyItemIdentity.copy(this);
     }
 
     @Shadow

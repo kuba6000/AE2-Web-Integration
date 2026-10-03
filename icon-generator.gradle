@@ -1,0 +1,122 @@
+import org.gradle.jvm.tasks.Jar
+
+sourceSets {
+    main.java.srcDir('src/identityCommon/java')
+    iconGenerator {
+        java.srcDir('src/identityCommon/java')
+        compileClasspath += sourceSets.patchedMc.output
+    }
+}
+
+configurations {
+    iconGeneratorShared {
+        canBeConsumed = false
+    }
+    iconGeneratorCompileClasspath.extendsFrom(iconGeneratorShared, patchedMinecraft, lwjgl2Classpath)
+    iconGeneratorAnnotationProcessor.extendsFrom(annotationProcessor)
+}
+
+dependencies {
+    iconGeneratorShared(project(path: ':core', configuration: 'iconPackElements')) {
+        transitive = false
+    }
+    iconGeneratorCompileOnly(rfg.deobf('curse.maven:ae2-extended-life-570458:5411078')) {
+        transitive = false
+    }
+    iconGeneratorCompileOnly('mezz.jei:jei_1.12.2:4.16.1.302') {
+        transitive = false
+    }
+    iconGeneratorCompileOnly('org.jetbrains:annotations:24.1.0')
+}
+
+// RFG 1.4.9 patches source fields after decompilation; binary ATs alone do not reach compiled dev classes.
+// Keep the same narrow rules in source preparation, the SRG runtime and the standalone manifest.
+tasks.named('applySourceAccessTransformers') {
+    accessTransformerFiles.from('src/iconGenerator/resources/META-INF/ae2webicons_at.cfg')
+}
+tasks.named('srgifyBinpatchedJar') {
+    accessTransformerFiles.from('src/iconGenerator/resources/META-INF/ae2webicons_at.cfg')
+}
+
+tasks.named('processIconGeneratorResources') {
+    inputs.property('version', project.version)
+    filesMatching(['mcmod.info', 'version.properties']) {
+        expand(version: project.version)
+    }
+}
+
+tasks.named('compileIconGeneratorJava', JavaCompile) {
+    javaCompiler = tasks.named('compileJava', JavaCompile).flatMap { it.javaCompiler }
+    sourceCompatibility = '17'
+    targetCompatibility = '8'
+    options.release = 8
+}
+
+def shadowJarType = tasks.named('shadowJar').get().class.classLoader.loadClass(
+    'com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar')
+def reobfuscatedJarType = tasks.named('reobfJar').get().class.classLoader.loadClass(
+    'com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar')
+def generatorJar = tasks.register('iconGeneratorJar', shadowJarType) {
+    group = 'build'
+    description = 'Builds the standalone icon generator in development mappings.'
+    archiveBaseName = 'ae2webintegration-icon-generator'
+    archiveClassifier = 'dev'
+    from(sourceSets.iconGenerator.output)
+    from('LICENSE')
+    configurations = [project.configurations.iconGeneratorShared]
+    relocate('pl.kuba6000.ae2webintegration.core.icons', 'pl.kuba6000.ae2webintegration.icongenerator.internal.icons')
+    relocate('pl.kuba6000.ae2webintegration.core.identity', 'pl.kuba6000.ae2webintegration.icongenerator.internal.identity')
+    relocate('pl.kuba6000.ae2webintegration.core.utils', 'pl.kuba6000.ae2webintegration.icongenerator.internal.utils')
+    relocate('pl.kuba6000.ae2webintegration.ae2interface.legacy', 'pl.kuba6000.ae2webintegration.icongenerator.internal.legacy')
+}
+
+def mappings = tasks.named('generateForgeSrgMappings')
+def patchedMinecraftJar = tasks.named('packagePatchedMc', Jar)
+def generatorReleaseJar = tasks.register('reobfIconGeneratorJar', reobfuscatedJarType) {
+    group = 'build'
+    description = 'Builds the standalone icon generator in production SRG mappings.'
+    dependsOn(mappings, patchedMinecraftJar, generatorJar)
+    setInputJarFromTask(generatorJar)
+    mcVersion.set(minecraft.mcVersion)
+    srg.set(mappings.flatMap { it.mcpToSrg })
+    fieldCsv.set(mappings.flatMap { it.fieldsCsv })
+    methodCsv.set(mappings.flatMap { it.methodsCsv })
+    exceptorCfg.set(mappings.flatMap { it.srgExc })
+    recompMcJar.set(patchedMinecraftJar.flatMap { it.archiveFile })
+    extraSrgEntries.set([])
+    extraSrgFiles.setFrom([])
+}
+
+tasks.named('assemble') {
+    dependsOn(generatorReleaseJar)
+}
+
+afterEvaluate {
+    tasks.named('iconGeneratorJar', shadowJarType) {
+        // The normal mod's convention manifest contains its integration mixin bootstrap.
+        manifest.attributes.clear()
+        manifest.attributes('Manifest-Version': '1.0', 'FMLAT': 'ae2webicons_at.cfg')
+    }
+}
+
+tasks.withType(reobfuscatedJarType).configureEach {
+    // Read rebuilt native classes directly; URLClassLoader may retain a stale patched-JAR handle.
+    if (name == 'reobfIconGeneratorJar') {
+        referenceClasspath.setFrom(sourceSets.patchedMc.output, sourceSets.iconGenerator.compileClasspath)
+    } else if (name == 'reobfJar') {
+        def originalSources = new ArrayList<>(referenceClasspath.from)
+        referenceClasspath.setFrom(sourceSets.patchedMc.output, originalSources)
+    }
+}
+
+spotless.java {
+    target('src/main/java/**/*.java', 'src/identityCommon/java/**/*.java', 'src/iconGenerator/java/**/*.java')
+}
+
+plugins.withId('idea') {
+    idea.module {
+        sourceDirs += sourceSets.iconGenerator.java.srcDirs
+        resourceDirs += sourceSets.iconGenerator.resources.srcDirs
+        scopes.PROVIDED.plus += [configurations.iconGeneratorCompileClasspath]
+    }
+}

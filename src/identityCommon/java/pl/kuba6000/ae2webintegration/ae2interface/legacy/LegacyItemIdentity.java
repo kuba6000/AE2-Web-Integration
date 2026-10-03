@@ -26,7 +26,6 @@ import appeng.api.storage.data.IAEStack;
 import appeng.fluids.util.AEFluidStack;
 import appeng.util.item.AEItemStack;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 /** Canonical native identity only; amounts, crafting flags and display data never enter these bytes. */
 @SuppressWarnings("UnstableApiUsage")
@@ -70,14 +69,14 @@ public final class LegacyItemIdentity {
         throw new UnsupportedOperationException("Unsupported legacy resource identity");
     }
 
-    public static @NotNull IAEKey copy(@NotNull IAEStack<?> stack) {
+    public static @NotNull IAEStack<?> copy(@NotNull IAEStack<?> stack) {
         if (!(stack instanceof AEItemStack) && !(stack instanceof AEFluidStack)) {
             throw new UnsupportedOperationException("Unsupported legacy resource identity");
         }
         // Follow AE2's native identity-sharing contract; only amount/crafting state is reset.
         IAEStack<?> result = stack.copy();
         result.reset();
-        return (IAEKey) result;
+        return result;
     }
 
     private static StableKey encode(String kind, @Nullable String registry, int metadata,

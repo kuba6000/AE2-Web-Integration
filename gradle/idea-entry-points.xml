@@ -4,11 +4,16 @@
     <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration AE2WebIntegration()" />
     <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.ae2interface.proxy.ClientProxy ClientProxy()" />
     <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy CommonProxy()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod IconGeneratorMod()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.GeneratorProxy GeneratorProxy()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.client.ClientBootstrap ClientBootstrap()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.client.JeiPlugin JeiPlugin()" />
   </entry_points>
-  <list size="3">
+  <list size="4">
     <item index="0" class="java.lang.String" itemvalue="net.minecraftforge.fml.common.Mod" />
     <item index="1" class="java.lang.String" itemvalue="net.minecraftforge.fml.common.Mod.EventHandler" />
     <item index="2" class="java.lang.String" itemvalue="net.minecraftforge.fml.common.eventhandler.SubscribeEvent" />
+    <item index="3" class="java.lang.String" itemvalue="mezz.jei.api.JEIPlugin" />
   </list>
   <writeAnnotations>
     <writeAnnotation name="net.minecraftforge.fml.common.SidedProxy" />
