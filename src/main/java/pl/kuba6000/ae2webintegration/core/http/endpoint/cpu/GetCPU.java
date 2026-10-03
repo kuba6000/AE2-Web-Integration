@@ -211,9 +211,6 @@ public final class GetCPU extends ISyncedRequest {
         }
 
         listing.commit();
-        context.getExchange()
-            .getResponseHeaders()
-            .set("Cache-Control", "private, no-store");
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, clusterData, mappings));
     }
 

@@ -124,7 +124,6 @@ class IconDeliveryHttpTest {
             64,
             data.get("height")
                 .getAsInt());
-        assertEquals("private, no-store", discovery.getHeaderField("Cache-Control"));
         HttpURLConnection page = connection(pagePath());
         assertEquals(200, page.getResponseCode());
         assertEquals("image/png", page.getHeaderField("Content-Type"));
@@ -512,6 +511,7 @@ class IconDeliveryHttpTest {
 
     private JsonObject json(HttpURLConnection connection) throws Exception {
         assertEquals(200, connection.getResponseCode());
+        assertEquals("no-store", connection.getHeaderField("Cache-Control"));
         try (InputStream body = connection.getInputStream()) {
             return new Gson()
                 .fromJson(IOUtils.toString(body, java.nio.charset.StandardCharsets.UTF_8), JsonObject.class);

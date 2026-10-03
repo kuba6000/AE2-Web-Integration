@@ -52,9 +52,6 @@ public final class GetIconPack extends IAsyncRequest {
             return;
         }
         IconPack pack = CoreEngine.getIconPack();
-        context.getExchange()
-            .getResponseHeaders()
-            .set("Cache-Control", "private, no-store");
         respond(
             HttpURLConnection.HTTP_OK,
             new Response(

@@ -106,9 +106,6 @@ public final class GetItems extends ISyncedRequest {
         }
 
         listing.commit();
-        context.getExchange()
-            .getResponseHeaders()
-            .set("Cache-Control", "private, no-store");
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
     }
 
