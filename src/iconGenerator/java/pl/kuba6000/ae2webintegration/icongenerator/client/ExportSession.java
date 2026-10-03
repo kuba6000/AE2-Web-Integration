@@ -63,6 +63,9 @@ final class ExportSession {
     private int exactCandidates;
     private int baseCandidates;
     private long longestStep;
+    private long captureWorkNanos;
+    private long captureBackpressureNanos;
+    private long backpressureStarted;
     private boolean finishing;
     private boolean canceling;
     private String status = "Preparing full icon export";
@@ -80,10 +83,10 @@ final class ExportSession {
     boolean tick(@NotNull Minecraft minecraft) {
         try {
             if (!canceling && !isCurrentWorld(minecraft)) cancel("world closed or changed");
-            if (!writer.ready()) return false;
-            if (canceling) return true;
-            if (finishing) {
+            if (canceling || finishing) {
+                if (!writer.finished()) return false;
                 writer.close();
+                if (canceling) return true;
                 status = "Icon export complete: " + processed
                     + "/"
                     + total
@@ -95,6 +98,14 @@ final class ExportSession {
                     + writer.completedPath()
                     + sourceNote();
                 return true;
+            }
+            if (!writer.ready()) {
+                if (discoveryComplete && backpressureStarted == 0) backpressureStarted = System.nanoTime();
+                return false;
+            }
+            if (backpressureStarted != 0) {
+                captureBackpressureNanos += System.nanoTime() - backpressureStarted;
+                backpressureStarted = 0;
             }
             IconCatalogue source = readyCatalogue(minecraft);
             if (source == null) return false;
@@ -199,12 +210,12 @@ final class ExportSession {
             longestStep = Math.max(longestStep, System.nanoTime() - before);
             if (System.nanoTime() - started >= FRAME_BUDGET) break;
         }
+        captureWorkNanos += System.nanoTime() - started;
         if (!captures.isEmpty() || !failures.isEmpty()) {
             writer.write(captures, failures);
             failures = new ArrayList<>();
-        } else if (pendingIcons.isEmpty()) {
-            finish(source);
         }
+        if (pendingIcons.isEmpty()) finish(source);
     }
 
     private void finish(@NotNull IconCatalogue source) {
@@ -220,6 +231,8 @@ final class ExportSession {
         counts.put("failures", (long) omitted);
         counts.put("duplicates", (long) duplicates);
         counts.put("longestNativeStepNanos", longestStep);
+        counts.put("captureWorkNanos", captureWorkNanos);
+        counts.put("captureBackpressureNanos", captureBackpressureNanos);
         String neiSource = useNei ? "nei"
             : neiUnavailable ? "nei-unavailable" : neiDisabled ? "nei-disabled" : "nei-absent";
         writer.finish(counts, Arrays.asList("native", neiSource, "fluids"));
