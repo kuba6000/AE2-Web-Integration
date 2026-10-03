@@ -17,6 +17,7 @@ import org.jetbrains.annotations.NotNull;
 import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.ModContainer;
 import cpw.mods.fml.relauncher.ReflectionHelper;
+import pl.kuba6000.ae2webintegration.ae2interface.platform.PlatformConstants;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.export.IMetadataSource;
 import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
@@ -41,7 +42,10 @@ final class ExportEnvironment {
         IResourcePack serverPack = repository.func_148530_e();
         if (serverPack != null) packs.add(backingFile(serverPack));
         return IMetadataSource.fromFilesystem(
-            new IconPack.Target("1.7.10", "forge", "ae2wi-legacy-1.7.10-v1", "ae2wi-legacy-1.7.10-base-v1"),
+            new IconPack.Target(
+                PlatformConstants.MINECRAFT_VERSION,
+                PlatformConstants.LOADER,
+                PlatformConstants.ICON_PACK_COMPATIBILITY_VERSION),
             IconGeneratorMod.VERSION,
             mods,
             packs);

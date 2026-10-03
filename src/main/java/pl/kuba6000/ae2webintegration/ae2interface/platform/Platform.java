@@ -10,17 +10,32 @@ import org.jetbrains.annotations.NotNull;
 import com.github.bsideup.jabel.Desugar;
 
 import cpw.mods.fml.common.FMLCommonHandler;
+import pl.kuba6000.ae2webintegration.Tags;
 import pl.kuba6000.ae2webintegration.ae2interface.config.LegacyConfigReader;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
-import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 
 @Desugar
 public record Platform(File configDir) implements IServerPlatform {
 
     @Override
-    public @NotNull IconPack.Target getIconPackTarget() {
-        return new IconPack.Target("1.7.10", "forge", "ae2wi-legacy-1.7.10-v1", "ae2wi-legacy-1.7.10-base-v1");
+    public @NotNull String getModVersion() {
+        return Tags.VERSION;
+    }
+
+    @Override
+    public @NotNull String getLoader() {
+        return PlatformConstants.LOADER;
+    }
+
+    @Override
+    public @NotNull String getMinecraftVersion() {
+        return PlatformConstants.MINECRAFT_VERSION;
+    }
+
+    @Override
+    public @NotNull String getIconPackCompatibilityVersion() {
+        return PlatformConstants.ICON_PACK_COMPATIBILITY_VERSION;
     }
 
     @Override
