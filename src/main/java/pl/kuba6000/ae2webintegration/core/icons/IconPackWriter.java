@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -39,6 +38,7 @@ import org.jetbrains.annotations.Nullable;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack.Metadata;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack.Page;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.utils.TempDirectories;
 
 /** Single-owner assembly with bounded parallel PNG encoding. add consumes caller pixels synchronously. */
 public final class IconPackWriter implements Closeable {
@@ -491,25 +491,10 @@ public final class IconPackWriter implements Closeable {
     private static @NotNull IOException encodingFailure(@NotNull Throwable cause) {
         if (cause instanceof Error) throw (Error) cause;
         if (cause instanceof RuntimeException) throw (RuntimeException) cause;
-        return new IOException("PNG page encoding failed", cause);
+        return new IOException("Icon pack writing or cleanup failed", cause);
     }
 
     private void deleteScratch() throws IOException {
-        IOException failure = null;
-        try (DirectoryStream<Path> files = Files.newDirectoryStream(scratch)) {
-            for (Path file : files) try {
-                Files.delete(file);
-            } catch (IOException cleanup) {
-                if (failure == null) failure = cleanup;
-                else failure.addSuppressed(cleanup);
-            }
-        }
-        try {
-            Files.delete(scratch);
-        } catch (IOException cleanup) {
-            if (failure == null) failure = cleanup;
-            else failure.addSuppressed(cleanup);
-        }
-        if (failure != null) throw failure;
+        TempDirectories.deleteRecursively(scratch);
     }
 }

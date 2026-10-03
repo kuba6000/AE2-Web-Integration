@@ -204,6 +204,7 @@ def iconPackJar = tasks.register('iconPackJar', Jar) {
         include 'pl/kuba6000/ae2webintegration/core/icons/IconPack*.class'
         include 'pl/kuba6000/ae2webintegration/core/icons/PackFormat*.class'
         include 'pl/kuba6000/ae2webintegration/core/icons/export/**'
+        include 'pl/kuba6000/ae2webintegration/core/utils/TempDirectories.class'
     }
 }
 configurations.create('iconPackElements') {

@@ -14,7 +14,7 @@ import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.toml.TomlParser;
 import com.electronwill.nightconfig.toml.TomlWriter;
 
-import pl.kuba6000.ae2webintegration.core.TempDirectories;
+import pl.kuba6000.ae2webintegration.core.utils.TempDirectories;
 
 /** Edits real configuration files through the same init/reload boundary used by a server. */
 public final class ConfigTestFixture implements AutoCloseable {
@@ -81,7 +81,11 @@ public final class ConfigTestFixture implements AutoCloseable {
             Config.reload();
         }
         if (ownsRoot) {
-            TempDirectories.deleteRecursively(root.toPath());
+            try {
+                TempDirectories.deleteRecursively(root.toPath());
+            } catch (IOException failure) {
+                throw new UncheckedIOException(failure);
+            }
         }
     }
 
