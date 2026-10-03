@@ -48,3 +48,10 @@ background than they do in the game's inventory.
 Open this checkout as a Gradle project. The versioned `.idea/inspectionProfiles` files select the
 **AE2 Web Integration** project inspection profile. Gradle supplies the source sets and dependencies;
 SDK locations and personal workspace settings stay local. Commit shared inspection changes with the code.
+
+Framework entry points are configured in `gradle/idea-entry-points.xml`. Gradle sync
+applies this policy to IDEA automatically; run `./gradlew updateIdeaEntryPoints`
+to apply it explicitly. The task replaces only the `EntryPointsManager` component
+in the ignored `.idea/misc.xml`, preserving SDK and other project settings. Edit
+the versioned policy to change entry points; local changes to that component are
+replaced on the next sync.

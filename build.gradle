@@ -123,3 +123,5 @@ tasks.withType(JavaCompile).configureEach {
 lombok {
     version = "1.18.38"
 }
+
+apply from: 'gradle/idea-settings.gradle'
