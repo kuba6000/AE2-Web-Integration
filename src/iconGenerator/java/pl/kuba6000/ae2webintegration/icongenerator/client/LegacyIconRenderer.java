@@ -27,11 +27,12 @@ import org.lwjgl.opengl.GL21;
 
 import com.gtnewhorizon.gtnhlib.client.renderer.TessellatorManager;
 
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Client-thread inventory capture. Each call restores the caller's GL state, including on failure. */
-final class LegacyIconRenderer implements AutoCloseable {
+final class LegacyIconRenderer implements IIconCapture<IconCandidate> {
 
     static final int ICON_SIZE = 64;
     private static final int GUI_SIZE = 16;
@@ -121,7 +122,7 @@ final class LegacyIconRenderer implements AutoCloseable {
                     Throwable cause = failure instanceof ReportedException ? failure.getCause() : failure;
                     if (cause instanceof VirtualMachineError fatal) throw fatal;
                     if (cause instanceof ThreadDeath fatal) throw fatal;
-                    renderFailure = failure;
+                    renderFailure = cause;
                 } finally {
                     drawNanos += System.nanoTime() - drawStarted;
                     drawCount++;
@@ -188,22 +189,20 @@ final class LegacyIconRenderer implements AutoCloseable {
         }
     }
 
-    static final class RenderFailure extends Exception {
-
-        final Throwable failure;
-
-        private RenderFailure(@NotNull Throwable failure) {
-            super("Native icon renderer failed", failure);
-            this.failure = failure instanceof ReportedException ? failure.getCause() : failure;
-        }
+    @Override
+    public void capture(@NotNull IconCandidate candidate, @NotNull StableKey key, @NotNull List<Capture> captures)
+        throws RenderFailure {
+        candidate.render(this, key, captures);
     }
 
-    void drain(@NotNull List<Capture> captures) {
+    @Override
+    public void drain(@NotNull List<Capture> captures) {
         readback.drain(captures);
     }
 
     /** Per-attempt wall times include pauses and deferred GPU work charged to the synchronizing call. */
-    void statistics(@NotNull Map<String, Long> counts) {
+    @Override
+    public void statistics(@NotNull Map<String, Long> counts) {
         counts.put("renderSnapshotNanos", snapshotNanos);
         counts.put("renderSnapshotCount", snapshotCount);
         counts.put("renderSetupNanos", setupNanos);

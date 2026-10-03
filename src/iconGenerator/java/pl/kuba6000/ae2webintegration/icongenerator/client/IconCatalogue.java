@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -9,26 +10,44 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.BiConsumer;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.ReportedException;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidContainerRegistry;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.registry.GameData;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconSource;
+import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
 
 /** Incremental registry traversal. Only one item's published variant list is retained at a time. */
-final class IconCatalogue {
+final class IconCatalogue implements IIconSource<IconCandidate> {
 
-    private final Iterator<Item> items;
-    private final Iterator<Map.Entry<String, Fluid>> fluids;
-    private final @Nullable NeiCatalogue nei;
-    private final BiConsumer<String, Throwable> failures;
+    private static final Logger LOG = LogManager.getLogger(IconGeneratorMod.MOD_ID);
+    private final Minecraft minecraft;
+    private final boolean neiInstalled;
+    private boolean useNei;
+    private boolean neiUnavailable;
+    private boolean prepared;
+    private boolean neiDisabled;
+
+    private Iterator<Item> items = Collections.<Item>emptyList()
+        .iterator();
+    private Iterator<Map.Entry<String, Fluid>> fluids = Collections.<Map.Entry<String, Fluid>>emptyList()
+        .iterator();
+    private @Nullable NeiCatalogue nei;
+    private @Nullable BiConsumer<String, Throwable> failures;
     private Iterator<ItemStack> variants = Collections.<ItemStack>emptyList()
         .iterator();
     private @Nullable Item currentItem;
@@ -43,10 +62,36 @@ final class IconCatalogue {
     private int neiCandidates;
     private int fluidCandidates;
 
-    @SuppressWarnings("unchecked") // Minecraft's registry exposes its vanilla raw Iterable.
-    IconCatalogue(@Nullable NeiCatalogue nei, @NotNull BiConsumer<String, Throwable> failures) {
-        this.nei = nei;
+    IconCatalogue(@NotNull Minecraft minecraft) {
+        this.minecraft = minecraft;
+        neiInstalled = Loader.isModLoaded("NotEnoughItems");
+    }
+
+    @Override
+    public @Nullable String prepare(@NotNull BiConsumer<String, Throwable> failures) {
+        if (prepared) return null;
+        try {
+            neiDisabled = neiInstalled && NeiCatalogue.disabled();
+            useNei = neiInstalled && !neiDisabled;
+            nei = useNei ? NeiCatalogue.ready() : null;
+        } catch (NoClassDefFoundError failure) {
+            neiUnavailable = true;
+            useNei = false;
+            String warning = "NEI catalogue unavailable (missing class); exporting native items and fluids only";
+            LOG.warn(warning, failure);
+            if (minecraft.thePlayer != null) minecraft.thePlayer.addChatMessage(new ChatComponentText(warning));
+        }
+        if (useNei && nei == null) {
+            return "Waiting for NEI to finish loading its full catalogue; /ae2webicons cancel to stop";
+        }
         this.failures = failures;
+        initialize();
+        prepared = true;
+        return null;
+    }
+
+    @SuppressWarnings("unchecked") // Minecraft's registry exposes its vanilla raw Iterable.
+    private void initialize() {
         List<Item> registry = new ArrayList<>();
         for (Item item : (Iterable<Item>) Item.itemRegistry) registry.add(item);
         registry.sort(
@@ -58,12 +103,14 @@ final class IconCatalogue {
             .iterator();
     }
 
-    void verify() {
+    @Override
+    public void verify() {
         if (nei != null) nei.verify();
     }
 
+    @Override
     @Nullable
-    IconCandidate next() {
+    public IconCandidate next() {
         if (variants.hasNext() || currentItem != null || items.hasNext()) return nextNative();
         if (nei != null && neiIndex < nei.size()) {
             context = "nei/" + neiIndex;
@@ -110,6 +157,7 @@ final class IconCatalogue {
         try {
             item.getSubItems(item, tab, published);
         } catch (Throwable failure) {
+            assert failures != null : "Catalogue must be prepared before discovery";
             failures.accept(context + "/subtypes", failure);
         }
         variantCount += published.size();
@@ -133,21 +181,44 @@ final class IconCatalogue {
         variantIndex = 0;
     }
 
-    boolean done() {
+    @Override
+    public boolean done() {
         return done;
     }
 
+    @Override
     @NotNull
-    String context() {
+    public String context() {
         return context;
     }
 
+    @Override
     @NotNull
-    Map<String, Long> counts() {
+    public Map<String, Long> counts() {
         Map<String, Long> result = new TreeMap<>();
         result.put("nativeCandidates", (long) nativeCandidates);
         result.put("neiCandidates", (long) neiCandidates);
         result.put("fluidCandidates", (long) fluidCandidates);
         return result;
+    }
+
+    @Override
+    public @NotNull List<String> sources() {
+        String neiSource = useNei ? "nei"
+            : neiUnavailable ? "nei-unavailable" : neiDisabled ? "nei-disabled" : "nei-absent";
+        return Arrays.asList("native", neiSource, "fluids");
+    }
+
+    @Override
+    public @NotNull String note() {
+        if (neiUnavailable) return " (NEI unavailable; native catalogue only)";
+        if (neiDisabled) return " (NEI disabled; native catalogue only)";
+        return "";
+    }
+
+    @Override
+    public @NotNull Throwable failureCause(@NotNull Throwable failure) {
+        if (failure instanceof NeiCatalogue.Changed changed) throw changed;
+        return failure instanceof ReportedException ? failure.getCause() : failure;
     }
 }

@@ -14,11 +14,12 @@ import org.jetbrains.annotations.Nullable;
 import appeng.util.Platform;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyIconBaseline;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconCandidate;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** One owned native candidate; it never crosses the writer thread boundary. */
-abstract class IconCandidate {
+abstract class IconCandidate implements IIconCandidate<IconCandidate> {
 
     final String context;
 
@@ -26,14 +27,19 @@ abstract class IconCandidate {
         this.context = context;
     }
 
-    abstract @NotNull StableKey key();
+    public abstract @NotNull StableKey key();
 
-    abstract boolean sameIdentity(@NotNull IconCandidate other);
+    public abstract boolean sameIdentity(@NotNull IconCandidate other);
 
-    abstract @NotNull IconCandidate baseline();
+    public abstract @NotNull IconCandidate baseline();
 
     abstract void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
         throws LegacyIconRenderer.RenderFailure;
+
+    @Override
+    public @NotNull String context() {
+        return context;
+    }
 
     static @NotNull IconCandidate item(@NotNull String context, @NotNull ItemStack stack) {
         if (stack.getItem() == null) throw new IllegalArgumentException("Catalogue item has no registered item");
@@ -60,7 +66,7 @@ abstract class IconCandidate {
 
         @Override
         @NotNull
-        StableKey key() {
+        public StableKey key() {
             Item item = stack.getItem();
             int metadata = Items.blaze_rod.getDamage(stack);
             NBTTagCompound tag = LegacyItemIdentity.prepareItemTag(stack);
@@ -72,7 +78,7 @@ abstract class IconCandidate {
         }
 
         @Override
-        boolean sameIdentity(@NotNull IconCandidate other) {
+        public boolean sameIdentity(@NotNull IconCandidate other) {
             if (!(other instanceof ItemCandidate item) || identityItem != item.identityItem
                 || identityMetadata != item.identityMetadata) return false;
             return identityTag == item.identityTag || identityTag != null && item.identityTag != null
@@ -81,7 +87,7 @@ abstract class IconCandidate {
 
         @Override
         @NotNull
-        IconCandidate baseline() {
+        public IconCandidate baseline() {
             return item(context + "/base", LegacyIconBaseline.item(stack));
         }
 
@@ -103,19 +109,19 @@ abstract class IconCandidate {
 
         @Override
         @NotNull
-        StableKey key() {
+        public StableKey key() {
             return LegacyItemIdentity.encode(stack);
         }
 
         @Override
-        boolean sameIdentity(@NotNull IconCandidate other) {
+        public boolean sameIdentity(@NotNull IconCandidate other) {
             // Match AEFluidStack factory equality: fluid identity only, without amount or native tag.
             return other instanceof FluidCandidate fluid && stack.getFluid() == fluid.stack.getFluid();
         }
 
         @Override
         @NotNull
-        IconCandidate baseline() {
+        public IconCandidate baseline() {
             return fluid(context + "/base", LegacyIconBaseline.fluid(stack));
         }
 
