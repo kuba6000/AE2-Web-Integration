@@ -152,7 +152,9 @@ public final class ClientBootstrap extends GeneratorProxy implements IResourceMa
                     throw new IllegalStateException("Another mod prevented the export screen from opening");
                 lastProgressMessage = System.nanoTime();
                 return "Started full 64px icon export; use the export screen to view progress or cancel";
-            } catch (RuntimeException exception) {
+            } catch (RuntimeException | Error exception) {
+                if (exception instanceof VirtualMachineError fatal) throw fatal;
+                if (exception instanceof ThreadDeath fatal) throw fatal;
                 if (session != null) session.cancel("could not open export screen");
                 progressScreen = null;
                 lastStatus = "Could not start icon export: " + exception;

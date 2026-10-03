@@ -22,16 +22,16 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import cpw.mods.fml.common.Loader;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
+import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Failure;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
-import pl.kuba6000.ae2webintegration.icongenerator.client.PackExportWriter.Capture;
-import pl.kuba6000.ae2webintegration.icongenerator.client.PackExportWriter.Failure;
 
 final class ExportSession {
 
     private static final Logger LOG = LogManager.getLogger(IconGeneratorMod.MOD_ID);
     private static final int MAX_FAILURE_MESSAGE_LENGTH = 512;
-    private static final int MAX_CAPTURES_PER_FRAME = 1024;
     private static final int MAX_STEPS_PER_FRAME = 4096;
     // Bound retained native candidates to the format-1 mapping ceiling, including candidates that later fail rendering.
     private static final int MAX_QUEUED_ICONS = 250_000;
@@ -73,11 +73,26 @@ final class ExportSession {
     ExportSession(@NotNull Minecraft minecraft) {
         world = minecraft.theWorld;
         neiInstalled = Loader.isModLoaded("NotEnoughItems");
+        ExportEnvironment environment = ExportEnvironment.capture(minecraft);
         renderer = new LegacyIconRenderer(minecraft);
-        writer = new PackExportWriter(
-            minecraft.mcDataDir.toPath()
-                .resolve("ae2webicons"),
-            ExportEnvironment.capture(minecraft));
+        try {
+            writer = new PackExportWriter(
+                minecraft.mcDataDir.toPath()
+                    .resolve("ae2webicons"),
+                environment);
+        } catch (RuntimeException | Error failure) {
+            try {
+                renderer.close();
+            } catch (RuntimeException | Error cleanup) {
+                if (!(failure instanceof VirtualMachineError) && !(failure instanceof ThreadDeath)
+                    && (cleanup instanceof VirtualMachineError || cleanup instanceof ThreadDeath)) {
+                    cleanup.addSuppressed(failure);
+                    throw cleanup;
+                }
+                failure.addSuppressed(cleanup);
+            }
+            throw failure;
+        }
     }
 
     boolean tick(@NotNull Minecraft minecraft) {
@@ -203,7 +218,7 @@ final class ExportSession {
     private void captureBatch(@NotNull IconCatalogue source) {
         List<Capture> captures = new ArrayList<>();
         long started = System.nanoTime();
-        for (int count = 0; count < MAX_CAPTURES_PER_FRAME && !pendingIcons.isEmpty(); count++) {
+        for (int count = 0; count < PackExportWriter.MAX_CAPTURES_PER_BATCH && !pendingIcons.isEmpty(); count++) {
             long before = System.nanoTime();
             capture(pendingIcons.removeFirst(), captures);
             processed++;
