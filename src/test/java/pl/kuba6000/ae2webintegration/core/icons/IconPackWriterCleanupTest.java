@@ -49,7 +49,7 @@ class IconPackWriterCleanupTest {
             try (Stream<Path> files = Files.list(directory)) {
                 scratch = files.filter(Files::isDirectory)
                     .findFirst()
-                    .get();
+                    .orElseThrow(() -> new AssertionError("Writer did not create a scratch directory"));
             }
             Path heldFile = Files.createFile(scratch.resolve("held-by-another-process"));
             Future<Path> completion;

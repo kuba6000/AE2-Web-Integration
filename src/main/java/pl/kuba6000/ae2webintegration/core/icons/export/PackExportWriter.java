@@ -100,6 +100,8 @@ public final class PackExportWriter {
             try {
                 if (failure != null || publication.get() == Publication.CANCELED) return null;
                 assemblyBatches++;
+                // Borrowed for this batch; finish/cancel closes the single assembly owner.
+                // noinspection resource
                 IconPackWriter output = output();
                 for (Failure omitted : failures) {
                     if (publication.get() == Publication.CANCELED) return null;

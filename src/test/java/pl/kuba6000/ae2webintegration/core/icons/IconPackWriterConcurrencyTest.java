@@ -168,6 +168,8 @@ class IconPackWriterConcurrencyTest {
                     return Thread.currentThread()
                         .isInterrupted();
                 } finally {
+                    // Clear the flag after asserting it, so this test does not interrupt later work.
+                    // noinspection ResultOfMethodCallIgnored
                     Thread.interrupted();
                 }
             });

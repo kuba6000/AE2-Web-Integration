@@ -264,7 +264,9 @@ class PackExportWriterTest {
         writer.finish(new HashMap<>(), Collections.emptyList());
         awaitFinished(writer);
         writer.close();
-        try (IconPack pack = IconPack.open(writer.completedPath(), "test", "loader", "identity", "base")) {
+        Path completed = writer.completedPath();
+        assertNotNull(completed, "Finished export must publish a pack");
+        try (IconPack pack = IconPack.open(completed, "test", "loader", "identity", "base")) {
             assertEquals(expected, pack.metadata().resourcePacks);
         }
     }
@@ -280,7 +282,9 @@ class PackExportWriterTest {
         writer.finish(new HashMap<>(), Arrays.asList("native", "fluids"));
         awaitFinished(writer);
         writer.close();
-        try (IconPack pack = IconPack.open(writer.completedPath(), "test", "loader", "identity", "base")) {
+        Path completed = writer.completedPath();
+        assertNotNull(completed, "Finished export must publish a pack");
+        try (IconPack pack = IconPack.open(completed, "test", "loader", "identity", "base")) {
             assertNotNull(pack.find(key));
             assertEquals(1, pack.failureCount());
         }

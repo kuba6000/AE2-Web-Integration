@@ -392,7 +392,11 @@ class IconPackTest {
 
     @Test
     void malformedInputAndAbortedWritersNeverPublishPartialPacks() throws Exception {
-        assertThrows(IllegalArgumentException.class, () -> new IconPackWriter(directory, metadata("today"), 65));
+        assertThrows(IllegalArgumentException.class, () -> {
+            try (IconPackWriter ignored = new IconPackWriter(directory, metadata("today"), 65)) {
+                fail("Invalid atlas size must be rejected");
+            }
+        });
         IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 512);
         try (IconPackWriter ignored = writer) {
             assertThrows(IllegalArgumentException.class, () -> writer.add(StableKey.random(), new int[1]));
@@ -592,9 +596,11 @@ class IconPackTest {
         }
         assertEquals(1, modified);
         Files.write(oversized, bytes);
-        IOException failure = assertThrows(
-            IOException.class,
-            () -> IconPack.open(oversized, "1.7.10", "forge", "legacy-v1", "base-v1"));
+        IOException failure = assertThrows(IOException.class, () -> {
+            try (IconPack ignored = IconPack.open(oversized, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+                fail("Oversized manifest must be rejected");
+            }
+        });
         assertTrue(
             failure.getMessage()
                 .contains("size limit"));

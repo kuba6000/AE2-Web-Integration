@@ -67,6 +67,8 @@ class TempDirectoriesTest {
                 Thread.currentThread()
                     .isInterrupted());
         } finally {
+            // Clear the flag after asserting it, so this test does not interrupt later work.
+            // noinspection ResultOfMethodCallIgnored
             Thread.interrupted();
         }
     }
@@ -117,6 +119,8 @@ class TempDirectoriesTest {
                 assertInstanceOf(FileSystemException.class, failure.getSuppressed()[0]);
                 assertTrue(Files.exists(file));
             } finally {
+                // Clear the flag after asserting it, so this test does not interrupt later work.
+                // noinspection ResultOfMethodCallIgnored
                 Thread.interrupted();
             }
         }

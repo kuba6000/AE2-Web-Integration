@@ -99,7 +99,9 @@ class VersionCheckerTest {
                 () -> checker.checkForUpdates()
                     .get(5, TimeUnit.SECONDS));
             assertInstanceOf(IOException.class, failure.getCause());
-            assertEquals("1.1.0", checker.getAvailableUpdate().version);
+            ReleaseManifest.Release retained = checker.getAvailableUpdate();
+            assertNotNull(retained);
+            assertEquals("1.1.0", retained.version);
         } finally {
             server.stop(0);
         }
@@ -134,7 +136,9 @@ class VersionCheckerTest {
                 ExecutionException.class,
                 () -> checker.checkForUpdates()
                     .get(5, TimeUnit.SECONDS));
-            assertEquals("1.1.0", checker.getAvailableUpdate().version);
+            ReleaseManifest.Release retained = checker.getAvailableUpdate();
+            assertNotNull(retained);
+            assertEquals("1.1.0", retained.version);
             status.set(200);
             body.set("not json");
             assertThrows(
@@ -174,6 +178,8 @@ class VersionCheckerTest {
                 .flush();
             entered.countDown();
             try {
+                // A bounded fallback releases the fake server even if caller assertions fail before signaling.
+                // noinspection ResultOfMethodCallIgnored
                 respond.await(5, TimeUnit.SECONDS);
                 byte[] bytes = ReleaseManifestTest.feed("1.1.0", null)
                     .getBytes(StandardCharsets.UTF_8);

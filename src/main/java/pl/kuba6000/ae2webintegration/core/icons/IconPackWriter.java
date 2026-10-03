@@ -456,6 +456,8 @@ public final class IconPackWriter implements Closeable {
             }
         }
         while (!pngExecutor.isTerminated()) try {
+            // The loop condition checks termination; interruptions must not bypass cleanup.
+            // noinspection ResultOfMethodCallIgnored
             pngExecutor.awaitTermination(1, TimeUnit.SECONDS);
         } catch (InterruptedException interruption) {
             interrupted = true;

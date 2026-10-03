@@ -119,10 +119,16 @@ public final class RequestInputs {
             } else if (type == long.class || type == Long.class || type == int.class || type == Integer.class) {
                 if (!scalar.isNumber()) throw new IllegalArgumentException("Expected integer: " + field.getName());
                 try {
-                    if (type == int.class || type == Integer.class) scalar.getAsBigDecimal()
-                        .intValueExact();
-                    else scalar.getAsBigDecimal()
-                        .longValueExact();
+                    // Exact conversion validates integrality and range; decoding later supplies the value.
+                    if (type == int.class || type == Integer.class) {
+                        // noinspection ResultOfMethodCallIgnored
+                        scalar.getAsBigDecimal()
+                            .intValueExact();
+                    } else {
+                        // noinspection ResultOfMethodCallIgnored
+                        scalar.getAsBigDecimal()
+                            .longValueExact();
+                    }
                 } catch (ArithmeticException exception) {
                     throw new IllegalArgumentException("Invalid integer", exception);
                 }
