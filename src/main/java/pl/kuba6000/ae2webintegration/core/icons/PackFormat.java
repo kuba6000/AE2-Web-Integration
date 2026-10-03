@@ -105,6 +105,7 @@ final class PackFormat {
             .onUnmappableCharacter(CodingErrorAction.REPORT)
             .decode(ByteBuffer.wrap(bytes))
             .toString();
+        rejectNegativeZero(json);
         // Gson normally keeps the last duplicate field. Audit structure before ordinary tree decoding.
         try (JsonReader reader = new JsonReader(new StringReader(json))) {
             audit(reader, 0);
@@ -115,6 +116,25 @@ final class PackFormat {
                 .getAsJsonObject();
         } catch (RuntimeException e) {
             throw new IOException("Invalid manifest", e);
+        }
+    }
+
+    private static void rejectNegativeZero(@NotNull String json) throws IOException {
+        // Gson 2.2.4 normalizes the numeric token -0 to 0, losing the sign before integer validation.
+        // Only protect that lexical distinction here; JsonReader still validates the JSON grammar.
+        boolean quoted = false;
+        for (int index = 0; index < json.length(); index++) {
+            char current = json.charAt(index);
+            if (quoted) {
+                if (current == '\\') index++;
+                else if (current == '"') quoted = false;
+            } else if (current == '"') quoted = true;
+            else if (current == '-' && index + 1 < json.length()
+                && json.charAt(index + 1) == '0'
+                && (index == 0 || " \t\r\n[:,".indexOf(json.charAt(index - 1)) >= 0)
+                && (index + 2 == json.length() || " \t\r\n,]}".indexOf(json.charAt(index + 2)) >= 0)) {
+                    throw new IOException("Expected nonnegative integer");
+                }
         }
     }
 

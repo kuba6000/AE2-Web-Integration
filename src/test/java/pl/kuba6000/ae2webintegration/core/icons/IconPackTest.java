@@ -210,6 +210,18 @@ class IconPackTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = { "-0", "quoted \"-0\"", "escaped \\\"-0", "backslash \\ then -0" })
+    void metadataTextContainingNegativeZeroRoundTrips(String text) throws Exception {
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata(text), 64)) {
+            output = writer.finish();
+        }
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+            assertEquals(text, pack.metadata().generatedAt);
+        }
+    }
+
     private Path packWithFailureCount(String count) throws Exception {
         Path original;
         try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
