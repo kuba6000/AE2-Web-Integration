@@ -93,3 +93,5 @@ tasks.withType(JavaCompile).configureEach {
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
 }
+
+apply from: 'gradle/idea-settings.gradle'
