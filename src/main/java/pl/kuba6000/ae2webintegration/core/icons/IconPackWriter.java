@@ -7,6 +7,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -57,6 +58,10 @@ public final class IconPackWriter implements Closeable {
     private final @NotNull Map<String, List<PixelRecord>> pixelIndex = new HashMap<>();
     private final @NotNull Map<String, PixelRecord> keyPixels = new HashMap<>();
     private final @NotNull RandomAccessFile pixelSpool;
+    private final byte @NotNull [] serializedPixels = new byte[PackFormat.ICON_BYTES];
+    private final byte @NotNull [] comparedPixels = new byte[PackFormat.ICON_BYTES];
+    private final @NotNull IntBuffer pixelInts = ByteBuffer.wrap(serializedPixels)
+        .asIntBuffer();
     private final @NotNull Map<String, Object> statistics = new TreeMap<>();
     private final @NotNull Map<String, Long> statisticCounts = new TreeMap<>();
     private final int pngWorkers = Math.max(
@@ -110,19 +115,17 @@ public final class IconPackWriter implements Closeable {
     public void add(@NotNull StableKey key, int @NotNull [] pixels) throws IOException {
         checkOpen();
         if (pixels.length != PackFormat.ICON_PIXELS) throw new IllegalArgumentException("Expected 64x64 ARGB pixels");
-        byte[] rgba = new byte[PackFormat.ICON_BYTES];
-        ByteBuffer.wrap(rgba)
-            .asIntBuffer()
-            .put(pixels);
+        pixelInts.clear();
+        pixelInts.put(pixels);
         PixelRecord existingKey = keyPixels.get(key.toString());
         if (existingKey != null) {
-            if (!samePixels(existingKey, rgba)) throw new IOException("Conflicting icon key");
+            if (!samePixels(existingKey)) throw new IOException("Conflicting icon key");
             return;
         }
         if (entries.size() >= PackFormat.MAX_KEYS) throw new IOException("Too many icon mappings");
-        String pixelDigest = PackFormat.hash(rgba);
+        String pixelDigest = PackFormat.hash(serializedPixels);
         List<PixelRecord> matches = pixelIndex.computeIfAbsent(pixelDigest, ignored -> new ArrayList<>());
-        for (PixelRecord match : matches) if (samePixels(match, rgba)) {
+        for (PixelRecord match : matches) if (samePixels(match)) {
             entries.put(key.toString(), match.position);
             keyPixels.put(key.toString(), match);
             return;
@@ -131,7 +134,7 @@ public final class IconPackWriter implements Closeable {
         entries.put(key.toString(), position);
         long offset = pixelSpool.length();
         pixelSpool.seek(offset);
-        pixelSpool.write(rgba);
+        pixelSpool.write(serializedPixels);
         PixelRecord record = new PixelRecord(offset, position);
         keyPixels.put(key.toString(), record);
         matches.add(record);
@@ -169,11 +172,10 @@ public final class IconPackWriter implements Closeable {
         }
     }
 
-    private boolean samePixels(@NotNull PixelRecord record, byte @NotNull [] pixels) throws IOException {
-        byte[] existing = new byte[pixels.length];
+    private boolean samePixels(@NotNull PixelRecord record) throws IOException {
         pixelSpool.seek(record.offset);
-        pixelSpool.readFully(existing);
-        return Arrays.equals(existing, pixels);
+        pixelSpool.readFully(comparedPixels);
+        return Arrays.equals(comparedPixels, serializedPixels);
     }
 
     private static final class PixelRecord {

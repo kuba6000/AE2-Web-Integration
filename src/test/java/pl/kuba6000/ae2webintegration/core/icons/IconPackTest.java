@@ -142,6 +142,94 @@ class IconPackTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = { 64, 512 })
+    void interleavedCapturesKeepPixelsAndDeduplicationIndependentOfCallerBufferReuse(int pageSize) throws Exception {
+        StableKey first = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        StableKey second = StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ");
+        StableKey duplicate = StableKey.parse("AgICAgICAgICAgICAgICAg");
+        int[] original = new int[4096];
+        Random colors = new Random(923);
+        for (int i = 0; i < original.length; i++) original[i] = colors.nextInt();
+        int[] supplied = original.clone();
+        Path output;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), pageSize)) {
+            writer.add(first, supplied);
+            assertArrayEquals(original, supplied);
+            Arrays.fill(supplied, 0xff123456);
+            writer.add(second, supplied);
+            assertEquals(0xff123456, supplied[0]);
+            assertThrows(IOException.class, () -> writer.add(first, supplied));
+            System.arraycopy(original, 0, supplied, 0, supplied.length);
+            writer.add(first, supplied);
+            writer.add(duplicate, supplied);
+            Arrays.fill(supplied, 0);
+            output = writer.finish();
+        }
+        try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1", "base-v1")) {
+            Location firstLocation = pack.find(first);
+            Location secondLocation = pack.find(second);
+            Location duplicateLocation = pack.find(duplicate);
+            assertNotNull(firstLocation);
+            assertNotNull(secondLocation);
+            assertNotNull(duplicateLocation);
+            assertEquals(firstLocation.page.digest, duplicateLocation.page.digest);
+            assertEquals(firstLocation.x, duplicateLocation.x);
+            assertEquals(firstLocation.y, duplicateLocation.y);
+            try (InputStream stream = pack.openPage(firstLocation.page.digest)) {
+                assertArrayEquals(
+                    original,
+                    ImageIO.read(stream)
+                        .getRGB(firstLocation.x, firstLocation.y, 64, 64, null, 0, 64));
+            }
+            int[] solid = new int[4096];
+            Arrays.fill(solid, 0xff123456);
+            try (InputStream stream = pack.openPage(secondLocation.page.digest)) {
+                assertArrayEquals(
+                    solid,
+                    ImageIO.read(stream)
+                        .getRGB(secondLocation.x, secondLocation.y, 64, 64, null, 0, 64));
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = { "\"0\"", "\"1\"", "-0", "-1", "0.0", "1.0", "1e0", "0E1", "2147483648", "4294967296",
+            "9999999999999999999999999", "true", "null", "[]", "{}", "00", "+1" })
+    void manifestIntegerFieldsRejectNoncanonicalOrOutOfRangeValues(String count) throws Exception {
+        assertRejectedPack(packWithFailureCount(count), "1.7.10");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 0, 1, Integer.MAX_VALUE })
+    void manifestIntegerFieldsAcceptCanonicalNonnegativeIntRange(int count) throws Exception {
+        try (IconPack pack = IconPack
+            .open(packWithFailureCount(Integer.toString(count)), "1.7.10", "forge", "legacy-v1", "base-v1")) {
+            assertEquals(count, pack.failureCount());
+        }
+    }
+
+    private Path packWithFailureCount(String count) throws Exception {
+        Path original;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+            original = writer.finish();
+        }
+        Path modified = directory.resolve("failure-count.zip");
+        try (ZipFile source = new ZipFile(original.toFile());
+            ZipOutputStream target = new ZipOutputStream(Files.newOutputStream(modified))) {
+            String json = new String(entryBytes(source, "manifest.json"), StandardCharsets.UTF_8);
+            // Failure diagnostics are excluded from pack identity; preserve the supplied JSON token verbatim.
+            writeEntry(
+                target,
+                "manifest.json",
+                json.replace("\"count\":0", "\"count\":" + count)
+                    .getBytes(StandardCharsets.UTF_8),
+                false);
+        }
+        return modified;
+    }
+
     @Test
     void cancellationRemovesUnpublishedOutputAndScratch() throws Exception {
         try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 512)) {

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.regex.Pattern;
 import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -47,6 +48,7 @@ final class PackFormat {
     private static final int COPY_BUFFER_SIZE = 8192;
     private static final int MAX_JSON_DEPTH = 16;
     private static final int MAX_TEXT_LENGTH = 4096;
+    private static final @NotNull Pattern NONNEGATIVE_INTEGER = Pattern.compile("0|[1-9][0-9]*");
     static final int MAX_KEYS = 250_000;
     static final int MAX_MANIFEST = 64 * 1024 * 1024;
     static final int MAX_PAGE = 16 * 1024 * 1024;
@@ -167,12 +169,13 @@ final class PackFormat {
     static int integer(@Nullable JsonElement value) throws IOException {
         if (value == null || !value.isJsonPrimitive()
             || !value.getAsJsonPrimitive()
-                .isNumber()
-            || !value.toString()
-                .matches("0|[1-9][0-9]*"))
+                .isNumber())
             throw new IOException("Expected nonnegative integer");
+        String number = value.getAsString();
+        if (!NONNEGATIVE_INTEGER.matcher(number)
+            .matches()) throw new IOException("Expected nonnegative integer");
         try {
-            return Integer.parseInt(value.toString());
+            return Integer.parseInt(number);
         } catch (NumberFormatException e) {
             throw new IOException("Integer outside supported range", e);
         }
