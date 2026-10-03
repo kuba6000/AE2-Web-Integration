@@ -14,6 +14,7 @@ import net.minecraftforge.fml.ModList;
 
 import org.jetbrains.annotations.NotNull;
 
+import pl.kuba6000.ae2webintegration.ae2interface.platform.PlatformConstants;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.export.IMetadataSource;
 import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
@@ -48,7 +49,10 @@ final class ExportEnvironment {
                         }
             });
         return IMetadataSource.fromFilesystem(
-            new IconPack.Target("1.20.1", "forge", "ae2wi-modern-1.20.1-v1", "ae2wi-modern-1.20.1-base-v1"),
+            new IconPack.Target(
+                PlatformConstants.MINECRAFT_VERSION,
+                PlatformConstants.LOADER,
+                PlatformConstants.ICON_PACK_COMPATIBILITY_VERSION),
             mods.get(IconGeneratorMod.MOD_ID),
             mods,
             paths);
