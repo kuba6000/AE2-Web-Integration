@@ -11,11 +11,12 @@ import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.NativeItemIdentity;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconCandidate;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Keeps the native identity intact, including dropSecondary keys with no default capabilities. */
-final class IconCandidate {
+final class IconCandidate implements IIconCandidate<IconCandidate> {
 
     final String context;
     private final AEKey nativeKey;
@@ -25,23 +26,31 @@ final class IconCandidate {
         this.nativeKey = nativeKey;
     }
 
+    @Override
+    public @NotNull String context() {
+        return context;
+    }
+
     static @Nullable IconCandidate item(@NotNull String context, @NotNull ItemStack stack) {
         AEItemKey key = AEItemKey.of(stack);
         return key == null ? null : new IconCandidate(context, key);
     }
 
+    @Override
     @NotNull
-    StableKey key() {
+    public StableKey key() {
         return NativeItemIdentity.getKey(nativeKey);
     }
 
+    @Override
     @Nullable
-    IconCandidate baseline() {
+    public IconCandidate baseline() {
         AEKey base = nativeKey.dropSecondary();
         return nativeKey.equals(base) ? null : new IconCandidate(context + "/base", base);
     }
 
-    boolean sameIdentity(@NotNull IconCandidate other) {
+    @Override
+    public boolean sameIdentity(@NotNull IconCandidate other) {
         return nativeKey.equals(other.nativeKey);
     }
 

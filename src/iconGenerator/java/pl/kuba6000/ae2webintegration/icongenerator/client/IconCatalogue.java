@@ -1,15 +1,19 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.BiConsumer;
 
+import net.minecraft.ReportedException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -17,24 +21,37 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import appeng.api.stacks.AEFluidKey;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconSource;
+import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
 
 /** Native registries and creative display/search entries, optionally unioned with a completed EMI index. */
-final class IconCatalogue {
+final class IconCatalogue implements IIconSource<IconCandidate> {
 
-    private final Iterator<Item> items;
-    private final Iterator<Fluid> fluids;
-    private final Iterator<CreativeModeTab> tabs;
+    private static final Logger LOG = LogManager.getLogger(IconGeneratorMod.MOD_ID);
+    private final Minecraft minecraft;
+    private final boolean emiInstalled;
+    private boolean useEmi;
+    private boolean emiUnavailable;
+    private boolean prepared;
+
+    private Iterator<Item> items = Collections.<Item>emptyList()
+        .iterator();
+    private Iterator<Fluid> fluids = Collections.emptyIterator();
+    private Iterator<CreativeModeTab> tabs = Collections.emptyIterator();
     private final FeatureFlagSet features;
-    private final @Nullable EmiCatalogue emi;
+    private @Nullable EmiCatalogue emi;
     private Iterator<ItemStack> variants = Collections.emptyIterator();
     private Iterator<ItemStack> searchVariants = Collections.emptyIterator();
-    private final long creativeRebuildNanos;
+    private long creativeRebuildNanos;
     private boolean done;
     private int emiIndex;
     private int nativeCandidates;
@@ -45,9 +62,39 @@ final class IconCatalogue {
     private int skippedDisabled;
     private String context = "native";
 
-    IconCatalogue(@NotNull Minecraft minecraft, @Nullable EmiCatalogue emi) {
-        this.emi = emi;
+    IconCatalogue(@NotNull Minecraft minecraft) {
+        this.minecraft = minecraft;
+        emiInstalled = ModList.get()
+            .isLoaded("emi");
         features = minecraft.level.enabledFeatures();
+    }
+
+    @Override
+    public @Nullable String prepare(@NotNull BiConsumer<String, Throwable> failures) {
+        if (prepared) return null;
+        try {
+            useEmi = emiInstalled;
+            emi = useEmi ? EmiCatalogue.ready() : null;
+            if (useEmi && emi == null && EmiCatalogue.failed()) {
+                throw new IllegalStateException(
+                    "EMI reload failed or is retrying; start a new export after EMI reload completes");
+            }
+        } catch (LinkageError failure) {
+            emiUnavailable = true;
+            useEmi = false;
+            String warning = "EMI catalogue unavailable (incompatible integration); exporting native items and fluids only";
+            LOG.warn(warning, failure);
+            if (minecraft.player != null) minecraft.player.displayClientMessage(Component.literal(warning), false);
+        }
+        if (useEmi && emi == null) {
+            return "Waiting for EMI to finish loading its full catalogue; /ae2webicons cancel to stop";
+        }
+        initialize();
+        prepared = true;
+        return null;
+    }
+
+    private void initialize() {
         long started = System.nanoTime();
         // Match ordinary creative visibility, without privileged operator entries.
         CreativeModeTabs.tryRebuildTabContents(features, false, minecraft.level.registryAccess());
@@ -70,12 +117,14 @@ final class IconCatalogue {
         fluids = registeredFluids.iterator();
     }
 
-    void verify() {
+    @Override
+    public void verify() {
         if (emi != null) emi.verify();
     }
 
+    @Override
     @Nullable
-    IconCandidate next() {
+    public IconCandidate next() {
         if (items.hasNext()) {
             Item item = items.next();
             context = "native/" + ForgeRegistries.ITEMS.getKey(item);
@@ -129,17 +178,20 @@ final class IconCatalogue {
         return IconCandidate.item(context, stack);
     }
 
-    boolean done() {
+    @Override
+    public boolean done() {
         return done;
     }
 
+    @Override
     @NotNull
-    String context() {
+    public String context() {
         return context;
     }
 
+    @Override
     @NotNull
-    Map<String, Long> counts() {
+    public Map<String, Long> counts() {
         Map<String, Long> counts = new TreeMap<>();
         counts.put("nativeCandidates", (long) nativeCandidates);
         counts.put("creativeCandidates", (long) creativeCandidates);
@@ -149,5 +201,23 @@ final class IconCatalogue {
         counts.put("skippedFeatureDisabled", (long) skippedDisabled);
         counts.put("creativeRebuildNanos", creativeRebuildNanos);
         return counts;
+    }
+
+    @Override
+    public @NotNull List<String> sources() {
+        String emiSource = useEmi ? "emi" : emiUnavailable ? "emi-unavailable" : "emi-absent";
+        return Arrays.asList("native", "creative", emiSource, "fluids");
+    }
+
+    @Override
+    public @NotNull String note() {
+        if (emiUnavailable) return " (EMI unavailable; native catalogue only)";
+        return "";
+    }
+
+    @Override
+    public @NotNull Throwable failureCause(@NotNull Throwable failure) {
+        if (failure instanceof EmiCatalogue.Changed changed) throw changed;
+        return failure instanceof ReportedException ? failure.getCause() : failure;
     }
 }

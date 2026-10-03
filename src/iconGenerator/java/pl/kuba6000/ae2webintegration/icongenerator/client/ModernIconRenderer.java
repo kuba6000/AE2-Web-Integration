@@ -33,11 +33,12 @@ import com.mojang.blaze3d.vertex.VertexSorting;
 
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
+import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Client-thread GUI capture; native model overrides and Forge custom item renderers remain authoritative. */
-final class ModernIconRenderer implements AutoCloseable {
+final class ModernIconRenderer implements IIconCapture<IconCandidate> {
 
     static final int ICON_SIZE = 64;
     private static final int GUI_SIZE = 16;
@@ -128,7 +129,7 @@ final class ModernIconRenderer implements AutoCloseable {
                     Throwable cause = failure instanceof ReportedException ? failure.getCause() : failure;
                     if (cause instanceof VirtualMachineError fatal) throw fatal;
                     if (cause instanceof ThreadDeath fatal) throw fatal;
-                    renderFailure = failure;
+                    renderFailure = cause;
                 } finally {
                     drawNanos += System.nanoTime() - started;
                     drawCount++;
@@ -205,11 +206,19 @@ final class ModernIconRenderer implements AutoCloseable {
         }
     }
 
-    void drain(@NotNull List<Capture> captures) {
+    @Override
+    public void capture(@NotNull IconCandidate candidate, @NotNull StableKey key, @NotNull List<Capture> captures)
+        throws RenderFailure {
+        candidate.render(this, key, captures);
+    }
+
+    @Override
+    public void drain(@NotNull List<Capture> captures) {
         readback.drain(captures);
     }
 
-    void statistics(@NotNull Map<String, Long> counts) {
+    @Override
+    public void statistics(@NotNull Map<String, Long> counts) {
         counts.put("renderSnapshotNanos", snapshotNanos);
         counts.put("renderSnapshotCount", snapshotCount);
         counts.put("renderSetupNanos", setupNanos);
@@ -236,13 +245,4 @@ final class ModernIconRenderer implements AutoCloseable {
         }
     }
 
-    static final class RenderFailure extends Exception {
-
-        final Throwable failure;
-
-        private RenderFailure(@NotNull Throwable failure) {
-            super("Native icon renderer failed", failure);
-            this.failure = failure instanceof ReportedException ? failure.getCause() : failure;
-        }
-    }
 }

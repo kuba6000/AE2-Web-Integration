@@ -1,13 +1,10 @@
 package pl.kuba6000.ae2webintegration.icongenerator.client;
 
-import java.io.IOException;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.function.BooleanSupplier;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.packs.FilePackResources;
@@ -19,23 +16,14 @@ import org.jetbrains.annotations.NotNull;
 
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.export.IMetadataSource;
-import pl.kuba6000.ae2webintegration.core.icons.export.ResourcePackFingerprint;
 import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
 
 /** Captures only paths and provenance on the client thread; file hashing belongs to the worker. */
-final class ExportEnvironment implements IMetadataSource {
+final class ExportEnvironment {
 
-    private final Map<String, String> mods;
-    private final List<Path> resourcePacks;
-    private final String generatedAt = Instant.now()
-        .toString();
+    private ExportEnvironment() {}
 
-    private ExportEnvironment(@NotNull Map<String, String> mods, @NotNull List<Path> resourcePacks) {
-        this.mods = mods;
-        this.resourcePacks = resourcePacks;
-    }
-
-    static @NotNull ExportEnvironment capture(@NotNull Minecraft minecraft) {
+    static @NotNull IMetadataSource capture(@NotNull Minecraft minecraft) {
         Map<String, String> mods = new TreeMap<>();
         ModList.get()
             .getMods()
@@ -59,24 +47,11 @@ final class ExportEnvironment implements IMetadataSource {
                             throw new IllegalStateException("Cannot fingerprint resource pack " + pack.packId());
                         }
             });
-        return new ExportEnvironment(mods, paths);
-    }
-
-    @Override
-    public @NotNull IconPack.Metadata create(@NotNull BooleanSupplier canceled) throws IOException {
-        List<String> fingerprints = new ArrayList<>();
-        for (Path pack : resourcePacks) fingerprints.add(
-            ResourcePackFingerprint.hash(pack, canceled)
-                .toString());
-        return new IconPack.Metadata(
-            "1.20.1",
-            "forge",
-            "ae2wi-modern-1.20.1-v1",
-            "ae2wi-modern-1.20.1-base-v1",
+        return IMetadataSource.fromFilesystem(
+            new IconPack.Target("1.20.1", "forge", "ae2wi-modern-1.20.1-v1", "ae2wi-modern-1.20.1-base-v1"),
             mods.get(IconGeneratorMod.MOD_ID),
-            generatedAt,
             mods,
-            fingerprints);
+            paths);
     }
 
     private static @NotNull Path backingPath(@NotNull PackResources pack) {
