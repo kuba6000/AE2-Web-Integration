@@ -748,6 +748,7 @@ export function mount(
         unsubscribe();
         slots.dispose();
         cpuView.dispose();
+        historyView.dispose();
         itemIcons.dispose();
         hideTooltip();
         window.removeEventListener('scroll', hideTooltip, true);

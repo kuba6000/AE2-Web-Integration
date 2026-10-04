@@ -5,6 +5,7 @@ import type { Translator as Locale } from '../../app/i18n.js';
 import { historyHref } from '../../app/router.js';
 import { renderHistoryTimeline } from './history-timeline.js';
 import { renderMinecraftText } from './minecraft-text.js';
+import { plainMinecraftText } from '../../app/minecraft-text.js';
 
 function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
@@ -17,15 +18,63 @@ export function createHistoryView(root: HTMLElement) {
     view.hidden = true;
     view.className = 'history-view';
     const title = element('h2');
+    const header = element('div');
+    header.className = 'terminal-heading';
+    header.append(title);
+    const body = element('div');
+    body.className = 'terminal-body';
     const status = element('p');
+    status.className = 'history-status';
     status.role = 'status';
+    const scroll = element('div');
+    scroll.className = 'terminal-scroll';
+    scroll.role = 'region';
+    scroll.tabIndex = 0;
     const list = element('ol');
     list.className = 'history-list';
     const detail = element('div');
-    const back = element('a');
-    view.append(title, status, list, detail, back);
+    detail.className = 'history-detail';
+    scroll.append(list, detail);
+    body.append(status, scroll);
+    view.append(header, body);
     root.append(view);
-    type HistoryRow = { li: HTMLLIElement; link: HTMLAnchorElement; time: HTMLParagraphElement };
+    const size = new ResizeObserver(() => {
+        const bounds = scroll.getBoundingClientRect();
+        if (bounds.width === 0) return;
+        const content = list.hidden ? detail : list;
+        view.style.setProperty(
+            '--grid-inset',
+            `${content.getBoundingClientRect().left - view.getBoundingClientRect().left}px`
+        );
+    });
+    size.observe(scroll);
+    type HistoryRow = ReturnType<typeof createRow>;
+
+    function createRow() {
+        const li = element('li');
+        const product = element('div');
+        product.className = 'history-product';
+        const link = element('a');
+        const quantity = element('span');
+        product.append(link, quantity);
+        const outcome = element('span');
+        outcome.className = 'history-outcome';
+        const timing = element('dl');
+        timing.className = 'history-timing';
+        const finished = element('div');
+        const finishedLabel = element('dt');
+        const time = element('time');
+        const finishedValue = element('dd');
+        finishedValue.append(time);
+        finished.append(finishedLabel, finishedValue);
+        const elapsed = element('div');
+        const elapsedLabel = element('dt');
+        const duration = element('dd');
+        elapsed.append(elapsedLabel, duration);
+        timing.append(finished, elapsed);
+        li.append(product, outcome, timing);
+        return { li, link, quantity, outcome, finishedLabel, time, elapsedLabel, duration };
+    }
 
     let entries: Map<HistoryEntry['id'], HistoryRow> = new Map();
 
@@ -38,6 +87,7 @@ export function createHistoryView(root: HTMLElement) {
             if (route.view !== 'history') return;
             const { common: t, number, dateTime } = locale;
             title.textContent = t('history');
+            scroll.setAttribute('aria-label', t('history'));
             status.textContent = state.error
                 ? t(state.error)
                 : state.status === 'loading'
@@ -48,23 +98,30 @@ export function createHistoryView(root: HTMLElement) {
                       ? ''
                       : t('historyEmpty');
             list.hidden = route.entryId !== null;
-            back.textContent = t(route.entryId !== null ? 'historyBack' : 'backResources');
-            back.href =
-                route.entryId !== null
-                    ? historyHref(route.gridKey)
-                    : `#/grids/${encodeURIComponent(route.gridKey)}/items`;
+            detail.hidden = route.entryId === null;
+            status.hidden = !status.textContent;
             const focused = document.activeElement as HTMLElement | null;
 
             const current: Map<HistoryEntry['id'], HistoryRow> = new Map();
             state.entries.forEach((entry, index) => {
-                const row = entries.get(entry.id) || { li: element('li'), link: element('a'), time: element('p') };
-                if (!row.link.parentNode) row.li.append(row.link, row.time);
+                const row = entries.get(entry.id) || createRow();
                 row.link.href = historyHref(route.gridKey, entry.id);
-                row.link.replaceChildren(
-                    renderMinecraftText(entry.finalOutput.itemname),
-                    ` × ${number(entry.finalOutput.quantity)} · #${entry.id}`
+                row.link.replaceChildren(renderMinecraftText(entry.finalOutput.itemname));
+                row.link.setAttribute(
+                    'aria-label',
+                    `${plainMinecraftText(entry.finalOutput.itemname)} × ${number(entry.finalOutput.quantity)} · #${entry.id}`
                 );
-                row.time.textContent = `${t(entry.wasCancelled ? 'historyCancelled' : 'historyCompleted')} · ${dateTime(entry.timeDone)}`;
+                row.link.title = `#${entry.id}`;
+                row.quantity.textContent = `× ${number(entry.finalOutput.quantity)}`;
+                row.outcome.textContent = t(entry.wasCancelled ? 'historyCancelled' : 'historyCompleted');
+                row.outcome.dataset.outcome = entry.wasCancelled ? 'cancelled' : 'completed';
+                row.finishedLabel.textContent = t('historyFinishedLabel');
+                row.time.textContent = dateTime(entry.timeDone);
+                row.time.dateTime = new Date(entry.timeDone).toISOString();
+                row.elapsedLabel.textContent = t('historyDurationLabel');
+                row.duration.textContent = t('seconds', {
+                    count: Math.max(0, entry.timeDone - entry.timeStarted) / 1000
+                });
                 if (list.children[index] !== row.li) list.insertBefore(row.li, list.children[index] || null);
                 current.set(entry.id, row);
             });
@@ -90,8 +147,8 @@ export function createHistoryView(root: HTMLElement) {
                 element('p', t('historyEnded', { time: dateTime(snapshot.timeDone) })),
                 element('p', t('cpuElapsed', { count: Math.max(0, snapshot.timeDone - snapshot.timeStarted) / 1000 }))
             );
-            const scroll = element('div');
-            scroll.className = 'plan-table';
+            const tableScroll = element('div');
+            tableScroll.className = 'plan-table';
             const table = element('table');
             const header = element('thead');
             const headings = element('tr');
@@ -125,9 +182,12 @@ export function createHistoryView(root: HTMLElement) {
                 body.append(row);
             }
             table.append(header, body);
-            scroll.append(table);
-            detail.append(scroll);
+            tableScroll.append(table);
+            detail.append(tableScroll);
             detail.append(renderHistoryTimeline(snapshot, locale));
+        },
+        dispose() {
+            size.disconnect();
         }
     };
 }

@@ -414,13 +414,95 @@ header {
     min-width: 0;
     overflow-wrap: anywhere;
 }
+.workspace:has(.history-view:not([hidden])) {
+    min-width: 0;
+}
 .history-list {
+    margin: 0;
     padding: 0;
     list-style: none;
 }
-.history-list li {
-    padding: 12px;
-    border-bottom: 1px solid var(--border);
+.history-list > li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px 20px;
+    padding: 18px 14px;
+    border-bottom: 2px solid var(--border);
+}
+.history-list > li:nth-child(odd) {
+    background: color-mix(in srgb, var(--slot) 25%, transparent);
+}
+.history-product {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    min-width: 0;
+    font-size: 15px;
+    line-height: 1.5;
+}
+.history-product a {
+    color: var(--terminal-title);
+    text-decoration: none;
+}
+.history-product a:hover {
+    text-decoration: underline;
+}
+.history-product > span {
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 12px;
+}
+.history-outcome {
+    align-self: start;
+    padding: 5px 7px;
+    font-size: 10px;
+    line-height: 1.5;
+    color: var(--surface-text);
+    background: var(--selected);
+}
+.history-outcome[data-outcome='cancelled'] {
+    background: color-mix(in srgb, var(--panel), var(--cpu-pending-tint));
+}
+.history-timing {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 36px;
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.5;
+}
+.history-timing dt {
+    color: var(--muted);
+    margin-bottom: 4px;
+}
+.history-timing dd {
+    margin: 0;
+}
+.history-detail {
+    padding: 0 14px 14px;
+}
+.history-detail > h3 {
+    margin-top: 4px;
+    font-size: 16px;
+    line-height: 1.5;
+}
+.history-detail > p,
+.history-detail > code {
+    font-size: 12px;
+    line-height: 1.6;
+}
+.history-detail .plan-table {
+    font-size: 12px;
+    line-height: 1.5;
+}
+.history-detail .plan-table th:first-child,
+.history-detail .plan-table td:first-child {
+    min-width: 190px;
+}
+.history-detail .plan-table td:not(:first-child) {
+    white-space: nowrap;
 }
 nav {
     display: flex;
@@ -800,7 +882,7 @@ label {
     padding-left: 0;
 }
 .with-terminal > .window-frame,
-.window-frame:has(> .cpu-view:not([hidden])) {
+.window-frame:has(> :is(.cpu-view, .history-view):not([hidden])) {
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -808,7 +890,8 @@ label {
 #terminal,
 .cpu-view,
 .cpu-overview,
-.cpu-terminal {
+.cpu-terminal,
+.history-view {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -829,12 +912,13 @@ label {
     color: var(--terminal-title);
     text-shadow: none;
 }
-.cpu-overview > .terminal-heading {
+:is(.cpu-overview, .history-view) > .terminal-heading {
     /* Keep the title centered at the same height as the terminal's search control. */
     min-height: 37px;
 }
 .cpu-list-status,
-.cpu-empty {
+.cpu-empty,
+.history-status {
     margin: 0 var(--grid-inset, 22px) 10px;
     color: var(--muted);
     font-size: 12px;
@@ -1330,6 +1414,13 @@ footer a {
         gap: 14px;
         margin-bottom: 18px;
     }
+    .history-list > li {
+        grid-template-columns: minmax(0, 1fr);
+        padding-inline: 10px;
+    }
+    .history-outcome {
+        justify-self: start;
+    }
     .preferences {
         justify-content: start;
     }
@@ -1357,7 +1448,7 @@ footer a {
         font-size: 12px;
         padding: 8px;
     }
-    .cpu-overview > .terminal-heading {
+    :is(.cpu-overview, .history-view) > .terminal-heading {
         min-height: 33px;
     }
     #app {
@@ -1402,7 +1493,7 @@ footer a {
     .search input {
         padding-block: 5px;
     }
-    .cpu-overview > .terminal-heading {
+    :is(.cpu-overview, .history-view) > .terminal-heading {
         min-height: 33px;
     }
     .terminal-body {
@@ -1416,7 +1507,7 @@ footer a {
     }
 }
 @media (max-width: 560px) and (max-height: 600px) {
-    .cpu-overview > .terminal-heading {
+    :is(.cpu-overview, .history-view) > .terminal-heading {
         min-height: 31px;
     }
 }

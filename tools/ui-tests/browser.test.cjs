@@ -1624,6 +1624,36 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
 
 // Public seam: history links retain runtime entry identity; completed detail is read-only
 // and its snapshot need not be refetched for ordinary polling.
+test('history rows keep product names primary and scroll beneath a stationary heading', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.history = Array.from({ length: 35 }, (_, index) => ({
+        ...historyEntry,
+        id: 100 + index,
+        wasCancelled: index % 2 === 0,
+        finalOutput: { ...iron, itemname: '§bLong precision assembly component', quantity: 12 + index }
+    }));
+    await page.goto(`${base}#/grids/${gridA}/history`);
+    const first = page.getByRole('link', { name: /Long precision assembly component.*#100/ });
+    await first.waitFor();
+    assert.doesNotMatch(await first.innerText(), /#100/, 'opaque job identity is not the primary title');
+    const region = page.getByRole('region', { name: 'History', exact: true });
+    const title = page.getByRole('heading', { name: 'History', exact: true });
+    const before = await title.boundingBox();
+    await region.hover();
+    await page.mouse.wheel(0, 900);
+    await page.waitForFunction(() => document.querySelector('[role="region"][aria-label="History"]').scrollTop > 0);
+    const after = await title.boundingBox();
+    assert.ok(Math.abs(before.y - after.y) < 1, 'history heading stays above its contained scroll');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    assert.equal(options.requests.filter((request) => /crafting-history\/\d+$/.test(request.path)).length, 0);
+    await first.focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).waitFor();
+    assert.match(page.url(), /\/history\/100$/);
+    await page.getByRole('link', { name: 'History', exact: true }).click();
+    await first.waitFor();
+});
+
 test('history preserves entry identity and opens measured cancelled work through direct routes', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     options.history = [{ ...historyEntry, id: 2 }, historyEntry];
@@ -1646,6 +1676,138 @@ test('history preserves entry identity and opens measured cancelled work through
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
 });
+
+test('history opens a deeply scrolled job at the start of its detail and preserves ordinary reading position', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.history = Array.from({ length: 30 }, (_, index) => ({ ...historyEntry, id: index + 1 }));
+    options.historyDetail = { ...historyDetail, items: Array.from({ length: 20 }, () => historyDetail.items[0]) };
+    await page.goto(`${base}#/grids/${gridA}/history`);
+    const last = page.getByRole('link', { name: /Iron Ingot.*#30$/ });
+    await last.scrollIntoViewIfNeeded();
+    const region = page.getByRole('region', { name: 'History', exact: true });
+    assert.ok(await region.evaluate((node) => node.scrollTop > 0));
+    await last.click();
+    await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).waitFor();
+    assert.equal(await region.evaluate((node) => node.scrollTop), 0, 'new detail starts at its summary');
+    await page.getByRole('region', { name: 'Smelter', exact: true }).scrollIntoViewIfNeeded();
+    const readingPosition = await region.evaluate((node) => node.scrollTop);
+    assert.ok(readingPosition > 0);
+    await poll(page);
+    assert.equal(
+        await region.evaluate((node) => node.scrollTop),
+        readingPosition,
+        'polling does not reset reading position'
+    );
+    await page.getByRole('link', { name: 'History', exact: true }).click();
+    await page.getByRole('link', { name: /Iron Ingot.*#1$/ }).waitFor();
+    assert.equal(await region.evaluate((node) => node.scrollTop), 0, 'return to the list starts at its beginning');
+});
+
+for (const appearance of ['light', 'dark']) {
+    test(`history list keeps its terminal alignment and readable rows on mobile in ${appearance} mode`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        options.history = Array.from({ length: 12 }, (_, index) => ({
+            ...historyEntry,
+            id: 100 + index,
+            wasCancelled: index % 2 === 0,
+            finalOutput: {
+                ...iron,
+                itemname: '§bPrecision assembly component with a long formatted name',
+                quantity: 12 + index
+            }
+        }));
+        await page.goto(`${base}#/web-settings`);
+        await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption(appearance);
+        const measure = (locator) =>
+            locator.evaluate((node) => {
+                const box = node.getBoundingClientRect(),
+                    style = getComputedStyle(node);
+                return { x: box.x, y: box.y, right: box.right, fontSize: style.fontSize, color: style.color };
+            });
+        for (const viewport of [
+            { width: 1184, height: 900 },
+            { width: 390, height: 844 }
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto(`${base}#/grids/${gridA}/items`);
+            await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+            const expected = await measure(page.getByRole('heading', { name: 'Terminal', exact: true }));
+            const expectedScroll = await measure(page.getByRole('region', { name: 'Resources', exact: true }));
+            await page.getByRole('link', { name: 'History', exact: true }).click();
+            const first = page.getByRole('link', { name: /Precision assembly.*#100/ });
+            await first.waitFor();
+            const heading = await measure(page.getByRole('heading', { name: 'History', exact: true }));
+            for (const key of ['x', 'y'])
+                assert.ok(Math.abs(heading[key] - expected[key]) < 0.1, `${key} history heading matches terminal`);
+            for (const key of ['fontSize', 'color']) assert.equal(heading[key], expected[key]);
+            const region = page.getByRole('region', { name: 'History', exact: true });
+            const actualScroll = await measure(region);
+            for (const key of ['x', 'y', 'right'])
+                assert.ok(Math.abs(actualScroll[key] - expectedScroll[key]) < 0.1, `${key} scroll viewport matches`);
+            const rows = region.getByRole('listitem');
+            assert.equal(await rows.count(), 12);
+            assert.deepEqual(
+                await rows.getByRole('link').evaluateAll((links) => links.map((link) => link.hash.split('/').at(-1))),
+                options.history.map((entry) => String(entry.id))
+            );
+            assert.equal(await rows.first().locator('time').getAttribute('datetime'), '2023-11-14T22:13:30.000Z');
+            for (const row of await rows.all()) {
+                const bounds = await row.evaluate((node) => ({ width: node.clientWidth, content: node.scrollWidth }));
+                assert.ok(bounds.content <= bounds.width + 1, 'long names and metadata fit their row');
+            }
+            await first.focus();
+            await poll(page);
+            assert.equal(await first.evaluate((node) => node === document.activeElement), true);
+            assert.equal(await page.getByRole('link', { name: 'Back to resources', exact: true }).count(), 0);
+            assert.ok(
+                await page.evaluate(
+                    () =>
+                        document.documentElement.scrollWidth <= innerWidth &&
+                        document.documentElement.scrollHeight <= innerHeight
+                )
+            );
+        }
+        if (process.env.UI_SCREENSHOT_DIR) {
+            await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+            await page.screenshot({
+                path: path.join(process.env.UI_SCREENSHOT_DIR, `history-mobile-${appearance}.png`)
+            });
+        }
+        await page.getByRole('link', { name: /Precision assembly.*#100/ }).click();
+        await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).waitFor();
+        const historyRegion = page.getByRole('region', { name: 'History', exact: true });
+        const provider = page.getByRole('region', { name: 'Smelter', exact: true });
+        await provider.getByText(/Intervals/).click();
+        await provider.locator('time').last().scrollIntoViewIfNeeded();
+        assert.ok(await historyRegion.evaluate((node) => node.scrollTop > 0));
+        assert.equal(await provider.locator('time').count(), 2);
+        assert.ok(
+            await page.evaluate(
+                () =>
+                    document.documentElement.scrollWidth <= innerWidth &&
+                    document.documentElement.scrollHeight <= innerHeight
+            )
+        );
+        if (process.env.UI_SCREENSHOT_DIR) {
+            await page.getByRole('heading', { name: /Iron Ingot/, level: 3 }).scrollIntoViewIfNeeded();
+            await page.screenshot({
+                path: path.join(process.env.UI_SCREENSHOT_DIR, `history-detail-mobile-${appearance}.png`)
+            });
+        }
+        options.history = [options.history[0]];
+        await page.getByRole('link', { name: 'History', exact: true }).click();
+        await page.reload();
+        await page.getByRole('link', { name: /Precision assembly.*#100/ }).waitFor();
+        assert.equal(await page.getByRole('region', { name: 'History', exact: true }).getByRole('listitem').count(), 1);
+        options.history = [];
+        await page.reload();
+        await page
+            .getByRole('status')
+            .filter({ hasText: /No crafting history/ })
+            .waitFor();
+        assert.equal(await page.getByRole('region', { name: 'History', exact: true }).getByRole('listitem').count(), 0);
+    });
+}
 
 // Public seam: an authorized grid user edits a draft and saves one explicit PATCH. Access
 // sources are grouped informational server text, never markup or an ownership gate.
