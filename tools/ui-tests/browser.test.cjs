@@ -3950,3 +3950,171 @@ test('a session lost before bootstrap returns to login with the destination inta
         false
     );
 });
+
+// Public rendered geometry: empty inventory cells follow the occupied grid, without becoming resources.
+for (const deviceScaleFactor of [1.25, 1.5]) {
+    test(`empty slot frames share occupied geometry without phantom resources at DPR ${deviceScaleFactor}`, async (t) => {
+        const { page, options, base } = await fixture(t, '', { deviceScaleFactor });
+        await atlasFixture(page, options);
+        options.itemsA = [iron, quartz, { ...iron, itemKey: 'gold', itemname: 'Gold Ingot' }];
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        const grid = page.locator('#items');
+        await grid.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+        await page.evaluate(() => document.fonts.ready);
+        for (const display of ['both', 'icons', 'names']) {
+            await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+            await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption(display);
+            await page.goto(`${base}#/grids/${gridA}/items`);
+            await grid.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+            for (const width of [997, 1031, 391]) {
+                await page.setViewportSize({ width, height: 844 });
+                await page.evaluate(
+                    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+                );
+                const geometry = await grid.evaluate((list) => {
+                    const bounds = list.getBoundingClientRect();
+                    const viewport = list.parentElement;
+                    const cells = [...list.children].map((cell) => {
+                        const control = cell.querySelector('button');
+                        const frame = control || cell;
+                        const rect = frame.getBoundingClientRect();
+                        const style = getComputedStyle(frame);
+                        return {
+                            x: rect.x - bounds.x,
+                            y: rect.y - bounds.y,
+                            width: rect.width,
+                            height: rect.height,
+                            real: !!control,
+                            hidden: cell.getAttribute('aria-hidden'),
+                            edges: [
+                                style.borderTopWidth,
+                                style.borderRightWidth,
+                                style.borderBottomWidth,
+                                style.borderLeftWidth,
+                                style.borderTopColor,
+                                style.borderRightColor,
+                                style.borderBottomColor,
+                                style.borderLeftColor
+                            ]
+                        };
+                    });
+                    return {
+                        cells,
+                        width: bounds.width,
+                        viewport: viewport.getBoundingClientRect().height,
+                        content: viewport.scrollHeight
+                    };
+                });
+                const real = geometry.cells.filter((cell) => cell.real);
+                const empty = geometry.cells.filter((cell) => !cell.real);
+                assert.equal(real.length, 3, 'decorative cells do not add resources');
+                assert.ok(empty.length > 0, 'the unoccupied viewport contains real decorative frames');
+                for (const cell of empty) {
+                    assert.equal(cell.hidden, 'true', 'empty cells are excluded from accessibility');
+                    assert.deepEqual(cell.edges, real[0].edges, 'empty and occupied frames use the same borders');
+                }
+                for (const cell of geometry.cells) {
+                    const row = geometry.cells.find((candidate) => Math.abs(candidate.y - cell.y) < 0.03);
+                    assert.ok(
+                        Math.abs(cell.y + cell.height - row.y - row.height) < 0.03,
+                        'occupied and decorative frames in a row share their bottom edge'
+                    );
+                }
+                const firstRow = geometry.cells.filter((cell) => Math.abs(cell.y) < 0.03);
+                for (let index = 1; index < firstRow.length; index++) {
+                    assert.ok(
+                        Math.abs(firstRow[index].x - firstRow[index - 1].x - firstRow[index - 1].width) < 0.03,
+                        'adjacent real and empty cells meet without gaps or overlap'
+                    );
+                }
+                assert.ok(
+                    Math.abs(firstRow.at(-1).x + firstRow.at(-1).width - geometry.width) < 0.03,
+                    'decorative frames follow the same final column edge'
+                );
+                const last = geometry.cells.at(-1);
+                assert.ok(
+                    last.y + last.height <= geometry.viewport + 0.1,
+                    'only complete empty rows fit inside the viewport'
+                );
+                assert.equal(await grid.getByRole('button').count(), 3);
+                assert.equal(await grid.getByRole('listitem').count(), 3);
+                const stable = await grid.evaluate((list) => ({
+                    count: list.children.length,
+                    height: list.parentElement.scrollHeight
+                }));
+                await page.evaluate(
+                    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+                );
+                assert.deepEqual(
+                    await grid.evaluate((list) => ({
+                        count: list.children.length,
+                        height: list.parentElement.scrollHeight
+                    })),
+                    stable,
+                    'fillers cannot increase their own required row count'
+                );
+            }
+        }
+    });
+}
+
+test('empty slots remain decorative through selection, zero matches and CPU row-height changes', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const grid = page.locator('#items');
+    const ironButton = grid.getByRole('button', { name: /Iron Ingot/ });
+    await ironButton.click();
+    await page.getByRole('heading', { name: 'Iron Ingot', exact: true }).waitFor();
+    const empty = grid.locator('li[aria-hidden="true"]').first();
+    await empty.waitFor({ state: 'visible' });
+    const bounds = await empty.boundingBox();
+    await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    assert.equal(await ironButton.getAttribute('aria-pressed'), 'true', 'empty cells cannot change selection');
+    assert.equal(await page.getByRole('tooltip').isVisible(), false, 'empty cells do not create tooltips');
+    const search = page.getByRole('searchbox', { name: 'Search resources' });
+    await search.fill('no matches');
+    assert.equal(await grid.getByRole('button').count(), 0);
+    await page.setViewportSize({ width: 1031, height: 844 });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.ok((await grid.locator('li[aria-hidden="true"]').count()) > 0, 'an empty result still has decorative rows');
+    assert.equal(await grid.getByRole('listitem').count(), 0);
+    assert.equal(
+        await grid.evaluate((list) => list.parentElement.scrollHeight > list.parentElement.clientHeight),
+        false
+    );
+    await search.fill('');
+    await ironButton.waitFor();
+    assert.equal(await grid.getByRole('button').count(), 2);
+
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const cpuResources = page.getByRole('region', { name: 'CPU resources', exact: true });
+    const cpuButton = cpuResources.getByRole('button', { name: /Iron Ingot/ });
+    await cpuButton.waitFor();
+    const trackedHeight = (await cpuButton.boundingBox()).height;
+    await cpuResources.locator('li[aria-hidden="true"]').first().waitFor({ state: 'visible' });
+    const cpuGeometry = () =>
+        cpuResources.evaluate((region) => {
+            const cells = [...region.querySelector('ul').children];
+            const control = cells[0].querySelector('button');
+            return {
+                real: control.getBoundingClientRect().height,
+                empty: cells
+                    .filter((cell) => cell.getAttribute('aria-hidden') === 'true')
+                    .map((cell) => cell.getBoundingClientRect().height)
+            };
+        });
+    let measured = await cpuGeometry();
+    assert.ok(measured.empty.every((height) => Math.abs(height - measured.real) < 0.03));
+    options.cpuDetails['cpu-a'] = { ...cpuWork, hasTrackingInfo: false };
+    const updated = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus/cpu-a'));
+    await poll(page);
+    await settleResponse(page, (await updated).request());
+    measured = await cpuGeometry();
+    assert.ok(measured.real < trackedHeight, 'untracked CPU rows preserve their more compact layout');
+    assert.ok(measured.empty.every((height) => Math.abs(height - measured.real) < 0.03));
+    assert.equal(await cpuResources.getByRole('button').count(), 1);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await ironButton.waitFor();
+    assert.equal(await grid.getByRole('button').count(), 2, 'returning to a hidden grid does not duplicate resources');
+});

@@ -14,6 +14,7 @@ import { createHistoryView } from './history.js';
 import { createSettingsView } from './settings.js';
 import { createAboutView } from './about.js';
 import { slotQuantity } from './resource-quantity.js';
+import { createSlotGrid } from './slot-grid.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 import { terminalIcons as symbols, craftingHammer } from './icons/pixel/terminal.js';
 import { userIcon } from './icons/hackernoon/user.js';
@@ -209,6 +210,7 @@ export function mount(
     > = root.querySelectorAll('.tool-button');
     const craftingView = createCraftingView(find('#window'), application);
     const itemIcons = application.icons.observe(find('#item-scroll'), paintResourceIcon);
+    const slots = createSlotGrid(find('#items'), find('#item-scroll'), find('#terminal'));
     const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace') });
     const historyView = createHistoryView(find('#window'));
     const settingsView = createSettingsView(find('#window'), application);
@@ -433,7 +435,7 @@ export function mount(
         const row = {
             item,
             li: element('li'),
-            button: element('button', '', 'item'),
+            button: element('button', '', 'item slot-frame'),
             name: element('strong'),
             quantity: element('span', '', 'quantity'),
             craftable: element('span', '', 'craftable-marker')
@@ -516,6 +518,7 @@ export function mount(
         find('#previous-page').disabled = page === 0;
         find('#next-page').disabled = (page + 1) * PAGE_SIZE >= allFiltered.length;
         find('#page-count').textContent = `${page + 1} / ${Math.max(1, Math.ceil(allFiltered.length / PAGE_SIZE))}`;
+        slots.update(rows.length);
     }
     function renderDetails() {
         const details = find('#details');
@@ -566,7 +569,6 @@ export function mount(
             iconSuggestionDismissed;
         if (changed) {
             renderPage();
-            updateSlotBackground();
             hideTooltip();
         }
     }
@@ -622,6 +624,7 @@ export function mount(
         historyView.render(state.route, state.history, locale);
         settingsView.render(state.route, state.settings, locale);
         aboutView.render(state.route, locale);
+        slots.update(rows.length);
         const gridKey = state.route.gridKey || state.selectedGridKey;
         find('#cpu-link').hidden = !gridKey;
         find('#terminal-link').hidden = !gridKey;
@@ -740,25 +743,10 @@ export function mount(
     window.addEventListener('scroll', hideTooltip, true);
     window.addEventListener('resize', hideTooltip);
     window.addEventListener('keydown', keydown);
-    // Paint empty slots using the same column width as the real resource grid.
-    const list = find('#items');
-    function updateSlotBackground() {
-        const width = list.getBoundingClientRect().width;
-        if (width === 0) return;
-        const columns = getComputedStyle(list).gridTemplateColumns.split(' ').length;
-        list.style.setProperty('--slot-width', `${width / columns}px`);
-        const terminal = find('#terminal');
-        terminal.style.setProperty(
-            '--grid-inset',
-            `${list.getBoundingClientRect().left - terminal.getBoundingClientRect().left}px`
-        );
-    }
-    const slotBackground = new ResizeObserver(updateSlotBackground);
-    slotBackground.observe(list);
     const unsubscribe = application.subscribe(render);
     return () => {
         unsubscribe();
-        slotBackground.disconnect();
+        slots.dispose();
         cpuView.dispose();
         itemIcons.dispose();
         hideTooltip();

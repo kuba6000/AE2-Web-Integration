@@ -11,6 +11,7 @@ import { renderMinecraftText } from './minecraft-text.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { terminalIcons, craftingHammer, craftingQueue, craftingPriorityIcon } from './icons/pixel/terminal.js';
 import { slotQuantity } from './resource-quantity.js';
+import { createSlotGrid } from './slot-grid.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 
 function element<Tag extends keyof HTMLElementTagNameMap>(
@@ -55,6 +56,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     scroll.tabIndex = 0;
     const grid = element('ul', '', 'resource-grid cpu-items');
     const icons = application.icons.observe(scroll, paintResourceIcon);
+    const slots = createSlotGrid(grid, scroll, terminal);
     const empty = element('p', '', 'cpu-empty');
     scroll.append(grid);
     body.append(scroll);
@@ -175,7 +177,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
 
     function createResourceRow(item: CpuItem) {
         const li = element('li');
-        const button = element('button', '', 'item cpu-item');
+        const button = element('button', '', 'item cpu-item slot-frame');
         button.type = 'button';
         const name = element('strong');
         const amounts = element('span', '', 'cpu-item-amounts');
@@ -355,6 +357,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         }
         for (const [key, row] of itemRows) if (!current.has(key)) row.li.remove();
         itemRows = current;
+        slots.update(itemRows.size);
         icons.update(
             [...itemRows.values()].map((row) => ({ element: row.button, icon: row.item.icon })),
             state.icons
@@ -389,16 +392,6 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         { signal: lifetime.signal }
     );
     window.addEventListener('resize', hideTooltip, { signal: lifetime.signal });
-    const slotBackground = new ResizeObserver(([entry]) => {
-        if (!entry || entry.contentRect.width === 0) return;
-        const columns = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
-        grid.style.setProperty('--slot-width', `${entry.contentRect.width / columns}px`);
-        terminal.style.setProperty(
-            '--grid-inset',
-            `${grid.getBoundingClientRect().left - terminal.getBoundingClientRect().left}px`
-        );
-    });
-    slotBackground.observe(grid);
 
     const outcomeText = (outcome: CpuOutcome | undefined) =>
         outcome?.uncertain
@@ -565,7 +558,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         dispose() {
             lifetime.abort();
             icons.dispose();
-            slotBackground.disconnect();
+            slots.dispose();
             hideTooltip();
             view.remove();
             tools.remove();
