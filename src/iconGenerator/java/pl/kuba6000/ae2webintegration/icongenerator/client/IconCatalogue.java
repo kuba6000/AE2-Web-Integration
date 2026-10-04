@@ -23,13 +23,13 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
 import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.fluids.FluidStack;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import appeng.api.stacks.AEFluidKey;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconSource;
 import pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod;
 
@@ -161,7 +161,7 @@ final class IconCatalogue implements IIconSource<IconCandidate> {
                 return null;
             }
             fluidCandidates++;
-            return new IconCandidate(context, AEFluidKey.of(fluid), registries);
+            return IconCandidate.fluid(context, new FluidStack(fluid, 1), registries);
         }
         done = true;
         return null;

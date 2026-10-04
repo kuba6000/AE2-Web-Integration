@@ -13,6 +13,7 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.neoforged.neoforge.fluids.FluidStack;
 
@@ -32,8 +33,6 @@ import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexSorting;
 
-import appeng.api.stacks.AEFluidKey;
-import appeng.api.stacks.AEItemKey;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCapture;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -76,14 +75,13 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
         }
     }
 
-    void item(@NotNull AEItemKey item, @NotNull StableKey key, @NotNull List<Capture> captures) throws RenderFailure {
-        capture(key, captures, graphics -> graphics.renderItem(item.toStack(), 0, 0));
+    void item(@NotNull ItemStack item, @NotNull StableKey key, @NotNull List<Capture> captures) throws RenderFailure {
+        capture(key, captures, graphics -> graphics.renderItem(item, 0, 0));
     }
 
-    void fluid(@NotNull AEFluidKey fluid, @NotNull StableKey key, @NotNull List<Capture> captures)
+    void fluid(@NotNull FluidStack stack, @NotNull StableKey key, @NotNull List<Capture> captures)
         throws RenderFailure {
         capture(key, captures, graphics -> {
-            FluidStack stack = fluid.toStack(1);
             IClientFluidTypeExtensions attributes = IClientFluidTypeExtensions.of(stack.getFluid());
             ResourceLocation still = attributes.getStillTexture(stack);
             if (still == null) throw new IllegalArgumentException("Fluid has no inventory sprite");

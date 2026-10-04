@@ -10,7 +10,6 @@ import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import appeng.api.stacks.AEFluidKey;
 import dev.emi.emi.api.EmiApi;
 import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.runtime.EmiReloadManager;
@@ -54,7 +53,7 @@ final class EmiCatalogue {
         if (key instanceof Fluid fluid) {
             FluidStack variant = new FluidStack(fluid, 1);
             variant.applyComponents(stack.getComponentChanges());
-            return new IconCandidate(context, AEFluidKey.of(variant), registries);
+            return IconCandidate.fluid(context, variant, registries);
         }
         throw new UnsupportedOperationException(
             "Unsupported EMI ingredient kind " + key.getClass()

@@ -6,15 +6,25 @@ import java.util.Optional;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
+import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import appeng.api.ids.AEComponents;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
+import appeng.api.stacks.AEKeyType;
+import appeng.core.definitions.AEItems;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Exact native AE key identity, including persistent addon data supported by native codecs. */
@@ -50,6 +60,55 @@ public final class NativeItemIdentity {
             sink.putInt(0);
             sink.putByte((byte) 1);
             CanonicalNbt.write(tag, sink);
+        });
+    }
+
+    /** Encodes the native item directly without creating an AE key or copying its stack. */
+    public static @NotNull StableKey getKey(@NotNull ItemStack stack, @NotNull HolderLookup.Provider registries) {
+        if (stack.isEmpty()) throw new IllegalArgumentException("Empty item has no identity");
+        CustomData original = stack.is(AEItems.MISSING_CONTENT.asItem())
+            ? stack.get(AEComponents.MISSING_CONTENT_AEKEY_DATA)
+            : null;
+        return getKey(
+            "item",
+            BuiltInRegistries.ITEM.getKey(stack.getItem())
+                .toString(),
+            AEKeyType.items()
+                .getId()
+                .toString(),
+            stack.getComponentsPatch(),
+            registries,
+            original == null ? null : original.getUnsafe());
+    }
+
+    /** Encodes the native fluid directly without creating an AE key or copying its stack. */
+    public static @NotNull StableKey getKey(@NotNull FluidStack stack, @NotNull HolderLookup.Provider registries) {
+        if (stack.isEmpty()) throw new IllegalArgumentException("Empty fluid has no identity");
+        return getKey(
+            "fluid",
+            BuiltInRegistries.FLUID.getKey(stack.getFluid())
+                .toString(),
+            AEKeyType.fluids()
+                .getId()
+                .toString(),
+            stack.getComponentsPatch(),
+            registries,
+            null);
+    }
+
+    private static @NotNull StableKey getKey(@NotNull String kind, @NotNull String id, @NotNull String type,
+        @NotNull DataComponentPatch patch, @NotNull HolderLookup.Provider registries, @Nullable CompoundTag original) {
+        checkPersistent(patch);
+        // Keep native component codecs; only their patch output needs a materialized tag.
+        Tag components = patch.isEmpty() ? null
+            : DataComponentPatch.CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), patch)
+                .getOrThrow();
+        return StableKey.create(sink -> {
+            StableKey.writeText(sink, kind);
+            StableKey.writeText(sink, id);
+            sink.putInt(0);
+            sink.putByte((byte) 1);
+            CanonicalNbt.writeResource(type, id, components, original, sink);
         });
     }
 
