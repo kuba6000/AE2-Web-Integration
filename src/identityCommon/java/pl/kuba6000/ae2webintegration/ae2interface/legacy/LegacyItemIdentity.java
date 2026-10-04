@@ -15,6 +15,7 @@ import net.minecraft.nbt.NBTTagIntArray;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.nbt.NBTTagString;
 import net.minecraftforge.common.util.Constants.NBT;
+import net.minecraftforge.fluids.FluidStack;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -35,6 +36,16 @@ public final class LegacyItemIdentity {
     private static final int MAX_NODES = 65536;
 
     private LegacyItemIdentity() {}
+
+    public static @NotNull StableKey encode(@NotNull FluidStack stack) {
+        // AE2UEL copies this tag without changing it and treats an empty compound as absent.
+        return encode(
+            "fluid",
+            stack.getFluid()
+                .getName(),
+            0,
+            stack.tag == null || stack.tag.isEmpty() ? null : stack.tag);
+    }
 
     public static @NotNull StableKey encode(@NotNull IAEStack<?> stack) {
         if (stack instanceof AEItemStack item) {

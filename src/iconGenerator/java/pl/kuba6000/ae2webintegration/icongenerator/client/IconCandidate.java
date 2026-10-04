@@ -3,13 +3,13 @@ package pl.kuba6000.ae2webintegration.icongenerator.client;
 import java.util.List;
 
 import net.minecraft.item.ItemStack;
+import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidStack;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import appeng.api.storage.data.IAEStack;
-import appeng.fluids.util.AEFluidStack;
+import appeng.util.Platform;
 import appeng.util.item.AEItemStack;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyIconBaseline;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
@@ -21,9 +21,14 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 final class IconCandidate implements IIconCandidate<IconCandidate> {
 
     private final String context;
-    private final IAEStack<?> nativeStack;
+    private final Object nativeStack;
 
-    private IconCandidate(@NotNull String context, @NotNull IAEStack<?> nativeStack) {
+    private IconCandidate(@NotNull String context, @NotNull AEItemStack nativeStack) {
+        this.context = context;
+        this.nativeStack = nativeStack;
+    }
+
+    private IconCandidate(@NotNull String context, @NotNull FluidStack nativeStack) {
         this.context = context;
         this.nativeStack = nativeStack;
     }
@@ -36,9 +41,8 @@ final class IconCandidate implements IIconCandidate<IconCandidate> {
         return key == null ? null : new IconCandidate(context, key);
     }
 
-    static @Nullable IconCandidate fluid(@NotNull String context, @NotNull FluidStack stack) {
-        AEFluidStack key = AEFluidStack.fromFluidStack(stack.copy());
-        return key == null ? null : new IconCandidate(context, key);
+    static @NotNull IconCandidate fluid(@NotNull String context, @NotNull FluidStack stack) {
+        return new IconCandidate(context, stack.copy());
     }
 
     @Override
@@ -48,25 +52,33 @@ final class IconCandidate implements IIconCandidate<IconCandidate> {
 
     @Override
     public @NotNull StableKey key() {
-        return LegacyItemIdentity.encode(nativeStack);
+        if (nativeStack instanceof AEItemStack item) return LegacyItemIdentity.encode(item);
+        return LegacyItemIdentity.encode((FluidStack) nativeStack);
     }
 
     @Override
     public boolean sameIdentity(@NotNull IconCandidate other) {
-        return nativeStack.equals(other.nativeStack);
+        if (nativeStack instanceof AEItemStack item) return item.equals(other.nativeStack);
+        if (!(other.nativeStack instanceof FluidStack otherFluid)) return false;
+        FluidStack fluid = (FluidStack) nativeStack;
+        // Use the same null/empty and numeric-tag equality as AE2UEL's AEFluidStack.
+        return fluid.getFluid() == otherFluid.getFluid() && Platform.itemComparisons()
+            .isNbtTagEqual(fluid.tag, otherFluid.tag);
     }
 
     @Override
     public @Nullable IconCandidate baseline() {
-        IAEStack<?> baseline;
-        if (nativeStack instanceof AEItemStack item) baseline = LegacyIconBaseline.item(item);
-        else baseline = LegacyIconBaseline.fluid((AEFluidStack) nativeStack);
-        return baseline == null ? null : new IconCandidate(context + "/base", baseline);
+        if (nativeStack instanceof AEItemStack item) {
+            AEItemStack baseline = LegacyIconBaseline.item(item);
+            return baseline == null ? null : new IconCandidate(context + "/base", baseline);
+        }
+        FluidStack fluid = (FluidStack) nativeStack;
+        return new IconCandidate(context + "/base", new FluidStack(fluid.getFluid(), Fluid.BUCKET_VOLUME));
     }
 
     void render(@NotNull LegacyIconRenderer renderer, @NotNull StableKey key, @NotNull List<Capture> captures)
         throws LegacyIconRenderer.RenderFailure {
         if (nativeStack instanceof AEItemStack item) renderer.item(item.asItemStackRepresentation(), key, captures);
-        else renderer.fluid(((AEFluidStack) nativeStack).getFluidStack(), key, captures);
+        else renderer.fluid(((FluidStack) nativeStack).copy(), key, captures);
     }
 }
