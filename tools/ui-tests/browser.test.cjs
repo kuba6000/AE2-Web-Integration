@@ -4248,3 +4248,78 @@ for (const appearance of ['light', 'dark']) {
         );
     });
 }
+
+// Public geometry seam: the CPU overview shares terminal alignment and keeps scrolling inside its viewport.
+test('CPU overview aligns with the terminal and scrolls only real processor panels', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const many = Object.fromEntries(
+        Array.from({ length: 18 }, (_, index) => [`cpu-${index}`, { ...cpu, name: `Processor ${index}` }])
+    );
+    const measure = async (locator) =>
+        locator.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            const style = getComputedStyle(node);
+            return {
+                x: rect.x,
+                y: rect.y,
+                right: rect.right,
+                fontSize: style.fontSize,
+                fontWeight: style.fontWeight,
+                fontFamily: style.fontFamily,
+                color: style.color
+            };
+        });
+    for (const viewport of [
+        { width: 1184, height: 900 },
+        { width: 390, height: 844 },
+        { width: 1184, height: 540 },
+        { width: 390, height: 540 }
+    ]) {
+        await page.setViewportSize(viewport);
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+        const heading = await measure(page.getByRole('heading', { name: 'Terminal', exact: true }));
+        const resources = await measure(page.getByRole('region', { name: 'Resources', exact: true }));
+        const items = await measure(page.locator('#items'));
+        options.cpus = many;
+        await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+        await page.getByRole('link', { name: /Processor 0 .*cpu-0/ }).waitFor();
+        const cpuHeading = page.getByRole('heading', { name: 'CPUs', exact: true });
+        const actual = await measure(cpuHeading);
+        for (const key of ['x', 'y'])
+            assert.ok(
+                Math.abs(actual[key] - heading[key]) < 0.1,
+                `${key} heading position matches at ${viewport.width}x${viewport.height}`
+            );
+        for (const key of ['fontSize', 'fontWeight', 'fontFamily', 'color']) assert.equal(actual[key], heading[key]);
+        assert.equal(await page.getByRole('link', { name: 'Back to resources', exact: true }).count(), 0);
+        const region = page.getByRole('region', { name: 'CPUs', exact: true });
+        const bounds = await measure(region);
+        for (const key of ['x', 'y', 'right'])
+            assert.ok(Math.abs(bounds[key] - resources[key]) < 0.1, `${key} scroll viewport matches`);
+        const cards = region.getByRole('listitem');
+        assert.equal(await cards.count(), 18);
+        const first = await measure(cards.first());
+        assert.ok(Math.abs(first.x - items.x) < 0.1, 'left card edge matches items');
+        const right = await cards.evaluateAll((nodes) =>
+            Math.max(...nodes.map((node) => node.getBoundingClientRect().right))
+        );
+        assert.ok(Math.abs(right - items.right) < 0.1, 'right card edge matches items');
+        await cards.last().getByRole('link').scrollIntoViewIfNeeded();
+        assert.ok(await region.evaluate((node) => node.scrollTop > 0));
+        assert.deepEqual(await measure(cpuHeading), actual, 'heading stays fixed while cards scroll');
+        assert.deepEqual(await page.evaluate(() => ({ x: scrollX, y: scrollY })), { x: 0, y: 0 });
+        assert.ok(
+            await page.evaluate(
+                () =>
+                    document.documentElement.scrollWidth <= innerWidth &&
+                    document.documentElement.scrollHeight <= innerHeight
+            )
+        );
+        options.cpus = { 'cpu-0': many['cpu-0'] };
+        const updated = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus'));
+        await poll(page);
+        await settleResponse(page, (await updated).request());
+        assert.equal(await cards.count(), 1, 'sparse overview has no decorative CPU placeholders');
+    }
+});

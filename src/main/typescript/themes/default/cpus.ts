@@ -32,12 +32,25 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     const view = element('section', '', 'cpu-view');
     view.hidden = true;
     const overview = element('div', '', 'cpu-overview');
+    const overviewHeader = element('div', '', 'terminal-heading');
     const title = element('h2');
-    const listStatus = element('p');
+    overviewHeader.append(title);
+    const overviewBody = element('div', '', 'terminal-body');
+    const listStatus = element('p', '', 'cpu-list-status');
     listStatus.role = 'status';
+    const listScroll = element('div', '', 'terminal-scroll');
+    listScroll.role = 'region';
+    listScroll.tabIndex = 0;
     const list = element('ul', '', 'cpu-list');
-    const resources = element('a');
-    overview.append(title, listStatus, list, resources);
+    listScroll.append(list);
+    overviewBody.append(listStatus, listScroll);
+    overview.append(overviewHeader, overviewBody);
+    const overviewSize = new ResizeObserver(() => {
+        const bounds = list.getBoundingClientRect();
+        if (bounds.width === 0) return;
+        overview.style.setProperty('--grid-inset', `${bounds.left - overview.getBoundingClientRect().left}px`);
+    });
+    overviewSize.observe(listScroll);
     const terminal = element('section', '', 'cpu-terminal');
     const header = element('div', '', 'terminal-heading');
     const heading = element('h2');
@@ -531,7 +544,6 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             locale = nextLocale;
             const selected = route.view === 'cpus' && !!route.cpuKey;
             view.hidden = route.view !== 'cpus';
-            view.classList.toggle('cpu-detail-active', selected);
             overview.hidden = selected;
             terminal.hidden = !selected;
             tools.hidden = !selected;
@@ -549,13 +561,15 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             if (route.view !== 'cpus') return;
             const t = locale.common;
             title.textContent = t('cpus');
-            resources.textContent = t('backResources');
-            resources.href = `#/grids/${encodeURIComponent(route.gridKey)}/items`;
+            listScroll.setAttribute('aria-label', t('cpus'));
             listStatus.textContent = state.error
                 ? t(state.error)
                 : state.status === 'loading'
                   ? t('loading')
-                  : t(state.cpus.length ? 'selectCpuWork' : 'noCpus');
+                  : state.cpus.length
+                    ? ''
+                    : t('noCpus');
+            listStatus.hidden = !listStatus.textContent;
             if (!selected) {
                 const current: Map<string, CpuRow> = new Map();
                 for (const cpu of state.cpus) {
@@ -612,6 +626,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         },
         dispose() {
             lifetime.abort();
+            overviewSize.disconnect();
             icons.dispose();
             slots.dispose();
             hideTooltip();
