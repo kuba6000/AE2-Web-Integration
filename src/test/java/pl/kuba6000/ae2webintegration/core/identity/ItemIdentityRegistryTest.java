@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class ItemIdentityRegistryTest {
@@ -20,8 +21,8 @@ class ItemIdentityRegistryTest {
     @Test
     void cpuAndInventorySnapshotsRetainIndependentResourcesAndShareBaseMemo() {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
-        IAEGrid grid = grid();
-        ICraftingCPUCluster cpu = (ICraftingCPUCluster) Proxy.newProxyInstance(
+        IIdentityHolder grid = grid();
+        IIdentityHolder cpu = (ICraftingCPUCluster) Proxy.newProxyInstance(
             ICraftingCPUCluster.class.getClassLoader(),
             new Class<?>[] { ICraftingCPUCluster.class },
             (proxy, method, args) -> null);
