@@ -130,7 +130,7 @@ public class AE2JobTracker {
             if (data == null || !data.getSettings()
                 .isTracked()) return;
         }
-        JSON_Stack finalOutput = JSON_Stack.capture(grid, cpuCluster.web$getFinalOutput());
+        JSON_Stack finalOutput = JSON_Stack.capture(grid, cpuCluster.web$getFinalOutput(), CoreEngine.getIconPack());
         if (finalOutput == null) {
             trackingInfoMap.remove(cpuCluster);
             return;

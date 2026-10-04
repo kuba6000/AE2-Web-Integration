@@ -458,10 +458,17 @@ header {
 .history-list > li > a:hover .history-name {
     text-decoration: underline;
 }
-.history-product > span:not(.history-name) {
+.history-product > span:not(.history-name, .resource-icon) {
     white-space: nowrap;
     color: var(--muted);
     font-size: 12px;
+}
+.product-icons-enabled :is(.history-product, .cpu-card-output-value) {
+    align-items: center;
+}
+.product-icons-enabled :is(.history-name, .cpu-card-output-value strong) {
+    flex: 1 1 120px;
+    min-width: 0;
 }
 .history-outcome {
     align-self: start;
@@ -1051,7 +1058,8 @@ label {
     display: none;
 }
 .resource-icons-enabled .resource-icon,
-.cpu-icons-enabled .cpu-item .resource-icon {
+.cpu-icons-enabled .cpu-item .resource-icon,
+.product-icons-enabled :is(.cpu-card-output-value, .history-product) .resource-icon {
     display: grid;
     place-items: center;
     font-size: 24px;
@@ -1064,7 +1072,8 @@ label {
     outline: 1px dashed var(--border);
 }
 .resource-icons-enabled .resource-icon-ready,
-.cpu-icons-enabled .cpu-item .resource-icon-ready {
+.cpu-icons-enabled .cpu-item .resource-icon-ready,
+.product-icons-enabled :is(.cpu-card-output-value, .history-product) .resource-icon-ready {
     outline: none;
 }
 .resource-icons-enabled .item,

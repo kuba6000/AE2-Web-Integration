@@ -11,12 +11,17 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -56,16 +61,22 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/cpus")
 public final class GetCPUList extends ISyncedRequest {
 
+    /** Include product icon references and atlas metadata; omitted means false. */
+    @QueryParam("icons")
+    private boolean icons;
+
     /**
      * Successful operation result.
      * 
      * @param status {@code OK} for a successful request
      * @param data   CPU summaries keyed by stable CPU identifier; empty when the grid has no crafting CPUs
+     * @param icons  atlas metadata for product references; null when not requested or no pack is available
      * @example status OK
      * @keyExample data AQEBAQEBAQEBAQEBAQEBAQ
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull Map<StableKey, CpuInfo> data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull Map<StableKey, CpuInfo> data,
+        @Nullable IconMappings icons) {}
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
@@ -90,6 +101,8 @@ public final class GetCPUList extends ISyncedRequest {
         public boolean isPaused;
         /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
         public @Nullable JSON_Stack finalOutput;
+        /** Product atlas reference; null when not requested, idle, unavailable, or absent from the pack. */
+        public @Nullable IconMappings.Reference icon;
         /**
          * Total CPU crafting storage in bytes.
          *
@@ -147,6 +160,8 @@ public final class GetCPUList extends ISyncedRequest {
             return;
         }
         Map<StableKey, ICraftingCPUCluster> clusters = getCPUList(grid.web$getCraftingGrid());
+        IconPack pack = icons ? CoreEngine.getIconPack() : null;
+        IconMappings mappings = pack == null ? null : new IconMappings(pack);
         LinkedHashMap<StableKey, CpuInfo> cpuList = new LinkedHashMap<>(clusters.size());
         for (Map.Entry<StableKey, ICraftingCPUCluster> entry : clusters.entrySet()) {
             CpuInfo cpuInfo = new CpuInfo();
@@ -161,6 +176,14 @@ public final class GetCPUList extends ISyncedRequest {
                 && pausable.web$isPaused();
             if (cpuInfo.isBusy) {
                 cpuInfo.finalOutput = JSON_Stack.capture(grid, cluster.web$getFinalOutput());
+                if (mappings != null && cpuInfo.finalOutput != null && cpuInfo.finalOutput.itemKey != null) {
+                    try {
+                        cpuInfo.icon = mappings
+                            .resolve(StableKey.parse(cpuInfo.finalOutput.itemKey), AE2Controller.itemIdentities);
+                    } catch (RuntimeException ignored) {
+                        // Optional icon failures must not hide the CPU or its output.
+                    }
+                }
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cluster);
                 if (trackingInfo != null) {
                     cpuInfo.hasTrackingInfo = true;
@@ -169,7 +192,7 @@ public final class GetCPUList extends ISyncedRequest {
             }
             cpuList.put(entry.getKey(), cpuInfo);
         }
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, cpuList));
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, cpuList, mappings));
     }
 
 }

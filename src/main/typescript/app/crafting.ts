@@ -87,7 +87,7 @@ export function createCrafting(api: Api, changed: () => void) {
             if (state.plan.isDone) {
                 const cpus = await api.cpus(current.gridKey, request.signal);
                 if (version !== generation) return;
-                state.cpus = Object.entries(cpus).map(([key, cpu]) => ({ ...cpu, key, eligible: eligible(cpu) }));
+                state.cpus = Object.entries(cpus.data).map(([key, cpu]) => ({ ...cpu, key, eligible: eligible(cpu) }));
                 if (state.selectedCpu && !state.cpus.some((cpu) => cpu.key === state.selectedCpu && cpu.eligible))
                     state.selectedCpu = '';
                 if (!selectedOnce) {

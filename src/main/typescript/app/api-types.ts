@@ -37,6 +37,7 @@ export type Grid = {
 };
 export type GridSettings = { isTracked: boolean };
 export type CpuInfo = {
+    icon?: IconReference | null;
     name: string;
     isBusy: boolean;
     supportsPause: boolean;
@@ -84,6 +85,7 @@ export type PlanItem = {
 };
 export type Plan = { isDone: boolean; isSimulating: boolean; bytesTotal: number; plan: PlanItem[] | null };
 export type HistoryEntry = {
+    icon?: IconReference | null;
     timeStarted: number;
     timeDone: number;
     wasCancelled: boolean;

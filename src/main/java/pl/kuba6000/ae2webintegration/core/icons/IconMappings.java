@@ -13,7 +13,7 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
-/** One response's compact page table, built on the server thread from one immutable pack snapshot. */
+/** One response's compact page table, built from one immutable pack snapshot and confined to its response thread. */
 public final class IconMappings {
 
     public final @NotNull String packId;
@@ -34,13 +34,24 @@ public final class IconMappings {
         this.packId = pack.packId();
     }
 
-    /** Exact matches never ask the native adapter to construct a base identity. */
+    /** Server-thread lookup: exact matches never ask the native adapter to construct a base identity. */
     public @Nullable Reference resolve(@NotNull StableKey key, @NotNull ItemIdentityRegistry registry) {
         IconPack.Location location = pack.find(key);
         if (location == null) {
             StableKey base = registry.resolveIconBase(key);
             if (base != null) location = pack.find(base);
         }
+        return reference(location);
+    }
+
+    /** Detached lookup safe for asynchronous history responses; exact identity takes precedence. */
+    public @Nullable Reference resolve(@NotNull StableKey key, @Nullable StableKey base) {
+        IconPack.Location location = pack.find(key);
+        if (location == null && base != null) location = pack.find(base);
+        return reference(location);
+    }
+
+    private @Nullable Reference reference(@Nullable IconPack.Location location) {
         if (location == null) return null;
         IconPack.Page page = location.page;
         Integer index = pageIndexes.get(page.digest);

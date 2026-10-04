@@ -65,12 +65,16 @@ export function createTerminal(
             notify();
             schedule();
         },
-        () => state.iconPack.available === true
+        () => iconsEnabled && state.iconPack.available === true
     );
-    const history = createHistory(api, () => {
-        notify();
-        schedule();
-    });
+    const history = createHistory(
+        api,
+        () => {
+            notify();
+            schedule();
+        },
+        () => iconsEnabled && state.iconPack.available === true
+    );
     const settings = createGridSettings(api, () => {
         notify();
         schedule();
@@ -167,20 +171,17 @@ export function createTerminal(
                 (pack.available && iconPackId !== pack.packId);
             state.iconPack = { available: pack.available, status: 'ready' };
             iconPackId = pack.packId;
-            icons.enabled(pack.available);
-            if (!pack.available) {
+            icons.enabled(iconsEnabled && pack.available);
+            if (changed) {
                 state.itemIcons = null;
-                state.cpus.icons = null;
+                cpus.invalidateIcons();
+                history.invalidateIcons();
             }
             notify();
             if (changed) {
                 void loadItems();
-                if (
-                    state.gridStatus === 'ready' &&
-                    state.route.view === 'cpus' &&
-                    state.grids.some((grid) => grid.key === state.route.gridKey)
-                )
-                    void cpus.refreshIcons();
+                void loadCpus();
+                if (state.route.view === 'history' && state.route.entryId === null) void loadHistory();
             }
         } catch (caught) {
             if (disposed || request !== iconRequest || (caught as ApiFailure).name === 'AbortError') return;
@@ -270,7 +271,12 @@ export function createTerminal(
             if (iconsEnabled === enabled) return;
             iconsEnabled = enabled;
             state.itemIcons = null;
-            loadItems();
+            cpus.invalidateIcons();
+            history.invalidateIcons();
+            icons.enabled(enabled && state.iconPack.available === true);
+            void loadItems();
+            void loadCpus();
+            if (state.route.view === 'history' && state.route.entryId === null) void loadHistory();
             notify();
         },
         subscribe(listener: (state: TerminalState) => void) {

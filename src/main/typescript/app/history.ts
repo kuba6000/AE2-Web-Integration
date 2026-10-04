@@ -1,4 +1,4 @@
-import type { HistoryEntry, HistoryDetail } from './api-types.js';
+import type { HistoryEntry, HistoryDetail, IconMetadata } from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
 
@@ -6,17 +6,25 @@ export type HistoryState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     entries: HistoryEntry[];
     detail: HistoryDetail | null;
+    icons: IconMetadata | null;
     error: string | null;
 };
 /** Completed history snapshots are read on entry or explicit refresh, not on each polling tick. */
-export function createHistory(api: Api, changed: () => void) {
-    const state: HistoryState = { status: 'idle', entries: [], detail: null, error: null };
+export function createHistory(api: Api, changed: () => void, iconsEnabled: () => boolean) {
+    const state: HistoryState = { status: 'idle', entries: [], detail: null, icons: null, error: null };
     let route: Route | { view?: undefined; gridKey?: undefined } = {};
     let generation = 0;
     let request: AbortController | undefined;
     let reading = false;
     return {
         state,
+        invalidateIcons() {
+            state.icons = null;
+            if (route.view !== 'history' || route.entryId !== null) return;
+            generation++;
+            request?.abort();
+            reading = false;
+        },
         route(next: Route) {
             generation++;
             request?.abort();
@@ -26,6 +34,7 @@ export function createHistory(api: Api, changed: () => void) {
                 status: next.view === 'history' ? 'loading' : 'idle',
                 entries: [],
                 detail: null,
+                icons: null,
                 error: null
             });
         },
@@ -42,9 +51,10 @@ export function createHistory(api: Api, changed: () => void) {
                     if (version !== generation) return;
                     state.detail = data;
                 } else {
-                    const data = await api.history(current.gridKey, request.signal);
+                    const data = await api.history(current.gridKey, request.signal, iconsEnabled());
                     if (version !== generation) return;
-                    state.entries = data;
+                    state.entries = data.data;
+                    state.icons = data.icons;
                 }
                 state.status = 'ready';
                 state.error = null;
@@ -55,6 +65,7 @@ export function createHistory(api: Api, changed: () => void) {
                     status: 'error',
                     entries: [],
                     detail: null,
+                    icons: null,
                     error: error.status || 'NETWORK_ERROR'
                 });
             } finally {
@@ -68,7 +79,7 @@ export function createHistory(api: Api, changed: () => void) {
             generation++;
             request?.abort();
             reading = false;
-            Object.assign(state, { status: 'error', entries: [], detail: null, error });
+            Object.assign(state, { status: 'error', entries: [], detail: null, icons: null, error });
             changed();
         },
         dispose() {

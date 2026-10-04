@@ -19,6 +19,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
@@ -44,6 +45,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 /** Public HTTP and server lifecycle contract; generated packs use the public archive writer. */
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -380,6 +382,8 @@ class IconDeliveryHttpTest {
                 case "web$isBusy" -> busy.get();
                 case "web$getName" -> "CPU";
                 case "web$getAvailableStorage" -> 1024L;
+                case "web$getUsedStorage", "web$getCoProcessors" -> 0L;
+                case "web$getFinalOutput" -> resource;
                 case "web$getActiveItems" -> 6L;
                 case "web$getPendingItems" -> 2L;
                 case "web$getStorageItems" -> 3L;
@@ -416,11 +420,31 @@ class IconDeliveryHttpTest {
         };
         String gridPath = "/api/grids/" + TestGridFixtures.resolvedKey(grid);
         String path = gridPath + "/cpus/" + cpuKey;
+        JsonObject overview = syncedJson(gridPath + "/cpus");
+        assertTrue(
+            overview.get("icons")
+                .isJsonNull());
+        assertEquals(0, normalizations.get());
+        JsonObject enabledOverview = syncedJson(gridPath + "/cpus?icons=true");
+        JsonObject product = enabledOverview.getAsJsonObject("data")
+            .getAsJsonObject(cpuKey.toString());
+        assertNotNull(product.getAsJsonObject("icon"));
+        assertEquals(
+            7,
+            product.getAsJsonObject("finalOutput")
+                .get("quantity")
+                .getAsLong());
+        assertEquals(
+            packId,
+            enabledOverview.getAsJsonObject("icons")
+                .get("packId")
+                .getAsString());
+        assertEquals(1, normalizations.get());
         JsonObject plain = syncedJson(path);
         assertTrue(
             plain.has("icons") && plain.get("icons")
                 .isJsonNull());
-        assertEquals(0, normalizations.get());
+        assertEquals(1, normalizations.get());
         for (int poll = 0; poll < 2; poll++) {
             JsonObject response = syncedJson(path + "?icons=true");
             assertEquals(
@@ -460,6 +484,14 @@ class IconDeliveryHttpTest {
         }
         assertEquals(1, normalizations.get());
         busy.set(false);
+        JsonObject idle = syncedJson(gridPath + "/cpus?icons=true").getAsJsonObject("data")
+            .getAsJsonObject(cpuKey.toString());
+        assertTrue(
+            idle.get("icon")
+                .isJsonNull());
+        assertTrue(
+            idle.get("finalOutput")
+                .isJsonNull());
         assertTrue(
             syncedJson(path + "?icons=true").getAsJsonObject("data")
                 .get("items")
@@ -477,6 +509,142 @@ class IconDeliveryHttpTest {
                 return Arrays.asList(rows);
             }
         };
+    }
+
+    @Test
+    void historyIconsSurviveNativeAndRegistryRetirementWithMergedOutput() throws Exception {
+        StableKey exact = TestGridFixtures.key(101);
+        StableKey base = TestGridFixtures.key(102);
+        installPack(exact, base);
+        CoreEngine.onServerStarted();
+        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(103);
+        AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
+        TestGridFixtures.track(grid);
+        AtomicBoolean unavailable = new AtomicBoolean();
+        AtomicInteger normalizations = new AtomicInteger();
+        AtomicReference<IAEGenericStack> output = new AtomicReference<>();
+        Thread serverThread = Thread.currentThread();
+        IAEGenericStack exactOutput = null;
+        ICraftingCPUCluster cpu = (ICraftingCPUCluster) Proxy.newProxyInstance(
+            getClass().getClassLoader(),
+            new Class<?>[] { ICraftingCPUCluster.class },
+            (proxy, method, args) -> {
+                assertFalse(unavailable.get(), "Native CPU accessed after history publication");
+                return switch (method.getName()) {
+                    case "web$getFinalOutput" -> output.get();
+                    case "web$getName" -> "History CPU";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new AssertionError(method.getName());
+                };
+            });
+        for (int index = 0; index < 3; index++) {
+            final int variant = index;
+            IAEKey key = (IAEKey) Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class<?>[] { IAEKey.class },
+                (proxy, method, args) -> {
+                    assertFalse(unavailable.get(), "Native identity accessed after history publication");
+                    assertSame(serverThread, Thread.currentThread(), "Native identity accessed from HTTP worker");
+                    return switch (method.getName()) {
+                        case "web$getKey" -> variant == 0 ? exact : TestGridFixtures.key(104 + variant);
+                        case "web$copyIdentity" -> proxy;
+                        case "web$getItemID", "web$getDisplayName" -> "product-" + variant;
+                        case "web$getIconBaseKey" -> {
+                            normalizations.incrementAndGet();
+                            if (variant == 2) throw new IllegalStateException("Unsupported base identity");
+                            yield base;
+                        }
+                        case "hashCode" -> System.identityHashCode(proxy);
+                        case "equals" -> proxy == args[0];
+                        default -> throw new AssertionError(method.getName());
+                    };
+                });
+            output.set(new IAEGenericStack() {
+
+                public @NotNull IAEKey web$what() {
+                    assertFalse(unavailable.get());
+                    return key;
+                }
+
+                public long web$amount() {
+                    assertFalse(unavailable.get());
+                    return 10 + variant;
+                }
+            });
+            if (index == 0) exactOutput = output.get();
+            if (index == 1) {
+                // A merge replaces both the previous exact identity and its output data.
+                AE2JobTracker.addJob(cpu, grid, true);
+            } else {
+                AE2JobTracker.addJob(cpu, grid, false);
+            }
+            if (index != 0) AE2JobTracker.completeCrafting(grid, cpu);
+        }
+        // Also retain an exact-match job independently of the merged fallback job.
+        output.set(exactOutput);
+        AE2JobTracker.addJob(cpu, grid, false);
+        AE2JobTracker.completeCrafting(grid, cpu);
+        assertEquals(2, normalizations.get(), "Only missing exact icons normalize, once during capture");
+        unavailable.set(true);
+        AE2Controller.itemIdentities.clear();
+        String path = "/api/grids/" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "/crafting-history";
+        JsonObject response = json(connection(path + "?icons=true"));
+        assertEquals(
+            packId,
+            response.getAsJsonObject("icons")
+                .get("packId")
+                .getAsString());
+        assertEquals(
+            1,
+            response.getAsJsonObject("icons")
+                .getAsJsonArray("pages")
+                .size());
+        assertEquals(
+            3,
+            response.getAsJsonArray("data")
+                .size());
+        for (com.google.gson.JsonElement entry : response.getAsJsonArray("data")) {
+            JsonObject row = entry.getAsJsonObject();
+            JsonObject product = row.getAsJsonObject("finalOutput");
+            assertEquals(
+                4,
+                product.entrySet()
+                    .size(),
+                "Detached icon identity is not part of the stack wire contract");
+            assertFalse(
+                product.get("itemKey")
+                    .isJsonNull(),
+                "Base failure preserves exact identity");
+            boolean missing = product.get("itemid")
+                .getAsString()
+                .equals("product-2");
+            assertEquals(
+                missing,
+                row.get("icon")
+                    .isJsonNull());
+            if (product.get("itemid")
+                .getAsString()
+                .equals("product-1")) {
+                assertEquals(
+                    11,
+                    product.get("quantity")
+                        .getAsLong());
+            }
+        }
+        for (String suffix : new String[] { "", "?icons=false" }) {
+            JsonObject plain = json(connection(path + suffix));
+            assertTrue(
+                plain.get("icons")
+                    .isJsonNull());
+            for (com.google.gson.JsonElement entry : plain.getAsJsonArray("data")) {
+                assertTrue(
+                    entry.getAsJsonObject()
+                        .get("icon")
+                        .isJsonNull());
+            }
+        }
+        assertEquals(2, normalizations.get());
     }
 
     @SuppressWarnings("BusyWait")

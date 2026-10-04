@@ -212,7 +212,7 @@ export function mount(
     const itemIcons = application.icons.observe(find('#item-scroll'), paintResourceIcon);
     const slots = createSlotGrid(find('#items'), find('#item-scroll'), find('#terminal'));
     const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace') });
-    const historyView = createHistoryView(find('#window'));
+    const historyView = createHistoryView(find('#window'), application);
     const settingsView = createSettingsView(find('#window'), application);
     const aboutView = createAboutView(find('#window'), modVersion);
     find('#legacy').href = base.href;
@@ -561,7 +561,8 @@ export function mount(
                     : '';
         find('#items').dataset.display = effectiveDisplay;
         find('#items').classList.toggle('resource-icons-enabled', effectiveDisplay !== 'names');
-        find('#workspace').classList.toggle('cpu-icons-enabled', available === true);
+        find('#workspace').classList.toggle('cpu-icons-enabled', effectiveDisplay !== 'names');
+        find('#workspace').classList.toggle('product-icons-enabled', effectiveDisplay !== 'names');
         find('#icon-notice').hidden =
             state.route.view !== 'items' ||
             effectiveDisplay !== 'names' ||

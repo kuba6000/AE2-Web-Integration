@@ -43,6 +43,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     listScroll.tabIndex = 0;
     const list = element('ul', '', 'cpu-list');
     listScroll.append(list);
+    const overviewIcons = application.icons.observe(listScroll, paintResourceIcon);
     overviewBody.append(listStatus, listScroll);
     overview.append(overviewHeader, overviewBody);
     const overviewSize = new ResizeObserver(() => {
@@ -478,6 +479,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         const work = element('div', '', 'cpu-card-output');
         const outputLabel = element('p', '', 'cpu-card-label');
         const output = element('p', '', 'cpu-card-output-value');
+        const icon = createResourceIcon();
         work.append(outputLabel, output);
         const metrics = element('dl', '', 'cpu-card-metrics');
         const fields = ['cpuCapacityLabel', 'cpuUsedStorageLabel', 'cpuCoprocessorsLabel'].map((label) => {
@@ -496,7 +498,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         const notice = element('p', '', 'cpu-card-notice');
         notice.role = 'status';
         li.append(header, work, metrics, identity, actions, notice);
-        return { li, link, badge, outputLabel, output, fields, identityLabel, key, actions, notice };
+        return { li, link, badge, outputLabel, output, icon, fields, identityLabel, key, actions, notice };
     }
 
     function renderOverviewRow(entry: CpuRow, cpu: TerminalState['cpus']['cpus'][number], gridKey: string) {
@@ -515,6 +517,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             const name = element('strong');
             name.append(renderMinecraftText(cpu.finalOutput.itemname));
             entry.output.append(
+                entry.icon,
                 name,
                 element('span', `× ${locale.number(cpu.finalOutput.quantity)}`, 'cpu-card-quantity')
             );
@@ -557,6 +560,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                 scroll.scrollTop = 0;
             }
             if (!selected) icons.update([], null);
+            if (route.view !== 'cpus' || selected) overviewIcons.update([], null);
             if (route.view !== 'cpus') return;
             const t = locale.common;
             title.textContent = t('cpus');
@@ -579,6 +583,12 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                 }
                 for (const [key, entry] of rows) if (!current.has(key)) entry.li.remove();
                 rows = current;
+                overviewIcons.update(
+                    state.cpus
+                        .filter((cpu) => cpu.isBusy && cpu.finalOutput)
+                        .map((cpu) => ({ element: current.get(cpu.key)!.output, icon: cpu.icon })),
+                    state.overviewIcons
+                );
                 return;
             }
             // Hidden list rows must not retain private data after a failed selected-CPU read.
@@ -625,6 +635,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         dispose() {
             lifetime.abort();
             overviewSize.disconnect();
+            overviewIcons.dispose();
             icons.dispose();
             slots.dispose();
             hideTooltip();

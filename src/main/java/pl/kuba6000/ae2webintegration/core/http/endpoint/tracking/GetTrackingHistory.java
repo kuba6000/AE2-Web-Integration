@@ -6,15 +6,21 @@ import java.util.List;
 import java.util.Map;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 /**
@@ -46,15 +52,20 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/crafting-history")
 public final class GetTrackingHistory extends IAsyncRequest {
 
+    /** Include product icon references and atlas metadata; omitted means false. */
+    @QueryParam("icons")
+    private boolean icons;
+
     /**
      * Successful operation result.
      * 
      * @param status {@code OK} for a successful request
      * @param data   history entries ordered by completion time, newest first; empty when no history has been recorded
+     * @param icons  atlas metadata for product references; null when not requested or no pack is available
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull List<HistoryEntry> data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull List<HistoryEntry> data, @Nullable IconMappings icons) {}
 
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
     public static class HistoryEntry {
@@ -79,6 +90,8 @@ public final class GetTrackingHistory extends IAsyncRequest {
         public boolean wasCancelled;
         /** Detached snapshot of the final crafting output. */
         public final @NotNull JSON_Stack finalOutput;
+        /** Product atlas reference; null when not requested, unavailable, or absent from the pack. */
+        public @Nullable IconMappings.Reference icon;
         /**
          * Runtime history entry identifier.
          *
@@ -93,9 +106,11 @@ public final class GetTrackingHistory extends IAsyncRequest {
 
     @Override
     public void handle() {
+        IconPack pack = icons ? CoreEngine.getIconPack() : null;
+        IconMappings mappings = pack == null ? null : new IconMappings(pack);
         if (grid == null) {
             // Nothing has ever been tracked on this grid; an empty history is the honest answer.
-            respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, new ArrayList<HistoryEntry>()));
+            respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, new ArrayList<HistoryEntry>(), mappings));
             return;
         }
         ArrayList<HistoryEntry> jobs = new ArrayList<>(grid.trackingInfo.trackingInfos.size());
@@ -103,6 +118,10 @@ public final class GetTrackingHistory extends IAsyncRequest {
         for (Map.Entry<Integer, AE2JobTracker.JobTrackingInfo> integerJobTrackingInfoEntry : grid.trackingInfo.trackingInfos
             .entrySet()) {
             HistoryEntry element = new HistoryEntry(integerJobTrackingInfoEntry.getValue().finalOutput);
+            if (mappings != null && element.finalOutput.itemKey != null) {
+                element.icon = mappings
+                    .resolve(StableKey.parse(element.finalOutput.itemKey), element.finalOutput.iconBaseKey);
+            }
             element.id = integerJobTrackingInfoEntry.getKey();
             element.timeStarted = integerJobTrackingInfoEntry.getValue().timeStarted;
             element.timeDone = integerJobTrackingInfoEntry.getValue().timeDone;
@@ -112,7 +131,7 @@ public final class GetTrackingHistory extends IAsyncRequest {
 
         jobs.sort((i1, i2) -> Long.compare(i2.timeDone, i1.timeDone));
 
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, jobs));
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, jobs, mappings));
     }
 
 }

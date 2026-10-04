@@ -1,11 +1,12 @@
 import type { HistoryEntry } from '../../app/api-types.js';
-import type { TerminalState } from '../../app/terminal.js';
+import type { TerminalState, createTerminal } from '../../app/terminal.js';
 import type { Translator as Locale } from '../../app/i18n.js';
 
 import { historyHref } from '../../app/router.js';
 import { renderHistoryTimeline } from './history-timeline.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
+import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 
 function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
@@ -13,7 +14,7 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): 
     return node;
 }
 
-export function createHistoryView(root: HTMLElement) {
+export function createHistoryView(root: HTMLElement, application: ReturnType<typeof createTerminal>) {
     const view = element('section');
     view.hidden = true;
     view.className = 'history-view';
@@ -30,6 +31,7 @@ export function createHistoryView(root: HTMLElement) {
     scroll.className = 'terminal-scroll';
     scroll.role = 'region';
     scroll.tabIndex = 0;
+    const icons = application.icons.observe(scroll, paintResourceIcon);
     const list = element('ol');
     list.className = 'history-list';
     const detail = element('div');
@@ -58,7 +60,7 @@ export function createHistoryView(root: HTMLElement) {
         const name = element('span');
         name.className = 'history-name';
         const quantity = element('span');
-        product.append(name, quantity);
+        product.append(createResourceIcon(), name, quantity);
         const outcome = element('span');
         outcome.className = 'history-outcome';
         const timing = element('dl');
@@ -87,6 +89,7 @@ export function createHistoryView(root: HTMLElement) {
     return {
         render(route: TerminalState['route'], state: TerminalState['history'], locale: Locale) {
             view.hidden = route.view !== 'history';
+            if (route.view !== 'history' || route.entryId !== null) icons.update([], null);
             if (route.view !== 'history') return;
             const { common: t, number, dateTime } = locale;
             title.textContent = t('history');
@@ -132,6 +135,11 @@ export function createHistoryView(root: HTMLElement) {
             });
             for (const [id, row] of entries) if (!current.has(id)) row.li.remove();
             entries = current;
+            if (route.entryId === null)
+                icons.update(
+                    state.entries.map((entry) => ({ element: current.get(entry.id)!.link, icon: entry.icon })),
+                    state.icons
+                );
             if (focused?.isConnected && list.contains(focused) && focused !== document.activeElement)
                 focused.focus({ preventScroll: true });
             if (lastDetail === state.detail && lastLocale === locale) return;
@@ -193,6 +201,7 @@ export function createHistoryView(root: HTMLElement) {
         },
         dispose() {
             size.disconnect();
+            icons.dispose();
         }
     };
 }

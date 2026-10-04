@@ -11,7 +11,11 @@ export type Api = {
     items: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<Item[]>>;
     createPlan: (gridKey: string, body: { itemKey: string; quantity: number }) => Promise<{ jobID: number }>;
     plan: (gridKey: string, planId: string | number, signal?: AbortSignal) => Promise<Plan>;
-    cpus: (gridKey: string, signal?: AbortSignal) => Promise<Record<string, CpuInfo>>;
+    cpus: (
+        gridKey: string,
+        signal?: AbortSignal,
+        icons?: boolean
+    ) => Promise<ResourceResponse<Record<string, CpuInfo>>>;
     cpu: (
         gridKey: string,
         cpuKey: string,
@@ -20,7 +24,7 @@ export type Api = {
     ) => Promise<ResourceResponse<CpuDetail>>;
     cancelCpu: (gridKey: string, cpuKey: string) => Promise<null>;
     pauseCpu: (gridKey: string, cpuKey: string, paused: boolean) => Promise<null>;
-    history: (gridKey: string, signal?: AbortSignal) => Promise<HistoryEntry[]>;
+    history: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<HistoryEntry[]>>;
     historyEntry: (gridKey: string, entryId: string | number, signal?: AbortSignal) => Promise<HistoryDetail>;
     settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettings>;
     saveSettings: (gridKey: string, body: { isTracked: boolean }) => Promise<GridSettings>;
@@ -105,7 +109,8 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans`, { method: 'POST', body }),
         plan: (gridKey, planId, signal) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${planId}`, { signal }),
-        cpus: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/cpus`, { signal }),
+        cpus: (gridKey, signal, icons = false) =>
+            read(`api/grids/${encodeURIComponent(gridKey)}/cpus${icons ? '?icons=true' : ''}`, { signal }),
         cpu: (gridKey, cpuKey, signal, icons = false) =>
             read(
                 `api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}${icons ? '?icons=true' : ''}`,
@@ -120,7 +125,8 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
                 method: 'POST',
                 body: { paused }
             }),
-        history: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/crafting-history`, { signal }),
+        history: (gridKey, signal, icons = false) =>
+            read(`api/grids/${encodeURIComponent(gridKey)}/crafting-history${icons ? '?icons=true' : ''}`, { signal }),
         historyEntry: (gridKey, entryId, signal) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-history/${entryId}`, { signal }),
         settings: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { signal }),

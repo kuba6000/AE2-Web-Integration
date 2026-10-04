@@ -4,6 +4,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -36,27 +38,45 @@ public final class JSON_Stack {
      * @example AAAAAAAAAAAAAAAAAAAAAA
      */
     public final @Nullable String itemKey;
+    /** Detached fallback identity for tracked history; captured only when the installed pack lacks the exact icon. */
+    public final transient @Nullable StableKey iconBaseKey;
 
-    private JSON_Stack(@NotNull String itemid, @NotNull String itemname, long quantity, @Nullable String itemKey) {
+    private JSON_Stack(@NotNull String itemid, @NotNull String itemname, long quantity, @Nullable String itemKey,
+        @Nullable StableKey iconBaseKey) {
         this.itemid = itemid;
         this.itemname = itemname;
         this.quantity = quantity;
         this.itemKey = itemKey;
+        this.iconBaseKey = iconBaseKey;
     }
 
     public static @Nullable JSON_Stack capture(@NotNull IAEGrid grid, @Nullable IAEGenericStack stack) {
+        return capture(grid, stack, null);
+    }
+
+    /** Captures history's optional fallback on the server thread before native identity ownership can expire. */
+    public static @Nullable JSON_Stack capture(@NotNull IAEGrid grid, @Nullable IAEGenericStack stack,
+        @Nullable IconPack pack) {
         if (stack == null) return null;
         IAEKey key = stack.web$what();
         String itemid = key.web$getItemID();
         String itemname = key.web$getDisplayName();
         long quantity = stack.web$amount();
+        StableKey itemKey;
         try {
-            String itemKey = AE2Controller.itemIdentities.remember(grid, key)
-                .toString();
-            return new JSON_Stack(itemid, itemname, quantity, itemKey);
+            itemKey = AE2Controller.itemIdentities.remember(grid, key);
         } catch (RuntimeException exception) {
-            return new JSON_Stack(itemid, itemname, quantity, null);
+            return new JSON_Stack(itemid, itemname, quantity, null, null);
         }
+        StableKey base = null;
+        if (pack != null && pack.find(itemKey) == null) {
+            try {
+                base = AE2Controller.itemIdentities.resolveIconBase(itemKey);
+            } catch (RuntimeException ignored) {
+                // Optional fallback must not discard a successfully captured exact identity.
+            }
+        }
+        return new JSON_Stack(itemid, itemname, quantity, itemKey.toString(), base);
     }
 
 }

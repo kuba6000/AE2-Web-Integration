@@ -256,9 +256,21 @@ async function fixture(t, mount = '', contextOptions = {}) {
                     response.end(JSON.stringify({ status: options.cpuError, data: null }));
                     return;
                 }
-                response.end(JSON.stringify({ status: 'OK', data: options.cpus }));
+                response.end(
+                    JSON.stringify({
+                        status: 'OK',
+                        data: options.cpus,
+                        icons: url.searchParams.get('icons') === 'true' ? options.icons : null
+                    })
+                );
             } else if (resource.endsWith('/crafting-history')) {
-                response.end(JSON.stringify({ status: options.historyError || 'OK', data: options.history }));
+                response.end(
+                    JSON.stringify({
+                        status: options.historyError || 'OK',
+                        data: options.history,
+                        icons: url.searchParams.get('icons') === 'true' ? options.icons : null
+                    })
+                );
             } else if (/\/crafting-history\/\d+$/.test(resource)) {
                 response.end(JSON.stringify({ status: options.historyError || 'OK', data: options.historyDetail }));
             } else if (resource.endsWith('/settings')) {
@@ -642,6 +654,12 @@ test('missing resource sprites share a question mark in detailed inventory and C
         .getByRole('region', { name: 'CPU resources', exact: true })
         .getByRole('button', { name: /Iron Ingot/ });
     await cpuItem.waitFor();
+    assert.equal(await cpuItem.locator('.resource-icon').isVisible(), false);
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/cpus/cpu-a')).at(-1).query, '');
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('both');
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await cpuItem.waitFor();
     assert.equal(
         await cpuItem.locator('.resource-icon').evaluate((icon) => getComputedStyle(icon, '::before').content),
         '"?"'
@@ -841,6 +859,177 @@ test('compact terminal keeps quantities and craftability readable with missing i
 
 // Public browser seam: atlas delivery, rendered sprites and the persistent display preference.
 // Shared pages must not be fetched per item or again for quantity-only polling updates.
+test('CPU overview and history products share atlas pages and respect the display preference without hiding names', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    await atlasFixture(page, options);
+    const icon = { page: 0, x: 0, y: 0 };
+    options.cpus = {
+        busy: { ...cpu, name: 'Busy processor', isBusy: true, finalOutput: iron, icon },
+        idle: { ...cpu, name: 'Idle processor', finalOutput: iron, icon },
+        unknown: { ...cpu, name: 'Unknown output', isBusy: true, finalOutput: null, icon }
+    };
+    options.history = [
+        { ...historyEntry, icon },
+        { ...historyEntry, id: 2, icon: null }
+    ];
+    const atlasReads = () => options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    const busy = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: /Busy processor/ }) });
+    await busy.waitFor();
+    await page.waitForFunction(
+        () =>
+            [...document.querySelectorAll('.cpu-card .resource-icon')].some(
+                (icon) => getComputedStyle(icon).backgroundImage !== 'none'
+            ),
+        null,
+        { timeout: 3000 }
+    );
+    assert.equal(await page.locator('.cpu-card .resource-icon:visible').count(), 1);
+    assert.ok((await busy.innerText()).includes('Iron Ingot'));
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/cpus')).at(-1).query, '?icons=true');
+    if (process.env.UI_SCREENSHOT_DIR) {
+        await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'product-icons-cpu.png') });
+    }
+    await page.getByRole('link', { name: 'History', exact: true }).click();
+    const first = page.getByRole('link', { name: /Iron Ingot.*#1$/ });
+    const missing = page.getByRole('link', { name: /Iron Ingot.*#2$/ });
+    await page.waitForFunction(
+        () =>
+            [...document.querySelectorAll('.history-list .resource-icon')].some(
+                (icon) => getComputedStyle(icon).backgroundImage !== 'none'
+            ),
+        null,
+        { timeout: 3000 }
+    );
+    assert.equal(
+        await missing.locator('.resource-icon').evaluate((node) => getComputedStyle(node, '::before').content),
+        '"?"'
+    );
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/crafting-history')).at(-1).query, '?icons=true');
+    assert.equal(atlasReads().length, 1, 'overview and history reuse the same atlas page');
+    await page.setViewportSize({ width: 390, height: 844 });
+    const bounds = await first.evaluate((node) => ({ width: node.clientWidth, content: node.scrollWidth }));
+    assert.ok(bounds.content <= bounds.width + 1, 'history product icon and text fit a mobile row');
+    if (process.env.UI_SCREENSHOT_DIR) {
+        await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'product-icons-history-mobile.png') });
+    }
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('icons');
+    await page.goto(`${base}#/grids/${gridA}/history`);
+    await first.waitFor();
+    assert.ok((await first.innerText()).includes('Iron Ingot'), 'history remains readable in terminal icons-only mode');
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
+    const before = atlasReads().length;
+    for (const route of ['history', 'cpus']) {
+        await page.goto(`${base}#/grids/${gridA}/${route}`);
+        await page.getByRole('link', { name: route === 'history' ? /Iron Ingot.*#1$/ : /Busy processor/ }).waitFor();
+        assert.equal(
+            await page.locator('.history-list .resource-icon:visible, .cpu-card .resource-icon:visible').count(),
+            0
+        );
+        assert.equal(
+            options.requests.filter((r) => r.path.endsWith(route === 'history' ? '/crafting-history' : '/cpus')).at(-1)
+                .query,
+            ''
+        );
+    }
+    assert.equal(atlasReads().length, before);
+    assert.equal(
+        options.requests.some((r) => /\/crafting-history\/\d+$|\/cpus\/(busy|idle|unknown)$/.test(r.path)),
+        false,
+        'list icons do not fetch per-row details'
+    );
+});
+
+for (const view of ['cpus', 'history']) {
+    test(`${view} product mappings recover from pack replacement and clear on unavailable or denied reads`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        await atlasFixture(page, options);
+        const icon = { page: 0, x: 0, y: 0 };
+        options.cpus = { busy: { ...cpu, name: 'Busy processor', isBusy: true, finalOutput: iron, icon } };
+        options.history = [{ ...historyEntry, icon }];
+        const endpoint = view === 'cpus' ? '/cpus' : '/crafting-history';
+        const iconSelector = view === 'cpus' ? '.cpu-card .resource-icon' : '.history-list .resource-icon';
+        options.pageStatus = 404;
+        page.on('response', (response) => {
+            if (new URL(response.url()).pathname.includes('/api/icon-packs/') && response.status() === 404) {
+                options.pack = { available: true, packId: 'c'.repeat(64), width: 64, height: 64 };
+                options.icons = { ...options.icons, packId: 'c'.repeat(64) };
+                options.pageStatus = 200;
+            }
+        });
+        await page.goto(`${base}#/grids/${gridA}/${view}`);
+        await page.waitForFunction(
+            (selector) => document.querySelector(selector)?.style.backgroundImage,
+            iconSelector,
+            { timeout: 3000 }
+        );
+        const pages = options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
+        assert.equal(pages.length, 2);
+        assert.ok(pages.at(-1).path.includes('c'.repeat(64)));
+        options.pack = { available: false, packId: null, width: 0, height: 0 };
+        const absent = page.waitForResponse(
+            (response) => new URL(response.url()).pathname.endsWith(endpoint) && !new URL(response.url()).search
+        );
+        await poll(page);
+        await settleResponse(page, (await absent).request());
+        assert.equal(await page.locator(`${iconSelector}:visible`).count(), 0);
+        options.pack = { available: true, packId: 'c'.repeat(64), width: 64, height: 64 };
+        await poll(page);
+        await page.waitForFunction(
+            (selector) => document.querySelector(selector)?.style.backgroundImage,
+            iconSelector,
+            { timeout: 3000 }
+        );
+        if (view === 'cpus') options.cpuError = 'NO_PERMISSIONS';
+        else options.historyError = 'NO_PERMISSIONS';
+        await poll(page);
+        await page
+            .getByRole('status')
+            .filter({ hasText: /no longer have access/i })
+            .waitFor();
+        assert.equal(await page.locator(iconSelector).count(), 0);
+    });
+
+    test(`${view} late icon-enabled response cannot restore images after choosing names`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        await atlasFixture(page, options);
+        const icon = { page: 0, x: 0, y: 0 };
+        options.cpus = { busy: { ...cpu, name: 'Busy processor', isBusy: true, finalOutput: iron, icon } };
+        options.history = [{ ...historyEntry, icon }];
+        const endpoint = view === 'cpus' ? '/cpus' : '/crafting-history';
+        let release;
+        const captured = new Promise((resolve) => {
+            release = resolve;
+        });
+        await page.route(`**${endpoint}?icons=true`, (route) => release(route));
+        await page.goto(`${base}#/grids/${gridA}/${view}`);
+        const delayed = await captured;
+        await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+        await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
+        await page.goto(`${base}#/grids/${gridA}/${view}`);
+        await page.getByRole('link', { name: view === 'cpus' ? /Busy processor/ : /Iron Ingot.*#1$/ }).waitFor();
+        await delayed.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                status: 'OK',
+                data: view === 'cpus' ? options.cpus : options.history,
+                icons: options.icons
+            })
+        });
+        await settleResponse(page, delayed.request());
+        assert.equal(
+            await page.locator('.cpu-card .resource-icon:visible, .history-list .resource-icon:visible').count(),
+            0
+        );
+        assert.equal(options.requests.filter((request) => request.path.startsWith('/api/icon-packs/')).length, 0);
+        assert.equal(options.requests.filter((request) => request.path.endsWith(endpoint)).at(-1).query, '');
+    });
+}
+
 test('resource atlas is shared across visible items and CPU rows and can be disabled persistently', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     await seedAutomaticRefresh(page, base, true);
@@ -1864,6 +2053,7 @@ for (const appearance of ['light', 'dark']) {
         }
         options.history = [options.history[0]];
         await page.getByRole('link', { name: 'History', exact: true }).click();
+        await page.getByRole('link', { name: /Precision assembly.*#100/ }).waitFor();
         await page.reload();
         await page.getByRole('link', { name: /Precision assembly.*#100/ }).waitFor();
         assert.equal(await page.getByRole('region', { name: 'History', exact: true }).getByRole('listitem').count(), 1);
