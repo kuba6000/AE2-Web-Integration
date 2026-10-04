@@ -1,40 +1,29 @@
 package pl.kuba6000.ae2webintegration.core.http;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import com.github.bsideup.jabel.Desugar;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
-import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService.LoginResult;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService.RegistrationResult;
-import pl.kuba6000.ae2webintegration.core.config.Config;
-import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 /** Serves browser pages and adapts shared authentication operations to forms, cookies and redirects. */
 public final class WebHandler implements HttpHandler {
-
-    @Desugar
-    private record DisplayUser(@NotNull String username, boolean isAdmin) {}
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -165,50 +154,18 @@ public final class WebHandler implements HttpHandler {
 
     private static void renderPage(HttpExchange exchange, @Nullable RequestContext context) throws IOException {
         String site = context == null ? "/assets/login.html" : "/assets/webpage.html";
-        boolean nextUi = context != null && usesNextUi(exchange);
-        if (nextUi) {
+        if (context != null && usesNextUi(exchange)) {
             site = "/assets/web/index.html";
         }
-        String response;
-        try (InputStream input = WebHandler.class.getResourceAsStream(site)) {
-            if (input == null) return;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
-                response = reader.lines()
-                    .collect(Collectors.joining(System.lineSeparator()));
-            }
-        }
-        response = response
-            .replace("_REPLACE_ME_IS_PUBLIC_MODE", Config.INSTANCE.general.publicMode ? "true" : "false");
-        response = response.replace(
-            "_REPLACE_ME_VERSION_OUTDATED",
-            Config.INSTANCE.general.checkForUpdates && CoreEngine.getAvailableUpdate() != null ? "true" : "false");
-        if (context != null) {
-            response = response.replace(
-                "_REPLACE_ME_USERNAME",
-                context.getPrincipal()
-                    .getUsername());
-            response = response.replace("_REPLACE_ME_IS_ADMIN", context.isAdmin() ? "true" : "false");
-            if (nextUi) {
-                // Gson's default HTML escaping keeps names from terminating the JSON script element.
-                String user = GSONUtils.GSON_BUILDER.create()
-                    .toJson(
-                        new DisplayUser(
-                            context.getPrincipal()
-                                .getUsername(),
-                            context.isAdmin()));
-                response = response.replace("_REPLACE_ME_USER", user);
-                // The HTML marker cannot occur in the already HTML-escaped user JSON.
-                response = response.replace(
-                    "<!--_REPLACE_ME_MOD_VERSION-->",
-                    GSONUtils.GSON_BUILDER.create()
-                        .toJson(CoreEngine.getModVersion()));
-                exchange.getResponseHeaders()
-                    .set("Cache-Control", "no-store");
-            }
-        }
+        // The selected document depends on authentication even though its bytes are static.
+        exchange.getResponseHeaders()
+            .set("Cache-Control", "no-store");
         exchange.getResponseHeaders()
             .set("Content-Type", "text/html; charset=UTF-8");
-        sendBytes(exchange, HttpURLConnection.HTTP_OK, response.getBytes(StandardCharsets.UTF_8));
+        try (InputStream input = WebHandler.class.getResourceAsStream(site)) {
+            if (input == null) return;
+            sendBytes(exchange, HttpURLConnection.HTTP_OK, IOUtils.toByteArray(input));
+        }
     }
 
     private static void redirect(HttpExchange exchange, String location) throws IOException {

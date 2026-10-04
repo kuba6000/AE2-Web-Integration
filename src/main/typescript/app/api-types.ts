@@ -2,6 +2,12 @@
  * JSON contracts from the core endpoint responses and JSON_* DTOs.
  * These declarations describe the wire format; they do not validate responses at runtime.
  */
+export type Bootstrap = {
+    publicMode: boolean;
+    modVersion: string | null;
+    isOutdated: boolean;
+    user: { username: string; isAdmin: boolean } | null;
+};
 export type Stack = { itemid: string; itemname: string; quantity: number; itemKey: string | null };
 export type IconReference = { page: number; x: number; y: number };
 export type IconMetadata = {

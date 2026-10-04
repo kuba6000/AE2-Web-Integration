@@ -6,14 +6,18 @@ import { readRoute } from './router.js';
 import { createThemeContext } from './theme-context.js';
 import { mount } from '../themes/default/view.js';
 
-const identity = document.getElementById('ae2-user') as HTMLScriptElement;
-const user: { username: string; isAdmin: boolean } = JSON.parse(identity.text);
-const version = document.getElementById('ae2-mod-version') as HTMLScriptElement;
-const modVersion: string | null = JSON.parse(version.text);
+const root = document.getElementById('app') as HTMLElement;
 const base = new URL('./', location.href);
+const preferences = createPreferences(base);
+const theme = createThemeContext(base, 'default');
+const locale = theme.i18n.forLanguage(preferences.values.language);
+const controller = new AbortController();
+let application: ReturnType<typeof createTerminal> | undefined;
+let unmount = () => {};
 let leaving = false;
+let disposed = false;
 function returnToLogin() {
-    if (leaving) return;
+    if (leaving || disposed) return;
     leaving = true;
     application?.dispose();
     const target = new URL('?ui=next', base);
@@ -23,27 +27,13 @@ function returnToLogin() {
     else location.replace(target.href);
 }
 const api = createApi(base, returnToLogin);
-const application = createTerminal(
-    api,
-    createPreferences(base),
-    createIconLoader(base, returnToLogin, () => application.refresh())
-);
-const unmount = mount(document.getElementById('app') as HTMLElement, application, {
-    ...createThemeContext(base, 'default'),
-    base,
-    user,
-    modVersion,
-    async logout() {
-        await api.logout();
-        returnToLogin();
-    }
-});
-const route = () => application.route(readRoute());
-window.addEventListener('hashchange', route);
+const route = () => application?.route(readRoute());
 window.addEventListener(
     'pagehide',
     () => {
-        application.dispose();
+        disposed = true;
+        controller.abort();
+        application?.dispose();
         unmount();
         window.removeEventListener('hashchange', route);
     },
@@ -53,5 +43,50 @@ window.addEventListener(
 window.addEventListener('pageshow', (event) => {
     if (event.persisted) location.reload();
 });
-route();
-application.refresh();
+
+async function start() {
+    const status = document.createElement('p');
+    status.setAttribute('role', 'status');
+    status.textContent = locale.common('bootstrapLoading');
+    root.replaceChildren(status);
+    try {
+        const metadata = await api.bootstrap(controller.signal);
+        if (disposed || leaving) return;
+        if (!metadata.user) {
+            returnToLogin();
+            return;
+        }
+        application = createTerminal(
+            api,
+            preferences,
+            createIconLoader(base, returnToLogin, async () => {
+                await application?.refresh();
+            })
+        );
+        unmount = mount(root, application, {
+            ...theme,
+            base,
+            user: metadata.user,
+            modVersion: metadata.modVersion,
+            async logout() {
+                await api.logout();
+                returnToLogin();
+            }
+        });
+        window.addEventListener('hashchange', route);
+        route();
+        application.refresh();
+    } catch {
+        if (disposed || leaving) return;
+        application?.dispose();
+        unmount();
+        status.setAttribute('role', 'alert');
+        status.textContent = locale.common('bootstrapError');
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.textContent = locale.common('retry');
+        retry.addEventListener('click', start, { once: true });
+        root.replaceChildren(status, retry);
+    }
+}
+void start();

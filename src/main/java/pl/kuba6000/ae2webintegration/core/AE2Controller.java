@@ -31,6 +31,7 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.WebHandler;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.GetBootstrap;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Login;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Logout;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Register;
@@ -211,6 +212,7 @@ public class AE2Controller {
                 api.register(DeleteCraftingPlan.class);
                 api.register(GetTrackingHistory.class);
                 api.register(GetTracking.class);
+                api.register(GetBootstrap.class);
                 api.register(Login.class);
                 api.register(Register.class);
                 api.register(Logout.class);

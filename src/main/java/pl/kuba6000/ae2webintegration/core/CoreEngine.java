@@ -196,7 +196,7 @@ public class CoreEngine {
         resetPlanMaintenance();
     }
 
-    public static String getModVersion() {
+    public static @Nullable String getModVersion() {
         return modVersion;
     }
 

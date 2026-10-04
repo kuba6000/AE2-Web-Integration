@@ -5,6 +5,8 @@ export type MessageValues = { count?: number } & Record<string, string | number 
 export type Translator = ReturnType<typeof createTranslator>;
 const translations: Dictionaries = {
     en: {
+        bootstrapLoading: 'Loading server settings…',
+        bootstrapError: 'Could not load server settings. Check the connection and try again.',
         resourceTimings: 'Resource processing intervals',
         providerTimings: 'Pattern provider processing intervals',
         historyNoTimings: 'No processing intervals were recorded.',
@@ -203,6 +205,8 @@ const translations: Dictionaries = {
         INVALID_RESPONSE: 'The server returned an unreadable response.'
     },
     pl: {
+        bootstrapLoading: 'Wczytywanie ustawień serwera…',
+        bootstrapError: 'Nie udało się wczytać ustawień serwera. Sprawdź połączenie i spróbuj ponownie.',
         resourceTimings: 'Przedziały przetwarzania zasobów',
         providerTimings: 'Przedziały pracy dostawców wzorców',
         historyNoTimings: 'Nie zapisano przedziałów przetwarzania.',

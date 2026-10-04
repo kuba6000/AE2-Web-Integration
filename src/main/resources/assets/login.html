@@ -172,7 +172,9 @@
         <section id="maininfo">
 
         </section>
-        <section id="mainrow">
+        <p id="bootstrapStatus" role="status">Loading server settings…</p>
+        <button id="bootstrapRetry" type="button" hidden>Retry</button>
+        <section id="mainrow" style="display: none;">
             <form action="" method="POST" id="formlogin">
                 <b>This service requires authentication</b><br><br>
                 <label for="username">Username</label><br>
@@ -197,13 +199,43 @@
 
 <script>
 
-    const IS_PUBLIC_MODE = _REPLACE_ME_IS_PUBLIC_MODE; // Replace with your actual public mode variable
-
-    if (!IS_PUBLIC_MODE){
-        document.getElementById("formregister").style.display = "none"; // Hide the registration form in public mode
-        document.getElementById("username").value = "Admin";
-        document.getElementById("username").readOnly = true;
+    const bootstrapController = new AbortController();
+    let pageDisposed = false;
+    window.addEventListener('pagehide', () => {
+        pageDisposed = true;
+        bootstrapController.abort();
+    }, { once: true });
+    window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
+    async function loadLoginSettings() {
+        const status = document.getElementById('bootstrapStatus');
+        const retry = document.getElementById('bootstrapRetry');
+        retry.hidden = true;
+        status.hidden = false;
+        status.setAttribute('role', 'status');
+        status.textContent = 'Loading server settings…';
+        try {
+            const { createApi } = await import('./assets/web/app/api.js');
+            if (pageDisposed) return;
+            const metadata = await createApi(new URL('./', location.href), () => location.reload())
+                .bootstrap(bootstrapController.signal);
+            if (pageDisposed) return;
+            if (!metadata.publicMode) {
+                document.getElementById('formregister').style.display = 'none';
+                document.getElementById('username').value = 'Admin';
+                document.getElementById('username').readOnly = true;
+            }
+            document.getElementById('mainrow').style.display = '';
+            status.hidden = true;
+        } catch {
+            if (pageDisposed) return;
+            status.hidden = false;
+            status.setAttribute('role', 'alert');
+            status.textContent = 'Could not load server settings. Check the connection and try again.';
+            retry.hidden = false;
+        }
     }
+    document.getElementById('bootstrapRetry').addEventListener('click', loadLoginSettings);
+    loadLoginSettings();
 
     const url = new URL(window.location.href);
     const cleanUrl = url.pathname + (url.searchParams.get('ui') === 'next' ? '?ui=next' : '') + url.hash;
@@ -217,7 +249,11 @@
         document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>Invalid username!</b><br><br>";
         window.history.replaceState(null, document.title, cleanUrl); // Clear transient status without losing the selected view.
     } else if (url.searchParams.get("confirmregistration") !== null) {
-        document.getElementById("maininfo").innerHTML = "<b style='color: #78b83d;'>Please enter this command in the game to finish registration:<br>/ae2webintegration auth " + url.searchParams.get("token") + "</b><br><br>";
+        const message = document.createElement('b');
+        message.style.color = '#78b83d';
+        message.append('Please enter this command in the game to finish registration:', document.createElement('br'),
+            '/ae2webintegration auth ' + url.searchParams.get('token'));
+        document.getElementById('maininfo').replaceChildren(message, document.createElement('br'), document.createElement('br'));
         window.history.replaceState(null, document.title, cleanUrl); // Clear transient status without losing the selected view.
     }
 

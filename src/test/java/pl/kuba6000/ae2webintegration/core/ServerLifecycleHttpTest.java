@@ -36,8 +36,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
@@ -396,10 +394,50 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void nextUiBootstrapsOnlyTheAuthenticatedDisplayIdentity() throws Exception {
+    void bootstrapProvidesPublicMetadataWithoutGrantingAccess() throws Exception {
+        startApi();
+        HttpURLConnection connection = connection("/api/bootstrap", null);
+        Response response = read(connection);
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        JsonObject envelope = new Gson().fromJson(response.body(), JsonObject.class);
+        assertEquals(
+            "OK",
+            envelope.get("status")
+                .getAsString());
+        JsonObject data = envelope.getAsJsonObject("data");
+        assertEquals(
+            4,
+            data.entrySet()
+                .size());
+        assertFalse(
+            data.get("publicMode")
+                .getAsBoolean());
+        assertFalse(
+            data.get("isOutdated")
+                .getAsBoolean());
+        assertTrue(data.has("modVersion"));
+        assertTrue(
+            data.get("user")
+                .isJsonNull());
+        assertEquals("no-store", connection.getHeaderField("Cache-Control"));
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", null).status());
+
+        config.set("general.public_mode", true);
+        JsonObject publicData = new Gson().fromJson(get("/api/bootstrap", null).body(), JsonObject.class)
+            .getAsJsonObject("data");
+        assertTrue(
+            publicData.get("publicMode")
+                .getAsBoolean());
+        assertTrue(
+            publicData.get("user")
+                .isJsonNull());
+    }
+
+    @Test
+    void bootstrapReturnsOnlyTheAuthenticatedDisplayIdentity() throws Exception {
         startApi();
         String token = login();
-        HttpURLConnection connection = connection("/?ui=next", token);
+        HttpURLConnection connection = connection("/api/bootstrap", token);
         Response response = read(connection);
         assertEquals(HttpURLConnection.HTTP_OK, response.status());
         JsonObject user = bootstrapUser(response.body());
@@ -419,16 +457,10 @@ class ServerLifecycleHttpTest {
             response.body()
                 .contains(token));
         assertEquals("no-store", connection.getHeaderField("Cache-Control"));
-        assertFalse(
-            get("/?ui=next", null).body()
-                .contains("id=\"ae2-user\""));
-        assertFalse(
-            get("/", token).body()
-                .contains("id=\"ae2-user\""));
     }
 
     @Test
-    void nextUiKeepsHostilePlayerNamesInsideTheJsonBootstrap() throws Exception {
+    void bootstrapKeepsPlayerNamesAsDataAndPagesStatic() throws Exception {
         String username = "Player</script><img src=x onerror=\"alert(1)\">&'\u2028"
             + "_REPLACE_ME_USERNAME_REPLACE_ME_IS_ADMIN_REPLACE_ME_USER";
         config.set("general.public_mode", true);
@@ -441,7 +473,7 @@ class ServerLifecycleHttpTest {
         String token = login(username, "player-password");
         Response page = get("/?ui=next", token);
         assertEquals(HttpURLConnection.HTTP_OK, page.status());
-        JsonObject user = bootstrapUser(page.body());
+        JsonObject user = bootstrapUser(get("/api/bootstrap", token).body());
         assertEquals(
             username,
             user.get("username")
@@ -453,20 +485,15 @@ class ServerLifecycleHttpTest {
             2,
             user.entrySet()
                 .size());
-        assertFalse(
-            page.body()
-                .contains("<img"),
-            "display names must not inject elements into the page");
-        assertFalse(
-            page.body()
-                .contains(token));
+        assertEquals(pageResource("/assets/web/index.html"), page.body());
+        assertEquals(pageResource("/assets/webpage.html"), get("/", token).body());
     }
 
     @ParameterizedTest
     @ValueSource(
         strings = { "2.7.4-native-test",
             "Version</script><img src=x onerror=\"alert(1)\">&'\u2028_REPLACE_ME_USER<!--_REPLACE_ME_MOD_VERSION-->" })
-    void nextUiBootstrapsTheRuntimeModVersionAsSafeJson(String version) throws Exception {
+    void bootstrapReturnsRuntimeModVersionWithoutChangingPageBytes(String version) throws Exception {
         IServerPlatform platform = new IServerPlatform() {
 
             @Override
@@ -515,38 +542,98 @@ class ServerLifecycleHttpTest {
             String token = login();
             Response page = get("/?ui=next", token);
             assertEquals(HttpURLConnection.HTTP_OK, page.status());
-            Matcher bootstrap = Pattern
-                .compile("<script\\b[^>]*\\bid=\"ae2-mod-version\"[^>]*>(.*?)</script>", Pattern.DOTALL)
-                .matcher(page.body());
-            assertTrue(bootstrap.find(), "the authenticated page must supply its runtime mod version");
-            assertEquals(version, new Gson().fromJson(bootstrap.group(1), String.class));
+            Response bootstrap = get("/api/bootstrap", token);
+            JsonObject metadata = new Gson().fromJson(bootstrap.body(), JsonObject.class)
+                .getAsJsonObject("data");
+            assertEquals(
+                version,
+                metadata.get("modVersion")
+                    .getAsString());
             assertEquals(
                 "Admin",
-                bootstrapUser(page.body()).get("username")
+                bootstrapUser(bootstrap.body()).get("username")
                     .getAsString());
-            assertFalse(
-                page.body()
-                    .contains("<img"),
-                "runtime metadata must not inject elements into the page");
-            assertFalse(
-                page.body()
-                    .contains(token));
-            assertFalse(
-                get("/?ui=next", null).body()
-                    .contains("id=\"ae2-mod-version\""));
-            assertFalse(
-                get("/", token).body()
-                    .contains("id=\"ae2-mod-version\""));
+            assertEquals(pageResource("/assets/web/index.html"), page.body());
+            assertEquals(pageResource("/assets/login.html"), get("/?ui=next", null).body());
+            assertEquals(pageResource("/assets/webpage.html"), get("/", token).body());
         } finally {
             CoreEngine.onServerStopped();
         }
     }
 
-    private static JsonObject bootstrapUser(String html) {
-        Matcher bootstrap = Pattern.compile("<script\\b[^>]*\\bid=\"ae2-user\"[^>]*>(.*?)</script>", Pattern.DOTALL)
-            .matcher(html);
-        assertTrue(bootstrap.find(), "the authenticated page must supply its display identity");
-        return new Gson().fromJson(bootstrap.group(1), JsonObject.class);
+    private static JsonObject bootstrapUser(String json) {
+        return new Gson().fromJson(json, JsonObject.class)
+            .getAsJsonObject("data")
+            .getAsJsonObject("user");
+    }
+
+    private static String pageResource(String path) throws IOException {
+        try (InputStream input = ServerLifecycleHttpTest.class.getResourceAsStream(path)) {
+            return IOUtils.toString(input, StandardCharsets.UTF_8);
+        }
+    }
+
+    @Test
+    void selectedPagesAreServedVerbatimWithoutCachingAuthenticationDecisions() throws Exception {
+        startApi();
+        String token = login();
+        for (String path : new String[] { "/", "/?ui=next" }) {
+            HttpURLConnection anonymous = connection(path, null);
+            assertEquals(pageResource("/assets/login.html"), read(anonymous).body());
+            assertEquals("no-store", anonymous.getHeaderField("Cache-Control"));
+            HttpURLConnection authenticated = connection(path, token);
+            String resource = path.equals("/") ? "/assets/webpage.html" : "/assets/web/index.html";
+            String expected = pageResource(resource);
+            assertEquals(expected, read(authenticated).body());
+            assertEquals("no-store", authenticated.getHeaderField("Cache-Control"));
+            HttpURLConnection head = connection(path, token);
+            head.setRequestMethod("HEAD");
+            assertEquals("", read(head).body());
+            assertEquals(expected.getBytes(StandardCharsets.UTF_8).length, head.getContentLength());
+        }
+    }
+
+    @Test
+    void bootstrapUsesCurrentCredentialsAndPreservesExplicitAuthorizationPrecedence() throws Exception {
+        startApi();
+        String token = login();
+        HttpURLConnection cookie = connection("/api/bootstrap", null);
+        cookie.setRequestProperty("Cookie", "authenticationToken=" + token);
+        assertEquals(
+            "Admin",
+            bootstrapUser(read(cookie).body()).get("username")
+                .getAsString());
+        HttpURLConnection invalidBearer = connection("/api/bootstrap", "invalid-session");
+        invalidBearer.setRequestProperty("Cookie", "authenticationToken=" + token);
+        assertTrue(
+            new Gson().fromJson(read(invalidBearer).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .get("user")
+                .isJsonNull());
+        HttpURLConnection logout = connection("/api/auth/logout", token);
+        logout.setRequestMethod("POST");
+        assertEquals(HttpURLConnection.HTTP_OK, read(logout).status());
+        assertTrue(
+            new Gson().fromJson(get("/api/bootstrap", token).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .get("user")
+                .isJsonNull());
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", token).status());
+
+        config.set("general.allow_no_password_on_localhost", true);
+        JsonObject local = bootstrapUser(get("/api/bootstrap", null).body());
+        assertEquals(
+            "localhost",
+            local.get("username")
+                .getAsString());
+        assertTrue(
+            local.get("isAdmin")
+                .getAsBoolean());
+        assertTrue(
+            new Gson().fromJson(get("/api/bootstrap", "invalid-session").body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .get("user")
+                .isJsonNull());
     }
 
     @Test
@@ -954,7 +1041,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void authenticatedPageUsesTheAccountNameWithoutReadingTheAeProfile() throws Exception {
+    void bootstrapUsesTheAccountNameWithoutReadingTheAeProfile() throws Exception {
         UUID playerUuid = UUID.fromString("99999999-8888-7777-6666-555555555555");
         config.set("general.public_mode", true);
         AE2Controller.AE2Interface = null;
@@ -967,12 +1054,13 @@ class ServerLifecycleHttpTest {
         CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login("canonicalplayer", "player-password");
-        Response page = get("/", token);
+        Response response = get("/api/bootstrap", token);
 
-        assertEquals(HttpURLConnection.HTTP_OK, page.status());
-        assertTrue(
-            page.body()
-                .contains("CanonicalPlayer"));
+        assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertEquals(
+            "CanonicalPlayer",
+            bootstrapUser(response.body()).get("username")
+                .getAsString());
     }
 
     @Test

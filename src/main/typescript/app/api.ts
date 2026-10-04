@@ -1,8 +1,9 @@
 import type { Grid, Item, Plan, CpuInfo, CpuDetail, HistoryEntry, HistoryDetail, GridSettings } from './api-types.js';
-import type { ResourceResponse, IconMetadata } from './api-types.js';
+import type { ResourceResponse, IconMetadata, Bootstrap } from './api-types.js';
 
 export type ApiFailure = Error & { status?: string; data?: unknown };
 export type Api = {
+    bootstrap: (signal?: AbortSignal) => Promise<Bootstrap>;
     iconPack: (
         signal?: AbortSignal
     ) => Promise<{ available: boolean; packId: string | null; width: number; height: number }>;
@@ -95,6 +96,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
         return read<T>(path, options).then((result) => result.data);
     }
     return {
+        bootstrap: (signal) => request('api/bootstrap', { signal }),
         iconPack: (signal) => request('api/icon-pack', { signal }),
         grids: (signal) => request('api/grids', { signal }),
         items: (gridKey, signal, icons = false) =>

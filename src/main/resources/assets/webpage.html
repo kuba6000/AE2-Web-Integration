@@ -626,7 +626,7 @@
     </section>
 </section>
 <h1>UNIVERSAL WEB TERMINAL</h1>
-<section id="overlay">
+<section id="overlay" style="display: none;">
     <section id="overlaytext">
         LOADING...
     </section>
@@ -636,7 +636,9 @@
         Error: Invalid grid
     </section> -->
 </section>
-<section id="terminalgrid">
+<p id="bootstrapStatus" role="status">Loading server settings…</p>
+<button id="bootstrapRetry" type="button" hidden>Retry</button>
+<section id="terminalgrid" style="display: none;">
     <button class='collapsible' id='currentgrid'>No grid selected</button>
     <section style='display: none;'>
         <section class="grid-options">
@@ -655,7 +657,7 @@
         <section id="gridaccessdetails" aria-live="polite"></section>
     </section>
 </section>
-<section id="terminalcontainer">
+<section id="terminalcontainer" style="display: none;">
     <section id="terminaltypes">
         <section id='terminalOptions'>
             <button class='collapsible mobile-only'>Terminal options</button>
@@ -737,10 +739,52 @@
 
 <script>
     document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7;
-    const username = "_REPLACE_ME_USERNAME";
-    const isAdmin = _REPLACE_ME_IS_ADMIN;
-    const isOutdated = _REPLACE_ME_VERSION_OUTDATED;
-    document.getElementById('username').innerText = username;
+    let isAdmin = false;
+    let isOutdated = false;
+    const bootstrapController = new AbortController();
+    let pageDisposed = false;
+    window.addEventListener('pagehide', () => {
+        pageDisposed = true;
+        bootstrapController.abort();
+    }, { once: true });
+    window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
+    async function startLegacy() {
+        const status = document.getElementById('bootstrapStatus');
+        const retry = document.getElementById('bootstrapRetry');
+        retry.hidden = true;
+        status.hidden = false;
+        status.setAttribute('role', 'status');
+        status.textContent = 'Loading server settings…';
+        try {
+            const { createApi } = await import('./assets/web/app/api.js');
+            if (pageDisposed) return;
+            const metadata = await createApi(new URL('./', location.href), () => location.reload())
+                .bootstrap(bootstrapController.signal);
+            if (pageDisposed) return;
+            if (!metadata.user) {
+                location.reload();
+                return;
+            }
+            isAdmin = metadata.user.isAdmin;
+            isOutdated = metadata.isOutdated;
+            document.getElementById('username').textContent = metadata.user.username;
+            document.getElementById('terminalgrid').style.display = '';
+            document.getElementById('terminalcontainer').style.display = '';
+            status.hidden = true;
+            updateGridList();
+            updateCPUList();
+            getItemList();
+            showAlertIfOutdated();
+            setTimeout(autoRefresher, 10000);
+        } catch {
+            if (pageDisposed) return;
+            status.hidden = false;
+            status.setAttribute('role', 'alert');
+            status.textContent = 'Could not load server settings. Check the connection and try again.';
+            retry.hidden = false;
+        }
+    }
+    document.getElementById('bootstrapRetry').addEventListener('click', startLegacy);
     selectedGrid = -1;
     globalItemList = {};
     globalCPUList = {};
@@ -1248,7 +1292,6 @@
                 : 'HTTP ' + response.status + ': Could not load grids.');
         });
     }
-    updateGridList();
     function showGridAccess(groups) {
         const container = document.getElementById('gridaccessdetails');
         const expanded = container.children.length > 0 && container.children[0].open;
@@ -1975,6 +2018,7 @@
     }
 
     function autoRefresher(){
+        if (pageDisposed) return;
         setTimeout(autoRefresher, 10000);
         if (loadingMessages.length > 0)
             return;
@@ -1983,8 +2027,6 @@
             refreshTerminal();
         }
     }
-    setTimeout(autoRefresher, 10000);
-
     loadingMessages = [];
 
     function pushLoadingScreen(message){
@@ -2012,9 +2054,6 @@
             document.getElementById('overlay').style.display = 'none';
     }
 
-    updateCPUList();
-    getItemList();
-
     function showAlertIfOutdated() {
         if (isOutdated && isAdmin){
             if (getCookie("DoNotShowUpdateMessage") == 1) return;
@@ -2025,7 +2064,7 @@
             setCookie("DoNotShowUpdateMessage", 0, 0);
         }
     }
-    setTimeout(showAlertIfOutdated, 100);
+
 
     function updateDoNotShowAgain(el){
         setCookie("DoNotShowUpdateMessage", 1, 7);
@@ -2081,6 +2120,7 @@
         });
     }
 
+    startLegacy();
 </script>
 <br><br>
 <footer>

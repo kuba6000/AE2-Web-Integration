@@ -19,7 +19,7 @@ function terminal(page) {
             };
         },
         getElementById(id) {
-            if (!elements.has(id)) elements.set(id, { innerHTML: '', style: {}, value: '', checked: false });
+            if (!elements.has(id)) elements.set(id, { innerHTML: '', style: {}, value: '', checked: false, setAttribute() {}, addEventListener() {} });
             return elements.get(id);
         },
         getElementsByClassName() { return []; }
@@ -37,13 +37,12 @@ function terminal(page) {
         return { fail(callback) { request.failure = callback; return this; } };
     };
     const context = vm.createContext({
-        document, $, console: { log() {} }, setTimeout() {},
-        window: { prompt: () => '3' },
+        document, $, AbortController, console: { log() {} }, setTimeout() {},
+        window: { prompt: () => '3', addEventListener() {} },
         localStorage: { getItem: () => null, setItem() {} }
     });
     const html = fs.readFileSync(path.join(__dirname, page), 'utf8');
     const script = html.match(/<script>([\s\S]*?)<\/script>/)[1]
-        .replace('_REPLACE_ME_IS_ADMIN', 'false').replace('_REPLACE_ME_VERSION_OUTDATED', 'false')
         .replace(/<\?php[\s\S]*?\?>/g, 'false');
     vm.runInContext(script, context);
     requests.length = 0;

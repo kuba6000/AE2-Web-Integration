@@ -114,6 +114,9 @@ async function fixture(t, mount = '', contextOptions = {}) {
         username: 'ExamplePlayer',
         isAdmin: false,
         modVersion: '9.8.7-browser-fixture',
+        publicMode: true,
+        bootstrapStatus: 200,
+        bootstrapDelay: 0,
         itemsA: [iron, quartz],
         plan: readyPlan,
         pendingReads: 0,
@@ -182,7 +185,26 @@ async function fixture(t, mount = '', contextOptions = {}) {
                 response.end(JSON.stringify({ status: options.fault.status, data: null }));
                 return;
             }
-            if (resource === '/api/icon-pack') {
+            if (resource === '/api/bootstrap') {
+                if (options.bootstrapDelay) await new Promise((resolve) => setTimeout(resolve, options.bootstrapDelay));
+                response.statusCode = options.bootstrapStatus;
+                response.end(
+                    JSON.stringify({
+                        status: options.bootstrapStatus === 200 ? 'OK' : 'INTERNAL_ERROR',
+                        data:
+                            options.bootstrapStatus === 200
+                                ? {
+                                      publicMode: options.publicMode,
+                                      modVersion: options.modVersion,
+                                      isOutdated: options.isOutdated || false,
+                                      user: options.loggedOut
+                                          ? null
+                                          : { username: options.username, isAdmin: options.isAdmin }
+                                  }
+                                : null
+                    })
+                );
+            } else if (resource === '/api/icon-pack') {
                 if (options.packError) {
                     response.writeHead(503).end(JSON.stringify({ status: 'INTERNAL_ERROR', data: null }));
                     return;
@@ -337,25 +359,7 @@ async function fixture(t, mount = '', contextOptions = {}) {
                         : 'text/html'
             );
             const content = await fs.readFile(file);
-            response.end(
-                login
-                    ? content.toString().replace('_REPLACE_ME_IS_PUBLIC_MODE', 'true')
-                    : file.endsWith('.html')
-                      ? content
-                            .toString()
-                            .replace(
-                                '_REPLACE_ME_USER',
-                                JSON.stringify({ username: options.username, isAdmin: options.isAdmin }).replace(
-                                    /</g,
-                                    '\\u003c'
-                                )
-                            )
-                            .replace(
-                                '<!--_REPLACE_ME_MOD_VERSION-->',
-                                JSON.stringify(options.modVersion).replace(/</g, '\\u003c')
-                            )
-                      : content
-            );
+            response.end(content);
         } catch {
             response.writeHead(404).end('Missing asset');
         }
@@ -659,6 +663,10 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await mode.selectOption('icons');
     await page.reload();
     await mode.waitFor();
+    await page.waitForFunction(
+        (select) => !select.querySelector('option[value="icons"]').disabled,
+        await mode.elementHandle()
+    );
     assert.equal(await mode.inputValue(), 'icons');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await item.waitFor();
@@ -693,6 +701,10 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await mode.selectOption('both');
     await page.reload();
     await mode.waitFor();
+    await page.waitForFunction(
+        (select) => !select.querySelector('option[value="icons"]').disabled,
+        await mode.elementHandle()
+    );
     assert.equal(await mode.inputValue(), 'both');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await item.waitFor();
@@ -3255,7 +3267,7 @@ test('login errors keep the new UI selector and destination without loading a th
     assert.equal(new URL(page.url()).searchParams.get('ui'), 'next');
     assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/items`);
     assert.equal(
-        options.requests.some((request) => request.path.includes('/assets/web/')),
+        options.requests.some((request) => request.path.includes('/assets/web/themes/')),
         false
     );
 });
@@ -3861,4 +3873,80 @@ test('resource details are text, keyboard accessible and paging does not require
     await page.getByRole('button', { name: 'Previous page' }).click();
     assert.equal(await item.getAttribute('aria-pressed'), 'true');
     assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, 1);
+});
+
+// HTTP/bootstrap and visible controls are the seam: no terminal requests before runtime identity is known.
+test('bootstrap failure keeps the terminal unmounted and retry loads current server metadata', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    options.bootstrapStatus = 503;
+    await page.goto(`${base}#/about`);
+    await page.getByRole('button', { name: 'Try again', exact: true }).waitFor({ timeout: 3000 });
+    assert.equal(await page.getByRole('combobox', { name: 'Network', exact: true }).count(), 0);
+    assert.equal(
+        options.requests.some((request) => request.path === '/api/grids'),
+        false
+    );
+    options.bootstrapStatus = 200;
+    options.username = 'AfterRetry';
+    options.modVersion = 'server-after-retry';
+    await page.getByRole('button', { name: 'Try again', exact: true }).click();
+    await page.getByText('AfterRetry', { exact: true }).waitFor({ timeout: 3000 });
+    await page.getByText(/Version: server-after-retry/).waitFor({ timeout: 3000 });
+    assert.equal(new URL(page.url()).hash, '#/about');
+    assert.equal(options.requests.filter((request) => request.path === '/api/bootstrap').length, 2);
+});
+
+test('login waits for bootstrap and offers private mode only after retry succeeds', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    options.loggedOut = true;
+    options.bootstrapStatus = 503;
+    options.publicMode = false;
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: 'Retry', exact: true }).waitFor({ timeout: 3000 });
+    assert.equal(await page.getByLabel('Username', { exact: true }).isVisible(), false);
+    assert.equal(await page.getByPlaceholder('Enter password', { exact: true }).first().isVisible(), false);
+    options.bootstrapStatus = 200;
+    await page.getByRole('button', { name: 'Accept Cookies', exact: true }).click();
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+    await page.getByPlaceholder('Enter password', { exact: true }).first().waitFor({ timeout: 3000 });
+    assert.equal(await page.getByLabel('Username', { exact: true }).inputValue(), 'Admin');
+    assert.equal(await page.getByLabel('Username', { exact: true }).getAttribute('readonly'), '');
+    assert.equal(await page.getByRole('button', { name: 'Continue', exact: true }).isVisible(), false);
+    assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/items`);
+});
+
+test('login bootstrap keeps public forms hidden until the server mode arrives', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.loggedOut = true;
+    let release;
+    const held = new Promise((resolve) => {
+        release = resolve;
+    });
+    await page.route('**/api/bootstrap', async (route) => {
+        await held;
+        await route.continue();
+    });
+    await page.goto(base);
+    assert.equal(await page.getByLabel('Username', { exact: true }).isVisible(), false);
+    assert.equal(await page.getByRole('button', { name: 'Continue', exact: true }).isVisible(), false);
+    release();
+    await page.getByLabel('Username', { exact: true }).waitFor({ timeout: 3000 });
+    assert.equal(await page.getByLabel('Username', { exact: true }).getAttribute('readonly'), null);
+    await page.getByRole('button', { name: 'Continue', exact: true }).waitFor({ timeout: 3000 });
+});
+
+test('a session lost before bootstrap returns to login with the destination intact', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    await page.route('**/api/bootstrap', async (route) => {
+        options.loggedOut = true;
+        await route.continue();
+    });
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByLabel('Username', { exact: true }).waitFor({ timeout: 3000 });
+    assert.equal(new URL(page.url()).searchParams.get('ui'), 'next');
+    assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/items`);
+    assert.equal(
+        options.requests.some((request) => request.path === '/api/grids'),
+        false
+    );
 });
