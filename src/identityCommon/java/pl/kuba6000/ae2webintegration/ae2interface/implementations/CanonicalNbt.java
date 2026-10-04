@@ -7,6 +7,7 @@ import java.util.List;
 import net.minecraft.nbt.*;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.hash.PrimitiveSink;
 
@@ -24,6 +25,33 @@ final class CanonicalNbt {
 
     static void write(@NotNull Tag tag, @NotNull PrimitiveSink sink) {
         new CanonicalNbt().writeTag(tag, sink, 0);
+    }
+
+    /** Streams the native AE codec's sorted compound envelope without constructing it. */
+    static void writeKey(@NotNull String type, @NotNull String id, @Nullable CompoundTag tag,
+        @Nullable CompoundTag caps, @NotNull PrimitiveSink sink) {
+        CanonicalNbt writer = new CanonicalNbt();
+        writer.nodes = 1;
+        sink.putByte(Tag.TAG_COMPOUND);
+        writeInt(sink, 2 + (tag == null ? 0 : 1) + (caps == null ? 0 : 1));
+        writer.writeStringEntry("#c", type, sink);
+        if (caps != null) {
+            StableKey.writeText(sink, "caps");
+            writer.writeTag(caps, sink, 1);
+        }
+        writer.writeStringEntry("id", id, sink);
+        if (tag != null) {
+            StableKey.writeText(sink, "tag");
+            writer.writeTag(tag, sink, 1);
+        }
+    }
+
+    private void writeStringEntry(@NotNull String name, @NotNull String value, @NotNull PrimitiveSink sink) {
+        checkChildren(1);
+        nodes++;
+        StableKey.writeText(sink, name);
+        sink.putByte(Tag.TAG_STRING);
+        StableKey.writeText(sink, value);
     }
 
     private void writeTag(@NotNull Tag tag, @NotNull PrimitiveSink sink, int depth) {

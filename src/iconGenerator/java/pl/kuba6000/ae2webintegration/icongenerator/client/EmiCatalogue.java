@@ -4,11 +4,11 @@ import java.util.List;
 
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.material.Fluid;
+import net.minecraftforge.fluids.FluidStack;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import appeng.api.stacks.AEFluidKey;
 import dev.emi.emi.api.EmiApi;
 import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.runtime.EmiReloadManager;
@@ -49,7 +49,7 @@ final class EmiCatalogue {
         String context = "emi/" + index;
         Object key = stack.getKey();
         if (key instanceof Item) return IconCandidate.item(context, stack.getItemStack());
-        if (key instanceof Fluid fluid) return new IconCandidate(context, AEFluidKey.of(fluid, stack.getNbt()));
+        if (key instanceof Fluid fluid) return new IconCandidate(context, new FluidStack(fluid, 1, stack.getNbt()));
         throw new UnsupportedOperationException(
             "Unsupported EMI ingredient kind " + key.getClass()
                 .getName());

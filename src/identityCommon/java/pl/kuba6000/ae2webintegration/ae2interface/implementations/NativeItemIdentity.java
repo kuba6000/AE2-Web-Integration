@@ -1,12 +1,17 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.fluids.FluidStack;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
+import appeng.api.stacks.AEKeyType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** Exact native AE key identity, including persistent addon data supported by native codecs. */
@@ -27,6 +32,67 @@ public final class NativeItemIdentity {
             sink.putInt(0);
             sink.putByte((byte) 1);
             CanonicalNbt.write(tag, sink);
+        });
+    }
+
+    /** Encodes an existing nonempty stack and its captured Forge capabilities without an AE wrapper. */
+    public static @NotNull StableKey getKey(@NotNull ItemStack stack, @Nullable CompoundTag caps) {
+        return getStackKey(
+            "item",
+            AEKeyType.items()
+                .getId()
+                .toString(),
+            BuiltInRegistries.ITEM.getKey(stack.getItem())
+                .toString(),
+            stack.getTag(),
+            caps == null || caps.isEmpty() ? null : caps);
+    }
+
+    /** AEItemKey.dropSecondary removes both tags and capabilities, including native defaults. */
+    public static @NotNull StableKey getBaseKey(@NotNull ItemStack stack) {
+        return getStackKey(
+            "item",
+            AEKeyType.items()
+                .getId()
+                .toString(),
+            BuiltInRegistries.ITEM.getKey(stack.getItem())
+                .toString(),
+            null,
+            null);
+    }
+
+    public static @NotNull StableKey getKey(@NotNull FluidStack stack) {
+        return getStackKey(
+            "fluid",
+            AEKeyType.fluids()
+                .getId()
+                .toString(),
+            BuiltInRegistries.FLUID.getKey(stack.getFluid())
+                .toString(),
+            stack.getTag(),
+            null);
+    }
+
+    public static @NotNull StableKey getBaseKey(@NotNull FluidStack stack) {
+        return getStackKey(
+            "fluid",
+            AEKeyType.fluids()
+                .getId()
+                .toString(),
+            BuiltInRegistries.FLUID.getKey(stack.getFluid())
+                .toString(),
+            null,
+            null);
+    }
+
+    private static @NotNull StableKey getStackKey(@NotNull String kind, @NotNull String type, @NotNull String id,
+        @Nullable CompoundTag tag, @Nullable CompoundTag caps) {
+        return StableKey.create(sink -> {
+            StableKey.writeText(sink, kind);
+            StableKey.writeText(sink, id);
+            sink.putInt(0);
+            sink.putByte((byte) 1);
+            CanonicalNbt.writeKey(type, id, tag, caps, sink);
         });
     }
 
