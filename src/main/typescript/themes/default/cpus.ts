@@ -54,13 +54,12 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     const terminal = element('section', '', 'cpu-terminal');
     const header = element('div', '', 'terminal-heading');
     const heading = element('h2');
-    const back = element('a', '', 'cpu-back');
-    header.append(heading, back);
     const searchLabel = element('label', '', 'search');
     const searchName = element('span', '', 'sr-only');
     const search = element('input');
     search.type = 'search';
     searchLabel.append(searchName, search);
+    header.append(heading, searchLabel);
     const status = element('p', '', 'cpu-status');
     status.role = 'status';
     const body = element('div', '', 'terminal-body');
@@ -72,8 +71,8 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     const slots = createSlotGrid(grid, scroll, terminal);
     const empty = element('p', '', 'cpu-empty');
     scroll.append(grid);
-    body.append(scroll);
-    terminal.append(header, searchLabel, status, empty, body);
+    body.append(empty, scroll);
+    terminal.append(header, body);
     view.append(overview, terminal);
     root.append(view);
     const tools = element('div', '', 'cpu-tools terminal-tools');
@@ -94,7 +93,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     const output = element('p');
     const timing = element('p');
     const actions = element('div');
-    panel.append(panelTitle, panelName, summary, output, timing, actions);
+    panel.append(panelTitle, status, panelName, summary, output, timing, actions);
     workspace.append(panel);
     const tooltip = element('div', '', 'tooltip');
     tooltip.id = 'cpu-resource-tooltip';
@@ -589,8 +588,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             const detail = state.error ? null : state.detail;
             const selectedOutcome = state.outcomes[route.cpuKey || ''];
             heading.replaceChildren(renderMinecraftText(cpu?.name || route.cpuKey || ''));
-            back.textContent = t('backCpus');
-            back.href = cpuHref(route.gridKey);
+            heading.title = plainMinecraftText(cpu?.name || route.cpuKey || '');
             searchName.textContent = t('searchCpuResources');
             search.placeholder = t('searchHint');
             search.setAttribute('aria-description', t('searchHelp'));

@@ -1969,7 +1969,7 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
         await page.goto(`${base}&case=${result}#/grids/${gridA}/cpus/cpu-a`);
         await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
         assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isDisabled(), true);
-        await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
+        await page.getByRole('link', { name: 'CPUs', exact: true }).click();
         await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
         await page.goBack();
         await page
@@ -2139,7 +2139,7 @@ test('CPU terminal replaces the CPU list with selected resources and returns to 
     assert.match(await details.textContent(), /3 coprocessors/);
     assert.match(await details.textContent(), /Iron Ingot.*12/);
     assert.equal(await details.getByRole('button', { name: 'Pause current work', exact: true }).isEnabled(), true);
-    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
+    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
     await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
     assert.match(page.url(), /\/cpus$/);
     assert.equal(await resources.isVisible(), false);
@@ -2351,7 +2351,7 @@ test('CPU resource tooltip preserves exact counts and tracking through polling a
     await tooltip.waitFor({ state: 'visible' });
     await page.keyboard.press('Escape');
     await tooltip.waitFor({ state: 'hidden' });
-    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
+    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
     assert.equal(await tooltip.isVisible(), false);
     await page.getByRole('link', { name: /Assembler.*cpu-b/ }).click();
     await resource.focus();
@@ -2411,7 +2411,7 @@ test('CPU terminal scrolls resources within desktop and mobile viewports while c
         assert.equal(documentSize.left, 0);
         for (const control of [
             search,
-            page.getByRole('link', { name: 'Back to CPUs', exact: true }),
+            page.getByRole('link', { name: 'CPUs', exact: true }),
             page.getByRole('button', { name: 'Hide stored-only resources', exact: true }),
             page.getByRole('button', { name: 'Cancel current work', exact: true })
         ]) {
@@ -2545,7 +2545,7 @@ test('CPU list and detail pause controls use capability, busy state and stable C
         ]
     );
     assert.ok(requests.every((request) => request.headers['x-ae2-request'] === 'true'));
-    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
+    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
     await row('unsupported').getByRole('link').click();
     await page.getByRole('button', { name: /^(Pause|Resume) current work$/ }).waitFor({ state: 'hidden' });
     assert.equal(await page.getByRole('button', { name: /^(Pause|Resume) current work$/ }).count(), 0);
@@ -2884,7 +2884,7 @@ test('CPU removal and denied reads clear current work without selecting a replac
         0
     );
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).count(), 0);
-    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
+    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
     await page.getByRole('link', { name: /Assembler.*cpu-a/ }).click();
     await page
         .getByRole('region', { name: 'CPU resources', exact: true })
@@ -2970,7 +2970,7 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
     );
     await poll(page);
     const delayed = await captured;
-    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
+    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
     await page.getByRole('link', { name: /Assembler.*cpu-b/ }).click();
     await page.getByText('Current output unavailable', { exact: true }).waitFor();
     await page
@@ -3015,7 +3015,7 @@ test('uncertain CPU cancellation never replays after refresh or route reentry', 
             .waitFor({ timeout: 3000 });
         const count = options.requests.filter((request) => request.path.endsWith('/cancel')).length;
         await poll(page);
-        await page.getByRole('link', { name: 'Back to CPUs', exact: true }).click();
+        await page.getByRole('link', { name: 'CPUs', exact: true }).click();
         await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
         await page.goBack();
         await page
@@ -4163,7 +4163,7 @@ test('CPU overview keeps names primary and exposes identity without extra detail
     await settleResponse(page, (await refreshed).request());
     assert.equal(await first.evaluate((link) => link === document.activeElement), true);
     await page.keyboard.press('Enter');
-    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).waitFor();
+    await page.getByRole('region', { name: 'CPU resources', exact: true }).waitFor();
     assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/cpus/cpu-a`);
 });
 
@@ -4322,4 +4322,88 @@ test('CPU overview aligns with the terminal and scrolls only real processor pane
         await settleResponse(page, (await updated).request());
         assert.equal(await cards.count(), 1, 'sparse overview has no decorative CPU placeholders');
     }
+});
+
+// Public geometry seam: the selected CPU keeps the same terminal header and resource viewport.
+test('selected CPU aligns its heading search and resource viewport with the main terminal', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = { 'cpu-a': { ...cpu, isBusy: true, supportsPause: true } };
+    options.cpuDetails['cpu-a'] = {
+        ...cpuWork,
+        supportsPause: true,
+        items: Array.from({ length: 80 }, (_, index) => ({
+            ...cpuWork.items[0],
+            itemid: `test:part_${index}`,
+            itemname: `Part ${String(index).padStart(3, '0')}`
+        }))
+    };
+    const measure = (locator) =>
+        locator.evaluate((node) => {
+            const r = node.getBoundingClientRect(),
+                s = getComputedStyle(node);
+            return {
+                x: r.x,
+                y: r.y,
+                right: r.right,
+                height: r.height,
+                fontSize: s.fontSize,
+                fontWeight: s.fontWeight,
+                fontFamily: s.fontFamily,
+                color: s.color
+            };
+        });
+    for (const viewport of [
+        { width: 1184, height: 900 },
+        { width: 390, height: 844 },
+        { width: 1184, height: 540 }
+    ]) {
+        await page.setViewportSize(viewport);
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+        const normalHeading = await measure(page.getByRole('heading', { name: 'Terminal', exact: true }));
+        const normalSearch = await measure(page.getByRole('searchbox', { name: 'Search resources', exact: true }));
+        const normalScroll = await measure(page.getByRole('region', { name: 'Resources', exact: true }));
+        await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+        const region = page.getByRole('region', { name: 'CPU resources', exact: true });
+        await region.getByRole('button', { name: /Part 000/ }).waitFor();
+        const heading = page.getByRole('heading', { name: 'Assembler', level: 2, exact: true });
+        const actualHeading = await measure(heading);
+        for (const key of ['x', 'y'])
+            assert.ok(Math.abs(actualHeading[key] - normalHeading[key]) < 0.1, `${key} heading matches`);
+        for (const key of ['fontSize', 'fontWeight', 'fontFamily', 'color'])
+            assert.equal(actualHeading[key], normalHeading[key]);
+        const search = page.getByRole('searchbox', { name: 'Search CPU resources', exact: true });
+        const actualSearch = await measure(search);
+        for (const key of ['y', 'right', 'height'])
+            assert.ok(Math.abs(actualSearch[key] - normalSearch[key]) < 0.1, `${key} search matches`);
+        const actualScroll = await measure(region);
+        for (const key of ['x', 'y', 'right'])
+            assert.ok(Math.abs(actualScroll[key] - normalScroll[key]) < 0.1, `${key} resources match`);
+        assert.equal(await page.getByRole('link', { name: 'Back to CPUs', exact: true }).count(), 0);
+        await region.getByRole('button').last().scrollIntoViewIfNeeded();
+        assert.ok(await region.evaluate((node) => node.scrollTop > 0));
+        assert.deepEqual(await measure(heading), actualHeading);
+        assert.deepEqual(await measure(search), actualSearch);
+        await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+        await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
+    }
+    options.cpus['cpu-a'].name = 'A very long processor name that must not push the search outside the terminal';
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const longHeading = page.getByRole('heading', { name: options.cpus['cpu-a'].name, level: 2, exact: true });
+    await longHeading.waitFor();
+    const search = page.getByRole('searchbox', { name: 'Search CPU resources', exact: true });
+    await search.fill('Part 000');
+    assert.equal(await page.getByRole('region', { name: 'CPU resources', exact: true }).getByRole('button').count(), 1);
+    const nameBox = await measure(longHeading),
+        searchBox = await measure(search);
+    assert.ok(nameBox.right <= searchBox.x, 'long title does not overlap search');
+    assert.ok(searchBox.right - searchBox.x >= 80, 'search remains usable on mobile');
+    assert.ok(
+        await page.evaluate(
+            () =>
+                document.documentElement.scrollWidth <= innerWidth &&
+                document.documentElement.scrollHeight <= innerHeight
+        )
+    );
 });

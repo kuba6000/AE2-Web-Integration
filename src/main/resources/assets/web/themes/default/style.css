@@ -336,30 +336,19 @@ header {
     gap: 8px;
     margin-block: 8px;
 }
-.cpu-terminal > .search {
-    width: auto;
-    flex: 0 0 auto;
-    margin: 10px var(--grid-inset, 22px) 0;
-}
-.cpu-terminal .terminal-heading {
-    gap: 12px;
-    align-items: start;
-}
 .cpu-terminal .terminal-heading h2 {
     min-width: 0;
-    font-size: 20px;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-.cpu-back {
-    flex-shrink: 0;
-    font-size: 11px;
-    color: var(--terminal-title);
-    padding-block: 5px;
+.cpu-terminal .search {
+    flex: 0 0 min(60%, 540px);
 }
 .cpu-status {
-    margin: 8px var(--grid-inset, 22px) 0;
+    margin: 8px 0;
     font-size: 12px;
-    color: var(--muted);
+    color: var(--surface-muted);
 }
 .cpu-status:empty {
     display: none;
@@ -844,7 +833,8 @@ label {
     /* Keep the title centered at the same height as the terminal's search control. */
     min-height: 37px;
 }
-.cpu-list-status {
+.cpu-list-status,
+.cpu-empty {
     margin: 0 var(--grid-inset, 22px) 10px;
     color: var(--muted);
     font-size: 12px;
