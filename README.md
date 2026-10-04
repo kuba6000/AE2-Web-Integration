@@ -84,19 +84,20 @@ password accordingly!
 
 ### Optional item icons
 
-The new web UI can display item icons in the inventory and crafting CPU resource list. Generate an
-`.ae2wi-icons` archive with the icon generator for the server's Minecraft version and matching modpack,
-then stop the server and copy it to `config/ae2webintegration/icons.ae2wi-icons`. Start the server to load
-the archive. Replacing or removing a pack also requires stopping and restarting the server.
+To show item icons in the web panel, generate an icon pack from your Minecraft client:
 
-The client icon generator is available for Minecraft 1.7.10 (GTNH), 1.12.2 (AE2UEL), 1.20.1 (Forge)
-and 1.21.1 (NeoForge). Packs must match the server's Minecraft version, loader and icon-pack compatibility
-version; a 1.7.10 pack cannot be used on another version. Generate with the resource packs whose appearance you want in the browser.
+1. Install the `ae2webintegration-icon-generator-*.jar` for your Minecraft version and mod loader
+   in your client's `mods` folder. Use the same modpack as the server.
+2. Start the game with the resource packs you want to use for the icons, then enter a world.
+3. Run `/ae2webicons export` in chat and wait for the progress window to finish.
+4. Find the generated `.ae2wi-icons` file in the `ae2webicons` folder inside your game directory.
+5. Stop the server, copy that file into `config/ae2webintegration/`, and rename it to `icons.ae2wi-icons`.
+6. Start the server. In the web panel settings, choose **Icons and names** or **Icons only**
+   under **Terminal display**.
 
-Icons are optional. A missing, invalid or incompatible archive leaves the terminal usable without
-icons; invalid archives are reported in the server log. The terminal display setting offers names only,
-icons and names, or icons only. Without a server icon pack, the terminal displays names without changing
-the saved preference. Missing individual icons use placeholders and do not affect crafting controls.
+The icons use the appearance of your loaded resource packs. You can cancel generation from the
+progress window. To replace or remove the server's icon pack, stop the server first and restart it afterward.
+Icons are optional; without an icon pack, the terminal displays item names.
 
 ### Terminal
 
@@ -254,12 +255,6 @@ documentation can be found here: https://ae2web.kuba6000.pl/docs/
 You can also generate the entire documentation yourself,
 see the [OpenAPI generator guide](tools/openapi-doclet/README.md) for generating the API
 specification from endpoint annotations and Javadocs.
-
-## IntelliJ IDEA
-
-Open this checkout as a Gradle project. The versioned `.idea/inspectionProfiles` files select the
-**AE2 Web Integration** project inspection profile. Gradle supplies the source sets and dependencies;
-SDK locations and personal workspace settings stay local. Commit shared inspection changes with the code.
 
 ## Compatibility
 
