@@ -495,6 +495,7 @@ function createTranslator(language: string, dictionaries: Dictionaries) {
         common: (key: string, values: MessageValues = {}) => translate(translations, key, values),
         duration(milliseconds: number) {
             let remaining = Math.max(0, milliseconds);
+            if (remaining >= 60000) remaining = Math.floor(remaining / 1000) * 1000;
             const parts: string[] = [];
             for (const [unit, size] of [
                 ['durationDays', 86400000],

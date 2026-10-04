@@ -1846,11 +1846,33 @@ test('history rows keep product names primary and scroll beneath a stationary he
 for (const language of ['en', 'pl']) {
     test(`history and CPU share readable millisecond durations in ${language} and entire history rows navigate`, async (t) => {
         const { page, options, base } = await fixture(t);
-        const durations = [0, 59999, 60000, 3600000, 86400000, 93784005, 1728000000];
+        const durations = [0, 59999, 60000, 3600000, 86400000, 93784005, 1728000000, 60001, 61999, 3599999];
         const expected =
             language === 'en'
-                ? ['0 s', '59.999 s', '1 min', '1 h', '1 d', '1 d 2 h 3 min 4.005 s', '20 d']
-                : ['0 s', '59,999 s', '1 min', '1 godz.', '1 dzień', '1 dzień 2 godz. 3 min 4,005 s', '20 dni'];
+                ? [
+                      '0 s',
+                      '59.999 s',
+                      '1 min',
+                      '1 h',
+                      '1 d',
+                      '1 d 2 h 3 min 4 s',
+                      '20 d',
+                      '1 min',
+                      '1 min 1 s',
+                      '59 min 59 s'
+                  ]
+                : [
+                      '0 s',
+                      '59,999 s',
+                      '1 min',
+                      '1 godz.',
+                      '1 dzień',
+                      '1 dzień 2 godz. 3 min 4 s',
+                      '20 dni',
+                      '1 min',
+                      '1 min 1 s',
+                      '59 min 59 s'
+                  ];
         options.history = durations.map((duration, index) => ({
             ...historyEntry,
             id: index + 1,
@@ -1880,7 +1902,7 @@ for (const language of ['en', 'pl']) {
         const rows = page.getByRole('listitem');
         await page.getByRole('link', { name: /Iron Ingot.*#7/ }).waitFor();
         for (let index = 0; index < durations.length; index++)
-            assert.ok((await rows.nth(index).innerText()).includes(expected[index]));
+            assert.equal(await rows.nth(index).locator('dd').last().innerText(), expected[index]);
         const row = rows.nth(5);
         await row.locator('time').click();
         await page.getByRole('table').waitFor();
