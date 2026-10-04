@@ -12,7 +12,7 @@ const translations: Dictionaries = {
         historyNoTimings: 'No processing intervals were recorded.',
         noIntervals: 'No intervals measured.',
         timingIntervals: 'Intervals: {count}',
-        processingTotal: 'Total processing time: {count} s',
+        processingTotal: 'Total processing time: {duration}',
         gridSettings: 'Grid settings',
         serverSettings: 'Server settings',
         webSettings: 'Web settings',
@@ -86,7 +86,7 @@ const translations: Dictionaries = {
         cpuWorking: 'CPU is crafting.',
         cpuIdleMessage: 'CPU is idle.',
         cpuStarted: 'Started: {time}',
-        cpuElapsed: 'Elapsed: {count} s',
+        cpuElapsed: 'Elapsed: {duration}',
         cpuTrackingUnavailable: 'Tracking measurements are unavailable for this work.',
         cpuActive: 'Active',
         cpuPending: 'Pending',
@@ -97,7 +97,10 @@ const translations: Dictionaries = {
         cpuElapsedShare: 'Share of elapsed time',
         cpuProcessingShare: 'Share of processing time',
         cpuTimeShare: 'Time share',
-        seconds: '{count} s',
+        durationDays: '{count} d',
+        durationHours: '{count} h',
+        durationMinutes: '{count} min',
+        durationSeconds: '{count} s',
         cancelCpuWork: 'Cancel current work',
         confirmCancelCpu: 'Cancel the current work on {cpu}?',
         pauseCpuWork: 'Pause current work',
@@ -222,7 +225,7 @@ const translations: Dictionaries = {
         historyNoTimings: 'Nie zapisano przedziałów przetwarzania.',
         noIntervals: 'Nie zmierzono przedziałów.',
         timingIntervals: 'Przedziały: {count}',
-        processingTotal: 'Łączny czas przetwarzania: {count} s',
+        processingTotal: 'Łączny czas przetwarzania: {duration}',
         gridSettings: 'Ustawienia sieci',
         serverSettings: 'Ustawienia serwera',
         webSettings: 'Ustawienia strony',
@@ -296,7 +299,7 @@ const translations: Dictionaries = {
         cpuWorking: 'CPU pracuje.',
         cpuIdleMessage: 'CPU jest wolny.',
         cpuStarted: 'Początek: {time}',
-        cpuElapsed: 'Czas trwania: {count} s',
+        cpuElapsed: 'Czas trwania: {duration}',
         cpuTrackingUnavailable: 'Pomiary śledzenia są niedostępne dla tej pracy.',
         cpuActive: 'Aktywne',
         cpuPending: 'Oczekujące',
@@ -307,7 +310,10 @@ const translations: Dictionaries = {
         cpuElapsedShare: 'Udział w czasie trwania',
         cpuProcessingShare: 'Udział w czasie przetwarzania',
         cpuTimeShare: 'Udział czasu',
-        seconds: '{count} s',
+        durationDays: { one: '{count} dzień', other: '{count} dni' },
+        durationHours: '{count} godz.',
+        durationMinutes: '{count} min',
+        durationSeconds: '{count} s',
         cancelCpuWork: 'Anuluj bieżącą pracę',
         confirmCancelCpu: 'Anulować bieżącą pracę na {cpu}?',
         pauseCpuWork: 'Wstrzymaj bieżącą pracę',
@@ -487,6 +493,22 @@ function createTranslator(language: string, dictionaries: Dictionaries) {
     return {
         t: (key: string, values: MessageValues = {}) => translate(dictionaries, key, values),
         common: (key: string, values: MessageValues = {}) => translate(translations, key, values),
+        duration(milliseconds: number) {
+            let remaining = Math.max(0, milliseconds);
+            const parts: string[] = [];
+            for (const [unit, size] of [
+                ['durationDays', 86400000],
+                ['durationHours', 3600000],
+                ['durationMinutes', 60000]
+            ] as const) {
+                const count = Math.floor(remaining / size);
+                remaining %= size;
+                if (count) parts.push(translate(translations, unit, { count }));
+            }
+            if (remaining || !parts.length)
+                parts.push(translate(translations, 'durationSeconds', { count: remaining / 1000 }));
+            return parts.join(' ');
+        },
         number: (value: number) => numbers.format(value),
         time: (value: number) => times.format(value),
         dateTime: (value: number) => dates.format(value),

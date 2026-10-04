@@ -55,8 +55,10 @@ export function createHistoryView(root: HTMLElement) {
         const product = element('div');
         product.className = 'history-product';
         const link = element('a');
+        const name = element('span');
+        name.className = 'history-name';
         const quantity = element('span');
-        product.append(link, quantity);
+        product.append(name, quantity);
         const outcome = element('span');
         outcome.className = 'history-outcome';
         const timing = element('dl');
@@ -72,8 +74,9 @@ export function createHistoryView(root: HTMLElement) {
         const duration = element('dd');
         elapsed.append(elapsedLabel, duration);
         timing.append(finished, elapsed);
-        li.append(product, outcome, timing);
-        return { li, link, quantity, outcome, finishedLabel, time, elapsedLabel, duration };
+        link.append(product, outcome, timing);
+        li.append(link);
+        return { li, link, name, quantity, outcome, finishedLabel, time, elapsedLabel, duration };
     }
 
     let entries: Map<HistoryEntry['id'], HistoryRow> = new Map();
@@ -106,7 +109,7 @@ export function createHistoryView(root: HTMLElement) {
             state.entries.forEach((entry, index) => {
                 const row = entries.get(entry.id) || createRow();
                 row.link.href = historyHref(route.gridKey, entry.id);
-                row.link.replaceChildren(renderMinecraftText(entry.finalOutput.itemname));
+                row.name.replaceChildren(renderMinecraftText(entry.finalOutput.itemname));
                 row.link.setAttribute(
                     'aria-label',
                     `${plainMinecraftText(entry.finalOutput.itemname)} × ${number(entry.finalOutput.quantity)} · #${entry.id}`
@@ -119,9 +122,11 @@ export function createHistoryView(root: HTMLElement) {
                 row.time.textContent = dateTime(entry.timeDone);
                 row.time.dateTime = new Date(entry.timeDone).toISOString();
                 row.elapsedLabel.textContent = t('historyDurationLabel');
-                row.duration.textContent = t('seconds', {
-                    count: Math.max(0, entry.timeDone - entry.timeStarted) / 1000
-                });
+                row.duration.textContent = locale.duration(entry.timeDone - entry.timeStarted);
+                row.link.setAttribute(
+                    'aria-description',
+                    `${row.outcome.textContent}. ${row.finishedLabel.textContent}: ${row.time.textContent}. ${row.elapsedLabel.textContent}: ${row.duration.textContent}`
+                );
                 if (list.children[index] !== row.li) list.insertBefore(row.li, list.children[index] || null);
                 current.set(entry.id, row);
             });
@@ -145,7 +150,7 @@ export function createHistoryView(root: HTMLElement) {
                 element('code', snapshot.finalOutput.itemid),
                 element('p', t('cpuStarted', { time: dateTime(snapshot.timeStarted) })),
                 element('p', t('historyEnded', { time: dateTime(snapshot.timeDone) })),
-                element('p', t('cpuElapsed', { count: Math.max(0, snapshot.timeDone - snapshot.timeStarted) / 1000 }))
+                element('p', t('cpuElapsed', { duration: locale.duration(snapshot.timeDone - snapshot.timeStarted) }))
             );
             const tableScroll = element('div');
             tableScroll.className = 'plan-table';
@@ -173,7 +178,7 @@ export function createHistoryView(root: HTMLElement) {
                 row.append(name);
                 for (const value of [
                     number(item.craftedTotal),
-                    t('seconds', { count: item.timeSpentOn / 1000 }),
+                    locale.duration(item.timeSpentOn),
                     `${number(item.craftsPerSec)}/s`,
                     `${number(item.shareInCraftingTimeCombined * 100)}%`,
                     `${number(item.shareInCraftingTime * 100)}%`

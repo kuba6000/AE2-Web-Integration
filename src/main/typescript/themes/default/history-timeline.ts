@@ -13,7 +13,7 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): 
 /* Detached history intervals; each API row remains separate even when names/registry IDs repeat. */
 
 export function renderHistoryTimeline(snapshot: HistoryDetail, locale: Translator) {
-    const { common: t, number, preciseTime } = locale;
+    const { common: t, duration: formatDuration, preciseTime } = locale;
     const container = element('div');
     container.className = 'history-timelines';
     const duration = snapshot.timeDone - snapshot.timeStarted;
@@ -35,7 +35,9 @@ export function renderHistoryTimeline(snapshot: HistoryDetail, locale: Translato
             if (!providers) section.append(element('code', (row as HistoryItem).itemid));
             else {
                 const provider = row as ProviderTiming;
-                section.append(element('p', t('processingTotal', { count: provider.timingsCombined / 1000 })));
+                section.append(
+                    element('p', t('processingTotal', { duration: formatDuration(provider.timingsCombined) }))
+                );
                 for (const position of provider.location)
                     section.append(element('p', t('position', { dimension: position.dimid, ...position })));
             }
@@ -66,7 +68,7 @@ export function renderHistoryTimeline(snapshot: HistoryDetail, locale: Translato
                     start,
                     document.createTextNode(' — '),
                     end,
-                    document.createTextNode(` · ${number(Math.max(0, interval.ended - interval.started) / 1000)} s`)
+                    document.createTextNode(` · ${formatDuration(interval.ended - interval.started)}`)
                 );
                 list.append(item);
             }

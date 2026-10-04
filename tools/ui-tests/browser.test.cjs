@@ -1654,6 +1654,74 @@ test('history rows keep product names primary and scroll beneath a stationary he
     await first.waitFor();
 });
 
+for (const language of ['en', 'pl']) {
+    test(`history and CPU share readable millisecond durations in ${language} and entire history rows navigate`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        const durations = [0, 59999, 60000, 3600000, 86400000, 93784005, 1728000000];
+        const expected =
+            language === 'en'
+                ? ['0 s', '59.999 s', '1 min', '1 h', '1 d', '1 d 2 h 3 min 4.005 s', '20 d']
+                : ['0 s', '59,999 s', '1 min', '1 godz.', '1 dzień', '1 dzień 2 godz. 3 min 4,005 s', '20 dni'];
+        options.history = durations.map((duration, index) => ({
+            ...historyEntry,
+            id: index + 1,
+            timeDone: historyEntry.timeStarted + duration
+        }));
+        options.historyDetail = {
+            ...historyDetail,
+            timeDone: historyEntry.timeStarted + 93784005,
+            items: [
+                {
+                    ...historyDetail.items[0],
+                    timeSpentOn: 93784005,
+                    timings: [{ started: historyEntry.timeStarted, ended: historyEntry.timeStarted + 93784005 }]
+                }
+            ],
+            interfaceShare: [{ ...historyDetail.interfaceShare[0], timingsCombined: 93784005 }]
+        };
+        options.cpus = { 'cpu-a': { ...cpu, isBusy: true } };
+        options.cpuDetails['cpu-a'] = {
+            ...cpuWork,
+            timeElapsed: 93784005,
+            items: [{ ...cpuWork.items[0], timeSpentCrafting: 93784005 }]
+        };
+        await page.goto(`${base}#/web-settings`);
+        await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption(language);
+        await page.goto(`${base}#/grids/${gridA}/history`);
+        const rows = page.getByRole('listitem');
+        await page.getByRole('link', { name: /Iron Ingot.*#7/ }).waitFor();
+        for (let index = 0; index < durations.length; index++)
+            assert.ok((await rows.nth(index).innerText()).includes(expected[index]));
+        const row = rows.nth(5);
+        await row.locator('time').click();
+        await page.getByRole('table').waitFor();
+        assert.match(page.url(), /history\/6$/);
+        assert.equal(await page.getByRole('cell', { name: expected[5], exact: true }).count(), 1);
+        const resource = page.getByRole('region', { name: 'Iron Ingot', exact: true });
+        await resource.locator('summary').click();
+        assert.ok((await resource.innerText()).includes(expected[5]));
+        assert.ok((await page.getByRole('region', { name: 'Smelter', exact: true }).innerText()).includes(expected[5]));
+        await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+        const item = page.getByRole('button', { name: /Iron Ingot/ });
+        await item.waitFor();
+        assert.ok((await page.locator('#cpu-panel').innerText()).includes(expected[5]));
+        await item.focus();
+        assert.ok((await page.getByRole('tooltip').innerText()).includes(expected[5]));
+        await page.goto(`${base}#/grids/${gridA}/history`);
+        const first = page.getByRole('link', { name: /Iron Ingot.*#1$/ });
+        await first.waitFor();
+        const box = await first.boundingBox();
+        await first.click({ position: { x: box.width - 5, y: box.height - 5 } });
+        await page.getByRole('table').waitFor();
+        assert.match(page.url(), /history\/1$/);
+        await page.goto(`${base}#/grids/${gridA}/history`);
+        await first.focus();
+        await page.keyboard.press('Enter');
+        await page.getByRole('table').waitFor();
+        assert.match(page.url(), /history\/1$/);
+    });
+}
+
 test('history preserves entry identity and opens measured cancelled work through direct routes', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     options.history = [{ ...historyEntry, id: 2 }, historyEntry];

@@ -148,7 +148,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             .map(([key, quantity]) => [key, locale.number(quantity)]);
         if (state.detail?.hasTrackingInfo)
             values.push(
-                ['cpuTimeSpent', locale.common('seconds', { count: item.timeSpentCrafting / 1000 })],
+                ['cpuTimeSpent', locale.duration(item.timeSpentCrafting)],
                 ['cpuCraftedTotal', locale.number(item.craftedTotal)],
                 ['cpuRate', `${locale.number(item.craftsPerSec)}/s`],
                 ['cpuElapsedShare', `${locale.number(item.shareInCraftingTimeCombined * 100)}%`],
@@ -616,7 +616,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             if (detail) renderOutput(output, detail);
             timing.textContent = detail?.isBusy
                 ? detail.hasTrackingInfo
-                    ? `${t('cpuStarted', { time: locale.dateTime(detail.timeStarted) })} · ${t('cpuElapsed', { count: detail.timeElapsed / 1000 })}`
+                    ? `${t('cpuStarted', { time: locale.dateTime(detail.timeStarted) })} · ${t('cpuElapsed', { duration: locale.duration(detail.timeElapsed) })}`
                     : t('cpuTrackingUnavailable')
                 : '';
             renderActions(actions, route.cpuKey || '', detail);
