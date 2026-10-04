@@ -2,7 +2,7 @@
  * JSON contracts from the core endpoint responses and JSON_* DTOs.
  * These declarations describe the wire format; they do not validate responses at runtime.
  */
-export type Bootstrap = {
+export type ApplicationContext = {
     publicMode: boolean;
     modVersion: string | null;
     isOutdated: boolean;

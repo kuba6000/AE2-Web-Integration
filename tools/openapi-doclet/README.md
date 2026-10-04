@@ -53,7 +53,9 @@ public final class GetGrids {
 | `@QueryParam("name")` on a boolean field | Optional query flag, false when omitted; field Javadoc describes its meaning. |
 | `@Body` | Field whose DTO describes the required JSON request body. |
 | `@OptionalInput` | Input member that may be omitted; explicit null remains disallowed. |
-| `@Endpoint(authenticated = false, ...)` | Operation without an authentication requirement. |
+| `@Endpoint(authentication = Authentication.REQUIRED, ...)` (default) | Authentication is required; the operation inherits the global Bearer-or-cookie security alternatives. |
+| `@Endpoint(authentication = Authentication.OPTIONAL, ...)` | The operation accepts anonymous requests and uses valid credentials when supplied; security lists anonymous, Bearer and cookie alternatives. |
+| `@Endpoint(authentication = Authentication.NONE, ...)` | The operation ignores existing request credentials and declares an empty security array. |
 
 Endpoint packages determine the operation categories through the doclet's category mapping.
 

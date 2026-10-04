@@ -25,6 +25,7 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
+import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
@@ -34,11 +35,13 @@ import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 class ApiRoutingHttpTest {
 
     private HttpServer server;
+    private volatile boolean localAccess;
 
     @BeforeEach
     void start() throws Exception {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         ApiRouter router = new ApiRouter(exchange -> {
+            if (localAccess) return new RequestContext(exchange, WebPrincipal.localhost());
             boolean identified = "Bearer valid".equals(
                 exchange.getRequestHeaders()
                     .getFirst("Authorization"))
@@ -50,6 +53,8 @@ class ApiRoutingHttpTest {
         router.register(Echo.class);
         router.register(Read.class);
         router.register(FailingRead.class);
+        router.register(PublicIdentity.class);
+        router.register(OptionalIdentity.class);
         server.createContext("/api", router);
         server.start();
     }
@@ -109,6 +114,85 @@ class ApiRoutingHttpTest {
         public void handle() {
             throw new IllegalArgumentException("Internal data cannot be processed");
         }
+    }
+
+    @Endpoint(method = HttpMethod.POST, path = "/api/public-identity", authentication = Authentication.NONE)
+    public static class PublicIdentity extends IAsyncRequest {
+
+        @Override
+        public void handle() {
+            succeed(
+                Collections.singletonMap(
+                    "isAdmin",
+                    context.getPrincipal()
+                        .isAdmin()));
+        }
+    }
+
+    @Endpoint(method = HttpMethod.POST, path = "/api/optional-identity", authentication = Authentication.OPTIONAL)
+    public static class OptionalIdentity extends IAsyncRequest {
+
+        @Override
+        public void handle() {
+            succeed(
+                Collections.singletonMap(
+                    "isAdmin",
+                    context.getPrincipal()
+                        .isAdmin()));
+        }
+    }
+
+    @Test
+    void publicEndpointDoesNotInheritAnExistingAuthenticatedPrincipal() throws Exception {
+        for (String credentials : new String[] { "", "Authorization: Bearer valid\r\n",
+            "Cookie: authenticationToken=valid\r\n" }) {
+            Reply reply = request("POST", "/api/public-identity", credentials, "");
+            assertEquals(HttpURLConnection.HTTP_OK, reply.status());
+            assertFalse(
+                reply.json()
+                    .getAsJsonObject("data")
+                    .get("isAdmin")
+                    .getAsBoolean());
+        }
+        localAccess = true;
+        assertFalse(
+            request("POST", "/api/public-identity", "", "").json()
+                .getAsJsonObject("data")
+                .get("isAdmin")
+                .getAsBoolean());
+    }
+
+    @Test
+    void optionalAuthenticationProtectsAuthenticatedCookieMutations() throws Exception {
+        Reply anonymous = request("POST", "/api/optional-identity", "", "");
+        assertEquals(HttpURLConnection.HTTP_OK, anonymous.status());
+        assertFalse(
+            anonymous.json()
+                .getAsJsonObject("data")
+                .get("isAdmin")
+                .getAsBoolean());
+        String cookie = "Cookie: authenticationToken=valid\r\n";
+        assertEquals(HttpURLConnection.HTTP_FORBIDDEN, request("POST", "/api/optional-identity", cookie, "").status());
+        for (String credentials : new String[] { cookie + "X-AE2-Request: true\r\n",
+            "Authorization: Bearer valid\r\n" }) {
+            Reply identified = request("POST", "/api/optional-identity", credentials, "");
+            assertEquals(HttpURLConnection.HTTP_OK, identified.status());
+            assertTrue(
+                identified.json()
+                    .getAsJsonObject("data")
+                    .get("isAdmin")
+                    .getAsBoolean());
+        }
+        assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, request("GET", "/api/echo/example", "", "").status());
+        localAccess = true;
+        assertEquals(HttpURLConnection.HTTP_FORBIDDEN, request("POST", "/api/optional-identity", "", "").status());
+        Reply local = request("POST", "/api/optional-identity", "X-AE2-Request: true\r\n", "");
+        assertEquals(HttpURLConnection.HTTP_OK, local.status());
+        assertTrue(
+            local.json()
+                .getAsJsonObject("data")
+                .get("isAdmin")
+                .getAsBoolean());
     }
 
     @Test

@@ -50,7 +50,7 @@ async function start() {
     status.textContent = locale.common('bootstrapLoading');
     root.replaceChildren(status);
     try {
-        const metadata = await api.bootstrap(controller.signal);
+        const metadata = await api.context(controller.signal);
         if (disposed || leaving) return;
         if (!metadata.user) {
             returnToLogin();

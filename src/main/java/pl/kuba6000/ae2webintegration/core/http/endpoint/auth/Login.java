@@ -15,6 +15,7 @@ import pl.kuba6000.ae2webintegration.core.auth.AuthService.LoginResult;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
@@ -47,7 +48,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
  * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
  * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
  */
-@Endpoint(method = HttpMethod.POST, path = "/api/auth/login", authenticated = false)
+@Endpoint(method = HttpMethod.POST, path = "/api/auth/login", authentication = Authentication.NONE)
 public final class Login extends IAsyncRequest {
 
     /** Account credentials and the requested session lifetime. */

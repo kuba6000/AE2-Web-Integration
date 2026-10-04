@@ -185,7 +185,7 @@ async function fixture(t, mount = '', contextOptions = {}) {
                 response.end(JSON.stringify({ status: options.fault.status, data: null }));
                 return;
             }
-            if (resource === '/api/bootstrap') {
+            if (resource === '/api/context') {
                 if (options.bootstrapDelay) await new Promise((resolve) => setTimeout(resolve, options.bootstrapDelay));
                 response.statusCode = options.bootstrapStatus;
                 response.end(
@@ -3893,7 +3893,7 @@ test('bootstrap failure keeps the terminal unmounted and retry loads current ser
     await page.getByText('AfterRetry', { exact: true }).waitFor({ timeout: 3000 });
     await page.getByText(/Version: server-after-retry/).waitFor({ timeout: 3000 });
     assert.equal(new URL(page.url()).hash, '#/about');
-    assert.equal(options.requests.filter((request) => request.path === '/api/bootstrap').length, 2);
+    assert.equal(options.requests.filter((request) => request.path === '/api/context').length, 2);
 });
 
 test('login waits for bootstrap and offers private mode only after retry succeeds', async (t) => {
@@ -3922,7 +3922,7 @@ test('login bootstrap keeps public forms hidden until the server mode arrives', 
     const held = new Promise((resolve) => {
         release = resolve;
     });
-    await page.route('**/api/bootstrap', async (route) => {
+    await page.route('**/api/context', async (route) => {
         await held;
         await route.continue();
     });
@@ -3937,7 +3937,7 @@ test('login bootstrap keeps public forms hidden until the server mode arrives', 
 
 test('a session lost before bootstrap returns to login with the destination intact', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
-    await page.route('**/api/bootstrap', async (route) => {
+    await page.route('**/api/context', async (route) => {
         options.loggedOut = true;
         await route.continue();
     });

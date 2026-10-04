@@ -370,7 +370,14 @@ public final class OpenApiDoclet implements Doclet {
             "responses",
             documentedResponses);
         addInputs(endpoint, routePath, pathDescriptions, operation);
-        if (Boolean.FALSE.equals(annotationValue(route, "authenticated"))) operation.put("security", List.of());
+        switch (annotationValue(route, "authentication").toString()) {
+            case "REQUIRED" -> {
+            }
+            case "OPTIONAL" -> operation
+                .put("security", List.of(object(), object("bearerAuth", List.of()), object("cookieAuth", List.of())));
+            case "NONE" -> operation.put("security", List.of());
+            default -> throw problem(endpoint, "Unsupported authentication policy");
+        }
         return operation;
     }
 

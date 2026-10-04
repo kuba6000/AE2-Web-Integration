@@ -394,9 +394,9 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void bootstrapProvidesPublicMetadataWithoutGrantingAccess() throws Exception {
+    void contextProvidesPublicMetadataWithoutGrantingAccess() throws Exception {
         startApi();
-        HttpURLConnection connection = connection("/api/bootstrap", null);
+        HttpURLConnection connection = connection("/api/context", null);
         Response response = read(connection);
         assertEquals(HttpURLConnection.HTTP_OK, response.status());
         JsonObject envelope = new Gson().fromJson(response.body(), JsonObject.class);
@@ -421,9 +421,10 @@ class ServerLifecycleHttpTest {
                 .isJsonNull());
         assertEquals("no-store", connection.getHeaderField("Cache-Control"));
         assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", null).status());
+        assertEquals(HttpURLConnection.HTTP_NOT_FOUND, get("/api/bootstrap", null).status());
 
         config.set("general.public_mode", true);
-        JsonObject publicData = new Gson().fromJson(get("/api/bootstrap", null).body(), JsonObject.class)
+        JsonObject publicData = new Gson().fromJson(get("/api/context", null).body(), JsonObject.class)
             .getAsJsonObject("data");
         assertTrue(
             publicData.get("publicMode")
@@ -434,18 +435,18 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void bootstrapReturnsOnlyTheAuthenticatedDisplayIdentity() throws Exception {
+    void contextReturnsOnlyTheAuthenticatedDisplayIdentity() throws Exception {
         startApi();
         String token = login();
-        HttpURLConnection connection = connection("/api/bootstrap", token);
+        HttpURLConnection connection = connection("/api/context", token);
         Response response = read(connection);
         assertEquals(HttpURLConnection.HTTP_OK, response.status());
-        JsonObject user = bootstrapUser(response.body());
+        JsonObject user = contextUser(response.body());
         assertEquals(
             2,
             user.entrySet()
                 .size(),
-            "the bootstrap must not expose session credentials or account IDs");
+            "the context must not expose session credentials or account IDs");
         assertEquals(
             "Admin",
             user.get("username")
@@ -460,7 +461,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void bootstrapKeepsPlayerNamesAsDataAndPagesStatic() throws Exception {
+    void contextKeepsPlayerNamesAsDataAndPagesStatic() throws Exception {
         String username = "Player</script><img src=x onerror=\"alert(1)\">&'\u2028"
             + "_REPLACE_ME_USERNAME_REPLACE_ME_IS_ADMIN_REPLACE_ME_USER";
         config.set("general.public_mode", true);
@@ -473,7 +474,7 @@ class ServerLifecycleHttpTest {
         String token = login(username, "player-password");
         Response page = get("/?ui=next", token);
         assertEquals(HttpURLConnection.HTTP_OK, page.status());
-        JsonObject user = bootstrapUser(get("/api/bootstrap", token).body());
+        JsonObject user = contextUser(get("/api/context", token).body());
         assertEquals(
             username,
             user.get("username")
@@ -493,7 +494,7 @@ class ServerLifecycleHttpTest {
     @ValueSource(
         strings = { "2.7.4-native-test",
             "Version</script><img src=x onerror=\"alert(1)\">&'\u2028_REPLACE_ME_USER<!--_REPLACE_ME_MOD_VERSION-->" })
-    void bootstrapReturnsRuntimeModVersionWithoutChangingPageBytes(String version) throws Exception {
+    void contextReturnsRuntimeModVersionWithoutChangingPageBytes(String version) throws Exception {
         IServerPlatform platform = new IServerPlatform() {
 
             @Override
@@ -542,8 +543,8 @@ class ServerLifecycleHttpTest {
             String token = login();
             Response page = get("/?ui=next", token);
             assertEquals(HttpURLConnection.HTTP_OK, page.status());
-            Response bootstrap = get("/api/bootstrap", token);
-            JsonObject metadata = new Gson().fromJson(bootstrap.body(), JsonObject.class)
+            Response context = get("/api/context", token);
+            JsonObject metadata = new Gson().fromJson(context.body(), JsonObject.class)
                 .getAsJsonObject("data");
             assertEquals(
                 version,
@@ -551,7 +552,7 @@ class ServerLifecycleHttpTest {
                     .getAsString());
             assertEquals(
                 "Admin",
-                bootstrapUser(bootstrap.body()).get("username")
+                contextUser(context.body()).get("username")
                     .getAsString());
             assertEquals(pageResource("/assets/web/index.html"), page.body());
             assertEquals(pageResource("/assets/login.html"), get("/?ui=next", null).body());
@@ -561,7 +562,7 @@ class ServerLifecycleHttpTest {
         }
     }
 
-    private static JsonObject bootstrapUser(String json) {
+    private static JsonObject contextUser(String json) {
         return new Gson().fromJson(json, JsonObject.class)
             .getAsJsonObject("data")
             .getAsJsonObject("user");
@@ -594,16 +595,16 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void bootstrapUsesCurrentCredentialsAndPreservesExplicitAuthorizationPrecedence() throws Exception {
+    void contextUsesCurrentCredentialsAndPreservesExplicitAuthorizationPrecedence() throws Exception {
         startApi();
         String token = login();
-        HttpURLConnection cookie = connection("/api/bootstrap", null);
+        HttpURLConnection cookie = connection("/api/context", null);
         cookie.setRequestProperty("Cookie", "authenticationToken=" + token);
         assertEquals(
             "Admin",
-            bootstrapUser(read(cookie).body()).get("username")
+            contextUser(read(cookie).body()).get("username")
                 .getAsString());
-        HttpURLConnection invalidBearer = connection("/api/bootstrap", "invalid-session");
+        HttpURLConnection invalidBearer = connection("/api/context", "invalid-session");
         invalidBearer.setRequestProperty("Cookie", "authenticationToken=" + token);
         assertTrue(
             new Gson().fromJson(read(invalidBearer).body(), JsonObject.class)
@@ -614,14 +615,14 @@ class ServerLifecycleHttpTest {
         logout.setRequestMethod("POST");
         assertEquals(HttpURLConnection.HTTP_OK, read(logout).status());
         assertTrue(
-            new Gson().fromJson(get("/api/bootstrap", token).body(), JsonObject.class)
+            new Gson().fromJson(get("/api/context", token).body(), JsonObject.class)
                 .getAsJsonObject("data")
                 .get("user")
                 .isJsonNull());
         assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, get("/api/grids", token).status());
 
         config.set("general.allow_no_password_on_localhost", true);
-        JsonObject local = bootstrapUser(get("/api/bootstrap", null).body());
+        JsonObject local = contextUser(get("/api/context", null).body());
         assertEquals(
             "localhost",
             local.get("username")
@@ -630,7 +631,7 @@ class ServerLifecycleHttpTest {
             local.get("isAdmin")
                 .getAsBoolean());
         assertTrue(
-            new Gson().fromJson(get("/api/bootstrap", "invalid-session").body(), JsonObject.class)
+            new Gson().fromJson(get("/api/context", "invalid-session").body(), JsonObject.class)
                 .getAsJsonObject("data")
                 .get("user")
                 .isJsonNull());
@@ -1041,7 +1042,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void bootstrapUsesTheAccountNameWithoutReadingTheAeProfile() throws Exception {
+    void contextUsesTheAccountNameWithoutReadingTheAeProfile() throws Exception {
         UUID playerUuid = UUID.fromString("99999999-8888-7777-6666-555555555555");
         config.set("general.public_mode", true);
         AE2Controller.AE2Interface = null;
@@ -1054,12 +1055,12 @@ class ServerLifecycleHttpTest {
         CoreEngine.GRID_IDENTITIES.initialize(new File(tempDirectory, "test-save"));
         AE2Controller.startHTTPServer();
         String token = login("canonicalplayer", "player-password");
-        Response response = get("/api/bootstrap", token);
+        Response response = get("/api/context", token);
 
         assertEquals(HttpURLConnection.HTTP_OK, response.status());
         assertEquals(
             "CanonicalPlayer",
-            bootstrapUser(response.body()).get("username")
+            contextUser(response.body()).get("username")
                 .getAsString());
     }
 

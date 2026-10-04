@@ -951,7 +951,7 @@ class OpenApiDocletTest {
             /** Public operation.
              * @response 204
              */
-            @Endpoint(method=HttpMethod.POST, path="/api/auth/login", authenticated=false)
+            @Endpoint(method=HttpMethod.POST, path="/api/auth/login", authentication=Authentication.NONE)
             public class Grids {}
             """);
         Path output = directory.resolve("public.json");
@@ -966,6 +966,38 @@ class OpenApiDocletTest {
             0,
             operation.getAsJsonArray("security")
                 .size());
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "REQUIRED", "OPTIONAL", "NONE" })
+    void representsEachAuthenticationPolicyInThePublishedSecurityRequirements(String authentication) throws Exception {
+        List<Path> sources = fixture("""
+            /** Reads the current request context.
+             * @response 204
+             */
+            @Endpoint(method=HttpMethod.GET, path="/api/context", authentication=Authentication.%s)
+            public class Grids {}
+            """.formatted(authentication));
+        Path output = directory.resolve("authentication.json");
+        Result result = generate(sources, output);
+        assertTrue(result.success(), result.diagnostics());
+        JsonObject document = JsonParser.parseString(Files.readString(output))
+            .getAsJsonObject();
+        JsonObject operation = document.getAsJsonObject("paths")
+            .getAsJsonObject("/api/context")
+            .getAsJsonObject("get");
+        assertEquals(JsonParser.parseString("[{\"bearerAuth\":[]},{\"cookieAuth\":[]}]"), document.get("security"));
+        if (authentication.equals("REQUIRED")) assertFalse(operation.has("security"));
+        else assertEquals(
+            JsonParser
+                .parseString(authentication.equals("NONE") ? "[]" : "[{},{\"bearerAuth\":[]},{\"cookieAuth\":[]}]"),
+            operation.get("security"));
+        SwaggerParseResult parsed = new OpenAPIV3Parser().readContents(Files.readString(output));
+        assertTrue(
+            parsed.getMessages()
+                .isEmpty(),
+            parsed.getMessages()
+                .toString());
     }
 
     @ParameterizedTest
@@ -1089,7 +1121,7 @@ class OpenApiDocletTest {
              * @response 401 {@link Failure} Authentication failed.
              * @responseExample 401 {"status":"%s","data":null}
              */
-            @Endpoint(method=HttpMethod.POST, path="/api/auth/login", authenticated=false)
+            @Endpoint(method=HttpMethod.POST, path="/api/auth/login", authentication=Authentication.NONE)
             public class Grids {
                 public enum Status {
                     OK,
@@ -1165,9 +1197,16 @@ class OpenApiDocletTest {
 
     private List<Path> fixture(String endpoint) throws Exception {
         List<Path> files = new ArrayList<>();
-        files.add(source("pl/kuba6000/ae2webintegration/core/http/contract/Endpoint.java", """
+        files.add(
+            source(
+                "pl/kuba6000/ae2webintegration/core/http/contract/Endpoint.java",
+                """
+                    package pl.kuba6000.ae2webintegration.core.http.contract;
+                    public @interface Endpoint { HttpMethod method(); String path(); Authentication authentication() default Authentication.REQUIRED; }
+                    """));
+        files.add(source("pl/kuba6000/ae2webintegration/core/http/contract/Authentication.java", """
             package pl.kuba6000.ae2webintegration.core.http.contract;
-            public @interface Endpoint { HttpMethod method(); String path(); boolean authenticated() default true; }
+            public enum Authentication { REQUIRED, OPTIONAL, NONE }
             """));
         files.add(source("pl/kuba6000/ae2webintegration/core/http/contract/HttpMethod.java", """
             package pl.kuba6000.ae2webintegration.core.http.contract;

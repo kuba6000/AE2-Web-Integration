@@ -759,7 +759,7 @@
             const { createApi } = await import('./assets/web/app/api.js');
             if (pageDisposed) return;
             const metadata = await createApi(new URL('./', location.href), () => location.reload())
-                .bootstrap(bootstrapController.signal);
+                .context(bootstrapController.signal);
             if (pageDisposed) return;
             if (!metadata.user) {
                 location.reload();

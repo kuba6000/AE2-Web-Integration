@@ -14,6 +14,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 
@@ -38,8 +39,8 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
  * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
  */
-@Endpoint(method = HttpMethod.GET, path = "/api/bootstrap", authenticated = false)
-public final class GetBootstrap extends IAsyncRequest {
+@Endpoint(method = HttpMethod.GET, path = "/api/context", authentication = Authentication.OPTIONAL)
+public final class GetContext extends IAsyncRequest {
 
     /**
      * Display information only; credentials and account identifiers are never included.
@@ -62,7 +63,7 @@ public final class GetBootstrap extends IAsyncRequest {
     public record Metadata(boolean publicMode, @Nullable String modVersion, boolean isOutdated, @Nullable User user) {}
 
     /**
-     * Bootstrap result.
+     * Application context result.
      *
      * @param status OK when metadata is available
      * @param data   public settings and the optional authenticated display identity
