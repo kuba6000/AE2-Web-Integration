@@ -207,16 +207,127 @@ header {
     list-style: none;
     padding: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
+    gap: 16px;
+}
+.cpu-list > .cpu-card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: auto;
+    overflow: visible;
+}
+.cpu-card-heading {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.cpu-card-heading h3 {
+    flex: 1 1 140px;
+    min-width: 0;
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.4;
+}
+.cpu-card-heading a {
+    display: block;
+    overflow-wrap: anywhere;
+    color: var(--terminal-title);
+    text-decoration: none;
+}
+.cpu-card-heading a:hover {
+    text-decoration: underline;
+}
+.cpu-card-state {
+    padding: 5px 7px;
+    background: var(--surface);
+    color: var(--surface-text);
+    font-size: 11px;
+    line-height: 1.4;
+}
+.cpu-card[data-state='busy'] .cpu-card-state {
+    background: var(--selected);
+    color: var(--text);
+}
+.cpu-card[data-state='paused'] .cpu-card-state {
+    background: color-mix(in srgb, var(--panel), var(--cpu-pending-tint));
+}
+.cpu-card-output {
+    min-height: 74px;
+    padding-block: 12px;
+    border-block: 1px solid var(--border);
+}
+.cpu-card-label,
+.cpu-card-metrics dt {
+    margin: 0;
+    font-size: 11px;
+    color: var(--muted);
+}
+.cpu-card-output-value {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0 0;
+    font-size: 14px;
+    line-height: 1.5;
+}
+.cpu-card-output-value strong {
+    min-width: 0;
+    font-weight: 400;
+    overflow-wrap: anywhere;
+}
+.cpu-card-quantity {
+    color: var(--text);
+}
+.cpu-card-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
+    margin: 0;
+}
+.cpu-card-metrics > div:last-child {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
     gap: 12px;
 }
-.cpu-list li {
-    border: 1px solid var(--border);
-    padding: 12px;
+.cpu-card-metrics dd {
+    margin: 5px 0 0;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+.cpu-card-identity {
+    margin-top: auto;
+    font-size: 11px;
+    color: var(--muted);
+}
+.cpu-card-identity summary {
+    cursor: pointer;
+}
+.cpu-card-identity code {
+    display: block;
+    margin-top: 8px;
+    overflow-wrap: anywhere;
+}
+.cpu-card > .cpu-actions {
+    margin: 0;
+}
+.cpu-card > .cpu-actions button {
+    flex: 1 1 100px;
     min-width: 0;
 }
-.cpu-list p {
-    font-size: 13px;
+.cpu-card > .cpu-actions:not(:has(button:not([hidden]))) {
+    display: none;
+}
+.cpu-card-notice {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
 }
 .cpu-actions {
     display: flex;

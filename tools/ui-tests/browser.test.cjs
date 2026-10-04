@@ -352,11 +352,13 @@ async function fixture(t, mount = '', contextOptions = {}) {
                 'Content-Type',
                 file.endsWith('.js') || file.endsWith('.mjs')
                     ? 'text/javascript'
-                    : file.endsWith('.css')
-                      ? 'text/css'
-                      : file.endsWith('.woff2')
-                        ? 'font/woff2'
-                        : 'text/html'
+                    : file.endsWith('.svg')
+                      ? 'image/svg+xml'
+                      : file.endsWith('.css')
+                        ? 'text/css'
+                        : file.endsWith('.woff2')
+                          ? 'font/woff2'
+                          : 'text/html'
             );
             const content = await fs.readFile(file);
             response.end(content);
@@ -4118,3 +4120,131 @@ test('empty slots remain decorative through selection, zero matches and CPU row-
     await ironButton.waitFor();
     assert.equal(await grid.getByRole('button').count(), 2, 'returning to a hidden grid does not duplicate resources');
 });
+
+test('CPU overview keeps names primary and exposes identity without extra detail reads', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = {
+        'cpu-a': {
+            ...cpu,
+            name: '§aAssembler',
+            isBusy: true,
+            supportsPause: true,
+            usedStorage: 2048,
+            finalOutput: { ...iron, quantity: 12 }
+        },
+        'cpu-b': { ...cpu, name: '§aAssembler', isBusy: true, isPaused: true, supportsPause: true, usedStorage: -1 },
+        'cpu-unnamed': { ...cpu, name: '' }
+    };
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    const first = page.getByRole('link', { name: /Assembler.*cpu-a/ });
+    await first.waitFor();
+    assert.equal((await first.textContent()).includes('cpu-a'), false, 'opaque identity is not the visible CPU title');
+    const row = page.getByRole('listitem').filter({ has: first });
+    await row.getByText('Iron Ingot', { exact: true }).waitFor();
+    assert.match(await row.textContent(), /2,048 B/);
+    assert.match(await row.textContent(), /8,192 B/);
+    await row.getByText('CPU identifier', { exact: true }).click();
+    await row.getByText('cpu-a', { exact: true }).waitFor({ state: 'visible' });
+    const unnamed = page.locator(`a[href$="/cpus/cpu-unnamed"]`);
+    assert.ok((await unnamed.textContent()).trim().length > 0, 'unnamed CPUs have a visible fallback');
+    assert.equal((await unnamed.textContent()).includes('cpu-unnamed'), false);
+    assert.equal(
+        options.requests.some((request) => /\/cpus\/[^/]+$/.test(request.path)),
+        false
+    );
+    await first.focus();
+    options.cpus = {
+        'cpu-unnamed': options.cpus['cpu-unnamed'],
+        'cpu-b': options.cpus['cpu-b'],
+        'cpu-a': { ...options.cpus['cpu-a'], usedStorage: 3072 }
+    };
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus'));
+    await poll(page);
+    await settleResponse(page, (await refreshed).request());
+    assert.equal(await first.evaluate((link) => link === document.activeElement), true);
+    await page.keyboard.press('Enter');
+    await page.getByRole('link', { name: 'Back to CPUs', exact: true }).waitFor();
+    assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/cpus/cpu-a`);
+});
+
+for (const appearance of ['light', 'dark']) {
+    test(`CPU overview panels keep long names and uncertain controls reachable in ${appearance} mode`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        options.cpus = {
+            'cpu-a': {
+                ...cpu,
+                name: '§bA long assembler name that must wrap inside its own panel',
+                isBusy: true,
+                supportsPause: true,
+                usedStorage: 1024,
+                finalOutput: { ...iron, quantity: 123456 }
+            },
+            'cpu-b': { ...cpu, name: '§a   ', isBusy: true, supportsPause: true, isPaused: true, usedStorage: -1 },
+            unsupported: { ...cpu, name: 'Assembler', isBusy: true, finalOutput: quartz },
+            idle: { ...cpu, name: 'Assembler' }
+        };
+        await page.goto(`${base}#/web-settings`);
+        await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption(appearance);
+        if (appearance === 'dark')
+            await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
+        await page.goto(`${base}#/grids/${gridA}/cpus`);
+        const link = page.locator('a[href$="/cpus/cpu-a"]');
+        await link.waitFor();
+        const card = page.getByRole('listitem').filter({ has: link });
+        for (const viewport of [
+            { width: 1280, height: 800 },
+            { width: 390, height: 844 }
+        ]) {
+            await page.setViewportSize(viewport);
+            for (const row of await page
+                .getByRole('listitem')
+                .filter({ has: page.locator('a[href*="/cpus/"]') })
+                .all()) {
+                const geometry = await row.evaluate((node) => ({
+                    width: node.clientWidth,
+                    content: node.scrollWidth,
+                    height: node.clientHeight,
+                    contentHeight: node.scrollHeight
+                }));
+                assert.ok(geometry.content <= geometry.width + 1, 'card content does not scroll horizontally');
+                assert.ok(
+                    geometry.contentHeight <= geometry.height + 1,
+                    'cards grow instead of introducing internal scroll areas'
+                );
+                for (const button of await row.getByRole('button').all()) {
+                    await button.scrollIntoViewIfNeeded();
+                    const bounds = await button.boundingBox();
+                    assert.ok(
+                        bounds.x >= 0 && bounds.x + bounds.width <= viewport.width,
+                        'each work control stays reachable'
+                    );
+                }
+            }
+        }
+        options.fault = { operation: 'pause', status: 'NETWORK_ERROR' };
+        const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus'));
+        await card.getByRole('button', { name: /(?:Pause|Wstrzymaj).*cpu-a/ }).click();
+        await settleResponse(page, (await refreshed).request());
+        await card
+            .getByRole('status')
+            .filter({ hasText: /unknown|nieznany/ })
+            .waitFor({ state: 'visible' });
+        for (const button of await card.getByRole('button').all()) assert.equal(await button.isDisabled(), true);
+        const after = await card.evaluate((node) => ({ height: node.clientHeight, content: node.scrollHeight }));
+        assert.ok(after.content <= after.height + 1, 'an uncertainty notice expands the panel without clipping');
+        await link.scrollIntoViewIfNeeded();
+        if (process.env.UI_SCREENSHOT_DIR) {
+            await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+            await page.screenshot({
+                path: path.join(process.env.UI_SCREENSHOT_DIR, `cpu-overview-mobile-${appearance}.png`)
+            });
+            await card.screenshot({
+                path: path.join(process.env.UI_SCREENSHOT_DIR, `cpu-overview-card-${appearance}.png`)
+            });
+        }
+        assert.equal(
+            options.requests.some((request) => /\/cpus\/[^/]+$/.test(request.path)),
+            false
+        );
+    });
+}

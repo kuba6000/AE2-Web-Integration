@@ -88,14 +88,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     tooltip.role = 'tooltip';
     tooltip.hidden = true;
     workspace.append(tooltip);
-    type CpuRow = {
-        li: HTMLLIElement;
-        link: HTMLAnchorElement;
-        summary: HTMLParagraphElement;
-        output: HTMLParagraphElement;
-        actions: HTMLDivElement;
-        notice: HTMLParagraphElement;
-    };
+    type CpuRow = ReturnType<typeof createOverviewRow>;
 
     let rows: Map<string, CpuRow> = new Map();
 
@@ -406,7 +399,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         target: HTMLDivElement,
         key: string,
         cpu: TerminalState['cpus']['detail'] | TerminalState['cpus']['cpus'][number] | null,
-        label = ''
+        overviewIdentity = ''
     ) {
         target.className = 'cpu-actions';
         if (!target.firstChild) {
@@ -420,17 +413,25 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         const outcome = state.outcomes[key];
         const disabled = !!outcome?.mutation || !!outcome?.uncertain || state.status !== 'ready';
         pause.hidden = !cpu?.isBusy || !cpu.supportsPause;
-        pause.textContent = locale.common(cpu?.isPaused ? 'resumeCpuWork' : 'pauseCpuWork');
+        const pauseLabel = locale.common(cpu?.isPaused ? 'resumeCpuWork' : 'pauseCpuWork');
+        const cancelLabel = locale.common('cancelCpuWork');
+        pause.textContent = overviewIdentity
+            ? locale.common(cpu?.isPaused ? 'resumeCpuShort' : 'pauseCpuShort')
+            : pauseLabel;
         pause.disabled = disabled;
         pause.onclick = () => application.cpus.pause(key, !cpu?.isPaused);
         cancel.hidden = !cpu?.isBusy;
-        cancel.textContent = locale.common('cancelCpuWork');
+        cancel.textContent = overviewIdentity ? locale.common('cancelCpuShort') : cancelLabel;
         cancel.disabled = disabled;
         cancel.onclick = () => {
-            if (window.confirm(locale.common('confirmCancelCpu', { cpu: label || key }))) application.cpus.cancel(key);
+            if (window.confirm(locale.common('confirmCancelCpu', { cpu: overviewIdentity || key })))
+                application.cpus.cancel(key);
         };
-        for (const button of [pause, cancel]) {
-            if (label) button.setAttribute('aria-label', `${button.textContent} · ${label}`);
+        for (const [button, description] of [
+            [pause, pauseLabel],
+            [cancel, cancelLabel]
+        ] as const) {
+            if (overviewIdentity) button.setAttribute('aria-label', `${description} · ${overviewIdentity}`);
             else button.removeAttribute('aria-label');
         }
     }
@@ -454,6 +455,76 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             );
         else target.append(locale.common('cpuOutputUnknown'));
     }
+    function createOverviewRow() {
+        const li = element('li', '', 'window-frame cpu-card');
+        const header = element('div', '', 'cpu-card-heading');
+        const heading = element('h3');
+        const link = element('a');
+        const badge = element('span', '', 'cpu-card-state');
+        heading.append(link);
+        header.append(heading, badge);
+        const work = element('div', '', 'cpu-card-output');
+        const outputLabel = element('p', '', 'cpu-card-label');
+        const output = element('p', '', 'cpu-card-output-value');
+        work.append(outputLabel, output);
+        const metrics = element('dl', '', 'cpu-card-metrics');
+        const fields = ['cpuCapacityLabel', 'cpuUsedStorageLabel', 'cpuCoprocessorsLabel'].map((label) => {
+            const group = element('div');
+            const term = element('dt');
+            const value = element('dd');
+            group.append(term, value);
+            metrics.append(group);
+            return { label, term, value };
+        });
+        const identity = element('details', '', 'cpu-card-identity');
+        const identityLabel = element('summary');
+        const key = element('code');
+        identity.append(identityLabel, key);
+        const actions = element('div');
+        const notice = element('p', '', 'cpu-card-notice');
+        notice.role = 'status';
+        li.append(header, work, metrics, identity, actions, notice);
+        return { li, link, badge, outputLabel, output, fields, identityLabel, key, actions, notice };
+    }
+
+    function renderOverviewRow(entry: CpuRow, cpu: TerminalState['cpus']['cpus'][number], gridKey: string) {
+        const t = locale.common;
+        const displayName = plainMinecraftText(cpu.name).trim() ? cpu.name : t('cpuUnnamed');
+        const identity = `${plainMinecraftText(displayName)} · ${cpu.key}`;
+        entry.link.href = cpuHref(gridKey, cpu.key);
+        entry.link.replaceChildren(renderMinecraftText(displayName));
+        entry.link.setAttribute('aria-label', identity);
+        entry.link.title = cpu.key;
+        entry.li.dataset.state = cpu.isBusy ? (cpu.isPaused ? 'paused' : 'busy') : 'idle';
+        entry.badge.textContent = t(cpu.isBusy ? (cpu.isPaused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle');
+        entry.outputLabel.textContent = t('cpuOutput');
+        entry.output.replaceChildren();
+        if (cpu.isBusy && cpu.finalOutput) {
+            const name = element('strong');
+            name.append(renderMinecraftText(cpu.finalOutput.itemname));
+            entry.output.append(
+                name,
+                element('span', `× ${locale.number(cpu.finalOutput.quantity)}`, 'cpu-card-quantity')
+            );
+        } else {
+            entry.output.textContent = t(cpu.isBusy ? 'cpuOutputUnknown' : 'cpuIdleMessage');
+        }
+        const values = [
+            t('cpuBytes', { count: cpu.availableStorage }),
+            cpu.usedStorage >= 0 ? t('cpuBytes', { count: cpu.usedStorage }) : t('cpuValueUnavailable'),
+            locale.number(cpu.coProcessors)
+        ];
+        entry.fields.forEach((field, index) => {
+            field.term.textContent = t(field.label);
+            field.value.textContent = values[index];
+        });
+        entry.identityLabel.textContent = t('cpuIdentifier');
+        entry.key.textContent = cpu.key;
+        renderActions(entry.actions, cpu.key, cpu, identity);
+        entry.notice.textContent = outcomeText(state.outcomes[cpu.key]);
+        entry.notice.hidden = !entry.notice.textContent;
+    }
+
     return {
         render(route: TerminalState['route'], nextState: TerminalState['cpus'], nextLocale: Locale) {
             state = nextState;
@@ -488,24 +559,8 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             if (!selected) {
                 const current: Map<string, CpuRow> = new Map();
                 for (const cpu of state.cpus) {
-                    const entry = rows.get(cpu.key) || {
-                        li: element('li'),
-                        link: element('a'),
-                        summary: element('p'),
-                        output: element('p'),
-                        actions: element('div'),
-                        notice: element('p')
-                    };
-                    if (!entry.link.parentNode) {
-                        entry.li.append(entry.link, entry.summary, entry.output, entry.actions, entry.notice);
-                        entry.notice.role = 'status';
-                    }
-                    entry.link.href = cpuHref(route.gridKey, cpu.key);
-                    entry.link.replaceChildren(renderMinecraftText(cpu.name), ` · ${cpu.key}`);
-                    entry.summary.textContent = summaryText(cpu);
-                    renderActions(entry.actions, cpu.key, cpu, `${plainMinecraftText(cpu.name)} · ${cpu.key}`);
-                    entry.notice.textContent = outcomeText(state.outcomes[cpu.key]);
-                    renderOutput(entry.output, cpu);
+                    const entry = rows.get(cpu.key) || createOverviewRow();
+                    renderOverviewRow(entry, cpu, route.gridKey);
                     if (!entry.li.parentNode) list.append(entry.li);
                     current.set(cpu.key, entry);
                 }
