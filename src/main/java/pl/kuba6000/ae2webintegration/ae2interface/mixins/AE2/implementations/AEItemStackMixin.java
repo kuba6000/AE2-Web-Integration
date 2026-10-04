@@ -28,8 +28,11 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
     default @Nullable StableKey web$getIconBaseKey() {
         IAEItemStack stack = this;
         if (!(stack instanceof AEItemStack nativeStack)) return null;
-        AEItemStack baseline = LegacyIconBaseline.item(nativeStack);
-        return baseline == null ? null : LegacyItemIdentity.encode(baseline);
+        Item item = nativeStack.getItem();
+        int sourceMaxDamage = !item.getHasSubtypes() && item.isDamageable()
+            ? item.getMaxDamage(nativeStack.asItemStackRepresentation())
+            : 0;
+        return LegacyItemIdentity.encode(LegacyIconBaseline.item(item, nativeStack.getItemDamage(), sourceMaxDamage));
     }
 
     @Override

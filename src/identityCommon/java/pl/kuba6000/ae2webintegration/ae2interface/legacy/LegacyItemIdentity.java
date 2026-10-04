@@ -6,6 +6,8 @@ import java.io.UncheckedIOException;
 import java.util.Arrays;
 import java.util.Set;
 
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.CompressedStreamTools;
 import net.minecraft.nbt.NBTBase;
 import net.minecraft.nbt.NBTPrimitive;
@@ -36,6 +38,36 @@ public final class LegacyItemIdentity {
     private static final int MAX_NODES = 65536;
 
     private LegacyItemIdentity() {}
+
+    public static @NotNull StableKey encode(@NotNull ItemStack stack) {
+        if (stack.isEmpty()) throw new UnsupportedOperationException("Resource has no registered identity");
+        NBTTagCompound capabilities = (NBTTagCompound) stack.writeToNBT(new NBTTagCompound())
+            .getTag("ForgeCaps");
+        return encode(stack.getItem(), stack.getItemDamage(), stack.getTagCompound(), capabilities);
+    }
+
+    /** The caller may retain native serialized capabilities captured before an ownership copy. */
+    public static @NotNull StableKey encode(@NotNull Item item, int metadata, @Nullable NBTTagCompound tag,
+        @Nullable NBTTagCompound capabilities) {
+        if (item.getRegistryName() == null) {
+            throw new UnsupportedOperationException("Resource has no registered identity");
+        }
+        return StableKey.create(sink -> {
+            DataOutputStream output = new DataOutputStream(Funnels.asOutputStream(sink));
+            try {
+                StableKey.writeText(sink, "item");
+                StableKey.writeText(
+                    sink,
+                    item.getRegistryName()
+                        .toString());
+                output.writeInt(metadata);
+                output.writeByte(1);
+                new Tags(output, sink, false).writeItem(tag, capabilities);
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
+        });
+    }
 
     public static @NotNull StableKey encode(@NotNull FluidStack stack) {
         // AE2UEL copies this tag without changing it and treats an empty compound as absent.
@@ -120,6 +152,23 @@ public final class LegacyItemIdentity {
             this.output = output;
             this.sink = sink;
             this.normalizeZero = normalizeZero;
+        }
+
+        private void writeItem(@Nullable NBTTagCompound tag, @Nullable NBTTagCompound capabilities) throws IOException {
+            // Native item serialization leaves a compound after excluding id/count/damage.
+            // Stream its fixed field order instead of constructing another envelope for hashing.
+            nodes = 1;
+            boolean hasCapabilities = capabilities != null && !capabilities.isEmpty();
+            output.writeByte(NBT.TAG_COMPOUND);
+            output.writeInt((tag == null ? 0 : 1) + (hasCapabilities ? 1 : 0));
+            if (hasCapabilities) {
+                StableKey.writeText(sink, "ForgeCaps");
+                write(capabilities, 1, true);
+            }
+            if (tag != null) {
+                StableKey.writeText(sink, "tag");
+                write(tag, 1, true);
+            }
         }
 
         private void write(NBTBase tag, int depth, boolean includeType) throws IOException {
