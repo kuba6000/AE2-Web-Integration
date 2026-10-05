@@ -86,11 +86,20 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
     let lastDetail: TerminalState['history']['detail'] | undefined;
 
     let lastLocale: Locale | undefined;
+    let lastRoute = '';
     return {
         render(route: TerminalState['route'], state: TerminalState['history'], locale: Locale) {
             view.hidden = route.view !== 'history';
             if (route.view !== 'history' || route.entryId !== null) icons.update([], null);
-            if (route.view !== 'history') return;
+            if (route.view !== 'history') {
+                lastRoute = '';
+                return;
+            }
+            const currentRoute = historyHref(route.gridKey, route.entryId);
+            if (currentRoute !== lastRoute) {
+                scroll.scrollTop = 0;
+                lastRoute = currentRoute;
+            }
             const { common: t, number, dateTime } = locale;
             title.textContent = t('history');
             scroll.setAttribute('aria-label', t('history'));
