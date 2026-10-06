@@ -1803,7 +1803,7 @@ test('terminal sort criterion cycles independently of order and persists both', 
     await page.getByRole('button', { name: /Alpha/ }).waitFor();
     assert.deepEqual(await names(), ['Gamma', 'Beta', 'Alpha']);
     assert.equal(await sort.getAttribute('aria-pressed'), null);
-    assert.equal(await order.getAttribute('aria-pressed'), 'true');
+    assert.equal(await order.getAttribute('aria-pressed'), null);
 });
 
 test('terminal item and fluid switches intersect filters and preserve other resource kinds', async (t) => {
@@ -1864,11 +1864,11 @@ for (const saved of [
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         assert.deepEqual(await page.locator('#items strong').allTextContents(), saved.expected);
         const order = page.getByRole('button', { name: /^Sort order:/ });
-        assert.equal(await order.getAttribute('aria-pressed'), String(saved.sort === 'quantity'));
+        assert.match(await order.getAttribute('aria-label'), saved.sort === 'quantity' ? /Descending/ : /Ascending/);
         await page.getByRole('button', { name: /^Sort by:/ }).click();
         await page.reload();
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-        assert.equal(await order.getAttribute('aria-pressed'), String(saved.sort === 'quantity'));
+        assert.match(await order.getAttribute('aria-label'), saved.sort === 'quantity' ? /Descending/ : /Ascending/);
     });
 }
 

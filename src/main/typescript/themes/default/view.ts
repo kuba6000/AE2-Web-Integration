@@ -632,7 +632,6 @@ export function mount(
                 button.dataset.value = current;
                 button.setAttribute('aria-label', `${locale.t('sortOrder')}: ${locale.t(current)}`);
                 button.setAttribute('aria-description', locale.t('nextState', { state: locale.t(next) }));
-                button.setAttribute('aria-pressed', String(current === 'descending'));
             } else {
                 const enabled = state.preferences[button.dataset.preference];
                 const value =
