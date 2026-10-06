@@ -287,12 +287,11 @@ export function mount(
 
     function resourceMetadata(item: TerminalState['items'][number], tag: 'span' | 'p') {
         const id = registryId(item);
-        const lines: HTMLElement[] = [];
-        if (item.damage !== null) {
+        const lines: HTMLElement[] = id ? [element('code', id)] : [];
+        if (item.damage !== null && item.damage !== 0) {
             lines.push(element(tag, `${locale.t('damage')}: ${locale.number(item.damage)}`));
         }
-        if (id) lines.push(element('code', id));
-        if (item.componentCount !== null) {
+        if (item.componentCount !== null && item.componentCount !== 0) {
             lines.push(
                 element(
                     tag,
@@ -310,7 +309,7 @@ export function mount(
         tooltip.replaceChildren(
             name,
             ...resourceMetadata(item, 'span'),
-            element('span', `${locale.common('quantity')}: ${locale.number(item.quantity)}`),
+            element('span', `${locale.common('stored')}: ${locale.number(item.quantity)}`),
             element('span', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))
         );
         tooltip.hidden = false;
@@ -519,7 +518,7 @@ export function mount(
             if (effectiveDisplay === 'icons') {
                 row.button.setAttribute(
                     'aria-label',
-                    `${plainMinecraftText(item.displayName)}, ${locale.common('quantity')}: ${locale.number(item.quantity)}, ${locale.common(item.craftable ? 'craftableYes' : 'craftableNo')}`
+                    `${plainMinecraftText(item.displayName)}, ${locale.common('stored')}: ${locale.number(item.quantity)}, ${locale.common(item.craftable ? 'craftableYes' : 'craftableNo')}`
                 );
             } else {
                 row.button.removeAttribute('aria-label');
@@ -564,7 +563,7 @@ export function mount(
         details.replaceChildren(
             name,
             ...resourceMetadata(item, 'p'),
-            element('p', `${locale.common('quantity')}: ${locale.number(item.quantity)}`),
+            element('p', `${locale.common('stored')}: ${locale.number(item.quantity)}`),
             element('p', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))
         );
         if (!item.itemKey) details.append(element('p', locale.common('identityUnavailable'), 'hint'));

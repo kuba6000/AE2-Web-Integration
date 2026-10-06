@@ -1766,7 +1766,7 @@ test('resource quantities abbreviate from ten thousand and retain exact tooltip 
         await item.hover();
         await page
             .getByRole('tooltip')
-            .getByText(`Quantity: ${quantity.toLocaleString('en')}`, { exact: true })
+            .getByText(`Stored: ${quantity.toLocaleString('en')}`, { exact: true })
             .waitFor();
         const itemBox = await item.boundingBox();
         const amountBox = await amount.boundingBox();
@@ -1790,11 +1790,11 @@ test('terminal availability cycles through all stored and craftable with current
     assert.equal(await availability.count(), 1);
     assert.equal(await availability.getAttribute('aria-pressed'), null);
     await availability.focus();
-    assert.match(await tooltip.textContent(), /All.*In storage/s);
+    assert.match(await tooltip.textContent(), /All.*Stored/s);
     await page.keyboard.press('Enter');
-    assert.match(await availability.getAttribute('aria-label'), /In storage/);
+    assert.match(await availability.getAttribute('aria-label'), /Stored/);
     assert.equal(await page.getByRole('button', { name: /Gold Ingot/ }).count(), 0);
-    assert.match(await tooltip.textContent(), /In storage.*Craftable/s);
+    assert.match(await tooltip.textContent(), /Stored.*Craftable/s);
     await page.keyboard.press('Space');
     assert.equal(await page.getByRole('button', { name: /Certus Quartz Crystal/ }).count(), 0);
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
@@ -1869,12 +1869,13 @@ test('terminal displays structured registry and optional resource metadata witho
     assert.equal(await details.getByText('example:tool', { exact: true }).isVisible(), true);
     assert.match(await details.innerText(), /Components:\s*3/);
     assert.match(await details.innerText(), /Damage:\s*7/);
-    await page.getByRole('button', { name: /Plain Tool/ }).click();
-    assert.match(await details.innerText(), /Components:\s*0/);
-    assert.match(await details.innerText(), /Damage:\s*0/);
+    const plain = page.getByRole('button', { name: /Plain Tool/ });
+    await plain.hover();
+    assert.doesNotMatch(await tooltip.innerText(), /Components:|Damage:/);
+    await plain.click();
+    assert.doesNotMatch(await details.innerText(), /Components:|Damage:/);
     await page.getByRole('button', { name: /Water/ }).click();
-    assert.match(await details.innerText(), /Components:\s*0/);
-    assert.doesNotMatch(await details.innerText(), /Damage:/);
+    assert.doesNotMatch(await details.innerText(), /Components:|Damage:/);
     await page.getByRole('button', { name: /Essentia/ }).click();
     assert.doesNotMatch(await details.innerText(), /Components:|Damage:|null|undefined/);
     assert.equal(await details.locator('code').count(), 0);
@@ -1897,8 +1898,10 @@ test('terminal displays structured registry and optional resource metadata witho
     await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Plain Tool/ }).click();
-    assert.match(await details.innerText(), /Komponenty:\s*0/);
-    assert.match(await details.innerText(), /Uszkodzenie:\s*0/);
+    assert.doesNotMatch(await details.innerText(), /Komponenty:|Uszkodzenie:/);
+    await page.getByRole('button', { name: /Damaged Tool/ }).click();
+    assert.match(await details.innerText(), /Komponenty:\s*3/);
+    assert.match(await details.innerText(), /Uszkodzenie:\s*7/);
 });
 
 test('CPU work, plans and history retain resources with unavailable registry metadata', async (t) => {

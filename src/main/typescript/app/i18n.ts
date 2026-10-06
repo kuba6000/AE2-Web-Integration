@@ -196,7 +196,7 @@ const translations: Dictionaries = {
             'Search item names and registry IDs.\n@mod filters by mod ID, e.g. @minecraft.\nCombine terms, e.g. @minecraft iron. Every term must match.\nSearch ignores letter case and Minecraft color codes.',
         resources: 'Resources',
         all: 'All',
-        stored: 'In storage',
+        stored: 'Stored',
         craftable: 'Craftable',
         sort: 'Sort by',
         name: 'Name',
