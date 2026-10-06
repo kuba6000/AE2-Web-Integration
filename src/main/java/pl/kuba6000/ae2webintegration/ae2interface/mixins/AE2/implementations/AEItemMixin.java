@@ -13,12 +13,21 @@ import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.me.Grid;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.NativeItemIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 @Mixin(value = AEKey.class, remap = false)
 public abstract class AEItemMixin implements IAEKey {
+
+    @Override
+    public @NotNull ResourceType web$getResourceType() {
+        AEKey key = (AEKey) (Object) this;
+        if (key instanceof AEItemKey) return ResourceType.ITEM;
+        if (key instanceof AEFluidKey) return ResourceType.FLUID;
+        return ResourceType.OTHER;
+    }
 
     @Override
     public @NotNull StableKey web$getKey() {
