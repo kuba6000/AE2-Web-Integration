@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
@@ -156,6 +157,11 @@ class CoreEngineLifecycleTest extends GridTestScope {
         @Override
         public @NotNull IAEKey web$copyIdentity() {
             return this;
+        }
+
+        @Override
+        public @NotNull ResourceType web$getResourceType() {
+            return ResourceType.ITEM;
         }
 
         @Override

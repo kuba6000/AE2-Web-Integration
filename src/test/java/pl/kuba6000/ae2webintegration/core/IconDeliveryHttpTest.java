@@ -34,6 +34,7 @@ import com.google.gson.JsonObject;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
@@ -549,6 +550,7 @@ class IconDeliveryHttpTest {
                     return switch (method.getName()) {
                         case "web$getKey" -> variant == 0 ? exact : TestGridFixtures.key(104 + variant);
                         case "web$copyIdentity" -> proxy;
+                        case "web$getResourceType" -> ResourceType.ITEM;
                         case "web$getItemID", "web$getDisplayName" -> "product-" + variant;
                         case "web$getIconBaseKey" -> {
                             normalizations.incrementAndGet();

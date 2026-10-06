@@ -67,11 +67,44 @@ const idIcon = icon(`<g transform="scale(2)">
     <path fill="#78a9c9" d="M5 7h2v2H5z"/>
   </g>`);
 
+const ascendingIcon = icon(`<g transform="scale(2)">
+    <path fill="#302b28" d="M7 1h2v1h1v1h1v1h1v1h1v3h-3v7H6V8H3V5h1V4h1V3h1V2h1z"/>
+    <path fill="#d2dcde" d="M7 3h2v1h1v1h1v1h1v1H9v7H7V7H4V6h1V5h1V4h1z"/>
+    <path fill="#74858d" d="M8 7h1v7H8z"/>
+  </g>`);
+const descendingIcon = icon(`<g transform="translate(0 32) scale(2 -2)">
+    <path fill="#302b28" d="M7 1h2v1h1v1h1v1h1v1h1v3h-3v7H6V8H3V5h1V4h1V3h1V2h1z"/>
+    <path fill="#d2dcde" d="M7 3h2v1h1v1h1v1h1v1H9v7H7V7H4V6h1V5h1V4h1z"/>
+    <path fill="#74858d" d="M8 7h1v7H8z"/>
+  </g>`);
+
+const itemBody = `<g transform="scale(2)">
+    <path fill="#302b28" d="M4 2h7v1h2v2h1v7h-2v2H4v-1H2V5h1V3h1z"/>
+    <path fill="#a16b3b" d="M4 3h7v1h2v8h-2v1H4v-1H3V5h1z"/>
+    <path fill="#dcb85c" d="M4 3h7v1h2v1h-2v1H5V5H3V4h1z"/>
+    <path fill="#754b2c" d="M8 6h3V5h2v7h-2v1H8z"/>
+    <path fill="#d2dcde" d="M6 3h2v2H6zM6 6h2v3H6z"/>
+  </g>`;
+const fluidBody = `<g transform="scale(2)">
+    <path fill="#302b28" d="M6 1h4v2h1v2h1v2h1v2h1v4h-1v1h-2v1H5v-1H3v-1H2V9h1V7h1V5h1V3h1z"/>
+    <path fill="#78a9c9" d="M7 2h2v2h1v2h1v2h1v2h1v3h-2v1H5v-1H3v-3h1V8h1V6h1V4h1z"/>
+    <path fill="#507a9b" d="M11 8h1v2h1v3h-2v1H5v-1h5v-2h1z"/>
+    <path fill="#d2dcde" d="M6 6h1v2H6zM5 8h1v3H5z"/>
+  </g>`;
+const enabledMark = `<path fill="#302b28" d="M22 22h10v10H22z"/><path fill="#86b967" d="M24 24h6v6h-6z"/>`;
+const disabledMark = `<path fill="#302b28" d="M20 20h12v12H20z"/><path fill="#c77e72" d="M22 22h2v2h4v-2h2v4h-2v2h2v2h-4v-2h-2v2h-2v-4h2v-2h-2z"/>`;
+
 export const terminalIcons = {
     all: allIcon,
     stored: storedIcon,
     craftable: craftingHammer,
     name: nameIcon,
     quantity: quantityIcon,
-    id: idIcon
+    id: idIcon,
+    ascending: ascendingIcon,
+    descending: descendingIcon,
+    itemsOn: icon(itemBody + enabledMark),
+    itemsOff: icon(itemBody + disabledMark),
+    fluidsOn: icon(fluidBody + enabledMark),
+    fluidsOff: icon(fluidBody + disabledMark)
 };

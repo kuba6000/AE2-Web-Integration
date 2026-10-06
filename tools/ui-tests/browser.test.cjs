@@ -14,6 +14,7 @@ const iron = {
     itemId: 'minecraft:iron_ingot',
     quantity: 128640,
     craftable: true,
+    resourceType: 'ITEM',
     itemKey: 'iron'
 };
 const quartz = {
@@ -21,6 +22,7 @@ const quartz = {
     itemId: 'ae2:certus_quartz_crystal',
     quantity: 42,
     craftable: false,
+    resourceType: 'ITEM',
     itemKey: 'quartz'
 };
 const readyPlan = {
@@ -1454,7 +1456,8 @@ test('real page browses API resources under a proxy prefix, with search and filt
     await page.getByRole('button', { name: /Certus Quartz Crystal/ }).waitFor();
     assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
     await page.getByRole('searchbox', { name: 'Search resources' }).fill('');
-    await page.getByRole('button', { name: 'Craftable', exact: true }).click();
+    await page.getByRole('button', { name: /^Availability:/ }).click();
+    await page.getByRole('button', { name: /^Availability:/ }).click();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await page.getByRole('button', { name: /Certus Quartz Crystal/ }).count(), 0);
     assert.equal(
@@ -1614,7 +1617,7 @@ test('Minecraft names search and sort as continuous plain text and keep tooltip 
     await page.goto(`${base}#/grids/${gridA}/items`);
     const alpha = page.getByRole('button', { name: /^Alpha/ });
     await alpha.waitFor();
-    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).waitFor();
     assert.match(
         await page
             .getByRole('button', { name: /^(Alpha|Beta)/ })
@@ -1740,61 +1743,160 @@ test('resource quantities abbreviate from ten thousand and retain exact tooltip 
     }
 });
 
-test('terminal icon tools expose tooltips and support keyboard filtering and sorting', async (t) => {
+// Public browser seam: one availability control cycles locally and retains keyboard focus.
+test('terminal availability cycles through all stored and craftable with current tooltips', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    options.itemsA = [iron, quartz, { ...iron, itemName: 'Gold Ingot', itemKey: 'gold', quantity: 0 }];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    const availability = page.getByRole('button', { name: /^Availability:/ });
+    const tooltip = page.getByRole('tooltip');
+    await availability.waitFor({ timeout: 1500 });
+    assert.equal(await availability.count(), 1);
+    assert.equal(await availability.getAttribute('aria-pressed'), null);
+    await availability.focus();
+    assert.match(await tooltip.textContent(), /All.*In storage/s);
+    await page.keyboard.press('Enter');
+    assert.match(await availability.getAttribute('aria-label'), /In storage/);
+    assert.equal(await page.getByRole('button', { name: /Gold Ingot/ }).count(), 0);
+    assert.match(await tooltip.textContent(), /In storage.*Craftable/s);
+    await page.keyboard.press('Space');
+    assert.equal(await page.getByRole('button', { name: /Certus Quartz Crystal/ }).count(), 0);
+    await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
+    assert.equal(await availability.evaluate((button) => document.activeElement === button), true);
+    await availability.click();
+    await page.getByRole('button', { name: /Certus Quartz Crystal/ }).waitFor();
+    assert.match(await availability.getAttribute('aria-label'), /All/);
+    await page.keyboard.press('Escape');
+    assert.equal(await tooltip.isVisible(), false);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, 1);
+});
+
+test('terminal sort criterion cycles independently of order and persists both', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    await seedAutomaticRefresh(page, base, false);
+    options.itemsA = [
+        { ...iron, itemName: 'Alpha', itemId: 'test:z', itemKey: 'a', quantity: 20 },
+        { ...iron, itemName: 'Beta', itemId: 'test:y', itemKey: 'b', quantity: 30 },
+        { ...iron, itemName: 'Gamma', itemId: 'test:x', itemKey: 'c', quantity: 10 }
+    ];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Alpha/ }).waitFor();
+    const names = () => page.locator('#items strong').allTextContents();
+    const sort = page.getByRole('button', { name: /^Sort by:/ });
+    const order = page.getByRole('button', { name: /^Sort order:/ });
+    assert.equal(await sort.count(), 1);
+    assert.deepEqual(await names(), ['Alpha', 'Beta', 'Gamma']);
+    await order.waitFor({ timeout: 1500 });
+    await sort.focus();
+    await page.keyboard.press('Enter');
+    assert.match(await sort.getAttribute('aria-label'), /Quantity/);
+    assert.deepEqual(await names(), ['Gamma', 'Alpha', 'Beta']);
+    await order.click();
+    assert.deepEqual(await names(), ['Beta', 'Alpha', 'Gamma']);
+    await sort.click();
+    assert.deepEqual(await names(), ['Alpha', 'Beta', 'Gamma']);
+    await sort.click();
+    assert.deepEqual(await names(), ['Gamma', 'Beta', 'Alpha']);
+    await page.reload();
+    await page.getByRole('button', { name: /Alpha/ }).waitFor();
+    assert.deepEqual(await names(), ['Gamma', 'Beta', 'Alpha']);
+    assert.equal(await sort.getAttribute('aria-pressed'), null);
+    assert.equal(await order.getAttribute('aria-pressed'), 'true');
+});
+
+test('terminal item and fluid switches intersect filters and preserve other resource kinds', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
     await seedAutomaticRefresh(page, base, false);
     options.itemsA = [
         iron,
         quartz,
-        { ...iron, itemName: 'Gold Ingot', itemId: 'minecraft:gold_ingot', itemKey: 'gold', quantity: 0 }
+        { ...iron, itemName: 'Water', itemId: 'minecraft:water', itemKey: 'water', resourceType: 'FLUID' },
+        { ...iron, itemName: 'Steam', itemId: 'addon:steam', itemKey: 'steam', resourceType: 'FLUID', quantity: 0 },
+        { ...iron, itemName: 'Energy', itemId: 'addon:energy', itemKey: 'energy', resourceType: 'OTHER' }
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-    const all = page.getByRole('button', { name: 'All', exact: true });
-    const craftable = page.getByRole('button', { name: 'Craftable', exact: true });
-    const stored = page.getByRole('button', { name: 'In storage', exact: true });
-    const tooltip = page.getByRole('tooltip');
-    assert.equal(await all.getAttribute('aria-pressed'), 'true');
-    await craftable.hover();
-    await tooltip.waitFor({ state: 'visible' });
-    assert.equal(await tooltip.textContent(), await craftable.getAttribute('aria-label'));
-    await page.keyboard.press('Escape');
-    await tooltip.waitFor({ state: 'hidden' });
-    await craftable.focus();
-    await tooltip.waitFor({ state: 'visible' });
-    await page.keyboard.press('Enter');
-    assert.equal(await craftable.getAttribute('aria-pressed'), 'true');
-    assert.equal(await all.getAttribute('aria-pressed'), 'false');
-    assert.equal(await page.getByRole('button', { name: /Certus Quartz Crystal/ }).count(), 0);
-    await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
-    await stored.focus();
+    const items = page.getByRole('button', { name: /^Items:/ });
+    const fluids = page.getByRole('button', { name: /^Fluids:/ });
+    await items.waitFor({ timeout: 1500 });
+    assert.equal(await items.getAttribute('aria-pressed'), 'true');
+    assert.equal(await fluids.getAttribute('aria-pressed'), 'true');
+    await items.click();
+    assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
+    await page.getByRole('button', { name: /Water/ }).waitFor();
+    await page.getByRole('button', { name: /^Availability:/ }).click();
+    assert.equal(await page.getByRole('button', { name: /Steam/ }).count(), 0);
+    await page.getByRole('searchbox').fill('@minecraft');
+    assert.deepEqual(await page.locator('#items strong').allTextContents(), ['Water']);
+    await fluids.focus();
     await page.keyboard.press('Space');
-    assert.equal(await stored.getAttribute('aria-pressed'), 'true');
-    assert.equal(await craftable.getAttribute('aria-pressed'), 'false');
-    await page.getByRole('button', { name: /Certus Quartz Crystal/ }).waitFor();
-    assert.equal(await page.getByRole('button', { name: /Gold Ingot/ }).count(), 0);
-    const quantity = page.getByRole('button', { name: 'Sort by: Quantity', exact: true });
-    await quantity.focus();
-    await tooltip.waitFor({ state: 'visible' });
-    assert.equal(await tooltip.textContent(), await quantity.getAttribute('aria-label'));
+    assert.equal(await page.locator('#items button').count(), 0);
+    await page.getByRole('searchbox').fill('');
+    assert.deepEqual(await page.locator('#items strong').allTextContents(), ['Energy']);
+    await page.reload();
+    await page.getByRole('button', { name: /Energy/ }).waitFor();
+    assert.equal(await items.getAttribute('aria-pressed'), 'false');
+    assert.equal(await fluids.getAttribute('aria-pressed'), 'false');
+    assert.deepEqual(await page.locator('#items strong').allTextContents(), ['Energy']);
+    await items.click();
+    await page.getByRole('button', { name: /Iron Ingot/ }).click();
+    assert.equal(await page.getByRole('heading', { name: 'Iron Ingot', exact: true }).isVisible(), true);
+    assert.equal(await fluids.getAttribute('aria-pressed'), 'false');
+});
+
+// Saved browser preferences are a supported public format; missing direction adopts the old criterion order.
+for (const saved of [
+    { sort: 'quantity', filter: 'craftable', expected: ['Iron Ingot', 'Certus Quartz Crystal'] },
+    { sort: 'name', filter: 'stored', expected: ['Certus Quartz Crystal', 'Iron Ingot'] },
+    { sort: 'id', filter: 'all', expected: ['Certus Quartz Crystal', 'Iron Ingot'] }
+]) {
+    test(`terminal restores legacy ${saved.sort} preferences without coupling later order changes`, async (t) => {
+        const { page, options, base } = await fixture(t, '/ae2');
+        options.itemsA = [iron, { ...quartz, craftable: true }];
+        await page.addInitScript(({ sort, filter }) => {
+            const key = 'ae2web:/ae2/:ui';
+            if (!localStorage.getItem(key))
+                localStorage.setItem(key, JSON.stringify({ sort, filter, autoRefresh: false }));
+        }, saved);
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+        assert.deepEqual(await page.locator('#items strong').allTextContents(), saved.expected);
+        const order = page.getByRole('button', { name: /^Sort order:/ });
+        assert.equal(await order.getAttribute('aria-pressed'), String(saved.sort === 'quantity'));
+        await page.getByRole('button', { name: /^Sort by:/ }).click();
+        await page.reload();
+        await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+        assert.equal(await order.getAttribute('aria-pressed'), String(saved.sort === 'quantity'));
+    });
+}
+
+test('terminal control focus and dismissed tooltips survive polling and filtering resets pagination', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.itemsA = Array.from({ length: 102 }, (_, index) => ({
+        ...iron,
+        itemName: `Item ${String(index).padStart(3, '0')}`,
+        itemKey: `item-${index}`,
+        quantity: index
+    }));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Item 000/ }).waitFor();
+    await page.getByRole('button', { name: 'Next page', exact: true }).click();
+    await page.getByRole('button', { name: /Item 101/ }).waitFor();
+    const availability = page.getByRole('button', { name: /^Availability:/ });
+    await availability.focus();
     await page.keyboard.press('Enter');
-    assert.equal(await quantity.getAttribute('aria-pressed'), 'true');
-    assert.equal(
-        await page.getByRole('button', { name: 'Sort by: Name', exact: true }).getAttribute('aria-pressed'),
-        'false'
-    );
-    assert.match(
-        await page
-            .getByRole('button', { name: /Iron Ingot|Certus Quartz Crystal/ })
-            .first()
-            .textContent(),
-        /Iron Ingot/
-    );
-    assert.equal(
-        options.requests.filter((request) => request.path.endsWith('/items')).length,
-        1,
-        'Icon tools change the loaded inventory locally'
-    );
+    await page.getByRole('button', { name: /Item 001/ }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Previous page', exact: true }).isDisabled(), true);
+    const tooltip = page.getByRole('tooltip');
+    const label = await tooltip.textContent();
+    await poll(page);
+    assert.equal(await availability.evaluate((button) => document.activeElement === button), true);
+    assert.equal(await tooltip.textContent(), label);
+    await page.keyboard.press('Escape');
+    await poll(page);
+    assert.equal(await tooltip.isVisible(), false);
 });
 
 // Public seam: browser controls plus emitted HTTP. A calculation must be explicit, keep its
@@ -2703,8 +2805,8 @@ test('CPU terminal hides stored-only resources, sorts explicit quantities and pr
     assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus/cpu-a')).length, 1);
     await page.getByRole('link', { name: 'Terminal', exact: true }).click();
     assert.equal(
-        await page.getByRole('button', { name: 'Sort by: Name', exact: true }).getAttribute('aria-pressed'),
-        'true',
+        await page.getByRole('button', { name: 'Sort by: Name', exact: true }).isVisible(),
+        true,
         'CPU sort controls must not overwrite inventory preferences'
     );
 });
@@ -3999,7 +4101,8 @@ test('appearance, language and terminal preferences survive reload and direct li
     const { page, base } = await fixture(t, '/ae2');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-    await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
+    await page.getByRole('button', { name: /^Sort by:/ }).click();
+    await page.getByRole('button', { name: /^Sort order:/ }).click();
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
     await page.getByRole('combobox', { name: 'Appearance' }).selectOption('dark');
@@ -4010,10 +4113,7 @@ test('appearance, language and terminal preferences survive reload and direct li
     assert.equal(await page.getByRole('checkbox', { name: 'Odświeżaj automatycznie' }).isChecked(), false);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-    assert.equal(
-        await page.getByRole('button', { name: 'Sortuj według: Ilości', exact: true }).getAttribute('aria-pressed'),
-        'true'
-    );
+    assert.equal(await page.getByRole('button', { name: 'Sortuj według: Ilości', exact: true }).isVisible(), true);
     await page.getByRole('navigation').locator('a[href="#/"]').click();
     await page.getByRole('button', { name: 'Wybierz sieć', exact: true }).waitFor();
     assert.equal(
@@ -4095,7 +4195,8 @@ test('hovered resource tooltip stays current through polling and closes when the
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     const tooltip = page.getByRole('tooltip');
-    await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
+    await page.getByRole('button', { name: /^Sort by:/ }).click();
+    await page.getByRole('button', { name: /^Sort order:/ }).click();
     await item.hover();
     await tooltip.waitFor({ state: 'visible' });
     const updatedTooltip = page.evaluate(
@@ -4187,11 +4288,11 @@ test('hovered tool keeps its tooltip when a keyboard-focused resource refreshes'
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     const tooltip = page.getByRole('tooltip');
-    const tool = page.getByRole('button', { name: 'Sort by: Quantity', exact: true });
+    const tool = page.getByRole('button', { name: /^Sort by:/ });
     await item.focus();
     await tool.hover();
-    const label = await tool.getAttribute('aria-label');
-    assert.equal(await tooltip.textContent(), label);
+    const label = await tooltip.textContent();
+    assert.ok(label.includes(await tool.getAttribute('aria-label')));
     options.itemsA = [{ ...iron, quantity: 2345 }, quartz];
     await page.getByRole('button', { name: /Iron Ingot.*2,345/ }).waitFor();
     assert.equal(await item.evaluate((button) => button === document.activeElement), true);

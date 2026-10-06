@@ -1047,6 +1047,12 @@ label {
     gap: 22px;
     margin-top: 26px;
 }
+#terminal-tools {
+    gap: 12px;
+}
+#terminal-tools [role='group'] {
+    gap: 5px;
+}
 .terminal-tools [role='group'] {
     display: flex;
     flex-direction: column;

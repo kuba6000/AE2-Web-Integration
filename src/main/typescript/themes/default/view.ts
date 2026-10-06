@@ -35,7 +35,7 @@ function element<Tag extends keyof HTMLElementTagNameMap>(
     return node;
 }
 
-function iconButton(group: 'filter' | 'sort', value: keyof typeof symbols) {
+function iconButton(group: 'filter' | 'sort' | 'sortOrder' | 'showItems' | 'showFluids', value: keyof typeof symbols) {
     return `<button type="button" class="tool-button" data-preference="${group}" data-value="${value}">${symbols[value]}</button>`;
 }
 
@@ -60,6 +60,16 @@ export function mount(
 ) {
     i18n.register({
         en: {
+            showItems: 'Items',
+            showFluids: 'Fluids',
+            on: 'On',
+            off: 'Off',
+            resourceKinds: 'Resource types',
+            sortOrder: 'Sort order',
+            ascending: 'Ascending',
+            descending: 'Descending',
+            availability: 'Availability',
+            nextState: 'Next: {state}',
             appearance: 'Appearance',
             light: 'Light',
             dark: 'Dark',
@@ -78,6 +88,16 @@ export function mount(
             dismissIcons: 'Dismiss icon suggestion'
         },
         pl: {
+            showItems: 'Przedmioty',
+            showFluids: 'Płyny',
+            on: 'Włączone',
+            off: 'Wyłączone',
+            resourceKinds: 'Rodzaje zasobów',
+            sortOrder: 'Kierunek sortowania',
+            ascending: 'Rosnąco',
+            descending: 'Malejąco',
+            availability: 'Dostępność',
+            nextState: 'Następnie: {state}',
             appearance: 'Wygląd',
             light: 'Jasny',
             dark: 'Ciemny',
@@ -136,8 +156,9 @@ export function mount(
         <button type="button" id="dismiss-icons">×</button></section><section class="window-frame info-notice" id="tracking-notice" aria-labelledby="tracking-notice-text" hidden>${infoCircle}<p><span id="tracking-notice-text"></span> <a id="tracking-settings-link"></a></p></section></div>
         <div class="workspace" id="workspace">
         <div class="terminal-tools" id="terminal-tools" hidden>
-        <div role="group" data-label="resources">${(['all', 'stored', 'craftable'] as const).map((value) => iconButton('filter', value)).join('')}</div>
-        <div role="group" data-label="sort">${(['name', 'quantity', 'id'] as const).map((value) => iconButton('sort', value)).join('')}</div></div>
+        <div role="group" data-label="resources">${iconButton('filter', 'all')}</div>
+        <div role="group" data-theme-label="resourceKinds">${iconButton('showItems', 'itemsOn')}${iconButton('showFluids', 'fluidsOn')}</div>
+        <div role="group" data-label="sort">${iconButton('sort', 'name')}${iconButton('sortOrder', 'ascending')}</div></div>
         <div class="window-frame" id="window">
         <div id="network-message" role="status"></div>
         <section id="server-settings" hidden><h2 data-text="serverSettings"></h2></section>
@@ -208,7 +229,12 @@ export function mount(
     find('#username').textContent = user.username;
 
     const toolButtons: NodeListOf<
-        HTMLButtonElement & { dataset: { preference: 'filter' | 'sort'; value: keyof typeof symbols } }
+        HTMLButtonElement & {
+            dataset: {
+                preference: 'filter' | 'sort' | 'sortOrder' | 'showItems' | 'showFluids';
+                value: keyof typeof symbols;
+            };
+        }
     > = root.querySelectorAll('.tool-button');
     const homeView = createHomeView(find('#workspace'), application);
     const craftingView = createCraftingView(find('#window'), application);
@@ -228,6 +254,7 @@ export function mount(
     let itemTooltip:
         { row: ReturnType<typeof createItemRow>; x: number; y: number; pointer: boolean } | null | undefined;
     let updatingRows = false;
+    let toolTooltip: HTMLButtonElement | null = null;
 
     let language: TerminalState['preferences']['language'];
 
@@ -242,6 +269,7 @@ export function mount(
 
     let allFiltered: TerminalState['items'] = [];
     function hideTooltip() {
+        toolTooltip = null;
         itemTooltip = null;
         tooltip.hidden = true;
     }
@@ -266,6 +294,7 @@ export function mount(
     }
 
     function showItemTooltip(row: ReturnType<typeof createItemRow>, x: number, y: number, pointer: boolean) {
+        toolTooltip = null;
         itemTooltip = { row, x, y, pointer };
         showTooltip(row.item, x, y);
     }
@@ -298,13 +327,9 @@ export function mount(
         (root.querySelectorAll('[data-label]') as NodeListOf<HTMLElement & { dataset: { label: string } }>).forEach(
             (node) => node.setAttribute('aria-label', locale.common(node.dataset.label))
         );
-        toolButtons.forEach((button) => {
-            const label =
-                button.dataset.preference === 'sort'
-                    ? `${locale.common('sort')}: ${locale.common(button.dataset.value)}`
-                    : locale.common(button.dataset.value);
-            button.setAttribute('aria-label', label);
-        });
+        (root.querySelectorAll('[data-theme-label]') as NodeListOf<HTMLElement>).forEach((node) =>
+            node.setAttribute('aria-label', locale.t(node.dataset.themeLabel!))
+        );
         find('#dismiss-icons').setAttribute('aria-label', locale.t('dismissIcons'));
         find('#search').placeholder = locale.common('searchHint');
         find('#search').setAttribute('aria-description', locale.common('searchHelp'));
@@ -336,6 +361,9 @@ export function mount(
             state.search,
             state.preferences.filter,
             state.preferences.sort,
+            state.preferences.sortOrder,
+            state.preferences.showItems,
+            state.preferences.showFluids,
             language,
             state.route.gridKey
         ].join('\0');
@@ -355,18 +383,32 @@ export function mount(
                         term.startsWith('@') ? mod.includes(term.slice(1)) : text.includes(term)
                     );
                 })
+                .filter(({ item }) =>
+                    item.resourceType === 'ITEM'
+                        ? state.preferences.showItems
+                        : item.resourceType === 'FLUID'
+                          ? state.preferences.showFluids
+                          : true
+                )
                 .filter(
                     ({ item }) =>
                         state.preferences.filter === 'all' ||
                         (state.preferences.filter === 'stored' ? item.quantity > 0 : item.craftable)
                 )
-                .sort((a, b) =>
-                    state.preferences.sort === 'quantity'
-                        ? b.item.quantity - a.item.quantity || a.name.localeCompare(b.name, language)
-                        : state.preferences.sort === 'id'
-                          ? a.item.itemId.localeCompare(b.item.itemId, language)
-                          : a.name.localeCompare(b.name, language)
-                )
+                .sort((a, b) => {
+                    const primary =
+                        state.preferences.sort === 'quantity'
+                            ? a.item.quantity - b.item.quantity
+                            : state.preferences.sort === 'id'
+                              ? a.item.itemId.localeCompare(b.item.itemId, language)
+                              : a.name.localeCompare(b.name, language);
+                    return (
+                        primary * (state.preferences.sortOrder === 'ascending' ? 1 : -1) ||
+                        a.name.localeCompare(b.name, language) ||
+                        a.item.itemId.localeCompare(b.item.itemId, language) ||
+                        (a.item.itemKey || '').localeCompare(b.item.itemKey || '')
+                    );
+                })
                 .map(({ item }) => item);
             listInput = { items: state.items, signature };
             renderPage();
@@ -568,12 +610,53 @@ export function mount(
         }
         languageSelect.value = language;
         find('#appearance').value = appearance;
-        toolButtons.forEach((button) =>
-            button.setAttribute(
-                'aria-pressed',
-                String(state.preferences[button.dataset.preference] === button.dataset.value)
-            )
-        );
+        toolButtons.forEach((button) => {
+            if (button.dataset.preference === 'filter') {
+                const current = state.preferences.filter;
+                const next = current === 'all' ? 'stored' : current === 'stored' ? 'craftable' : 'all';
+                if (button.dataset.value !== current) button.innerHTML = symbols[current];
+                button.dataset.value = current;
+                button.setAttribute('aria-label', `${locale.t('availability')}: ${locale.common(current)}`);
+                button.setAttribute('aria-description', locale.t('nextState', { state: locale.common(next) }));
+            } else if (button.dataset.preference === 'sort') {
+                const current = state.preferences.sort;
+                const next = current === 'name' ? 'quantity' : current === 'quantity' ? 'id' : 'name';
+                if (button.dataset.value !== current) button.innerHTML = symbols[current];
+                button.dataset.value = current;
+                button.setAttribute('aria-label', `${locale.common('sort')}: ${locale.common(current)}`);
+                button.setAttribute('aria-description', locale.t('nextState', { state: locale.common(next) }));
+            } else if (button.dataset.preference === 'sortOrder') {
+                const current = state.preferences.sortOrder;
+                const next = current === 'ascending' ? 'descending' : 'ascending';
+                if (button.dataset.value !== current) button.innerHTML = symbols[current];
+                button.dataset.value = current;
+                button.setAttribute('aria-label', `${locale.t('sortOrder')}: ${locale.t(current)}`);
+                button.setAttribute('aria-description', locale.t('nextState', { state: locale.t(next) }));
+                button.setAttribute('aria-pressed', String(current === 'descending'));
+            } else {
+                const enabled = state.preferences[button.dataset.preference];
+                const value =
+                    button.dataset.preference === 'showItems'
+                        ? enabled
+                            ? 'itemsOn'
+                            : 'itemsOff'
+                        : enabled
+                          ? 'fluidsOn'
+                          : 'fluidsOff';
+                if (button.dataset.value !== value) button.innerHTML = symbols[value];
+                button.dataset.value = value;
+                button.setAttribute(
+                    'aria-label',
+                    `${locale.t(button.dataset.preference)}: ${locale.t(enabled ? 'on' : 'off')}`
+                );
+                button.setAttribute(
+                    'aria-description',
+                    locale.t('nextState', { state: locale.t(enabled ? 'off' : 'on') })
+                );
+                button.setAttribute('aria-pressed', String(enabled));
+            }
+        });
+        if (toolTooltip) showToolTooltip(toolTooltip);
         (root.querySelectorAll('[data-view]') as NodeListOf<HTMLAnchorElement>).forEach((link) => {
             if (
                 link.dataset.view === state.route.view ||
@@ -625,6 +708,7 @@ export function mount(
         application.search(search.value);
     });
     const showSearchHelp = () => {
+        toolTooltip = null;
         itemTooltip = null;
         tooltip.replaceChildren(
             ...locale
@@ -675,17 +759,38 @@ export function mount(
         settings.set('appearance', appearance);
         document.documentElement.dataset.appearance = appearance;
     });
+    function showToolTooltip(button: HTMLButtonElement) {
+        itemTooltip = null;
+        toolTooltip = button;
+        tooltip.textContent = [button.getAttribute('aria-label'), button.getAttribute('aria-description')]
+            .filter(Boolean)
+            .join(' · ');
+        tooltip.hidden = false;
+        const box = button.getBoundingClientRect();
+        positionTooltip(box.right, box.top);
+    }
     toolButtons.forEach((button) => {
-        const show = () => {
-            itemTooltip = null;
-            tooltip.textContent = button.getAttribute('aria-label');
-            tooltip.hidden = false;
-            const box = button.getBoundingClientRect();
-            positionTooltip(box.right, box.top);
-        };
+        const show = () => showToolTooltip(button);
         button.addEventListener('click', () => {
-            application.preference(button.dataset.preference, button.dataset.value);
-            hideTooltip();
+            if (button.dataset.preference === 'filter') {
+                const current = state.preferences.filter;
+                application.preference(
+                    'filter',
+                    current === 'all' ? 'stored' : current === 'stored' ? 'craftable' : 'all'
+                );
+            } else if (button.dataset.preference === 'sort') {
+                const current = state.preferences.sort;
+                application.preference(
+                    'sort',
+                    current === 'name' ? 'quantity' : current === 'quantity' ? 'id' : 'name'
+                );
+            } else if (button.dataset.preference === 'sortOrder') {
+                application.preference(
+                    'sortOrder',
+                    state.preferences.sortOrder === 'ascending' ? 'descending' : 'ascending'
+                );
+            } else application.preference(button.dataset.preference, !state.preferences[button.dataset.preference]);
+            show();
         });
         button.addEventListener('pointerenter', (event) => {
             if (event.pointerType !== 'touch') show();

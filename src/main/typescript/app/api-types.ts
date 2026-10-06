@@ -18,6 +18,7 @@ export type IconMetadata = {
 };
 export type ResourceResponse<T> = { data: T; icons: IconMetadata | null };
 export type StoredResource = ResourceStack & {
+    resourceType: 'ITEM' | 'FLUID' | 'OTHER';
     craftable: boolean;
     identityStatus: string | null;
     icon?: IconReference | null;

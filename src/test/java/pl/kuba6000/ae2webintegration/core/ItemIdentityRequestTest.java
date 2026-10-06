@@ -21,6 +21,7 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.CreateCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -29,6 +30,84 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class ItemIdentityRequestTest extends GridTestScope {
+
+    @Test
+    void listingExposesTheResourceTypeForTerminalFiltering() {
+        Resource fluid = new Resource("virtual:fluid_drop", 8000, true) {
+
+            @Override
+            public @NotNull ResourceType web$getResourceType() {
+                return ResourceType.FLUID;
+            }
+        };
+        Resource other = new Resource("addon:chemical", 42, false) {
+
+            @Override
+            public @NotNull ResourceType web$getResourceType() {
+                return ResourceType.OTHER;
+            }
+
+            @Override
+            public @NotNull StableKey web$getKey() {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public @NotNull IAEKey web$copyIdentity() {
+                return this;
+            }
+        };
+        Resource recipe = new Resource("fluid:recipe", 0, true) {
+
+            @Override
+            public @NotNull ResourceType web$getResourceType() {
+                return ResourceType.FLUID;
+            }
+        };
+        Grid grid = new Grid(910012, new Resource("minecraft:water_bucket", 5, false), fluid, other);
+        grid.recipes = Collections.singleton(recipe);
+        JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
+        assertEquals(4, rows.size());
+        assertEquals(
+            "ITEM",
+            rows.get(0)
+                .getAsJsonObject()
+                .get("resourceType")
+                .getAsString());
+        JsonObject fluidRow = rows.get(1)
+            .getAsJsonObject();
+        assertEquals(
+            "FLUID",
+            fluidRow.get("resourceType")
+                .getAsString());
+        assertEquals(
+            8000,
+            fluidRow.get("quantity")
+                .getAsLong());
+        JsonObject otherRow = rows.get(2)
+            .getAsJsonObject();
+        assertEquals(
+            "OTHER",
+            otherRow.get("resourceType")
+                .getAsString());
+        assertEquals(
+            "UNSUPPORTED",
+            otherRow.get("identityStatus")
+                .getAsString());
+        JsonObject recipeRow = rows.get(3)
+            .getAsJsonObject();
+        assertEquals(
+            "FLUID",
+            recipeRow.get("resourceType")
+                .getAsString());
+        assertEquals(
+            0,
+            recipeRow.get("quantity")
+                .getAsLong());
+        assertTrue(
+            recipeRow.get("craftable")
+                .getAsBoolean());
+    }
 
     @Test
     @SuppressWarnings("BusyWait") // Wait for GC to release ownership, bounded by the deadline below.
@@ -373,6 +452,10 @@ class ItemIdentityRequestTest extends GridTestScope {
 
         public @NotNull IAEKey web$copyIdentity() {
             return new Resource(id, 0, false);
+        }
+
+        public @NotNull ResourceType web$getResourceType() {
+            return ResourceType.ITEM;
         }
 
         public @NotNull String web$getItemID() {

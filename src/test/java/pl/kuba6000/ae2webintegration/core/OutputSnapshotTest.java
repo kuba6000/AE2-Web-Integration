@@ -19,6 +19,7 @@ import com.google.gson.JsonParser;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPUList;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -265,6 +266,11 @@ class OutputSnapshotTest extends GridTestScope {
 
         private void available() {
             if (unavailable) throw new AssertionError("Native access after capture");
+        }
+
+        public @NotNull ResourceType web$getResourceType() {
+            available();
+            return ResourceType.ITEM;
         }
 
         public @NotNull String web$getItemID() {

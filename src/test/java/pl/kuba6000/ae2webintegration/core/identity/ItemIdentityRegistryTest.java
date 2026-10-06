@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -290,6 +291,11 @@ class ItemIdentityRegistryTest {
         @Override
         public @NotNull IAEKey web$copyIdentity() {
             return new Resource(name, false, encodedName);
+        }
+
+        @Override
+        public @NotNull ResourceType web$getResourceType() {
+            return ResourceType.ITEM;
         }
 
         @Override

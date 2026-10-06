@@ -134,7 +134,16 @@ public final class GetItems extends ISyncedRequest {
             identityStatus = "UNAVAILABLE";
         }
 
-        items.add(new StoredResource(itemId, itemName, quantity, craftable, itemKey, identityStatus, icon));
+        items.add(
+            new StoredResource(
+                itemId,
+                itemName,
+                key.web$getResourceType(),
+                quantity,
+                craftable,
+                itemKey,
+                identityStatus,
+                icon));
     }
 
 }
