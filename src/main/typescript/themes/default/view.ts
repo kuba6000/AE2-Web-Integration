@@ -7,8 +7,9 @@ type Terminal = ReturnType<typeof createTerminal>;
 import { createSettings } from '../../app/storage.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
-import { navigateToGrid, cpuHref, historyHref } from '../../app/router.js';
+import { cpuHref, historyHref } from '../../app/router.js';
 import { createCraftingView } from './crafting.js';
+import { createHomeView } from './home.js';
 import { createCpuView } from './cpus.js';
 import { createHistoryView } from './history.js';
 import { createSettingsView } from './settings.js';
@@ -127,7 +128,7 @@ export function mount(
     root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1>AE2 <span>Web Integration</span></h1></div><div class="account-controls">
         <span class="account-user">${userIcon}<span id="username"></span></span><button id="logout" data-text="logout"></button></div></header>
         <dl class="network-summary"><dt><span data-text="network"></span>:</dt><dd id="selected-network"></dd></dl>
-        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav></div>
+        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav><p id="session-message" role="alert" hidden></p></div>
         <section class="window-frame icon-notice" id="icon-notice" aria-labelledby="icon-notice-text" hidden>
         ${infoCircle}<p id="icon-notice-text" data-theme-text="iconsOffer"></p>
         <button type="button" id="enable-icons" data-theme-text="enableIcons"></button>
@@ -138,8 +139,6 @@ export function mount(
         <div role="group" data-label="sort">${(['name', 'quantity', 'id'] as const).map((value) => iconButton('sort', value)).join('')}</div></div>
         <div class="window-frame" id="window">
         <div id="network-message" role="status"></div>
-        <section id="home"><h2 data-text="home"></h2><p data-text="homeHelp"></p>
-        <label class="home-network"><span data-text="network"></span><select id="network"></select></label><div id="networks"></div></section>
         <section id="server-settings" hidden><h2 data-text="serverSettings"></h2></section>
         <section id="web-settings" hidden><h2 data-text="webSettings"></h2><div class="web-preferences">
         <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
@@ -168,8 +167,8 @@ export function mount(
         '#language': HTMLElementTagNameMap['select'];
         '#appearance': HTMLElementTagNameMap['select'];
         '#logout': HTMLElementTagNameMap['button'];
+        '#session-message': HTMLElementTagNameMap['p'];
         '#username': HTMLElementTagNameMap['span'];
-        '#network': HTMLElementTagNameMap['select'];
         '#selected-network': HTMLElementTagNameMap['dd'];
         '#auto-refresh': HTMLElementTagNameMap['input'];
         '#terminal-link': HTMLElementTagNameMap['a'];
@@ -180,10 +179,8 @@ export function mount(
         '#terminal-tools': HTMLElementTagNameMap['div'];
         '#window': HTMLElementTagNameMap['div'];
         '#network-message': HTMLElementTagNameMap['div'];
-        '#home': HTMLElementTagNameMap['section'];
         '#web-settings': HTMLElementTagNameMap['section'];
         '#server-settings': HTMLElementTagNameMap['section'];
-        '#networks': HTMLElementTagNameMap['div'];
         '#terminal': HTMLElementTagNameMap['section'];
         '#search': HTMLElementTagNameMap['input'];
         '#item-message': HTMLElementTagNameMap['p'];
@@ -208,6 +205,7 @@ export function mount(
     const toolButtons: NodeListOf<
         HTMLButtonElement & { dataset: { preference: 'filter' | 'sort'; value: keyof typeof symbols } }
     > = root.querySelectorAll('.tool-button');
+    const homeView = createHomeView(find('#workspace'), application);
     const craftingView = createCraftingView(find('#window'), application);
     const itemIcons = application.icons.observe(find('#item-scroll'), paintResourceIcon);
     const slots = createSlotGrid(find('#items'), find('#item-scroll'), find('#terminal'));
@@ -309,32 +307,11 @@ export function mount(
         find('#next-page').setAttribute('aria-label', locale.common('nextPage'));
     }
     function renderNetworks() {
-        const select = find('#network');
         const gridKey = state.route.gridKey || state.selectedGridKey;
-        const current = new Map([...select.options].map((option) => [option.value, option]));
-        const entries = [
-            { key: '', label: locale.common('chooseNetwork') },
-            ...state.grids.map((grid) => ({
-                key: grid.key,
-                label: `${grid.owner || locale.common('unknownOwner')} · ${grid.key}`
-            }))
-        ];
-        if (gridKey && !state.grids.some((grid) => grid.key === gridKey)) {
-            entries.push({ key: gridKey, label: gridKey });
-        }
-        for (const entry of entries) {
-            const option = current.get(entry.key) || document.createElement('option');
-            option.value = entry.key;
-            option.textContent = entry.label;
-            option.disabled = !entry.key;
-            if (!option.parentNode) select.append(option);
-            current.delete(entry.key);
-        }
-        for (const option of current.values()) option.remove();
-        select.value = gridKey || '';
+        const grid = state.grids.find((grid) => grid.key === gridKey);
         const selectedNetwork = find('#selected-network');
-        selectedNetwork.textContent = select.value
-            ? select.selectedOptions[0].textContent
+        selectedNetwork.textContent = gridKey
+            ? `${grid?.owner || locale.common('unknownOwner')} · ${gridKey}`
             : locale.common('noNetworkSelected');
         selectedNetwork.title = selectedNetwork.textContent;
         const networkMessage =
@@ -346,25 +323,6 @@ export function mount(
                     ? `${locale.common('noNetworks')}. ${locale.common('noNetworksHelp')}`
                     : '';
         find('#network-message').textContent = networkMessage;
-        const networks = find('#networks');
-        const focused = (
-            networks.contains(document.activeElement) ? document.activeElement : null
-        ) as HTMLAnchorElement | null;
-        const links = new Map(([...networks.children] as HTMLAnchorElement[]).map((link) => [link.dataset.key, link]));
-        state.grids.forEach((grid, index) => {
-            const link = links.get(grid.key) || element('a', '', 'network');
-            link.dataset.key = grid.key;
-            link.href = `#/grids/${encodeURIComponent(grid.key)}/items`;
-            link.replaceChildren(
-                element('strong', locale.common('gridOwner', { owner: grid.owner || locale.common('unknownOwner') })),
-                element('code', grid.key),
-                element('span', locale.common('cpuCount', { count: grid.cpuCount }))
-            );
-            if (networks.children[index] !== link) networks.insertBefore(link, networks.children[index] || null);
-            links.delete(grid.key);
-        });
-        for (const link of links.values()) link.remove();
-        if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
     }
     function renderItems() {
         const signature = [
@@ -606,7 +564,9 @@ export function mount(
         });
         find('#auto-refresh').checked = state.preferences.autoRefresh;
         if (find('#search').value !== state.search) find('#search').value = state.search;
-        find('#home').hidden = state.route.view !== 'home';
+        find('#window').hidden = state.route.view === 'home';
+        find('#workspace').classList.toggle('with-home', state.route.view === 'home');
+        homeView.render(state, locale);
         find('#web-settings').hidden = state.route.view !== 'web-settings';
         find('#server-settings').hidden = state.route.view !== 'server-settings';
         find('#terminal').hidden = state.route.view !== 'items';
@@ -639,8 +599,6 @@ export function mount(
             ? locale.common('updated', { time: locale.time(state.updatedAt) })
             : '';
     }
-    const network = find('#network');
-    network.addEventListener('change', () => navigateToGrid(network.value));
     const search = find('#search');
     search.addEventListener('input', () => {
         hideTooltip();
@@ -730,10 +688,12 @@ export function mount(
     });
     find('#logout').addEventListener('click', async () => {
         find('#logout').disabled = true;
+        find('#session-message').hidden = true;
         try {
             await logout();
         } catch (error) {
-            find('#network-message').textContent = locale.common((error as ApiError).status);
+            find('#session-message').textContent = locale.common((error as ApiError).status);
+            find('#session-message').hidden = false;
             find('#logout').disabled = false;
         }
     });
@@ -749,6 +709,7 @@ export function mount(
         unsubscribe();
         slots.dispose();
         cpuView.dispose();
+        homeView.dispose();
         historyView.dispose();
         itemIcons.dispose();
         hideTooltip();

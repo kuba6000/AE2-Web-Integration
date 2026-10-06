@@ -3,6 +3,7 @@ import type { Grid, Item, IconMetadata } from './api-types.js';
 import type { createIconLoader } from './icons.js';
 import type { Preferences, createPreferences } from './preferences.js';
 import type { CraftingState } from './crafting.js';
+import { createHomeMonitor, type HomeState } from './home.js';
 import type { CpuState } from './cpus.js';
 import type { HistoryState } from './history.js';
 import type { SettingsState } from './settings.js';
@@ -32,6 +33,7 @@ export type TerminalState = TerminalData & {
     selectedGridKey: string | null;
     crafting: CraftingState;
     cpus: CpuState;
+    home: HomeState;
     history: HistoryState;
     settings: SettingsState;
 };
@@ -67,6 +69,7 @@ export function createTerminal(
         },
         () => iconsEnabled && state.iconPack.available === true
     );
+    const home = createHomeMonitor(api, notify, () => iconsEnabled && state.iconPack.available === true);
     const history = createHistory(
         api,
         () => {
@@ -98,6 +101,7 @@ export function createTerminal(
         preferences: preferences.values,
         crafting: crafting.state,
         cpus: cpus.state,
+        home: home.state,
         history: history.state,
         settings: settings.state
     };
@@ -176,11 +180,13 @@ export function createTerminal(
                 state.itemIcons = null;
                 cpus.invalidateIcons();
                 history.invalidateIcons();
+                home.invalidateIcons();
             }
             notify();
             if (changed) {
                 void loadItems();
                 void loadCpus();
+                void loadHome();
                 if (state.route.view === 'history' && state.route.entryId === null) void loadHistory();
             }
         } catch (caught) {
@@ -200,6 +206,9 @@ export function createTerminal(
         if (state.route.view !== 'plan' || state.gridStatus !== 'ready') return;
         if (!state.grids.some((grid) => grid.key === state.route.gridKey)) crafting.block('GRID_NOT_FOUND');
         else return crafting.refresh();
+    }
+    function loadHome() {
+        if (state.route.view === 'home' && state.gridStatus === 'ready') return home.refresh(state.grids);
     }
     function loadCpus() {
         if (state.route.view !== 'cpus' || state.gridStatus !== 'ready') return;
@@ -237,6 +246,7 @@ export function createTerminal(
                 state.gridStatus = 'ready';
                 state.gridError = null;
                 notify();
+                await loadHome();
                 await loadItems();
                 await loadCrafting();
                 await loadCpus();
@@ -246,6 +256,9 @@ export function createTerminal(
                 const error = caught as ApiFailure;
                 if (disposed || error.name === 'AbortError') return;
                 state.gridStatus = 'error';
+                state.grids = [];
+                state.selectedGridKey = null;
+                home.clear();
                 state.gridError = error.status || 'NETWORK_ERROR';
                 invalidateItems();
                 crafting.block(state.gridError);
@@ -273,9 +286,11 @@ export function createTerminal(
             state.itemIcons = null;
             cpus.invalidateIcons();
             history.invalidateIcons();
+            home.invalidateIcons();
             icons.enabled(enabled && state.iconPack.available === true);
             void loadItems();
             void loadCpus();
+            void loadHome();
             if (state.route.view === 'history' && state.route.entryId === null) void loadHistory();
             notify();
         },
@@ -293,12 +308,14 @@ export function createTerminal(
             cpus.route(route);
             history.route(route);
             settings.route(route);
+            home.route(route.view === 'home');
             notify();
             loadItems();
             loadCrafting();
             loadCpus();
             loadHistory();
             loadSettings();
+            void loadHome();
             schedule();
         },
         search(value: string) {
@@ -324,6 +341,7 @@ export function createTerminal(
             cpus.dispose();
             history.dispose();
             settings.dispose();
+            home.dispose();
             icons.dispose();
             listeners.clear();
         }
