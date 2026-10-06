@@ -829,10 +829,10 @@ label {
 .workspace {
     min-height: 0;
 }
-.workspace:not(.with-terminal) {
+.workspace:not(.with-terminal, .with-home) {
     margin-inline: var(--tools-width) var(--details-width);
 }
-.workspace.with-terminal {
+.workspace:is(.with-terminal, .with-home) {
     display: grid;
     grid-template-columns: var(--tools-width) minmax(0, 1fr) var(--details-width);
     grid-template-rows: minmax(0, 1fr);
@@ -981,25 +981,25 @@ label {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
 }
-:is(#item-scroll, .terminal-scroll, .workspace.with-home, .network-dialog)::-webkit-scrollbar {
+:is(#item-scroll, .terminal-scroll, .network-dialog)::-webkit-scrollbar {
     width: 18px;
 }
-:is(#item-scroll, .terminal-scroll, .workspace.with-home, .network-dialog)::-webkit-scrollbar-track {
+:is(#item-scroll, .terminal-scroll, .network-dialog)::-webkit-scrollbar-track {
     background: var(--slot);
     border: 2px solid;
     border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
 }
-:is(#item-scroll, .terminal-scroll, .workspace.with-home, .network-dialog)::-webkit-scrollbar-thumb {
+:is(#item-scroll, .terminal-scroll, .network-dialog)::-webkit-scrollbar-thumb {
     min-height: 28px;
     background: var(--panel);
     border: 2px solid;
     border-color: var(--edge-light) var(--edge-dark) var(--edge-dark) var(--edge-light);
 }
-:is(#item-scroll, .terminal-scroll, .workspace.with-home, .network-dialog)::-webkit-scrollbar-thumb:hover {
+:is(#item-scroll, .terminal-scroll, .network-dialog)::-webkit-scrollbar-thumb:hover {
     background: var(--selected);
 }
 @supports not selector(::-webkit-scrollbar) {
-    :is(#item-scroll, .terminal-scroll, .workspace.with-home, .network-dialog) {
+    :is(#item-scroll, .terminal-scroll, .network-dialog) {
         scrollbar-color: var(--border) var(--slot);
     }
 }
@@ -1406,12 +1406,13 @@ footer a {
     #app {
         --details-width: 0px;
     }
-    .workspace.with-terminal {
+    .workspace:is(.with-terminal, .with-home) {
         grid-template-columns: var(--tools-width) minmax(0, 1fr);
         grid-template-rows: minmax(0, 1fr) auto;
     }
     #resource-panel,
-    #cpu-panel {
+    #cpu-panel,
+    #home-network-panel {
         grid-column: 2;
         margin-top: 0;
         margin-left: 0;
@@ -1530,34 +1531,31 @@ footer a {
     }
 }
 
+/* Home shares the terminal's outer window, title and scrolling surface. */
 .workspace.with-home {
-    overflow: auto;
+    overflow: hidden;
 }
 .home-dashboard {
-    padding-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    grid-column: 2;
 }
-.home-heading {
-    padding: 4px 8px 12px;
-    color: #eeeaf4;
+.home-dashboard > .terminal-heading {
+    min-height: 37px;
 }
-.home-heading h2 {
-    margin: 0 0 10px;
-    font-size: 20px;
+.home-network-panel {
+    grid-column: 3;
 }
-.home-heading p {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.6;
-    color: #c0bacd;
+.home-selected-network {
+    font-size: 11px;
 }
-.home-columns {
-    display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(230px, 1fr);
-    gap: 16px;
-    align-items: start;
+.home-network-panel .choose-network {
+    width: 100%;
+    font-size: 11px;
 }
-.home-columns > .window-frame {
-    height: auto;
+.home-scroll {
+    margin-top: 18px;
 }
 .home-section-heading {
     display: flex;
@@ -1565,53 +1563,39 @@ footer a {
     justify-content: space-between;
     gap: 16px;
 }
-.home-columns h3 {
-    margin: 2px 0 18px;
-    font-size: 16px;
-}
-.home-work-count {
-    color: var(--muted);
-}
-.home-status {
-    font-size: 12px;
-    line-height: 1.7;
+.home-work h3 {
     margin: 0;
-    color: var(--muted);
-}
-.home-crafting-network h4 {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 6px 12px;
-    margin: 18px 0 10px;
-    font-size: 12px;
-}
-.home-crafting-network:first-child h4 {
-    margin-top: 0;
-}
-.home-crafting-network small {
-    color: var(--muted);
-    font-size: 10px;
+    font-size: 14px;
     font-weight: 400;
-    overflow-wrap: anywhere;
+}
+.home-work-count,
+.home-status,
+.home-scope {
+    color: var(--muted);
+    font-size: 11px;
+}
+.home-status,
+.home-scope {
+    line-height: 1.7;
+    margin: 8px 0 12px;
 }
 .home-work-list {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: grid;
-    gap: 8px;
 }
-.home-work-list li,
+.home-work-list li {
+    border-bottom: 1px solid var(--border);
+}
 .network-choice {
     background: color-mix(in srgb, var(--panel) 65%, var(--slot));
 }
 .home-work-link {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 14px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 12px;
+    padding: 10px 6px;
     text-decoration: none;
     color: var(--text);
 }
@@ -1621,50 +1605,39 @@ footer a {
 }
 .home-work-link:focus-visible,
 .network-choice-link:focus-visible {
-    outline-offset: -4px;
+    outline-offset: -2px;
 }
 .home-product {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     min-height: 32px;
-    font-size: 14px;
+    min-width: 0;
+    font-size: 12px;
     overflow-wrap: anywhere;
+}
+.home-product strong {
+    font-weight: 400;
 }
 .home-product:not(.has-resource-icon) .resource-icon {
     display: none;
 }
 .home-work-detail {
+    grid-column: 1 / -1;
     display: flex;
     flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 11px;
+    gap: 4px 12px;
+    font-size: 10px;
     color: var(--muted);
 }
+.home-work-detail > span,
+.network-choice-link {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 .home-cpu-state {
-    color: var(--text);
-}
-.home-totals {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 16px;
-    padding: 16px;
-    margin: 0;
-    font-size: 13px;
-    background: color-mix(in srgb, var(--panel) 65%, var(--slot));
-}
-.home-totals dd {
-    margin: 0;
-}
-.home-networks .hint {
-    font-size: 11px;
-    line-height: 1.7;
-    margin: 18px 0;
-}
-.choose-network,
-.home-retry {
-    width: 100%;
+    font-size: 10px;
+    color: var(--muted);
 }
 .home-retry {
     margin-top: 10px;
@@ -1719,23 +1692,5 @@ footer a {
 .network-choice code {
     display: block;
     margin-top: 8px;
-    overflow-wrap: anywhere;
-}
-@media (max-width: 850px) {
-    .home-columns {
-        grid-template-columns: 1fr;
-    }
-    .home-networks .hint {
-        margin: 12px 0;
-    }
-    .home-totals {
-        gap: 12px;
-    }
-}
-
-.home-work-detail > span,
-.home-crafting-network h4 > span,
-.network-choice-link {
-    min-width: 0;
     overflow-wrap: anywhere;
 }

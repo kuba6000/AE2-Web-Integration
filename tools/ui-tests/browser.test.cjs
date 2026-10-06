@@ -5106,7 +5106,7 @@ test('Home and its chooser contain long identities on mobile in light and dark a
         await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption(appearance);
         await page.getByRole('link', { name: 'Home', exact: true }).click();
         await page.getByRole('link', { name: /Current output unavailable/ }).waitFor();
-        const work = page.getByRole('link', { name: new RegExp(longName) });
+        const work = page.getByRole('link', { name: new RegExp(`^${longName} ×`) });
         await work.focus();
         await poll(page);
         assert.equal(await work.evaluate((node) => node === document.activeElement), true);

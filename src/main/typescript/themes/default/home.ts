@@ -13,22 +13,24 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className = 
 
 /** Home presentation and chooser lifetime; discovery and CPU reads belong to the application. */
 export function createHomeView(root: HTMLElement, application: ReturnType<typeof createTerminal>) {
-    const view = element('section', 'home-dashboard');
+    const view = element('section', 'window-frame home-dashboard');
     view.id = 'home';
-    view.innerHTML = `<div class="home-heading"><h2></h2><p></p></div>
-        <div class="home-columns"><section class="window-frame home-work"><div class="home-section-heading"><h3></h3><span class="home-work-count"></span></div>
-        <p class="home-status" role="status"></p><div class="home-crafting"></div></section>
-        <section class="window-frame home-networks"><h3></h3><dl class="inset-frame home-totals"></dl><p class="hint"></p><button type="button" class="choose-network"></button><button type="button" class="home-retry"></button></section></div>`;
+    view.innerHTML = `<div class="terminal-heading"><h2></h2></div>
+        <div class="terminal-scroll home-scroll" tabindex="0"><section class="home-work"><div class="home-section-heading"><h3></h3><span class="home-work-count"></span></div>
+        <p class="home-scope"></p><p class="home-status" role="status"></p><div class="home-crafting"></div><button type="button" class="home-retry"></button></section></div>`;
+    const panel = element('aside', 'home-network-panel');
+    panel.id = 'home-network-panel';
+    panel.innerHTML = `<h3></h3><p class="home-selected-network"></p><button type="button" class="choose-network"></button>`;
     const title = view.querySelector('h2')!;
-    const description = view.querySelector('.home-heading p')!;
+    const description = view.querySelector('.home-scope')!;
     const workTitle = view.querySelector('.home-work h3')!;
     const workCount = view.querySelector('.home-work-count')!;
     const status = view.querySelector<HTMLElement>('.home-status')!;
     const work = view.querySelector<HTMLElement>('.home-crafting')!;
-    const networkTitle = view.querySelector('.home-networks h3')!;
-    const totals = view.querySelector('.home-totals')!;
-    const help = view.querySelector('.home-networks .hint')!;
-    const choose = view.querySelector<HTMLButtonElement>('.choose-network')!;
+    const networkLabel = panel.querySelector('h3')!;
+    const selectedNetwork = panel.querySelector('.home-selected-network')!;
+    const scroll = view.querySelector<HTMLElement>('.home-scroll')!;
+    const choose = panel.querySelector<HTMLButtonElement>('.choose-network')!;
     const retry = view.querySelector<HTMLButtonElement>('.home-retry')!;
     const dialog = element('dialog', 'window-frame network-dialog');
     dialog.setAttribute('aria-labelledby', 'network-dialog-title');
@@ -40,7 +42,7 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
     const dialogRetry = dialog.querySelector<HTMLButtonElement>('.network-dialog-retry')!;
     dialogRetry.addEventListener('click', () => void application.refresh());
     const options = dialog.querySelector<HTMLElement>('.network-options')!;
-    root.append(view);
+    root.append(view, panel);
     root.after(dialog);
     choose.addEventListener('click', () => dialog.showModal());
     close.addEventListener('click', () => dialog.close());
@@ -71,18 +73,12 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
     }
     function createGroup() {
         const section = element('section', 'home-crafting-network');
-        const heading = element('h4');
-        const label = element('span');
-        const location = element('small');
-        heading.append(label, location);
         const message = element('p', 'hint');
         const list = element('ul', 'home-work-list');
-        section.append(heading, message, list);
-        const icons = application.icons.observe(root, paintResourceIcon);
+        section.append(message, list);
+        const icons = application.icons.observe(scroll, paintResourceIcon);
         return {
             section,
-            label,
-            location,
             message,
             list,
             icons,
@@ -90,7 +86,7 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
         };
     }
     function createWork() {
-        const li = element('li', 'inset-frame');
+        const li = element('li');
         const link = element('a', 'home-work-link');
         const product = element('span', 'home-product');
         const icon = createResourceIcon();
@@ -98,15 +94,17 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
         product.append(icon, name);
         const detail = element('span', 'home-work-detail');
         const cpu = element('span');
+        const source = element('span', 'home-work-source');
         const status = element('span', 'home-cpu-state');
-        detail.append(cpu, status);
-        link.append(product, detail);
+        detail.append(source, cpu);
+        link.append(product, status, detail);
         li.append(link);
-        return { li, link, product, name, cpu, status };
+        return { li, link, product, name, cpu, source, status };
     }
     return {
         render(state: TerminalState, locale: Translator) {
             view.hidden = state.route.view !== 'home';
+            panel.hidden = view.hidden;
             if (view.hidden) {
                 if (dialog.open) dialog.close();
                 for (const group of groups.values()) {
@@ -119,7 +117,11 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
             title.textContent = locale.common('home');
             description.textContent = locale.common('homeOverview');
             workTitle.textContent = locale.common('cpuOutput');
-            networkTitle.textContent = locale.common('homeNetworks');
+            networkLabel.textContent = locale.common('network');
+            const selected = state.grids.find((grid) => grid.key === state.selectedGridKey);
+            selectedNetwork.textContent = selected
+                ? `${selected.owner || locale.common('unknownOwner')} · ${gridLocation(selected, locale)}`
+                : locale.common('noNetworkSelected');
             choose.textContent = locale.common('chooseNetwork');
             choose.disabled = state.gridStatus !== 'ready' || !state.grids.length;
             retry.textContent = locale.common('retry');
@@ -140,7 +142,6 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
             dialogRetry.hidden = state.gridStatus !== 'error' && !!state.grids.length;
             dialogRetry.textContent = locale.common('retry');
             close.setAttribute('aria-label', locale.common('close'));
-            help.textContent = locale.common('homeNetworkHelp');
             const busy = state.home.networks.reduce(
                 (count, network) => count + network.cpus.filter((cpu) => cpu.isBusy).length,
                 0
@@ -162,17 +163,6 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
                         ? locale.common('homeIdle')
                         : '';
             status.hidden = !status.textContent;
-            totals.replaceChildren();
-            for (const [label, count] of [
-                ['homeNetworks', state.grids.length],
-                ['cpus', state.grids.reduce((count, grid) => count + grid.cpuCount, 0)]
-            ] as const) {
-                const term = element('dt');
-                term.textContent = locale.common(label);
-                const value = element('dd');
-                value.textContent = state.gridStatus === 'ready' ? locale.number(count) : '—';
-                totals.append(term, value);
-            }
             const focused = options.contains(document.activeElement) ? (document.activeElement as HTMLElement) : null;
             for (const [key, choice] of choices)
                 if (!state.grids.some((grid) => grid.key === key)) {
@@ -201,9 +191,9 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
             for (const network of state.home.networks) {
                 const group = groups.get(network.grid.key) || createGroup();
                 groups.set(network.grid.key, group);
-                group.label.textContent = gridLabel(network.grid, locale);
-                group.location.textContent = gridLocation(network.grid, locale);
-                group.message.textContent = network.error ? locale.common(network.error) : '';
+                group.message.textContent = network.error
+                    ? `${gridLabel(network.grid, locale)} · ${gridLocation(network.grid, locale)}: ${locale.common(network.error)}`
+                    : '';
                 group.message.hidden = !network.error;
                 const cpus = network.cpus.filter((cpu) => cpu.isBusy);
                 group.section.hidden = !cpus.length && network.status !== 'error';
@@ -221,6 +211,8 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
                     );
                     if (cpu.finalOutput) row.name.append(` × ${locale.number(cpu.finalOutput.quantity)}`);
                     row.cpu.replaceChildren(renderMinecraftText(cpu.name || locale.common('cpuUnnamed')));
+                    row.source.textContent = network.grid.owner || locale.common('unknownOwner');
+                    row.source.title = `${gridLabel(network.grid, locale)} · ${gridLocation(network.grid, locale)}`;
                     row.status.textContent = locale.common(cpu.isPaused ? 'cpuPausedState' : 'cpuBusy');
                     row.product.classList.toggle('has-resource-icon', !!network.icons && !!cpu.finalOutput);
                     if (!row.li.parentNode) group.list.append(row.li);
@@ -239,6 +231,7 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
             dialog.close();
             dialog.remove();
             view.remove();
+            panel.remove();
         }
     };
 }
