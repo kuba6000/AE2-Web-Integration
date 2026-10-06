@@ -11,6 +11,7 @@ import appeng.api.storage.data.IAEItemStack;
 import appeng.util.item.AEItemStack;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyIconBaseline;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -18,6 +19,11 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 @Mixin(value = IAEItemStack.class, remap = false)
 public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack {
+
+    @Override
+    default @NotNull ResourceType web$getResourceType() {
+        return ResourceType.ITEM;
+    }
 
     @Override
     default @NotNull StableKey web$getKey() {
