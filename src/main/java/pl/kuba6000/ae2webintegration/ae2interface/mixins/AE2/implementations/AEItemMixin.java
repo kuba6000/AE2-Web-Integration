@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
@@ -57,9 +58,30 @@ public abstract class AEItemMixin implements IAEKey {
     }
 
     @Override
-    public @NotNull String web$getItemID() {
-        ResourceLocation rs = getId();
-        return rs.getNamespace() + ":" + rs.getPath();
+    public @NotNull String web$getRegistryNamespace() {
+        return getId().getNamespace();
+    }
+
+    @Override
+    public @NotNull String web$getRegistryPath() {
+        return getId().getPath();
+    }
+
+    @Override
+    public @Nullable Integer web$getComponentCount() {
+        AEKey key = (AEKey) (Object) this;
+        CompoundTag tag;
+        if (key instanceof AEItemKey item) tag = item.getTag();
+        else if (key instanceof AEFluidKey fluid) tag = fluid.getTag();
+        else return null;
+        return tag == null ? 0 : tag.size();
+    }
+
+    @Override
+    public @Nullable Integer web$getDamage() {
+        AEKey key = (AEKey) (Object) this;
+        return key instanceof AEItemKey item ? item.getReadOnlyStack()
+            .getDamageValue() : null;
     }
 
     @Override
