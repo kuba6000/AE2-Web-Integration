@@ -1,5 +1,8 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraftforge.fluids.FluidRegistry;
+
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
@@ -41,8 +44,25 @@ public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStac
     }
 
     @Override
-    default @NotNull String web$getItemID() {
+    default @NotNull String web$getRegistryNamespace() {
+        String name = FluidRegistry.getDefaultFluidName(getFluid());
+        return name.substring(0, name.indexOf(':'));
+    }
+
+    @Override
+    default @NotNull String web$getRegistryPath() {
         return getFluid().getName();
+    }
+
+    @Override
+    default @NotNull Integer web$getComponentCount() {
+        NBTTagCompound tag = getFluidStack().tag;
+        return tag == null ? 0 : tag.getSize();
+    }
+
+    @Override
+    default @Nullable Integer web$getDamage() {
+        return null;
     }
 
     @Override

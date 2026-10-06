@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import net.minecraft.item.Item;
+import net.minecraft.nbt.NBTTagCompound;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -53,8 +54,26 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
     int getItemDamage();
 
     @Override
-    default @NotNull String web$getItemID() {
-        return getItem().getRegistryName() + ":" + getItemDamage();
+    default @NotNull String web$getRegistryNamespace() {
+        return getItem().getRegistryName()
+            .getNamespace();
+    }
+
+    @Override
+    default @NotNull String web$getRegistryPath() {
+        return getItem().getRegistryName()
+            .getPath();
+    }
+
+    @Override
+    default @NotNull Integer web$getComponentCount() {
+        NBTTagCompound tag = getDefinition().getTagCompound();
+        return tag == null ? 0 : tag.getSize();
+    }
+
+    @Override
+    default @NotNull Integer web$getDamage() {
+        return getItemDamage();
     }
 
     @Override
