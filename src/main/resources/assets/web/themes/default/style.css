@@ -573,8 +573,8 @@ body {
     padding: 30px 34px 16px;
     background:
         radial-gradient(ellipse at 50% 0, #41414d80, transparent 70%),
-        repeating-linear-gradient(0deg, #ffffff02 0 1px, transparent 1px 4px),
-        repeating-linear-gradient(90deg, #0000000a 0 1px, transparent 1px 4px);
+        repeating-linear-gradient(0deg, #ffffff02 0 1px, transparent 1px 8px),
+        repeating-linear-gradient(90deg, #0000000a 0 1px, transparent 1px 8px);
 }
 #app {
     --tools-width: 42px;
