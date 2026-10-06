@@ -120,7 +120,7 @@ const historyDetail = {
     ]
 };
 
-async function fixture(t, mount = '', contextOptions = {}) {
+async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } = {}) {
     const options = {
         delayA: 0,
         status: 200,
@@ -434,7 +434,7 @@ async function fixture(t, mount = '', contextOptions = {}) {
     });
     const page = await browser.newPage({ locale: 'en-US', ...contextOptions });
     page.on('dialog', (dialog) => dialog.accept());
-    await page.clock.install();
+    if (mockClock) await page.clock.install();
     const errors = [];
     page.on('pageerror', (error) => errors.push(String(error)));
     t.after(() => assert.deepEqual(errors, []));
@@ -4803,7 +4803,8 @@ test('a session lost before bootstrap returns to login with the destination inta
 // Public rendered geometry: empty inventory cells follow the occupied grid, without becoming resources.
 for (const deviceScaleFactor of [1.25, 1.5]) {
     test(`empty slot frames share occupied geometry without phantom resources at DPR ${deviceScaleFactor}`, async (t) => {
-        const { page, options, base } = await fixture(t, '', { deviceScaleFactor });
+        // Native animation frames must follow ResizeObserver delivery in this layout test.
+        const { page, options, base } = await fixture(t, '', { deviceScaleFactor }, { mockClock: false });
         await atlasFixture(page, options);
         options.itemsA = [iron, quartz, { ...iron, itemKey: 'gold', displayName: 'Gold Ingot' }];
         await page.goto(`${base}#/grids/${gridA}/items`);
