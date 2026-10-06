@@ -58,9 +58,29 @@ public abstract class AEItemMixin implements IAEKey {
     }
 
     @Override
-    public @NotNull String web$getItemID() {
-        ResourceLocation rs = getId();
-        return rs.getNamespace() + ":" + rs.getPath();
+    public @NotNull String web$getRegistryNamespace() {
+        return getId().getNamespace();
+    }
+
+    @Override
+    public @NotNull String web$getRegistryPath() {
+        return getId().getPath();
+    }
+
+    @Override
+    public @Nullable Integer web$getComponentCount() {
+        AEKey key = (AEKey) (Object) this;
+        if (key instanceof AEItemKey item) return item.getReadOnlyStack()
+            .getComponents()
+            .size();
+        return null;
+    }
+
+    @Override
+    public @Nullable Integer web$getDamage() {
+        AEKey key = (AEKey) (Object) this;
+        return key instanceof AEItemKey item ? item.getReadOnlyStack()
+            .getDamageValue() : null;
     }
 
     @Override
