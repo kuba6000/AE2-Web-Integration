@@ -5391,6 +5391,7 @@ test('Home clears revoked sources during pending reads and stops reading summari
 
 test('Home bounds cross-network reads and keeps per-response atlas identity and name-only preferences', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
     await atlasFixture(page, options);
     options.cpusByGrid = {
         [gridA]: { running: { ...cpu, isBusy: true, finalOutput: iron, icon: { page: 0, x: 0, y: 0 } } },
@@ -5411,7 +5412,15 @@ test('Home bounds cross-network reads and keeps per-response atlas identity and 
         }))
     ];
     options.cpuDelay = 100;
-    await page.goto(base);
+    // Capability discovery may legitimately restart a Home read; measure one load after it settles.
+    await page.goto(`${base}#/web-settings`);
+    const display = page.getByRole('combobox', { name: 'Terminal display', exact: true });
+    await page.waitForFunction(
+        (select) => !select.querySelector('option[value="both"]').disabled,
+        await display.elementHandle()
+    );
+    options.requests.length = 0;
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
     const first = page.getByRole('link', { name: /Iron Ingot/ });
     const second = page.getByRole('link', { name: /Certus Quartz Crystal/ });
     await second.waitFor();
