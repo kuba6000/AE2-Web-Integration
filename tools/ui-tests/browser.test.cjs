@@ -5601,6 +5601,7 @@ test('tracking notices use the current network, update after saving, and retain 
         .getByText(/tracking is disabled/i)
         .waitFor();
     await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await page.getByRole('heading', { name: 'Home', exact: true }).waitFor();
     assert.equal(await enable.count(), 0);
     await page.goto(`${base}#/grids/${gridB}/cpus`);
     await page
@@ -5642,10 +5643,7 @@ test('late discovery cannot undo a confirmed name or tracking save', async (t) =
     });
     await settleResponse(page, oldDiscovery.request());
     await page.getByRole('link', { name: 'Home', exact: true }).click();
-    assert.equal(
-        await page.locator('#home-network-panel').getByRole('heading', { name: 'Factory', exact: true }).count(),
-        1
-    );
+    await page.locator('#home-network-panel').getByRole('heading', { name: 'Factory', exact: true }).waitFor();
     await page.getByRole('link', { name: 'Terminal', exact: true }).click();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await page.getByRole('link', { name: 'Enable tracking', exact: true }).count(), 0);

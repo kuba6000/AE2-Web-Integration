@@ -43,6 +43,8 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 class ApiRoutingHttpTest extends GridTestScope {
 
     private HttpServer server;
+    // The production registry is weak; the fixture owns the live grid until HTTP requests finish.
+    private TestGridFixtures.TestGrid grid;
     private volatile boolean localAccess;
 
     @BeforeEach
@@ -77,6 +79,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     @AfterEach
     void stop() {
         server.stop(0);
+        grid = null;
     }
 
     @Endpoint(method = HttpMethod.PATCH, path = "/api/echo/{name}")
@@ -278,7 +281,8 @@ class ApiRoutingHttpTest extends GridTestScope {
 
     @Test
     void networkNameCanBeSavedReadAndClearedWithoutEnablingTracking() throws Exception {
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(TestGridFixtures.grid(1));
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         String path = "/api/grids/" + key + "/settings";
         String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
         Reply saved = request("PATCH", path, headers, "{\"name\":\"  Factory  \"}");
@@ -326,7 +330,8 @@ class ApiRoutingHttpTest extends GridTestScope {
         strings = { "null", "true", "123", "[]", "{}", "\"bad\\nname\"", "\"\\tname\"", "\"name\\u0000\"",
             "\"name\\u007f\"", "\"name\\u0085\"", "\"name\\u009f\"" })
     void invalidNameRejectsTheWholeSettingsUpdate(String nameJson) throws Exception {
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(TestGridFixtures.grid(1));
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         String path = "/api/grids/" + key + "/settings";
         String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
         assertEquals(HttpURLConnection.HTTP_OK, request("PATCH", path, headers, "{\"name\":\"Factory\"}").status());
@@ -345,7 +350,8 @@ class ApiRoutingHttpTest extends GridTestScope {
 
     @Test
     void nameTrimsUnicodeWhitespaceAndLimitsUtf16UnitsBeforeMutating() throws Exception {
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(TestGridFixtures.grid(1));
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         String path = "/api/grids/" + key + "/settings";
         String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
         String limit = String.join("", Collections.nCopies(64, "\ud83d\ude80"));
@@ -375,7 +381,7 @@ class ApiRoutingHttpTest extends GridTestScope {
 
     @Test
     void namingUsesExistingGridAuthorizationAndCsrfProtection() throws Exception {
-        var grid = TestGridFixtures.grid(1);
+        grid = TestGridFixtures.grid(1);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         String path = "/api/grids/" + key + "/settings";
         String json = "Content-Type: application/json\r\n";
@@ -415,7 +421,8 @@ class ApiRoutingHttpTest extends GridTestScope {
 
     @Test
     void nameKeepsMongolianVowelSeparatorOnEverySupportedJavaRuntime() throws Exception {
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(TestGridFixtures.grid(1));
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         Reply response = request(
             "PATCH",
             "/api/grids/" + key + "/settings",
@@ -432,7 +439,8 @@ class ApiRoutingHttpTest extends GridTestScope {
 
     @Test
     void failedNameSaveReturnsErrorAndSameValueRetryPersistsAcrossRestart() throws Exception {
-        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(TestGridFixtures.grid(1));
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         String path = "/api/grids/" + key + "/settings";
         String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
         Path file = gridSave.toPath()
@@ -450,7 +458,7 @@ class ApiRoutingHttpTest extends GridTestScope {
         Files.deleteIfExists(blocker);
         assertEquals(HttpURLConnection.HTTP_OK, request("PATCH", path, headers, body).status());
         CoreEngine.GRID_IDENTITIES.initialize(gridSave);
-        TestGridFixtures.grid(1);
+        grid = TestGridFixtures.grid(1);
         JsonObject loaded = request("GET", path, headers, "").json()
             .getAsJsonObject("data");
         assertEquals(
