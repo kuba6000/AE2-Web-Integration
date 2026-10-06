@@ -215,6 +215,9 @@ header {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    min-width: 0;
+    padding: clamp(14px, 2vw, 22px);
+    background: color-mix(in srgb, var(--panel) 75%, var(--slot));
     height: auto;
     overflow: visible;
 }
@@ -1089,6 +1092,7 @@ label {
     transform: translateY(-50%);
 }
 .history-list:not(:empty),
+.inset-frame,
 .slot-frame {
     border: 2px solid;
     border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);

@@ -469,7 +469,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         else target.append(locale.common('cpuOutputUnknown'));
     }
     function createOverviewRow() {
-        const li = element('li', '', 'window-frame cpu-card');
+        const li = element('li', '', 'inset-frame cpu-card');
         const header = element('div', '', 'cpu-card-heading');
         const heading = element('h3');
         const link = element('a');
