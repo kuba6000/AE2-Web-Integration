@@ -57,7 +57,7 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     const accessHelp = element('p');
     accessHelp.className = 'hint';
     const sources = element('div');
-    sources.className = 'network-access';
+    sources.className = 'network-access inset-frame';
     const emptySources = element('p');
     access.append(accessTitle, accessHelp, sources, emptySources);
     const settingsTitle = element('h3');
@@ -104,11 +104,14 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
         person.list.replaceChildren();
         for (const source of person.entries) {
             const row = element('li');
+            const description = element('div');
+            description.className = 'network-source-heading';
+            description.append(
+                element('strong', locale.common(kinds[source.kind] || source.kind)),
+                element('span', locale.common(reasons[source.reason] || source.reason))
+            );
             row.append(
-                element(
-                    'p',
-                    `${locale.common(kinds[source.kind] || source.kind)} · ${locale.common(reasons[source.reason] || source.reason)}`
-                ),
+                description,
                 element(
                     'code',
                     locale.common('position', { dimension: source.position.dimid, ...source.position }) +
@@ -124,8 +127,14 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
         const summary = element('summary');
         const name = element('strong');
         const count = element('span');
-        summary.append(name, count);
-        const identity = element('code', uuid);
+        count.className = 'network-source-count';
+        const labels = element('span');
+        labels.className = 'network-person-labels';
+        labels.append(name, count);
+        summary.append(labels);
+        const identity = element('div');
+        identity.className = 'network-person-identity';
+        identity.append(element('span', 'UUID'), element('code', uuid));
         const list = element('ul');
         details.append(summary, identity, list);
         const person = { details, name, count, list, entries: [] as AccessSource[] };
