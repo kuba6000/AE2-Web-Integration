@@ -1,4 +1,4 @@
-import type { Item } from '../../app/api-types.js';
+import type { StoredResource } from '../../app/api-types.js';
 import type { TerminalState, createTerminal } from '../../app/terminal.js';
 import type { Translator as Locale } from '../../app/i18n.js';
 type Terminal = ReturnType<typeof createTerminal>;
@@ -31,7 +31,7 @@ export function createCraftingView(root: HTMLElement, application: Terminal) {
     orderMessage.role = 'status';
     order.append(quantityLabel, calculate, orderMessage);
 
-    let item: Item;
+    let item: StoredResource;
     order.addEventListener('submit', (event) => {
         event.preventDefault();
         application.crafting.create(item, Number(quantity.value));
@@ -78,7 +78,7 @@ export function createCraftingView(root: HTMLElement, application: Terminal) {
     let lastLocale: Locale | undefined;
     root.append(planView);
     return {
-        order(selected: Item, state: TerminalState['crafting'], locale: Locale) {
+        order(selected: StoredResource, state: TerminalState['crafting'], locale: Locale) {
             if (item?.itemKey !== selected?.itemKey) quantity.value = '1';
             item = selected;
             quantityText.textContent = locale.common('craftQuantity');
@@ -99,7 +99,7 @@ export function createCraftingView(root: HTMLElement, application: Terminal) {
             title.textContent = t('craftingPlan');
             output.replaceChildren();
             if (state.metadata)
-                output.append(renderMinecraftText(state.metadata.itemname), ` × ${number(state.metadata.quantity)}`);
+                output.append(renderMinecraftText(state.metadata.itemName), ` × ${number(state.metadata.quantity)}`);
             status.textContent = state.uncertain
                 ? t(state.uncertain === 'delete' ? 'uncertainDelete' : 'uncertainSubmit')
                 : state.error
@@ -128,7 +128,7 @@ export function createCraftingView(root: HTMLElement, application: Terminal) {
                     ...(state.plan?.plan || []).map((row) => {
                         const tr = element('tr');
                         const name = element('td');
-                        name.append(renderMinecraftText(row.itemname), element('code', row.itemid));
+                        name.append(renderMinecraftText(row.itemName), element('code', row.itemId));
                         tr.append(name);
                         for (const value of [row.stored, row.requested, row.missing, row.steps])
                             tr.append(element('td', number(value)));

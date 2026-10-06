@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,7 +18,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
-import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
@@ -58,7 +59,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
         double expectedShare, double expectedRate) {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(GRID);
         OutputSnapshotTest.Resource key = new OutputSnapshotTest.Resource();
-        JSON_Stack output = JSON_Stack.capture(grid, new OutputSnapshotTest.Stack(key, 10));
+        ResourceStack output = ResourceStack.capture(grid, new OutputSnapshotTest.Stack(key, 10));
         assertNotNull(output);
         AE2JobTracker.JobTrackingInfo info = new AE2JobTracker.JobTrackingInfo(output);
         // Completed measurement records, including legitimate sub-millisecond intervals rounded to zero.
@@ -73,7 +74,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
 
         GetTracking request = new GetTracking();
         request.handle(TestGridFixtures.context(-1, "grid=" + actualKey + "&id=1"));
-        JsonObject response = JsonParser.parseString(request.getJSON())
+        JsonObject response = new JsonParser().parse(request.getJSON())
             .getAsJsonObject();
         assertEquals(
             "OK",
@@ -83,6 +84,16 @@ class TrackingStatisticsResponseTest extends GridTestScope {
             .getAsJsonArray("items")
             .get(0)
             .getAsJsonObject();
+        assertEquals(
+            "example:resource:7",
+            item.get("itemId")
+                .getAsString());
+        assertEquals(
+            "Resource",
+            item.get("itemName")
+                .getAsString());
+        assertFalse(item.has("itemid"));
+        assertFalse(item.has("itemname"));
         assertEquals(
             crafted,
             item.get("craftedTotal")
@@ -167,7 +178,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                         -1,
                         "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&cpu=AAAAAAAAAAAAAAAAAAAAAA")));
             request.runOnServerThread(ae);
-            JsonObject response = JsonParser.parseString(request.getJSON())
+            JsonObject response = new JsonParser().parse(request.getJSON())
                 .getAsJsonObject();
             assertEquals(
                 "OK",
@@ -177,6 +188,16 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 .getAsJsonArray("items")
                 .get(0)
                 .getAsJsonObject();
+            assertEquals(
+                "example:resource:7",
+                item.get("itemId")
+                    .getAsString());
+            assertEquals(
+                "Resource",
+                item.get("itemName")
+                    .getAsString());
+            assertFalse(item.has("itemid"));
+            assertFalse(item.has("itemname"));
             assertEquals(
                 crafted,
                 item.get("craftedTotal")

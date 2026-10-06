@@ -148,6 +148,13 @@ test {
             includeTestsMatching '*IconDeliveryHttpTest'
             includeTestsMatching '*RequestCompletionTest'
             includeTestsMatching '*IconPackTest'
+            includeTestsMatching '*OutputSnapshotTest'
+            includeTestsMatching '*TrackingStatisticsResponseTest'
+            includeTestsMatching '*ItemIdentityRequestTest'
+            includeTestsMatching '*GridIdentityRegistryTest'
+            includeTestsMatching '*DimensionalCoordsTest'
+            includeTestsMatching '*GridAccessSourceTest'
+            includeTestsMatching '*CraftingPlanRequestLifecycleTest'
         }
         shouldRunAfter tasks.named('test')
     }

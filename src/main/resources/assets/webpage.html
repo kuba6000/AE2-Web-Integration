@@ -835,7 +835,7 @@
         let sortOrder = sortingOptions.sortOrder == 1 ? -1 : 1;
         if (sortingOptions.sortBy == 0){
             globalItemList.sort(function(i1,i2){
-                return skipSpecialFormat(i1['itemname']).localeCompare(skipSpecialFormat(i2['itemname'])) * sortOrder;
+                return skipSpecialFormat(i1['itemName']).localeCompare(skipSpecialFormat(i2['itemName'])) * sortOrder;
             });
         }
         else if(sortingOptions.sortBy == 1){
@@ -845,8 +845,8 @@
         }
         else if(sortingOptions.sortBy == 2){
             globalItemList.sort(function(i1,i2){
-                let mod1 = i1['itemid'].substring(0, i1['itemid'].indexOf(':'));
-                let mod2 = i2['itemid'].substring(0, i2['itemid'].indexOf(':'));
+                let mod1 = i1['itemId'].substring(0, i1['itemId'].indexOf(':'));
+                let mod2 = i2['itemId'].substring(0, i2['itemId'].indexOf(':'));
                 return mod1.localeCompare(mod2) * sortOrder;
             });
         }
@@ -857,11 +857,11 @@
             return false;
         }
         if (filteringOptions.itemsType != 2
-            && (item['itemid'] == 'ae2fc:fluid_drop:0') != (filteringOptions.itemsType == 1)){
+            && (item['itemId'] == 'ae2fc:fluid_drop:0') != (filteringOptions.itemsType == 1)){
             return false;
         }
         if (filteringOptions.searchString && filteringOptions.searchString != ""){
-            return item['itemname'].toLowerCase().indexOf(filteringOptions.searchString) !== -1;
+            return item['itemName'].toLowerCase().indexOf(filteringOptions.searchString) !== -1;
         }
         return true;
     }
@@ -1119,13 +1119,13 @@
         return skippedItemName;
     }
     function formatItemName(itemObject, allowNewLines=true) {
-        let itemName = '<b>' + itemObject['itemname'] + '</b>';
+        let itemName = '<b>' + itemObject['itemName'] + '</b>';
         if (itemName.indexOf('§') != -1){
             itemName = parseSpecialFormat(itemName);
         }
         let html = itemName;
         if (settings.showItemID)
-            html += (allowNewLines ? "<br>" : "") + " " + itemObject['itemid'];
+            html += (allowNewLines ? "<br>" : "") + " " + itemObject['itemId'];
         return html;
     }
     function escapeCPUText(value) {
@@ -1335,7 +1335,7 @@
                 const location = document.createElement('div');
                 const pos = source.position;
                 appendText(location, 'code', 'grid-access-position', pos.x + ', ' + pos.y + ', ' + pos.z);
-                appendText(location, 'span', 'grid-access-world', 'Dimension: ' + pos.dimid +
+                appendText(location, 'span', 'grid-access-world', 'Dimension: ' + pos.dimensionId +
                     (source.side ? ' · Side: ' + source.side : ''));
                 item.appendChild(block);
                 item.appendChild(location);
@@ -1626,7 +1626,7 @@
                                         let locations = context.dataset.data[context.label][2];
                                         for(let i = 0; i < locations.length; i++){
                                             let location = locations[i];
-                                            label.push(i + ': ' + location.dimid + ', ' + location.x + ', ' + location.y + ', ' + location.z);
+                                            label.push(i + ': ' + location.dimensionId + ', ' + location.x + ', ' + location.y + ', ' + location.z);
                                         }
                                     }
                                     return label;
@@ -1764,9 +1764,9 @@
             itemShareData = [];
             for(let i = 0; i < items.length; i++){
                 let item = items[i];
-                let name = skipSpecialFormat(item['itemname']);
+                let name = skipSpecialFormat(item['itemName']);
                 if (settings.showItemID)
-                    name += " " + item['itemid'];
+                    name += " " + item['itemId'];
                 itemShareData.push({'name': name, 'timings': item['timings']});
 
                 html += "<td class='storage'>" + formatItemName(item, false) + " x" + formatNumber(item['craftedTotal']);
@@ -1841,12 +1841,12 @@
                     return;
                 }
                 data = data.data;
-                if (data['jobID']){
+                if (data['jobId']){
                     setCurrentScreen(2);
                     document.getElementById("terminalcontent").innerHTML = ";)";
                     document.getElementById("terminalJobHeaderText").innerHTML = "Calculating, please wait...";
                     cpuForJob = "";
-                    currentJob.id = data['jobID'];
+                    currentJob.id = data['jobId'];
                     currentJob.bytesTotal = -1;
                     currentJob.itemKey = itemKey;
                     setTimeout(updateCraftingPlan, 1000);

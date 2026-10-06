@@ -135,10 +135,10 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
             state.entries.forEach((entry, index) => {
                 const row = entries.get(entry.id) || createRow();
                 row.link.href = historyHref(route.gridKey, entry.id);
-                row.name.replaceChildren(renderMinecraftText(entry.finalOutput.itemname));
+                row.name.replaceChildren(renderMinecraftText(entry.finalOutput.itemName));
                 row.link.setAttribute(
                     'aria-label',
-                    `${plainMinecraftText(entry.finalOutput.itemname)} × ${number(entry.finalOutput.quantity)} · #${entry.id}`
+                    `${plainMinecraftText(entry.finalOutput.itemName)} × ${number(entry.finalOutput.quantity)} · #${entry.id}`
                 );
                 row.link.title = `#${entry.id}`;
                 row.quantity.textContent = `× ${number(entry.finalOutput.quantity)}`;
@@ -173,12 +173,12 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
             if (!snapshot) return;
             const heading = element('h3');
             heading.append(
-                renderMinecraftText(snapshot.finalOutput.itemname),
+                renderMinecraftText(snapshot.finalOutput.itemName),
                 ` × ${number(snapshot.finalOutput.quantity)}`
             );
             detail.append(
                 heading,
-                element('code', snapshot.finalOutput.itemid),
+                element('code', snapshot.finalOutput.itemId),
                 element('p', t('cpuStarted', { time: dateTime(snapshot.timeStarted) })),
                 element('p', t('historyEnded', { time: dateTime(snapshot.timeDone) })),
                 element('p', t('cpuElapsed', { duration: locale.duration(snapshot.timeDone - snapshot.timeStarted) }))
@@ -205,7 +205,7 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
             for (const item of snapshot.items) {
                 const row = element('tr');
                 const name = element('td');
-                name.append(renderMinecraftText(item.itemname), element('code', item.itemid));
+                name.append(renderMinecraftText(item.itemName), element('code', item.itemId));
                 row.append(name);
                 for (const value of [
                     number(item.craftedTotal),

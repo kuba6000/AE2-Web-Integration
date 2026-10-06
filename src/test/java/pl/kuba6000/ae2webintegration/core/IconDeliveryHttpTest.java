@@ -616,14 +616,14 @@ class IconDeliveryHttpTest {
                 product.get("itemKey")
                     .isJsonNull(),
                 "Base failure preserves exact identity");
-            boolean missing = product.get("itemid")
+            boolean missing = product.get("itemId")
                 .getAsString()
                 .equals("product-2");
             assertEquals(
                 missing,
                 row.get("icon")
                     .isJsonNull());
-            if (product.get("itemid")
+            if (product.get("itemId")
                 .getAsString()
                 .equals("product-1")) {
                 assertEquals(

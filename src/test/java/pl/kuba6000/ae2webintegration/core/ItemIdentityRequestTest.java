@@ -125,7 +125,7 @@ class ItemIdentityRequestTest extends GridTestScope {
             "variantB",
             rows.get(1)
                 .getAsJsonObject()
-                .get("itemid")
+                .get("itemId")
                 .getAsString());
     }
 
@@ -179,6 +179,16 @@ class ItemIdentityRequestTest extends GridTestScope {
         JsonObject normal = rows.get(0)
             .getAsJsonObject();
         assertTrue(normal.has("itemKey"));
+        assertEquals(
+            "iron",
+            normal.get("itemId")
+                .getAsString());
+        assertEquals(
+            "iron",
+            normal.get("itemName")
+                .getAsString());
+        assertFalse(normal.has("itemid"));
+        assertFalse(normal.has("itemname"));
         assertTrue(
             normal.get("identityStatus")
                 .isJsonNull());
@@ -202,7 +212,7 @@ class ItemIdentityRequestTest extends GridTestScope {
                 .getAsLong());
         assertEquals(
             "unsupported",
-            unsupported.get("itemname")
+            unsupported.get("itemName")
                 .getAsString());
     }
 
@@ -252,7 +262,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         request.runOnServerThread(TestGridFixtures.ae(grid));
         assertEquals(
             "NO_PERMISSIONS",
-            JsonParser.parseString(request.getJSON())
+            new JsonParser().parse(request.getJSON())
                 .getAsJsonObject()
                 .get("status")
                 .getAsString());
@@ -313,6 +323,9 @@ class ItemIdentityRequestTest extends GridTestScope {
                 .getAsString());
         assertTrue(
             result.getAsJsonObject("data")
+                .has("jobId"));
+        assertFalse(
+            result.getAsJsonObject("data")
                 .has("jobID"));
         assertEquals(1, grid.jobs);
     }
@@ -338,7 +351,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         AE2Controller.AE2Interface = ae;
         if (request.init(TestGridFixtures.context(-1, "grid=" + TestGridFixtures.resolvedKey(grid) + params)))
             request.runOnServerThread(ae);
-        return JsonParser.parseString(request.getJSON())
+        return new JsonParser().parse(request.getJSON())
             .getAsJsonObject();
     }
 

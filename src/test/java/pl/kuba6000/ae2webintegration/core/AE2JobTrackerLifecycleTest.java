@@ -390,7 +390,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         assertSame(info, GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.get(1));
         assertTrue(info.isDone);
         assertEquals(5, info.finalOutput.quantity);
-        assertEquals("example:resource:7", info.finalOutput.itemid);
+        assertEquals("example:resource:7", info.finalOutput.itemId);
     }
 
     @Test

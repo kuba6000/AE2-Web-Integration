@@ -1,4 +1,4 @@
-package pl.kuba6000.ae2webintegration.core.api;
+package pl.kuba6000.ae2webintegration.core.http.dto;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -10,7 +10,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
  * Tracking measurements remain zero when this CPU has no tracked job.
  */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
-public class JSON_CompactedItem {
+public class CpuResource {
 
     /** Exact resource identity, or null when the native identity cannot be captured. */
     public @Nullable String itemKey;
@@ -22,13 +22,13 @@ public class JSON_CompactedItem {
      *
      * @example minecraft:iron_ingot
      */
-    public final String itemid;
+    public final String itemId;
     /**
      * Resource display name.
      *
      * @example Iron Ingot
      */
-    public final String itemname;
+    public final String itemName;
     /**
      * Resource units currently being processed.
      *
@@ -79,9 +79,9 @@ public class JSON_CompactedItem {
      */
     public double craftsPerSec = 0d;
 
-    public JSON_CompactedItem(IAEKey key) {
-        this.itemid = key.web$getItemID();
-        this.itemname = key.web$getDisplayName();
+    public CpuResource(IAEKey key) {
+        this.itemId = key.web$getItemID();
+        this.itemName = key.web$getDisplayName();
     }
 
 }

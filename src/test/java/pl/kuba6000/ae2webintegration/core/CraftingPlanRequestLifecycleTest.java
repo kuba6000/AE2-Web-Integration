@@ -12,6 +12,7 @@ import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
@@ -26,6 +27,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 class CraftingPlanRequestLifecycleTest extends GridTestScope {
 
@@ -95,7 +97,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
             poll.getResponse()
                 .httpStatus());
         assertFalse(
-            JsonParser.parseString(poll.getJSON())
+            new JsonParser().parse(poll.getJSON())
                 .getAsJsonObject()
                 .getAsJsonObject("data")
                 .get("isDone")
@@ -111,6 +113,52 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
             HttpURLConnection.HTTP_CONFLICT,
             submit.getResponse()
                 .httpStatus());
+    }
+
+    @Test
+    void calculatedResourceSerializesCamelCaseIdentityAndMeasurements() {
+        GetCraftingPlan.PlanData.JobItem row = new GetCraftingPlan.PlanData.JobItem(
+            "example:resource",
+            "Resource",
+            8,
+            12,
+            3,
+            4,
+            0.5);
+        JsonObject json = new JsonParser().parse(
+            GSONUtils.GSON_BUILDER.create()
+                .toJson(row))
+            .getAsJsonObject();
+        assertEquals(
+            "example:resource",
+            json.get("itemId")
+                .getAsString());
+        assertEquals(
+            "Resource",
+            json.get("itemName")
+                .getAsString());
+        assertEquals(
+            8,
+            json.get("stored")
+                .getAsLong());
+        assertEquals(
+            12,
+            json.get("requested")
+                .getAsLong());
+        assertEquals(
+            3,
+            json.get("missing")
+                .getAsLong());
+        assertEquals(
+            4,
+            json.get("steps")
+                .getAsLong());
+        assertEquals(
+            0.5,
+            json.get("usedPercent")
+                .getAsDouble());
+        assertFalse(json.has("itemid"));
+        assertFalse(json.has("itemname"));
     }
 
     private static String submit(TestGrid grid, int id) {

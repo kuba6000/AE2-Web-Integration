@@ -1,6 +1,6 @@
 import type { CpuOutcome } from '../../app/cpus.js';
 import type { TerminalState, createTerminal } from '../../app/terminal.js';
-import type { CpuItem } from '../../app/api-types.js';
+import type { CpuResource } from '../../app/api-types.js';
 import type { Translator as Locale } from '../../app/i18n.js';
 type Terminal = ReturnType<typeof createTerminal>;
 type ResourceSort = 'name' | 'active' | 'pending' | 'stored' | 'shareInCraftingTime';
@@ -143,7 +143,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         }
         const item = row.item;
         const name = element('strong');
-        name.append(renderMinecraftText(item.itemname));
+        name.append(renderMinecraftText(item.itemName));
         const values = Object.entries({ cpuActive: item.active, cpuPending: item.pending, cpuStored: item.stored })
             .filter(([, quantity]) => quantity > 0)
             .map(([key, quantity]) => [key, locale.number(quantity)]);
@@ -157,7 +157,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             );
         tooltip.replaceChildren(
             name,
-            element('code', item.itemid),
+            element('code', item.itemId),
             ...values.map(([key, value]) => element('span', `${locale.common(key)}: ${value}`))
         );
         tooltip.hidden = false;
@@ -181,7 +181,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         positionTooltip(box.right, box.top);
     }
 
-    function createResourceRow(item: CpuItem) {
+    function createResourceRow(item: CpuResource) {
         const li = element('li');
         const button = element('button', '', 'item cpu-item slot-frame');
         button.type = 'button';
@@ -272,7 +272,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     addControl('stored', 'cpuSortStored', 'sort', terminalIcons.quantity);
     addControl('shareInCraftingTime', 'cpuProcessingShare', 'sort', '<span aria-hidden="true">%</span>');
 
-    function craftingPriority(item: CpuItem) {
+    function craftingPriority(item: CpuResource) {
         return item.active > 0 ? 0 : item.pending > 0 ? 1 : 2;
     }
 
@@ -309,15 +309,15 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         const occurrences: Map<string, number> = new Map();
         // Unsupported identities retain repeated rows by occurrence; never merge by registry ID.
         const items = (state.detail?.isBusy && !state.error ? state.detail.items || [] : []).map((item) => {
-            const identity = item.itemKey || JSON.stringify([item.itemid, item.itemname]);
+            const identity = item.itemKey || JSON.stringify([item.itemId, item.itemName]);
             const occurrence = occurrences.get(identity) || 0;
             occurrences.set(identity, occurrence + 1);
-            return { item, key: `${identity}:${occurrence}`, name: plainMinecraftText(item.itemname) };
+            return { item, key: `${identity}:${occurrence}`, name: plainMinecraftText(item.itemName) };
         });
         const visible = items
             .filter(({ item, name }) => {
-                const text = `${name} ${item.itemid}`.toLocaleLowerCase(language);
-                const mod = item.itemid.split(':')[0].toLocaleLowerCase(language);
+                const text = `${name} ${item.itemId}`.toLocaleLowerCase(language);
+                const mod = item.itemId.split(':')[0].toLocaleLowerCase(language);
                 return (
                     (!hideStored || item.active > 0 || item.pending > 0) &&
                     terms.every((term) => (term.startsWith('@') ? mod.includes(term.slice(1)) : text.includes(term)))
@@ -336,7 +336,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         for (const [index, { item, key }] of visible.entries()) {
             const row = itemRows.get(key) || createResourceRow(item);
             row.item = item;
-            row.name.replaceChildren(renderMinecraftText(item.itemname));
+            row.name.replaceChildren(renderMinecraftText(item.itemName));
             row.button.dataset.crafting = item.active > 0 ? 'active' : item.pending > 0 ? 'pending' : 'stored';
             const quantities = [item.active, item.pending, item.stored];
             row.counts.forEach((count, i) => {
@@ -351,7 +351,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             row.button.setAttribute(
                 'aria-label',
                 [
-                    plainMinecraftText(item.itemname),
+                    plainMinecraftText(item.itemName),
                     ...row.counts.flatMap((count, i) =>
                         quantities[i] > 0 ? [`${locale.common(count.key)}: ${locale.number(quantities[i])}`] : []
                     ),
@@ -463,7 +463,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         if (cpu.finalOutput)
             target.append(
                 `${locale.common('cpuOutput')}: `,
-                renderMinecraftText(cpu.finalOutput.itemname),
+                renderMinecraftText(cpu.finalOutput.itemName),
                 ` × ${locale.number(cpu.finalOutput.quantity)}`
             );
         else target.append(locale.common('cpuOutputUnknown'));
@@ -515,7 +515,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         entry.output.replaceChildren();
         if (cpu.isBusy && cpu.finalOutput) {
             const name = element('strong');
-            name.append(renderMinecraftText(cpu.finalOutput.itemname));
+            name.append(renderMinecraftText(cpu.finalOutput.itemName));
             entry.output.append(
                 entry.icon,
                 name,

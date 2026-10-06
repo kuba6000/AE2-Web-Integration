@@ -14,12 +14,12 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.api.JSON_DetailedItem;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.StoredResource;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
@@ -71,7 +71,7 @@ public final class GetItems extends ISyncedRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull List<JSON_DetailedItem> data,
+    public record Response(@NotNull ApiStatus status, @NotNull List<StoredResource> data,
         @Nullable IconMappings icons) {}
 
     /** Include atlas references. Absent or false skips all native icon normalization. */
@@ -87,7 +87,7 @@ public final class GetItems extends ISyncedRequest {
         IAEStorageGrid storageGrid = grid.web$getStorageGrid();
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
         IStackList storageList = storageGrid.web$getStorageList();
-        ArrayList<JSON_DetailedItem> items = new ArrayList<>();
+        ArrayList<StoredResource> items = new ArrayList<>();
         Set<IAEKey> listed = new HashSet<>();
         ItemIdentityRegistry.Listing listing = AE2Controller.itemIdentities.beginListing(grid);
         IconPack pack = icons ? CoreEngine.getIconPack() : null;
@@ -109,30 +109,32 @@ public final class GetItems extends ISyncedRequest {
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
     }
 
-    private static void addItem(ArrayList<JSON_DetailedItem> items, IAEGenericStack stack, IAEGrid grid,
+    private static void addItem(ArrayList<StoredResource> items, IAEGenericStack stack, IAEGrid grid,
         ItemIdentityRegistry.Listing listing, @Nullable IconMappings mappings) {
         IAEKey key = stack.web$what();
 
-        JSON_DetailedItem detailedItem = new JSON_DetailedItem();
-        detailedItem.itemid = key.web$getItemID();
-        detailedItem.itemname = key.web$getDisplayName();
-        detailedItem.quantity = stack.web$amount();
-        detailedItem.craftable = key.web$isCraftable(grid);
+        String itemId = key.web$getItemID();
+        String itemName = key.web$getDisplayName();
+        long quantity = stack.web$amount();
+        boolean craftable = key.web$isCraftable(grid);
+        String itemKey = null;
+        String identityStatus = null;
+        IconMappings.Reference icon = null;
 
         try {
             StableKey identity = listing.remember(key);
-            detailedItem.itemKey = identity.toString();
-            if (mappings != null) detailedItem.icon = mappings.resolve(identity, AE2Controller.itemIdentities);
+            itemKey = identity.toString();
+            if (mappings != null) icon = mappings.resolve(identity, AE2Controller.itemIdentities);
 
         } catch (ItemIdentityRegistry.Ambiguous e) {
-            detailedItem.identityStatus = "AMBIGUOUS";
+            identityStatus = "AMBIGUOUS";
         } catch (UnsupportedOperationException e) {
-            detailedItem.identityStatus = "UNSUPPORTED";
+            identityStatus = "UNSUPPORTED";
         } catch (RuntimeException e) {
-            detailedItem.identityStatus = "UNAVAILABLE";
+            identityStatus = "UNAVAILABLE";
         }
 
-        items.add(detailedItem);
+        items.add(new StoredResource(itemId, itemName, quantity, craftable, itemKey, identityStatus, icon));
     }
 
 }

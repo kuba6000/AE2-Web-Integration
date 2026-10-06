@@ -85,52 +85,29 @@ public final class GetCraftingPlan extends ISyncedRequest {
         /** Calculated resource rows; null while calculation is pending. */
         public @Nullable ArrayList<JobItem> plan;
 
-        public static class JobItem {
+        /**
+         * One resource required by the calculated crafting plan.
+         *
+         * @param itemId      registry resource identifier
+         * @param itemName    resource display name
+         * @param stored      resource units taken from network storage
+         * @param requested   resource units to be crafted
+         * @param missing     resource units missing from a simulation
+         * @param steps       number of crafting steps; zero when the platform cannot report it
+         * @param usedPercent fraction of currently available stored units consumed by a storage-only row; zero when the
+         *                    row requests crafting, has missing units or has no available storage
+         * @example itemId minecraft:iron_ingot
+         * @example itemName Iron Ingot
+         * @example stored 0
+         * @example requested 64
+         * @example missing 0
+         * @example steps 64
+         * @example usedPercent 0.0
+         */
+        @Desugar
+        public record JobItem(@NotNull String itemId, @NotNull String itemName, long stored, long requested,
+            long missing, long steps, double usedPercent) {}
 
-            /**
-             * Registry resource identifier.
-             *
-             * @example minecraft:iron_ingot
-             */
-            public String itemid;
-            /**
-             * Resource display name.
-             *
-             * @example Iron Ingot
-             */
-            public String itemname;
-            /**
-             * Resource units taken from network storage.
-             *
-             * @example 0
-             */
-            public long stored;
-            /**
-             * Resource units to be crafted.
-             *
-             * @example 64
-             */
-            public long requested;
-            /**
-             * Resource units missing from a simulation.
-             *
-             * @example 0
-             */
-            public long missing;
-            /**
-             * Number of crafting steps; zero when the platform cannot report it.
-             *
-             * @example 64
-             */
-            public long steps;
-            /**
-             * Fraction of currently available stored units consumed by a storage-only row; zero when the row requests
-             * crafting, has missing units or has no available storage.
-             *
-             * @example 0.0
-             */
-            public double usedPercent;
-        }
     }
 
     /**
@@ -144,7 +121,7 @@ public final class GetCraftingPlan extends ISyncedRequest {
     public record Response(@NotNull ApiStatus status, @NotNull PlanData data) {}
 
     @PathParam("planId")
-    private int jobID;
+    private int jobId;
 
     @Override
     protected void handle(IAEGrid grid) {
@@ -152,7 +129,7 @@ public final class GetCraftingPlan extends ISyncedRequest {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        Future<IAECraftingJob> job = gridData.getJob(jobID);
+        Future<IAECraftingJob> job = gridData.getJob(jobId);
         if (job == null) {
             deny(ApiStatus.INVALID_ID);
             return;
@@ -170,29 +147,30 @@ public final class GetCraftingPlan extends ISyncedRequest {
                 jobData.plan = new ArrayList<>();
                 for (ICraftingPlanSummaryEntry entry : summary.web$getEntries()) {
                     IAEKey key = entry.web$getWhat();
-                    PlanData.JobItem jobItem = new PlanData.JobItem();
-                    jobItem.itemid = key.web$getItemID();
-                    jobItem.itemname = key.web$getDisplayName();
-                    jobItem.requested = entry.web$getCraftAmount();
-                    jobItem.steps = entry.web$getCraftSteps();
-                    jobItem.stored = entry.web$getStoredAmount();
-                    jobItem.missing = entry.web$getMissingAmount();
-                    if (jobItem.missing == 0 && jobItem.requested == 0 && jobItem.stored > 0) {
+                    String itemId = key.web$getItemID();
+                    String itemName = key.web$getDisplayName();
+                    long requested = entry.web$getCraftAmount();
+                    long steps = entry.web$getCraftSteps();
+                    long stored = entry.web$getStoredAmount();
+                    long missing = entry.web$getMissingAmount();
+                    double usedPercent = 0d;
+                    if (missing == 0 && requested == 0 && stored > 0) {
                         long available = inventory.web$getAvailable(key, grid);
                         if (available > 0L) {
-                            jobItem.usedPercent = (double) jobItem.stored / (double) available;
+                            usedPercent = (double) stored / (double) available;
                         }
                     }
-                    jobData.plan.add(jobItem);
+                    jobData.plan
+                        .add(new PlanData.JobItem(itemId, itemName, stored, requested, missing, steps, usedPercent));
                 }
                 jobData.plan.sort((i1, i2) -> {
-                    if (i1.missing > 0 && i2.missing > 0) return Long.compare(i2.missing, i1.missing);
-                    else if (i1.missing > 0 && i2.missing == 0) return -1;
-                    else if (i1.missing == 0 && i2.missing > 0) return 1;
-                    if (i1.requested > 0 && i2.requested > 0) return Long.compare(i2.steps, i1.steps);
-                    else if (i1.requested > 0 && i2.requested == 0) return -1;
-                    else if (i1.requested == 0 && i2.requested > 0) return 1;
-                    return Long.compare(i2.stored, i1.stored);
+                    if (i1.missing() > 0 && i2.missing() > 0) return Long.compare(i2.missing(), i1.missing());
+                    else if (i1.missing() > 0 && i2.missing() == 0) return -1;
+                    else if (i1.missing() == 0 && i2.missing() > 0) return 1;
+                    if (i1.requested() > 0 && i2.requested() > 0) return Long.compare(i2.steps(), i1.steps());
+                    else if (i1.requested() > 0 && i2.requested() == 0) return -1;
+                    else if (i1.requested() == 0 && i2.requested() > 0) return 1;
+                    return Long.compare(i2.stored(), i1.stored());
                 });
             } catch (InterruptedException | ExecutionException e) {
                 LOG.error("Failed to read crafting job", e);

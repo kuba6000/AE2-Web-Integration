@@ -254,10 +254,10 @@ export function mount(
 
     function showTooltip(item: TerminalState['items'][number], x: number, y: number) {
         const name = element('strong');
-        name.append(renderMinecraftText(item.itemname));
+        name.append(renderMinecraftText(item.itemName));
         tooltip.replaceChildren(
             name,
-            element('code', item.itemid),
+            element('code', item.itemId),
             element('span', `${locale.common('quantity')}: ${locale.number(item.quantity)}`),
             element('span', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))
         );
@@ -347,10 +347,10 @@ export function mount(
             }
             const terms = state.search.trim().toLocaleLowerCase(language).split(/\s+/);
             allFiltered = state.items
-                .map((item) => ({ item, name: plainMinecraftText(item.itemname) }))
+                .map((item) => ({ item, name: plainMinecraftText(item.itemName) }))
                 .filter(({ item, name }) => {
-                    const text = `${name} ${item.itemid}`.toLocaleLowerCase(language);
-                    const mod = item.itemid.split(':')[0].toLocaleLowerCase(language);
+                    const text = `${name} ${item.itemId}`.toLocaleLowerCase(language);
+                    const mod = item.itemId.split(':')[0].toLocaleLowerCase(language);
                     return terms.every((term) =>
                         term.startsWith('@') ? mod.includes(term.slice(1)) : text.includes(term)
                     );
@@ -364,7 +364,7 @@ export function mount(
                     state.preferences.sort === 'quantity'
                         ? b.item.quantity - a.item.quantity || a.name.localeCompare(b.name, language)
                         : state.preferences.sort === 'id'
-                          ? a.item.itemid.localeCompare(b.item.itemid, language)
+                          ? a.item.itemId.localeCompare(b.item.itemId, language)
                           : a.name.localeCompare(b.name, language)
                 )
                 .map(({ item }) => item);
@@ -448,12 +448,12 @@ export function mount(
         const next = allFiltered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((item, index) => {
             const row = previous.get(item.itemKey) || createItemRow(item);
             row.item = item;
-            row.name.replaceChildren(renderMinecraftText(item.itemname));
+            row.name.replaceChildren(renderMinecraftText(item.itemName));
             row.quantity.textContent = slotQuantity(item.quantity, locale);
             if (effectiveDisplay === 'icons') {
                 row.button.setAttribute(
                     'aria-label',
-                    `${plainMinecraftText(item.itemname)}, ${locale.common('quantity')}: ${locale.number(item.quantity)}, ${locale.common(item.craftable ? 'craftableYes' : 'craftableNo')}`
+                    `${plainMinecraftText(item.itemName)}, ${locale.common('quantity')}: ${locale.number(item.quantity)}, ${locale.common(item.craftable ? 'craftableYes' : 'craftableNo')}`
                 );
             } else {
                 row.button.removeAttribute('aria-label');
@@ -494,10 +494,10 @@ export function mount(
             return;
         }
         const name = element('h4');
-        name.append(renderMinecraftText(item.itemname));
+        name.append(renderMinecraftText(item.itemName));
         details.replaceChildren(
             name,
-            element('code', item.itemid),
+            element('code', item.itemId),
             element('p', `${locale.common('quantity')}: ${locale.number(item.quantity)}`),
             element('p', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))
         );

@@ -14,7 +14,7 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -100,7 +100,7 @@ public final class GetCPUList extends ISyncedRequest {
         /** Whether the active job is paused; false for idle or unsupported CPUs. */
         public boolean isPaused;
         /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
-        public @Nullable JSON_Stack finalOutput;
+        public @Nullable ResourceStack finalOutput;
         /** Product atlas reference; null when not requested, idle, unavailable, or absent from the pack. */
         public @Nullable IconMappings.Reference icon;
         /**
@@ -175,7 +175,7 @@ public final class GetCPUList extends ISyncedRequest {
             cpuInfo.isPaused = cpuInfo.isBusy && cluster instanceof IPausableCraftingCPU pausable
                 && pausable.web$isPaused();
             if (cpuInfo.isBusy) {
-                cpuInfo.finalOutput = JSON_Stack.capture(grid, cluster.web$getFinalOutput());
+                cpuInfo.finalOutput = ResourceStack.capture(grid, cluster.web$getFinalOutput());
                 if (mappings != null && cpuInfo.finalOutput != null && cpuInfo.finalOutput.itemKey != null) {
                     try {
                         cpuInfo.icon = mappings

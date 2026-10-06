@@ -15,7 +15,7 @@ import com.google.common.collect.MapMaker;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -55,7 +55,7 @@ public class AE2JobTracker {
 
     public static class JobTrackingInfo {
 
-        public volatile @NotNull JSON_Stack finalOutput;
+        public volatile @NotNull ResourceStack finalOutput;
         public long timeStarted;
         public long timeDone;
         public HashMap<IAEKey, Long> timeSpentOn = new HashMap<>();
@@ -71,7 +71,7 @@ public class AE2JobTracker {
         public boolean isDone = false;
         public boolean wasCancelled = false;
 
-        public JobTrackingInfo(@NotNull JSON_Stack finalOutput) {
+        public JobTrackingInfo(@NotNull ResourceStack finalOutput) {
             this.finalOutput = finalOutput;
             this.timeStarted = System.currentTimeMillis();
         }
@@ -130,7 +130,8 @@ public class AE2JobTracker {
             if (data == null || !data.getSettings()
                 .isTracked()) return;
         }
-        JSON_Stack finalOutput = JSON_Stack.capture(grid, cpuCluster.web$getFinalOutput(), CoreEngine.getIconPack());
+        ResourceStack finalOutput = ResourceStack
+            .capture(grid, cpuCluster.web$getFinalOutput(), CoreEngine.getIconPack());
         if (finalOutput == null) {
             trackingInfoMap.remove(cpuCluster);
             return;
@@ -252,7 +253,7 @@ public class AE2JobTracker {
                 new CraftingMessage(
                     key,
                     cpu.web$getName(),
-                    info.finalOutput.itemname,
+                    info.finalOutput.itemName,
                     craftedAmount,
                     NotificationManager.formatDuration(durationMillis),
                     info.wasCancelled));

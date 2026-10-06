@@ -40,9 +40,9 @@ test(page + ': only craftable rows with a usable identity offer ordering', () =>
         const key = 'AAAAAAAAAAAAAAAAAAAAAA';
         context.settings.showItemIcon = icons;
         context.globalItemList = [
-            { itemid: 'minecraft:stone', itemname: 'Stone', quantity: 4, craftable: true, itemKey: key },
-            { itemid: 'minecraft:dirt', itemname: 'Dirt', quantity: 2, craftable: true, identityStatus: 'UNAVAILABLE' },
-            { itemid: 'minecraft:sand', itemname: 'Sand', quantity: 8, craftable: false, itemKey: key }
+            { itemId: 'minecraft:stone', itemName: 'Stone', quantity: 4, craftable: true, itemKey: key },
+            { itemId: 'minecraft:dirt', itemName: 'Dirt', quantity: 2, craftable: true, identityStatus: 'UNAVAILABLE' },
+            { itemId: 'minecraft:sand', itemName: 'Sand', quantity: 8, craftable: false, itemKey: key }
         ];
         context.displayItemList();
         const rendered = elements.get('terminalcontent').innerHTML;
@@ -82,9 +82,9 @@ test(page + ': icons render from cache and missing icons round-trip using resour
     context.localStorage.setItem = (key, value) => cache.set(key, value);
     context.settings.showItemIcon = true;
     context.globalItemList = [
-        { itemid: 'minecraft:stone', itemname: 'Stone', quantity: 4, itemKey: cached },
-        { itemid: 'minecraft:dirt', itemname: 'Dirt', quantity: 2, itemKey: missing },
-        { itemid: 'minecraft:sand', itemname: 'Sand', quantity: 1 }
+        { itemId: 'minecraft:stone', itemName: 'Stone', quantity: 4, itemKey: cached },
+        { itemId: 'minecraft:dirt', itemName: 'Dirt', quantity: 2, itemKey: missing },
+        { itemId: 'minecraft:sand', itemName: 'Sand', quantity: 1 }
     ];
     context.displayItemList(true);
     assert.ok(elements.get('terminalcontent').innerHTML.includes('data:image/png;base64,Y2FjaGVk'));
@@ -99,7 +99,7 @@ test(page + ': icons render from cache and missing icons round-trip using resour
 
 test(page + ': icon preference persists and controls image rendering', () => {
     const { context, elements } = terminal(page);
-    context.globalItemList = [{ itemid: 'minecraft:stone', itemname: 'Stone', quantity: 4, itemKey: 'AAAAAAAAAAAAAAAAAAAAAA' }];
+    context.globalItemList = [{ itemId: 'minecraft:stone', itemName: 'Stone', quantity: 4, itemKey: 'AAAAAAAAAAAAAAAAAAAAAA' }];
     context.changeShowItemIcon({ checked: true });
     assert.ok(elements.get('terminalcontent').innerHTML.includes('<img'));
     context.settings.showItemIcon = false;

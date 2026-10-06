@@ -10,15 +10,15 @@ const compiledResources = path.resolve(__dirname, '../../build/generated/fronten
 const gridA = 'AAAAAAAAAAAAAAAAAAAAAA';
 const gridB = 'BBBBBBBBBBBBBBBBBBBBBA';
 const iron = {
-    itemname: 'Iron Ingot',
-    itemid: 'minecraft:iron_ingot',
+    itemName: 'Iron Ingot',
+    itemId: 'minecraft:iron_ingot',
     quantity: 128640,
     craftable: true,
     itemKey: 'iron'
 };
 const quartz = {
-    itemname: 'Certus Quartz Crystal',
-    itemid: 'ae2:certus_quartz_crystal',
+    itemName: 'Certus Quartz Crystal',
+    itemId: 'ae2:certus_quartz_crystal',
     quantity: 42,
     craftable: false,
     itemKey: 'quartz'
@@ -29,8 +29,8 @@ const readyPlan = {
     bytesTotal: 2048,
     plan: [
         {
-            itemid: 'minecraft:iron_ingot',
-            itemname: 'Iron Ingot',
+            itemId: 'minecraft:iron_ingot',
+            itemName: 'Iron Ingot',
             stored: 4,
             requested: 12,
             missing: 0,
@@ -59,8 +59,8 @@ const cpuWork = {
     timeElapsed: 10000,
     items: [
         {
-            itemid: 'minecraft:iron_ingot',
-            itemname: 'Iron Ingot',
+            itemId: 'minecraft:iron_ingot',
+            itemName: 'Iron Ingot',
             active: 4,
             pending: 6,
             stored: 2,
@@ -83,8 +83,8 @@ const historyDetail = {
     ...historyEntry,
     items: [
         {
-            itemname: 'Iron Ingot',
-            itemid: 'minecraft:iron_ingot',
+            itemName: 'Iron Ingot',
+            itemId: 'minecraft:iron_ingot',
             timeSpentOn: 5000,
             craftedTotal: 10,
             craftsPerSec: 2,
@@ -97,7 +97,7 @@ const historyDetail = {
         {
             name: 'Smelter',
             timingsCombined: 5000,
-            location: [{ dimid: 'minecraft:overworld', x: 120, y: 64, z: -32 }],
+            location: [{ dimensionId: 'minecraft:overworld', x: 120, y: 64, z: -32 }],
             timings: [{ started: 1700000001000, ended: 1700000006000 }]
         }
     ]
@@ -245,7 +245,7 @@ async function fixture(t, mount = '', contextOptions = {}) {
                 );
             } else if (resource.endsWith('/crafting-plans')) {
                 response.statusCode = 202;
-                response.end(JSON.stringify({ status: 'OK', data: { jobID: 7 } }));
+                response.end(JSON.stringify({ status: 'OK', data: { jobId: 7 } }));
             } else if (resource.endsWith('/submit')) {
                 response.statusCode = options.submitStatus === 'OK' ? 200 : 409;
                 response.end(JSON.stringify({ status: options.submitStatus, data: options.submitReason || null }));
@@ -350,8 +350,8 @@ async function fixture(t, mount = '', contextOptions = {}) {
                                           : [
                                                 {
                                                     ...iron,
-                                                    itemname: 'Gold Ingot',
-                                                    itemid: 'minecraft:gold_ingot',
+                                                    itemName: 'Gold Ingot',
+                                                    itemId: 'minecraft:gold_ingot',
                                                     quantity: 5
                                                 }
                                             ]
@@ -487,7 +487,7 @@ test('unavailable icons override the saved mode and recover without losing it', 
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     await item.waitFor();
     assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
-    assert.equal(await item.getByText(iron.itemname, { exact: true }).isVisible(), true);
+    assert.equal(await item.getByText(iron.itemName, { exact: true }).isVisible(), true);
     options.pack = { available: true, packId: 'a'.repeat(64), width: 64, height: 64 };
     await poll(page);
     await page.waitForFunction(
@@ -515,7 +515,7 @@ test('pending icon discovery leaves inventory usable and failures preserve confi
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     await item.waitFor({ timeout: 1000 });
-    assert.equal(await item.getByText(iron.itemname, { exact: true }).isVisible(), true);
+    assert.equal(await item.getByText(iron.itemName, { exact: true }).isVisible(), true);
     assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
     await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage, null, {
         timeout: 4000
@@ -714,13 +714,13 @@ test('compact terminal mode persists and preserves accessible selection and craf
     const compact = await item.boundingBox();
     assert.ok(Math.abs(compact.width - compact.height) < 1, 'compact item slots are square');
     assert.ok(compact.width < original.width);
-    const nameBox = await item.getByText(iron.itemname, { exact: true }).boundingBox();
+    const nameBox = await item.getByText(iron.itemName, { exact: true }).boundingBox();
     assert.ok(!nameBox || nameBox.width <= 1, 'the item name is not permanently painted in the slot');
     await item.hover();
-    await page.getByRole('tooltip').getByText(iron.itemname, { exact: true }).waitFor();
+    await page.getByRole('tooltip').getByText(iron.itemName, { exact: true }).waitFor();
     await page.keyboard.press('Escape');
     await item.focus();
-    await page.getByRole('tooltip').getByText(iron.itemname, { exact: true }).waitFor();
+    await page.getByRole('tooltip').getByText(iron.itemName, { exact: true }).waitFor();
     await page.keyboard.press('Enter');
     assert.equal(await item.getAttribute('aria-pressed'), 'true');
     await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
@@ -737,7 +737,7 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await cpuItem.waitFor();
     const cpuBox = await cpuItem.boundingBox();
     assert.ok(cpuBox.width > cpuBox.height, 'CPU resources retain their rectangular layout');
-    assert.equal(await cpuItem.getByText(iron.itemname, { exact: true }).isVisible(), true);
+    assert.equal(await cpuItem.getByText(iron.itemName, { exact: true }).isVisible(), true);
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await mode.selectOption('both');
     await page.reload();
@@ -749,7 +749,7 @@ test('compact terminal mode persists and preserves accessible selection and craf
     assert.equal(await mode.inputValue(), 'both');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await item.waitFor();
-    assert.equal(await item.getByText(iron.itemname, { exact: true }).isVisible(), true);
+    assert.equal(await item.getByText(iron.itemName, { exact: true }).isVisible(), true);
 });
 
 // Public rendered geometry seam: responsive square slots contain sprites that stay still on hover.
@@ -759,7 +759,7 @@ for (const deviceScaleFactor of [1, 1.25, 1.5, 1.75, 2]) {
         await atlasFixture(page, options);
         options.itemsA = Array.from({ length: 80 }, (_, index) => ({
             ...iron,
-            itemname: `Resource ${index}`,
+            itemName: `Resource ${index}`,
             itemKey: `resource-${index}`,
             icon: { page: 0, x: 0, y: 0 }
         }));
@@ -839,8 +839,8 @@ test('compact terminal keeps quantities and craftability readable with missing i
     for (const width of [390, 1024]) {
         await page.setViewportSize({ width, height: 844 });
         for (const [name, amount] of [
-            [iron.itemname, '9,999'],
-            [quartz.itemname, '1E']
+            [iron.itemName, '9,999'],
+            [quartz.itemName, '1E']
         ]) {
             const item = page.getByRole('button', { name: new RegExp(name) });
             const itemBox = await item.boundingBox();
@@ -865,12 +865,12 @@ test('compact terminal keeps quantities and craftability readable with missing i
         }
     }
     await missing.focus();
-    await page.getByRole('tooltip').getByText(quartz.itemname, { exact: true }).waitFor();
+    await page.getByRole('tooltip').getByText(quartz.itemName, { exact: true }).waitFor();
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
     await page.getByRole('link', { name: 'Terminal', exact: true }).click();
     await page.getByRole('button', { name: /Iron Ingot/ }).focus();
-    await page.getByRole('tooltip').getByText(iron.itemname, { exact: true }).waitFor();
+    await page.getByRole('tooltip').getByText(iron.itemName, { exact: true }).waitFor();
     await page.keyboard.press('Enter');
     await page.getByRole('spinbutton', { name: 'Craft quantity' }).waitFor();
     await page.getByRole('searchbox', { name: 'Search resources' }).fill('quartz');
@@ -1129,7 +1129,7 @@ test('atlas pages are limited to nearby rows and malformed mappings never become
     }));
     options.itemsA = options.icons.pages.map((_, i) => ({
         ...iron,
-        itemname: `Resource ${String(i).padStart(2, '0')}`,
+        itemName: `Resource ${String(i).padStart(2, '0')}`,
         itemKey: `item-${i}`,
         icon: { page: i, x: 0, y: 0 }
     }));
@@ -1255,7 +1255,7 @@ test('visible atlas requests have bounded concurrency', async (t) => {
     }));
     options.itemsA = options.icons.pages.map((_, i) => ({
         ...iron,
-        itemname: `Resource ${i}`,
+        itemName: `Resource ${i}`,
         itemKey: `item-${i}`,
         icon: { page: i, x: 0, y: 0 }
     }));
@@ -1488,7 +1488,7 @@ test('Minecraft item formatting renders readable names and resets decorations on
     options.itemsA = [
         {
             ...iron,
-            itemname:
+            itemName:
                 'Base §aGreen §lBold §oItalic §nUnderlined §mStruck §BColorCleared §L§O§N§MHeavy §RRestored §qUnknown tail§'
         }
     ];
@@ -1517,13 +1517,13 @@ test('Minecraft item formatting renders readable names and resets decorations on
 test('Minecraft names retain formatting across crafting plans, CPU work and history', async (t) => {
     const { page, options, base } = await fixture(t);
     await seedAutomaticRefresh(page, base, false);
-    const itemname = '§aCobalt §lIngot';
-    const finalOutput = { ...iron, itemname, quantity: 12 };
-    options.itemsA = [{ ...iron, itemname }];
-    options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], itemname }] };
-    options.cpuDetails = { 'cpu-a': { ...cpuWork, finalOutput, items: [{ ...cpuWork.items[0], itemname }] } };
+    const itemName = '§aCobalt §lIngot';
+    const finalOutput = { ...iron, itemName, quantity: 12 };
+    options.itemsA = [{ ...iron, itemName }];
+    options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], itemName }] };
+    options.cpuDetails = { 'cpu-a': { ...cpuWork, finalOutput, items: [{ ...cpuWork.items[0], itemName }] } };
     options.history = [{ ...historyEntry, finalOutput }];
-    options.historyDetail = { ...historyDetail, finalOutput, items: [{ ...historyDetail.items[0], itemname }] };
+    options.historyDetail = { ...historyDetail, finalOutput, items: [{ ...historyDetail.items[0], itemName }] };
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Cobalt.*Ingot/ }).click();
     await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
@@ -1586,8 +1586,8 @@ test('Minecraft classic palette, obfuscation and literal HTML remain safe and re
     ];
     const literal = '<img src=x onerror=alert(1)> & <script>alert(2)</script>';
     options.itemsA = [
-        { ...iron, itemname: colors.map(([code]) => `§${code}Color${code}`).join(' ') },
-        { ...quartz, itemname: `§kSecret Words §aVisible §KMasked §rPlain §qUnknown tail§ ${literal}` }
+        { ...iron, itemName: colors.map(([code]) => `§${code}Color${code}`).join(' ') },
+        { ...quartz, itemName: `§kSecret Words §aVisible §KMasked §rPlain §qUnknown tail§ ${literal}` }
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     const palette = page.getByRole('button', { name: /^Color0/ });
@@ -1608,8 +1608,8 @@ test('Minecraft classic palette, obfuscation and literal HTML remain safe and re
 test('Minecraft names search and sort as continuous plain text and keep tooltip formatting through polling', async (t) => {
     const { page, options, base } = await fixture(t);
     options.itemsA = [
-        { ...iron, itemname: '§fAl§apha' },
-        { ...quartz, itemname: '§0Beta §qliteral' }
+        { ...iron, itemName: '§fAl§apha' },
+        { ...quartz, itemName: '§0Beta §qliteral' }
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     const alpha = page.getByRole('button', { name: /^Alpha/ });
@@ -1635,7 +1635,7 @@ test('Minecraft names search and sort as continuous plain text and keep tooltip 
     const tooltip = page.getByRole('tooltip');
     await tooltip.waitFor({ state: 'visible' });
     assert.equal((await textStyle(tooltip, 'pha')).color, 'rgb(85, 255, 85)');
-    options.itemsA = [{ ...iron, itemname: '§cAlpha', quantity: 8765 }, options.itemsA[1]];
+    options.itemsA = [{ ...iron, itemName: '§cAlpha', quantity: 8765 }, options.itemsA[1]];
     await page.getByRole('button', { name: /^Alpha.*8,765/ }).waitFor();
     assert.equal(await tooltip.isVisible(), true);
     assert.match(await tooltip.innerText(), /8,765/);
@@ -1652,7 +1652,7 @@ test('search explains its rules and combines mod identifiers with item text', as
     options.itemsA = [
         iron,
         quartz,
-        { ...iron, itemname: 'Gold Ingot', itemKey: 'gold', itemid: 'minecraft:gold_ingot' }
+        { ...iron, itemName: 'Gold Ingot', itemKey: 'gold', itemId: 'minecraft:gold_ingot' }
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     const search = page.getByRole('searchbox', { name: 'Search resources' });
@@ -1713,7 +1713,7 @@ test('resource quantities abbreviate from ten thousand and retain exact tooltip 
     options.itemsA = samples.map(([quantity], index) => ({
         ...iron,
         quantity,
-        itemname: `Resource ${index}`,
+        itemName: `Resource ${index}`,
         itemKey: `resource-${index}`
     }));
     await page.setViewportSize({ width: 390, height: 844 });
@@ -1746,7 +1746,7 @@ test('terminal icon tools expose tooltips and support keyboard filtering and sor
     options.itemsA = [
         iron,
         quartz,
-        { ...iron, itemname: 'Gold Ingot', itemid: 'minecraft:gold_ingot', itemKey: 'gold', quantity: 0 }
+        { ...iron, itemName: 'Gold Ingot', itemId: 'minecraft:gold_ingot', itemKey: 'gold', quantity: 0 }
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -1851,7 +1851,7 @@ test('history rows keep product names primary and scroll beneath a stationary he
         ...historyEntry,
         id: 100 + index,
         wasCancelled: index % 2 === 0,
-        finalOutput: { ...iron, itemname: '§bLong precision assembly component', quantity: 12 + index }
+        finalOutput: { ...iron, itemName: '§bLong precision assembly component', quantity: 12 + index }
     }));
     await page.goto(`${base}#/grids/${gridA}/history`);
     const first = page.getByRole('link', { name: /Long precision assembly component.*#100/ });
@@ -2024,7 +2024,7 @@ for (const appearance of ['light', 'dark']) {
             wasCancelled: index % 2 === 0,
             finalOutput: {
                 ...iron,
-                itemname: '§bPrecision assembly component with a long formatted name',
+                itemName: '§bPrecision assembly component with a long formatted name',
                 quantity: 12 + index
             }
         }));
@@ -2133,7 +2133,7 @@ test('grid settings preserve the draft and save explicitly while safely showing 
                 player,
                 kind: 'security_terminal',
                 reason: 'security_card',
-                position: { dimid: 'minecraft:overworld', x: 120, y: 64, z: -32 },
+                position: { dimensionId: 'minecraft:overworld', x: 120, y: 64, z: -32 },
                 side: 'north'
             }
         ]
@@ -2324,7 +2324,7 @@ test('settings save remains single-flight across grids and uses the returned val
                 player,
                 kind: 'controller',
                 reason: 'node_owner',
-                position: { dimid: 'minecraft:overworld', x: 1, y: 64, z: 2 },
+                position: { dimensionId: 'minecraft:overworld', x: 1, y: 64, z: 2 },
                 side: null
             }
         ]
@@ -2640,17 +2640,17 @@ test('CPU terminal hides stored-only resources, sorts explicit quantities and pr
     options.cpuDetails['cpu-a'] = {
         ...cpuWork,
         items: [
-            { ...cpuWork.items[0], itemname: 'Zinc', itemid: 'minecraft:zinc', active: 10, pending: 0, stored: 0 },
+            { ...cpuWork.items[0], itemName: 'Zinc', itemId: 'minecraft:zinc', active: 10, pending: 0, stored: 0 },
             {
                 ...cpuWork.items[0],
-                itemname: 'Alpha',
-                itemid: 'minecraft:unique_pending',
+                itemName: 'Alpha',
+                itemId: 'minecraft:unique_pending',
                 active: 0,
                 pending: 30,
                 stored: 0
             },
-            { ...cpuWork.items[0], itemname: 'Beta', itemid: 'ae2:beta', active: 0, pending: 0, stored: 20 },
-            { ...cpuWork.items[0], itemname: '§aMixed', itemid: 'other:mixed', active: 3, pending: 8, stored: 50 }
+            { ...cpuWork.items[0], itemName: 'Beta', itemId: 'ae2:beta', active: 0, pending: 0, stored: 20 },
+            { ...cpuWork.items[0], itemName: '§aMixed', itemId: 'other:mixed', active: 3, pending: 8, stored: 50 }
         ]
     };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
@@ -2712,17 +2712,17 @@ test('CPU terminal hides stored-only resources, sorts explicit quantities and pr
 test('CPU tiles show processing shares and sort by precise shares through refresh and tracking changes', async (t) => {
     const { page, options, base } = await fixture(t);
     const items = [
-        { ...cpuWork.items[0], itemname: 'Alpha', itemid: 'example:alpha', shareInCraftingTime: 0.12441 },
-        { ...cpuWork.items[0], itemname: 'Beta', itemid: 'example:beta', shareInCraftingTime: 0.12449 },
+        { ...cpuWork.items[0], itemName: 'Alpha', itemId: 'example:alpha', shareInCraftingTime: 0.12441 },
+        { ...cpuWork.items[0], itemName: 'Beta', itemId: 'example:beta', shareInCraftingTime: 0.12449 },
         {
             ...cpuWork.items[0],
-            itemname: 'Stored',
-            itemid: 'example:stored',
+            itemName: 'Stored',
+            itemId: 'example:stored',
             active: 0,
             pending: 0,
             shareInCraftingTime: 0.7511
         },
-        { ...cpuWork.items[0], itemname: 'Waiting', itemid: 'example:waiting', active: 0, shareInCraftingTime: 0 }
+        { ...cpuWork.items[0], itemName: 'Waiting', itemId: 'example:waiting', active: 0, shareInCraftingTime: 0 }
     ];
     options.cpuDetails['cpu-a'] = { ...cpuWork, items };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
@@ -2860,8 +2860,8 @@ test('CPU terminal scrolls resources within desktop and mobile viewports while c
         supportsPause: true,
         items: Array.from({ length: 120 }, (_, index) => ({
             ...cpuWork.items[0],
-            itemid: `example:resource_${index}`,
-            itemname: `Resource ${String(index).padStart(3, '0')}`
+            itemId: `example:resource_${index}`,
+            itemName: `Resource ${String(index).padStart(3, '0')}`
         }))
     };
     for (const viewport of [
@@ -2937,8 +2937,8 @@ test('CPU resource reordering does not leave a stale hover tooltip or reopen key
     const { page, options, base } = await fixture(t);
     const second = {
         ...cpuWork.items[0],
-        itemid: 'example:copper',
-        itemname: 'Copper',
+        itemId: 'example:copper',
+        itemName: 'Copper',
         active: 50,
         pending: 0,
         stored: 0
@@ -4169,7 +4169,7 @@ test('resource tooltips appear on the first hover frame and respect keyboard dis
     await tooltip.waitFor({ state: 'visible' });
     await page.keyboard.press('Escape');
     await tooltip.waitFor({ state: 'hidden' });
-    options.itemsA = [{ ...iron, itemname: 'A Iron Ingot', quantity: 3456 }, quartz];
+    options.itemsA = [{ ...iron, itemName: 'A Iron Ingot', quantity: 3456 }, quartz];
     await page.getByRole('button', { name: /Iron Ingot.*3,456/ }).waitFor();
     assert.equal(await item.evaluate((button) => button === document.activeElement), true);
     assert.equal(await tooltip.isVisible(), false, 'Reordering must not reopen a dismissed tooltip');
@@ -4201,7 +4201,7 @@ test('hovered tool keeps its tooltip when a keyboard-focused resource refreshes'
         label,
         'Polling must not replace the hovered tool tooltip with resource details'
     );
-    options.itemsA = [{ ...iron, itemname: 'A Iron Ingot', quantity: 1234 }, quartz];
+    options.itemsA = [{ ...iron, itemName: 'A Iron Ingot', quantity: 1234 }, quartz];
     await page.getByRole('button', { name: /Iron Ingot.*1,234/ }).waitFor();
     assert.equal(await item.evaluate((button) => button === document.activeElement), true);
     assert.equal(await tooltip.isVisible(), true);
@@ -4256,7 +4256,7 @@ test('resource grid stays centered and stationary when scrolling becomes unneces
     const { page, options, base } = await fixture(t);
     options.itemsA = Array.from({ length: 90 }, (_, index) => ({
         ...iron,
-        itemname: `Resource ${String(index).padStart(3, '0')}`,
+        itemName: `Resource ${String(index).padStart(3, '0')}`,
         itemKey: `key-${index}`
     }));
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -4299,7 +4299,7 @@ test('terminal scrolls resources inside the viewport while search and navigation
     await seedAutomaticRefresh(page, base, false);
     options.itemsA = Array.from({ length: 105 }, (_, index) => ({
         ...iron,
-        itemname: `Resource ${String(index).padStart(3, '0')}`,
+        itemName: `Resource ${String(index).padStart(3, '0')}`,
         itemKey: `key-${index}`
     }));
     for (const viewport of [
@@ -4353,10 +4353,10 @@ test('resource details are text, keyboard accessible and paging does not require
     const { page, options, base } = await fixture(t);
     const untrustedName = '<img src=x onerror=alert(1)> Quartz';
     options.itemsA = [
-        { ...quartz, itemname: untrustedName },
+        { ...quartz, itemName: untrustedName },
         ...Array.from({ length: 105 }, (_, index) => ({
             ...iron,
-            itemname: `Resource ${String(index).padStart(3, '0')}`,
+            itemName: `Resource ${String(index).padStart(3, '0')}`,
             itemKey: `key-${index}`
         }))
     ];
@@ -4457,7 +4457,7 @@ for (const deviceScaleFactor of [1.25, 1.5]) {
     test(`empty slot frames share occupied geometry without phantom resources at DPR ${deviceScaleFactor}`, async (t) => {
         const { page, options, base } = await fixture(t, '', { deviceScaleFactor });
         await atlasFixture(page, options);
-        options.itemsA = [iron, quartz, { ...iron, itemKey: 'gold', itemname: 'Gold Ingot' }];
+        options.itemsA = [iron, quartz, { ...iron, itemKey: 'gold', itemName: 'Gold Ingot' }];
         await page.goto(`${base}#/grids/${gridA}/items`);
         const grid = page.locator('#items');
         await grid.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -4860,8 +4860,8 @@ test('selected CPU aligns its heading search and resource viewport with the main
         supportsPause: true,
         items: Array.from({ length: 80 }, (_, index) => ({
             ...cpuWork.items[0],
-            itemid: `test:part_${index}`,
-            itemname: `Part ${String(index).padStart(3, '0')}`
+            itemId: `test:part_${index}`,
+            itemName: `Part ${String(index).padStart(3, '0')}`
         }))
     };
     const measure = (locator) =>
@@ -5123,7 +5123,7 @@ test('Home and its chooser contain long identities on mobile in light and dark a
         { key: gridB, owner: longName, cpuCount: 1, accessSources: {} }
     ];
     options.cpusByGrid = {
-        [gridA]: { running: { ...cpu, name: longName, isBusy: true, finalOutput: { ...iron, itemname: longName } } },
+        [gridA]: { running: { ...cpu, name: longName, isBusy: true, finalOutput: { ...iron, itemName: longName } } },
         [gridB]: { running: { ...cpu, isBusy: true, isPaused: true, finalOutput: null } }
     };
     for (const appearance of ['light', 'dark']) {
@@ -5394,7 +5394,7 @@ test('Network groups explicit people with collapsed source lists and keeps discl
         player,
         kind: 'security_terminal',
         reason: 'security_card',
-        position: { dimid: 'minecraft:overworld', x, y: 64, z: -32 },
+        position: { dimensionId: 'minecraft:overworld', x, y: 64, z: -32 },
         side: null
     });
     options.accessSources = {
@@ -5447,7 +5447,7 @@ test('Network details scroll long access lists under a fixed heading and keep mo
             player,
             kind: 'security_terminal',
             reason: 'security_card',
-            position: { dimid: 'minecraft:overworld', x, y: 64, z: -32 },
+            position: { dimensionId: 'minecraft:overworld', x, y: 64, z: -32 },
             side: null
         }))
     };
@@ -5540,10 +5540,7 @@ test('Network refetch publishes remote name and tracking changes with polling di
     await page.getByRole('textbox', { name: 'Network name', exact: true }).waitFor();
     assert.equal(await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).isChecked(), true);
     await page.getByRole('link', { name: 'Home', exact: true }).click();
-    assert.equal(
-        await page.locator('#home-network-panel').getByRole('heading', { name: 'Remote factory', exact: true }).count(),
-        1
-    );
+    await page.locator('#home-network-panel').getByRole('heading', { name: 'Remote factory', exact: true }).waitFor();
     await page.getByRole('link', { name: 'Terminal', exact: true }).click();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await page.getByRole('link', { name: 'Enable tracking', exact: true }).count(), 0);

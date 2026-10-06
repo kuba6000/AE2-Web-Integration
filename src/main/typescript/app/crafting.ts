@@ -1,9 +1,9 @@
-import type { Plan, CpuInfo, Item } from './api-types.js';
+import type { Plan, CpuInfo, StoredResource } from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
 import { navigateToPlan } from './router.js';
 
-export type PlanMetadata = { itemKey: string; itemname: string; quantity: number };
+export type PlanMetadata = { itemKey: string; itemName: string; quantity: number };
 export type Mutation = 'create' | 'submit' | 'delete';
 export type CraftingState = {
     status: 'idle' | 'loading' | 'calculating' | 'ready' | 'submitted' | 'deleted' | 'unavailable' | 'error';
@@ -160,7 +160,7 @@ export function createCrafting(api: Api, changed: () => void) {
             state.selectedCpu = state.cpus.find((cpu) => cpu.key === key && cpu.eligible)?.key || '';
             changed();
         },
-        async create(item: Item | null, quantity: number) {
+        async create(item: StoredResource | null, quantity: number) {
             if (
                 route.view !== 'items' ||
                 state.mutation ||
@@ -179,11 +179,11 @@ export function createCrafting(api: Api, changed: () => void) {
             state.error = null;
             changed();
             try {
-                const { jobID } = await api.createPlan(gridKey, { itemKey: item.itemKey, quantity });
-                metadata.set(`${gridKey}/${jobID}`, { itemKey: item.itemKey, itemname: item.itemname, quantity });
+                const { jobId } = await api.createPlan(gridKey, { itemKey: item.itemKey, quantity });
+                metadata.set(`${gridKey}/${jobId}`, { itemKey: item.itemKey, itemName: item.itemName, quantity });
                 finishMutation(key, null);
                 if (version !== generation) return;
-                navigateToPlan(gridKey, jobID);
+                navigateToPlan(gridKey, jobId);
             } catch (caught) {
                 const error = caught as ApiFailure;
                 finishMutation(key, isUncertain(error) ? { uncertain: 'create' } : null);

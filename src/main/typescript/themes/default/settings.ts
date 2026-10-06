@@ -117,7 +117,7 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
                 description,
                 element(
                     'code',
-                    locale.common('position', { dimension: source.position.dimid, ...source.position }) +
+                    locale.common('position', { dimension: source.position.dimensionId, ...source.position }) +
                         (source.side ? ` · ${locale.common('accessSide', { side: source.side })}` : '')
                 )
             );

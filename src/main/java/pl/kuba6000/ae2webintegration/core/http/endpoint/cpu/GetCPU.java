@@ -14,14 +14,14 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.api.JSON_CompactedItem;
-import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.CpuResource;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
@@ -102,9 +102,9 @@ public final class GetCPU extends ISyncedRequest {
         /** Whether the active job is paused; false for idle or unsupported CPUs. */
         public boolean isPaused;
         /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
-        public @Nullable JSON_Stack finalOutput;
+        public @Nullable ResourceStack finalOutput;
         /** Resource details for current work; null when the CPU is idle. */
-        public @Nullable ArrayList<JSON_CompactedItem> items;
+        public @Nullable ArrayList<CpuResource> items;
         /**
          * Whether measurements are available for the active job.
          *
@@ -154,16 +154,16 @@ public final class GetCPU extends ISyncedRequest {
         clusterData.isPaused = clusterData.isBusy && cpu instanceof IPausableCraftingCPU pausable
             && pausable.web$isPaused();
         if (clusterData.isBusy) {
-            clusterData.finalOutput = JSON_Stack.capture(grid, cpu.web$getFinalOutput());
+            clusterData.finalOutput = ResourceStack.capture(grid, cpu.web$getFinalOutput());
             AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cpu);
             clusterData.hasTrackingInfo = trackingInfo != null;
 
-            Map<IAEKey, JSON_CompactedItem> prep = new HashMap<>();
+            Map<IAEKey, CpuResource> prep = new HashMap<>();
             IStackList allItems = AE2Controller.AE2Interface.web$createStackList();
             cpu.web$getAllItems(allItems);
             for (IAEGenericStack stack : allItems.web$stacks()) {
                 IAEKey key = stack.web$what();
-                JSON_CompactedItem compactedItem = prep.computeIfAbsent(key, JSON_CompactedItem::new);
+                CpuResource compactedItem = prep.computeIfAbsent(key, CpuResource::new);
                 compactedItem.active += cpu.web$getActiveItems(key);
                 compactedItem.pending += cpu.web$getPendingItems(key);
                 compactedItem.stored += cpu.web$getStorageItems(key);
@@ -173,7 +173,7 @@ public final class GetCPU extends ISyncedRequest {
                 clusterData.timeStarted = trackingInfo.timeStarted;
                 clusterData.timeElapsed = (System.currentTimeMillis()) - clusterData.timeStarted;
                 for (IAEKey key : trackingInfo.timeSpentOn.keySet()) {
-                    JSON_CompactedItem compactedItem = prep.computeIfAbsent(key, JSON_CompactedItem::new);
+                    CpuResource compactedItem = prep.computeIfAbsent(key, CpuResource::new);
                     compactedItem.timeSpentCrafting += trackingInfo.getTimeSpentOn(key);
                     compactedItem.craftedTotal += trackingInfo.craftedTotal.getOrDefault(key, 0L);
                     compactedItem.shareInCraftingTime += trackingInfo.getShareInCraftingTime(key);
@@ -187,8 +187,8 @@ public final class GetCPU extends ISyncedRequest {
                 }
             }
 
-            for (Map.Entry<IAEKey, JSON_CompactedItem> entry : prep.entrySet()) {
-                JSON_CompactedItem row = entry.getValue();
+            for (Map.Entry<IAEKey, CpuResource> entry : prep.entrySet()) {
+                CpuResource row = entry.getValue();
                 try {
                     StableKey key = listing.remember(entry.getKey());
                     row.itemKey = key.toString();

@@ -12,7 +12,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
-import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -67,42 +67,23 @@ public final class GetTrackingHistory extends IAsyncRequest {
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull List<HistoryEntry> data, @Nullable IconMappings icons) {}
 
-    @SuppressWarnings("unused") // Gson reads the fields reflectively.
-    public static class HistoryEntry {
-
-        /**
-         * Crafting start time in Unix epoch milliseconds.
-         *
-         * @example 1700000000000
-         */
-        public long timeStarted;
-        /**
-         * Completion time in Unix epoch milliseconds.
-         *
-         * @example 1700000010000
-         */
-        public long timeDone;
-        /**
-         * Whether the crafting work was cancelled.
-         *
-         * @example false
-         */
-        public boolean wasCancelled;
-        /** Detached snapshot of the final crafting output. */
-        public final @NotNull JSON_Stack finalOutput;
-        /** Product atlas reference; null when not requested, unavailable, or absent from the pack. */
-        public @Nullable IconMappings.Reference icon;
-        /**
-         * Runtime history entry identifier.
-         *
-         * @example 12
-         */
-        public int id;
-
-        private HistoryEntry(@NotNull JSON_Stack finalOutput) {
-            this.finalOutput = finalOutput;
-        }
-    }
+    /**
+     * One completed or cancelled crafting job.
+     *
+     * @param timeStarted  crafting start time in Unix epoch milliseconds
+     * @param timeDone     completion time in Unix epoch milliseconds
+     * @param wasCancelled whether the crafting work was cancelled
+     * @param finalOutput  detached snapshot of the final crafting output
+     * @param icon         product atlas reference; null when not requested, unavailable, or absent from the pack
+     * @param id           runtime history entry identifier
+     * @example timeStarted 1700000000000
+     * @example timeDone 1700000010000
+     * @example wasCancelled false
+     * @example id 12
+     */
+    @Desugar
+    public record HistoryEntry(long timeStarted, long timeDone, boolean wasCancelled,
+        @NotNull ResourceStack finalOutput, @Nullable IconMappings.Reference icon, int id) {}
 
     @Override
     public void handle() {
@@ -117,19 +98,23 @@ public final class GetTrackingHistory extends IAsyncRequest {
 
         for (Map.Entry<Integer, AE2JobTracker.JobTrackingInfo> integerJobTrackingInfoEntry : grid.trackingInfo.trackingInfos
             .entrySet()) {
-            HistoryEntry element = new HistoryEntry(integerJobTrackingInfoEntry.getValue().finalOutput);
-            if (mappings != null && element.finalOutput.itemKey != null) {
-                element.icon = mappings
-                    .resolve(StableKey.parse(element.finalOutput.itemKey), element.finalOutput.iconBaseKey);
+            AE2JobTracker.JobTrackingInfo info = integerJobTrackingInfoEntry.getValue();
+            ResourceStack finalOutput = info.finalOutput;
+            IconMappings.Reference icon = null;
+            if (mappings != null && finalOutput.itemKey != null) {
+                icon = mappings.resolve(StableKey.parse(finalOutput.itemKey), finalOutput.iconBaseKey);
             }
-            element.id = integerJobTrackingInfoEntry.getKey();
-            element.timeStarted = integerJobTrackingInfoEntry.getValue().timeStarted;
-            element.timeDone = integerJobTrackingInfoEntry.getValue().timeDone;
-            element.wasCancelled = integerJobTrackingInfoEntry.getValue().wasCancelled;
-            jobs.add(element);
+            jobs.add(
+                new HistoryEntry(
+                    info.timeStarted,
+                    info.timeDone,
+                    info.wasCancelled,
+                    finalOutput,
+                    icon,
+                    integerJobTrackingInfoEntry.getKey()));
         }
 
-        jobs.sort((i1, i2) -> Long.compare(i2.timeDone, i1.timeDone));
+        jobs.sort((i1, i2) -> Long.compare(i2.timeDone(), i1.timeDone()));
 
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, jobs, mappings));
     }

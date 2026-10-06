@@ -1,11 +1,11 @@
-import type { HistoryEntry, HistoryDetail, IconMetadata } from './api-types.js';
+import type { HistoryEntry, CraftingHistory, IconMetadata } from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
 
 export type HistoryState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     entries: HistoryEntry[];
-    detail: HistoryDetail | null;
+    detail: CraftingHistory | null;
     icons: IconMetadata | null;
     error: string | null;
 };

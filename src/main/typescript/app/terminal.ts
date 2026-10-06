@@ -1,5 +1,5 @@
 import type { Route } from './router.js';
-import type { Grid, Item, IconMetadata, GridSettings } from './api-types.js';
+import type { Grid, StoredResource, IconMetadata, GridSettings } from './api-types.js';
 import type { createIconLoader } from './icons.js';
 import type { Preferences, createPreferences } from './preferences.js';
 import type { CraftingState } from './crafting.js';
@@ -18,7 +18,7 @@ export type TerminalData = {
     grids: Grid[];
     gridStatus: 'loading' | 'ready' | 'error';
     gridError: string | null;
-    items: Item[];
+    items: StoredResource[];
     itemIcons: IconMetadata | null;
     iconPack: { available: boolean | null; status: 'loading' | 'ready' | 'error' };
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';
@@ -26,7 +26,7 @@ export type TerminalData = {
     refreshing: boolean;
     updatedAt: number | null;
     search: string;
-    selected: Item | null;
+    selected: StoredResource | null;
     preferences: Preferences;
 };
 export type TerminalState = TerminalData & {
@@ -350,7 +350,7 @@ export function createTerminal(
             state.search = value;
             notify();
         },
-        select(item: Item | null) {
+        select(item: StoredResource | null) {
             state.selected = item;
             notify();
         },

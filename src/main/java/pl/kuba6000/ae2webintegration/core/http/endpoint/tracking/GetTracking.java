@@ -7,12 +7,12 @@ import org.jetbrains.annotations.NotNull;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
-import pl.kuba6000.ae2webintegration.core.api.JSON_CompactedJobTrackingInfo;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.CraftingHistory;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 /**
@@ -53,7 +53,7 @@ public final class GetTracking extends IAsyncRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull JSON_CompactedJobTrackingInfo data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull CraftingHistory data) {}
 
     @PathParam("entryId")
     private int id;
@@ -72,7 +72,7 @@ public final class GetTracking extends IAsyncRequest {
             return;
         }
 
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, new JSON_CompactedJobTrackingInfo(info)));
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, CraftingHistory.capture(info)));
     }
 
 }

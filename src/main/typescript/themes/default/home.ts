@@ -211,7 +211,7 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
                     group.rows.set(cpu.key, row);
                     row.link.href = cpuHref(network.grid.key, cpu.key);
                     row.name.replaceChildren(
-                        renderMinecraftText(cpu.finalOutput?.itemname || locale.common('cpuOutputUnknown'))
+                        renderMinecraftText(cpu.finalOutput?.itemName || locale.common('cpuOutputUnknown'))
                     );
                     if (cpu.finalOutput) row.name.append(` × ${locale.number(cpu.finalOutput.quantity)}`);
                     row.cpu.replaceChildren(renderMinecraftText(cpu.name || locale.common('cpuUnnamed')));

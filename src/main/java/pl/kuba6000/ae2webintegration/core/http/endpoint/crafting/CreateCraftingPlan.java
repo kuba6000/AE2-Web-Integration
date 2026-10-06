@@ -76,11 +76,11 @@ public final class CreateCraftingPlan extends ISyncedRequest {
     /**
      * Accepted crafting calculation.
      * 
-     * @param jobID identifier local to this grid and server runtime, used to poll, submit or delete the plan
-     * @example jobID 7
+     * @param jobId identifier local to this grid and server runtime, used to poll, submit or delete the plan
+     * @example jobId 7
      */
     @Desugar
-    public record PlanCreated(int jobID) {}
+    public record PlanCreated(int jobId) {}
 
     /** Parameters for a new crafting plan. */
     public static final class Input {
@@ -146,8 +146,8 @@ public final class CreateCraftingPlan extends ISyncedRequest {
         if (!allBusy) {
             Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, itemKey, input.quantity);
 
-            int jobID = gridData.addJob(job);
-            respond(HttpURLConnection.HTTP_ACCEPTED, new Response(ApiStatus.OK, new PlanCreated(jobID)));
+            int jobId = gridData.addJob(job);
+            respond(HttpURLConnection.HTTP_ACCEPTED, new Response(ApiStatus.OK, new PlanCreated(jobId)));
         } else {
             deny(ApiStatus.ALL_CPU_BUSY);
         }

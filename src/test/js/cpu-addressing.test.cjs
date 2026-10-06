@@ -72,7 +72,7 @@ test(page + ': stale CPU detail response cannot overwrite a newer selection', ()
     context.globalCPUList = { [first]: { name: 'First' }, [second]: { name: 'Second' } };
     context.selectCPU({ name: first });
     context.selectCPU({ name: second });
-    requests[1].success({ status: 'OK', data: { items: [], finalOutput: { itemname: 'Second job', quantity: 2 } } });
+    requests[1].success({ status: 'OK', data: { items: [], finalOutput: { itemName: 'Second job', quantity: 2 } } });
     const newer = elements.get('terminalCPUHeaderText').innerHTML;
     requests[0].success({ status: 'OK', data: { isBusy: false } });
     assert.equal(elements.get('terminalCPUHeaderText').innerHTML, newer);
@@ -114,7 +114,7 @@ test(page + ': a fresh plan waits for its size before choosing a default CPU', (
     const { context, requests } = terminal(page);
     context.currentJob.bytesTotal = 16;
     context.beginOrderingItem('AAAAAAAAAAAAAAAAAAAAAA');
-    requests.shift().success({ status: 'OK', data: { jobID: 13 } });
+    requests.shift().success({ status: 'OK', data: { jobId: 13 } });
     context.updateCPUList();
     requests.shift().success({ status: 'OK', data: {
         'ae2:0:1:2:3': { name: 'Small', isBusy: false, availableStorage: 64 },

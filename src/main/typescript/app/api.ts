@@ -1,4 +1,13 @@
-import type { Grid, Item, Plan, CpuInfo, CpuDetail, HistoryEntry, HistoryDetail, GridSettings } from './api-types.js';
+import type {
+    Grid,
+    StoredResource,
+    Plan,
+    CpuInfo,
+    CpuDetail,
+    HistoryEntry,
+    CraftingHistory,
+    GridSettings
+} from './api-types.js';
 import type { ResourceResponse, IconMetadata, ApplicationContext } from './api-types.js';
 
 export type ApiFailure = Error & { status?: string; data?: unknown };
@@ -8,8 +17,8 @@ export type Api = {
         signal?: AbortSignal
     ) => Promise<{ available: boolean; packId: string | null; width: number; height: number }>;
     grids: (signal?: AbortSignal) => Promise<Grid[]>;
-    items: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<Item[]>>;
-    createPlan: (gridKey: string, body: { itemKey: string; quantity: number }) => Promise<{ jobID: number }>;
+    items: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<StoredResource[]>>;
+    createPlan: (gridKey: string, body: { itemKey: string; quantity: number }) => Promise<{ jobId: number }>;
     plan: (gridKey: string, planId: string | number, signal?: AbortSignal) => Promise<Plan>;
     cpus: (
         gridKey: string,
@@ -25,7 +34,7 @@ export type Api = {
     cancelCpu: (gridKey: string, cpuKey: string) => Promise<null>;
     pauseCpu: (gridKey: string, cpuKey: string, paused: boolean) => Promise<null>;
     history: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<HistoryEntry[]>>;
-    historyEntry: (gridKey: string, entryId: string | number, signal?: AbortSignal) => Promise<HistoryDetail>;
+    historyEntry: (gridKey: string, entryId: string | number, signal?: AbortSignal) => Promise<CraftingHistory>;
     settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettings>;
     saveSettings: (gridKey: string, body: Partial<GridSettings>) => Promise<GridSettings>;
     submitPlan: (gridKey: string, planId: string | number, cpuKey: string) => Promise<null>;
