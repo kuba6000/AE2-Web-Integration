@@ -212,14 +212,32 @@ header {
     gap: 16px;
 }
 .cpu-list > .cpu-card {
+    --cpu-card-padding: clamp(14px, 2vw, 22px);
+
     display: flex;
     flex-direction: column;
     gap: 16px;
     min-width: 0;
-    padding: clamp(14px, 2vw, 22px);
+    padding: var(--cpu-card-padding);
     background: color-mix(in srgb, var(--panel) 75%, var(--slot));
     height: auto;
     overflow: visible;
+}
+.cpu-card-link {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 16px;
+    margin: calc(-1 * var(--cpu-card-padding)) calc(-1 * var(--cpu-card-padding)) -8px;
+    padding: var(--cpu-card-padding) var(--cpu-card-padding) 8px;
+    color: inherit;
+    text-decoration: none;
+}
+.cpu-card-link:hover {
+    background: rgb(255 255 255 / 6%);
+}
+.cpu-card-link:focus-visible {
+    outline-offset: -3px;
 }
 .cpu-card-heading {
     display: flex;
@@ -234,14 +252,10 @@ header {
     margin: 0;
     font-size: 18px;
     line-height: 1.4;
-}
-.cpu-card-heading a {
-    display: block;
     overflow-wrap: anywhere;
     color: var(--terminal-title);
-    text-decoration: none;
 }
-.cpu-card-heading a:hover {
+.cpu-card-link:hover h3 {
     text-decoration: underline;
 }
 .cpu-card-state {

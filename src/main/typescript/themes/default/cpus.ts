@@ -472,9 +472,8 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         const li = element('li', '', 'inset-frame cpu-card');
         const header = element('div', '', 'cpu-card-heading');
         const heading = element('h3');
-        const link = element('a');
+        const link = element('a', '', 'cpu-card-link');
         const badge = element('span', '', 'cpu-card-state');
-        heading.append(link);
         header.append(heading, badge);
         const work = element('div', '', 'cpu-card-output');
         const outputLabel = element('p', '', 'cpu-card-label');
@@ -497,8 +496,9 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         const actions = element('div');
         const notice = element('p', '', 'cpu-card-notice');
         notice.role = 'status';
-        li.append(header, work, metrics, identity, actions, notice);
-        return { li, link, badge, outputLabel, output, icon, fields, identityLabel, key, actions, notice };
+        link.append(header, work, metrics);
+        li.append(link, identity, actions, notice);
+        return { li, link, heading, badge, outputLabel, output, icon, fields, identityLabel, key, actions, notice };
     }
 
     function renderOverviewRow(entry: CpuRow, cpu: TerminalState['cpus']['cpus'][number], gridKey: string) {
@@ -506,7 +506,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         const displayName = plainMinecraftText(cpu.name).trim() ? cpu.name : t('cpuUnnamed');
         const identity = `${plainMinecraftText(displayName)} · ${cpu.key}`;
         entry.link.href = cpuHref(gridKey, cpu.key);
-        entry.link.replaceChildren(renderMinecraftText(displayName));
+        entry.heading.replaceChildren(renderMinecraftText(displayName));
         entry.link.setAttribute('aria-label', identity);
         entry.link.title = cpu.key;
         entry.li.dataset.state = cpu.isBusy ? (cpu.isPaused ? 'paused' : 'busy') : 'idle';

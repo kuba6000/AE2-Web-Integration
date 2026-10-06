@@ -4609,6 +4609,34 @@ test('CPU overview keeps names primary and exposes identity without extra detail
     assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/cpus/cpu-a`);
 });
 
+test('CPU overview opens from product, metrics and summary padding while identifier and actions stay independent', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = {
+        'cpu-a': { ...cpu, isBusy: true, supportsPause: true, finalOutput: { ...iron, quantity: 12 } }
+    };
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    const link = page.getByRole('link', { name: /Assembler.*cpu-a/ });
+    const card = page.getByRole('listitem').filter({ has: link });
+    await link.waitFor();
+    for (const open of [
+        () => card.getByText('Iron Ingot', { exact: true }).click(),
+        () => card.getByText('8,192 B', { exact: true }).click(),
+        () => card.click({ position: { x: 6, y: 6 } })
+    ]) {
+        await open();
+        await page.waitForURL(`**#/grids/${gridA}/cpus/cpu-a`, { timeout: 3000 });
+        await page.getByRole('region', { name: 'CPU resources', exact: true }).waitFor();
+        await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+        await link.waitFor();
+    }
+    await card.getByText('CPU identifier', { exact: true }).click();
+    await card.getByText('cpu-a', { exact: true }).waitFor({ state: 'visible' });
+    assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/cpus`);
+    await card.getByRole('button', { name: /Pause.*cpu-a/ }).click();
+    await card.getByRole('button', { name: /Resume.*cpu-a/ }).waitFor();
+    assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/cpus`);
+});
+
 for (const appearance of ['light', 'dark']) {
     test(`CPU overview panels keep long names and uncertain controls reachable in ${appearance} mode`, async (t) => {
         const { page, options, base } = await fixture(t);
