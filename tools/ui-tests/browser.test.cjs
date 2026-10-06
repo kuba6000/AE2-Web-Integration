@@ -2141,7 +2141,18 @@ test('grid settings preserve the draft and save explicitly while safely showing 
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('link', { name: 'Network', exact: true }).click({ timeout: 3000 });
     const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
+    const networkName = page.getByRole('textbox', { name: 'Network name', exact: true });
+    await networkName.waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    const formPosition = () =>
+        networkName.evaluate((input) => input.getBoundingClientRect().top + input.closest('[role="region"]').scrollTop);
+    const cleanPosition = await formPosition();
     await tracking.check();
+    assert.equal(await formPosition(), cleanPosition, 'An unsaved notice must not move the form content');
+    const draftStatus = page.getByRole('status').filter({ hasText: /unsaved/i });
+    await draftStatus.waitFor();
+    const saveBounds = await page.getByRole('button', { name: 'Save settings', exact: true }).boundingBox();
+    assert.ok((await draftStatus.boundingBox()).y >= saveBounds.y, 'Draft feedback belongs by the save action');
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/settings'));
     await poll(page);
     await (await refreshed).finished();

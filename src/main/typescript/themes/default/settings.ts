@@ -82,7 +82,10 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     label.append(tracking, labelText);
     const save = element('button');
     save.type = 'submit';
-    form.append(settingsTitle, nameLabel, nameHelp, label, save);
+    const actions = element('div');
+    actions.className = 'settings-actions';
+    actions.append(save);
+    form.append(settingsTitle, nameLabel, nameHelp, label, actions);
     name.addEventListener('input', () => application.settings.edit('name', name.value));
     tracking.addEventListener('change', () => application.settings.edit('isTracked', tracking.checked));
     form.addEventListener('submit', (event) => {
@@ -188,6 +191,9 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             identityLabel.textContent = t('networkIdentifier');
             identity.querySelector('code')!.textContent = route.gridKey;
             form.hidden = state.current === null;
+            if (form.hidden) {
+                if (status.parentNode !== scroll) scroll.prepend(status);
+            } else if (status.parentNode !== actions) actions.append(status);
             if (name.value !== state.draft.name) name.value = state.draft.name;
             name.disabled = state.saving || state.status !== 'ready';
             const error = networkNameError(state.draft.name);

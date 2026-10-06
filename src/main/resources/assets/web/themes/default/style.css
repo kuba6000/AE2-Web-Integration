@@ -1887,6 +1887,17 @@ footer a {
 .settings-view form input[type='text'] {
     width: 100%;
 }
+.settings-actions {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px 14px;
+    width: 100%;
+}
+.settings-actions [role='status'] {
+    overflow-wrap: anywhere;
+    color: var(--muted);
+}
 .settings-view .hint,
 .settings-view [role='status'] {
     font-size: 11px;
