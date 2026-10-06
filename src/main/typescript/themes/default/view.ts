@@ -287,12 +287,19 @@ export function mount(
 
     function resourceMetadata(item: TerminalState['items'][number], tag: 'span' | 'p') {
         const id = registryId(item);
-        const lines: HTMLElement[] = id ? [element('code', id)] : [];
-        if (item.componentCount !== null) {
-            lines.push(element(tag, `${locale.t('componentCount')}: ${locale.number(item.componentCount)}`));
-        }
+        const lines: HTMLElement[] = [];
         if (item.damage !== null) {
             lines.push(element(tag, `${locale.t('damage')}: ${locale.number(item.damage)}`));
+        }
+        if (id) lines.push(element('code', id));
+        if (item.componentCount !== null) {
+            lines.push(
+                element(
+                    tag,
+                    `${locale.t('componentCount')}: ${locale.number(item.componentCount)}`,
+                    'resource-components'
+                )
+            );
         }
         return lines;
     }

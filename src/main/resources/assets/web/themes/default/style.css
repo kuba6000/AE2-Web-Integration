@@ -1406,7 +1406,8 @@ footer a {
         3 / 3px stretch;
     font-size: 12px;
 }
-.tooltip code {
+.tooltip code,
+.tooltip .resource-components {
     color: #aaa;
 }
 @media (min-width: 1500px) {
