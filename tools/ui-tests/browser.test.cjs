@@ -5860,7 +5860,11 @@ for (const height of [844, 600]) {
         const information = page.getByRole('region', { name: 'Information', exact: true });
         await information.focus();
         await page.keyboard.press('End');
-        await page.waitForFunction((node) => node.scrollTop > 0, await information.elementHandle());
+        // Finish the End-key scroll before focus starts another browser scroll.
+        await page.waitForFunction(
+            (node) => node.scrollTop > 0 && node.scrollTop + node.clientHeight >= node.scrollHeight - 1,
+            await information.elementHandle()
+        );
         for (const control of [icons, tracking]) {
             await control.focus();
             await page.waitForFunction(
