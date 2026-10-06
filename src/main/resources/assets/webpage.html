@@ -835,7 +835,7 @@
         let sortOrder = sortingOptions.sortOrder == 1 ? -1 : 1;
         if (sortingOptions.sortBy == 0){
             globalItemList.sort(function(i1,i2){
-                return skipSpecialFormat(i1['itemName']).localeCompare(skipSpecialFormat(i2['itemName'])) * sortOrder;
+                return skipSpecialFormat(i1['displayName']).localeCompare(skipSpecialFormat(i2['displayName'])) * sortOrder;
             });
         }
         else if(sortingOptions.sortBy == 1){
@@ -845,8 +845,8 @@
         }
         else if(sortingOptions.sortBy == 2){
             globalItemList.sort(function(i1,i2){
-                let mod1 = i1['itemId'].substring(0, i1['itemId'].indexOf(':'));
-                let mod2 = i2['itemId'].substring(0, i2['itemId'].indexOf(':'));
+                const mod1 = i1.registryNamespace ?? '';
+                const mod2 = i2.registryNamespace ?? '';
                 return mod1.localeCompare(mod2) * sortOrder;
             });
         }
@@ -857,11 +857,12 @@
             return false;
         }
         if (filteringOptions.itemsType != 2
-            && (item['itemId'] == 'ae2fc:fluid_drop:0') != (filteringOptions.itemsType == 1)){
+            && item.resourceType !== 'OTHER'
+            && (item.resourceType === 'FLUID') !== (filteringOptions.itemsType == 1)){
             return false;
         }
         if (filteringOptions.searchString && filteringOptions.searchString != ""){
-            return item['itemName'].toLowerCase().indexOf(filteringOptions.searchString) !== -1;
+            return item['displayName'].toLowerCase().indexOf(filteringOptions.searchString) !== -1;
         }
         return true;
     }
@@ -1064,14 +1065,14 @@
     }
     const extraSpecialFormatChars = "klmno";
     const extraSpecialFormatResetChar = 'r';
-    function parseSpecialFormat(itemName) {
+    function parseSpecialFormat(displayName) {
         let formattedItemName = "";
         let spanCounter = 0;
         let extraSpecialCounter = 0;
-        for (let i = 0; i < itemName.length; i++){
-            char = itemName[i];
+        for (let i = 0; i < displayName.length; i++){
+            char = displayName[i];
             if (char == '§'){
-                let specialChar = itemName[++i];
+                let specialChar = displayName[++i];
                 if (extraSpecialFormatChars.indexOf(specialChar) != -1) {
                     extraSpecialCounter++;
                 }
@@ -1103,13 +1104,13 @@
         }
         return formattedItemName;
     }
-    function skipSpecialFormat(itemName) {
-        if (itemName.indexOf('§') == -1){
-            return itemName;
+    function skipSpecialFormat(displayName) {
+        if (displayName.indexOf('§') == -1){
+            return displayName;
         }
         let skippedItemName = "";
-        for (let i = 0; i < itemName.length; i++){
-            char = itemName[i];
+        for (let i = 0; i < displayName.length; i++){
+            char = displayName[i];
             if (char == '§'){
                 i++;
                 continue;
@@ -1118,14 +1119,20 @@
         }
         return skippedItemName;
     }
+    function resourceRegistryId(resource) {
+        return resource.registryNamespace !== null && resource.registryPath !== null
+            ? `${resource.registryNamespace}:${resource.registryPath}`
+            : '';
+    }
     function formatItemName(itemObject, allowNewLines=true) {
-        let itemName = '<b>' + itemObject['itemName'] + '</b>';
-        if (itemName.indexOf('§') != -1){
-            itemName = parseSpecialFormat(itemName);
+        let displayName = '<b>' + itemObject['displayName'] + '</b>';
+        if (displayName.indexOf('§') != -1){
+            displayName = parseSpecialFormat(displayName);
         }
-        let html = itemName;
-        if (settings.showItemID)
-            html += (allowNewLines ? "<br>" : "") + " " + itemObject['itemId'];
+        let html = displayName;
+        const registryId = resourceRegistryId(itemObject);
+        if (settings.showItemID && registryId)
+            html += (allowNewLines ? "<br>" : "") + " " + registryId;
         return html;
     }
     function escapeCPUText(value) {
@@ -1764,9 +1771,10 @@
             itemShareData = [];
             for(let i = 0; i < items.length; i++){
                 let item = items[i];
-                let name = skipSpecialFormat(item['itemName']);
-                if (settings.showItemID)
-                    name += " " + item['itemId'];
+                let name = skipSpecialFormat(item['displayName']);
+                const registryId = resourceRegistryId(item);
+                if (settings.showItemID && registryId)
+                    name += " " + registryId;
                 itemShareData.push({'name': name, 'timings': item['timings']});
 
                 html += "<td class='storage'>" + formatItemName(item, false) + " x" + formatNumber(item['craftedTotal']);

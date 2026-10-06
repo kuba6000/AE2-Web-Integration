@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
@@ -46,8 +47,14 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
     /**
      * Completed processing measurements for one resource identity.
      *
-     * @param itemId                      registry resource identifier
-     * @param itemName                    resource display name
+     * @param registryNamespace           native registry namespace, or null when unavailable
+     * @param componentCount              root NBT entry count on 1.7.10/1.12.2/1.20.1; effective component count on
+     *                                    1.21.1; null when
+     *                                    unsupported
+     * @param damage                      raw legacy item damage/metadata or modern damage value; null for fluids and
+     *                                    unsupported resources
+     * @param registryPath                native registry path without namespace or damage, or null when unavailable
+     * @param displayName                 resource display name
      * @param timeSpentOn                 measured processing time for this resource, in milliseconds
      * @param craftedTotal                total resource units produced during the measured work
      * @param shareInCraftingTime         fraction of summed resource processing time attributed to this resource; one
@@ -55,8 +62,8 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
      * @param shareInCraftingTimeCombined fraction of job elapsed time spent processing this resource, capped at one
      * @param craftsPerSec                produced resource units per second of measured processing time
      * @param timings                     measured processing intervals
-     * @example itemId minecraft:iron_ingot
-     * @example itemName Iron Ingot
+     * @example registryPath iron_ingot
+     * @example displayName Iron Ingot
      * @example timeSpentOn 10000
      * @example craftedTotal 64
      * @example shareInCraftingTime 1.0
@@ -64,8 +71,9 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
      * @example craftsPerSec 6.4
      */
     @Desugar
-    public record ResourceTiming(@NotNull String itemId, @NotNull String itemName, long timeSpentOn, long craftedTotal,
-        double shareInCraftingTime, double shareInCraftingTimeCombined, double craftsPerSec,
+    public record ResourceTiming(@Nullable String registryNamespace, @Nullable String registryPath,
+        @NotNull String displayName, @Nullable Integer componentCount, @Nullable Integer damage, long timeSpentOn,
+        long craftedTotal, double shareInCraftingTime, double shareInCraftingTimeCombined, double craftsPerSec,
         @NotNull ArrayList<Timing> timings) {}
 
     /**
@@ -88,8 +96,8 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
         for (Map.Entry<IAEKey, Long> entry : info.timeSpentOn.entrySet()) {
             IAEKey key = entry.getKey();
             long spent = entry.getValue();
-            String itemId = key.web$getItemID();
-            String itemName = key.web$getDisplayName();
+            String registryPath = key.web$getRegistryPath();
+            String displayName = key.web$getDisplayName();
             long craftedTotal = info.craftedTotal.get(key);
             double share = info.getShareInCraftingTime(key);
             double combinedShare = elapsed > 0 ? Math.min((double) spent / (double) elapsed, 1d) : 0d;
@@ -98,7 +106,19 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
             for (Pair<Long, Long> interval : info.itemShare.get(key)) {
                 timings.add(new Timing(interval.getKey(), interval.getValue()));
             }
-            items.add(new ResourceTiming(itemId, itemName, spent, craftedTotal, share, combinedShare, rate, timings));
+            items.add(
+                new ResourceTiming(
+                    key.web$getRegistryNamespace(),
+                    registryPath,
+                    displayName,
+                    key.web$getComponentCount(),
+                    key.web$getDamage(),
+                    spent,
+                    craftedTotal,
+                    share,
+                    combinedShare,
+                    rate,
+                    timings));
         }
         items.sort((first, second) -> Double.compare(second.shareInCraftingTime(), first.shareInCraftingTime()));
         ArrayList<ProviderTiming> interfaceShare = new ArrayList<>();

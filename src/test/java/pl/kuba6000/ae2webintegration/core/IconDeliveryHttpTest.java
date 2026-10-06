@@ -551,7 +551,9 @@ class IconDeliveryHttpTest {
                         case "web$getKey" -> variant == 0 ? exact : TestGridFixtures.key(104 + variant);
                         case "web$copyIdentity" -> proxy;
                         case "web$getResourceType" -> ResourceType.ITEM;
-                        case "web$getItemID", "web$getDisplayName" -> "product-" + variant;
+                        case "web$getRegistryNamespace" -> "example";
+                        case "web$getComponentCount", "web$getDamage" -> 0;
+                        case "web$getRegistryPath", "web$getDisplayName" -> "product-" + variant;
                         case "web$getIconBaseKey" -> {
                             normalizations.incrementAndGet();
                             if (variant == 2) throw new IllegalStateException("Unsupported base identity");
@@ -609,23 +611,19 @@ class IconDeliveryHttpTest {
         for (com.google.gson.JsonElement entry : response.getAsJsonArray("data")) {
             JsonObject row = entry.getAsJsonObject();
             JsonObject product = row.getAsJsonObject("finalOutput");
-            assertEquals(
-                4,
-                product.entrySet()
-                    .size(),
-                "Detached icon identity is not part of the stack wire contract");
+            assertFalse(product.has("iconBaseKey"), "Detached icon identity is not part of the stack wire contract");
             assertFalse(
                 product.get("itemKey")
                     .isJsonNull(),
                 "Base failure preserves exact identity");
-            boolean missing = product.get("itemId")
+            boolean missing = product.get("registryPath")
                 .getAsString()
                 .equals("product-2");
             assertEquals(
                 missing,
                 row.get("icon")
                     .isJsonNull());
-            if (product.get("itemId")
+            if (product.get("registryPath")
                 .getAsString()
                 .equals("product-1")) {
                 assertEquals(

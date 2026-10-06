@@ -1,3 +1,4 @@
+import { registryId } from './resource-metadata.js';
 import type { Translator } from '../../app/i18n.js';
 import type { CraftingHistory, ResourceTiming, ProviderTiming } from '../../app/api-types.js';
 
@@ -26,14 +27,16 @@ export function renderHistoryTimeline(snapshot: CraftingHistory, locale: Transla
     for (const [title, rows, providers] of groups) {
         container.append(element('h3', t(title)));
         for (const row of rows) {
-            const name = providers ? (row as ProviderTiming).name : (row as ResourceTiming).itemName;
+            const name = providers ? (row as ProviderTiming).name : (row as ResourceTiming).displayName;
             const section = element('section');
             section.setAttribute('aria-label', plainMinecraftText(name));
             const heading = element('h4');
             heading.append(renderMinecraftText(name));
             section.append(heading);
-            if (!providers) section.append(element('code', (row as ResourceTiming).itemId));
-            else {
+            if (!providers) {
+                const id = registryId(row as ResourceTiming);
+                if (id) section.append(element('code', id));
+            } else {
                 const provider = row as ProviderTiming;
                 section.append(
                     element('p', t('processingTotal', { duration: formatDuration(provider.timingsCombined) }))

@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -36,11 +37,41 @@ class ItemIdentityRequestTest extends GridTestScope {
         Resource fluid = new Resource("virtual:fluid_drop", 8000, true) {
 
             @Override
+            public @Nullable Integer web$getDamage() {
+                return null;
+            }
+
+            @Override
+            public @Nullable Integer web$getComponentCount() {
+                return 0;
+            }
+
+            @Override
             public @NotNull ResourceType web$getResourceType() {
                 return ResourceType.FLUID;
             }
         };
         Resource other = new Resource("addon:chemical", 42, false) {
+
+            @Override
+            public @Nullable String web$getRegistryNamespace() {
+                return null;
+            }
+
+            @Override
+            public @Nullable String web$getRegistryPath() {
+                return null;
+            }
+
+            @Override
+            public @Nullable Integer web$getComponentCount() {
+                return null;
+            }
+
+            @Override
+            public @Nullable Integer web$getDamage() {
+                return null;
+            }
 
             @Override
             public @NotNull ResourceType web$getResourceType() {
@@ -84,6 +115,13 @@ class ItemIdentityRequestTest extends GridTestScope {
             8000,
             fluidRow.get("quantity")
                 .getAsLong());
+        assertTrue(
+            fluidRow.get("damage")
+                .isJsonNull());
+        assertEquals(
+            0,
+            fluidRow.get("componentCount")
+                .getAsInt());
         JsonObject otherRow = rows.get(2)
             .getAsJsonObject();
         assertEquals(
@@ -94,6 +132,15 @@ class ItemIdentityRequestTest extends GridTestScope {
             "UNSUPPORTED",
             otherRow.get("identityStatus")
                 .getAsString());
+        assertEquals(
+            "addon:chemical",
+            otherRow.get("displayName")
+                .getAsString());
+        for (String field : new String[] { "registryNamespace", "registryPath", "componentCount", "damage" }) {
+            assertTrue(
+                otherRow.get(field)
+                    .isJsonNull());
+        }
         JsonObject recipeRow = rows.get(3)
             .getAsJsonObject();
         assertEquals(
@@ -204,7 +251,7 @@ class ItemIdentityRequestTest extends GridTestScope {
             "variantB",
             rows.get(1)
                 .getAsJsonObject()
-                .get("itemId")
+                .get("registryPath")
                 .getAsString());
     }
 
@@ -259,12 +306,26 @@ class ItemIdentityRequestTest extends GridTestScope {
             .getAsJsonObject();
         assertTrue(normal.has("itemKey"));
         assertEquals(
+            "example",
+            normal.get("registryNamespace")
+                .getAsString());
+        assertEquals(
+            2,
+            normal.get("componentCount")
+                .getAsInt());
+        assertEquals(
+            7,
+            normal.get("damage")
+                .getAsInt());
+        assertFalse(normal.has("itemId"));
+        assertFalse(normal.has("itemName"));
+        assertEquals(
             "iron",
-            normal.get("itemId")
+            normal.get("registryPath")
                 .getAsString());
         assertEquals(
             "iron",
-            normal.get("itemName")
+            normal.get("displayName")
                 .getAsString());
         assertFalse(normal.has("itemid"));
         assertFalse(normal.has("itemname"));
@@ -291,7 +352,7 @@ class ItemIdentityRequestTest extends GridTestScope {
                 .getAsLong());
         assertEquals(
             "unsupported",
-            unsupported.get("itemName")
+            unsupported.get("displayName")
                 .getAsString());
     }
 
@@ -312,7 +373,7 @@ class ItemIdentityRequestTest extends GridTestScope {
             "OK",
             run(new CreateCraftingPlan(), grid, "&itemKey=" + first + "&quantity=1").get("status")
                 .getAsString());
-        assertEquals("Aa", grid.ordered.web$getItemID());
+        assertEquals("Aa", grid.ordered.web$getRegistryPath());
     }
 
     @Test
@@ -379,7 +440,7 @@ class ItemIdentityRequestTest extends GridTestScope {
                 .getAsString());
         assertEquals(1, first.jobs);
         assertEquals(2147483648L, first.orderedAmount);
-        assertEquals("iron", first.ordered.web$getItemID());
+        assertEquals("iron", first.ordered.web$getRegistryPath());
     }
 
     @Test
@@ -458,7 +519,19 @@ class ItemIdentityRequestTest extends GridTestScope {
             return ResourceType.ITEM;
         }
 
-        public @NotNull String web$getItemID() {
+        public @Nullable String web$getRegistryNamespace() {
+            return "example";
+        }
+
+        public @Nullable Integer web$getComponentCount() {
+            return 2;
+        }
+
+        public @Nullable Integer web$getDamage() {
+            return 7;
+        }
+
+        public @Nullable String web$getRegistryPath() {
             return id;
         }
 

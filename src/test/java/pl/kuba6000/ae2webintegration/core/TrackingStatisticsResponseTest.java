@@ -85,13 +85,27 @@ class TrackingStatisticsResponseTest extends GridTestScope {
             .get(0)
             .getAsJsonObject();
         assertEquals(
-            "example:resource:7",
-            item.get("itemId")
+            "resource",
+            item.get("registryPath")
                 .getAsString());
         assertEquals(
             "Resource",
-            item.get("itemName")
+            item.get("displayName")
                 .getAsString());
+        assertEquals(
+            "example",
+            item.get("registryNamespace")
+                .getAsString());
+        assertEquals(
+            2,
+            item.get("componentCount")
+                .getAsInt());
+        assertEquals(
+            7,
+            item.get("damage")
+                .getAsInt());
+        assertFalse(item.has("itemId"));
+        assertFalse(item.has("itemName"));
         assertFalse(item.has("itemid"));
         assertFalse(item.has("itemname"));
         assertEquals(
@@ -189,13 +203,27 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 .get(0)
                 .getAsJsonObject();
             assertEquals(
-                "example:resource:7",
-                item.get("itemId")
+                "resource",
+                item.get("registryPath")
                     .getAsString());
             assertEquals(
                 "Resource",
-                item.get("itemName")
+                item.get("displayName")
                     .getAsString());
+            assertEquals(
+                "example",
+                item.get("registryNamespace")
+                    .getAsString());
+            assertEquals(
+                2,
+                item.get("componentCount")
+                    .getAsInt());
+            assertEquals(
+                7,
+                item.get("damage")
+                    .getAsInt());
+            assertFalse(item.has("itemId"));
+            assertFalse(item.has("itemName"));
             assertFalse(item.has("itemid"));
             assertFalse(item.has("itemname"));
             assertEquals(

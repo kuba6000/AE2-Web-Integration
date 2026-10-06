@@ -1,3 +1,4 @@
+import { registryId } from './resource-metadata.js';
 import type { ApiError } from '../../app/api.js';
 import type { createThemeContext } from '../../app/theme-context.js';
 import type { TerminalState, createTerminal } from '../../app/terminal.js';
@@ -65,6 +66,8 @@ export function mount(
             on: 'On',
             off: 'Off',
             resourceKinds: 'Resource types',
+            componentCount: 'Components',
+            damage: 'Damage',
             sortOrder: 'Sort order',
             ascending: 'Ascending',
             descending: 'Descending',
@@ -93,6 +96,8 @@ export function mount(
             on: 'Włączone',
             off: 'Wyłączone',
             resourceKinds: 'Rodzaje zasobów',
+            componentCount: 'Komponenty',
+            damage: 'Uszkodzenie',
             sortOrder: 'Kierunek sortowania',
             ascending: 'Rosnąco',
             descending: 'Malejąco',
@@ -280,12 +285,24 @@ export function mount(
         tooltip.style.top = `${Math.max(8, y + box.height + 24 > innerHeight ? y - box.height - 10 : y + 16)}px`;
     }
 
+    function resourceMetadata(item: TerminalState['items'][number], tag: 'span' | 'p') {
+        const id = registryId(item);
+        const lines: HTMLElement[] = id ? [element('code', id)] : [];
+        if (item.componentCount !== null) {
+            lines.push(element(tag, `${locale.t('componentCount')}: ${locale.number(item.componentCount)}`));
+        }
+        if (item.damage !== null) {
+            lines.push(element(tag, `${locale.t('damage')}: ${locale.number(item.damage)}`));
+        }
+        return lines;
+    }
+
     function showTooltip(item: TerminalState['items'][number], x: number, y: number) {
         const name = element('strong');
-        name.append(renderMinecraftText(item.itemName));
+        name.append(renderMinecraftText(item.displayName));
         tooltip.replaceChildren(
             name,
-            element('code', item.itemId),
+            ...resourceMetadata(item, 'span'),
             element('span', `${locale.common('quantity')}: ${locale.number(item.quantity)}`),
             element('span', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))
         );
@@ -375,10 +392,10 @@ export function mount(
             }
             const terms = state.search.trim().toLocaleLowerCase(language).split(/\s+/);
             allFiltered = state.items
-                .map((item) => ({ item, name: plainMinecraftText(item.itemName) }))
+                .map((item) => ({ item, name: plainMinecraftText(item.displayName) }))
                 .filter(({ item, name }) => {
-                    const text = `${name} ${item.itemId}`.toLocaleLowerCase(language);
-                    const mod = item.itemId.split(':')[0].toLocaleLowerCase(language);
+                    const text = `${name} ${registryId(item)}`.toLocaleLowerCase(language);
+                    const mod = (item.registryNamespace ?? '').toLocaleLowerCase(language);
                     return terms.every((term) =>
                         term.startsWith('@') ? mod.includes(term.slice(1)) : text.includes(term)
                     );
@@ -400,12 +417,12 @@ export function mount(
                         state.preferences.sort === 'quantity'
                             ? a.item.quantity - b.item.quantity
                             : state.preferences.sort === 'id'
-                              ? a.item.itemId.localeCompare(b.item.itemId, language)
+                              ? registryId(a.item).localeCompare(registryId(b.item), language)
                               : a.name.localeCompare(b.name, language);
                     return (
                         primary * (state.preferences.sortOrder === 'ascending' ? 1 : -1) ||
                         a.name.localeCompare(b.name, language) ||
-                        a.item.itemId.localeCompare(b.item.itemId, language) ||
+                        registryId(a.item).localeCompare(registryId(b.item), language) ||
                         (a.item.itemKey || '').localeCompare(b.item.itemKey || '')
                     );
                 })
@@ -490,12 +507,12 @@ export function mount(
         const next = allFiltered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((item, index) => {
             const row = previous.get(item.itemKey) || createItemRow(item);
             row.item = item;
-            row.name.replaceChildren(renderMinecraftText(item.itemName));
+            row.name.replaceChildren(renderMinecraftText(item.displayName));
             row.quantity.textContent = slotQuantity(item.quantity, locale);
             if (effectiveDisplay === 'icons') {
                 row.button.setAttribute(
                     'aria-label',
-                    `${plainMinecraftText(item.itemName)}, ${locale.common('quantity')}: ${locale.number(item.quantity)}, ${locale.common(item.craftable ? 'craftableYes' : 'craftableNo')}`
+                    `${plainMinecraftText(item.displayName)}, ${locale.common('quantity')}: ${locale.number(item.quantity)}, ${locale.common(item.craftable ? 'craftableYes' : 'craftableNo')}`
                 );
             } else {
                 row.button.removeAttribute('aria-label');
@@ -536,10 +553,10 @@ export function mount(
             return;
         }
         const name = element('h4');
-        name.append(renderMinecraftText(item.itemName));
+        name.append(renderMinecraftText(item.displayName));
         details.replaceChildren(
             name,
-            element('code', item.itemId),
+            ...resourceMetadata(item, 'p'),
             element('p', `${locale.common('quantity')}: ${locale.number(item.quantity)}`),
             element('p', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))
         );

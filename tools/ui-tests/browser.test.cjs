@@ -10,16 +10,22 @@ const compiledResources = path.resolve(__dirname, '../../build/generated/fronten
 const gridA = 'AAAAAAAAAAAAAAAAAAAAAA';
 const gridB = 'BBBBBBBBBBBBBBBBBBBBBA';
 const iron = {
-    itemName: 'Iron Ingot',
-    itemId: 'minecraft:iron_ingot',
+    displayName: 'Iron Ingot',
+    registryNamespace: 'minecraft',
+    registryPath: 'iron_ingot',
+    componentCount: 0,
+    damage: 0,
     quantity: 128640,
     craftable: true,
     resourceType: 'ITEM',
     itemKey: 'iron'
 };
 const quartz = {
-    itemName: 'Certus Quartz Crystal',
-    itemId: 'ae2:certus_quartz_crystal',
+    displayName: 'Certus Quartz Crystal',
+    registryNamespace: 'ae2',
+    registryPath: 'certus_quartz_crystal',
+    componentCount: 0,
+    damage: 0,
     quantity: 42,
     craftable: false,
     resourceType: 'ITEM',
@@ -31,8 +37,11 @@ const readyPlan = {
     bytesTotal: 2048,
     plan: [
         {
-            itemId: 'minecraft:iron_ingot',
-            itemName: 'Iron Ingot',
+            registryNamespace: 'minecraft',
+            registryPath: 'iron_ingot',
+            componentCount: 0,
+            damage: 0,
+            displayName: 'Iron Ingot',
             stored: 4,
             requested: 12,
             missing: 0,
@@ -61,8 +70,11 @@ const cpuWork = {
     timeElapsed: 10000,
     items: [
         {
-            itemId: 'minecraft:iron_ingot',
-            itemName: 'Iron Ingot',
+            registryNamespace: 'minecraft',
+            registryPath: 'iron_ingot',
+            componentCount: 0,
+            damage: 0,
+            displayName: 'Iron Ingot',
             active: 4,
             pending: 6,
             stored: 2,
@@ -85,8 +97,11 @@ const historyDetail = {
     ...historyEntry,
     items: [
         {
-            itemName: 'Iron Ingot',
-            itemId: 'minecraft:iron_ingot',
+            displayName: 'Iron Ingot',
+            registryNamespace: 'minecraft',
+            registryPath: 'iron_ingot',
+            componentCount: 0,
+            damage: 0,
             timeSpentOn: 5000,
             craftedTotal: 10,
             craftsPerSec: 2,
@@ -352,8 +367,9 @@ async function fixture(t, mount = '', contextOptions = {}) {
                                           : [
                                                 {
                                                     ...iron,
-                                                    itemName: 'Gold Ingot',
-                                                    itemId: 'minecraft:gold_ingot',
+                                                    displayName: 'Gold Ingot',
+                                                    registryNamespace: 'minecraft',
+                                                    registryPath: 'gold_ingot',
                                                     quantity: 5
                                                 }
                                             ]
@@ -489,7 +505,7 @@ test('unavailable icons override the saved mode and recover without losing it', 
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     await item.waitFor();
     assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
-    assert.equal(await item.getByText(iron.itemName, { exact: true }).isVisible(), true);
+    assert.equal(await item.getByText(iron.displayName, { exact: true }).isVisible(), true);
     options.pack = { available: true, packId: 'a'.repeat(64), width: 64, height: 64 };
     await poll(page);
     await page.waitForFunction(
@@ -517,7 +533,7 @@ test('pending icon discovery leaves inventory usable and failures preserve confi
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     await item.waitFor({ timeout: 1000 });
-    assert.equal(await item.getByText(iron.itemName, { exact: true }).isVisible(), true);
+    assert.equal(await item.getByText(iron.displayName, { exact: true }).isVisible(), true);
     assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
     await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage, null, {
         timeout: 4000
@@ -716,13 +732,13 @@ test('compact terminal mode persists and preserves accessible selection and craf
     const compact = await item.boundingBox();
     assert.ok(Math.abs(compact.width - compact.height) < 1, 'compact item slots are square');
     assert.ok(compact.width < original.width);
-    const nameBox = await item.getByText(iron.itemName, { exact: true }).boundingBox();
+    const nameBox = await item.getByText(iron.displayName, { exact: true }).boundingBox();
     assert.ok(!nameBox || nameBox.width <= 1, 'the item name is not permanently painted in the slot');
     await item.hover();
-    await page.getByRole('tooltip').getByText(iron.itemName, { exact: true }).waitFor();
+    await page.getByRole('tooltip').getByText(iron.displayName, { exact: true }).waitFor();
     await page.keyboard.press('Escape');
     await item.focus();
-    await page.getByRole('tooltip').getByText(iron.itemName, { exact: true }).waitFor();
+    await page.getByRole('tooltip').getByText(iron.displayName, { exact: true }).waitFor();
     await page.keyboard.press('Enter');
     assert.equal(await item.getAttribute('aria-pressed'), 'true');
     await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
@@ -739,7 +755,7 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await cpuItem.waitFor();
     const cpuBox = await cpuItem.boundingBox();
     assert.ok(cpuBox.width > cpuBox.height, 'CPU resources retain their rectangular layout');
-    assert.equal(await cpuItem.getByText(iron.itemName, { exact: true }).isVisible(), true);
+    assert.equal(await cpuItem.getByText(iron.displayName, { exact: true }).isVisible(), true);
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await mode.selectOption('both');
     await page.reload();
@@ -751,7 +767,7 @@ test('compact terminal mode persists and preserves accessible selection and craf
     assert.equal(await mode.inputValue(), 'both');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await item.waitFor();
-    assert.equal(await item.getByText(iron.itemName, { exact: true }).isVisible(), true);
+    assert.equal(await item.getByText(iron.displayName, { exact: true }).isVisible(), true);
 });
 
 // Public rendered geometry seam: responsive square slots contain sprites that stay still on hover.
@@ -761,7 +777,7 @@ for (const deviceScaleFactor of [1, 1.25, 1.5, 1.75, 2]) {
         await atlasFixture(page, options);
         options.itemsA = Array.from({ length: 80 }, (_, index) => ({
             ...iron,
-            itemName: `Resource ${index}`,
+            displayName: `Resource ${index}`,
             itemKey: `resource-${index}`,
             icon: { page: 0, x: 0, y: 0 }
         }));
@@ -841,8 +857,8 @@ test('compact terminal keeps quantities and craftability readable with missing i
     for (const width of [390, 1024]) {
         await page.setViewportSize({ width, height: 844 });
         for (const [name, amount] of [
-            [iron.itemName, '9,999'],
-            [quartz.itemName, '1E']
+            [iron.displayName, '9,999'],
+            [quartz.displayName, '1E']
         ]) {
             const item = page.getByRole('button', { name: new RegExp(name) });
             const itemBox = await item.boundingBox();
@@ -867,12 +883,12 @@ test('compact terminal keeps quantities and craftability readable with missing i
         }
     }
     await missing.focus();
-    await page.getByRole('tooltip').getByText(quartz.itemName, { exact: true }).waitFor();
+    await page.getByRole('tooltip').getByText(quartz.displayName, { exact: true }).waitFor();
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
     await page.getByRole('link', { name: 'Terminal', exact: true }).click();
     await page.getByRole('button', { name: /Iron Ingot/ }).focus();
-    await page.getByRole('tooltip').getByText(iron.itemName, { exact: true }).waitFor();
+    await page.getByRole('tooltip').getByText(iron.displayName, { exact: true }).waitFor();
     await page.keyboard.press('Enter');
     await page.getByRole('spinbutton', { name: 'Craft quantity' }).waitFor();
     await page.getByRole('searchbox', { name: 'Search resources' }).fill('quartz');
@@ -1131,7 +1147,7 @@ test('atlas pages are limited to nearby rows and malformed mappings never become
     }));
     options.itemsA = options.icons.pages.map((_, i) => ({
         ...iron,
-        itemName: `Resource ${String(i).padStart(2, '0')}`,
+        displayName: `Resource ${String(i).padStart(2, '0')}`,
         itemKey: `item-${i}`,
         icon: { page: i, x: 0, y: 0 }
     }));
@@ -1257,7 +1273,7 @@ test('visible atlas requests have bounded concurrency', async (t) => {
     }));
     options.itemsA = options.icons.pages.map((_, i) => ({
         ...iron,
-        itemName: `Resource ${i}`,
+        displayName: `Resource ${i}`,
         itemKey: `item-${i}`,
         icon: { page: i, x: 0, y: 0 }
     }));
@@ -1491,7 +1507,7 @@ test('Minecraft item formatting renders readable names and resets decorations on
     options.itemsA = [
         {
             ...iron,
-            itemName:
+            displayName:
                 'Base §aGreen §lBold §oItalic §nUnderlined §mStruck §BColorCleared §L§O§N§MHeavy §RRestored §qUnknown tail§'
         }
     ];
@@ -1520,13 +1536,20 @@ test('Minecraft item formatting renders readable names and resets decorations on
 test('Minecraft names retain formatting across crafting plans, CPU work and history', async (t) => {
     const { page, options, base } = await fixture(t);
     await seedAutomaticRefresh(page, base, false);
-    const itemName = '§aCobalt §lIngot';
-    const finalOutput = { ...iron, itemName, quantity: 12 };
-    options.itemsA = [{ ...iron, itemName }];
-    options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], itemName }] };
-    options.cpuDetails = { 'cpu-a': { ...cpuWork, finalOutput, items: [{ ...cpuWork.items[0], itemName }] } };
+    const displayName = '§aCobalt §lIngot';
+    const metadata = {
+        displayName,
+        registryNamespace: 'example',
+        registryPath: 'cobalt_ingot',
+        componentCount: 2,
+        damage: 7
+    };
+    const finalOutput = { ...iron, ...metadata, quantity: 12 };
+    options.itemsA = [{ ...iron, ...metadata }];
+    options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], ...metadata }] };
+    options.cpuDetails = { 'cpu-a': { ...cpuWork, finalOutput, items: [{ ...cpuWork.items[0], ...metadata }] } };
     options.history = [{ ...historyEntry, finalOutput }];
-    options.historyDetail = { ...historyDetail, finalOutput, items: [{ ...historyDetail.items[0], itemName }] };
+    options.historyDetail = { ...historyDetail, finalOutput, items: [{ ...historyDetail.items[0], ...metadata }] };
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Cobalt.*Ingot/ }).click();
     await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
@@ -1539,6 +1562,7 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
         assert.ok(Number((await textStyle(locator, 'Ingot')).weight) >= 700);
     }
     await assertFormatted(resource);
+    assert.equal(await resource.getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
     const planOutput = page.getByRole('paragraph').filter({ hasText: /^Cobalt Ingot × 12$/ });
     await assertFormatted(planOutput);
     assert.notEqual((await textStyle(planOutput, '× 12')).color, 'rgb(85, 255, 85)');
@@ -1552,6 +1576,8 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
         .getByRole('button', { name: /Cobalt Ingot/ });
     await cpuResource.waitFor();
     await assertFormatted(cpuResource);
+    await cpuResource.hover();
+    assert.equal(await page.getByRole('tooltip').getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
     const cpuOutput = page.getByRole('paragraph').filter({ hasText: /^[^§]*: Cobalt Ingot × 12$/ });
     await assertFormatted(cpuOutput);
     await page.getByRole('link', { name: 'History', exact: true }).click();
@@ -1561,9 +1587,11 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
     await historyLink.click();
     await resource.waitFor();
     await assertFormatted(resource);
+    assert.equal(await resource.getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
     await assertFormatted(page.getByRole('heading', { name: 'Cobalt Ingot × 12', exact: true }));
     const timeline = page.getByRole('region', { name: 'Cobalt Ingot', exact: true });
     await timeline.waitFor();
+    assert.equal(await timeline.getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
     await assertFormatted(timeline.getByRole('heading', { name: 'Cobalt Ingot', exact: true }));
 });
 
@@ -1589,8 +1617,8 @@ test('Minecraft classic palette, obfuscation and literal HTML remain safe and re
     ];
     const literal = '<img src=x onerror=alert(1)> & <script>alert(2)</script>';
     options.itemsA = [
-        { ...iron, itemName: colors.map(([code]) => `§${code}Color${code}`).join(' ') },
-        { ...quartz, itemName: `§kSecret Words §aVisible §KMasked §rPlain §qUnknown tail§ ${literal}` }
+        { ...iron, displayName: colors.map(([code]) => `§${code}Color${code}`).join(' ') },
+        { ...quartz, displayName: `§kSecret Words §aVisible §KMasked §rPlain §qUnknown tail§ ${literal}` }
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     const palette = page.getByRole('button', { name: /^Color0/ });
@@ -1611,8 +1639,8 @@ test('Minecraft classic palette, obfuscation and literal HTML remain safe and re
 test('Minecraft names search and sort as continuous plain text and keep tooltip formatting through polling', async (t) => {
     const { page, options, base } = await fixture(t);
     options.itemsA = [
-        { ...iron, itemName: '§fAl§apha' },
-        { ...quartz, itemName: '§0Beta §qliteral' }
+        { ...iron, displayName: '§fAl§apha' },
+        { ...quartz, displayName: '§0Beta §qliteral' }
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     const alpha = page.getByRole('button', { name: /^Alpha/ });
@@ -1638,7 +1666,7 @@ test('Minecraft names search and sort as continuous plain text and keep tooltip 
     const tooltip = page.getByRole('tooltip');
     await tooltip.waitFor({ state: 'visible' });
     assert.equal((await textStyle(tooltip, 'pha')).color, 'rgb(85, 255, 85)');
-    options.itemsA = [{ ...iron, itemName: '§cAlpha', quantity: 8765 }, options.itemsA[1]];
+    options.itemsA = [{ ...iron, displayName: '§cAlpha', quantity: 8765 }, options.itemsA[1]];
     await page.getByRole('button', { name: /^Alpha.*8,765/ }).waitFor();
     assert.equal(await tooltip.isVisible(), true);
     assert.match(await tooltip.innerText(), /8,765/);
@@ -1655,7 +1683,13 @@ test('search explains its rules and combines mod identifiers with item text', as
     options.itemsA = [
         iron,
         quartz,
-        { ...iron, itemName: 'Gold Ingot', itemKey: 'gold', itemId: 'minecraft:gold_ingot' }
+        {
+            ...iron,
+            displayName: 'Gold Ingot',
+            itemKey: 'gold',
+            registryNamespace: 'minecraft',
+            registryPath: 'gold_ingot'
+        }
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     const search = page.getByRole('searchbox', { name: 'Search resources' });
@@ -1716,7 +1750,7 @@ test('resource quantities abbreviate from ten thousand and retain exact tooltip 
     options.itemsA = samples.map(([quantity], index) => ({
         ...iron,
         quantity,
-        itemName: `Resource ${index}`,
+        displayName: `Resource ${index}`,
         itemKey: `resource-${index}`
     }));
     await page.setViewportSize({ width: 390, height: 844 });
@@ -1747,7 +1781,7 @@ test('resource quantities abbreviate from ten thousand and retain exact tooltip 
 test('terminal availability cycles through all stored and craftable with current tooltips', async (t) => {
     const { page, options, base } = await fixture(t);
     await seedAutomaticRefresh(page, base, false);
-    options.itemsA = [iron, quartz, { ...iron, itemName: 'Gold Ingot', itemKey: 'gold', quantity: 0 }];
+    options.itemsA = [iron, quartz, { ...iron, displayName: 'Gold Ingot', itemKey: 'gold', quantity: 0 }];
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     const availability = page.getByRole('button', { name: /^Availability:/ });
@@ -1773,13 +1807,150 @@ test('terminal availability cycles through all stored and craftable with current
     assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, 1);
 });
 
+test('terminal displays structured registry and optional resource metadata without inventing values', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    options.itemsA = [
+        {
+            displayName: 'Damaged Tool',
+            registryNamespace: 'example',
+            registryPath: 'tool',
+            componentCount: 3,
+            damage: 7,
+            quantity: 2,
+            craftable: false,
+            resourceType: 'ITEM',
+            itemKey: 'tool'
+        },
+        {
+            displayName: 'Plain Tool',
+            registryNamespace: 'example',
+            registryPath: 'plain',
+            componentCount: 0,
+            damage: 0,
+            quantity: 1,
+            craftable: false,
+            resourceType: 'ITEM',
+            itemKey: 'plain'
+        },
+        {
+            displayName: 'Water',
+            registryNamespace: 'minecraft',
+            registryPath: 'water',
+            componentCount: 0,
+            damage: null,
+            quantity: 1000,
+            craftable: false,
+            resourceType: 'FLUID',
+            itemKey: 'water'
+        },
+        {
+            displayName: 'Essentia',
+            registryNamespace: null,
+            registryPath: null,
+            componentCount: null,
+            damage: null,
+            quantity: 12,
+            craftable: false,
+            resourceType: 'OTHER',
+            itemKey: null
+        }
+    ];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const tool = page.getByRole('button', { name: /Damaged Tool/ });
+    await tool.waitFor({ timeout: 3000 });
+    await tool.hover();
+    const tooltip = page.getByRole('tooltip');
+    assert.equal(await tooltip.getByText('example:tool', { exact: true }).isVisible(), true);
+    assert.match(await tooltip.innerText(), /Components:\s*3/);
+    assert.match(await tooltip.innerText(), /Damage:\s*7/);
+    await tool.click();
+    const details = page.locator('#details');
+    assert.equal(await details.getByText('example:tool', { exact: true }).isVisible(), true);
+    assert.match(await details.innerText(), /Components:\s*3/);
+    assert.match(await details.innerText(), /Damage:\s*7/);
+    await page.getByRole('button', { name: /Plain Tool/ }).click();
+    assert.match(await details.innerText(), /Components:\s*0/);
+    assert.match(await details.innerText(), /Damage:\s*0/);
+    await page.getByRole('button', { name: /Water/ }).click();
+    assert.match(await details.innerText(), /Components:\s*0/);
+    assert.doesNotMatch(await details.innerText(), /Damage:/);
+    await page.getByRole('button', { name: /Essentia/ }).click();
+    assert.doesNotMatch(await details.innerText(), /Components:|Damage:|null|undefined/);
+    assert.equal(await details.locator('code').count(), 0);
+    const search = page.getByRole('searchbox', { name: 'Search resources' });
+    const names = () => page.locator('#items strong').allTextContents();
+    await search.fill('@example');
+    assert.deepEqual(await names(), ['Damaged Tool', 'Plain Tool']);
+    await search.fill('example:tool');
+    assert.deepEqual(await names(), ['Damaged Tool']);
+    await search.fill('@tool');
+    assert.deepEqual(await names(), [], 'Mod search uses the namespace, not the display name or registry path');
+    await search.fill('essentia');
+    assert.deepEqual(await names(), ['Essentia']);
+    await search.fill('');
+    const sort = page.getByRole('button', { name: /^Sort by:/ });
+    await sort.click();
+    await sort.click();
+    assert.deepEqual(await names(), ['Essentia', 'Plain Tool', 'Damaged Tool', 'Water']);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Plain Tool/ }).click();
+    assert.match(await details.innerText(), /Komponenty:\s*0/);
+    assert.match(await details.innerText(), /Uszkodzenie:\s*0/);
+});
+
+test('CPU work, plans and history retain resources with unavailable registry metadata', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    const metadata = {
+        displayName: 'Essentia',
+        registryNamespace: null,
+        registryPath: null,
+        componentCount: null,
+        damage: null
+    };
+    const finalOutput = { ...metadata, itemKey: null, quantity: 12 };
+    options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], ...metadata }] };
+    options.cpuDetails = { 'cpu-a': { ...cpuWork, finalOutput, items: [{ ...cpuWork.items[0], ...metadata }] } };
+    options.history = [{ ...historyEntry, finalOutput }];
+    options.historyDetail = { ...historyDetail, finalOutput, items: [{ ...historyDetail.items[0], ...metadata }] };
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    const resource = page.getByRole('cell', { name: 'Essentia', exact: true });
+    await resource.waitFor();
+    assert.equal(await resource.locator('code').count(), 0);
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const cpuResource = page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Essentia/ });
+    await cpuResource.hover();
+    const tooltip = page.getByRole('tooltip');
+    assert.equal(await tooltip.getByText('Essentia', { exact: true }).isVisible(), true);
+    assert.equal(await tooltip.locator('code').count(), 0);
+    assert.doesNotMatch(await tooltip.innerText(), /null|undefined/);
+    const search = page.getByRole('searchbox', { name: 'Search CPU resources' });
+    await search.fill('@example');
+    assert.equal(await cpuResource.count(), 0);
+    await search.fill('essentia');
+    await cpuResource.waitFor();
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    await resource.waitFor();
+    assert.equal(await resource.locator('code').count(), 0);
+    await page.getByRole('heading', { name: 'Essentia × 12', exact: true }).waitFor();
+    const timeline = page.getByRole('region', { name: 'Essentia', exact: true });
+    await timeline.waitFor();
+    assert.equal(await timeline.locator('code').count(), 0);
+    assert.doesNotMatch(await timeline.innerText(), /null|undefined/);
+});
+
 test('terminal sort criterion cycles independently of order and persists both', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     await seedAutomaticRefresh(page, base, false);
     options.itemsA = [
-        { ...iron, itemName: 'Alpha', itemId: 'test:z', itemKey: 'a', quantity: 20 },
-        { ...iron, itemName: 'Beta', itemId: 'test:y', itemKey: 'b', quantity: 30 },
-        { ...iron, itemName: 'Gamma', itemId: 'test:x', itemKey: 'c', quantity: 10 }
+        { ...iron, displayName: 'Alpha', registryNamespace: 'test', registryPath: 'z', itemKey: 'a', quantity: 20 },
+        { ...iron, displayName: 'Beta', registryNamespace: 'test', registryPath: 'y', itemKey: 'b', quantity: 30 },
+        { ...iron, displayName: 'Gamma', registryNamespace: 'test', registryPath: 'x', itemKey: 'c', quantity: 10 }
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Alpha/ }).waitFor();
@@ -1812,9 +1983,35 @@ test('terminal item and fluid switches intersect filters and preserve other reso
     options.itemsA = [
         iron,
         quartz,
-        { ...iron, itemName: 'Water', itemId: 'minecraft:water', itemKey: 'water', resourceType: 'FLUID' },
-        { ...iron, itemName: 'Steam', itemId: 'addon:steam', itemKey: 'steam', resourceType: 'FLUID', quantity: 0 },
-        { ...iron, itemName: 'Energy', itemId: 'addon:energy', itemKey: 'energy', resourceType: 'OTHER' }
+        {
+            ...iron,
+            displayName: 'Water',
+            registryNamespace: 'minecraft',
+            registryPath: 'water',
+            itemKey: 'water',
+            resourceType: 'FLUID',
+            damage: null
+        },
+        {
+            ...iron,
+            displayName: 'Steam',
+            registryNamespace: 'addon',
+            registryPath: 'steam',
+            itemKey: 'steam',
+            resourceType: 'FLUID',
+            damage: null,
+            quantity: 0
+        },
+        {
+            ...iron,
+            displayName: 'Energy',
+            registryNamespace: 'addon',
+            registryPath: 'energy',
+            itemKey: 'energy',
+            resourceType: 'OTHER',
+            componentCount: null,
+            damage: null
+        }
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -1876,7 +2073,7 @@ test('terminal control focus and dismissed tooltips survive polling and filterin
     const { page, options, base } = await fixture(t);
     options.itemsA = Array.from({ length: 102 }, (_, index) => ({
         ...iron,
-        itemName: `Item ${String(index).padStart(3, '0')}`,
+        displayName: `Item ${String(index).padStart(3, '0')}`,
         itemKey: `item-${index}`,
         quantity: index
     }));
@@ -1953,7 +2150,7 @@ test('history rows keep product names primary and scroll beneath a stationary he
         ...historyEntry,
         id: 100 + index,
         wasCancelled: index % 2 === 0,
-        finalOutput: { ...iron, itemName: '§bLong precision assembly component', quantity: 12 + index }
+        finalOutput: { ...iron, displayName: '§bLong precision assembly component', quantity: 12 + index }
     }));
     await page.goto(`${base}#/grids/${gridA}/history`);
     const first = page.getByRole('link', { name: /Long precision assembly component.*#100/ });
@@ -2126,7 +2323,7 @@ for (const appearance of ['light', 'dark']) {
             wasCancelled: index % 2 === 0,
             finalOutput: {
                 ...iron,
-                itemName: '§bPrecision assembly component with a long formatted name',
+                displayName: '§bPrecision assembly component with a long formatted name',
                 quantity: 12 + index
             }
         }));
@@ -2742,17 +2939,42 @@ test('CPU terminal hides stored-only resources, sorts explicit quantities and pr
     options.cpuDetails['cpu-a'] = {
         ...cpuWork,
         items: [
-            { ...cpuWork.items[0], itemName: 'Zinc', itemId: 'minecraft:zinc', active: 10, pending: 0, stored: 0 },
             {
                 ...cpuWork.items[0],
-                itemName: 'Alpha',
-                itemId: 'minecraft:unique_pending',
+                displayName: 'Zinc',
+                registryNamespace: 'minecraft',
+                registryPath: 'zinc',
+                active: 10,
+                pending: 0,
+                stored: 0
+            },
+            {
+                ...cpuWork.items[0],
+                displayName: 'Alpha',
+                registryNamespace: 'minecraft',
+                registryPath: 'unique_pending',
                 active: 0,
                 pending: 30,
                 stored: 0
             },
-            { ...cpuWork.items[0], itemName: 'Beta', itemId: 'ae2:beta', active: 0, pending: 0, stored: 20 },
-            { ...cpuWork.items[0], itemName: '§aMixed', itemId: 'other:mixed', active: 3, pending: 8, stored: 50 }
+            {
+                ...cpuWork.items[0],
+                displayName: 'Beta',
+                registryNamespace: 'ae2',
+                registryPath: 'beta',
+                active: 0,
+                pending: 0,
+                stored: 20
+            },
+            {
+                ...cpuWork.items[0],
+                displayName: '§aMixed',
+                registryNamespace: 'other',
+                registryPath: 'mixed',
+                active: 3,
+                pending: 8,
+                stored: 50
+            }
         ]
     };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
@@ -2814,17 +3036,37 @@ test('CPU terminal hides stored-only resources, sorts explicit quantities and pr
 test('CPU tiles show processing shares and sort by precise shares through refresh and tracking changes', async (t) => {
     const { page, options, base } = await fixture(t);
     const items = [
-        { ...cpuWork.items[0], itemName: 'Alpha', itemId: 'example:alpha', shareInCraftingTime: 0.12441 },
-        { ...cpuWork.items[0], itemName: 'Beta', itemId: 'example:beta', shareInCraftingTime: 0.12449 },
         {
             ...cpuWork.items[0],
-            itemName: 'Stored',
-            itemId: 'example:stored',
+            displayName: 'Alpha',
+            registryNamespace: 'example',
+            registryPath: 'alpha',
+            shareInCraftingTime: 0.12441
+        },
+        {
+            ...cpuWork.items[0],
+            displayName: 'Beta',
+            registryNamespace: 'example',
+            registryPath: 'beta',
+            shareInCraftingTime: 0.12449
+        },
+        {
+            ...cpuWork.items[0],
+            displayName: 'Stored',
+            registryNamespace: 'example',
+            registryPath: 'stored',
             active: 0,
             pending: 0,
             shareInCraftingTime: 0.7511
         },
-        { ...cpuWork.items[0], itemName: 'Waiting', itemId: 'example:waiting', active: 0, shareInCraftingTime: 0 }
+        {
+            ...cpuWork.items[0],
+            displayName: 'Waiting',
+            registryNamespace: 'example',
+            registryPath: 'waiting',
+            active: 0,
+            shareInCraftingTime: 0
+        }
     ];
     options.cpuDetails['cpu-a'] = { ...cpuWork, items };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
@@ -2962,8 +3204,9 @@ test('CPU terminal scrolls resources within desktop and mobile viewports while c
         supportsPause: true,
         items: Array.from({ length: 120 }, (_, index) => ({
             ...cpuWork.items[0],
-            itemId: `example:resource_${index}`,
-            itemName: `Resource ${String(index).padStart(3, '0')}`
+            registryNamespace: 'example',
+            registryPath: `resource_${index}`,
+            displayName: `Resource ${String(index).padStart(3, '0')}`
         }))
     };
     for (const viewport of [
@@ -3039,8 +3282,9 @@ test('CPU resource reordering does not leave a stale hover tooltip or reopen key
     const { page, options, base } = await fixture(t);
     const second = {
         ...cpuWork.items[0],
-        itemId: 'example:copper',
-        itemName: 'Copper',
+        registryNamespace: 'example',
+        registryPath: 'copper',
+        displayName: 'Copper',
         active: 50,
         pending: 0,
         stored: 0
@@ -4270,7 +4514,7 @@ test('resource tooltips appear on the first hover frame and respect keyboard dis
     await tooltip.waitFor({ state: 'visible' });
     await page.keyboard.press('Escape');
     await tooltip.waitFor({ state: 'hidden' });
-    options.itemsA = [{ ...iron, itemName: 'A Iron Ingot', quantity: 3456 }, quartz];
+    options.itemsA = [{ ...iron, displayName: 'A Iron Ingot', quantity: 3456 }, quartz];
     await page.getByRole('button', { name: /Iron Ingot.*3,456/ }).waitFor();
     assert.equal(await item.evaluate((button) => button === document.activeElement), true);
     assert.equal(await tooltip.isVisible(), false, 'Reordering must not reopen a dismissed tooltip');
@@ -4302,7 +4546,7 @@ test('hovered tool keeps its tooltip when a keyboard-focused resource refreshes'
         label,
         'Polling must not replace the hovered tool tooltip with resource details'
     );
-    options.itemsA = [{ ...iron, itemName: 'A Iron Ingot', quantity: 1234 }, quartz];
+    options.itemsA = [{ ...iron, displayName: 'A Iron Ingot', quantity: 1234 }, quartz];
     await page.getByRole('button', { name: /Iron Ingot.*1,234/ }).waitFor();
     assert.equal(await item.evaluate((button) => button === document.activeElement), true);
     assert.equal(await tooltip.isVisible(), true);
@@ -4357,7 +4601,7 @@ test('resource grid stays centered and stationary when scrolling becomes unneces
     const { page, options, base } = await fixture(t);
     options.itemsA = Array.from({ length: 90 }, (_, index) => ({
         ...iron,
-        itemName: `Resource ${String(index).padStart(3, '0')}`,
+        displayName: `Resource ${String(index).padStart(3, '0')}`,
         itemKey: `key-${index}`
     }));
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -4400,7 +4644,7 @@ test('terminal scrolls resources inside the viewport while search and navigation
     await seedAutomaticRefresh(page, base, false);
     options.itemsA = Array.from({ length: 105 }, (_, index) => ({
         ...iron,
-        itemName: `Resource ${String(index).padStart(3, '0')}`,
+        displayName: `Resource ${String(index).padStart(3, '0')}`,
         itemKey: `key-${index}`
     }));
     for (const viewport of [
@@ -4454,10 +4698,10 @@ test('resource details are text, keyboard accessible and paging does not require
     const { page, options, base } = await fixture(t);
     const untrustedName = '<img src=x onerror=alert(1)> Quartz';
     options.itemsA = [
-        { ...quartz, itemName: untrustedName },
+        { ...quartz, displayName: untrustedName },
         ...Array.from({ length: 105 }, (_, index) => ({
             ...iron,
-            itemName: `Resource ${String(index).padStart(3, '0')}`,
+            displayName: `Resource ${String(index).padStart(3, '0')}`,
             itemKey: `key-${index}`
         }))
     ];
@@ -4558,7 +4802,7 @@ for (const deviceScaleFactor of [1.25, 1.5]) {
     test(`empty slot frames share occupied geometry without phantom resources at DPR ${deviceScaleFactor}`, async (t) => {
         const { page, options, base } = await fixture(t, '', { deviceScaleFactor });
         await atlasFixture(page, options);
-        options.itemsA = [iron, quartz, { ...iron, itemKey: 'gold', itemName: 'Gold Ingot' }];
+        options.itemsA = [iron, quartz, { ...iron, itemKey: 'gold', displayName: 'Gold Ingot' }];
         await page.goto(`${base}#/grids/${gridA}/items`);
         const grid = page.locator('#items');
         await grid.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -4961,8 +5205,9 @@ test('selected CPU aligns its heading search and resource viewport with the main
         supportsPause: true,
         items: Array.from({ length: 80 }, (_, index) => ({
             ...cpuWork.items[0],
-            itemId: `test:part_${index}`,
-            itemName: `Part ${String(index).padStart(3, '0')}`
+            registryNamespace: 'test',
+            registryPath: `part_${index}`,
+            displayName: `Part ${String(index).padStart(3, '0')}`
         }))
     };
     const measure = (locator) =>
@@ -5224,7 +5469,7 @@ test('Home and its chooser contain long identities on mobile in light and dark a
         { key: gridB, owner: longName, cpuCount: 1, accessSources: {} }
     ];
     options.cpusByGrid = {
-        [gridA]: { running: { ...cpu, name: longName, isBusy: true, finalOutput: { ...iron, itemName: longName } } },
+        [gridA]: { running: { ...cpu, name: longName, isBusy: true, finalOutput: { ...iron, displayName: longName } } },
         [gridB]: { running: { ...cpu, isBusy: true, isPaused: true, finalOutput: null } }
     };
     for (const appearance of ['light', 'dark']) {

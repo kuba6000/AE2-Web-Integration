@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.http.dto;
 
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
@@ -18,17 +19,23 @@ public class CpuResource {
     public @Nullable IconMappings.Reference icon;
 
     /**
-     * Registry resource identifier.
+     * Native registry path without namespace or damage; null when unavailable.
      *
-     * @example minecraft:iron_ingot
+     * @example iron_ingot
      */
-    public final String itemId;
+    public final @Nullable String registryPath;
+    /** Native registry namespace, or null when unavailable. */
+    public final @Nullable String registryNamespace;
+    /** Root NBT entry count on 1.7.10/1.12.2/1.20.1; effective component count on 1.21.1. Null when unsupported. */
+    public final @Nullable Integer componentCount;
+    /** Raw legacy item damage/metadata or modern damage value; null for fluids and unsupported resources. */
+    public final @Nullable Integer damage;
     /**
      * Resource display name.
      *
      * @example Iron Ingot
      */
-    public final String itemName;
+    public final @NotNull String displayName;
     /**
      * Resource units currently being processed.
      *
@@ -80,8 +87,11 @@ public class CpuResource {
     public double craftsPerSec = 0d;
 
     public CpuResource(IAEKey key) {
-        this.itemId = key.web$getItemID();
-        this.itemName = key.web$getDisplayName();
+        this.registryNamespace = key.web$getRegistryNamespace();
+        this.registryPath = key.web$getRegistryPath();
+        this.componentCount = key.web$getComponentCount();
+        this.damage = key.web$getDamage();
+        this.displayName = key.web$getDisplayName();
     }
 
 }

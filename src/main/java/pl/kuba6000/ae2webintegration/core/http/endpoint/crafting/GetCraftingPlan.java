@@ -88,16 +88,23 @@ public final class GetCraftingPlan extends ISyncedRequest {
         /**
          * One resource required by the calculated crafting plan.
          *
-         * @param itemId      registry resource identifier
-         * @param itemName    resource display name
-         * @param stored      resource units taken from network storage
-         * @param requested   resource units to be crafted
-         * @param missing     resource units missing from a simulation
-         * @param steps       number of crafting steps; zero when the platform cannot report it
-         * @param usedPercent fraction of currently available stored units consumed by a storage-only row; zero when the
-         *                    row requests crafting, has missing units or has no available storage
-         * @example itemId minecraft:iron_ingot
-         * @example itemName Iron Ingot
+         * @param registryNamespace native registry namespace, or null when unavailable
+         * @param componentCount    root NBT entry count on 1.7.10/1.12.2/1.20.1; effective component count on 1.21.1;
+         *                          null when
+         *                          unsupported
+         * @param damage            raw legacy item damage/metadata or modern damage value; null for fluids and
+         *                          unsupported resources
+         * @param registryPath      native registry path without namespace or damage, or null when unavailable
+         * @param displayName       resource display name
+         * @param stored            resource units taken from network storage
+         * @param requested         resource units to be crafted
+         * @param missing           resource units missing from a simulation
+         * @param steps             number of crafting steps; zero when the platform cannot report it
+         * @param usedPercent       fraction of currently available stored units consumed by a storage-only row; zero
+         *                          when the
+         *                          row requests crafting, has missing units or has no available storage
+         * @example registryPath iron_ingot
+         * @example displayName Iron Ingot
          * @example stored 0
          * @example requested 64
          * @example missing 0
@@ -105,8 +112,9 @@ public final class GetCraftingPlan extends ISyncedRequest {
          * @example usedPercent 0.0
          */
         @Desugar
-        public record JobItem(@NotNull String itemId, @NotNull String itemName, long stored, long requested,
-            long missing, long steps, double usedPercent) {}
+        public record JobItem(@Nullable String registryNamespace, @Nullable String registryPath,
+            @NotNull String displayName, @Nullable Integer componentCount, @Nullable Integer damage, long stored,
+            long requested, long missing, long steps, double usedPercent) {}
 
     }
 
@@ -147,8 +155,8 @@ public final class GetCraftingPlan extends ISyncedRequest {
                 jobData.plan = new ArrayList<>();
                 for (ICraftingPlanSummaryEntry entry : summary.web$getEntries()) {
                     IAEKey key = entry.web$getWhat();
-                    String itemId = key.web$getItemID();
-                    String itemName = key.web$getDisplayName();
+                    String registryPath = key.web$getRegistryPath();
+                    String displayName = key.web$getDisplayName();
                     long requested = entry.web$getCraftAmount();
                     long steps = entry.web$getCraftSteps();
                     long stored = entry.web$getStoredAmount();
@@ -160,8 +168,18 @@ public final class GetCraftingPlan extends ISyncedRequest {
                             usedPercent = (double) stored / (double) available;
                         }
                     }
-                    jobData.plan
-                        .add(new PlanData.JobItem(itemId, itemName, stored, requested, missing, steps, usedPercent));
+                    jobData.plan.add(
+                        new PlanData.JobItem(
+                            key.web$getRegistryNamespace(),
+                            registryPath,
+                            displayName,
+                            key.web$getComponentCount(),
+                            key.web$getDamage(),
+                            stored,
+                            requested,
+                            missing,
+                            steps,
+                            usedPercent));
                 }
                 jobData.plan.sort((i1, i2) -> {
                     if (i1.missing() > 0 && i2.missing() > 0) return Long.compare(i2.missing(), i1.missing());

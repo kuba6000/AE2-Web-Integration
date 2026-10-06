@@ -1,3 +1,4 @@
+import { registryId } from './resource-metadata.js';
 import type { StoredResource } from '../../app/api-types.js';
 import type { TerminalState, createTerminal } from '../../app/terminal.js';
 import type { Translator as Locale } from '../../app/i18n.js';
@@ -99,7 +100,7 @@ export function createCraftingView(root: HTMLElement, application: Terminal) {
             title.textContent = t('craftingPlan');
             output.replaceChildren();
             if (state.metadata)
-                output.append(renderMinecraftText(state.metadata.itemName), ` × ${number(state.metadata.quantity)}`);
+                output.append(renderMinecraftText(state.metadata.displayName), ` × ${number(state.metadata.quantity)}`);
             status.textContent = state.uncertain
                 ? t(state.uncertain === 'delete' ? 'uncertainDelete' : 'uncertainSubmit')
                 : state.error
@@ -128,7 +129,10 @@ export function createCraftingView(root: HTMLElement, application: Terminal) {
                     ...(state.plan?.plan || []).map((row) => {
                         const tr = element('tr');
                         const name = element('td');
-                        name.append(renderMinecraftText(row.itemName), element('code', row.itemId));
+                        name.append(
+                            renderMinecraftText(row.displayName),
+                            ...(registryId(row) ? [element('code', registryId(row))] : [])
+                        );
                         tr.append(name);
                         for (const value of [row.stored, row.requested, row.missing, row.steps])
                             tr.append(element('td', number(value)));

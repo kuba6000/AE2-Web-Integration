@@ -113,8 +113,8 @@ public final class GetItems extends ISyncedRequest {
         ItemIdentityRegistry.Listing listing, @Nullable IconMappings mappings) {
         IAEKey key = stack.web$what();
 
-        String itemId = key.web$getItemID();
-        String itemName = key.web$getDisplayName();
+        String registryPath = key.web$getRegistryPath();
+        String displayName = key.web$getDisplayName();
         long quantity = stack.web$amount();
         boolean craftable = key.web$isCraftable(grid);
         String itemKey = null;
@@ -136,8 +136,11 @@ public final class GetItems extends ISyncedRequest {
 
         items.add(
             new StoredResource(
-                itemId,
-                itemName,
+                key.web$getRegistryNamespace(),
+                registryPath,
+                displayName,
+                key.web$getComponentCount(),
+                key.web$getDamage(),
                 key.web$getResourceType(),
                 quantity,
                 craftable,

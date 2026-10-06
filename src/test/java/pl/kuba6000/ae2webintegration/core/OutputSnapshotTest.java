@@ -54,17 +54,31 @@ class OutputSnapshotTest extends GridTestScope {
                 .toJson(snapshot))
             .getAsJsonObject();
         assertEquals(
-            "example:resource:7",
-            json.get("itemId")
+            "example",
+            json.get("registryNamespace")
                 .getAsString());
         assertEquals(
             "Resource",
-            json.get("itemName")
+            json.get("displayName")
                 .getAsString());
         assertEquals(
             5,
             json.get("quantity")
                 .getAsLong());
+        assertEquals(
+            "resource",
+            json.get("registryPath")
+                .getAsString());
+        assertEquals(
+            7,
+            json.get("damage")
+                .getAsInt());
+        assertEquals(
+            2,
+            json.get("componentCount")
+                .getAsInt());
+        assertFalse(json.has("itemId"));
+        assertFalse(json.has("itemName"));
         assertFalse(json.has("hashcode"));
         assertFalse(json.has("itemid"));
         assertFalse(json.has("itemname"));
@@ -94,7 +108,7 @@ class OutputSnapshotTest extends GridTestScope {
         JsonObject output = json.getAsJsonObject("output");
         assertEquals(
             "Resource",
-            output.get("itemName")
+            output.get("displayName")
                 .getAsString());
         assertEquals(
             9,
@@ -273,9 +287,24 @@ class OutputSnapshotTest extends GridTestScope {
             return ResourceType.ITEM;
         }
 
-        public @NotNull String web$getItemID() {
+        public @NotNull String web$getRegistryNamespace() {
             available();
-            return "example:resource:7";
+            return "example";
+        }
+
+        public @NotNull String web$getRegistryPath() {
+            available();
+            return "resource";
+        }
+
+        public @NotNull Integer web$getComponentCount() {
+            available();
+            return 2;
+        }
+
+        public @NotNull Integer web$getDamage() {
+            available();
+            return 7;
         }
 
         public @NotNull String web$getDisplayName() {

@@ -299,7 +299,19 @@ class ItemIdentityRegistryTest {
         }
 
         @Override
-        public @NotNull String web$getItemID() {
+        public @NotNull String web$getRegistryNamespace() {
+            return "example";
+        }
+
+        public @NotNull Integer web$getComponentCount() {
+            return 2;
+        }
+
+        public @NotNull Integer web$getDamage() {
+            return 7;
+        }
+
+        public @NotNull String web$getRegistryPath() {
             return name;
         }
 

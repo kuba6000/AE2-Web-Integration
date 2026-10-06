@@ -118,8 +118,11 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
     @Test
     void calculatedResourceSerializesCamelCaseIdentityAndMeasurements() {
         GetCraftingPlan.PlanData.JobItem row = new GetCraftingPlan.PlanData.JobItem(
-            "example:resource",
+            "example",
+            "resource",
             "Resource",
+            2,
+            7,
             8,
             12,
             3,
@@ -130,12 +133,12 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
                 .toJson(row))
             .getAsJsonObject();
         assertEquals(
-            "example:resource",
-            json.get("itemId")
+            "resource",
+            json.get("registryPath")
                 .getAsString());
         assertEquals(
             "Resource",
-            json.get("itemName")
+            json.get("displayName")
                 .getAsString());
         assertEquals(
             8,
@@ -157,6 +160,20 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
             0.5,
             json.get("usedPercent")
                 .getAsDouble());
+        assertEquals(
+            "example",
+            json.get("registryNamespace")
+                .getAsString());
+        assertEquals(
+            2,
+            json.get("componentCount")
+                .getAsInt());
+        assertEquals(
+            7,
+            json.get("damage")
+                .getAsInt());
+        assertFalse(json.has("itemId"));
+        assertFalse(json.has("itemName"));
         assertFalse(json.has("itemid"));
         assertFalse(json.has("itemname"));
     }

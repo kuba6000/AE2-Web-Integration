@@ -3,7 +3,7 @@ import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
 import { navigateToPlan } from './router.js';
 
-export type PlanMetadata = { itemKey: string; itemName: string; quantity: number };
+export type PlanMetadata = { itemKey: string; displayName: string; quantity: number };
 export type Mutation = 'create' | 'submit' | 'delete';
 export type CraftingState = {
     status: 'idle' | 'loading' | 'calculating' | 'ready' | 'submitted' | 'deleted' | 'unavailable' | 'error';
@@ -180,7 +180,7 @@ export function createCrafting(api: Api, changed: () => void) {
             changed();
             try {
                 const { jobId } = await api.createPlan(gridKey, { itemKey: item.itemKey, quantity });
-                metadata.set(`${gridKey}/${jobId}`, { itemKey: item.itemKey, itemName: item.itemName, quantity });
+                metadata.set(`${gridKey}/${jobId}`, { itemKey: item.itemKey, displayName: item.displayName, quantity });
                 finishMutation(key, null);
                 if (version !== generation) return;
                 navigateToPlan(gridKey, jobId);

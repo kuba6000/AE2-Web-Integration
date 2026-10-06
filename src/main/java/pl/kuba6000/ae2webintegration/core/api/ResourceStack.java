@@ -15,17 +15,23 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 public final class ResourceStack {
 
     /**
-     * Registry resource identifier.
+     * Native registry path without namespace or damage; null when unavailable.
      *
-     * @example minecraft:iron_ingot
+     * @example iron_ingot
      */
-    public final @NotNull String itemId;
+    public final @Nullable String registryPath;
+    /** Native registry namespace, or null when unavailable. */
+    public final @Nullable String registryNamespace;
+    /** Root NBT entry count on 1.7.10/1.12.2/1.20.1; effective component count on 1.21.1. Null when unsupported. */
+    public final @Nullable Integer componentCount;
+    /** Raw legacy item damage/metadata or modern damage value; null for fluids and unsupported resources. */
+    public final @Nullable Integer damage;
     /**
      * Resource display name.
      *
      * @example Iron Ingot
      */
-    public final @NotNull String itemName;
+    public final @NotNull String displayName;
     /**
      * Number of resource units.
      *
@@ -41,10 +47,14 @@ public final class ResourceStack {
     /** Detached fallback identity for tracked history; captured only when the installed pack lacks the exact icon. */
     public final transient @Nullable StableKey iconBaseKey;
 
-    private ResourceStack(@NotNull String itemId, @NotNull String itemName, long quantity, @Nullable String itemKey,
-        @Nullable StableKey iconBaseKey) {
-        this.itemId = itemId;
-        this.itemName = itemName;
+    private ResourceStack(@Nullable String registryNamespace, @Nullable String registryPath,
+        @Nullable Integer componentCount, @Nullable Integer damage, @NotNull String displayName, long quantity,
+        @Nullable String itemKey, @Nullable StableKey iconBaseKey) {
+        this.registryNamespace = registryNamespace;
+        this.registryPath = registryPath;
+        this.componentCount = componentCount;
+        this.damage = damage;
+        this.displayName = displayName;
         this.quantity = quantity;
         this.itemKey = itemKey;
         this.iconBaseKey = iconBaseKey;
@@ -59,14 +69,25 @@ public final class ResourceStack {
         @Nullable IconPack pack) {
         if (stack == null) return null;
         IAEKey key = stack.web$what();
-        String itemId = key.web$getItemID();
-        String itemName = key.web$getDisplayName();
+        String registryNamespace = key.web$getRegistryNamespace();
+        String registryPath = key.web$getRegistryPath();
+        Integer componentCount = key.web$getComponentCount();
+        Integer damage = key.web$getDamage();
+        String displayName = key.web$getDisplayName();
         long quantity = stack.web$amount();
         StableKey itemKey;
         try {
             itemKey = AE2Controller.itemIdentities.remember(grid, key);
         } catch (RuntimeException exception) {
-            return new ResourceStack(itemId, itemName, quantity, null, null);
+            return new ResourceStack(
+                registryNamespace,
+                registryPath,
+                componentCount,
+                damage,
+                displayName,
+                quantity,
+                null,
+                null);
         }
         StableKey base = null;
         if (pack != null && pack.find(itemKey) == null) {
@@ -76,7 +97,15 @@ public final class ResourceStack {
                 // Optional fallback must not discard a successfully captured exact identity.
             }
         }
-        return new ResourceStack(itemId, itemName, quantity, itemKey.toString(), base);
+        return new ResourceStack(
+            registryNamespace,
+            registryPath,
+            componentCount,
+            damage,
+            displayName,
+            quantity,
+            itemKey.toString(),
+            base);
     }
 
 }

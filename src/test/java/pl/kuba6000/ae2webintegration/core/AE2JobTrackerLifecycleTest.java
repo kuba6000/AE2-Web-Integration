@@ -391,7 +391,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         assertSame(info, GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.get(1));
         assertTrue(info.isDone);
         assertEquals(5, info.finalOutput.quantity);
-        assertEquals("example:resource:7", info.finalOutput.itemId);
+        assertEquals("resource", info.finalOutput.registryPath);
     }
 
     @Test
@@ -542,7 +542,19 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         }
 
         @Override
-        public @NotNull String web$getItemID() {
+        public @NotNull String web$getRegistryNamespace() {
+            return "example";
+        }
+
+        public @NotNull Integer web$getComponentCount() {
+            return 2;
+        }
+
+        public @NotNull Integer web$getDamage() {
+            return 7;
+        }
+
+        public @NotNull String web$getRegistryPath() {
             return "test:resource";
         }
 

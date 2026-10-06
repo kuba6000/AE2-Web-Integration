@@ -8,7 +8,15 @@ export type ApplicationContext = {
     isOutdated: boolean;
     user: { username: string; isAdmin: boolean } | null;
 };
-export type ResourceStack = { itemId: string; itemName: string; quantity: number; itemKey: string | null };
+export type ResourceStack = {
+    displayName: string;
+    registryNamespace: string | null;
+    registryPath: string | null;
+    componentCount: number | null;
+    damage: number | null;
+    quantity: number;
+    itemKey: string | null;
+};
 export type IconReference = { page: number; x: number; y: number };
 export type IconMetadata = {
     packId: string;
@@ -58,8 +66,11 @@ export type CpuInfo = {
 export type CpuResource = {
     itemKey?: string | null;
     icon?: IconReference | null;
-    itemId: string;
-    itemName: string;
+    displayName: string;
+    registryNamespace: string | null;
+    registryPath: string | null;
+    componentCount: number | null;
+    damage: number | null;
     active: number;
     pending: number;
     stored: number;
@@ -81,8 +92,11 @@ export type CpuDetail = {
     timeElapsed: number;
 };
 export type PlanItem = {
-    itemId: string;
-    itemName: string;
+    displayName: string;
+    registryNamespace: string | null;
+    registryPath: string | null;
+    componentCount: number | null;
+    damage: number | null;
     stored: number;
     requested: number;
     missing: number;
@@ -100,8 +114,11 @@ export type HistoryEntry = {
 };
 export type Timing = { started: number; ended: number };
 export type ResourceTiming = {
-    itemId: string;
-    itemName: string;
+    displayName: string;
+    registryNamespace: string | null;
+    registryPath: string | null;
+    componentCount: number | null;
+    damage: number | null;
     timeSpentOn: number;
     craftedTotal: number;
     shareInCraftingTime: number;

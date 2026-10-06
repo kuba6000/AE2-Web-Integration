@@ -26,8 +26,21 @@ public interface IAEKey {
         return null;
     }
 
-    @NotNull
-    String web$getItemID();
+    /** Native registry namespace, or null when this resource has no registry entry. */
+    @Nullable
+    String web$getRegistryNamespace();
+
+    /** Native registry path, without damage or variant suffixes; null when unavailable. */
+    @Nullable
+    String web$getRegistryPath();
+
+    /** Root NBT entry count on 1.7.10/1.12.2/1.20.1; effective component count on 1.21.1. Null when unsupported. */
+    @Nullable
+    Integer web$getComponentCount();
+
+    /** Raw legacy item damage/metadata or modern damage value; null for fluids and unsupported resources. */
+    @Nullable
+    Integer web$getDamage();
 
     @NotNull
     String web$getDisplayName();

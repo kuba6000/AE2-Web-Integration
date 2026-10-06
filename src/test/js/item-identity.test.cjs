@@ -40,9 +40,9 @@ test(page + ': only craftable rows with a usable identity offer ordering', () =>
         const key = 'AAAAAAAAAAAAAAAAAAAAAA';
         context.settings.showItemIcon = icons;
         context.globalItemList = [
-            { itemId: 'minecraft:stone', itemName: 'Stone', quantity: 4, craftable: true, itemKey: key },
-            { itemId: 'minecraft:dirt', itemName: 'Dirt', quantity: 2, craftable: true, identityStatus: 'UNAVAILABLE' },
-            { itemId: 'minecraft:sand', itemName: 'Sand', quantity: 8, craftable: false, itemKey: key }
+            { componentCount: 0, damage: 0, resourceType: 'ITEM', registryNamespace: 'minecraft', registryPath: 'stone', displayName: 'Stone', quantity: 4, craftable: true, itemKey: key },
+            { componentCount: 0, damage: 0, resourceType: 'ITEM', registryNamespace: 'minecraft', registryPath: 'dirt', displayName: 'Dirt', quantity: 2, craftable: true, identityStatus: 'UNAVAILABLE' },
+            { componentCount: 0, damage: 0, resourceType: 'ITEM', registryNamespace: 'minecraft', registryPath: 'sand', displayName: 'Sand', quantity: 8, craftable: false, itemKey: key }
         ];
         context.displayItemList();
         const rendered = elements.get('terminalcontent').innerHTML;
@@ -82,9 +82,9 @@ test(page + ': icons render from cache and missing icons round-trip using resour
     context.localStorage.setItem = (key, value) => cache.set(key, value);
     context.settings.showItemIcon = true;
     context.globalItemList = [
-        { itemId: 'minecraft:stone', itemName: 'Stone', quantity: 4, itemKey: cached },
-        { itemId: 'minecraft:dirt', itemName: 'Dirt', quantity: 2, itemKey: missing },
-        { itemId: 'minecraft:sand', itemName: 'Sand', quantity: 1 }
+        { componentCount: 0, damage: 0, resourceType: 'ITEM', registryNamespace: 'minecraft', registryPath: 'stone', displayName: 'Stone', quantity: 4, itemKey: cached },
+        { componentCount: 0, damage: 0, resourceType: 'ITEM', registryNamespace: 'minecraft', registryPath: 'dirt', displayName: 'Dirt', quantity: 2, itemKey: missing },
+        { componentCount: 0, damage: 0, resourceType: 'ITEM', registryNamespace: 'minecraft', registryPath: 'sand', displayName: 'Sand', quantity: 1 }
     ];
     context.displayItemList(true);
     assert.ok(elements.get('terminalcontent').innerHTML.includes('data:image/png;base64,Y2FjaGVk'));
@@ -99,7 +99,7 @@ test(page + ': icons render from cache and missing icons round-trip using resour
 
 test(page + ': icon preference persists and controls image rendering', () => {
     const { context, elements } = terminal(page);
-    context.globalItemList = [{ itemId: 'minecraft:stone', itemName: 'Stone', quantity: 4, itemKey: 'AAAAAAAAAAAAAAAAAAAAAA' }];
+    context.globalItemList = [{ componentCount: 0, damage: 0, resourceType: 'ITEM', registryNamespace: 'minecraft', registryPath: 'stone', displayName: 'Stone', quantity: 4, itemKey: 'AAAAAAAAAAAAAAAAAAAAAA' }];
     context.changeShowItemIcon({ checked: true });
     assert.ok(elements.get('terminalcontent').innerHTML.includes('<img'));
     context.settings.showItemIcon = false;
