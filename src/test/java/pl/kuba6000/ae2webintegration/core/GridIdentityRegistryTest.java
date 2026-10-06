@@ -97,6 +97,37 @@ class GridIdentityRegistryTest {
     }
 
     @Test
+    void mergePrefersNamedUntrackedIdentityAndPreservesNameAfterRestart() throws Exception {
+        File file = directory.resolve("named-merge.json")
+            .toFile();
+        GridIdentityRegistry registry = new GridIdentityRegistry(file);
+        StableKey first = resolve(registry, controller(1));
+        StableKey second = resolve(registry, controller(2));
+        StableKey named = first.toString()
+            .compareTo(second.toString()) > 0 ? first : second;
+        GridPersistentData data = registry.getPersistentData(named);
+        assertNotNull(data);
+        data.getSettings()
+            .setName("Factory");
+        registry.saveIfDirty();
+        assertEquals(named, resolve(registry, controller(1), controller(2)));
+        GridPersistentData loaded = new GridIdentityRegistry(file).getPersistentData(named);
+        assertNotNull(loaded);
+        assertEquals(
+            "Factory",
+            loaded.getSettings()
+                .getName());
+        assertFalse(
+            loaded.getSettings()
+                .isTracked());
+        loaded.getSettings()
+            .setName("");
+        assertTrue(
+            loaded.getSettings()
+                .isDefault());
+    }
+
+    @Test
     void equalSettingsMergeKeepsTheSameKeyRegardlessOfControllerOrder() throws Exception {
         File file = directory.resolve("tie.json")
             .toFile();

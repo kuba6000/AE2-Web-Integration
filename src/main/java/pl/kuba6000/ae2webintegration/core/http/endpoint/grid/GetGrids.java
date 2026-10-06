@@ -69,12 +69,15 @@ public final class GetGrids extends ISyncedRequest {
      * Current state and access information for a grid.
      *
      * @param key               persistent grid identifier
+     * @param name              custom network name; empty when unnamed
      * @param cpuCount          number of crafting CPUs in the grid
      * @param owner             representative owner's username, or {@code N/A} when no owner is known
      * @param isOwned           true for player-authorized access; false for administrator or trusted-local access
      * @param isTrackingEnabled whether crafting tracking is enabled for this grid
-     * @param accessSources     players with explicit grid access, keyed by UUID, and the sources granting that access
+     * @param accessSources     players with explicit grid access, keyed by UUID, and the sources granting that access;
+     *                          excludes administrator and trusted-local bypass access
      * @example key AAAAAAAAAAAAAAAAAAAAAA
+     * @example name Factory
      * @example cpuCount 2
      * @example owner ExamplePlayer
      * @example isOwned true
@@ -82,13 +85,14 @@ public final class GetGrids extends ISyncedRequest {
      * @keyExample accessSources 095be615-a8ad-4c33-8e9c-c7612fbf6c9f
      */
     @Desugar
-    public record GridInfo(StableKey key, int cpuCount, String owner, boolean isOwned, boolean isTrackingEnabled,
-        Map<UUID, List<GridAccessSource>> accessSources) {
+    public record GridInfo(StableKey key, String name, int cpuCount, String owner, boolean isOwned,
+        boolean isTrackingEnabled, Map<UUID, List<GridAccessSource>> accessSources) {
 
         GridInfo(GridAccess.View view, boolean isOwned, @Nullable PlayerIdentity owner,
             Map<UUID, List<GridAccessSource>> sources, GridSettingsData settings) {
             this(
                 view.key(),
+                settings.getName(),
                 view.grid()
                     .web$getCraftingGrid()
                     .web$getCPUCount(),

@@ -28,6 +28,7 @@ export type AccessSource = {
 };
 export type AccessSources = Record<string, AccessSource[]>;
 export type Grid = {
+    name: string;
     key: string;
     cpuCount: number;
     owner: string;
@@ -35,7 +36,7 @@ export type Grid = {
     isTrackingEnabled: boolean;
     accessSources: AccessSources;
 };
-export type GridSettings = { isTracked: boolean };
+export type GridSettings = { isTracked: boolean; name: string };
 export type CpuInfo = {
     icon?: IconReference | null;
     name: string;

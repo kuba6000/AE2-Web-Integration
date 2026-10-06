@@ -128,7 +128,7 @@ async function fixture(t, mount = '', contextOptions = {}) {
         pauseStatus: 'OK',
         history: [historyEntry],
         historyDetail,
-        settings: { [gridA]: { isTracked: false }, [gridB]: { isTracked: false } },
+        settings: { [gridA]: { isTracked: false, name: '' }, [gridB]: { isTracked: false, name: '' } },
         accessSources: {}
     };
     const server = http.createServer(async (request, response) => {
@@ -233,7 +233,14 @@ async function fixture(t, mount = '', contextOptions = {}) {
                 response.end(
                     JSON.stringify({
                         status: 'OK',
-                        data: options.empty ? [] : options.grids || (options.reverseGrids ? grids.reverse() : grids)
+                        data: (options.empty
+                            ? []
+                            : options.grids || (options.reverseGrids ? grids.reverse() : grids)
+                        ).map((grid) => ({
+                            ...grid,
+                            name: options.settings[grid.key]?.name ?? grid.name ?? '',
+                            isTrackingEnabled: options.settings[grid.key]?.isTracked ?? false
+                        }))
                     })
                 );
             } else if (resource.endsWith('/crafting-plans')) {
@@ -285,7 +292,12 @@ async function fixture(t, mount = '', contextOptions = {}) {
             } else if (resource.endsWith('/settings')) {
                 const key = resource.includes(gridA) ? gridA : gridB;
                 if (request.method === 'PATCH' && !options.settingsError)
-                    options.settings[key] = options.settingsReply || options.requests.at(-1).body;
+                    options.settings[key] = options.settingsReply || {
+                        ...options.settings[key],
+                        ...options.requests.at(-1).body
+                    };
+                if (typeof options.settings[key].name === 'string')
+                    options.settings[key].name = options.settings[key].name.trim();
                 response.end(JSON.stringify({ status: options.settingsError || 'OK', data: options.settings[key] }));
             } else if (resource.endsWith('/pause')) {
                 if (options.pauseStatus === 'OK') {
@@ -1280,10 +1292,10 @@ test('global settings tabs preserve grid navigation and browser preferences', as
     await page.getByRole('heading', { name: 'Server settings', exact: true }).waitFor();
     assert.equal(await page.getByRole('combobox', { name: 'Appearance', exact: true }).isVisible(), false);
     assert.equal(
-        await page.getByRole('link', { name: 'Grid settings', exact: true }).getAttribute('href'),
+        await page.getByRole('link', { name: 'Network', exact: true }).getAttribute('href'),
         `#/grids/${gridA}/settings`
     );
-    await page.getByRole('link', { name: 'Grid settings', exact: true }).click();
+    await page.getByRole('link', { name: 'Network', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).waitFor();
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
@@ -1349,7 +1361,7 @@ test('About shows runtime metadata and resource links while retaining the select
     ])
         assert.ok(await about.locator(`a[href="${href}"]`).count(), `About must link to ${href}`);
     assert.doesNotMatch(await about.innerText(), /Lucide|Font Awesome|Material Icons|TERMS AND CONDITIONS|PREAMBLE/i);
-    await page.getByRole('link', { name: 'Grid settings', exact: true }).click();
+    await page.getByRole('link', { name: 'Network', exact: true }).click();
     assert.match(page.url(), new RegExp(`#/grids/${gridA}/settings$`));
     await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).waitFor();
     assert.equal(
@@ -1397,14 +1409,14 @@ test('Home retains the selected network and owns switching while Web settings ow
         `#/grids/${gridA}/items`
     );
     assert.equal(
-        await page.getByRole('link', { name: 'Grid settings', exact: true }).getAttribute('href'),
+        await page.getByRole('link', { name: 'Network', exact: true }).getAttribute('href'),
         `#/grids/${gridA}/settings`
     );
     assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Refresh', exact: true }).count(), 0);
     assert.equal(await page.getByRole('checkbox', { name: 'Refresh automatically' }).count(), 0);
     assert.equal(await page.locator('header').getByRole('combobox').count(), 0);
-    assert.match(await page.locator('#selected-network').innerText(), new RegExp(`Alpha.*${gridA}`));
+    assert.match(await page.locator('#selected-network').innerText(), new RegExp(`Alpha.*${gridA.slice(0, 8)}`));
     const scopedReads = options.requests.filter(
         (request) => request.path.endsWith('/items') || /\/cpus\/[^/]+$/.test(request.path)
     ).length;
@@ -2005,6 +2017,7 @@ test('history opens a deeply scrolled job at the start of its detail and preserv
 for (const appearance of ['light', 'dark']) {
     test(`history list keeps its terminal alignment and readable rows on mobile in ${appearance} mode`, async (t) => {
         const { page, options, base } = await fixture(t);
+        options.settings[gridA].isTracked = true;
         options.history = Array.from({ length: 12 }, (_, index) => ({
             ...historyEntry,
             id: 100 + index,
@@ -2126,7 +2139,7 @@ test('grid settings preserve the draft and save explicitly while safely showing 
         ]
     };
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.getByRole('link', { name: 'Grid settings', exact: true }).click({ timeout: 3000 });
+    await page.getByRole('link', { name: 'Network', exact: true }).click({ timeout: 3000 });
     const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
     await tracking.check();
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/settings'));
@@ -2134,7 +2147,8 @@ test('grid settings preserve the draft and save explicitly while safely showing 
     await (await refreshed).finished();
     assert.equal(await tracking.isChecked(), true);
     assert.equal(options.requests.filter((request) => request.method === 'PATCH').length, 0);
-    await page.getByRole('heading', { name: player.name, exact: true }).waitFor();
+    await page.getByText(player.name, { exact: true }).waitFor();
+    await page.getByText(player.name, { exact: true }).click();
     await page.getByText(player.uuid, { exact: true }).waitFor();
     await page.getByText(/minecraft:overworld.*120.*64.*-32/).waitFor();
     assert.equal(await page.locator('img[src="x"]').count(), 0);
@@ -2184,11 +2198,11 @@ test('history exposes resource and provider intervals with their correct locatio
 test('uncertain settings saves preserve the draft and remain unconfirmed until explicit retry succeeds', async (t) => {
     const { page, options, base } = await fixture(t);
     for (const status of ['INTERNAL_ERROR', 'TIMEOUT', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
-        options.settings[gridA] = { isTracked: false };
+        options.settings[gridA] = { isTracked: false, name: '' };
         await page.goto(`${base}&case=${status}#/grids/${gridA}/settings`);
         const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
         await tracking.check();
-        options.settings[gridA] = { isTracked: true };
+        options.settings[gridA] = { isTracked: true, name: '' };
         options.fault = { operation: 'settings', status };
         await page.getByRole('button', { name: 'Save settings', exact: true }).click();
         await page
@@ -2197,7 +2211,7 @@ test('uncertain settings saves preserve the draft and remain unconfirmed until e
             .waitFor({ timeout: 3000 });
         const count = options.requests.filter((request) => request.method === 'PATCH').length;
         await poll(page);
-        await page.getByRole('link', { name: 'Back to resources', exact: true }).click();
+        await page.getByRole('link', { name: 'Terminal', exact: true }).click();
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.goBack();
         await tracking.waitFor();
@@ -2248,11 +2262,11 @@ test('settings drafts survive transient discovery failures and pending saves rec
     options.gridError = 'NO_PERMISSIONS';
     await poll(page);
     await tracking.waitFor({ state: 'hidden' });
-    options.settings[gridA] = { isTracked: true };
+    options.settings[gridA] = { isTracked: true, name: '' };
     await save.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'OK', data: { isTracked: true } })
+        body: JSON.stringify({ status: 'OK', data: { isTracked: true, name: '' } })
     });
     assert.equal(await tracking.count(), 0);
     options.gridError = null;
@@ -2327,14 +2341,14 @@ test('settings save remains single-flight across grids and uses the returned val
     await pending.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'OK', data: { isTracked: false } })
+        body: JSON.stringify({ status: 'OK', data: { isTracked: false, name: '' } })
     });
     await page
         .getByRole('status')
         .filter({ hasText: /Settings saved/i })
         .waitFor();
     assert.equal(await tracking.isChecked(), false);
-    await page.getByRole('heading', { name: 'Alex', exact: true }).waitFor({ timeout: 3000 });
+    await page.getByText('Alex', { exact: true }).waitFor({ timeout: 3000 });
     assert.equal(await page.getByRole('button', { name: 'Save settings', exact: true }).isDisabled(), true);
 });
 
@@ -2363,7 +2377,7 @@ test('old settings reads cannot replace saved data and denied saves clear access
     await delayed.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'OK', data: { isTracked: false } })
+        body: JSON.stringify({ status: 'OK', data: { isTracked: false, name: '' } })
     });
     await settleResponse(page, delayed.request());
     assert.equal(await tracking.isChecked(), true);
@@ -2375,7 +2389,7 @@ test('old settings reads cannot replace saved data and denied saves clear access
         .filter({ hasText: /no longer have access/i })
         .waitFor();
     assert.equal(await tracking.count(), 0);
-    assert.equal(await page.getByRole('heading', { name: 'Players with access', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('heading', { name: 'Players with explicit access', exact: true }).count(), 0);
 });
 
 test('late history details cannot enter another grid and denied reads remove the selected snapshot', async (t) => {
@@ -3989,7 +4003,7 @@ test('appearance, language and terminal preferences survive reload and direct li
         await page.getByRole('button', { name: 'Sortuj według: Ilości', exact: true }).getAttribute('aria-pressed'),
         'true'
     );
-    await page.locator('a[href="#/"]').click();
+    await page.getByRole('navigation').locator('a[href="#/"]').click();
     await page.getByRole('button', { name: 'Wybierz sieć', exact: true }).waitFor();
     assert.equal(
         await page.getByRole('link', { name: 'Terminal', exact: true }).getAttribute('href'),
@@ -5145,4 +5159,382 @@ test('Home keeps failed logout visible and allows an explicit retry', async (t) 
     await page.getByRole('button', { name: 'Log out', exact: true }).click();
     await page.getByRole('button', { name: 'Continue', exact: true }).waitFor();
     assert.equal(options.requests.filter((request) => request.path === '/api/auth/logout').length, 2);
+});
+
+// Public settings/HTTP seam: the server-backed name is shared presentation, independent of tracking.
+test('Network details save and clear a name without resending tracking, and update Home immediately', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    const name = page.getByRole('textbox', { name: 'Network name', exact: true });
+    await name.fill('  Main factory  ', { timeout: 2000 });
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /settings saved/i })
+        .waitFor();
+    assert.equal(await name.inputValue(), 'Main factory');
+    assert.deepEqual(options.requests.filter((request) => request.method === 'PATCH').at(-1).body, {
+        name: 'Main factory'
+    });
+    const navigation = page.locator('nav').getByRole('link');
+    assert.deepEqual((await navigation.allTextContents()).slice(0, 3), ['Home', 'Network', 'Terminal']);
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    const panel = page.locator('#home-network-panel');
+    await panel.getByText('Main factory', { exact: true }).waitFor();
+    await panel.getByText('Owner: Alpha', { exact: true }).waitFor();
+    await panel.getByText(gridA, { exact: true }).waitFor();
+    await panel.getByRole('link', { name: 'Network details', exact: true }).click();
+    await name.fill('');
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /settings saved/i })
+        .waitFor();
+    assert.deepEqual(options.requests.filter((request) => request.method === 'PATCH').at(-1).body, { name: '' });
+    await page.reload();
+    await name.waitFor();
+    assert.equal(await name.inputValue(), '');
+});
+
+test('tracking notices use the current network, update after saving, and retain previously recorded history', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    options.settings[gridA].isTracked = false;
+    options.settings[gridB].isTracked = true;
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const enable = page.getByRole('link', { name: 'Enable tracking', exact: true });
+    await enable.waitFor({ timeout: 2000 });
+    assert.equal(await enable.getAttribute('href'), `#/grids/${gridA}/settings`);
+    await enable.click();
+    await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).check();
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /settings saved/i })
+        .waitFor();
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    assert.equal(await enable.count(), 0);
+    await page.getByRole('link', { name: 'Network', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).uncheck();
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /settings saved/i })
+        .waitFor();
+    await page.getByRole('link', { name: 'History', exact: true }).click();
+    await page.getByRole('link', { name: /Iron Ingot.*#1/ }).waitFor();
+    await enable.waitFor();
+    assert.equal(await enable.getAttribute('href'), `#/grids/${gridA}/settings`);
+    await page
+        .getByRole('region', { name: 'History', exact: true })
+        .getByText(/tracking is disabled/i)
+        .waitFor();
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    assert.equal(await enable.count(), 0);
+    await page.goto(`${base}#/grids/${gridB}/cpus`);
+    await page
+        .getByRole('link', { name: /Assembler/ })
+        .first()
+        .waitFor();
+    assert.equal(await enable.count(), 0);
+});
+
+// A discovery snapshot predating a PATCH cannot undo the confirmed metadata in another view.
+test('late discovery cannot undo a confirmed name or tracking save', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    const name = page.getByRole('textbox', { name: 'Network name', exact: true });
+    await name.fill('Factory');
+    await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).check();
+    let release;
+    const captured = new Promise((resolve) => {
+        release = resolve;
+    });
+    await page.route('**/api/grids', (route) => release(route));
+    await poll(page);
+    const oldDiscovery = await captured;
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /settings saved/i })
+        .waitFor();
+    await oldDiscovery.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+            status: 'OK',
+            data: [
+                { key: gridA, name: '', owner: 'Alpha', cpuCount: 2, isTrackingEnabled: false, accessSources: {} },
+                { key: gridB, name: '', owner: 'Beta', cpuCount: 1, isTrackingEnabled: false, accessSources: {} }
+            ]
+        })
+    });
+    await settleResponse(page, oldDiscovery.request());
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    assert.equal(
+        await page.locator('#home-network-panel').getByRole('heading', { name: 'Factory', exact: true }).count(),
+        1
+    );
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    assert.equal(await page.getByRole('link', { name: 'Enable tracking', exact: true }).count(), 0);
+    assert.equal(options.requests.filter((request) => request.method === 'PATCH').length, 1);
+});
+
+test('Network keeps field drafts across grids, refreshes unedited fields, and rejects invalid names before HTTP', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    const name = page.getByRole('textbox', { name: 'Network name', exact: true });
+    const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
+    await name.fill('Draft A');
+    options.settings[gridA].isTracked = true;
+    const read = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/settings'));
+    await poll(page);
+    await settleResponse(page, (await read).request());
+    assert.equal(await name.inputValue(), 'Draft A');
+    assert.equal(await tracking.isChecked(), true);
+    await page.goto(`${base}#/grids/${gridB}/settings`);
+    await name.fill('Draft B');
+    await page.goBack();
+    await name.waitFor();
+    assert.equal(await name.inputValue(), 'Draft A');
+    const save = page.getByRole('button', { name: 'Save settings', exact: true });
+    for (const invalid of ['🙂'.repeat(65), 'Invalid\u0001name']) {
+        await name.fill(invalid);
+        assert.equal(await save.isDisabled(), true);
+    }
+    assert.equal(options.requests.filter((request) => request.method === 'PATCH').length, 0);
+    await name.fill('Draft A');
+    await save.click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /settings saved/i })
+        .waitFor();
+    assert.deepEqual(options.requests.filter((request) => request.method === 'PATCH').at(-1).body, { name: 'Draft A' });
+    await page.goto(`${base}#/grids/${gridB}/settings`);
+    await name.waitFor();
+    assert.equal(await name.inputValue(), 'Draft B');
+});
+
+test('Network pending and uncertain name saves retain source identity and notify Home after navigation', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    const name = page.getByRole('textbox', { name: 'Network name', exact: true });
+    await name.fill('Requested');
+    let release;
+    const captured = new Promise((resolve) => {
+        release = resolve;
+    });
+    await page.route('**/settings', (route) =>
+        route.request().method() === 'PATCH' ? release(route) : route.continue()
+    );
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    const pending = await captured;
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    options.settings[gridA] = { name: 'Canonical', isTracked: true };
+    await pending.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'OK', data: options.settings[gridA] })
+    });
+    await page.locator('#home-network-panel').getByRole('heading', { name: 'Canonical', exact: true }).waitFor();
+    await page.unroute('**/settings');
+    await page.getByRole('link', { name: 'Network', exact: true }).click();
+    await name.fill('Unconfirmed');
+    options.fault = { operation: 'settings', status: 'INTERNAL_ERROR' };
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /not confirmed/i })
+        .waitFor();
+    await page.goto(`${base}#/grids/${gridB}/settings`);
+    await name.waitFor();
+    assert.equal(await name.inputValue(), '');
+    await page.goBack();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /not confirmed/i })
+        .waitFor();
+    assert.equal(await name.inputValue(), 'Unconfirmed');
+    assert.equal(
+        options.requests.filter((request) => request.method === 'PATCH').length,
+        1,
+        'The intercepted first save is outside fixture logging; failed PATCH must not replay'
+    );
+    options.fault = null;
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /settings saved/i })
+        .waitFor();
+    assert.deepEqual(options.requests.filter((request) => request.method === 'PATCH').at(-1).body, {
+        name: 'Unconfirmed'
+    });
+});
+
+test('Network groups explicit people with collapsed source lists and keeps disclosure and focus during polling', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const first = { uuid: 'person-a', name: 'Alice' };
+    const second = { uuid: 'person-b', name: 'Bob' };
+    const source = (player, x) => ({
+        player,
+        kind: 'security_terminal',
+        reason: 'security_card',
+        position: { dimid: 'minecraft:overworld', x, y: 64, z: -32 },
+        side: null
+    });
+    options.accessSources = {
+        [first.uuid]: [source(first, 120)],
+        [second.uuid]: Array.from({ length: 18 }, (_, x) => source(second, x + 200))
+    };
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    await page.getByText('Bob', { exact: true }).waitFor();
+    const alice = page.locator('details').filter({ has: page.getByText('Alice', { exact: true }) });
+    const bob = page.locator('details').filter({ has: page.getByText('Bob', { exact: true }) });
+    assert.equal(await page.getByText(/minecraft:overworld/).count(), 0);
+    await bob.locator('summary').click();
+    await bob.getByRole('listitem').last().waitFor();
+    assert.equal(await bob.getByRole('listitem').count(), 18);
+    assert.equal(await alice.getByRole('listitem').count(), 0);
+    await bob.locator('summary').focus();
+    options.accessSources = {
+        ...options.accessSources,
+        [second.uuid]: [...options.accessSources[second.uuid], source(second, 999)]
+    };
+    const read = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/settings'));
+    await poll(page);
+    await settleResponse(page, (await read).request());
+    assert.equal(await bob.getByRole('listitem').count(), 19);
+    assert.equal(await bob.locator('summary').evaluate((node) => node === document.activeElement), true);
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    assert.equal(
+        await page
+            .locator('#home, #home-network-panel, #selected-network')
+            .getByText(/minecraft:overworld/)
+            .count(),
+        0
+    );
+    await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
+    assert.equal(
+        await page
+            .getByRole('dialog')
+            .getByText(/minecraft:overworld/)
+            .count(),
+        0
+    );
+});
+
+test('Network details scroll long access lists under a fixed heading and keep mobile settings usable in both appearances', async (t) => {
+    const { page, options, base } = await fixture(t, '', { viewport: { width: 390, height: 844 } });
+    options.settings[gridA].name = 'LongNetworkName'.repeat(8);
+    const player = { uuid: 'source-owner', name: 'LongPlayerName'.repeat(8) };
+    options.accessSources = {
+        [player.uuid]: Array.from({ length: 30 }, (_, x) => ({
+            player,
+            kind: 'security_terminal',
+            reason: 'security_card',
+            position: { dimid: 'minecraft:overworld', x, y: 64, z: -32 },
+            side: null
+        }))
+    };
+    for (const appearance of ['light', 'dark']) {
+        await page.goto(`${base}#/web-settings`);
+        await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption(appearance);
+        await page.goto(`${base}#/grids/${gridA}/settings`);
+        const heading = page.getByRole('heading', { name: 'Network details', exact: true });
+        await heading.waitFor();
+        const before = await heading.boundingBox();
+        const person = page.locator('details').filter({ has: page.getByText(player.name, { exact: true }) });
+        if (!(await person.evaluate((node) => node.open))) await person.locator('summary').click();
+        await person.getByRole('listitem').last().waitFor();
+        const name = page.getByRole('textbox', { name: 'Network name', exact: true });
+        await name.scrollIntoViewIfNeeded();
+        assert.deepEqual(await heading.boundingBox(), before);
+        await name.fill(`Mobile ${appearance}`);
+        await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+        await page
+            .getByRole('status')
+            .filter({ hasText: /settings saved/i })
+            .waitFor();
+        const region = page.getByRole('region', { name: 'Network details', exact: true });
+        assert.ok(await region.evaluate((node) => node.scrollWidth <= node.clientWidth));
+        assert.ok(
+            await page.evaluate(
+                () =>
+                    document.documentElement.scrollWidth <= innerWidth &&
+                    document.documentElement.scrollHeight <= innerHeight
+            )
+        );
+    }
+});
+
+for (const height of [844, 600]) {
+    test(`icon and tracking notices coexist without hiding the terminal at mobile height ${height}`, async (t) => {
+        const { page, options, base } = await fixture(t, '', { viewport: { width: 390, height } });
+        await atlasFixture(page, options);
+        await page.addInitScript(() =>
+            localStorage.setItem('ae2web:/:theme:default', JSON.stringify({ resourceIcons: false }))
+        );
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        const icons = page.getByRole('button', { name: 'Enable icons', exact: true });
+        const tracking = page.getByRole('link', { name: 'Enable tracking', exact: true });
+        await icons.waitFor();
+        await tracking.waitFor();
+        const search = page.getByRole('searchbox', { name: 'Search resources', exact: true });
+        await search.fill('Iron');
+        const region = page.getByRole('region', { name: 'Resources', exact: true });
+        const bounds = await region.boundingBox();
+        assert.ok(bounds.height >= 44, `Notices must leave a usable resource viewport at ${height}px`);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight));
+        await page.getByRole('button', { name: /Iron Ingot/ }).click();
+        const information = page.getByRole('region', { name: 'Information', exact: true });
+        await information.focus();
+        await page.keyboard.press('End');
+        await page.waitForFunction((node) => node.scrollTop > 0, await information.elementHandle());
+        for (const control of [icons, tracking]) {
+            await control.focus();
+            await page.waitForFunction(
+                ([control, region]) => {
+                    const box = control.getBoundingClientRect(),
+                        area = region.getBoundingClientRect();
+                    return box.y >= area.y && box.bottom <= area.bottom;
+                },
+                [await control.elementHandle(), await information.elementHandle()],
+                { timeout: 2000 }
+            );
+        }
+        await page.getByRole('button', { name: 'Dismiss icon suggestion', exact: true }).click();
+        assert.equal(await icons.count(), 0);
+        await tracking.waitFor();
+        assert.equal(await tracking.getAttribute('href'), `#/grids/${gridA}/settings`);
+        const searchBounds = await search.boundingBox();
+        assert.ok(searchBounds.y >= 0 && searchBounds.y + searchBounds.height <= height);
+        await tracking.focus();
+        await page.keyboard.press('Enter');
+        await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).waitFor();
+        assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/settings`);
+    });
+}
+
+test('Network refetch publishes remote name and tracking changes with polling disabled', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('link', { name: 'Enable tracking', exact: true }).waitFor();
+    options.settings[gridA] = { name: 'Remote factory', isTracked: true };
+    await page.getByRole('link', { name: 'Network', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Network name', exact: true }).waitFor();
+    assert.equal(await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).isChecked(), true);
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    assert.equal(
+        await page.locator('#home-network-panel').getByRole('heading', { name: 'Remote factory', exact: true }).count(),
+        1
+    );
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    assert.equal(await page.getByRole('link', { name: 'Enable tracking', exact: true }).count(), 0);
+    assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
 });

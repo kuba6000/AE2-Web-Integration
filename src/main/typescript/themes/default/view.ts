@@ -12,6 +12,7 @@ import { createCraftingView } from './crafting.js';
 import { createHomeView } from './home.js';
 import { createCpuView } from './cpus.js';
 import { createHistoryView } from './history.js';
+import { networkLabel, networkOwner } from './network.js';
 import { createSettingsView } from './settings.js';
 import { createAboutView } from './about.js';
 import { slotQuantity } from './resource-quantity.js';
@@ -128,11 +129,11 @@ export function mount(
     root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1>AE2 <span>Web Integration</span></h1></div><div class="account-controls">
         <span class="account-user">${userIcon}<span id="username"></span></span><button id="logout" data-text="logout"></button></div></header>
         <dl class="network-summary"><dt><span data-text="network"></span>:</dt><dd id="selected-network"></dd></dl>
-        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a id="settings-link" data-view="settings" data-text="gridSettings" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav><p id="session-message" role="alert" hidden></p></div>
-        <section class="window-frame icon-notice" id="icon-notice" aria-labelledby="icon-notice-text" hidden>
+        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="settings-link" data-view="settings" data-text="network" hidden></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav><p id="session-message" role="alert" hidden></p></div>
+        <div class="info-notices" id="info-notices" role="region" data-label="notices" tabindex="0" hidden><section class="window-frame info-notice" id="icon-notice" aria-labelledby="icon-notice-text" hidden>
         ${infoCircle}<p id="icon-notice-text" data-theme-text="iconsOffer"></p>
         <button type="button" id="enable-icons" data-theme-text="enableIcons"></button>
-        <button type="button" id="dismiss-icons">×</button></section>
+        <button type="button" id="dismiss-icons">×</button></section><section class="window-frame info-notice" id="tracking-notice" aria-labelledby="tracking-notice-text" hidden>${infoCircle}<p><span id="tracking-notice-text"></span> <a id="tracking-settings-link"></a></p></section></div>
         <div class="workspace" id="workspace">
         <div class="terminal-tools" id="terminal-tools" hidden>
         <div role="group" data-label="resources">${(['all', 'stored', 'craftable'] as const).map((value) => iconButton('filter', value)).join('')}</div>
@@ -162,6 +163,10 @@ export function mount(
         '#terminal-display': HTMLSelectElement;
         '#icon-availability': HTMLParagraphElement;
         '#icon-notice': HTMLElement;
+        '#info-notices': HTMLElement;
+        '#tracking-notice': HTMLElement;
+        '#tracking-notice-text': HTMLElement;
+        '#tracking-settings-link': HTMLAnchorElement;
         '#enable-icons': HTMLButtonElement;
         '#dismiss-icons': HTMLButtonElement;
         '#language': HTMLElementTagNameMap['select'];
@@ -311,9 +316,11 @@ export function mount(
         const grid = state.grids.find((grid) => grid.key === gridKey);
         const selectedNetwork = find('#selected-network');
         selectedNetwork.textContent = gridKey
-            ? `${grid?.owner || locale.common('unknownOwner')} · ${gridKey}`
+            ? grid
+                ? networkLabel(grid, locale)
+                : gridKey
             : locale.common('noNetworkSelected');
-        selectedNetwork.title = selectedNetwork.textContent;
+        selectedNetwork.title = grid ? `${networkOwner(grid, locale)} · ${grid.key}` : selectedNetwork.textContent;
         const networkMessage =
             state.gridStatus === 'loading'
                 ? locale.common('loading')
@@ -526,6 +533,19 @@ export function mount(
             effectiveDisplay !== 'names' ||
             available !== true ||
             iconSuggestionDismissed;
+        const routeGrid =
+            state.gridStatus === 'ready' ? state.grids.find((grid) => grid.key === state.route.gridKey) : undefined;
+        const trackingUnavailable =
+            routeGrid?.isTrackingEnabled === false &&
+            ((state.route.view === 'items' && state.itemStatus === 'ready') ||
+                (state.route.view === 'cpus' && state.cpus.status === 'ready'));
+        find('#tracking-notice').hidden = !trackingUnavailable;
+        find('#tracking-notice-text').textContent = locale.common('trackingDisabledTip');
+        find('#tracking-settings-link').textContent = locale.common('enableTracking');
+        find('#tracking-settings-link').href = routeGrid
+            ? `#/grids/${encodeURIComponent(routeGrid.key)}/settings`
+            : '#/';
+        find('#info-notices').hidden = find('#icon-notice').hidden && find('#tracking-notice').hidden;
         if (changed) {
             renderPage();
             hideTooltip();
@@ -582,8 +602,8 @@ export function mount(
         renderDetails();
         craftingView.render(state.route, state.crafting, locale);
         cpuView.render(state.route, state.cpus, locale);
-        historyView.render(state.route, state.history, locale);
-        settingsView.render(state.route, state.settings, locale);
+        historyView.render(state, locale);
+        settingsView.render(state, locale);
         aboutView.render(state.route, locale);
         slots.update(rows.length);
         const gridKey = state.route.gridKey || state.selectedGridKey;

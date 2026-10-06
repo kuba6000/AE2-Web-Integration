@@ -12,11 +12,19 @@ public final class GridSettingsData {
      * @example true
      */
     private boolean isTracked;
+    /**
+     * Custom network name; empty when unnamed.
+     *
+     * @example Factory
+     */
+    private @NotNull String name = "";
     private transient @NotNull Object lock = this;
     private transient @NotNull Runnable markDirty = () -> {};
 
     /** Bound before publication; getters, edits and persistence then share the registry monitor. */
+    @SuppressWarnings("ConstantValue") // Gson can load an explicit null into a required field.
     void attach(@NotNull Object lock, @NotNull Runnable markDirty) {
+        if (name == null) throw new IllegalArgumentException("Missing grid name");
         this.lock = lock;
         this.markDirty = markDirty;
     }
@@ -35,9 +43,23 @@ public final class GridSettingsData {
         }
     }
 
+    public @NotNull String getName() {
+        synchronized (lock) {
+            return name;
+        }
+    }
+
+    public void setName(@NotNull String value) {
+        synchronized (lock) {
+            if (name.equals(value)) return;
+            name = value;
+            markDirty.run();
+        }
+    }
+
     public boolean isDefault() {
         synchronized (lock) {
-            return !isTracked;
+            return !isTracked && name.isEmpty();
         }
     }
 

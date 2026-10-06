@@ -27,7 +27,7 @@ export type Api = {
     history: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<HistoryEntry[]>>;
     historyEntry: (gridKey: string, entryId: string | number, signal?: AbortSignal) => Promise<HistoryDetail>;
     settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettings>;
-    saveSettings: (gridKey: string, body: { isTracked: boolean }) => Promise<GridSettings>;
+    saveSettings: (gridKey: string, body: Partial<GridSettings>) => Promise<GridSettings>;
     submitPlan: (gridKey: string, planId: string | number, cpuKey: string) => Promise<null>;
     deletePlan: (gridKey: string, planId: string | number) => Promise<null>;
     logout: () => Promise<null>;
@@ -59,7 +59,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             body?:
                 | { itemKey: string; quantity: number }
                 | { cpuKey: string }
-                | { isTracked: boolean }
+                | Partial<GridSettings>
                 | { paused: boolean };
         } = {}
     ): Promise<ResourceResponse<T>> {

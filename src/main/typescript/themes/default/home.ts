@@ -1,6 +1,8 @@
 import type { TerminalState, createTerminal } from '../../app/terminal.js';
-import type { Grid } from '../../app/api-types.js';
 import type { Translator } from '../../app/i18n.js';
+import { homeIcon } from './icons/hackernoon/home.js';
+import { networkIcon } from './icons/hackernoon/chart-network.js';
+import { networkLabel as gridLabel, networkOwner } from './network.js';
 import { cpuHref } from '../../app/router.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
@@ -15,20 +17,23 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className = 
 export function createHomeView(root: HTMLElement, application: ReturnType<typeof createTerminal>) {
     const view = element('section', 'window-frame home-dashboard');
     view.id = 'home';
-    view.innerHTML = `<div class="terminal-heading"><h2></h2></div>
+    view.innerHTML = `<div class="terminal-heading"><h2>${homeIcon}<span></span></h2></div>
         <div class="terminal-scroll home-scroll" tabindex="0"><section class="home-work"><div class="home-section-heading"><h3></h3><span class="home-work-count"></span></div>
         <p class="home-scope"></p><p class="home-status" role="status"></p><div class="home-crafting"></div><button type="button" class="home-retry"></button></section></div>`;
     const panel = element('aside', 'home-network-panel');
     panel.id = 'home-network-panel';
-    panel.innerHTML = `<h3></h3><p class="home-selected-network"></p><button type="button" class="choose-network"></button>`;
-    const title = view.querySelector('h2')!;
+    panel.innerHTML = `<h3>${networkIcon}<span></span></h3><h4 class="home-selected-network"></h4><p class="home-selected-owner"></p><dl class="home-selected-identity"><dt></dt><dd><code></code></dd></dl><a class="home-network-details button-link"></a><button type="button" class="choose-network"></button>`;
+    const title = view.querySelector('h2 span')!;
     const description = view.querySelector('.home-scope')!;
     const workTitle = view.querySelector('.home-work h3')!;
     const workCount = view.querySelector('.home-work-count')!;
     const status = view.querySelector<HTMLElement>('.home-status')!;
     const work = view.querySelector<HTMLElement>('.home-crafting')!;
-    const networkLabel = panel.querySelector('h3')!;
+    const networkLabel = panel.querySelector('h3 span')!;
     const selectedNetwork = panel.querySelector('.home-selected-network')!;
+    const selectedOwner = panel.querySelector<HTMLElement>('.home-selected-owner')!;
+    const selectedIdentity = panel.querySelector<HTMLElement>('.home-selected-identity')!;
+    const details = panel.querySelector<HTMLAnchorElement>('.home-network-details')!;
     const scroll = view.querySelector<HTMLElement>('.home-scroll')!;
     const choose = panel.querySelector<HTMLButtonElement>('.choose-network')!;
     const retry = view.querySelector<HTMLButtonElement>('.home-retry')!;
@@ -50,13 +55,6 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
     const choices = new Map<string, ReturnType<typeof createChoice>>();
     const groups = new Map<string, ReturnType<typeof createGroup>>();
 
-    function gridLabel(grid: Grid, locale: Translator) {
-        return locale.common('gridOwner', { owner: grid.owner || locale.common('unknownOwner') });
-    }
-    function gridLocation(grid: Grid, locale: Translator) {
-        const position = Object.values(grid.accessSources).flat()[0]?.position;
-        return position ? locale.common('position', { dimension: position.dimid, ...position }) : grid.key.slice(0, 8);
-    }
     function createChoice() {
         const card = element('div', 'inset-frame network-choice');
         const link = element('a', 'network-choice-link');
@@ -119,9 +117,15 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
             workTitle.textContent = locale.common('cpuOutput');
             networkLabel.textContent = locale.common('network');
             const selected = state.grids.find((grid) => grid.key === state.selectedGridKey);
-            selectedNetwork.textContent = selected
-                ? `${selected.owner || locale.common('unknownOwner')} · ${gridLocation(selected, locale)}`
-                : locale.common('noNetworkSelected');
+            selectedNetwork.textContent = selected ? gridLabel(selected, locale) : locale.common('noNetworkSelected');
+            selectedOwner.hidden = !selected;
+            selectedIdentity.hidden = !selected;
+            details.hidden = !selected;
+            selectedOwner.textContent = selected ? networkOwner(selected, locale) : '';
+            selectedIdentity.querySelector('dt')!.textContent = locale.common('networkIdentifier');
+            selectedIdentity.querySelector('code')!.textContent = selected?.key || '';
+            details.textContent = locale.common('networkDetails');
+            details.href = selected ? `#/grids/${encodeURIComponent(selected.key)}/settings` : '#/';
             choose.textContent = locale.common('chooseNetwork');
             choose.disabled = state.gridStatus !== 'ready' || !state.grids.length;
             retry.textContent = locale.common('retry');
@@ -174,7 +178,7 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
                 choices.set(grid.key, choice);
                 choice.link.href = `#/grids/${encodeURIComponent(grid.key)}/items`;
                 choice.name.textContent = gridLabel(grid, locale);
-                choice.location.textContent = gridLocation(grid, locale);
+                choice.location.textContent = networkOwner(grid, locale);
                 choice.count.textContent = locale.common('cpuCount', { count: grid.cpuCount });
                 choice.summary.textContent = locale.common('networkIdentifier');
                 choice.identity.textContent = grid.key;
@@ -192,7 +196,7 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
                 const group = groups.get(network.grid.key) || createGroup();
                 groups.set(network.grid.key, group);
                 group.message.textContent = network.error
-                    ? `${gridLabel(network.grid, locale)} · ${gridLocation(network.grid, locale)}: ${locale.common(network.error)}`
+                    ? `${gridLabel(network.grid, locale)}: ${locale.common(network.error)}`
                     : '';
                 group.message.hidden = !network.error;
                 const cpus = network.cpus.filter((cpu) => cpu.isBusy);
@@ -211,8 +215,8 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
                     );
                     if (cpu.finalOutput) row.name.append(` × ${locale.number(cpu.finalOutput.quantity)}`);
                     row.cpu.replaceChildren(renderMinecraftText(cpu.name || locale.common('cpuUnnamed')));
-                    row.source.textContent = network.grid.owner || locale.common('unknownOwner');
-                    row.source.title = `${gridLabel(network.grid, locale)} · ${gridLocation(network.grid, locale)}`;
+                    row.source.textContent = gridLabel(network.grid, locale);
+                    row.source.title = `${networkOwner(network.grid, locale)} · ${network.grid.key}`;
                     row.status.textContent = locale.common(cpu.isPaused ? 'cpuPausedState' : 'cpuBusy');
                     row.product.classList.toggle('has-resource-icon', !!network.icons && !!cpu.finalOutput);
                     if (!row.li.parentNode) group.list.append(row.li);

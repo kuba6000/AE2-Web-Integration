@@ -1,5 +1,5 @@
 import type { Route } from './router.js';
-import type { Grid, Item, IconMetadata } from './api-types.js';
+import type { Grid, Item, IconMetadata, GridSettings } from './api-types.js';
 import type { createIconLoader } from './icons.js';
 import type { Preferences, createPreferences } from './preferences.js';
 import type { CraftingState } from './crafting.js';
@@ -54,6 +54,7 @@ export function createTerminal(
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let refreshingGrids: Promise<void> | null = null;
+    const discoveryUpdates = new Map<string, GridSettings>();
     const notify = () => {
         if (!disposed) for (const listener of listeners) listener(state);
     };
@@ -78,10 +79,27 @@ export function createTerminal(
         },
         () => iconsEnabled && state.iconPack.available === true
     );
-    const settings = createGridSettings(api, () => {
-        notify();
-        schedule();
-    });
+    const settings = createGridSettings(
+        api,
+        () => {
+            notify();
+            schedule();
+        },
+        (key, saved) => {
+            if (refreshingGrids) discoveryUpdates.set(key, saved);
+            for (const grid of state.grids)
+                if (grid.key === key) {
+                    grid.name = saved.name;
+                    grid.isTrackingEnabled = saved.isTracked;
+                }
+            for (const network of state.home.networks)
+                if (network.grid.key === key) {
+                    network.grid.name = saved.name;
+                    network.grid.isTrackingEnabled = saved.isTracked;
+                }
+            notify();
+        }
+    );
 
     const state: TerminalState = {
         route: { view: 'home', gridKey: null },
@@ -235,12 +253,21 @@ export function createTerminal(
         if (disposed) return;
         if (refreshingGrids) return reloadDetail ? refreshingGrids.then(() => loadHistory(true)) : refreshingGrids;
         clearTimeout(timer);
+        discoveryUpdates.clear();
         gridRequest = new AbortController();
         void loadIconPack();
         refreshingGrids = (async () => {
             try {
                 const grids = await api.grids(gridRequest.signal);
                 if (disposed) return;
+                // Grid-scoped settings results outrank discovery that was already in flight.
+                for (const grid of grids) {
+                    const saved = discoveryUpdates.get(grid.key);
+                    if (saved) {
+                        grid.name = saved.name;
+                        grid.isTrackingEnabled = saved.isTracked;
+                    }
+                }
                 state.grids = grids;
                 if (!state.grids.some((grid) => grid.key === state.selectedGridKey)) state.selectedGridKey = null;
                 state.gridStatus = 'ready';
@@ -267,6 +294,7 @@ export function createTerminal(
                 settings.block(state.gridError);
                 notify();
             } finally {
+                discoveryUpdates.clear();
                 refreshingGrids = null;
                 schedule();
             }

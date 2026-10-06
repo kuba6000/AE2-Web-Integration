@@ -2,6 +2,7 @@ import type { HistoryEntry } from '../../app/api-types.js';
 import type { TerminalState, createTerminal } from '../../app/terminal.js';
 import type { Translator as Locale } from '../../app/i18n.js';
 
+import { infoCircle } from './icons/hackernoon/info-circle.js';
 import { historyHref } from '../../app/router.js';
 import { renderHistoryTimeline } from './history-timeline.js';
 import { renderMinecraftText } from './minecraft-text.js';
@@ -36,7 +37,10 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
     list.className = 'history-list';
     const detail = element('div');
     detail.className = 'history-detail';
-    scroll.append(list, detail);
+    const trackingNotice = element('div');
+    trackingNotice.className = 'history-tracking-notice';
+    trackingNotice.innerHTML = `${infoCircle}<p><span></span> <a></a></p>`;
+    scroll.append(trackingNotice, list, detail);
     body.append(status, scroll);
     view.append(header, body);
     root.append(view);
@@ -88,7 +92,8 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
     let lastLocale: Locale | undefined;
     let lastRoute = '';
     return {
-        render(route: TerminalState['route'], state: TerminalState['history'], locale: Locale) {
+        render(applicationState: TerminalState, locale: Locale) {
+            const { route, history: state } = applicationState;
             view.hidden = route.view !== 'history';
             if (route.view !== 'history' || route.entryId !== null) icons.update([], null);
             if (route.view !== 'history') {
@@ -102,6 +107,15 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
             }
             const { common: t, number, dateTime } = locale;
             title.textContent = t('history');
+            const grid =
+                applicationState.gridStatus === 'ready'
+                    ? applicationState.grids.find((grid) => grid.key === route.gridKey)
+                    : undefined;
+            trackingNotice.hidden = state.status !== 'ready' || grid?.isTrackingEnabled !== false;
+            trackingNotice.querySelector('span')!.textContent = t('trackingDisabledHistory');
+            const settingsLink = trackingNotice.querySelector('a')!;
+            settingsLink.textContent = t('enableTracking');
+            settingsLink.href = `#/grids/${encodeURIComponent(route.gridKey)}/settings`;
             scroll.setAttribute('aria-label', t('history'));
             status.textContent = state.error
                 ? t(state.error)

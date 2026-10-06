@@ -537,22 +537,6 @@ nav {
     min-width: 0;
     overflow-wrap: anywhere;
 }
-.settings-view form {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin: 20px 0;
-}
-.settings-view h3 {
-    margin-top: 24px;
-}
-.settings-view h4 {
-    margin-top: 18px;
-}
-.settings-view li {
-    margin-bottom: 14px;
-}
 .plan-table th {
     overflow-wrap: normal;
 }
@@ -633,6 +617,7 @@ h4 {
     margin: 0 0 12px;
     font-size: 15px;
 }
+.button-link,
 button,
 input,
 select {
@@ -640,6 +625,7 @@ select {
     color: inherit;
     border-radius: 0;
 }
+.button-link,
 button,
 select {
     background: var(--surface);
@@ -649,13 +635,16 @@ select {
     box-shadow: none;
     padding: 8px 12px;
 }
+.button-link,
 button {
     cursor: pointer;
     font-size: 13px;
 }
+.button-link:hover,
 button:hover {
     background: var(--surface-hover);
 }
+.button-link:active,
 button:active {
     border-color: var(--control-edge-dark) var(--control-edge-light) var(--control-edge-light) var(--control-edge-dark);
 }
@@ -860,10 +849,10 @@ label {
     margin-bottom: 16px;
     margin-inline: var(--tools-width) var(--details-width);
 }
-#app:has(> .icon-notice:not([hidden])) {
+#app:has(> .info-notices:not([hidden])) {
     grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
-.icon-notice {
+.info-notice {
     --panel: light-dark(#e8eef5, #3d4654);
     --frame-image: url('./window-frame.svg#info');
 
@@ -876,12 +865,12 @@ label {
     margin-bottom: 16px;
     color: light-dark(#34333b, #e8edf3);
 }
-.icon-notice > .theme-icon {
+.info-notice > .theme-icon {
     flex: 0 0 24px;
     width: 24px;
     height: 24px;
 }
-.icon-notice p {
+.info-notice p {
     flex: 1 1 200px;
     margin: 0;
     line-height: 1.5;
@@ -901,7 +890,7 @@ label {
     padding-left: 0;
 }
 .with-terminal > .window-frame,
-.window-frame:has(> :is(.cpu-view, .history-view):not([hidden])) {
+.window-frame:has(> :is(.cpu-view, .history-view, .settings-view):not([hidden])) {
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -910,7 +899,8 @@ label {
 .cpu-view,
 .cpu-overview,
 .cpu-terminal,
-.history-view {
+.history-view,
+.settings-view {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -931,7 +921,7 @@ label {
     color: var(--terminal-title);
     text-shadow: none;
 }
-:is(.cpu-overview, .history-view) > .terminal-heading {
+:is(.cpu-overview, .history-view, .settings-view) > .terminal-heading {
     /* Keep the title centered at the same height as the terminal's search control. */
     min-height: 37px;
 }
@@ -977,29 +967,29 @@ label {
     scrollbar-gutter: stable both-edges;
     padding-inline: 4px;
 }
-:is(#item-scroll, .terminal-scroll):focus-visible {
+:is(#item-scroll, .terminal-scroll, .info-notices):focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
 }
-:is(#item-scroll, .terminal-scroll, .network-dialog)::-webkit-scrollbar {
+:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices)::-webkit-scrollbar {
     width: 18px;
 }
-:is(#item-scroll, .terminal-scroll, .network-dialog)::-webkit-scrollbar-track {
+:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices)::-webkit-scrollbar-track {
     background: var(--slot);
     border: 2px solid;
     border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
 }
-:is(#item-scroll, .terminal-scroll, .network-dialog)::-webkit-scrollbar-thumb {
+:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices)::-webkit-scrollbar-thumb {
     min-height: 28px;
     background: var(--panel);
     border: 2px solid;
     border-color: var(--edge-light) var(--edge-dark) var(--edge-dark) var(--edge-light);
 }
-:is(#item-scroll, .terminal-scroll, .network-dialog)::-webkit-scrollbar-thumb:hover {
+:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices)::-webkit-scrollbar-thumb:hover {
     background: var(--selected);
 }
 @supports not selector(::-webkit-scrollbar) {
-    :is(#item-scroll, .terminal-scroll, .network-dialog) {
+    :is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices) {
         scrollbar-color: var(--border) var(--slot);
     }
 }
@@ -1467,7 +1457,7 @@ footer a {
         font-size: 12px;
         padding: 8px;
     }
-    :is(.cpu-overview, .history-view) > .terminal-heading {
+    :is(.cpu-overview, .history-view, .settings-view) > .terminal-heading {
         min-height: 33px;
     }
     #app {
@@ -1512,7 +1502,7 @@ footer a {
     .search input {
         padding-block: 5px;
     }
-    :is(.cpu-overview, .history-view) > .terminal-heading {
+    :is(.cpu-overview, .history-view, .settings-view) > .terminal-heading {
         min-height: 33px;
     }
     .terminal-body {
@@ -1526,7 +1516,7 @@ footer a {
     }
 }
 @media (max-width: 560px) and (max-height: 600px) {
-    :is(.cpu-overview, .history-view) > .terminal-heading {
+    :is(.cpu-overview, .history-view, .settings-view) > .terminal-heading {
         min-height: 31px;
     }
 }
@@ -1546,9 +1536,6 @@ footer a {
 }
 .home-network-panel {
     grid-column: 3;
-}
-.home-selected-network {
-    font-size: 11px;
 }
 .home-network-panel .choose-network {
     width: 100%;
@@ -1693,4 +1680,158 @@ footer a {
     display: block;
     margin-top: 8px;
     overflow-wrap: anywhere;
+}
+
+.home-dashboard h2,
+.settings-view h2 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.home-dashboard h2 .theme-icon,
+.settings-view h2 .theme-icon {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+}
+.home-network-panel h3 .theme-icon {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+}
+.home-selected-network {
+    font-size: 13px;
+    margin: 0 0 14px;
+    overflow-wrap: anywhere;
+}
+.home-selected-owner,
+.home-selected-identity,
+.home-network-details {
+    font-size: 11px;
+    overflow-wrap: anywhere;
+    line-height: 1.6;
+}
+.home-selected-identity dd {
+    margin: 6px 0 16px;
+}
+.home-network-details {
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    margin-bottom: 14px;
+}
+.network-details-scroll {
+    padding-block: 0 14px;
+}
+.network-details-scroll > section,
+.network-details-scroll > form {
+    margin-bottom: 28px;
+}
+.network-details-scroll h3 {
+    margin: 8px 0 16px;
+    font-size: 15px;
+}
+.network-information dl {
+    display: grid;
+    grid-template-columns: minmax(80px, auto) minmax(0, 1fr);
+    gap: 12px 24px;
+    font-size: 12px;
+    line-height: 1.6;
+}
+.network-information dd {
+    margin: 0;
+}
+.network-information dt {
+    color: var(--muted);
+}
+.network-access {
+    border-top: 1px solid var(--border);
+}
+.network-person {
+    border-bottom: 1px solid var(--border);
+    padding: 12px 0;
+    font-size: 12px;
+}
+.network-person summary {
+    cursor: pointer;
+    padding: 4px 0;
+}
+.network-person summary strong {
+    margin-right: 16px;
+}
+.network-person summary span {
+    color: var(--muted);
+    font-size: 11px;
+}
+.network-person > code {
+    display: block;
+    margin: 14px 0;
+    color: var(--muted);
+}
+.network-person ul {
+    padding-left: 20px;
+}
+.network-person li {
+    margin-bottom: 16px;
+    line-height: 1.6;
+}
+.network-person li p {
+    margin-bottom: 6px;
+}
+.settings-view form {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+}
+.settings-view form h3,
+.settings-view form p {
+    margin: 0;
+}
+.settings-view form label:not(.checkbox) {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: min(100%, 520px);
+    font-size: 12px;
+}
+.settings-view form input[type='text'] {
+    width: 100%;
+}
+.settings-view .hint,
+.settings-view [role='status'] {
+    font-size: 11px;
+    line-height: 1.7;
+}
+
+.info-notices {
+    min-height: 0;
+    max-height: 17dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.history-tracking-notice {
+    display: flex;
+    align-items: start;
+    gap: 12px;
+    margin: 0 0 16px;
+    font-size: 12px;
+    line-height: 1.7;
+}
+.history-tracking-notice .info-icon {
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+}
+.history-tracking-notice p {
+    margin: 0;
+}
+
+@media (max-height: 600px) {
+    .info-notices {
+        max-height: 12dvh;
+    }
+    #app:has(> .info-notices:not([hidden])) .control-panel {
+        max-height: 30dvh;
+    }
 }
