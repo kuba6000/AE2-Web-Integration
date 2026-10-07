@@ -75,6 +75,12 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICrafting
     }
 
     @Override
+    public boolean web$acceptsPlayerJobs() {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return cpu.isActive() && !cpu.isBusy();
+    }
+
+    @Override
     public boolean web$isBusy() {
         return ((ICraftingCPU) this).isBusy();
     }

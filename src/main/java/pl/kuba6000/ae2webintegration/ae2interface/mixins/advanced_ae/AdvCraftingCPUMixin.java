@@ -94,6 +94,12 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNam
     }
 
     @Override
+    public boolean web$acceptsPlayerJobs() {
+        AdvCraftingCPU cpu = (AdvCraftingCPU) (Object) this;
+        return cpu.isActive() && !cpu.isBusy();
+    }
+
+    @Override
     public boolean web$isBusy() {
         return ((ICraftingCPU) this).isBusy();
     }
