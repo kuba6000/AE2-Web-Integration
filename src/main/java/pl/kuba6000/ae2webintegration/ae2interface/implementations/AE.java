@@ -1,6 +1,8 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.Map;
 
 import net.minecraft.world.World;
 
@@ -11,6 +13,7 @@ import appeng.api.storage.data.IAEStack;
 import appeng.hooks.TickHandler;
 import appeng.me.Grid;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
+import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -18,6 +21,14 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 public class AE implements IAE {
+
+    private static final Map<ServerCapability, Boolean> CAPABILITIES = Collections
+        .singletonMap(ServerCapability.CRAFTING_LIGHT_MODE, true);
+
+    @Override
+    public @NotNull Map<ServerCapability, Boolean> web$getCapabilities() {
+        return CAPABILITIES;
+    }
 
     public static AE instance = new AE();
 
