@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
+import appeng.api.config.CraftingAllow;
 import appeng.api.networking.crafting.CraftingItemList;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.storage.data.IItemList;
@@ -99,6 +100,13 @@ public abstract class AECraftingCPUClusterMixin implements IPausableCraftingCPU,
     @Override
     public long web$getCoProcessors() {
         return ((CraftingCPUCluster) (Object) this).getCoProcessors();
+    }
+
+    @Override
+    public boolean web$acceptsPlayerJobs() {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return cpu.isActive() && cpu.getCraftingAllowMode() != CraftingAllow.ONLY_NONPLAYER
+            && (!cpu.isBusy() || cpu.isCraftingLinkStandalone());
     }
 
     @Override
