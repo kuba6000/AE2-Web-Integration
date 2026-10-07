@@ -147,10 +147,6 @@ header {
     min-width: 0;
     overflow-wrap: anywhere;
 }
-.crafting-plan select {
-    width: 100%;
-    min-width: 0;
-}
 .plan-table {
     overflow-x: auto;
     max-width: 100%;
@@ -175,11 +171,13 @@ header {
 .plan-actions {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 12px;
     flex-wrap: wrap;
-    margin-top: 16px;
+    flex-shrink: 0;
+    margin: 12px var(--grid-inset, 22px) 0;
 }
-.crafting-dialog input[type='number'] {
+.crafting-dialog input[type='text'] {
     min-width: 0;
     width: 100%;
 }
@@ -662,7 +660,7 @@ input::placeholder {
     color: var(--surface-muted);
     opacity: 1;
 }
-input[type='checkbox'] {
+input:is([type='checkbox'], [type='radio']) {
     appearance: none;
     display: grid;
     place-content: center;
@@ -674,7 +672,7 @@ input[type='checkbox'] {
     border-radius: 0;
     cursor: pointer;
 }
-input[type='checkbox']::before {
+input:is([type='checkbox'], [type='radio'])::before {
     content: '';
     width: 16px;
     height: 16px;
@@ -683,27 +681,27 @@ input[type='checkbox']::before {
         center / 16px 16px no-repeat;
     visibility: hidden;
 }
-input[type='checkbox']:checked::before {
+input:is([type='checkbox'], [type='radio']):checked::before {
     visibility: visible;
 }
 .checkbox:not(:has(input:disabled)):hover input {
     background: var(--surface-hover);
 }
-input[type='checkbox']:active:not(:disabled) {
+input:is([type='checkbox'], [type='radio']):active:not(:disabled) {
     background: var(--slot-selected);
 }
 .checkbox:has(input:disabled) {
     opacity: 0.5;
     cursor: default;
 }
-input[type='checkbox']:disabled {
+input:is([type='checkbox'], [type='radio']):disabled {
     cursor: default;
 }
 @media (forced-colors: active) {
-    input[type='checkbox'] {
+    input:is([type='checkbox'], [type='radio']) {
         appearance: auto;
     }
-    input[type='checkbox']::before {
+    input:is([type='checkbox'], [type='radio'])::before {
         display: none;
     }
 }
@@ -947,7 +945,8 @@ label {
 .cpu-overview,
 .cpu-terminal,
 .history-view,
-.settings-view {
+.settings-view,
+.crafting-plan {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -1018,25 +1017,25 @@ label {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
 }
-:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices)::-webkit-scrollbar {
+:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices, #plan-panel)::-webkit-scrollbar {
     width: 18px;
 }
-:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices)::-webkit-scrollbar-track {
+:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices, #plan-panel)::-webkit-scrollbar-track {
     background: var(--slot);
     border: 2px solid;
     border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
 }
-:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices)::-webkit-scrollbar-thumb {
+:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices, #plan-panel)::-webkit-scrollbar-thumb {
     min-height: 28px;
     background: var(--panel);
     border: 2px solid;
     border-color: var(--edge-light) var(--edge-dark) var(--edge-dark) var(--edge-light);
 }
-:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices)::-webkit-scrollbar-thumb:hover {
+:is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices, #plan-panel)::-webkit-scrollbar-thumb:hover {
     background: var(--selected);
 }
 @supports not selector(::-webkit-scrollbar) {
-    :is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices) {
+    :is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices, #plan-panel) {
         scrollbar-color: var(--border) var(--slot);
     }
 }
@@ -1456,6 +1455,7 @@ footer a {
     }
     #resource-panel,
     #cpu-panel,
+    #plan-panel,
     #home-network-panel {
         grid-column: 2;
         margin-top: 0;
@@ -1981,4 +1981,53 @@ footer a {
 .resource-menu button {
     width: 100%;
     text-align: start;
+}
+
+.cpu-item[data-crafting='missing'] {
+    --crafting-tint: rgb(205 55 55 / 35.3%);
+}
+.resource-grid.plan-items {
+    --slot-height: 116px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+}
+.plan-cpu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.plan-cpu {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 4px;
+    padding: 6px;
+    background: var(--slot);
+    font-size: 11px;
+}
+.plan-cpu input {
+    grid-row: span 2;
+    margin: 3px 0;
+}
+.plan-cpu:has(:checked) {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+.plan-cpu:has(:disabled) {
+    opacity: 0.6;
+}
+.plan-cpu span {
+    font-size: 10px;
+}
+.quantity-adjustments {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+}
+.quantity-adjustments button {
+    padding: 6px 2px;
+    font-size: 11px;
+}
+.craft-product {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }

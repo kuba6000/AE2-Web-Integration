@@ -20,6 +20,12 @@ public interface ICraftingCPUCluster extends IIdentityHolder {
 
     boolean web$isBusy();
 
+    /**
+     * Whether current native state admits a player request, before checking its output and storage needs.
+     * Read on the server thread; native submission remains authoritative.
+     */
+    boolean web$acceptsPlayerJobs();
+
     void web$cancel();
 
     IAEGenericStack web$getFinalOutput();

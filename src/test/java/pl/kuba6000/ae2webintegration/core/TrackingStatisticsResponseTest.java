@@ -146,6 +146,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 case "web$getKey" -> StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
                 case "web$getName" -> "cpu";
                 case "web$isBusy" -> true;
+                case "web$acceptsPlayerJobs" -> false;
                 case "web$getAvailableStorage" -> 64L;
                 case "web$getAllItems" -> null;
                 default -> throw new AssertionError("Unexpected CPU call: " + method.getName());

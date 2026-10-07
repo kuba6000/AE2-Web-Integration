@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -37,12 +38,16 @@ import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
+import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
@@ -365,6 +370,161 @@ class IconDeliveryHttpTest {
     }
 
     @Test
+    void planIconsAreOptInAndRetainFallbackAcrossInventoryRefresh() throws Exception {
+        StableKey exact = TestGridFixtures.key(151);
+        StableKey base = TestGridFixtures.key(152);
+        installPack(exact, base);
+        CoreEngine.onServerStarted();
+        AtomicInteger normalizations = new AtomicInteger();
+        IAEKey[] resources = { iconResource("exact", 12, exact, base, normalizations),
+            iconResource("fallback", 12, TestGridFixtures.key(153), base, normalizations),
+            new ItemIdentityRequestTest.Resource("unavailable", 12, false) {
+
+                @Override
+                public @NotNull IAEKey web$copyIdentity() {
+                    return this;
+                }
+
+                @Override
+                public StableKey web$getIconBaseKey() {
+                    throw new IllegalStateException("Unsupported icon");
+                }
+            } };
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
+            154,
+            false,
+            AEControllerState.CONTROLLER_ONLINE) {
+
+            @Override
+            public IAECraftingGrid web$getCraftingGrid() {
+                return (IAECraftingGrid) Proxy.newProxyInstance(
+                    getClass().getClassLoader(),
+                    new Class<?>[] { IAECraftingGrid.class },
+                    (proxy, method, args) -> Collections.emptySet());
+            }
+
+            @Override
+            public IAEStorageGrid web$getStorageGrid() {
+                return (IAEStorageGrid) Proxy.newProxyInstance(
+                    getClass().getClassLoader(),
+                    new Class<?>[] { IAEStorageGrid.class },
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "web$getStorageList" -> stacks();
+                        case "web$getInventory" -> Proxy.newProxyInstance(
+                            getClass().getClassLoader(),
+                            new Class<?>[] { pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem.class },
+                            (inventory, operation, parameters) -> 0L);
+                        default -> throw new AssertionError(method.getName());
+                    });
+            }
+        };
+        AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
+        String gridPath = "/api/grids/" + TestGridFixtures.resolvedKey(grid);
+        CompletableFuture<IAECraftingJob> future = new CompletableFuture<>();
+        int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
+            .addJob(future);
+        String path = gridPath + "/crafting-plans/" + id;
+        JsonObject pending = syncedJson(path + "?icons=true");
+        assertFalse(
+            pending.getAsJsonObject("data")
+                .get("isDone")
+                .getAsBoolean());
+        assertTrue(
+            pending.getAsJsonObject("data")
+                .get("plan")
+                .isJsonNull());
+        ICraftingPlanSummary summary = () -> Arrays.stream(resources)
+            .map(
+                resource -> (ICraftingPlanSummaryEntry) Proxy.newProxyInstance(
+                    getClass().getClassLoader(),
+                    new Class<?>[] { ICraftingPlanSummaryEntry.class },
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "web$getWhat" -> resource;
+                        case "web$getCraftAmount" -> 12L;
+                        case "web$getCraftSteps" -> 3L;
+                        case "web$getMissingAmount", "web$getStoredAmount" -> 0L;
+                        default -> throw new AssertionError(method.getName());
+                    }))
+            .collect(java.util.stream.Collectors.toList());
+        future.complete(
+            (IAECraftingJob) Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class<?>[] { IAECraftingJob.class },
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "web$isSimulation" -> false;
+                    case "web$getByteTotal" -> 4096L;
+                    case "web$generateSummary" -> summary;
+                    default -> throw new AssertionError(method.getName());
+                }));
+        JsonObject plain = syncedJson(path);
+        assertTrue(
+            plain.has("icons") && plain.get("icons")
+                .isJsonNull());
+        assertEquals(0, normalizations.get());
+        for (int poll = 0; poll < 2; poll++) {
+            JsonObject response = syncedJson(path + "?icons=true");
+            assertEquals(
+                packId,
+                response.getAsJsonObject("icons")
+                    .get("packId")
+                    .getAsString());
+            com.google.gson.JsonArray rows = response.getAsJsonObject("data")
+                .getAsJsonArray("plan");
+            assertEquals(3, rows.size());
+            assertEquals(
+                exact.toString(),
+                rows.get(0)
+                    .getAsJsonObject()
+                    .get("itemKey")
+                    .getAsString());
+            assertNotNull(
+                rows.get(0)
+                    .getAsJsonObject()
+                    .getAsJsonObject("icon"));
+            assertEquals(
+                rows.get(0)
+                    .getAsJsonObject()
+                    .get("icon"),
+                rows.get(1)
+                    .getAsJsonObject()
+                    .get("icon"));
+            assertTrue(
+                rows.get(2)
+                    .getAsJsonObject()
+                    .get("icon")
+                    .isJsonNull());
+            assertEquals(
+                12,
+                rows.get(1)
+                    .getAsJsonObject()
+                    .get("requested")
+                    .getAsLong());
+            syncedJson(gridPath + "/items");
+            System.gc();
+        }
+        assertEquals(1, normalizations.get());
+        JsonObject disabled = syncedJson(path + "?icons=false");
+        assertTrue(
+            disabled.get("icons")
+                .isJsonNull());
+        assertTrue(
+            disabled.getAsJsonObject("data")
+                .getAsJsonArray("plan")
+                .get(0)
+                .getAsJsonObject()
+                .get("icon")
+                .isJsonNull());
+        HttpURLConnection invalid = connection(path + "?icons=perhaps");
+        assertEquals(400, invalid.getResponseCode());
+        invalid.disconnect();
+        config.write("general.allow_no_password_on_localhost", false);
+        Config.reload();
+        HttpURLConnection denied = connection(path + "?icons=true");
+        assertEquals(401, denied.getResponseCode());
+        denied.disconnect();
+    }
+
+    @Test
     void cpuUsesIndependentIdentityOwnershipAndPreservesExistingAggregation() throws Exception {
         StableKey baseKey = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         StableKey exactKey = TestGridFixtures.key(91);
@@ -381,6 +541,7 @@ class IconDeliveryHttpTest {
             (proxy, method, args) -> switch (method.getName()) {
                 case "web$getKey" -> cpuKey;
                 case "web$isBusy" -> busy.get();
+                case "web$acceptsPlayerJobs" -> true;
                 case "web$getName" -> "CPU";
                 case "web$getAvailableStorage" -> 1024L;
                 case "web$getUsedStorage", "web$getCoProcessors" -> 0L;

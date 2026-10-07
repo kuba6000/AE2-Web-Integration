@@ -12,12 +12,19 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
+import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -61,6 +68,10 @@ public final class GetCraftingPlan extends ISyncedRequest {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
+    /** Include resource icon references and atlas metadata; omitted means false. */
+    @QueryParam("icons")
+    private boolean icons;
+
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
     public static class PlanData {
 
@@ -103,6 +114,8 @@ public final class GetCraftingPlan extends ISyncedRequest {
          * @param usedPercent       fraction of currently available stored units consumed by a storage-only row; zero
          *                          when the
          *                          row requests crafting, has missing units or has no available storage
+         * @param itemKey           stable resource identity, or null when unavailable
+         * @param icon              atlas reference; null when not requested or unavailable
          * @example registryPath iron_ingot
          * @example displayName Iron Ingot
          * @example stored 0
@@ -114,7 +127,8 @@ public final class GetCraftingPlan extends ISyncedRequest {
         @Desugar
         public record JobItem(@Nullable String registryNamespace, @Nullable String registryPath,
             @NotNull String displayName, @Nullable Integer componentCount, @Nullable Integer damage, long stored,
-            long requested, long missing, long steps, double usedPercent) {}
+            long requested, long missing, long steps, double usedPercent, @Nullable String itemKey,
+            @Nullable IconMappings.Reference icon) {}
 
     }
 
@@ -123,10 +137,11 @@ public final class GetCraftingPlan extends ISyncedRequest {
      * 
      * @param status {@code OK} for a successful request
      * @param data   calculation state and, once complete, the required storage and resource plan
+     * @param icons  atlas metadata; null when not requested or no pack is available
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull PlanData data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull PlanData data, @Nullable IconMappings icons) {}
 
     @PathParam("planId")
     private int jobId;
@@ -143,6 +158,8 @@ public final class GetCraftingPlan extends ISyncedRequest {
             return;
         }
         PlanData jobData = new PlanData();
+        IconPack pack = icons ? CoreEngine.getIconPack() : null;
+        IconMappings mappings = pack == null ? null : new IconMappings(pack);
         jobData.isDone = job.isDone();
         if (jobData.isDone) {
             try {
@@ -153,6 +170,7 @@ public final class GetCraftingPlan extends ISyncedRequest {
                 jobData.bytesTotal = craftingJob.web$getByteTotal();
                 ICraftingPlanSummary summary = craftingJob.web$generateSummary(grid);
                 jobData.plan = new ArrayList<>();
+                ItemIdentityRegistry.Listing identities = AE2Controller.itemIdentities.beginListing(craftingJob);
                 for (ICraftingPlanSummaryEntry entry : summary.web$getEntries()) {
                     IAEKey key = entry.web$getWhat();
                     String registryPath = key.web$getRegistryPath();
@@ -162,6 +180,14 @@ public final class GetCraftingPlan extends ISyncedRequest {
                     long stored = entry.web$getStoredAmount();
                     long missing = entry.web$getMissingAmount();
                     double usedPercent = 0d;
+                    StableKey itemKey = null;
+                    IconMappings.Reference icon = null;
+                    try {
+                        itemKey = identities.remember(key);
+                        if (mappings != null) icon = mappings.resolve(itemKey, AE2Controller.itemIdentities);
+                    } catch (RuntimeException unavailable) {
+                        // Optional identity or icon failures must not hide the calculated resource counts.
+                    }
                     if (missing == 0 && requested == 0 && stored > 0) {
                         long available = inventory.web$getAvailable(key, grid);
                         if (available > 0L) {
@@ -179,8 +205,11 @@ public final class GetCraftingPlan extends ISyncedRequest {
                             requested,
                             missing,
                             steps,
-                            usedPercent));
+                            usedPercent,
+                            itemKey == null ? null : itemKey.toString(),
+                            icon));
                 }
+                identities.commit();
                 jobData.plan.sort((i1, i2) -> {
                     if (i1.missing() > 0 && i2.missing() > 0) return Long.compare(i2.missing(), i1.missing());
                     else if (i1.missing() > 0 && i2.missing() == 0) return -1;
@@ -196,6 +225,6 @@ public final class GetCraftingPlan extends ISyncedRequest {
                 return;
             }
         }
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, jobData));
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, jobData, mappings));
     }
 }

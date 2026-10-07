@@ -1,11 +1,16 @@
-import type { Plan, CpuInfo, StoredResource } from './api-types.js';
+import type { Plan, CpuInfo, StoredResource, IconMetadata } from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
-import { navigateToPlan } from './router.js';
+import { navigateToPlan, navigateToGrid } from './router.js';
 
 export type PlanMetadata = { itemKey: string; displayName: string; quantity: number };
 export type Mutation = 'create' | 'submit' | 'delete';
+export type PlanSort = 'name' | 'stored' | 'requested' | 'missing';
 export type CraftingState = {
+    search: string;
+    sort: PlanSort;
+    descending: boolean;
+    icons: IconMetadata | null;
     status: 'idle' | 'loading' | 'calculating' | 'ready' | 'submitted' | 'deleted' | 'unavailable' | 'error';
     plan: Plan | null;
     cpus: (CpuInfo & { key: string; eligible: boolean | undefined })[];
@@ -19,8 +24,12 @@ export type CraftingState = {
 export type CraftingOutcome = Partial<Pick<CraftingState, 'mutation' | 'uncertain' | 'status'>>;
 
 /** Calculation state and actions. The application supplies route lifetime and scheduling. */
-export function createCrafting(api: Api, changed: () => void) {
+export function createCrafting(api: Api, changed: () => void, iconsEnabled: () => boolean) {
     const state: CraftingState = {
+        search: '',
+        sort: 'name',
+        descending: false,
+        icons: null,
         status: 'idle',
         plan: null,
         cpus: [],
@@ -41,6 +50,8 @@ export function createCrafting(api: Api, changed: () => void) {
     let readFailed = false;
     let activePlan: { gridKey: string; planId: string | number } | null = null;
     let autoStart = false;
+    let planIcons: boolean | null = null;
+    let iconRevision = 0;
     let handoff: { key: string; state: CraftingState } | null = null;
     const identity = () =>
         `${route.gridKey}/${activePlan?.planId ?? (route.view === 'plan' ? route.planId : 'create')}`;
@@ -61,6 +72,7 @@ export function createCrafting(api: Api, changed: () => void) {
     const isUncertain = (error: ApiFailure) =>
         !error.status || ['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'].includes(error.status);
     const eligible = (cpu: CpuInfo) =>
+        cpu.acceptsPlayerJobs &&
         state.plan?.isDone &&
         !state.plan.isSimulating &&
         !state.plan.plan?.some((row) => row.missing > 0) &&
@@ -83,10 +95,15 @@ export function createCrafting(api: Api, changed: () => void) {
             readFailed = false;
         }
         try {
-            if (!state.plan?.isDone || state.uncertain) {
-                const plan = await api.plan(current.gridKey, current.planId, request.signal);
+            if (!state.plan?.isDone || state.uncertain || planIcons !== iconsEnabled()) {
+                const requestedIcons = iconsEnabled();
+                const requestedRevision = iconRevision;
+                const response = await api.plan(current.gridKey, current.planId, request.signal, requestedIcons);
                 if (version !== generation) return;
+                const plan = response.data;
                 state.plan = plan;
+                state.icons = requestedRevision === iconRevision ? response.icons : null;
+                planIcons = requestedRevision === iconRevision ? requestedIcons : null;
                 state.status = plan.isDone ? 'ready' : 'calculating';
             }
             if (state.plan.isDone && autoStart) {
@@ -113,6 +130,7 @@ export function createCrafting(api: Api, changed: () => void) {
             state.selectedCpu = '';
             if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
                 state.plan = null;
+                state.icons = null;
                 state.metadata = null;
                 state.status = error.status === 'INVALID_ID' ? 'unavailable' : 'error';
             }
@@ -121,11 +139,29 @@ export function createCrafting(api: Api, changed: () => void) {
             if (version === generation) {
                 reading = false;
                 changed();
+                if (!readFailed && planIcons === null) void refresh();
             }
         }
     }
     const actions = {
         state,
+        invalidateIcons() {
+            iconRevision++;
+            state.icons = null;
+            planIcons = null;
+        },
+        search(value: string) {
+            state.search = value;
+            changed();
+        },
+        sort(value: PlanSort) {
+            state.sort = value;
+            changed();
+        },
+        reverse() {
+            state.descending = !state.descending;
+            changed();
+        },
         get pending() {
             return !!activePlan && state.status === 'calculating' && !state.error;
         },
@@ -143,6 +179,8 @@ export function createCrafting(api: Api, changed: () => void) {
             readFailed = false;
             Object.assign(state, {
                 status: next.view === 'plan' ? 'loading' : 'idle',
+                search: '',
+                icons: null,
                 plan: null,
                 cpus: [],
                 selectedCpu: '',
@@ -167,6 +205,7 @@ export function createCrafting(api: Api, changed: () => void) {
             Object.assign(state, {
                 status: 'error',
                 plan: null,
+                icons: null,
                 metadata: null,
                 cpus: [],
                 selectedCpu: '',
@@ -200,6 +239,7 @@ export function createCrafting(api: Api, changed: () => void) {
             state.mutation = 'create';
             state.status = 'idle';
             state.plan = null;
+            state.icons = null;
             state.metadata = null;
             state.cpus = [];
             state.selectedCpu = '';
@@ -219,6 +259,7 @@ export function createCrafting(api: Api, changed: () => void) {
                     activePlan = { gridKey, planId: jobId };
                     state.metadata = metadata.get(identity())!;
                     state.plan = null;
+                    state.icons = null;
                     state.status = 'calculating';
                     state.mutation = null;
                     await refresh();
@@ -257,7 +298,10 @@ export function createCrafting(api: Api, changed: () => void) {
                 const current = activePlan;
                 await api.submitPlan(current.gridKey, current.planId, automatic ? undefined : state.selectedCpu);
                 finishMutation(key, { status: 'submitted' });
-                if (version === generation) state.status = 'submitted';
+                if (version === generation) {
+                    state.status = 'submitted';
+                    if (!automatic) navigateToGrid(current.gridKey);
+                }
             } catch (caught) {
                 const error = caught as ApiFailure;
                 finishMutation(key, isUncertain(error) ? { uncertain: 'submit' } : null);
@@ -273,6 +317,7 @@ export function createCrafting(api: Api, changed: () => void) {
                     }
                     if (error.status === 'JOB_NOT_DONE') {
                         state.plan = null;
+                        state.icons = null;
                         state.status = 'calculating';
                         state.cpus = [];
                         state.selectedCpu = '';
@@ -281,6 +326,7 @@ export function createCrafting(api: Api, changed: () => void) {
                     if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
                         state.status = error.status === 'INVALID_ID' ? 'unavailable' : 'error';
                         state.plan = null;
+                        state.icons = null;
                         state.metadata = null;
                         state.cpus = [];
                         state.selectedCpu = '';
@@ -317,7 +363,10 @@ export function createCrafting(api: Api, changed: () => void) {
             try {
                 await api.deletePlan(route.gridKey, route.planId);
                 finishMutation(key, { status: 'deleted' });
-                if (version === generation) state.status = 'deleted';
+                if (version === generation) {
+                    state.status = 'deleted';
+                    navigateToGrid(route.gridKey);
+                }
             } catch (caught) {
                 const error = caught as ApiFailure;
                 finishMutation(key, isUncertain(error) ? { uncertain: 'delete' } : null);
@@ -326,6 +375,7 @@ export function createCrafting(api: Api, changed: () => void) {
                     if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
                         state.status = error.status === 'INVALID_ID' ? 'unavailable' : 'error';
                         state.plan = null;
+                        state.icons = null;
                         state.metadata = null;
                         state.cpus = [];
                         state.selectedCpu = '';

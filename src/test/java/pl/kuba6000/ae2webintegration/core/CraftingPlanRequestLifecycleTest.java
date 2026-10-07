@@ -128,7 +128,9 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
             12,
             3,
             4,
-            0.5);
+            0.5,
+            null,
+            null);
         JsonObject json = new JsonParser().parse(
             GSONUtils.GSON_BUILDER.create()
                 .toJson(row))

@@ -102,6 +102,43 @@ class CpuPauseHttpTest extends GridTestScope {
     }
 
     @Test
+    void cpuListReportsCurrentPlayerAdmissionWithoutInferringItFromBusyState() throws Exception {
+        first.acceptsPlayerJobs = true;
+        second.acceptsPlayerJobs = false;
+        unsupported.busy = false;
+        unsupported.acceptsPlayerJobs = false;
+
+        JsonObject list = get(base);
+        assertNotNull(
+            list.getAsJsonObject(first.id)
+                .get("acceptsPlayerJobs"));
+        assertTrue(
+            list.getAsJsonObject(first.id)
+                .get("acceptsPlayerJobs")
+                .getAsBoolean());
+        assertFalse(
+            list.getAsJsonObject(second.id)
+                .get("acceptsPlayerJobs")
+                .getAsBoolean());
+        assertFalse(
+            list.getAsJsonObject(unsupported.id)
+                .get("acceptsPlayerJobs")
+                .getAsBoolean());
+
+        first.acceptsPlayerJobs = false;
+        unsupported.acceptsPlayerJobs = true;
+        JsonObject refreshed = get(base);
+        assertFalse(
+            refreshed.getAsJsonObject(first.id)
+                .get("acceptsPlayerJobs")
+                .getAsBoolean());
+        assertTrue(
+            refreshed.getAsJsonObject(unsupported.id)
+                .get("acceptsPlayerJobs")
+                .getAsBoolean());
+    }
+
+    @Test
     void capabilitiesAndExplicitPauseStateRoundTripForTheAddressedCpu() throws Exception {
         JsonObject list = get(base);
         assertTrue(
@@ -301,6 +338,7 @@ class CpuPauseHttpTest extends GridTestScope {
         final String name;
         final long storage;
         boolean busy;
+        boolean acceptsPlayerJobs;
 
         TestCpu(String id, String name, long storage) {
             this.id = id;
@@ -327,6 +365,10 @@ class CpuPauseHttpTest extends GridTestScope {
 
         public long web$getCoProcessors() {
             return 0;
+        }
+
+        public boolean web$acceptsPlayerJobs() {
+            return acceptsPlayerJobs;
         }
 
         public boolean web$isBusy() {

@@ -52,6 +52,7 @@ export type Grid = {
 };
 export type GridSettings = { isTracked: boolean; name: string };
 export type CpuInfo = {
+    acceptsPlayerJobs: boolean;
     icon?: IconReference | null;
     name: string;
     isBusy: boolean;
@@ -93,6 +94,8 @@ export type CpuDetail = {
     timeElapsed: number;
 };
 export type PlanItem = {
+    itemKey: string | null;
+    icon?: IconReference | null;
     displayName: string;
     registryNamespace: string | null;
     registryPath: string | null;

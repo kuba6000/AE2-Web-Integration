@@ -22,7 +22,12 @@ export type Api = {
         gridKey: string,
         body: { itemKey: string; quantity: number; lightMode?: boolean }
     ) => Promise<{ jobId: number }>;
-    plan: (gridKey: string, planId: string | number, signal?: AbortSignal) => Promise<Plan>;
+    plan: (
+        gridKey: string,
+        planId: string | number,
+        signal?: AbortSignal,
+        icons?: boolean
+    ) => Promise<ResourceResponse<Plan>>;
     cpus: (
         gridKey: string,
         signal?: AbortSignal,
@@ -119,8 +124,10 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             read(`api/grids/${encodeURIComponent(gridKey)}/items${icons ? '?icons=true' : ''}`, { signal }),
         createPlan: (gridKey, body) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans`, { method: 'POST', body }),
-        plan: (gridKey, planId, signal) =>
-            request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${planId}`, { signal }),
+        plan: (gridKey, planId, signal, icons) =>
+            read(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${planId}${icons ? '?icons=true' : ''}`, {
+                signal
+            }),
         cpus: (gridKey, signal, icons = false) =>
             read(`api/grids/${encodeURIComponent(gridKey)}/cpus${icons ? '?icons=true' : ''}`, { signal }),
         cpu: (gridKey, cpuKey, signal, icons = false) =>

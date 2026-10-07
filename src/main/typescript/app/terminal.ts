@@ -60,15 +60,22 @@ export function createTerminal(
     const notify = () => {
         if (!disposed) for (const listener of listeners) listener(state);
     };
-    const crafting = createCrafting(api, () => {
-        if (state.route.view === 'items' && ['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(crafting.state.error ?? '')) {
-            invalidateItems();
-            state.itemStatus = 'error';
-            state.itemError = crafting.state.error ?? null;
-        }
-        notify();
-        schedule();
-    });
+    const crafting = createCrafting(
+        api,
+        () => {
+            if (
+                state.route.view === 'items' &&
+                ['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(crafting.state.error ?? '')
+            ) {
+                invalidateItems();
+                state.itemStatus = 'error';
+                state.itemError = crafting.state.error ?? null;
+            }
+            notify();
+            schedule();
+        },
+        () => iconsEnabled && state.iconPack.available === true
+    );
     const cpus = createCpuMonitor(
         api,
         () => {
@@ -206,6 +213,7 @@ export function createTerminal(
             if (changed) {
                 state.itemIcons = null;
                 cpus.invalidateIcons();
+                crafting.invalidateIcons();
                 history.invalidateIcons();
                 home.invalidateIcons();
             }
@@ -213,6 +221,7 @@ export function createTerminal(
             if (changed) {
                 void loadItems();
                 void loadCpus();
+                void loadCrafting();
                 void loadHome();
                 if (state.route.view === 'history' && state.route.entryId === null) void loadHistory();
             }
@@ -322,11 +331,13 @@ export function createTerminal(
             iconsEnabled = enabled;
             state.itemIcons = null;
             cpus.invalidateIcons();
+            crafting.invalidateIcons();
             history.invalidateIcons();
             home.invalidateIcons();
             icons.enabled(enabled && state.iconPack.available === true);
             void loadItems();
             void loadCpus();
+            void loadCrafting();
             void loadHome();
             if (state.route.view === 'history' && state.route.entryId === null) void loadHistory();
             notify();

@@ -232,6 +232,11 @@ class CoreEngineLifecycleTest extends GridTestScope {
         }
 
         @Override
+        public boolean web$acceptsPlayerJobs() {
+            return !web$isBusy();
+        }
+
+        @Override
         public boolean web$isBusy() {
             return true;
         }

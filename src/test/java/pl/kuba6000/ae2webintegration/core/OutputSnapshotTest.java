@@ -162,6 +162,7 @@ class OutputSnapshotTest extends GridTestScope {
                 case "web$getKey" -> StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
                 case "web$getName" -> "cpu";
                 case "web$isBusy" -> true;
+                case "web$acceptsPlayerJobs" -> false;
                 case "web$getAvailableStorage" -> 64L;
                 case "web$getUsedStorage" -> 16L;
                 case "web$getCoProcessors" -> 1L;

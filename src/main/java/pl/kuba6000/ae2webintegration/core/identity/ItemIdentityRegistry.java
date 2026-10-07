@@ -12,7 +12,7 @@ import com.google.common.cache.CacheBuilder;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
 
-/** Server-thread-only shared identities retained by the grids and CPUs that last reported them. */
+/** Server-thread-only shared identities retained by the grids, CPUs and plans that last reported them. */
 public final class ItemIdentityRegistry {
 
     // Values must not refer back to their owner: that would defeat the weak owner key.

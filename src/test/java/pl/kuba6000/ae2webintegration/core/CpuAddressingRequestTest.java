@@ -416,6 +416,10 @@ class CpuAddressingRequestTest extends GridTestScope {
             return 0;
         }
 
+        public boolean web$acceptsPlayerJobs() {
+            return !web$isBusy();
+        }
+
         public boolean web$isBusy() {
             return busy;
         }

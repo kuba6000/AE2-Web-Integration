@@ -253,6 +253,8 @@ class CraftingOptionsHttpTest extends GridTestScope {
                 (proxy, method, args) -> {
                     if (method.getName()
                         .equals("web$isBusy")) return true;
+                    if (method.getName()
+                        .equals("web$acceptsPlayerJobs")) return false;
                     throw new AssertionError("Unexpected CPU operation: " + method.getName());
                 });
         }

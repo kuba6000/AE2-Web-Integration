@@ -242,7 +242,7 @@ export function mount(
         }
     > = root.querySelectorAll('.tool-button');
     const homeView = createHomeView(find('#workspace'), application);
-    const craftingView = createCraftingView(find('#window'), application);
+    const craftingView = createCraftingView(find('#window'), application, find('#workspace'));
     const itemIcons = application.icons.observe(find('#item-scroll'), paintResourceIcon);
     const slots = createSlotGrid(find('#items'), find('#item-scroll'), find('#terminal'));
     const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace') });
@@ -763,13 +763,15 @@ export function mount(
         find('#resource-panel').hidden = state.route.view !== 'items';
         find('#workspace').classList.toggle(
             'with-terminal',
-            state.route.view === 'items' || (state.route.view === 'cpus' && state.route.cpuKey !== null)
+            state.route.view === 'items' ||
+                state.route.view === 'plan' ||
+                (state.route.view === 'cpus' && state.route.cpuKey !== null)
         );
         find('#missing').hidden = state.route.view !== 'missing';
         renderNetworks();
         renderItems();
         renderDetails();
-        craftingView.render(state, locale);
+        craftingView.render(state, locale, effectiveDisplay !== 'names');
         if (state.route.view !== 'items' || state.itemStatus === 'error' || menuGrid !== state.route.gridKey)
             closeResourceMenu(false);
         cpuView.render(state.route, state.cpus, locale);

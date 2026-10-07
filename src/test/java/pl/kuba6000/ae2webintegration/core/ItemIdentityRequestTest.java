@@ -604,6 +604,8 @@ class ItemIdentityRequestTest extends GridTestScope {
                     (proxy, method, args) -> {
                         if (method.getName()
                             .equals("web$isBusy")) return false;
+                        if (method.getName()
+                            .equals("web$acceptsPlayerJobs")) return true;
                         throw new AssertionError("Unexpected CPU operation: " + method.getName());
                     }));
         }

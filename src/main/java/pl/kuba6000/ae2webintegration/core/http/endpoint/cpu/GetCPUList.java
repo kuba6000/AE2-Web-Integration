@@ -95,6 +95,11 @@ public final class GetCPUList extends ISyncedRequest {
          * @example true
          */
         public boolean isBusy;
+        /**
+         * Whether this CPU currently admits player requests before output and storage checks. Busy CPUs may
+         * admit compatible merges on supported platforms; submission rechecks live native state.
+         */
+        public boolean acceptsPlayerJobs;
         /** Whether this CPU supports pausing the scheduling of its current job. */
         public boolean supportsPause;
         /** Whether the active job is paused; false for idle or unsupported CPUs. */
@@ -171,6 +176,7 @@ public final class GetCPUList extends ISyncedRequest {
             cpuInfo.usedStorage = cluster.web$getUsedStorage();
             cpuInfo.coProcessors = cluster.web$getCoProcessors();
             cpuInfo.isBusy = cluster.web$isBusy();
+            cpuInfo.acceptsPlayerJobs = cluster.web$acceptsPlayerJobs();
             cpuInfo.supportsPause = cluster instanceof IPausableCraftingCPU;
             cpuInfo.isPaused = cpuInfo.isBusy && cluster instanceof IPausableCraftingCPU pausable
                 && pausable.web$isPaused();

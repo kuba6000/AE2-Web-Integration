@@ -51,6 +51,7 @@ const readyPlan = {
     ]
 };
 const cpu = {
+    acceptsPlayerJobs: true,
     name: 'Assembler',
     isBusy: false,
     supportsPause: false,
@@ -273,6 +274,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 response.end(
                     JSON.stringify({
                         status: options.planStatus,
+                        icons: url.searchParams.get('icons') === 'true' ? options.icons : null,
                         data:
                             request.method === 'DELETE'
                                 ? null
@@ -493,10 +495,10 @@ test('resource crafting opens one accessible dialog from details, middle click a
     await page.goto(`${base}#/grids/${gridA}/items`);
     const resource = page.getByRole('button', { name: /Iron Ingot/ });
     await resource.click();
-    assert.equal(await page.getByRole('spinbutton').isVisible(), false);
+    assert.equal(await page.getByRole('textbox').isVisible(), false);
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
     const dialog = page.getByRole('dialog');
-    const quantity = dialog.getByRole('spinbutton');
+    const quantity = dialog.getByRole('textbox');
     await quantity.fill('37');
     await poll(page);
     assert.equal(await quantity.inputValue(), '37');
@@ -532,7 +534,7 @@ test('autostart calculates once with native CPU choice and preserves the resourc
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('spinbutton').fill('23');
+    await dialog.getByRole('textbox').fill('23');
     await dialog.getByRole('checkbox', { name: 'Start automatically', exact: true }).check();
     await dialog.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     await page.clock.fastForward(1200);
@@ -577,7 +579,13 @@ test('autostart failures open the plan without repeating mutations or losing the
                 .filter({ hasText: /outcome.*unknown/i })
                 .waitFor();
         if (failure === 'NO_PERMISSIONS')
-            assert.equal(await page.getByRole('cell', { name: 'Iron Ingot', exact: false }).count(), 0);
+            assert.equal(
+                await page
+                    .getByRole('list', { name: 'Plan resources', exact: true })
+                    .getByRole('button', { name: /Iron Ingot/ })
+                    .count(),
+                0
+            );
         await poll(page);
         await page.goBack();
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -652,14 +660,14 @@ test('a new calculation rejection after successful autostart preserves its dialo
         .waitFor();
     options.fault = { operation: 'create', status: 'BAD_PARAM' };
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
-    await page.getByRole('spinbutton').fill('31');
+    await page.getByRole('textbox').fill('31');
     const rejection = page.waitForResponse(
         (response) => response.request().method() === 'POST' && response.url().endsWith('/crafting-plans')
     );
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     await (await rejection).finished();
     assert.equal(await page.getByRole('dialog').isVisible(), true);
-    assert.equal(await page.getByRole('spinbutton').inputValue(), '31');
+    assert.equal(await page.getByRole('textbox').inputValue(), '31');
     assert.equal(await page.getByRole('button', { name: 'Calculate plan', exact: true }).isEnabled(), true);
 });
 
@@ -955,9 +963,9 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await page.keyboard.press('Enter');
     assert.equal(await item.getAttribute('aria-pressed'), 'true');
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
-    await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
+    await page.getByRole('textbox', { name: 'Craft quantity' }).fill('12');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor();
+    await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor();
     assert.deepEqual(
         options.requests.find((request) => request.method === 'POST' && request.path.endsWith('/crafting-plans')).body,
         { itemKey: 'iron', quantity: 12 }
@@ -1767,9 +1775,11 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Cobalt.*Ingot/ }).click();
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
-    await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
+    await page.getByRole('textbox', { name: 'Craft quantity' }).fill('12');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
-    const resource = page.getByRole('cell', { name: /Cobalt Ingot/ });
+    const resource = page
+        .getByRole('list', { name: 'Plan resources', exact: true })
+        .getByRole('button', { name: /Cobalt Ingot/ });
     await resource.waitFor({ timeout: 3000 });
     async function assertFormatted(locator) {
         assert.doesNotMatch(await locator.innerText(), /§[0-9a-fk-or]/i);
@@ -1777,7 +1787,7 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
         assert.ok(Number((await textStyle(locator, 'Ingot')).weight) >= 700);
     }
     await assertFormatted(resource);
-    assert.equal(await resource.getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
+    assert.match(await resource.getAttribute('title'), /example:cobalt_ingot/);
     const planOutput = page.getByRole('paragraph').filter({ hasText: /^Cobalt Ingot × 12$/ });
     await assertFormatted(planOutput);
     assert.notEqual((await textStyle(planOutput, '× 12')).color, 'rgb(85, 255, 85)');
@@ -1800,9 +1810,10 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
     await historyLink.waitFor();
     await assertFormatted(historyLink);
     await historyLink.click();
-    await resource.waitFor();
-    await assertFormatted(resource);
-    assert.equal(await resource.getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
+    const historyResource = page.getByRole('cell', { name: /Cobalt Ingot/ });
+    await historyResource.waitFor();
+    await assertFormatted(historyResource);
+    assert.equal(await historyResource.getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
     await assertFormatted(page.getByRole('heading', { name: 'Cobalt Ingot × 12', exact: true }));
     const timeline = page.getByRole('region', { name: 'Cobalt Ingot', exact: true });
     await timeline.waitFor();
@@ -2135,7 +2146,9 @@ test('CPU work, plans and history retain resources with unavailable registry met
     options.history = [{ ...historyEntry, finalOutput }];
     options.historyDetail = { ...historyDetail, finalOutput, items: [{ ...historyDetail.items[0], ...metadata }] };
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
-    const resource = page.getByRole('cell', { name: 'Essentia', exact: true });
+    const resource = page
+        .getByRole('list', { name: 'Plan resources', exact: true })
+        .getByRole('button', { name: /Essentia/ });
     await resource.waitFor();
     assert.equal(await resource.locator('code').count(), 0);
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
@@ -2153,8 +2166,9 @@ test('CPU work, plans and history retain resources with unavailable registry met
     await search.fill('essentia');
     await cpuResource.waitFor();
     await page.goto(`${base}#/grids/${gridA}/history/1`);
-    await resource.waitFor();
-    assert.equal(await resource.locator('code').count(), 0);
+    const historyResource = page.getByRole('cell', { name: 'Essentia', exact: true });
+    await historyResource.waitFor();
+    assert.equal(await historyResource.locator('code').count(), 0);
     await page.getByRole('heading', { name: 'Essentia × 12', exact: true }).waitFor();
     const timeline = page.getByRole('region', { name: 'Essentia', exact: true });
     await timeline.waitFor();
@@ -2323,25 +2337,31 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
-    await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
+    await page.getByRole('textbox', { name: 'Craft quantity' }).fill('12');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor({ timeout: 5000 });
+    await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor({ timeout: 5000 });
     assert.match(page.url(), /\/plans\/7$/);
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Refresh automatically' }).check();
     await page.goBack();
-    await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor();
-    await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).selectOption('cpu-b');
+    await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor();
+    await page
+        .getByRole('radiogroup', { name: 'Crafting CPU', exact: true })
+        .getByRole('radio', { name: /cpu-b/ })
+        .check();
     options.cpus = { 'cpu-b': cpu, 'cpu-a': cpu };
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus'));
     await poll(page);
     await (await refreshed).finished();
-    assert.equal(await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).inputValue(), 'cpu-b');
+    assert.equal(
+        await page
+            .getByRole('radiogroup', { name: 'Crafting CPU', exact: true })
+            .getByRole('radio', { name: /cpu-b/ })
+            .isChecked(),
+        true
+    );
     await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
-    await page
-        .getByRole('status')
-        .filter({ hasText: /submitted/i })
-        .waitFor();
+    await page.waitForURL(new RegExp(`/grids/${gridA}/items$`));
     const create = options.requests.filter(
         (request) => request.method === 'POST' && request.path.endsWith('/crafting-plans')
     );
@@ -2353,7 +2373,8 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
         options.requests.filter((request) => request.path.endsWith('/submit')).map((request) => request.body),
         [{ cpuKey: 'cpu-b' }]
     );
-    await page.getByRole('link', { name: 'Inspect CPU work', exact: true }).click({ timeout: 3000 });
+    assert.equal(await page.getByRole('link', { name: 'Inspect CPU work', exact: true }).count(), 0);
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-b`);
     await page
         .getByRole('region', { name: 'CPU resources', exact: true })
         .getByRole('button', { name: /Iron Ingot/ })
@@ -3044,11 +3065,8 @@ test('direct plan entry only reads, and explicit cancellation stops calculation 
     await seedAutomaticRefresh(page, base, false);
     options.pendingReads = 100;
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
-    await page.getByRole('button', { name: 'Delete calculation', exact: true }).click({ timeout: 3000 });
-    await page
-        .getByRole('status')
-        .filter({ hasText: /calculation deleted/i })
-        .waitFor();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click({ timeout: 3000 });
+    await page.waitForURL(new RegExp(`/grids/${gridA}/items$`));
     const reads = options.requests.filter(
         (request) => request.path.endsWith('/crafting-plans/7') && request.method === 'GET'
     ).length;
@@ -3062,7 +3080,7 @@ test('direct plan entry only reads, and explicit cancellation stops calculation 
         options.requests.filter((request) => request.method !== 'GET').map((request) => request.method),
         ['DELETE']
     );
-    await page.getByRole('link', { name: 'Back to resources' }).click();
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 1);
 });
@@ -3081,26 +3099,26 @@ test('busy CPU eligibility uses known output identity and missing selections req
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
-    const cpus = page.getByRole('combobox', { name: 'Crafting CPU', exact: true });
+    const cpus = page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true });
     await cpus.waitFor();
-    assert.equal(await cpus.getByRole('option', { name: /cpu-b/ }).evaluate((option) => option.disabled), false);
-    assert.equal(await cpus.getByRole('option', { name: /other-output/ }).evaluate((option) => option.disabled), true);
+    assert.equal(await cpus.getByRole('radio', { name: /cpu-b/ }).evaluate((option) => option.disabled), false);
+    assert.equal(await cpus.getByRole('radio', { name: /other-output/ }).evaluate((option) => option.disabled), true);
     assert.equal(
-        await cpus.getByRole('option', { name: /unknown-storage/ }).evaluate((option) => option.disabled),
+        await cpus.getByRole('radio', { name: /unknown-storage/ }).evaluate((option) => option.disabled),
         true
     );
-    await cpus.selectOption('cpu-b');
+    await cpus.getByRole('radio', { name: /cpu-b/ }).check();
     delete options.cpus['cpu-b'];
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus'));
     await poll(page);
     await (await refreshed).finished();
-    await cpus.getByRole('option', { name: /cpu-b/ }).waitFor({ state: 'detached' });
-    assert.equal(await cpus.inputValue(), '');
+    await cpus.getByRole('radio', { name: /cpu-b/ }).waitFor({ state: 'detached' });
+    assert.equal(await cpus.getByRole('radio', { checked: true }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
     options.cpus['cpu-b'] = { ...cpu, isBusy: true, finalOutput: { itemKey: 'iron' } };
     await page.reload();
     await cpus.waitFor();
-    assert.equal(await cpus.getByRole('option', { name: /cpu-b/ }).evaluate((option) => option.disabled), true);
+    assert.equal(await cpus.getByRole('radio', { name: /cpu-b/ }).evaluate((option) => option.disabled), true);
     await page.getByText(/Only idle CPUs/).waitFor();
     assert.equal(options.requests.filter((request) => request.method === 'POST').length, 1);
 });
@@ -4092,7 +4110,13 @@ test('known submission rejection retains the plan and permits deliberate correct
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
     await page.getByText(options.submitReason, { exact: true }).waitFor({ timeout: 3000 });
-    assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 1);
+    assert.equal(
+        await page
+            .getByRole('list', { name: 'Plan resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .count(),
+        1
+    );
     assert.equal(await page.locator('img[src="x"]').count(), 0);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/submit')).length, 1);
     options.submitStatus = 'CPU_NOT_FOUND';
@@ -4101,15 +4125,21 @@ test('known submission rejection retains the plan and permits deliberate correct
         .getByRole('status')
         .filter({ hasText: /CPU.*available/i })
         .waitFor();
-    assert.equal(await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).inputValue(), '');
+    assert.equal(
+        await page
+            .getByRole('radiogroup', { name: 'Crafting CPU', exact: true })
+            .getByRole('radio', { checked: true })
+            .count(),
+        0
+    );
     assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
-    await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).selectOption('cpu-b');
+    await page
+        .getByRole('radiogroup', { name: 'Crafting CPU', exact: true })
+        .getByRole('radio', { name: /cpu-b/ })
+        .check();
     options.submitStatus = 'OK';
     await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
-    await page
-        .getByRole('status')
-        .filter({ hasText: /submitted/i })
-        .waitFor();
+    await page.waitForURL(new RegExp(`/grids/${gridA}/items$`));
     assert.equal(options.requests.filter((request) => request.path.endsWith('/submit')).length, 3);
 });
 
@@ -4123,7 +4153,7 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
         .getByRole('status')
         .filter({ hasText: /plan.*unavailable/i })
         .waitFor({ timeout: 3000 });
-    assert.equal(await page.getByRole('button', { name: 'Delete calculation', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Cancel', exact: true }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).count(), 0);
     options.planStatus = 'OK';
     options.plan = { ...readyPlan, isSimulating: true };
@@ -4135,25 +4165,40 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
     assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
     options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], missing: 8 }] };
     await page.reload();
-    await page.getByRole('cell', { name: '8', exact: true }).waitFor();
+    await page
+        .getByRole('list', { name: 'Plan resources', exact: true })
+        .getByRole('button', { name: /Missing: 8/ })
+        .waitFor();
     assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
     options.plan = readyPlan;
     await page.reload();
-    await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor();
+    await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor();
     options.cpuError = 'NO_PERMISSIONS';
     await poll(page);
     await page
         .getByRole('status')
         .filter({ hasText: /no longer have access/i })
         .waitFor();
-    assert.equal(await page.getByRole('cell', { name: /Iron Ingot/ }).count(), 0);
+    assert.equal(
+        await page
+            .getByRole('list', { name: 'Plan resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .count(),
+        0
+    );
     assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).count(), 0);
     options.cpuError = null;
     await poll(page);
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+    await page
+        .getByRole('list', { name: 'Plan resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
     options.gridError = 'NO_PERMISSIONS';
     await poll(page);
-    await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor({ state: 'hidden' });
+    await page
+        .getByRole('list', { name: 'Plan resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor({ state: 'hidden' });
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
 });
 
@@ -4172,7 +4217,7 @@ test('uncertain submission outcomes cannot be retried by polling or route reentr
             .waitFor({ timeout: 3000 });
         const count = options.requests.filter((request) => request.path.endsWith('/submit')).length;
         await poll(page);
-        await page.getByRole('link', { name: 'Back to resources' }).click();
+        await page.getByRole('link', { name: 'Terminal', exact: true }).click();
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.goBack();
         await page
@@ -4205,13 +4250,13 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
     assert.equal(await page.getByRole('button', { name: 'Calculate plan', exact: true }).isDisabled(), true);
     options.fault = { operation: 'delete', status: 'TIMEOUT' };
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
-    await page.getByRole('button', { name: 'Delete calculation', exact: true }).click();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page
         .getByRole('status')
         .filter({ hasText: /outcome.*unknown/i })
         .waitFor();
     await poll(page);
-    assert.equal(await page.getByRole('button', { name: 'Delete calculation', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Cancel', exact: true }).isDisabled(), true);
     assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
     assert.deepEqual(
         options.requests.filter((request) => request.method !== 'GET').map((request) => request.method),
@@ -4219,12 +4264,170 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
     );
 });
 
+test('crafting popup and plan share optional atlas icons and honor native CPU admission', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
+    options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], itemKey: 'iron', icon: options.itemsA[0].icon }] };
+    options.cpus = { 'cpu-a': { ...cpu, acceptsPlayerJobs: false }, 'cpu-b': cpu };
+    await page.goto(`${base}#/web-settings`);
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('both');
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
+    await page.getByRole('dialog').locator('.resource-icon-ready').waitFor({ timeout: 3000 });
+    await page.getByRole('dialog').getByRole('textbox', { name: 'Craft quantity' }).fill('64');
+    options.itemsA = [{ ...iron, icon: { page: 0, x: 64, y: 0 } }];
+    await poll(page);
+    await page.waitForFunction(() =>
+        document.querySelector('dialog .resource-icon').style.backgroundPosition.startsWith('calc(-1')
+    );
+    assert.equal(await page.getByRole('dialog').getByRole('textbox', { name: 'Craft quantity' }).inputValue(), '64');
+    await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    const resources = page.getByRole('list', { name: 'Plan resources', exact: true });
+    await resources.locator('.resource-icon-ready').waitFor({ timeout: 3000 });
+    const cpus = page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true });
+    assert.equal(await cpus.getByRole('radio', { name: /cpu-a/ }).isDisabled(), true);
+    assert.equal(await cpus.getByRole('radio', { name: /cpu-b/ }).isChecked(), true);
+    assert.ok(
+        options.requests.some(
+            (request) => request.path.endsWith('/crafting-plans/7') && request.query === '?icons=true'
+        )
+    );
+});
+
+test('plan icon pack replacement supersedes a delayed completed-plan mapping', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], itemKey: 'iron', icon: { page: 0, x: 0, y: 0 } }] };
+    await page.goto(`${base}#/web-settings`);
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('both');
+    let release;
+    const captured = new Promise((resolve) => {
+        release = resolve;
+    });
+    let first = true;
+    await page.route('**/crafting-plans/7?icons=true', async (route) => {
+        if (!first) return route.continue();
+        first = false;
+        const response = await route.fetch();
+        release(() => route.fulfill({ response }));
+    });
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    const finish = await captured;
+    options.icons = { ...options.icons, packId: 'c'.repeat(64) };
+    options.pack = { ...options.pack, packId: options.icons.packId };
+    const discovery = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/icon-pack'));
+    await poll(page);
+    await (await discovery).finished();
+    await finish();
+    await page
+        .getByRole('list', { name: 'Plan resources', exact: true })
+        .locator('.resource-icon-ready')
+        .waitFor({ timeout: 3000 });
+    assert.ok(options.requests.some((request) => request.path.includes(`/icon-packs/${'c'.repeat(64)}/`)));
+});
+
+for (const width of [1280, 390]) {
+    test(`plan frame, search, CPU attachment and footer remain usable at ${width}px`, async (t) => {
+        const { page, options, base } = await fixture(
+            t,
+            '',
+            { viewport: { width, height: 900 } },
+            { mockClock: false }
+        );
+        options.plan = {
+            ...readyPlan,
+            plan: Array.from({ length: 90 }, (_, index) => ({
+                ...readyPlan.plan[0],
+                displayName: `Resource ${index}`,
+                missing: index === 3 ? 8 : 0
+            }))
+        };
+        await page.goto(`${base}#/grids/${gridA}/plans/7`);
+        const region = page.getByRole('region', { name: 'Plan resources', exact: true });
+        const resource = region.getByRole('button', { name: /Resource 0 ·/ });
+        await resource.waitFor();
+        const card = await resource.boundingBox();
+        assert.ok(card.width > card.height, 'plan resource cards remain rectangular');
+        const search = await page.getByRole('searchbox', { name: 'Search plan resources' }).boundingBox();
+        const heading = await page.getByRole('heading', { name: 'Crafting plan', exact: true }).boundingBox();
+        const footer = await page.getByRole('button', { name: 'Cancel', exact: true }).boundingBox();
+        const viewport = await region.boundingBox();
+        assert.ok(Math.abs(heading.x - card.x) < 2, 'heading aligns to the resource grid');
+        assert.ok(search.y + search.height <= card.y, 'search stays above resources');
+        assert.ok(footer.y >= viewport.y + viewport.height, 'actions stay below the scroll viewport');
+        assert.ok(footer.y + footer.height <= 900, 'actions stay within the viewport');
+        assert.ok(await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).isVisible());
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    });
+}
+
+test('crafting plan resources search and sort while CPU choice and actions stay available outside scroll', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.plan = {
+        ...readyPlan,
+        plan: Array.from({ length: 80 }, (_, index) => ({
+            ...readyPlan.plan[0],
+            displayName: `Resource ${String(index).padStart(2, '0')}`,
+            stored: index + 1,
+            requested: 80 - index
+        }))
+    };
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    const resources = page.getByRole('list', { name: 'Plan resources', exact: true });
+    await resources.getByRole('button', { name: /Resource 00/ }).waitFor();
+    const cpus = page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true });
+    await cpus.getByRole('radio', { name: /cpu-b/ }).check();
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    assert.match(await resources.getByRole('button').first().getAttribute('aria-label'), /Resource 00/);
+    await page.getByRole('button', { name: /Sort order: Ascending/ }).click();
+    assert.match(await resources.getByRole('button').first().getAttribute('aria-label'), /Resource 79/);
+    await page.getByRole('searchbox', { name: 'Search plan resources' }).fill('Resource 03');
+    assert.equal(await resources.getByRole('button').count(), 1);
+    await page.getByRole('searchbox', { name: 'Search plan resources' }).fill('');
+    const start = page.getByRole('button', { name: 'Start crafting', exact: true });
+    const before = await start.boundingBox();
+    await resources.evaluate((list) => {
+        list.parentElement.scrollTop = list.parentElement.scrollHeight;
+    });
+    const after = await start.boundingBox();
+    assert.deepEqual(after, before);
+    assert.equal(await cpus.getByRole('radio', { name: /cpu-b/ }).isChecked(), true);
+    await start.click();
+    await page.waitForURL(new RegExp(`/grids/${gridA}/items$`));
+    assert.equal(options.requests.find((request) => request.path.endsWith('/submit')).body.cpuKey, 'cpu-b');
+});
+
+test('quantity expressions and adjustments send exact positive integers through HTTP', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
+    const dialog = page.getByRole('dialog');
+    const quantity = dialog.getByRole('textbox', { name: 'Craft quantity' });
+    await quantity.fill('10.5m + (100k / 2) - 64');
+    await dialog.getByRole('button', { name: '+64', exact: true }).click();
+    assert.equal(await quantity.inputValue(), '10550000');
+    await quantity.fill('1');
+    await dialog.getByRole('button', { name: '-1000', exact: true }).click();
+    assert.equal(await quantity.inputValue(), '1');
+    for (const invalid of ['1/3', '1/0', '1.0000000000000001', '9007199254740992', '2**3', 'abc']) {
+        await quantity.fill(invalid);
+        await dialog.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+        assert.equal(await quantity.getAttribute('aria-invalid'), 'true');
+    }
+    assert.equal(options.requests.filter((request) => request.method === 'POST').length, 0);
+    await quantity.fill('-(2-3) * (10,5m + 100k) / 2');
+    await dialog.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    await page.waitForURL(/\/plans\/7$/);
+    assert.equal(options.requests.find((request) => request.path.endsWith('/crafting-plans')).body.quantity, 5300000);
+});
+
 test('quantity editing survives refresh and only positive safe integer quantities reach HTTP', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
-    const quantity = page.getByRole('spinbutton', { name: 'Craft quantity' });
+    const quantity = page.getByRole('textbox', { name: 'Craft quantity' });
     await quantity.fill('37');
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/items'));
     await poll(page);
@@ -4239,7 +4442,7 @@ test('quantity editing survives refresh and only positive safe integer quantitie
     assert.equal(options.requests.filter((request) => request.method === 'POST').length, 0);
     await quantity.fill('9007199254740991');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor();
+    await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor();
     assert.equal(
         options.requests.find((request) => request.path.endsWith('/crafting-plans')).body.quantity,
         9007199254740991
@@ -4251,10 +4454,16 @@ test('deletion rejection makes unavailable or denied plans non-actionable', asyn
     let planId = 20;
     for (const status of ['NO_PERMISSIONS', 'GRID_NOT_FOUND', 'INVALID_ID']) {
         await page.goto(`${base}#/grids/${gridA}/plans/${planId++}`);
-        await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor();
+        await page
+            .getByRole('list', { name: 'Plan resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .waitFor();
         options.fault = { operation: 'delete', status };
-        await page.getByRole('button', { name: 'Delete calculation', exact: true }).click();
-        await page.getByRole('cell', { name: /Iron Ingot/ }).waitFor({ state: 'hidden', timeout: 3000 });
+        await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+        await page
+            .getByRole('list', { name: 'Plan resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .waitFor({ state: 'hidden', timeout: 3000 });
         assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).count(), 0);
     }
 });
@@ -4276,7 +4485,7 @@ test('pending submission resolves after route reentry and older CPU reads cannot
     ]) {
         await page.goto(`${base}#/grids/${gridA}/plans/${planId}`);
         await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
-        await page.getByRole('link', { name: 'Back to resources' }).click();
+        await page.getByRole('link', { name: 'Terminal', exact: true }).click();
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.goBack();
         await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor();
@@ -4293,7 +4502,7 @@ test('pending submission resolves after route reentry and older CPU reads cannot
     }
     await page.unroute('**/submit');
     await page.goto(`${base}#/grids/${gridA}/plans/32`);
-    await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor();
+    await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor();
     let releaseCpus;
     const captured = new Promise((resolve) => {
         releaseCpus = resolve;
@@ -4302,20 +4511,14 @@ test('pending submission resolves after route reentry and older CPU reads cannot
     await poll(page);
     const cpuRequest = await captured;
     await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
-    await page
-        .getByRole('status')
-        .filter({ hasText: /submitted/i })
-        .waitFor();
+    await page.waitForURL(new RegExp(`/grids/${gridA}/items$`));
     await cpuRequest.fulfill({
         status: 403,
         contentType: 'application/json',
         body: JSON.stringify({ status: 'NO_PERMISSIONS', data: null })
     });
     await page.waitForTimeout(100);
-    await page
-        .getByRole('status')
-        .filter({ hasText: /submitted/i })
-        .waitFor();
+    assert.match(page.url(), new RegExp(`/grids/${gridA}/items$`));
 });
 
 test('login errors keep the new UI selector and destination without loading a theme', async (t) => {
