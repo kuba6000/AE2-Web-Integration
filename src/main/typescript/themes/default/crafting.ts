@@ -246,7 +246,13 @@ export function createCraftingView(
     root.append(planView);
     const cpuRows = new Map<
         string,
-        { label: HTMLLabelElement; input: HTMLInputElement; name: HTMLElement; details: HTMLElement }
+        {
+            label: HTMLLabelElement;
+            input: HTMLInputElement;
+            name: HTMLElement;
+            details: HTMLElement;
+            tooltipContent: () => Node[];
+        }
     >();
     let lastRows: TerminalState['crafting']['plan'] | undefined;
     let lastIcons: TerminalState['crafting']['icons'] | undefined;
@@ -460,11 +466,42 @@ export function createCraftingView(
                     const name = element('strong');
                     const details = element('span');
                     label.append(input, name, details);
-                    tooltip.bind(label, () => [element('code', cpu.key)], input);
-                    row = { label, input, name, details };
+                    const entry = { label, input, name, details, tooltipContent: (): Node[] => [] };
+                    tooltip.bind(label, () => entry.tooltipContent(), input);
+                    row = entry;
                     cpuRows.set(cpu.key, row);
                     cpuList.append(label);
                 }
+                row.tooltipContent = () => {
+                    const name = element('strong');
+                    name.append(renderMinecraftText(cpu.name || t('cpuUnnamed')));
+                    const lines: Node[] = [
+                        name,
+                        element('span', t(cpu.isBusy ? (cpu.isPaused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle')),
+                        element('span', t('cpuCapacity', { count: cpu.availableStorage })),
+                        element(
+                            'span',
+                            cpu.usedStorage >= 0
+                                ? t('cpuUsedStorage', { count: cpu.usedStorage })
+                                : t('cpuStorageUnknown')
+                        ),
+                        element('span', t('coprocessors', { count: cpu.coProcessors }))
+                    ];
+                    if (cpu.isBusy) {
+                        const output = element('span');
+                        if (cpu.finalOutput)
+                            output.append(
+                                `${t('cpuOutput')}: `,
+                                renderMinecraftText(cpu.finalOutput.displayName),
+                                ` × ${number(cpu.finalOutput.quantity)}`
+                            );
+                        else output.textContent = t('cpuOutputUnknown');
+                        lines.push(output);
+                    }
+                    const identifier = element('code', cpu.key);
+                    lines.push(identifier);
+                    return lines;
+                };
                 row.name.replaceChildren(renderMinecraftText(cpu.name || t('cpuUnnamed')));
                 const description = `${number(cpu.availableStorage)} B · ${t('coprocessors', { count: cpu.coProcessors })} · ${t(cpu.isBusy ? 'cpuBusy' : 'cpuIdle')}`;
                 row.details.textContent = description;

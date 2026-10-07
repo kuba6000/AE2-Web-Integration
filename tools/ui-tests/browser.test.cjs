@@ -4365,6 +4365,51 @@ test('plan tools search and CPU identifiers use current custom tooltips and clea
     assert.equal(await tooltip.isVisible(), false);
 });
 
+test('plan CPU tooltip shows live capacity work and state after polling', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = {
+        'cpu-a': {
+            ...cpu,
+            name: '§aAssembly',
+            isBusy: true,
+            isPaused: true,
+            availableStorage: 65536,
+            usedStorage: 12345,
+            coProcessors: 8,
+            finalOutput: { ...iron, displayName: '§bIron', quantity: 640 }
+        }
+    };
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    await page.getByText('Plan ready', { exact: true }).waitFor();
+    const choice = page.getByRole('radio', { name: /cpu-a/ });
+    await choice.scrollIntoViewIfNeeded();
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await choice.locator('..').hover();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.getByText('Assembly', { exact: true }).waitFor({ timeout: 3000 });
+    assert.equal((await textStyle(tooltip, 'Assembly')).color, 'rgb(85, 255, 85)');
+    assert.match(await tooltip.innerText(), /Paused/);
+    assert.match(await tooltip.innerText(), /65,536 B/);
+    assert.match(await tooltip.innerText(), /12,345 B/);
+    assert.match(await tooltip.innerText(), /8 coprocessors/);
+    assert.match(await tooltip.innerText(), /Iron × 640/);
+    assert.equal((await textStyle(tooltip, 'Iron')).color, 'rgb(85, 255, 255)');
+    assert.ok((await tooltip.innerText()).endsWith('cpu-a'));
+    options.cpus['cpu-a'] = { ...cpu, name: 'Updated CPU', usedStorage: -1, coProcessors: 4 };
+    await poll(page);
+    await page.getByRole('radio', { name: /Updated CPU/ }).waitFor();
+    await page.mouse.move(0, 0);
+    await choice.scrollIntoViewIfNeeded();
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await choice.locator('..').hover();
+    await tooltip.getByText('Updated CPU', { exact: true }).waitFor();
+    assert.match(await tooltip.innerText(), /Idle/);
+    assert.match(await tooltip.innerText(), /8,192 B/);
+    assert.match(await tooltip.innerText(), /4 coprocessors/);
+    assert.match(await tooltip.innerText(), /Used storage unavailable/);
+    assert.doesNotMatch(await tooltip.innerText(), /Iron|Paused|12,345/);
+});
+
 test('plan tooltips clear on scroll resize navigation and access denial', async (t) => {
     const { page, options, base } = await fixture(t);
     options.plan = {
