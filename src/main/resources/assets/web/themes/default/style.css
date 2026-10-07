@@ -1996,23 +1996,36 @@ footer a {
     gap: 6px;
 }
 .plan-cpu {
+    position: relative;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 4px;
     padding: 6px;
     background: var(--slot);
     font-size: 11px;
+    cursor: pointer;
 }
 .plan-cpu input {
-    grid-row: span 2;
-    margin: 3px 0;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: inherit;
 }
 .plan-cpu:has(:checked) {
+    background: var(--slot-selected);
     outline: 2px solid var(--accent);
     outline-offset: -2px;
 }
+.plan-cpu:has(:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
 .plan-cpu:has(:disabled) {
     opacity: 0.6;
+    cursor: default;
 }
 .plan-cpu span {
     font-size: 10px;
