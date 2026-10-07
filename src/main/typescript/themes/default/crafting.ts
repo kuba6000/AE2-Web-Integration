@@ -376,6 +376,9 @@ export function createCraftingView(
                         );
                     })
                     .sort((a, b) => {
+                        const groupA = a.missing > 0 ? 0 : a.requested > 0 ? 1 : 2;
+                        const groupB = b.missing > 0 ? 0 : b.requested > 0 ? 1 : 2;
+                        if (groupA !== groupB) return groupA - groupB;
                         const names = plainMinecraftText(a.displayName).localeCompare(
                             plainMinecraftText(b.displayName),
                             language
