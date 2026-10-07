@@ -1,5 +1,5 @@
 import type { Route } from './router.js';
-import type { Grid, StoredResource, IconMetadata, GridSettings } from './api-types.js';
+import type { Grid, StoredResource, IconMetadata, GridSettings, ApplicationContext } from './api-types.js';
 import type { createIconLoader } from './icons.js';
 import type { Preferences, createPreferences } from './preferences.js';
 import type { CraftingState } from './crafting.js';
@@ -14,6 +14,7 @@ import { createHistory } from './history.js';
 import { createGridSettings } from './settings.js';
 
 export type TerminalData = {
+    capabilities: ApplicationContext['capabilities'];
     route: Route;
     grids: Grid[];
     gridStatus: 'loading' | 'ready' | 'error';
@@ -42,7 +43,8 @@ export type TerminalState = TerminalData & {
 export function createTerminal(
     api: Api,
     preferences: ReturnType<typeof createPreferences>,
-    icons: ReturnType<typeof createIconLoader>
+    icons: ReturnType<typeof createIconLoader>,
+    capabilities: ApplicationContext['capabilities']
 ) {
     let iconsEnabled = false;
     const listeners = new Set<(state: TerminalState) => void>();
@@ -59,6 +61,11 @@ export function createTerminal(
         if (!disposed) for (const listener of listeners) listener(state);
     };
     const crafting = createCrafting(api, () => {
+        if (state.route.view === 'items' && ['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(crafting.state.error ?? '')) {
+            invalidateItems();
+            state.itemStatus = 'error';
+            state.itemError = crafting.state.error ?? null;
+        }
         notify();
         schedule();
     });
@@ -102,6 +109,7 @@ export function createTerminal(
     );
 
     const state: TerminalState = {
+        capabilities,
         route: { view: 'home', gridKey: null },
         selectedGridKey: null,
         grids: [],
@@ -173,6 +181,7 @@ export function createTerminal(
             state.updatedAt = null;
             state.itemStatus = 'error';
             state.itemError = error.status || 'NETWORK_ERROR';
+            if (['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.itemError)) crafting.block(state.itemError);
         } finally {
             if (!disposed && version === serial) {
                 state.refreshing = false;
@@ -221,7 +230,7 @@ export function createTerminal(
         else if (state.preferences.autoRefresh) timer = setTimeout(refresh, 5000);
     }
     function loadCrafting() {
-        if (state.route.view !== 'plan' || state.gridStatus !== 'ready') return;
+        if (!crafting.active || state.gridStatus !== 'ready') return;
         if (!state.grids.some((grid) => grid.key === state.route.gridKey)) crafting.block('GRID_NOT_FOUND');
         else return crafting.refresh();
     }

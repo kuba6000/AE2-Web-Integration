@@ -3,6 +3,7 @@
  * These declarations describe the wire format; they do not validate responses at runtime.
  */
 export type ApplicationContext = {
+    capabilities: { craftingLightMode?: boolean };
     publicMode: boolean;
     modVersion: string | null;
     isOutdated: boolean;

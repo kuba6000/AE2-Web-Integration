@@ -9,19 +9,22 @@ import org.jetbrains.annotations.NotNull;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 
 /**
@@ -30,7 +33,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
  * @pathParam gridKey Persistent grid identifier.
  * @response 202 {@link Response} Successful response.
  * @response 400 {@link ErrorResponse} BAD_PARAM: malformed path value, unexpected body, or invalid JSON/input
- *           fields. INVALID_QUANTITY: quantity must be positive.
+ *           fields or an unsupported enabled calculation option. INVALID_QUANTITY: quantity must be positive.
  * @response 401 {@link ErrorResponse} UNAUTHORIZED: no valid session was provided; response includes
  *           WWW-Authenticate: Bearer.
  * @response 403 {@link ErrorResponse} NO_PERMISSIONS: the user cannot access this grid. CSRF_REJECTED: cookie or
@@ -39,7 +42,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
  *           craftable resource does not exist.
  * @response 405 {@link ErrorResponse} METHOD_NOT_ALLOWED: this path does not support the method; Allow lists
  *           supported methods.
- * @response 409 {@link ErrorResponse} ALL_CPU_BUSY or AMBIGUOUS_ITEM_KEY: the request conflicts with current state.
+ * @response 409 {@link ErrorResponse} AMBIGUOUS_ITEM_KEY: the request conflicts with current state.
  * @response 413 {@link ErrorResponse} REQUEST_TOO_LARGE: the request body exceeds 8192 bytes.
  * @response 415 {@link ErrorResponse} UNSUPPORTED_MEDIA_TYPE: a nonempty request body requires Content-Type:
  *           application/json.
@@ -53,7 +56,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
  * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
  * @responseExample 404 {"status":"GRID_NOT_FOUND","data":null}
  * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
- * @responseExample 409 {"status":"ALL_CPU_BUSY","data":null}
+ * @responseExample 409 {"status":"AMBIGUOUS_ITEM_KEY","data":null}
  * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
  * @responseExample 415 {"status":"UNSUPPORTED_MEDIA_TYPE","data":null}
  * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
@@ -98,6 +101,14 @@ public final class CreateCraftingPlan extends ISyncedRequest {
          * @example 64
          */
         public long quantity;
+        /**
+         * Use the native light calculator, which disables some pattern features for faster calculation.
+         * Omitted values default to false. Requires the server's craftingLightMode capability when true.
+         *
+         * @example false
+         */
+        @OptionalInput
+        public boolean lightMode;
     }
 
     @Body
@@ -132,25 +143,20 @@ public final class CreateCraftingPlan extends ISyncedRequest {
             return;
         }
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
+        if (input.lightMode && !Boolean.TRUE.equals(
+            AE2Controller.AE2Interface.web$getCapabilities()
+                .get(ServerCapability.CRAFTING_LIGHT_MODE))) {
+            deny(ApiStatus.BAD_PARAM);
+            return;
+        }
         if (!craftingGrid.web$isCurrentlyCraftable(itemKey)) {
             deny(ApiStatus.ITEM_NOT_FOUND);
             return;
         }
-        boolean allBusy = true;
-        for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
-            if (!cpu.web$isBusy()) {
-                allBusy = false;
-                break;
-            }
-        }
-        if (!allBusy) {
-            Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, itemKey, input.quantity);
-
-            int jobId = gridData.addJob(job);
-            respond(HttpURLConnection.HTTP_ACCEPTED, new Response(ApiStatus.OK, new PlanCreated(jobId)));
-        } else {
-            deny(ApiStatus.ALL_CPU_BUSY);
-        }
+        Future<IAECraftingJob> job = craftingGrid
+            .web$beginCraftingJob(grid, itemKey, input.quantity, new CraftingOptions(input.lightMode));
+        int jobId = gridData.addJob(job);
+        respond(HttpURLConnection.HTTP_ACCEPTED, new Response(ApiStatus.OK, new PlanCreated(jobId)));
     }
 
 }

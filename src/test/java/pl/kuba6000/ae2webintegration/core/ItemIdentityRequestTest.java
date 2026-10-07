@@ -22,6 +22,7 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.CreateCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
@@ -607,7 +608,8 @@ class ItemIdentityRequestTest extends GridTestScope {
                     }));
         }
 
-        public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey key, long amount) {
+        public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey key, long amount,
+            CraftingOptions options) {
             jobs++;
             ordered = key;
             orderedAmount = amount;

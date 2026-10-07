@@ -61,7 +61,8 @@ async function start() {
             preferences,
             createIconLoader(base, returnToLogin, async () => {
                 await application?.refresh();
-            })
+            }),
+            metadata.capabilities
         );
         unmount = mount(root, application, {
             ...theme,

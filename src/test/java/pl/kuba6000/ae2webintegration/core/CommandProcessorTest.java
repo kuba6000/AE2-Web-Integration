@@ -2,6 +2,8 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Collections;
+import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -10,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
@@ -145,6 +148,11 @@ class CommandProcessorTest {
     }
 
     private static class TestAE implements IAE {
+
+        @Override
+        public Map<ServerCapability, Boolean> web$getCapabilities() {
+            return Collections.singletonMap(ServerCapability.CRAFTING_LIGHT_MODE, false);
+        }
 
         @Override
         public Iterable<IAEGrid> web$getGrids() {

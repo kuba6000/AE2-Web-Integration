@@ -39,7 +39,17 @@ export function createCrafting(api: Api, changed: () => void) {
     let reading = false;
     let selectedOnce = false;
     let readFailed = false;
-    const identity = () => `${route.gridKey}/${route.view === 'plan' ? route.planId : 'create'}`;
+    let activePlan: { gridKey: string; planId: string | number } | null = null;
+    let autoStart = false;
+    let handoff: { key: string; state: CraftingState } | null = null;
+    const identity = () =>
+        `${route.gridKey}/${activePlan?.planId ?? (route.view === 'plan' ? route.planId : 'create')}`;
+    function showPlan() {
+        autoStart = false;
+        if (route.view !== 'items' || !activePlan) return;
+        handoff = { key: identity(), state: { ...state } };
+        navigateToPlan(activePlan.gridKey, activePlan.planId);
+    }
     function finishMutation(key: string, outcome: CraftingOutcome | null) {
         if (outcome) outcomes.set(key, outcome);
         else outcomes.delete(key);
@@ -62,15 +72,10 @@ export function createCrafting(api: Api, changed: () => void) {
                 cpu.availableStorage >= cpu.usedStorage + state.plan.bytesTotal));
 
     async function refresh() {
-        if (
-            route.view !== 'plan' ||
-            reading ||
-            state.mutation ||
-            ['submitted', 'deleted', 'unavailable'].includes(state.status)
-        )
+        if (!activePlan || reading || state.mutation || ['submitted', 'deleted', 'unavailable'].includes(state.status))
             return;
         const version = generation;
-        const current = route;
+        const current = activePlan;
         reading = true;
         request = new AbortController();
         if (readFailed) {
@@ -84,7 +89,11 @@ export function createCrafting(api: Api, changed: () => void) {
                 state.plan = plan;
                 state.status = plan.isDone ? 'ready' : 'calculating';
             }
-            if (state.plan.isDone) {
+            if (state.plan.isDone && autoStart) {
+                autoStart = false;
+                if (state.plan.isSimulating || state.plan.plan?.some((row) => row.missing > 0)) showPlan();
+                else await actions.submit(true);
+            } else if (state.plan.isDone) {
                 const cpus = await api.cpus(current.gridKey, request.signal);
                 if (version !== generation) return;
                 state.cpus = Object.entries(cpus.data).map(([key, cpu]) => ({ ...cpu, key, eligible: eligible(cpu) }));
@@ -107,6 +116,7 @@ export function createCrafting(api: Api, changed: () => void) {
                 state.metadata = null;
                 state.status = error.status === 'INVALID_ID' ? 'unavailable' : 'error';
             }
+            showPlan();
         } finally {
             if (version === generation) {
                 reading = false;
@@ -114,16 +124,21 @@ export function createCrafting(api: Api, changed: () => void) {
             }
         }
     }
-    return {
+    const actions = {
         state,
         get pending() {
-            return route.view === 'plan' && state.status === 'calculating' && !state.error;
+            return !!activePlan && state.status === 'calculating' && !state.error;
+        },
+        get active() {
+            return !!activePlan;
         },
         route(next: Route) {
             generation++;
             request?.abort();
             reading = false;
             route = next;
+            activePlan = next.view === 'plan' ? { gridKey: next.gridKey, planId: next.planId } : null;
+            autoStart = false;
             selectedOnce = false;
             readFailed = false;
             Object.assign(state, {
@@ -138,6 +153,9 @@ export function createCrafting(api: Api, changed: () => void) {
                 metadata: metadata.get(identity()) || null
             });
             Object.assign(state, outcomes.get(identity()));
+            if (handoff?.key === identity()) Object.assign(state, handoff.state);
+            handoff = null;
+            if (['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.error ?? '')) activePlan = null;
         },
         refresh,
         block(error: string | null) {
@@ -145,6 +163,7 @@ export function createCrafting(api: Api, changed: () => void) {
             request?.abort();
             reading = false;
             readFailed = true;
+            autoStart = false;
             Object.assign(state, {
                 status: 'error',
                 plan: null,
@@ -160,11 +179,12 @@ export function createCrafting(api: Api, changed: () => void) {
             state.selectedCpu = state.cpus.find((cpu) => cpu.key === key && cpu.eligible)?.key || '';
             changed();
         },
-        async create(item: StoredResource | null, quantity: number) {
+        async create(item: StoredResource | null, quantity: number, automatic = false, lightMode = false) {
             if (
                 route.view !== 'items' ||
                 state.mutation ||
                 state.uncertain ||
+                (activePlan && ['calculating', 'ready'].includes(state.status)) ||
                 !item?.craftable ||
                 !item.itemKey ||
                 !Number.isSafeInteger(quantity) ||
@@ -173,17 +193,36 @@ export function createCrafting(api: Api, changed: () => void) {
                 return;
             const version = generation;
             const gridKey = route.gridKey;
+            activePlan = null;
             const key = identity();
+            autoStart = automatic;
             outcomes.set(key, { mutation: 'create' });
             state.mutation = 'create';
+            state.status = 'idle';
+            state.plan = null;
+            state.metadata = null;
+            state.cpus = [];
+            state.selectedCpu = '';
             state.error = null;
+            state.errorDetail = null;
             changed();
             try {
-                const { jobId } = await api.createPlan(gridKey, { itemKey: item.itemKey, quantity });
+                const { jobId } = await api.createPlan(gridKey, {
+                    itemKey: item.itemKey,
+                    quantity,
+                    ...(lightMode ? { lightMode: true } : {})
+                });
                 metadata.set(`${gridKey}/${jobId}`, { itemKey: item.itemKey, displayName: item.displayName, quantity });
                 finishMutation(key, null);
                 if (version !== generation) return;
-                navigateToPlan(gridKey, jobId);
+                if (automatic) {
+                    activePlan = { gridKey, planId: jobId };
+                    state.metadata = metadata.get(identity())!;
+                    state.plan = null;
+                    state.status = 'calculating';
+                    state.mutation = null;
+                    await refresh();
+                } else navigateToPlan(gridKey, jobId);
             } catch (caught) {
                 const error = caught as ApiFailure;
                 finishMutation(key, isUncertain(error) ? { uncertain: 'create' } : null);
@@ -195,12 +234,13 @@ export function createCrafting(api: Api, changed: () => void) {
                 }
             }
         },
-        async submit() {
+        async submit(automatic = false) {
             if (
                 state.mutation ||
                 state.uncertain ||
                 state.status !== 'ready' ||
-                !state.cpus.some((cpu) => cpu.key === state.selectedCpu && cpu.eligible)
+                !activePlan ||
+                (!automatic && !state.cpus.some((cpu) => cpu.key === state.selectedCpu && cpu.eligible))
             )
                 return;
             const key = identity();
@@ -214,8 +254,8 @@ export function createCrafting(api: Api, changed: () => void) {
             changed();
             try {
                 // A ready plan and eligible CPU belong to the active plan route.
-                const current = route as Extract<Route, { view: 'plan' }>;
-                await api.submitPlan(current.gridKey, current.planId, state.selectedCpu);
+                const current = activePlan;
+                await api.submitPlan(current.gridKey, current.planId, automatic ? undefined : state.selectedCpu);
                 finishMutation(key, { status: 'submitted' });
                 if (version === generation) state.status = 'submitted';
             } catch (caught) {
@@ -245,6 +285,10 @@ export function createCrafting(api: Api, changed: () => void) {
                         state.cpus = [];
                         state.selectedCpu = '';
                         readFailed = true;
+                    }
+                    if (automatic) {
+                        state.mutation = null;
+                        showPlan();
                     }
                 }
             } finally {
@@ -302,4 +346,5 @@ export function createCrafting(api: Api, changed: () => void) {
             outcomes.clear();
         }
     };
+    return actions;
 }

@@ -179,11 +179,7 @@ header {
     flex-wrap: wrap;
     margin-top: 16px;
 }
-#order form {
-    display: grid;
-    gap: 12px;
-}
-#order input {
+.crafting-dialog input[type='number'] {
     min-width: 0;
     width: 100%;
 }
@@ -577,13 +573,22 @@ body {
         repeating-linear-gradient(90deg, #0000000a 0 1px, transparent 1px 8px);
 }
 #app {
+    --app-max-width: 1320px;
     --tools-width: 42px;
     --details-width: 225px;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     height: 100%;
     margin: auto;
-    max-width: 1320px;
+    /* Center the main frame while keeping its attachments inside the available width. */
+    margin-inline-start: max(
+        0px,
+        min(
+            calc((100% - var(--app-max-width) + var(--details-width) - var(--tools-width)) / 2),
+            calc(100% - var(--app-max-width))
+        )
+    );
+    max-width: var(--app-max-width);
     padding: 0;
     background: none;
     border: 0;
@@ -1941,4 +1946,39 @@ footer a {
     #app:has(> .info-notices:not([hidden])) .control-panel {
         max-height: 30dvh;
     }
+}
+
+.crafting-dialog {
+    width: min(420px, calc(100vw - 24px));
+    max-height: calc(100dvh - 32px);
+    height: fit-content;
+    color: var(--text);
+}
+.crafting-dialog::backdrop {
+    background: rgb(0 0 0 / 65%);
+}
+.craft-dialog-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+.craft-dialog-heading h2 {
+    margin: 0;
+    font-size: 18px;
+}
+.crafting-dialog form {
+    display: grid;
+    gap: 16px;
+}
+.resource-menu {
+    position: fixed;
+    z-index: 10;
+    height: auto;
+    min-width: 140px;
+    padding: 4px;
+}
+.resource-menu button {
+    width: 100%;
+    text-align: start;
 }

@@ -18,7 +18,10 @@ export type Api = {
     ) => Promise<{ available: boolean; packId: string | null; width: number; height: number }>;
     grids: (signal?: AbortSignal) => Promise<Grid[]>;
     items: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<StoredResource[]>>;
-    createPlan: (gridKey: string, body: { itemKey: string; quantity: number }) => Promise<{ jobId: number }>;
+    createPlan: (
+        gridKey: string,
+        body: { itemKey: string; quantity: number; lightMode?: boolean }
+    ) => Promise<{ jobId: number }>;
     plan: (gridKey: string, planId: string | number, signal?: AbortSignal) => Promise<Plan>;
     cpus: (
         gridKey: string,
@@ -37,7 +40,7 @@ export type Api = {
     historyEntry: (gridKey: string, entryId: string | number, signal?: AbortSignal) => Promise<CraftingHistory>;
     settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettings>;
     saveSettings: (gridKey: string, body: Partial<GridSettings>) => Promise<GridSettings>;
-    submitPlan: (gridKey: string, planId: string | number, cpuKey: string) => Promise<null>;
+    submitPlan: (gridKey: string, planId: string | number, cpuKey?: string) => Promise<null>;
     deletePlan: (gridKey: string, planId: string | number) => Promise<null>;
     logout: () => Promise<null>;
 };
@@ -66,8 +69,8 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             method?: string;
             signal?: AbortSignal;
             body?:
-                | { itemKey: string; quantity: number }
-                | { cpuKey: string }
+                | { itemKey: string; quantity: number; lightMode?: boolean }
+                | { cpuKey?: string }
                 | Partial<GridSettings>
                 | { paused: boolean };
         } = {}

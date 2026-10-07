@@ -54,6 +54,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
@@ -65,6 +66,7 @@ import pl.kuba6000.ae2webintegration.core.http.WebHandler;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Login;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Register;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class ServerLifecycleHttpTest {
@@ -406,9 +408,10 @@ class ServerLifecycleHttpTest {
                 .getAsString());
         JsonObject data = envelope.getAsJsonObject("data");
         assertEquals(
-            4,
+            5,
             data.entrySet()
                 .size());
+        assertEquals(new JsonObject(), data.getAsJsonObject("capabilities"));
         assertFalse(
             data.get("publicMode")
                 .getAsBoolean());
@@ -432,6 +435,35 @@ class ServerLifecycleHttpTest {
         assertTrue(
             publicData.get("user")
                 .isJsonNull());
+        assertEquals(new JsonObject(), publicData.getAsJsonObject("capabilities"));
+    }
+
+    @Test
+    void contextReportsNativeCapabilitySupportOnlyToAnAuthenticatedPrincipal() throws Exception {
+        startApi();
+        AE2Controller.AE2Interface = new TestGridFixtures.TestAE() {
+
+            @Override
+            public Map<ServerCapability, Boolean> web$getCapabilities() {
+                return Collections.singletonMap(ServerCapability.CRAFTING_LIGHT_MODE, true);
+            }
+
+            @Override
+            public Iterable<IAEGrid> web$getGrids() {
+                throw new AssertionError("Context must not read live game state");
+            }
+        };
+        assertEquals(
+            new JsonObject(),
+            new Gson().fromJson(get("/api/context", null).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities"));
+        assertTrue(
+            new Gson().fromJson(get("/api/context", login()).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingLightMode")
+                .getAsBoolean());
     }
 
     @Test
@@ -441,6 +473,12 @@ class ServerLifecycleHttpTest {
         HttpURLConnection connection = connection("/api/context", token);
         Response response = read(connection);
         assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertFalse(
+            new Gson().fromJson(response.body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingLightMode")
+                .getAsBoolean());
         JsonObject user = contextUser(response.body());
         assertEquals(
             2,
@@ -475,6 +513,12 @@ class ServerLifecycleHttpTest {
         Response page = get("/?ui=next", token);
         assertEquals(HttpURLConnection.HTTP_OK, page.status());
         JsonObject user = contextUser(get("/api/context", token).body());
+        assertFalse(
+            new Gson().fromJson(get("/api/context", token).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingLightMode")
+                .getAsBoolean());
         assertEquals(
             username,
             user.get("username")
@@ -623,6 +667,12 @@ class ServerLifecycleHttpTest {
 
         config.set("general.allow_no_password_on_localhost", true);
         JsonObject local = contextUser(get("/api/context", null).body());
+        assertFalse(
+            new Gson().fromJson(get("/api/context", null).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingLightMode")
+                .getAsBoolean());
         assertEquals(
             "localhost",
             local.get("username")
@@ -1045,7 +1095,13 @@ class ServerLifecycleHttpTest {
     void contextUsesTheAccountNameWithoutReadingTheAeProfile() throws Exception {
         UUID playerUuid = UUID.fromString("99999999-8888-7777-6666-555555555555");
         config.set("general.public_mode", true);
-        AE2Controller.AE2Interface = null;
+        AE2Controller.AE2Interface = new TestGridFixtures.TestAE() {
+
+            @Override
+            public Iterable<IAEGrid> web$getGrids() {
+                throw new AssertionError("Context must not read live game state");
+            }
+        };
         CoreDataTestFixture.reset();
         assertTrue(
             CoreData.setPassword(

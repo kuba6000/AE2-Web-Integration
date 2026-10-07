@@ -130,6 +130,9 @@ const translations: Dictionaries = {
         inspectCpu: 'Inspect CPU work',
         cpuNoResources: 'No resource details are available for this current work.',
         craftQuantity: 'Craft quantity',
+        craft: 'Craft',
+        autostart: 'Start automatically',
+        craftingLightMode: 'Light mode',
         calculatePlan: 'Calculate plan',
         craftingPlan: 'Crafting plan',
         resource: 'Resource',
@@ -161,8 +164,6 @@ const translations: Dictionaries = {
             'Calculation outcome is unknown. The server may still be calculating a plan, but its ID was not received. Automatic retry is disabled; reload only if you deliberately want a separate calculation.',
         uncertainDelete:
             'Deletion outcome is unknown. Refresh can check whether the plan is available, but deletion will not be sent again from this view.',
-        ALL_CPU_BUSY:
-            'Calculation requires at least one idle crafting CPU. Wait for a CPU to finish or make one available.',
         ITEM_NOT_FOUND: 'This resource is no longer craftable. Refresh the resource list.',
         ITEM_IDENTITY_UNKNOWN: 'The server no longer recognizes this resource. Refresh the resource list.',
         AMBIGUOUS_ITEM_KEY: 'The server cannot uniquely identify this resource. Refresh the resource list.',
@@ -362,6 +363,9 @@ const translations: Dictionaries = {
         inspectCpu: 'Sprawdź pracę CPU',
         cpuNoResources: 'Szczegóły zasobów bieżącej pracy są niedostępne.',
         craftQuantity: 'Ilość do wytworzenia',
+        craft: 'Wytwórz',
+        autostart: 'Uruchom automatycznie',
+        craftingLightMode: 'Tryb lekki',
         calculatePlan: 'Oblicz plan',
         craftingPlan: 'Plan craftingu',
         resource: 'Zasób',
@@ -393,8 +397,6 @@ const translations: Dictionaries = {
             'Wynik obliczenia jest nieznany. Serwer może nadal obliczać plan, ale nie otrzymano jego identyfikatora. Ponawianie jest wyłączone; przeładuj stronę tylko wtedy, gdy chcesz świadomie utworzyć osobne obliczenie.',
         uncertainDelete:
             'Wynik usunięcia jest nieznany. Odświeżenie sprawdzi dostępność planu, ale ten widok nie wyśle ponownie żądania usunięcia.',
-        ALL_CPU_BUSY:
-            'Obliczenie wymaga co najmniej jednego wolnego CPU craftingu. Poczekaj na zakończenie pracy lub udostępnij CPU.',
         ITEM_NOT_FOUND: 'Tego zasobu nie można już wytworzyć. Odśwież listę zasobów.',
         ITEM_IDENTITY_UNKNOWN: 'Serwer nie rozpoznaje już tego zasobu. Odśwież listę zasobów.',
         AMBIGUOUS_ITEM_KEY: 'Serwer nie może jednoznacznie rozpoznać tego zasobu. Odśwież listę zasobów.',

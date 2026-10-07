@@ -15,6 +15,20 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): 
 }
 
 export function createCraftingView(root: HTMLElement, application: Terminal) {
+    const dialog = element('dialog');
+    dialog.className = 'window-frame crafting-dialog';
+    dialog.setAttribute('aria-labelledby', 'craft-dialog-title');
+    const dialogTitle = element('h2');
+    dialogTitle.id = 'craft-dialog-title';
+    const close = element('button', '×');
+    close.type = 'button';
+    close.className = 'close-dialog';
+    const heading = element('div');
+    heading.className = 'craft-dialog-heading';
+    heading.append(dialogTitle, close);
+    const product = element('p');
+    const craft = element('button');
+    craft.type = 'button';
     const order = element('form');
     const quantityLabel = element('label');
     const quantityText = element('span');
@@ -30,12 +44,65 @@ export function createCraftingView(root: HTMLElement, application: Terminal) {
     calculate.type = 'submit';
     const orderMessage = element('p');
     orderMessage.role = 'status';
-    order.append(quantityLabel, calculate, orderMessage);
+    const automatic = element('input');
+    automatic.type = 'checkbox';
+    const automaticText = element('span');
+    const automaticLabel = element('label');
+    automaticLabel.className = 'checkbox';
+    automaticLabel.append(automatic, automaticText);
+    const lightMode = element('input');
+    lightMode.type = 'checkbox';
+    const lightText = element('span');
+    const lightLabel = element('label');
+    lightLabel.className = 'checkbox';
+    lightLabel.append(lightMode, lightText);
+    order.append(quantityLabel, automaticLabel, lightLabel, calculate, orderMessage);
+    const terminalMessage = element('p');
+    terminalMessage.role = 'status';
+    const orderControls = element('div');
+    orderControls.append(craft, terminalMessage);
 
     let item: StoredResource;
+    let opener: HTMLElement | null = null;
+    let gridKey: string | null = null;
+    let submitted = false;
+    function open(selected: StoredResource, source: HTMLElement) {
+        if (!selected.craftable || !selected.itemKey || application.state.route.view !== 'items') return;
+        item = selected;
+        gridKey = application.state.route.gridKey;
+        opener = source;
+        quantity.value = '1';
+        automatic.checked = false;
+        lightMode.checked = false;
+        submitted = false;
+        product.replaceChildren(renderMinecraftText(selected.displayName));
+        if (!dialog.open) dialog.showModal();
+        terminalMessage.hidden = true;
+        quantity.focus();
+        quantity.select();
+    }
+    craft.addEventListener('click', () => open(item, craft));
+    close.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', () => {
+        terminalMessage.hidden = !terminalMessage.textContent;
+        if (
+            opener?.isConnected &&
+            application.state.route.view === 'items' &&
+            application.state.route.gridKey === gridKey
+        )
+            opener.focus({ preventScroll: true });
+    });
+    dialog.append(heading, product, order);
+    document.body.append(dialog);
     order.addEventListener('submit', (event) => {
         event.preventDefault();
-        application.crafting.create(item, Number(quantity.value));
+        submitted = true;
+        void application.crafting.create(
+            item,
+            Number(quantity.value),
+            automatic.checked,
+            application.state.capabilities.craftingLightMode === true && lightMode.checked
+        );
     });
 
     const planView = element('section');
@@ -79,21 +146,42 @@ export function createCraftingView(root: HTMLElement, application: Terminal) {
     let lastLocale: Locale | undefined;
     root.append(planView);
     return {
+        open,
         order(selected: StoredResource, state: TerminalState['crafting'], locale: Locale) {
-            if (item?.itemKey !== selected?.itemKey) quantity.value = '1';
-            item = selected;
+            if (!dialog.open) item = selected;
+            craft.textContent = locale.common('craft');
+            dialogTitle.textContent = locale.common('craft');
+            close.setAttribute('aria-label', locale.common('close'));
             quantityText.textContent = locale.common('craftQuantity');
+            automaticText.textContent = locale.common('autostart');
+            lightText.textContent = locale.common('craftingLightMode');
+            lightLabel.hidden = application.state.capabilities.craftingLightMode !== true;
             calculate.textContent = locale.common('calculatePlan');
-            calculate.disabled = !!state.mutation || !!state.uncertain;
+            calculate.disabled = !!state.mutation || !!state.uncertain || state.status === 'calculating';
             orderMessage.textContent = state.uncertain
                 ? locale.common('uncertainCreate')
                 : state.error
                   ? locale.common(state.error)
                   : '';
-            return order;
+            terminalMessage.textContent = state.uncertain
+                ? locale.common('uncertainCreate')
+                : state.error
+                  ? locale.common(state.error)
+                  : state.mutation || ['calculating', 'submitted'].includes(state.status)
+                    ? locale.common(state.mutation ? 'calculating' : state.status)
+                    : '';
+            terminalMessage.hidden = dialog.open || !terminalMessage.textContent;
+            return orderControls;
         },
 
-        render(route: TerminalState['route'], state: TerminalState['crafting'], locale: Locale) {
+        render(terminal: TerminalState, locale: Locale) {
+            const { route, crafting: state } = terminal;
+            if (dialog.open && submitted && ['calculating', 'submitted'].includes(state.status)) dialog.close();
+            if (route.view !== 'items' || route.gridKey !== gridKey || terminal.itemStatus === 'error') {
+                opener = null;
+                if (dialog.open) dialog.close();
+                product.replaceChildren();
+            }
             const { common: t, number } = locale;
             planView.hidden = route.view !== 'plan';
             if (route.view !== 'plan') return;
@@ -170,6 +258,11 @@ export function createCraftingView(root: HTMLElement, application: Terminal) {
             remove.textContent = t('deleteCalculation');
             remove.hidden = ['submitted', 'deleted', 'unavailable', 'error'].includes(state.status);
             remove.disabled = !!state.mutation || !!state.uncertain;
+        },
+        dispose() {
+            opener = null;
+            dialog.close();
+            dialog.remove();
         }
     };
 }

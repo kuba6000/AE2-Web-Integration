@@ -461,6 +461,50 @@ export function mount(
         find('#item-message').textContent = message;
     }
 
+    const resourceMenu = element('div', '', 'window-frame resource-menu');
+    resourceMenu.role = 'menu';
+    resourceMenu.hidden = true;
+    const menuCraft = element('button');
+    menuCraft.type = 'button';
+    menuCraft.role = 'menuitem';
+    resourceMenu.append(menuCraft);
+    root.append(resourceMenu);
+    let menuItem: TerminalState['selected'] = null;
+    let menuSource: HTMLElement | null = null;
+    let menuGrid: string | null = null;
+    function closeResourceMenu(restore: boolean) {
+        if (resourceMenu.hidden) return;
+        resourceMenu.hidden = true;
+        if (restore && menuSource?.isConnected) menuSource.focus({ preventScroll: true });
+        menuItem = null;
+    }
+    function showResourceMenu(item: TerminalState['items'][number], source: HTMLElement, x: number, y: number) {
+        application.select(item);
+        hideTooltip();
+        menuItem = item;
+        menuSource = source;
+        menuGrid = state.route.gridKey;
+        menuCraft.textContent = locale.common('craft');
+        menuCraft.disabled = !item.craftable || !item.itemKey;
+        resourceMenu.hidden = false;
+        resourceMenu.style.left = `${Math.max(8, Math.min(x, innerWidth - resourceMenu.offsetWidth - 8))}px`;
+        resourceMenu.style.top = `${Math.max(8, Math.min(y, innerHeight - resourceMenu.offsetHeight - 8))}px`;
+        menuCraft.focus();
+    }
+    menuCraft.addEventListener('click', () => {
+        const item = menuItem;
+        const source = menuSource;
+        closeResourceMenu(false);
+        if (item && source) craftingView.open(item, source);
+    });
+    resourceMenu.addEventListener('keydown', (event) => {
+        if (event.key === 'Tab') closeResourceMenu(false);
+    });
+    const outsideResourceMenu = (event: PointerEvent) => {
+        if (!resourceMenu.contains(event.target as Node)) closeResourceMenu(false);
+    };
+    window.addEventListener('pointerdown', outsideResourceMenu);
+
     function createItemRow(item: TerminalState['items'][number]) {
         const row = {
             item,
@@ -481,6 +525,26 @@ export function mount(
         button.addEventListener('click', () => {
             application.select(row.item);
             hideTooltip();
+        });
+        button.addEventListener('mousedown', (event) => {
+            if (event.button === 1 && row.item.craftable && row.item.itemKey) event.preventDefault();
+        });
+        button.addEventListener('auxclick', (event) => {
+            if (event.button !== 1 || !row.item.craftable || !row.item.itemKey) return;
+            event.preventDefault();
+            application.select(row.item);
+            hideTooltip();
+            craftingView.open(row.item, button);
+        });
+        button.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            showResourceMenu(row.item, button, event.clientX, event.clientY);
+        });
+        button.addEventListener('keydown', (event) => {
+            if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return;
+            event.preventDefault();
+            const bounds = button.getBoundingClientRect();
+            showResourceMenu(row.item, button, bounds.left, bounds.bottom);
         });
         button.addEventListener('pointerenter', (event) => {
             if (event.pointerType !== 'touch') showItemTooltip(row, event.clientX, event.clientY, true);
@@ -705,7 +769,9 @@ export function mount(
         renderNetworks();
         renderItems();
         renderDetails();
-        craftingView.render(state.route, state.crafting, locale);
+        craftingView.render(state, locale);
+        if (state.route.view !== 'items' || state.itemStatus === 'error' || menuGrid !== state.route.gridKey)
+            closeResourceMenu(false);
         cpuView.render(state.route, state.cpus, locale);
         historyView.render(state, locale);
         settingsView.render(state, locale);
@@ -846,7 +912,10 @@ export function mount(
     });
 
     const keydown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') hideTooltip();
+        if (event.key === 'Escape') {
+            hideTooltip();
+            closeResourceMenu(true);
+        }
     };
     window.addEventListener('scroll', hideTooltip, true);
     window.addEventListener('resize', hideTooltip);
@@ -857,6 +926,9 @@ export function mount(
         slots.dispose();
         cpuView.dispose();
         homeView.dispose();
+        craftingView.dispose();
+        resourceMenu.remove();
+        window.removeEventListener('pointerdown', outsideResourceMenu);
         historyView.dispose();
         itemIcons.dispose();
         hideTooltip();

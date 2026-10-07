@@ -132,6 +132,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
         isAdmin: false,
         modVersion: '9.8.7-browser-fixture',
         publicMode: true,
+        capabilities: { craftingLightMode: false },
         bootstrapStatus: 200,
         bootstrapDelay: 0,
         itemsA: [iron, quartz],
@@ -212,6 +213,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                             options.bootstrapStatus === 200
                                 ? {
                                       publicMode: options.publicMode,
+                                      capabilities: options.loggedOut ? {} : options.capabilities,
                                       modVersion: options.modVersion,
                                       isOutdated: options.isOutdated || false,
                                       user: options.loggedOut
@@ -486,6 +488,217 @@ async function atlasFixture(page, options) {
 }
 
 // Public UI/HTTP seam: server capability overrides presentation without overwriting user intent.
+test('resource crafting opens one accessible dialog from details, middle click and context menu', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const resource = page.getByRole('button', { name: /Iron Ingot/ });
+    await resource.click();
+    assert.equal(await page.getByRole('spinbutton').isVisible(), false);
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    const quantity = dialog.getByRole('spinbutton');
+    await quantity.fill('37');
+    await poll(page);
+    assert.equal(await quantity.inputValue(), '37');
+    assert.equal(await quantity.evaluate((input) => input === document.activeElement), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await dialog.isVisible(), false);
+    assert.equal(
+        await page
+            .getByRole('button', { name: 'Craft', exact: true })
+            .evaluate((node) => node === document.activeElement),
+        true
+    );
+    await resource.click({ button: 'middle' });
+    await dialog.waitFor();
+    await page.keyboard.press('Escape');
+    await resource.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Craft', exact: true }).click();
+    await dialog.waitFor();
+    await page.keyboard.press('Escape');
+    await resource.focus();
+    await page.keyboard.press('Shift+F10');
+    await page.getByRole('menuitem', { name: 'Craft', exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    assert.equal(await page.getByRole('menu').isVisible(), false);
+    assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
+});
+
+test('autostart calculates once with native CPU choice and preserves the resource terminal', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    await seedAutomaticRefresh(page, base, false);
+    options.pendingReads = 1;
+    options.cpus = {};
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('spinbutton').fill('23');
+    await dialog.getByRole('checkbox', { name: 'Start automatically', exact: true }).check();
+    await dialog.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    await page.clock.fastForward(1200);
+    await page
+        .getByRole('status')
+        .filter({ hasText: /submitted/i })
+        .waitFor();
+    assert.match(page.url(), /\/items$/);
+    assert.equal(await dialog.isVisible(), false);
+    assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).getAttribute('aria-pressed'), 'true');
+    assert.deepEqual(
+        options.requests.filter((r) => r.path.endsWith('/submit')).map((r) => r.body),
+        [{}]
+    );
+    assert.deepEqual(
+        options.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/crafting-plans')).map((r) => r.body),
+        [{ itemKey: 'iron', quantity: 23 }]
+    );
+    await page.clock.fastForward(6000);
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/submit')).length, 1);
+});
+
+test('autostart failures open the plan without repeating mutations or losing the native reason', async (t) => {
+    for (const failure of ['missing', 'FAIL', 'TIMEOUT', 'NO_PERMISSIONS']) {
+        const { page, options, base } = await fixture(t);
+        if (failure === 'missing') options.plan = { ...readyPlan, isSimulating: true };
+        else if (failure === 'TIMEOUT') options.fault = { operation: 'submit', status: failure };
+        else {
+            options.submitStatus = failure;
+            options.submitReason = '<CPU became unavailable>';
+        }
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
+        await page.getByRole('checkbox', { name: 'Start automatically', exact: true }).check();
+        await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+        await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor();
+        assert.match(page.url(), /\/plans\/7$/);
+        if (failure === 'FAIL') await page.getByText('<CPU became unavailable>', { exact: true }).waitFor();
+        if (failure === 'TIMEOUT')
+            await page
+                .getByRole('status')
+                .filter({ hasText: /outcome.*unknown/i })
+                .waitFor();
+        if (failure === 'NO_PERMISSIONS')
+            assert.equal(await page.getByRole('cell', { name: 'Iron Ingot', exact: false }).count(), 0);
+        await poll(page);
+        await page.goBack();
+        await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+        await page.goForward();
+        await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor();
+        assert.equal(options.requests.filter((r) => r.path.endsWith('/submit')).length, failure === 'missing' ? 0 : 1);
+        assert.equal(
+            options.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/crafting-plans')).length,
+            1
+        );
+    }
+});
+
+test('autostart navigation revokes pending intent and delayed plans cannot cross grids', async (t) => {
+    const { page, options, base } = await fixture(t);
+    let complete;
+    const requested = new Promise((resolve) => {
+        complete = resolve;
+    });
+    await page.route('**/crafting-plans/7', (route) => complete(route));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
+    await page.getByRole('checkbox', { name: 'Start automatically', exact: true }).check();
+    await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    const pending = await requested;
+    await page.goto(`${base}#/grids/${gridB}/items`);
+    await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
+    await pending.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'OK', data: readyPlan })
+    });
+    await page.clock.fastForward(6000);
+    assert.match(page.url(), new RegExp(`${gridB}/items$`));
+    assert.equal(await page.getByText('Iron Ingot', { exact: true }).isVisible(), false);
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/submit')).length, 0);
+    await page.unroute('**/crafting-plans/7');
+    await page.goBack();
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    await page.clock.fastForward(6000);
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/submit')).length, 0);
+});
+
+test('crafting light mode follows authenticated server capability and only sends an explicit supported choice', async (t) => {
+    for (const supported of [false, true]) {
+        const { page, options, base } = await fixture(t);
+        options.capabilities = { craftingLightMode: supported };
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
+        const lightMode = page.getByRole('checkbox', { name: 'Light mode', exact: true });
+        if (supported) await lightMode.check({ timeout: 3000 });
+        else assert.equal(await lightMode.isVisible(), false);
+        await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+        await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor();
+        assert.deepEqual(options.requests.find((r) => r.method === 'POST' && r.path.endsWith('/crafting-plans')).body, {
+            itemKey: 'iron',
+            quantity: 1,
+            ...(supported ? { lightMode: true } : {})
+        });
+    }
+});
+
+test('a new calculation rejection after successful autostart preserves its dialog draft', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
+    await page.getByRole('checkbox', { name: 'Start automatically', exact: true }).check();
+    await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /submitted/i })
+        .waitFor();
+    options.fault = { operation: 'create', status: 'BAD_PARAM' };
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
+    await page.getByRole('spinbutton').fill('31');
+    const rejection = page.waitForResponse(
+        (response) => response.request().method() === 'POST' && response.url().endsWith('/crafting-plans')
+    );
+    await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    await (await rejection).finished();
+    assert.equal(await page.getByRole('dialog').isVisible(), true);
+    assert.equal(await page.getByRole('spinbutton').inputValue(), '31');
+    assert.equal(await page.getByRole('button', { name: 'Calculate plan', exact: true }).isEnabled(), true);
+});
+
+test('denied crafting creation closes the private resource dialog and clears the selected resource', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    options.fault = { operation: 'create', status: 'NO_PERMISSIONS' };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
+    const response = page.waitForResponse((response) => response.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    await (await response).finished();
+    assert.equal(await page.getByRole('dialog').isVisible(), false);
+    assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Craft', exact: true }).count(), 0);
+});
+
+test('craft dialog and contextual menu fit a narrow viewport and close through outside interaction', async (t) => {
+    const { page, options, base } = await fixture(t, '', { viewport: { width: 390, height: 844 }, hasTouch: true });
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).tap();
+    await page.getByRole('button', { name: 'Craft', exact: true }).tap();
+    const dialog = page.getByRole('dialog');
+    const bounds = await dialog.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
+    assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 844);
+    await dialog.getByRole('button', { name: 'Close', exact: true }).tap();
+    const item = page.getByRole('button', { name: /Iron Ingot/ });
+    await item.focus();
+    await page.keyboard.press('ContextMenu');
+    const menu = page.getByRole('menu');
+    const menuBounds = await menu.boundingBox();
+    assert.ok(menuBounds.x >= 0 && menuBounds.x + menuBounds.width <= 390);
+    assert.ok(menuBounds.y >= 0 && menuBounds.y + menuBounds.height <= 844);
+    await page.getByRole('heading', { name: /AE2/ }).tap();
+    assert.equal(await menu.isVisible(), false);
+    assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
+});
+
 test('unavailable icons override the saved mode and recover without losing it', async (t) => {
     const { page, options, base } = await fixture(t);
     await seedAutomaticRefresh(page, base, true);
@@ -741,6 +954,7 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await page.getByRole('tooltip').getByText(iron.displayName, { exact: true }).waitFor();
     await page.keyboard.press('Enter');
     assert.equal(await item.getAttribute('aria-pressed'), 'true');
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
     await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor();
@@ -890,7 +1104,7 @@ test('compact terminal keeps quantities and craftability readable with missing i
     await page.getByRole('button', { name: /Iron Ingot/ }).focus();
     await page.getByRole('tooltip').getByText(iron.displayName, { exact: true }).waitFor();
     await page.keyboard.press('Enter');
-    await page.getByRole('spinbutton', { name: 'Craft quantity' }).waitFor();
+    await page.getByRole('button', { name: 'Craft', exact: true }).waitFor();
     await page.getByRole('searchbox', { name: 'Search resources' }).fill('quartz');
     await missing.waitFor();
     assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
@@ -1227,7 +1441,7 @@ test('failed atlas pages keep resources usable without repeated requests during 
     await page.goto(`${base}#/grids/${gridA}/items`);
     await (await failed).finished();
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
-    assert.equal(await page.getByRole('spinbutton').isEnabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Craft', exact: true }).isEnabled(), true);
     for (let i = 0; i < 2; i++) {
         options.itemsA = options.itemsA.map((item) => ({ ...item, quantity: item.quantity + 1 }));
         const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/items'));
@@ -1552,6 +1766,7 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
     options.historyDetail = { ...historyDetail, finalOutput, items: [{ ...historyDetail.items[0], ...metadata }] };
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Cobalt.*Ingot/ }).click();
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
     await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     const resource = page.getByRole('cell', { name: /Cobalt Ingot/ });
@@ -2107,6 +2322,7 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
     options.pendingReads = 1;
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
     await page.getByRole('spinbutton', { name: 'Craft quantity' }).fill('12');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     await page.getByRole('combobox', { name: 'Crafting CPU', exact: true }).waitFor({ timeout: 5000 });
@@ -2863,6 +3079,7 @@ test('busy CPU eligibility uses known output identity and missing selections req
     };
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     const cpus = page.getByRole('combobox', { name: 'Crafting CPU', exact: true });
     await cpus.waitFor();
@@ -3972,6 +4189,7 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
     options.fault = { operation: 'create', status: 'TIMEOUT' };
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     await page
         .getByRole('status')
@@ -3983,6 +4201,7 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     await page.goBack();
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
     assert.equal(await page.getByRole('button', { name: 'Calculate plan', exact: true }).isDisabled(), true);
     options.fault = { operation: 'delete', status: 'TIMEOUT' };
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
@@ -4004,6 +4223,7 @@ test('quantity editing survives refresh and only positive safe integer quantitie
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
     const quantity = page.getByRole('spinbutton', { name: 'Craft quantity' });
     await quantity.fill('37');
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/items'));
@@ -5907,3 +6127,45 @@ test('Network refetch publishes remote name and tracking changes with polling di
     assert.equal(await page.getByRole('link', { name: 'Enable tracking', exact: true }).count(), 0);
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
 });
+// Public browser geometry: center the main frame, keeping its attachments on screen.
+for (const deviceScaleFactor of [1, 1.25, 1.5]) {
+    test(`main terminal centers independently of its attachments at DPR ${deviceScaleFactor}`, async (t) => {
+        const { page, base } = await fixture(t, '', { deviceScaleFactor }, { mockClock: false });
+        await seedAutomaticRefresh(page, base, false);
+        for (const width of [1920, 1600, 1500, 1400, 1184, 800, 600, 390]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.goto(`${base}#/grids/${gridA}/items`);
+            await page.getByRole('button', { name: /Iron Ingot/ }).click();
+            await page.evaluate(() => document.fonts.ready);
+            const frame = await page.locator('#window').boundingBox();
+            const details = await page.getByRole('complementary').filter({ visible: true }).boundingBox();
+            const tools = await page.getByRole('group', { name: 'Resources', exact: true }).boundingBox();
+            assert.ok(frame.x >= 0 && frame.x + frame.width <= width, `main frame fits at ${width}`);
+            assert.ok(details.x >= 0 && details.x + details.width <= width, `attached details fit at ${width}`);
+            assert.ok(tools.x >= 0 && tools.x + tools.width <= frame.x + 1, `tools fit beside frame at ${width}`);
+            if (width >= 1600) {
+                assert.ok(
+                    Math.abs(frame.x + frame.width / 2 - width / 2) < 1,
+                    `main frame center ${frame.x + frame.width / 2} matches viewport center ${width / 2}`
+                );
+            }
+            if (width > 600) {
+                assert.ok(Math.abs(details.x - (frame.x + frame.width)) <= 3, `details remain docked at ${width}`);
+            } else {
+                assert.ok(details.y >= frame.y + frame.height - 1, `details stack below at ${width}`);
+            }
+            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        }
+        await page.setViewportSize({ width: 1920, height: 900 });
+        for (const name of ['CPUs', 'History', 'Network', 'Web settings', 'About', 'Home', 'Terminal']) {
+            await page.getByRole('navigation').getByRole('link', { name, exact: true }).click();
+            const frame = page.locator(name === 'Home' ? '#home' : '#window');
+            await frame.waitFor();
+            const bounds = await frame.boundingBox();
+            assert.ok(Math.abs(bounds.x + bounds.width / 2 - 960) < 1, `${name} frame retains shared center`);
+            const header = await page.getByRole('navigation').boundingBox();
+            assert.ok(Math.abs(header.x + header.width / 2 - 960) < 1, `${name} header retains shared center`);
+            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        }
+    });
+}
