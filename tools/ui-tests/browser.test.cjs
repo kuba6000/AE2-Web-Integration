@@ -1787,7 +1787,9 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
         assert.ok(Number((await textStyle(locator, 'Ingot')).weight) >= 700);
     }
     await assertFormatted(resource);
-    assert.match(await resource.getAttribute('title'), /example:cobalt_ingot/);
+    await resource.hover();
+    await page.getByRole('tooltip').getByText('example:cobalt_ingot', { exact: true }).waitFor();
+    await page.keyboard.press('Escape');
     const planOutput = page.getByRole('paragraph').filter({ hasText: /^Cobalt Ingot × 12$/ });
     await assertFormatted(planOutput);
     assert.notEqual((await textStyle(planOutput, '× 12')).color, 'rgb(85, 255, 85)');
@@ -4262,6 +4264,144 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
         options.requests.filter((request) => request.method !== 'GET').map((request) => request.method),
         ['POST', 'DELETE']
     );
+});
+
+test('plan resources share custom formatted tooltips with exact values and dismiss without polling reopen', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.plan = {
+        ...readyPlan,
+        plan: [
+            {
+                ...readyPlan.plan[0],
+                displayName: '§aIron §lIngot',
+                stored: 123456,
+                requested: 234567,
+                missing: 34567,
+                damage: 4,
+                componentCount: 2,
+                steps: 17,
+                usedPercent: 0.25
+            }
+        ]
+    };
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    const resource = page
+        .getByRole('list', { name: 'Plan resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ });
+    await resource.hover();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.getByText('Iron Ingot', { exact: true }).waitFor({ timeout: 3000 });
+    assert.equal(await resource.getAttribute('title'), null);
+    assert.match(await tooltip.innerText(), /minecraft:iron_ingot\s+Damage: 4\s+Components: 2/);
+    for (const value of ['123,456', '234,567', '34,567', '17', '25%'])
+        assert.ok((await tooltip.innerText()).includes(value));
+    assert.equal((await textStyle(tooltip, 'Iron')).color, 'rgb(85, 255, 85)');
+    assert.equal(
+        await tooltip.getByText('Components: 2').evaluate((node) => getComputedStyle(node).color),
+        'rgb(170, 170, 170)'
+    );
+    await page.keyboard.press('Escape');
+    assert.equal(await tooltip.isVisible(), false);
+    await poll(page);
+    assert.equal(await tooltip.isVisible(), false);
+    await page.mouse.move(0, 0);
+    await resource.focus();
+    await tooltip.getByText('Iron Ingot', { exact: true }).waitFor();
+    assert.equal(await resource.getAttribute('aria-describedby'), await tooltip.getAttribute('id'));
+    await page.keyboard.press('Escape');
+    await poll(page);
+    assert.equal(await tooltip.isVisible(), false);
+    await page.getByRole('searchbox', { name: 'Search plan resources' }).fill('quartz');
+    assert.equal(await resource.count(), 0);
+    assert.equal(await tooltip.isVisible(), false);
+});
+
+test('plan tools search and CPU identifiers use current custom tooltips and clear removed or dismissed targets', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = { 'cpu-a': cpu, 'cpu-b': { ...cpu, acceptsPlayerJobs: false } };
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    const sort = page.getByRole('button', { name: 'Sort by: Name', exact: true });
+    await sort.hover();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.getByText(/Sort by.*Name/).waitFor({ timeout: 3000 });
+    assert.equal(await sort.getAttribute('title'), null);
+    await sort.click();
+    await tooltip.getByText(/Sort by.*From storage/).waitFor();
+    await page.keyboard.press('Escape');
+    await poll(page);
+    assert.equal(await tooltip.isVisible(), false);
+    const order = page.getByRole('button', { name: 'Sort order: Ascending', exact: true });
+    await page.mouse.move(0, 0);
+    await order.focus();
+    await tooltip.getByText(/Sort order.*Ascending/).waitFor();
+    await page.keyboard.press('Enter');
+    await tooltip.getByText(/Sort order.*Descending/).waitFor();
+    const search = page.getByRole('searchbox', { name: 'Search plan resources' });
+    await search.focus();
+    await tooltip.getByText(/@/).first().waitFor();
+    await search.fill('iron');
+    assert.equal(await tooltip.isVisible(), false);
+    const disabled = page.getByRole('radio', { name: /cpu-b/ });
+    await page.mouse.move(0, 0);
+    await disabled.locator('..').hover();
+    await tooltip.getByText('cpu-b', { exact: true }).waitFor();
+    assert.equal(await disabled.isDisabled(), true);
+    assert.equal(await disabled.locator('..').getAttribute('title'), null);
+    const enabled = page.getByRole('radio', { name: /cpu-a/ });
+    await enabled.focus();
+    await tooltip.getByText('cpu-a', { exact: true }).waitFor();
+    await page.mouse.move(0, 0);
+    await disabled.locator('..').hover();
+    await tooltip.getByText('cpu-b', { exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    await poll(page);
+    assert.equal(await tooltip.isVisible(), false);
+    await page.mouse.move(0, 0);
+    await disabled.locator('..').hover();
+    await tooltip.getByText('cpu-b', { exact: true }).waitFor();
+    delete options.cpus['cpu-b'];
+    await poll(page);
+    await disabled.waitFor({ state: 'detached' });
+    assert.equal(await tooltip.isVisible(), false);
+});
+
+test('plan tooltips clear on scroll resize navigation and access denial', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.plan = {
+        ...readyPlan,
+        plan: Array.from({ length: 80 }, (_, index) => ({ ...readyPlan.plan[0], displayName: `Ingredient ${index}` }))
+    };
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    const region = page.getByRole('region', { name: 'Plan resources', exact: true });
+    const resource = region.getByRole('button', { name: /^Ingredient 0 ·/ });
+    const tooltip = page.getByRole('tooltip');
+    await resource.hover();
+    await tooltip.getByText('Ingredient 0', { exact: true }).waitFor();
+    await region.evaluate((node) => {
+        node.scrollTop = 100;
+    });
+    await page.waitForFunction(() => document.querySelector('#resource-tooltip').hidden);
+    await region.evaluate((node) => {
+        node.scrollTop = 0;
+    });
+    await page.mouse.move(0, 0);
+    await resource.focus();
+    await tooltip.getByText('Ingredient 0', { exact: true }).waitFor();
+    await page.setViewportSize({ width: 1100, height: 800 });
+    await page.waitForFunction(() => document.querySelector('#resource-tooltip').hidden);
+    await resource.evaluate((node) => node.blur());
+    await resource.focus();
+    await tooltip.getByText('Ingredient 0', { exact: true }).waitFor();
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await page.getByRole('searchbox', { name: 'Search resources', exact: true }).waitFor();
+    assert.equal(await tooltip.isVisible(), false);
+    await page.goBack();
+    await resource.hover();
+    await tooltip.getByText('Ingredient 0', { exact: true }).waitFor();
+    options.cpuError = 'NO_PERMISSIONS';
+    await poll(page);
+    await resource.waitFor({ state: 'detached' });
+    assert.equal(await tooltip.isVisible(), false);
 });
 
 test('crafting popup and plan share optional atlas icons and honor native CPU admission', async (t) => {

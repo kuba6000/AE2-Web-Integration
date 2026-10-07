@@ -1,5 +1,5 @@
 import { registryId } from './resource-metadata.js';
-import type { StoredResource } from '../../app/api-types.js';
+import type { StoredResource, ResourceStack } from '../../app/api-types.js';
 import type { TerminalState, createTerminal } from '../../app/terminal.js';
 import type { Translator as Locale } from '../../app/i18n.js';
 type Terminal = ReturnType<typeof createTerminal>;
@@ -19,7 +19,20 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): 
     return node;
 }
 
-export function createCraftingView(root: HTMLElement, application: Terminal, workspace: HTMLElement) {
+export type CraftingTooltipPresenter = {
+    bind(target: HTMLElement, content: () => Node[], focusTarget?: HTMLElement): void;
+    hide(): void;
+    metadata(
+        resource: Pick<ResourceStack, 'registryNamespace' | 'registryPath' | 'damage' | 'componentCount'>
+    ): HTMLElement[];
+};
+
+export function createCraftingView(
+    root: HTMLElement,
+    application: Terminal,
+    workspace: HTMLElement,
+    tooltip: CraftingTooltipPresenter
+) {
     const dialog = element('dialog');
     dialog.className = 'window-frame crafting-dialog';
     dialog.setAttribute('aria-labelledby', 'craft-dialog-title');
@@ -184,6 +197,11 @@ export function createCraftingView(root: HTMLElement, application: Terminal, wor
     direction.type = 'button';
     direction.className = 'tool-button';
     sortGroup.append(sort, direction);
+    for (const control of [sort, direction])
+        tooltip.bind(control, () => [element('span', control.getAttribute('aria-label') || '')]);
+    tooltip.bind(search, () =>
+        (search.getAttribute('aria-description') || '').split('\n').map((line) => element('span', line))
+    );
     tools.append(sortGroup);
     workspace.insertBefore(tools, root);
     const criteria: PlanSort[] = ['name', 'stored', 'requested', 'missing'];
@@ -196,6 +214,7 @@ export function createCraftingView(root: HTMLElement, application: Terminal, wor
         application.crafting.reverse();
     });
     search.addEventListener('input', () => {
+        tooltip.hide();
         scroll.scrollTop = 0;
         application.crafting.search(search.value);
     });
@@ -233,6 +252,7 @@ export function createCraftingView(root: HTMLElement, application: Terminal, wor
     let lastIcons: TerminalState['crafting']['icons'] | undefined;
     let lastPresentation = '';
     let lastLocale: Locale | undefined;
+    let planRoute = '';
 
     return {
         open,
@@ -266,6 +286,9 @@ export function createCraftingView(root: HTMLElement, application: Terminal, wor
 
         render(terminal: TerminalState, locale: Locale, enabled: boolean) {
             const { route, crafting: state } = terminal;
+            const nextRoute = route.view === 'plan' ? `${route.gridKey}/${route.planId}` : '';
+            if (planRoute && planRoute !== nextRoute) tooltip.hide();
+            planRoute = nextRoute;
             if (dialog.open && submitted && ['calculating', 'submitted'].includes(state.status)) dialog.close();
             if (route.view !== 'items' || route.gridKey !== gridKey || terminal.itemStatus === 'error') {
                 opener = null;
@@ -327,7 +350,6 @@ export function createCraftingView(root: HTMLElement, application: Terminal, wor
                 'aria-label',
                 `${t('sortOrder')}: ${t(state.descending ? 'descending' : 'ascending')}`
             );
-            for (const control of [sort, direction]) control.title = control.getAttribute('aria-label') || '';
             sortGroup.setAttribute('aria-label', t('sort'));
             const presentation = `${state.search}/${state.sort}/${state.descending}`;
             if (
@@ -393,14 +415,17 @@ export function createCraftingView(root: HTMLElement, application: Terminal, wor
                         ...values.map(([key, value]) => `${t(key)}: ${number(value)}`)
                     ];
                     button.setAttribute('aria-label', description.join(' · '));
-                    button.title = [
-                        ...description,
-                        registryId(row),
-                        `${t('steps')}: ${number(row.steps)}`,
-                        `${t('storageUse')}: ${number(row.usedPercent * 100)}%`
-                    ]
-                        .filter(Boolean)
-                        .join('\n');
+                    tooltip.bind(button, () => {
+                        const name = element('strong');
+                        name.append(renderMinecraftText(row.displayName));
+                        return [
+                            name,
+                            ...tooltip.metadata(row),
+                            ...values.map(([key, value]) => element('span', `${t(key)}: ${number(value)}`)),
+                            element('span', `${t('steps')}: ${number(row.steps)}`),
+                            element('span', `${t('storageUse')}: ${number(row.usedPercent * 100)}%`)
+                        ];
+                    });
                     button.append(createResourceIcon(), name, amounts);
                     li.append(button);
                     grid.insertBefore(li, grid.querySelector('.empty-slot'));
@@ -432,6 +457,7 @@ export function createCraftingView(root: HTMLElement, application: Terminal, wor
                     const name = element('strong');
                     const details = element('span');
                     label.append(input, name, details);
+                    tooltip.bind(label, () => [element('code', cpu.key)], input);
                     row = { label, input, name, details };
                     cpuRows.set(cpu.key, row);
                     cpuList.append(label);
@@ -439,7 +465,6 @@ export function createCraftingView(root: HTMLElement, application: Terminal, wor
                 row.name.replaceChildren(renderMinecraftText(cpu.name || t('cpuUnnamed')));
                 const description = `${number(cpu.availableStorage)} B · ${t('coprocessors', { count: cpu.coProcessors })} · ${t(cpu.isBusy ? 'cpuBusy' : 'cpuIdle')}`;
                 row.details.textContent = description;
-                row.label.title = cpu.key;
                 row.input.setAttribute(
                     'aria-label',
                     `${plainMinecraftText(cpu.name || t('cpuUnnamed'))} · ${cpu.key} · ${description}`

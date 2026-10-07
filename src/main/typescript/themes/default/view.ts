@@ -242,7 +242,11 @@ export function mount(
         }
     > = root.querySelectorAll('.tool-button');
     const homeView = createHomeView(find('#workspace'), application);
-    const craftingView = createCraftingView(find('#window'), application, find('#workspace'));
+    const craftingView = createCraftingView(find('#window'), application, find('#workspace'), {
+        bind: bindTooltip,
+        hide: hideTooltip,
+        metadata: (resource) => resourceMetadata(resource, 'span')
+    });
     const itemIcons = application.icons.observe(find('#item-scroll'), paintResourceIcon);
     const slots = createSlotGrid(find('#items'), find('#item-scroll'), find('#terminal'));
     const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace') });
@@ -260,6 +264,14 @@ export function mount(
         { row: ReturnType<typeof createItemRow>; x: number; y: number; pointer: boolean } | null | undefined;
     let updatingRows = false;
     let toolTooltip: HTMLButtonElement | null = null;
+    let attachedTooltip: {
+        target: HTMLElement;
+        focusTarget: HTMLElement;
+        content: () => Node[];
+        pointer: boolean;
+        x: number;
+        y: number;
+    } | null = null;
 
     let language: TerminalState['preferences']['language'];
 
@@ -274,6 +286,8 @@ export function mount(
 
     let allFiltered: TerminalState['items'] = [];
     function hideTooltip() {
+        attachedTooltip?.focusTarget.removeAttribute('aria-describedby');
+        attachedTooltip = null;
         toolTooltip = null;
         itemTooltip = null;
         tooltip.hidden = true;
@@ -285,7 +299,10 @@ export function mount(
         tooltip.style.top = `${Math.max(8, y + box.height + 24 > innerHeight ? y - box.height - 10 : y + 16)}px`;
     }
 
-    function resourceMetadata(item: TerminalState['items'][number], tag: 'span' | 'p') {
+    function resourceMetadata(
+        item: Pick<TerminalState['items'][number], 'registryNamespace' | 'registryPath' | 'damage' | 'componentCount'>,
+        tag: 'span' | 'p'
+    ) {
         const id = registryId(item);
         const lines: HTMLElement[] = id ? [element('code', id)] : [];
         if (item.damage !== null && item.damage !== 0) {
@@ -317,6 +334,7 @@ export function mount(
     }
 
     function showItemTooltip(row: ReturnType<typeof createItemRow>, x: number, y: number, pointer: boolean) {
+        hideTooltip();
         toolTooltip = null;
         itemTooltip = { row, x, y, pointer };
         showTooltip(row.item, x, y);
@@ -333,6 +351,53 @@ export function mount(
         }
         const box = row.button.getBoundingClientRect();
         showTooltip(row.item, pointer ? x : box.left, pointer ? y : box.bottom);
+    }
+    function refreshAttachedTooltip() {
+        if (!attachedTooltip) return;
+        const { target, focusTarget, content, pointer, x, y } = attachedTooltip;
+        if (
+            !target.isConnected ||
+            !target.getClientRects().length ||
+            (pointer ? !target.contains(document.elementFromPoint(x, y)) : document.activeElement !== focusTarget)
+        ) {
+            hideTooltip();
+            return;
+        }
+        tooltip.replaceChildren(...content());
+        tooltip.hidden = false;
+        const box = target.getBoundingClientRect();
+        positionTooltip(pointer ? x : box.left, pointer ? y : box.bottom);
+    }
+    function bindTooltip(target: HTMLElement, content: () => Node[], focusTarget = target) {
+        let pointerInside = false;
+        const show = (pointer: boolean, x = 0, y = 0) => {
+            hideTooltip();
+            attachedTooltip = { target, focusTarget, content, pointer, x, y };
+            focusTarget.setAttribute('aria-describedby', tooltip.id);
+            refreshAttachedTooltip();
+        };
+        const hide = () => {
+            if (attachedTooltip?.target === target) hideTooltip();
+        };
+        target.addEventListener('pointerenter', (event) => {
+            if (event.pointerType === 'touch' || pointerInside) return;
+            // Replacing a hovered descendant can emit another enter without a leave.
+            pointerInside = true;
+            show(true, event.clientX, event.clientY);
+        });
+        target.addEventListener('pointermove', (event) => {
+            if (attachedTooltip?.target === target && attachedTooltip.pointer) {
+                attachedTooltip.x = event.clientX;
+                attachedTooltip.y = event.clientY;
+                positionTooltip(event.clientX, event.clientY);
+            }
+        });
+        target.addEventListener('pointerleave', () => {
+            pointerInside = false;
+            hide();
+        });
+        focusTarget.addEventListener('focus', () => show(false));
+        focusTarget.addEventListener('blur', hide);
     }
     function updateLabels() {
         locale = i18n.forLanguage(language);
@@ -772,6 +837,7 @@ export function mount(
         renderItems();
         renderDetails();
         craftingView.render(state, locale, effectiveDisplay !== 'names');
+        refreshAttachedTooltip();
         if (state.route.view !== 'items' || state.itemStatus === 'error' || menuGrid !== state.route.gridKey)
             closeResourceMenu(false);
         cpuView.render(state.route, state.cpus, locale);
@@ -798,6 +864,7 @@ export function mount(
         application.search(search.value);
     });
     const showSearchHelp = () => {
+        hideTooltip();
         toolTooltip = null;
         itemTooltip = null;
         tooltip.replaceChildren(
@@ -850,6 +917,7 @@ export function mount(
         document.documentElement.dataset.appearance = appearance;
     });
     function showToolTooltip(button: HTMLButtonElement) {
+        hideTooltip();
         itemTooltip = null;
         toolTooltip = button;
         tooltip.textContent = [button.getAttribute('aria-label'), button.getAttribute('aria-description')]
