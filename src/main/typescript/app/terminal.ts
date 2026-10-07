@@ -74,7 +74,8 @@ export function createTerminal(
             notify();
             schedule();
         },
-        () => iconsEnabled && state.iconPack.available === true
+        () => iconsEnabled && state.iconPack.available === true,
+        preferences
     );
     const cpus = createCpuMonitor(
         api,

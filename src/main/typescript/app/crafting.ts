@@ -1,11 +1,12 @@
 import type { Plan, CpuInfo, StoredResource, IconMetadata } from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
+import type { Preferences, createPreferences } from './preferences.js';
 import { navigateToPlan, navigateToGrid } from './router.js';
 
 export type PlanMetadata = { itemKey: string; displayName: string; quantity: number };
 export type Mutation = 'create' | 'submit' | 'delete';
-export type PlanSort = 'name' | 'stored' | 'requested' | 'missing';
+export type PlanSort = Preferences['planSort'];
 export type CraftingState = {
     search: string;
     sort: PlanSort;
@@ -24,11 +25,16 @@ export type CraftingState = {
 export type CraftingOutcome = Partial<Pick<CraftingState, 'mutation' | 'uncertain' | 'status'>>;
 
 /** Calculation state and actions. The application supplies route lifetime and scheduling. */
-export function createCrafting(api: Api, changed: () => void, iconsEnabled: () => boolean) {
+export function createCrafting(
+    api: Api,
+    changed: () => void,
+    iconsEnabled: () => boolean,
+    preferences: ReturnType<typeof createPreferences>
+) {
     const state: CraftingState = {
         search: '',
-        sort: 'name',
-        descending: false,
+        sort: preferences.values.planSort,
+        descending: preferences.values.planSortOrder === 'descending',
         icons: null,
         status: 'idle',
         plan: null,
@@ -155,11 +161,13 @@ export function createCrafting(api: Api, changed: () => void, iconsEnabled: () =
             changed();
         },
         sort(value: PlanSort) {
+            preferences.set('planSort', value);
             state.sort = value;
             changed();
         },
         reverse() {
             state.descending = !state.descending;
+            preferences.set('planSortOrder', state.descending ? 'descending' : 'ascending');
             changed();
         },
         get pending() {

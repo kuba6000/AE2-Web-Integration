@@ -4268,6 +4268,7 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
 
 test('plan resources share custom formatted tooltips with exact values and dismiss without polling reopen', async (t) => {
     const { page, options, base } = await fixture(t);
+    options.capabilities.craftingPlanSteps = true;
     options.plan = {
         ...readyPlan,
         plan: [
@@ -4326,7 +4327,7 @@ test('plan tools search and CPU identifiers use current custom tooltips and clea
     await tooltip.getByText(/Sort by.*Name/).waitFor({ timeout: 3000 });
     assert.equal(await sort.getAttribute('title'), null);
     await sort.click();
-    await tooltip.getByText(/Sort by.*From storage/).waitFor();
+    await tooltip.getByText(/Sort by.*Quantity/).waitFor();
     await page.keyboard.press('Escape');
     await poll(page);
     assert.equal(await tooltip.isVisible(), false);
@@ -4530,7 +4531,7 @@ for (const width of [1280, 390]) {
         };
         await page.goto(`${base}#/grids/${gridA}/plans/7`);
         const region = page.getByRole('region', { name: 'Plan resources', exact: true });
-        const resource = region.getByRole('button', { name: /Resource 0 ·/ });
+        const resource = region.getByRole('button').first();
         await resource.waitFor();
         const card = await resource.boundingBox();
         assert.ok(card.width > card.height, 'plan resource cards remain rectangular');
@@ -4547,28 +4548,33 @@ for (const width of [1280, 390]) {
     });
 }
 
-test('crafting plan keeps missing crafting and stored groups in order for every sort direction', async (t) => {
+test('crafting plan persists independent name total quantity and steps sorting within fixed groups', async (t) => {
     const { page, options, base } = await fixture(t);
+    options.capabilities.craftingPlanSteps = true;
     options.plan = {
         ...readyPlan,
         plan: [
-            ['Alpha', 60, 0, 0],
-            ['Zeta', 20, 10, 1],
-            ['Yotta', 30, 20, 0],
-            ['Gamma', 50, 0, 0],
-            ['Beta', 10, 20, 2],
-            ['Delta', 40, 10, 0]
-        ].map(([displayName, stored, requested, missing]) => ({
+            ['Alpha', 60, 0, 0, 4],
+            ['Zeta', 2, 10, 50, 1],
+            ['Yotta', 30, 5, 0, 2],
+            ['Gamma', 50, 0, 0, 8],
+            ['Beta', 10, 40, 2, 7],
+            ['Delta', 4, 20, 0, 9]
+        ].map(([displayName, stored, requested, missing, steps]) => ({
             ...readyPlan.plan[0],
             displayName,
             stored,
             requested,
-            missing
+            missing,
+            steps
         }))
     };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
+    await page.getByRole('button', { name: 'Sort order: Ascending', exact: true }).click();
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     const resources = page.getByRole('list', { name: 'Plan resources', exact: true });
-    await resources.getByRole('button', { name: /^Alpha ·/ }).waitFor();
     const names = async () =>
         await resources
             .getByRole('button')
@@ -4580,30 +4586,66 @@ test('crafting plan keeps missing crafting and stored groups in order for every 
             ['Zeta', 'Beta', 'Yotta', 'Delta', 'Gamma', 'Alpha']
         ],
         [
-            'From storage',
-            ['Beta', 'Zeta', 'Yotta', 'Delta', 'Gamma', 'Alpha'],
-            ['Zeta', 'Beta', 'Delta', 'Yotta', 'Alpha', 'Gamma']
+            'Quantity',
+            ['Beta', 'Zeta', 'Delta', 'Yotta', 'Gamma', 'Alpha'],
+            ['Zeta', 'Beta', 'Yotta', 'Delta', 'Alpha', 'Gamma']
         ],
         [
-            'Requested',
-            ['Zeta', 'Beta', 'Delta', 'Yotta', 'Alpha', 'Gamma'],
-            ['Beta', 'Zeta', 'Yotta', 'Delta', 'Alpha', 'Gamma']
-        ],
-        [
-            'Missing',
-            ['Zeta', 'Beta', 'Delta', 'Yotta', 'Alpha', 'Gamma'],
-            ['Beta', 'Zeta', 'Delta', 'Yotta', 'Alpha', 'Gamma']
+            'Crafting steps',
+            ['Zeta', 'Beta', 'Yotta', 'Delta', 'Alpha', 'Gamma'],
+            ['Beta', 'Zeta', 'Delta', 'Yotta', 'Gamma', 'Alpha']
         ]
     ];
     for (const [criterion, ascending, descending] of cases) {
+        await resources.getByRole('button', { name: /^Alpha ·/ }).waitFor();
         assert.deepEqual(await names(), ascending, `${criterion} ascending within fixed groups`);
         await page.getByRole('button', { name: 'Sort order: Ascending', exact: true }).click();
         assert.deepEqual(await names(), descending, `${criterion} descending within fixed groups`);
+        await page.reload();
+        await page.getByRole('button', { name: `Sort by: ${criterion}`, exact: true }).waitFor({ timeout: 3000 });
+        await resources.getByRole('button', { name: /^Alpha ·/ }).waitFor();
+        assert.deepEqual(await names(), descending, `${criterion} and direction survive reload`);
         await page.getByRole('button', { name: 'Sort order: Descending', exact: true }).click();
         await page.getByRole('button', { name: `Sort by: ${criterion}`, exact: true }).click();
     }
     await page.getByRole('searchbox', { name: 'Search plan resources' }).fill('ta');
     assert.deepEqual(await names(), ['Beta', 'Zeta', 'Delta', 'Yotta']);
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await page.getByRole('button', { name: 'Sort by: Registry ID', exact: true }).waitFor();
+    assert.ok(await page.getByRole('button', { name: 'Sort order: Descending', exact: true }).isVisible());
+});
+
+test('unsupported plan steps fall back without overwriting the saved choice and omit unavailable metrics', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.capabilities.craftingPlanSteps = true;
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
+    await page.getByRole('button', { name: 'Sort by: Crafting steps', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Sort order: Ascending', exact: true }).click();
+    options.capabilities.craftingPlanSteps = false;
+    await page.reload();
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).waitFor();
+    assert.ok(await page.getByRole('button', { name: 'Sort order: Descending', exact: true }).isVisible());
+    await page
+        .getByRole('list', { name: 'Plan resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .hover();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.getByText('Iron Ingot', { exact: true }).waitFor();
+    assert.equal(await tooltip.getByText(/Crafting steps/).count(), 0);
+    options.capabilities.craftingPlanSteps = true;
+    await page.reload();
+    await page.getByRole('button', { name: 'Sort by: Crafting steps', exact: true }).waitFor();
+    options.capabilities.craftingPlanSteps = false;
+    await page.reload();
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).click();
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    options.capabilities.craftingPlanSteps = true;
+    await page.reload();
+    await page.getByRole('button', { name: 'Sort by: Quantity', exact: true }).waitFor();
+    assert.ok(await page.getByRole('button', { name: 'Sort order: Descending', exact: true }).isVisible());
 });
 
 test('crafting plan resources search and sort while CPU choice and actions stay available outside scroll', async (t) => {
@@ -4614,7 +4656,7 @@ test('crafting plan resources search and sort while CPU choice and actions stay 
             ...readyPlan.plan[0],
             displayName: `Resource ${String(index).padStart(2, '0')}`,
             stored: index + 1,
-            requested: 80 - index
+            requested: 20
         }))
     };
     await page.goto(`${base}#/grids/${gridA}/plans/7`);

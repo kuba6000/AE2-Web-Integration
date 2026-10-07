@@ -63,7 +63,8 @@ public final class GetContext extends IAsyncRequest {
      * @param modVersion   native mod version, or null before the platform initializes the core
      * @param isOutdated   whether update checking is enabled and a newer mod release is currently known
      * @param user         authenticated display identity, or null without valid session or trusted localhost access
-     * @param capabilities native feature support for authenticated users; empty for anonymous requests
+     * @param capabilities native feature support for authenticated users; empty for anonymous requests. Keys include
+     *                     craftingLightMode and craftingPlanSteps (per-resource crafting step counts).
      * @keyExample capabilities craftingLightMode
      */
     @Desugar

@@ -7,7 +7,7 @@ type Terminal = ReturnType<typeof createTerminal>;
 import { createSlotGrid } from './slot-grid.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 import { slotQuantity } from './resource-quantity.js';
-import { terminalIcons, craftingQueue } from './icons/pixel/terminal.js';
+import { terminalIcons, craftingHammer } from './icons/pixel/terminal.js';
 import type { PlanSort } from '../../app/crafting.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
@@ -204,10 +204,15 @@ export function createCraftingView(
     );
     tools.append(sortGroup);
     workspace.insertBefore(tools, root);
-    const criteria: PlanSort[] = ['name', 'stored', 'requested', 'missing'];
+    const criteria: PlanSort[] =
+        application.state.capabilities.craftingPlanSteps === true
+            ? ['name', 'quantity', 'steps']
+            : ['name', 'quantity'];
+    const effectiveSort = (): PlanSort =>
+        criteria.includes(application.state.crafting.sort) ? application.state.crafting.sort : 'name';
     sort.addEventListener('click', () => {
         scroll.scrollTop = 0;
-        application.crafting.sort(criteria[(criteria.indexOf(application.state.crafting.sort) + 1) % criteria.length]);
+        application.crafting.sort(criteria[(criteria.indexOf(effectiveSort()) + 1) % criteria.length]);
     });
     direction.addEventListener('click', () => {
         scroll.scrollTop = 0;
@@ -340,15 +345,13 @@ export function createCraftingView(
             if (search.value !== state.search) search.value = state.search;
             grid.setAttribute('aria-label', t('planResources'));
             scroll.setAttribute('aria-label', t('planResources'));
-            const sortKey = { name: 'name', stored: 'consumed', requested: 'requested', missing: 'missingAmount' }[
-                state.sort
-            ];
+            const sortBy = effectiveSort();
+            const sortKey = { name: 'name', quantity: 'quantity', steps: 'steps' }[sortBy];
             const sortIcon = {
                 name: terminalIcons.name,
-                stored: terminalIcons.stored,
-                requested: craftingQueue,
-                missing: terminalIcons.quantity
-            }[state.sort];
+                quantity: terminalIcons.quantity,
+                steps: craftingHammer
+            }[sortBy];
             sort.innerHTML = sortIcon;
             sort.setAttribute('aria-label', `${t('sort')}: ${t(sortKey)}`);
             direction.innerHTML = terminalIcons[state.descending ? 'descending' : 'ascending'];
@@ -357,7 +360,7 @@ export function createCraftingView(
                 `${t('sortOrder')}: ${t(state.descending ? 'descending' : 'ascending')}`
             );
             sortGroup.setAttribute('aria-label', t('sort'));
-            const presentation = `${state.search}/${state.sort}/${state.descending}`;
+            const presentation = `${state.search}/${sortBy}/${state.descending}`;
             if (
                 lastRows !== state.plan ||
                 lastIcons !== state.icons ||
@@ -389,10 +392,11 @@ export function createCraftingView(
                             plainMinecraftText(b.displayName),
                             language
                         );
-                        return (
-                            (state.sort === 'name' ? names : a[state.sort] - b[state.sort]) *
-                                (state.descending ? -1 : 1) || names
-                        );
+                        const amount =
+                            sortBy === 'quantity'
+                                ? a.stored + a.requested + a.missing - (b.stored + b.requested + b.missing)
+                                : a.steps - b.steps;
+                        return (sortBy === 'name' ? names : amount) * (state.descending ? -1 : 1) || names;
                     });
                 // Let the shared grid own its decorative cells across updates.
                 for (const row of [...grid.children]) if (!row.classList.contains('empty-slot')) row.remove();
@@ -431,7 +435,9 @@ export function createCraftingView(
                             name,
                             ...tooltip.metadata(row),
                             ...values.map(([key, value]) => element('span', `${t(key)}: ${number(value)}`)),
-                            element('span', `${t('steps')}: ${number(row.steps)}`),
+                            ...(terminal.capabilities.craftingPlanSteps === true
+                                ? [element('span', `${t('steps')}: ${number(row.steps)}`)]
+                                : []),
                             element('span', `${t('storageUse')}: ${number(row.usedPercent * 100)}%`)
                         ];
                     });

@@ -4,6 +4,8 @@ export type Preferences = {
     language: string;
     sort: 'name' | 'quantity' | 'id';
     sortOrder: 'ascending' | 'descending';
+    planSort: 'name' | 'quantity' | 'steps';
+    planSortOrder: 'ascending' | 'descending';
     filter: 'all' | 'stored' | 'craftable';
     showItems: boolean;
     showFluids: boolean;
@@ -17,6 +19,8 @@ export function createPreferences(base: URL) {
         language: navigator.language.toLowerCase().startsWith('pl') ? 'pl' : 'en',
         sort: 'name',
         sortOrder: 'ascending',
+        planSort: 'name',
+        planSortOrder: 'ascending',
         filter: 'all',
         showItems: true,
         showFluids: true,
@@ -25,6 +29,8 @@ export function createPreferences(base: URL) {
     const allowed = {
         sort: ['name', 'quantity', 'id'],
         sortOrder: ['ascending', 'descending'],
+        planSort: ['name', 'quantity', 'steps'],
+        planSortOrder: ['ascending', 'descending'],
         filter: ['all', 'stored', 'craftable']
     };
     function isValid<K extends keyof Preferences>(name: K, value: unknown): value is Preferences[K] {

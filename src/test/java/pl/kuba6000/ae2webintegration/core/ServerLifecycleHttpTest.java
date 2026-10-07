@@ -26,6 +26,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -445,7 +446,11 @@ class ServerLifecycleHttpTest {
 
             @Override
             public Map<ServerCapability, Boolean> web$getCapabilities() {
-                return Collections.singletonMap(ServerCapability.CRAFTING_LIGHT_MODE, true);
+                Map<ServerCapability, Boolean> capabilities = new EnumMap<>(ServerCapability.class);
+                for (ServerCapability capability : ServerCapability.values()) {
+                    capabilities.put(capability, true);
+                }
+                return capabilities;
             }
 
             @Override
@@ -458,12 +463,14 @@ class ServerLifecycleHttpTest {
             new Gson().fromJson(get("/api/context", null).body(), JsonObject.class)
                 .getAsJsonObject("data")
                 .getAsJsonObject("capabilities"));
-        assertTrue(
+        JsonObject expected = new JsonObject();
+        expected.addProperty("craftingLightMode", true);
+        expected.addProperty("craftingPlanSteps", true);
+        assertEquals(
+            expected,
             new Gson().fromJson(get("/api/context", login()).body(), JsonObject.class)
                 .getAsJsonObject("data")
-                .getAsJsonObject("capabilities")
-                .get("craftingLightMode")
-                .getAsBoolean());
+                .getAsJsonObject("capabilities"));
     }
 
     @Test
@@ -478,6 +485,12 @@ class ServerLifecycleHttpTest {
                 .getAsJsonObject("data")
                 .getAsJsonObject("capabilities")
                 .get("craftingLightMode")
+                .getAsBoolean());
+        assertFalse(
+            new Gson().fromJson(response.body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingPlanSteps")
                 .getAsBoolean());
         JsonObject user = contextUser(response.body());
         assertEquals(
@@ -518,6 +531,12 @@ class ServerLifecycleHttpTest {
                 .getAsJsonObject("data")
                 .getAsJsonObject("capabilities")
                 .get("craftingLightMode")
+                .getAsBoolean());
+        assertFalse(
+            new Gson().fromJson(get("/api/context", token).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingPlanSteps")
                 .getAsBoolean());
         assertEquals(
             username,
@@ -672,6 +691,12 @@ class ServerLifecycleHttpTest {
                 .getAsJsonObject("data")
                 .getAsJsonObject("capabilities")
                 .get("craftingLightMode")
+                .getAsBoolean());
+        assertFalse(
+            new Gson().fromJson(get("/api/context", null).body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("craftingPlanSteps")
                 .getAsBoolean());
         assertEquals(
             "localhost",
