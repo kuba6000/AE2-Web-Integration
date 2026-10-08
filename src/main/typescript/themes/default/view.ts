@@ -78,7 +78,7 @@ export function mount(
             dark: 'Dark',
             system: 'System',
             defaultTheme: 'Default',
-            themeOptions: 'Theme options',
+            generalOptions: 'General',
             terminalDisplay: 'Terminal display',
             detailedItems: 'Icons and names',
             compactItems: 'Icons only',
@@ -108,7 +108,7 @@ export function mount(
             dark: 'Ciemny',
             system: 'Systemowy',
             defaultTheme: 'Domyślny',
-            themeOptions: 'Opcje motywu',
+            generalOptions: 'Ogólne',
             terminalDisplay: 'Wyświetlanie terminala',
             detailedItems: 'Ikony i nazwy',
             compactItems: 'Same ikony',
@@ -168,13 +168,15 @@ export function mount(
         <div id="network-message" role="status"></div>
         <section id="server-settings" hidden><h2 data-text="serverSettings"></h2></section>
         <section id="web-settings" hidden><h2 data-text="webSettings"></h2><div class="web-preferences">
+        <section class="web-preferences-section" aria-labelledby="general-options-title"><h3 id="general-options-title" data-theme-text="generalOptions"></h3>
         <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
-        <label class="checkbox"><input type="checkbox" id="auto-refresh"><span data-text="autoRefresh"></span></label>
+        <label class="web-preference-toggle"><span data-text="autoRefresh"></span><input type="checkbox" id="auto-refresh"></label></section>
+        <section class="web-preferences-section" aria-labelledby="appearance-options-title"><h3 id="appearance-options-title" data-theme-text="appearance"></h3>
         <label><span data-text="theme"></span><select disabled><option value="default" data-theme-text="defaultTheme"></option></select></label>
-        <section><h3 data-theme-text="themeOptions"></h3>
-        <label><span data-theme-text="terminalDisplay"></span><select id="terminal-display" aria-describedby="icon-availability"><option value="names" data-theme-text="namesOnly"></option><option value="both" data-theme-text="detailedItems"></option><option value="icons" data-theme-text="compactItems"></option></select></label>
-        <p class="hint" id="icon-availability" role="status"></p>
-        <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label>
+        <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label></section>
+        <section class="web-preferences-section" aria-labelledby="terminal-options-title"><h3 id="terminal-options-title" data-text="terminal"></h3>
+        <div class="web-preference-field"><label><span data-theme-text="terminalDisplay"></span><select id="terminal-display" aria-describedby="icon-availability"><option value="names" data-theme-text="namesOnly"></option><option value="both" data-theme-text="detailedItems"></option><option value="icons" data-theme-text="compactItems"></option></select></label>
+        <p class="hint" id="icon-availability" role="status"></p></div>
         </section></div></section>
         <section id="terminal" hidden><div class="terminal-heading"><h2 data-text="terminal"></h2>
         <label class="search"><span class="sr-only" data-text="search"></span><input id="search" type="search"></label></div>

@@ -762,16 +762,53 @@ label {
     padding: 6px 9px;
 }
 .web-preferences {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-    max-width: 380px;
+    display: grid;
+    gap: 20px;
+}
+.web-preferences-section {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+}
+.web-preferences-section + .web-preferences-section {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+}
+.web-preferences h3 {
+    margin: 0;
+    font-size: 15px;
+}
+.web-preferences label {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 320px);
+    align-items: center;
+    gap: 12px 24px;
 }
 .web-preferences select {
     width: 100%;
+    min-width: 0;
 }
-.web-preferences h3 {
-    margin-bottom: 12px;
+.web-preference-toggle input {
+    justify-self: start;
+}
+.web-preference-field .hint {
+    max-width: 320px;
+    margin: 8px 0 0 auto;
+}
+.web-preference-field .hint:empty {
+    display: none;
+}
+@media (max-width: 600px) {
+    .web-preferences label {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+    }
+    .web-preferences .web-preference-toggle {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .web-preference-field .hint {
+        max-width: none;
+    }
 }
 .about-view {
     overflow-wrap: anywhere;
@@ -825,9 +862,6 @@ label {
     white-space: nowrap;
 }
 
-.web-preferences > .checkbox {
-    align-self: flex-start;
-}
 .checkbox {
     flex-direction: row;
     align-items: center;
