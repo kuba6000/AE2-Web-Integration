@@ -68,13 +68,17 @@ public final class ResourceStack {
     public static @Nullable ResourceStack capture(@NotNull IAEGrid grid, @Nullable IAEGenericStack stack,
         @Nullable IconPack pack) {
         if (stack == null) return null;
-        IAEKey key = stack.web$what();
+        return capture(grid, stack.web$what(), stack.web$amount(), pack);
+    }
+
+    /** Captures a measured resource directly, without allocating a temporary native stack. */
+    public static @NotNull ResourceStack capture(@NotNull IAEGrid grid, @NotNull IAEKey key, long quantity,
+        @Nullable IconPack pack) {
         String registryNamespace = key.web$getRegistryNamespace();
         String registryPath = key.web$getRegistryPath();
         Integer componentCount = key.web$getComponentCount();
         Integer damage = key.web$getDamage();
         String displayName = key.web$getDisplayName();
-        long quantity = stack.web$amount();
         StableKey itemKey;
         try {
             itemKey = AE2Controller.itemIdentities.remember(grid, key);

@@ -528,7 +528,9 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
 
         @Override
         public @NotNull StableKey web$getKey() {
-            throw new AssertionError("Tracking must not encode stable resource IDs");
+            return StableKey.create(
+                sink -> sink.putInt(id)
+                    .putInt(variant));
         }
 
         @Override

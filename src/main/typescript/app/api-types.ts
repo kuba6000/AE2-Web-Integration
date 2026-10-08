@@ -118,6 +118,7 @@ export type HistoryEntry = {
 };
 export type Timing = { started: number; ended: number };
 export type ResourceTiming = {
+    icon?: IconReference | null;
     displayName: string;
     registryNamespace: string | null;
     registryPath: string | null;
@@ -132,6 +133,7 @@ export type ResourceTiming = {
 };
 export type ProviderTiming = { name: string; timings: Timing[]; timingsCombined: number; location: Position[] };
 export type CraftingHistory = {
+    icon?: IconReference | null;
     finalOutput: ResourceStack;
     timeStarted: number;
     timeDone: number;

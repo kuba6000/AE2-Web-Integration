@@ -59,6 +59,8 @@ public class AE2JobTracker {
         public long timeStarted;
         public long timeDone;
         public HashMap<IAEKey, Long> timeSpentOn = new HashMap<>();
+        /** Detached metadata captured before completed measurements are published to HTTP readers. */
+        public final HashMap<IAEKey, ResourceStack> resourceSnapshots = new HashMap<>();
         public HashMap<IAEKey, Long> startedWaitingFor = new HashMap<>();
         public HashMap<IAEKey, Long> craftedTotal = new HashMap<>();
         public HashMap<IAEKey, Long> waitingFor = new HashMap<>();
@@ -240,6 +242,11 @@ public class AE2JobTracker {
         info.startedWaitingFor.clear();
         info.isDone = true;
         info.timeDone = now;
+        for (IAEKey resource : info.timeSpentOn.keySet()) {
+            info.resourceSnapshots.put(
+                resource,
+                ResourceStack.capture(grid, resource, info.craftedTotal.get(resource), CoreEngine.getIconPack()));
+        }
         GridData gridData = GridData.getOrCreate(key);
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         long durationMillis = info.timeDone - info.timeStarted;

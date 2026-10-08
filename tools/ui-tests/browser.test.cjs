@@ -309,7 +309,13 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                     })
                 );
             } else if (/\/crafting-history\/\d+$/.test(resource)) {
-                response.end(JSON.stringify({ status: options.historyError || 'OK', data: options.historyDetail }));
+                response.end(
+                    JSON.stringify({
+                        status: options.historyError || 'OK',
+                        data: options.historyDetail,
+                        icons: url.searchParams.get('icons') === 'true' ? options.icons : null
+                    })
+                );
             } else if (resource.endsWith('/settings')) {
                 const key = resource.includes(gridA) ? gridA : gridB;
                 if (request.method === 'PATCH' && !options.settingsError)
@@ -1201,6 +1207,110 @@ test('CPU overview and history products share atlas pages and respect the displa
         options.requests.some((r) => /\/crafting-history\/\d+$|\/cpus\/(busy|idle|unknown)$/.test(r.path)),
         false,
         'list icons do not fetch per-row details'
+    );
+});
+
+// Public UI/HTTP seam: history details use optional server mappings, never inferred icons.
+test('history details display product and paged resource icons only when enabled', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    const icon = { page: 0, x: 0, y: 0 };
+    options.historyDetail = {
+        ...historyDetail,
+        icon,
+        items: Array.from({ length: 27 }, (_, index) => ({
+            ...historyDetail.items[0],
+            displayName: `Material ${index}`,
+            icon: index === 0 ? null : icon
+        }))
+    };
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    const product = page.getByRole('heading', { name: 'Iron Ingot', exact: true }).locator('..');
+    const first = page.getByRole('region', { name: 'Material 0', exact: true });
+    const ready = page.getByRole('region', { name: 'Material 1', exact: true });
+    await first.waitFor();
+    await page.waitForFunction(
+        (node) =>
+            !!node.querySelector('.resource-icon') &&
+            getComputedStyle(node.querySelector('.resource-icon')).backgroundImage !== 'none',
+        await product.elementHandle(),
+        { timeout: 3000 }
+    );
+    await ready.scrollIntoViewIfNeeded();
+    await page.waitForFunction(
+        (node) => getComputedStyle(node.querySelector('.resource-icon')).backgroundImage !== 'none',
+        await ready.elementHandle(),
+        { timeout: 3000 }
+    );
+    assert.equal(
+        await first.locator('.resource-icon').evaluate((node) => getComputedStyle(node, '::before').content),
+        '"?"'
+    );
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/crafting-history/1')).at(-1).query, '?icons=true');
+    assert.equal(options.requests.filter((r) => r.path.startsWith('/api/icon-packs/')).length, 1);
+    const pages = page.getByRole('navigation', { name: 'History pages', exact: true });
+    await pages.getByRole('button', { name: 'Next page', exact: true }).click();
+    await page.getByRole('region', { name: 'Material 25', exact: true }).waitFor();
+    await poll(page);
+    assert.equal(
+        await page.getByRole('region', { name: 'Material 25', exact: true }).isVisible(),
+        true,
+        'polling preserves the selected page'
+    );
+    await page.getByRole('button', { name: 'Pattern providers', exact: true }).click();
+    assert.equal(await page.getByRole('region', { name: 'Smelter', exact: true }).locator('.resource-icon').count(), 0);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
+    const reads = options.requests.filter((r) => r.path.startsWith('/api/icon-packs/')).length;
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    await first.waitFor();
+    assert.equal(await page.locator('.history-detail .resource-icon:visible').count(), 0);
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/crafting-history/1')).at(-1).query, '');
+    assert.equal(options.requests.filter((r) => r.path.startsWith('/api/icon-packs/')).length, reads);
+});
+
+test('history detail icons refresh after late pack discovery and pack replacement without polling the snapshot', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    options.packDelay = 150;
+    options.historyDetail = {
+        ...historyDetail,
+        icon: { page: 0, x: 0, y: 0 },
+        items: [{ ...historyDetail.items[0], icon: { page: 0, x: 64, y: 0 } }]
+    };
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    const row = page.getByRole('region', { name: 'Iron Ingot', exact: true });
+    await row.waitFor();
+    await row.scrollIntoViewIfNeeded();
+    await page.waitForFunction(
+        (node) =>
+            !!node.querySelector('.resource-icon') &&
+            getComputedStyle(node.querySelector('.resource-icon')).backgroundImage !== 'none',
+        await row.elementHandle(),
+        { timeout: 3000 }
+    );
+    const detailReads = () => options.requests.filter((r) => r.path.endsWith('/crafting-history/1'));
+    assert.equal(detailReads()[0].query, '', 'the snapshot may arrive before icon availability');
+    assert.equal(detailReads().at(-1).query, '?icons=true', 'late discovery fetches optional mappings');
+    await row.locator('summary').click();
+    const before = detailReads().length;
+    await poll(page);
+    assert.equal(detailReads().length, before, 'ordinary polling does not reread completed history');
+    assert.equal(await row.getByRole('list', { name: 'Exact intervals', exact: true }).isVisible(), true);
+    options.packDelay = 0;
+    options.icons = { ...options.icons, packId: 'c'.repeat(64) };
+    options.pack = { ...options.pack, packId: options.icons.packId };
+    const refreshed = page.waitForResponse((response) => response.url().includes('/crafting-history/1?icons=true'));
+    await poll(page);
+    await (await refreshed).finished();
+    await row.scrollIntoViewIfNeeded();
+    await page.waitForFunction(
+        (node) => getComputedStyle(node.querySelector('.resource-icon')).backgroundImage !== 'none',
+        await row.elementHandle()
+    );
+    assert.ok(
+        options.requests.some((r) => r.path.includes(`/icon-packs/${'c'.repeat(64)}/pages/`)),
+        'replacement uses its new atlas URL'
     );
 });
 
@@ -6331,6 +6441,13 @@ test('current network stays on the brand and account row at narrow widths withou
             const account = await page.getByRole('button', { name: 'Log out', exact: true }).boundingBox();
             const label = await network.boundingBox();
             const header = await page.locator('header').boundingBox();
+            if (width === 1280)
+                assert.ok(
+                    await page
+                        .getByText(options.username, { exact: true })
+                        .evaluate((node) => node.scrollWidth <= node.clientWidth),
+                    'The account name must use available header space before being shortened'
+                );
             assert.ok(
                 Math.abs(label.y + label.height / 2 - brand.y - brand.height / 2) < 2,
                 `brand alignment at ${width}`

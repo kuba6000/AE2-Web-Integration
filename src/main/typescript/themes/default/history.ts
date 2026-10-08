@@ -9,6 +9,7 @@ import { renderHistoryTimeline } from './history-timeline.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
+import type { IconTarget } from '../../app/icons.js';
 
 function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
@@ -92,12 +93,18 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
 
     let lastLocale: Locale | undefined;
     let lastRoute = '';
+    let detailIcons: IconTarget[] = [];
+    let productIcon: IconTarget | null = null;
+    const updateDetailIcons = () =>
+        icons.update(productIcon ? [productIcon, ...detailIcons] : [], application.state.history.icons);
     return {
         render(applicationState: TerminalState, locale: Locale) {
             const { route, history: state } = applicationState;
             view.hidden = route.view !== 'history';
-            if (route.view !== 'history' || route.entryId !== null) icons.update([], null);
             if (route.view !== 'history') {
+                icons.update([], null);
+                detailIcons = [];
+                productIcon = null;
                 lastRoute = '';
                 detail.replaceChildren();
                 lastDetail = undefined;
@@ -168,19 +175,31 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
                 );
             if (focused?.isConnected && list.contains(focused) && focused !== document.activeElement)
                 focused.focus({ preventScroll: true });
-            if (lastDetail === state.detail && lastLocale === locale) return;
+            if (lastDetail === state.detail && lastLocale === locale) {
+                if (route.entryId !== null) updateDetailIcons();
+                return;
+            }
             lastDetail = state.detail;
             lastLocale = locale;
             detail.replaceChildren();
+            detailIcons = [];
+            productIcon = null;
             const snapshot = state.detail;
-            if (!snapshot) return;
+            if (!snapshot) {
+                if (route.entryId !== null) updateDetailIcons();
+                return;
+            }
             const summary = element('section');
             summary.className = 'history-summary';
             const product = element('div');
             product.className = 'history-summary-product';
+            const iconHost = element('span');
+            iconHost.className = 'history-summary-icon';
+            iconHost.append(createResourceIcon());
+            productIcon = { element: iconHost, icon: snapshot.icon };
             const heading = element('h3');
             heading.append(renderMinecraftText(snapshot.finalOutput.displayName));
-            product.append(heading, element('span', `× ${number(snapshot.finalOutput.quantity)}`));
+            product.append(iconHost, heading, element('span', `× ${number(snapshot.finalOutput.quantity)}`));
             const outcome = element('span', t(snapshot.wasCancelled ? 'historyCancelled' : 'historyCompleted'));
             outcome.className = 'history-outcome';
             outcome.dataset.outcome = snapshot.wasCancelled ? 'cancelled' : 'completed';
@@ -200,7 +219,13 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
             if (productId) product.append(element('code', productId));
             summary.append(product, outcome, stats);
             detail.append(summary);
-            detail.append(renderHistoryTimeline(snapshot, locale));
+            detail.append(
+                renderHistoryTimeline(snapshot, locale, (targets) => {
+                    detailIcons = targets;
+                    updateDetailIcons();
+                })
+            );
+            updateDetailIcons();
         },
         dispose() {
             size.disconnect();

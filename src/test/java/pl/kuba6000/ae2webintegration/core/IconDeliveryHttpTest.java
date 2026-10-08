@@ -685,6 +685,7 @@ class IconDeliveryHttpTest {
         AtomicBoolean unavailable = new AtomicBoolean();
         AtomicInteger normalizations = new AtomicInteger();
         AtomicReference<IAEGenericStack> output = new AtomicReference<>();
+        AtomicInteger waiting = new AtomicInteger();
         Thread serverThread = Thread.currentThread();
         IAEGenericStack exactOutput = null;
         ICraftingCPUCluster cpu = (ICraftingCPUCluster) Proxy.newProxyInstance(
@@ -695,6 +696,16 @@ class IconDeliveryHttpTest {
                 return switch (method.getName()) {
                     case "web$getFinalOutput" -> output.get();
                     case "web$getName" -> "History CPU";
+                    case "web$getWaitingFor" -> new IStackList() {
+
+                        public long web$getAmount(IAEKey key) {
+                            return waiting.get();
+                        }
+
+                        public Iterable<IAEGenericStack> web$stacks() {
+                            return Collections.emptyList();
+                        }
+                    };
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
                     default -> throw new AssertionError(method.getName());
@@ -706,6 +717,10 @@ class IconDeliveryHttpTest {
                 getClass().getClassLoader(),
                 new Class<?>[] { IAEKey.class },
                 (proxy, method, args) -> {
+                    if (method.getName()
+                        .equals("hashCode")) return System.identityHashCode(proxy);
+                    if (method.getName()
+                        .equals("equals")) return proxy == args[0];
                     assertFalse(unavailable.get(), "Native identity accessed after history publication");
                     assertSame(serverThread, Thread.currentThread(), "Native identity accessed from HTTP worker");
                     return switch (method.getName()) {
@@ -720,8 +735,6 @@ class IconDeliveryHttpTest {
                             if (variant == 2) throw new IllegalStateException("Unsupported base identity");
                             yield base;
                         }
-                        case "hashCode" -> System.identityHashCode(proxy);
-                        case "equals" -> proxy == args[0];
                         default -> throw new AssertionError(method.getName());
                     };
                 });
@@ -744,6 +757,10 @@ class IconDeliveryHttpTest {
             } else {
                 AE2JobTracker.addJob(cpu, grid, false);
             }
+            waiting.set(10 + variant);
+            AE2JobTracker.updateCraftingStatus(cpu, key);
+            waiting.set(0);
+            AE2JobTracker.updateCraftingStatus(cpu, key);
             if (index != 0) AE2JobTracker.completeCrafting(grid, cpu);
         }
         // Also retain an exact-match job independently of the merged fallback job.
@@ -803,6 +820,51 @@ class IconDeliveryHttpTest {
                     entry.getAsJsonObject()
                         .get("icon")
                         .isJsonNull());
+            }
+        }
+        for (com.google.gson.JsonElement entry : response.getAsJsonArray("data")) {
+            int id = entry.getAsJsonObject()
+                .get("id")
+                .getAsInt();
+            JsonObject detail = json(connection(path + "/" + id + "?icons=true"));
+            JsonObject detailData = detail.getAsJsonObject("data");
+            assertEquals(
+                entry.getAsJsonObject()
+                    .get("icon"),
+                detailData.get("icon"));
+            assertEquals(
+                packId,
+                detail.getAsJsonObject("icons")
+                    .get("packId")
+                    .getAsString());
+            for (com.google.gson.JsonElement resource : detailData.getAsJsonArray("items")) {
+                JsonObject item = resource.getAsJsonObject();
+                assertEquals(
+                    item.get("registryPath")
+                        .getAsString()
+                        .equals("product-2"),
+                    item.get("icon")
+                        .isJsonNull());
+                assertTrue(
+                    item.get("craftedTotal")
+                        .getAsLong() > 0);
+            }
+            for (String suffix : new String[] { "", "?icons=false" }) {
+                JsonObject plain = json(connection(path + "/" + id + suffix));
+                assertTrue(
+                    plain.get("icons")
+                        .isJsonNull());
+                assertTrue(
+                    plain.getAsJsonObject("data")
+                        .get("icon")
+                        .isJsonNull());
+                for (com.google.gson.JsonElement resource : plain.getAsJsonObject("data")
+                    .getAsJsonArray("items")) {
+                    assertTrue(
+                        resource.getAsJsonObject()
+                            .get("icon")
+                            .isJsonNull());
+                }
             }
         }
         assertEquals(2, normalizations.get());

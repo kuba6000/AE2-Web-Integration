@@ -231,7 +231,7 @@ export function createTerminal(
                 void loadCpus();
                 void loadCrafting();
                 void loadHome();
-                if (state.route.view === 'history' && state.route.entryId === null) void loadHistory();
+                if (state.route.view === 'history') void loadHistory();
             }
         } catch (caught) {
             if (disposed || request !== iconRequest || (caught as ApiFailure).name === 'AbortError') return;
@@ -347,7 +347,7 @@ export function createTerminal(
             void loadCpus();
             void loadCrafting();
             void loadHome();
-            if (state.route.view === 'history' && state.route.entryId === null) void loadHistory();
+            if (state.route.view === 'history') void loadHistory();
             notify();
         },
         subscribe(listener: (state: TerminalState) => void) {

@@ -548,6 +548,26 @@ nav {
     font-size: 10px;
     color: var(--muted);
 }
+.history-summary-icon {
+    display: none;
+}
+.product-icons-enabled .history-summary-icon {
+    --resource-icon-size: 40px;
+
+    display: block;
+    flex-shrink: 0;
+}
+.product-icons-enabled .history-summary-product {
+    display: grid;
+    grid-template-columns: 40px minmax(0, max-content) auto;
+    align-items: center;
+}
+.product-icons-enabled .history-summary-product h3 {
+    min-width: 0;
+}
+.product-icons-enabled .history-summary-product > code {
+    grid-column: 1 / -1;
+}
 .history-summary-stats {
     flex: 1 0 100%;
     display: grid;
@@ -708,6 +728,11 @@ details[open] > .history-analysis-summary::before {
 }
 .history-analysis-name {
     min-width: 0;
+}
+.product-icons-enabled .history-analysis-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 .history-analysis-name h4 {
     margin: 0;
@@ -979,6 +1004,7 @@ label {
 }
 .brand h1 {
     margin: 0;
+    line-height: 1;
     white-space: nowrap;
 }
 .brand h1 > span {
@@ -1014,7 +1040,7 @@ label {
     height: 100%;
 }
 .account-controls {
-    flex: 0 1 220px;
+    flex: 0 1 auto;
     margin-left: auto;
     display: flex;
     align-items: center;
@@ -1125,7 +1151,8 @@ label {
     flex: 1 1 140px;
     min-width: 0;
     max-width: 100%;
-    font-size: 11px;
+    font-size: 12px;
+    line-height: 1;
     color: var(--muted);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1412,7 +1439,9 @@ label {
 .home-product.has-resource-icon .resource-icon,
 .resource-icons-enabled .resource-icon,
 .cpu-icons-enabled .cpu-item .resource-icon,
-.product-icons-enabled :is(.cpu-card-output-value, .history-product) .resource-icon {
+.product-icons-enabled
+    :is(.cpu-card-output-value, .history-product, .history-summary-icon, .history-analysis-name)
+    .resource-icon {
     display: grid;
     place-items: center;
     font-size: 24px;
@@ -1427,7 +1456,9 @@ label {
 .home-product.has-resource-icon .resource-icon-ready,
 .resource-icons-enabled .resource-icon-ready,
 .cpu-icons-enabled .cpu-item .resource-icon-ready,
-.product-icons-enabled :is(.cpu-card-output-value, .history-product) .resource-icon-ready {
+.product-icons-enabled
+    :is(.cpu-card-output-value, .history-product, .history-summary-icon, .history-analysis-name)
+    .resource-icon-ready {
     outline: none;
 }
 .resource-icons-enabled .item,
@@ -1784,7 +1815,6 @@ footer a {
         height: 24px;
     }
     .account-controls {
-        flex-basis: 200px;
         gap: 6px;
         font-size: 10px;
     }

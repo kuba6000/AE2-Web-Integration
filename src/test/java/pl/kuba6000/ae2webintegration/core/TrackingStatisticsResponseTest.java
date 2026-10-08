@@ -68,6 +68,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
         info.isDone = true;
         info.timeSpentOn.put(key, spent);
         info.craftedTotal.put(key, crafted);
+        info.resourceSnapshots.put(key, ResourceStack.capture(grid, key, crafted, null));
         info.itemShare.put(key, new ArrayList<>(Collections.singletonList(Pair.of(1000L, 1000L + spent))));
         StableKey actualKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
         GridData.getOrCreate(actualKey).trackingInfo.trackingInfos.put(1, info);
@@ -130,6 +131,25 @@ class TrackingStatisticsResponseTest extends GridTestScope {
             1,
             item.getAsJsonArray("timings")
                 .size());
+        GetTracking requestedIcons = new GetTracking();
+        requestedIcons.handle(TestGridFixtures.context(-1, "grid=" + actualKey + "&id=1&icons=true"));
+        JsonObject withoutPack = new JsonParser().parse(requestedIcons.getJSON())
+            .getAsJsonObject();
+        assertTrue(
+            withoutPack.get("icons")
+                .isJsonNull());
+        assertTrue(
+            withoutPack.getAsJsonObject("data")
+                .get("icon")
+                .isJsonNull());
+        assertTrue(
+            withoutPack.getAsJsonObject("data")
+                .getAsJsonArray("items")
+                .get(0)
+                .getAsJsonObject()
+                .get("icon")
+                .isJsonNull());
+        assertEquals(response.get("data"), withoutPack.get("data"), "Missing pack preserves all measured history data");
     }
 
     @ParameterizedTest

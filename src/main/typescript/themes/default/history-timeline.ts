@@ -3,6 +3,8 @@ import type { Translator } from '../../app/i18n.js';
 import type { CraftingHistory, ResourceTiming, ProviderTiming, Timing } from '../../app/api-types.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
+import { createResourceIcon } from './resource-icon.js';
+import type { IconTarget } from '../../app/icons.js';
 
 function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
@@ -89,7 +91,11 @@ function pager(total: number, pageSize: number, label: string, locale: Translato
     return nav;
 }
 
-export function renderHistoryTimeline(snapshot: CraftingHistory, locale: Translator) {
+export function renderHistoryTimeline(
+    snapshot: CraftingHistory,
+    locale: Translator,
+    visibleIcons: (targets: IconTarget[]) => void
+) {
     const { common: t, duration: formatDuration, preciseTime, number } = locale;
     const container = element('div');
     container.className = 'history-analysis';
@@ -143,6 +149,7 @@ export function renderHistoryTimeline(snapshot: CraftingHistory, locale: Transla
     list.className = 'history-analysis-list';
     const empty = element('p', t('historyNoMatches'));
     const pagination = element('div');
+    let iconTargets: IconTarget[] = [];
     container.append(tabs, toolbar, legend, columns, axis, list, empty, pagination);
 
     function createRow(row: ResourceTiming | ProviderTiming) {
@@ -159,6 +166,10 @@ export function renderHistoryTimeline(snapshot: CraftingHistory, locale: Transla
         heading.append(renderMinecraftText(name));
         const identity = element('div');
         identity.className = 'history-analysis-name';
+        if (resource) {
+            identity.append(createResourceIcon());
+            iconTargets.push({ element: identity, icon: resource.icon });
+        }
         identity.append(heading);
         const quantity = element('span', number(resource ? resource.craftedTotal : row.timings.length));
         quantity.className = 'history-analysis-quantity';
@@ -271,9 +282,11 @@ export function renderHistoryTimeline(snapshot: CraftingHistory, locale: Transla
         let currentPage = 0;
         pagination.replaceChildren(
             pager(matching.length, 25, t('historyPages'), locale, (page) => {
+                iconTargets = [];
                 list.replaceChildren();
                 for (let i = page * 25; i < Math.min((page + 1) * 25, matching.length); i++)
                     list.append(createRow(matching[i]));
+                visibleIcons(iconTargets);
                 if (page !== currentPage) columns.scrollIntoView({ block: 'start' });
                 currentPage = page;
             })

@@ -13,6 +13,8 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
@@ -20,6 +22,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
  * A completed or cancelled crafting job with resource and pattern-provider timing measurements.
  *
  * @param finalOutput    detached snapshot of the final crafting output
+ * @param icon           product atlas reference; null when not requested, unavailable, or absent from the pack
  * @param timeStarted    crafting start in Unix epoch milliseconds
  * @param timeDone       crafting completion or cancellation in Unix epoch milliseconds
  * @param wasCancelled   whether the crafting work was cancelled
@@ -30,8 +33,9 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
  * @example wasCancelled false
  */
 @Desugar
-public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStarted, long timeDone, boolean wasCancelled,
-    @NotNull ArrayList<ResourceTiming> items, @NotNull ArrayList<ProviderTiming> interfaceShare) {
+public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable IconMappings.Reference icon,
+    long timeStarted, long timeDone, boolean wasCancelled, @NotNull ArrayList<ResourceTiming> items,
+    @NotNull ArrayList<ProviderTiming> interfaceShare) {
 
     /**
      * One measured processing interval with absolute timestamps.
@@ -61,6 +65,8 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
      *                                    when no processing time is recorded
      * @param shareInCraftingTimeCombined fraction of job elapsed time spent processing this resource, capped at one
      * @param craftsPerSec                produced resource units per second of measured processing time
+     * @param icon                        resource atlas reference; null when not requested, unavailable, or absent from
+     *                                    the pack
      * @param timings                     measured processing intervals
      * @example registryPath iron_ingot
      * @example displayName Iron Ingot
@@ -74,7 +80,7 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
     public record ResourceTiming(@Nullable String registryNamespace, @Nullable String registryPath,
         @NotNull String displayName, @Nullable Integer componentCount, @Nullable Integer damage, long timeSpentOn,
         long craftedTotal, double shareInCraftingTime, double shareInCraftingTimeCombined, double craftsPerSec,
-        @NotNull ArrayList<Timing> timings) {}
+        @NotNull ArrayList<Timing> timings, @Nullable IconMappings.Reference icon) {}
 
     /**
      * Processing measurements combined for pattern providers sharing a display name.
@@ -90,14 +96,14 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
     public record ProviderTiming(@NotNull String name, @NotNull ArrayList<Timing> timings, long timingsCombined,
         @NotNull HashSet<DimensionalCoords> location) {}
 
-    public static @NotNull CraftingHistory capture(@NotNull AE2JobTracker.JobTrackingInfo info) {
+    public static @NotNull CraftingHistory capture(@NotNull AE2JobTracker.JobTrackingInfo info,
+        @Nullable IconMappings mappings) {
         long elapsed = info.timeDone - info.timeStarted;
         ArrayList<ResourceTiming> items = new ArrayList<>();
         for (Map.Entry<IAEKey, Long> entry : info.timeSpentOn.entrySet()) {
             IAEKey key = entry.getKey();
             long spent = entry.getValue();
-            String registryPath = key.web$getRegistryPath();
-            String displayName = key.web$getDisplayName();
+            ResourceStack resource = info.resourceSnapshots.get(key);
             long craftedTotal = info.craftedTotal.get(key);
             double share = info.getShareInCraftingTime(key);
             double combinedShare = elapsed > 0 ? Math.min((double) spent / (double) elapsed, 1d) : 0d;
@@ -108,17 +114,18 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
             }
             items.add(
                 new ResourceTiming(
-                    key.web$getRegistryNamespace(),
-                    registryPath,
-                    displayName,
-                    key.web$getComponentCount(),
-                    key.web$getDamage(),
+                    resource.registryNamespace,
+                    resource.registryPath,
+                    resource.displayName,
+                    resource.componentCount,
+                    resource.damage,
                     spent,
                     craftedTotal,
                     share,
                     combinedShare,
                     rate,
-                    timings));
+                    timings,
+                    resolveIcon(resource, mappings)));
         }
         items.sort((first, second) -> Double.compare(second.shareInCraftingTime(), first.shareInCraftingTime()));
         ArrayList<ProviderTiming> interfaceShare = new ArrayList<>();
@@ -134,10 +141,17 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
         interfaceShare.sort((first, second) -> Long.compare(second.timingsCombined(), first.timingsCombined()));
         return new CraftingHistory(
             info.finalOutput,
+            resolveIcon(info.finalOutput, mappings),
             info.timeStarted,
             info.timeDone,
             info.wasCancelled,
             items,
             interfaceShare);
+    }
+
+    private static @Nullable IconMappings.Reference resolveIcon(@NotNull ResourceStack resource,
+        @Nullable IconMappings mappings) {
+        return mappings == null || resource.itemKey == null ? null
+            : mappings.resolve(StableKey.parse(resource.itemKey), resource.iconBaseKey);
     }
 }

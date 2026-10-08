@@ -16,11 +16,13 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
     let generation = 0;
     let request: AbortController | undefined;
     let reading = false;
+    let detailIconsStale = false;
     return {
         state,
         invalidateIcons() {
             state.icons = null;
-            if (route.view !== 'history' || route.entryId !== null) return;
+            if (route.view !== 'history') return;
+            detailIconsStale = true;
             generation++;
             request?.abort();
             reading = false;
@@ -30,6 +32,7 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
             request?.abort();
             reading = false;
             route = next;
+            detailIconsStale = false;
             Object.assign(state, {
                 status: next.view === 'history' ? 'loading' : 'idle',
                 entries: [],
@@ -39,7 +42,11 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
             });
         },
         async refresh(reloadDetail = false) {
-            if (route.view !== 'history' || reading || (route.entryId !== null && state.detail && !reloadDetail))
+            if (
+                route.view !== 'history' ||
+                reading ||
+                (route.entryId !== null && state.detail && !reloadDetail && !detailIconsStale)
+            )
                 return;
             const current = route;
             const version = generation;
@@ -47,9 +54,16 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
             reading = true;
             try {
                 if (current.entryId !== null) {
-                    const data = await api.historyEntry(current.gridKey, current.entryId, request.signal);
+                    const data = await api.historyEntry(
+                        current.gridKey,
+                        current.entryId,
+                        request.signal,
+                        iconsEnabled()
+                    );
                     if (version !== generation) return;
-                    state.detail = data;
+                    state.detail = data.data;
+                    state.icons = data.icons;
+                    detailIconsStale = false;
                 } else {
                     const data = await api.history(current.gridKey, request.signal, iconsEnabled());
                     if (version !== generation) return;

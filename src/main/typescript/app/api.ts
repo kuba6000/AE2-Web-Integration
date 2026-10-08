@@ -42,7 +42,12 @@ export type Api = {
     cancelCpu: (gridKey: string, cpuKey: string) => Promise<null>;
     pauseCpu: (gridKey: string, cpuKey: string, paused: boolean) => Promise<null>;
     history: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<HistoryEntry[]>>;
-    historyEntry: (gridKey: string, entryId: string | number, signal?: AbortSignal) => Promise<CraftingHistory>;
+    historyEntry: (
+        gridKey: string,
+        entryId: string | number,
+        signal?: AbortSignal,
+        icons?: boolean
+    ) => Promise<ResourceResponse<CraftingHistory>>;
     settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettings>;
     saveSettings: (gridKey: string, body: Partial<GridSettings>) => Promise<GridSettings>;
     submitPlan: (gridKey: string, planId: string | number, cpuKey?: string) => Promise<null>;
@@ -146,8 +151,10 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             }),
         history: (gridKey, signal, icons = false) =>
             read(`api/grids/${encodeURIComponent(gridKey)}/crafting-history${icons ? '?icons=true' : ''}`, { signal }),
-        historyEntry: (gridKey, entryId, signal) =>
-            request(`api/grids/${encodeURIComponent(gridKey)}/crafting-history/${entryId}`, { signal }),
+        historyEntry: (gridKey, entryId, signal, icons = false) =>
+            read(`api/grids/${encodeURIComponent(gridKey)}/crafting-history/${entryId}${icons ? '?icons=true' : ''}`, {
+                signal
+            }),
         settings: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { signal }),
         saveSettings: (gridKey, body) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { method: 'PATCH', body }),
