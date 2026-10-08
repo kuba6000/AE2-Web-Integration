@@ -723,8 +723,7 @@ label {
     gap: 12px;
 }
 .brand {
-    container: brand / inline-size;
-    flex: 0 1 320px;
+    flex: 0 0 auto;
     min-width: 0;
     display: flex;
     align-items: center;
@@ -743,7 +742,10 @@ label {
 .brand-short {
     display: none;
 }
-@container brand (max-width: 300px) {
+.brand-short > span {
+    margin-left: 0;
+}
+@container header (max-width: 700px) {
     .brand-full {
         display: none;
     }
@@ -943,6 +945,7 @@ label {
     box-shadow: 0 5px 8px #08070d2e;
 }
 .control-panel {
+    container: header / inline-size;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -1523,7 +1526,6 @@ footer a {
         gap: 8px;
     }
     .brand {
-        flex-basis: 180px;
         gap: 6px;
     }
     .brand h1 {

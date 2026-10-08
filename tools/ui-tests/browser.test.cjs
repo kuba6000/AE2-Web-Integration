@@ -6322,6 +6322,10 @@ test('current network stays on the brand and account row at narrow widths withou
                 `account alignment at ${width}`
             );
             assert.ok(label.x >= brand.x + brand.width && label.x + label.width <= account.x);
+            assert.ok(
+                label.x - (brand.x + brand.width) <= 24,
+                'The brand must not reserve empty space after its visible text'
+            );
             assert.ok(label.width > 0 && account.x + account.width <= width);
             if (previous)
                 assert.deepEqual(
