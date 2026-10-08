@@ -39,6 +39,7 @@
     --edge-light: #fafafd;
     --edge-dark: #777680;
     --accent: #6c508d;
+    --focus: #626262;
     --selected: #e0d5ec;
     --frame-image: url('./window-frame.svg');
     font-family: Monocraft, monospace;
@@ -67,6 +68,7 @@
     --edge-light: #766e83;
     --edge-dark: #26232e;
     --accent: #c5a5ef;
+    --focus: #b0b0b0;
     --selected: #5f4c77;
 }
 @media (prefers-color-scheme: dark) {
@@ -93,6 +95,7 @@
         --edge-light: #766e83;
         --edge-dark: #26232e;
         --accent: #c5a5ef;
+        --focus: #b0b0b0;
         --selected: #5f4c77;
     }
 }
@@ -108,8 +111,8 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 summary:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+    outline: 1px solid var(--focus);
+    outline-offset: 1px;
 }
 a {
     color: var(--accent);
@@ -1014,7 +1017,7 @@ label {
     padding-inline: 4px;
 }
 :is(#item-scroll, .terminal-scroll, .info-notices):focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 1px solid var(--focus);
     outline-offset: -2px;
 }
 :is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices, #plan-panel)::-webkit-scrollbar {
@@ -2015,11 +2018,11 @@ footer a {
 }
 .plan-cpu:has(:checked) {
     background: var(--slot-selected);
-    outline: 2px solid var(--accent);
+    outline: 1px solid var(--focus);
     outline-offset: -2px;
 }
 .plan-cpu:has(:focus-visible) {
-    outline: 2px solid var(--accent);
+    outline: 1px solid var(--focus);
     outline-offset: -2px;
 }
 .plan-cpu:has(:disabled) {
