@@ -2,6 +2,7 @@ import { createSettings } from './storage.js';
 
 export type Preferences = {
     language: string;
+    selectedGridKey: string | null;
     sort: 'name' | 'quantity' | 'id';
     sortOrder: 'ascending' | 'descending';
     planSort: 'name' | 'quantity' | 'steps';
@@ -17,6 +18,7 @@ export function createPreferences(base: URL) {
     const settings = createSettings(base, 'ui');
     const defaults: Preferences = {
         language: navigator.language.toLowerCase().startsWith('pl') ? 'pl' : 'en',
+        selectedGridKey: null,
         sort: 'name',
         sortOrder: 'ascending',
         planSort: 'name',
@@ -35,6 +37,8 @@ export function createPreferences(base: URL) {
     };
     function isValid<K extends keyof Preferences>(name: K, value: unknown): value is Preferences[K] {
         if (name === 'autoRefresh' || name === 'showItems' || name === 'showFluids') return typeof value === 'boolean';
+        if (name === 'selectedGridKey')
+            return value === null || (typeof value === 'string' && /^[A-Za-z0-9_-]{22}$/.test(value));
         if (name === 'language') {
             if (typeof value !== 'string') return false;
             try {

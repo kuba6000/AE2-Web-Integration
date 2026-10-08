@@ -1688,6 +1688,35 @@ test('Home retains the selected network and owns switching while Web settings ow
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
 });
 
+test('selected network survives global page reloads and direct routes take precedence', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    await page.getByRole('textbox', { name: 'Network name', exact: true }).waitFor();
+    const terminal = page.getByRole('link', { name: 'Terminal', exact: true });
+    for (const route of ['/', '/web-settings', '/server-settings', '/about']) {
+        await page.goto(`${base}#${route}`);
+        await terminal.waitFor({ timeout: 2000 });
+        assert.equal(await terminal.getAttribute('href'), `#/grids/${gridA}/items`);
+        await page.reload();
+        await terminal.waitFor({ timeout: 2000 });
+        assert.equal(await terminal.getAttribute('href'), `#/grids/${gridA}/items`);
+    }
+    await page.goto(`${base}#/grids/${gridB}/cpus`);
+    await page.getByRole('heading', { name: 'CPUs', exact: true }).waitFor();
+    await page.goto(`${base}#/web-settings`);
+    await terminal.waitFor({ timeout: 2000 });
+    assert.equal(await terminal.getAttribute('href'), `#/grids/${gridB}/items`);
+    options.grids = [];
+    await page.reload();
+    await page.getByRole('checkbox', { name: 'Refresh automatically' }).waitFor();
+    assert.equal(await terminal.isVisible(), false, 'Remembered identity does not grant network access');
+    options.grids = undefined;
+    await page.reload();
+    await terminal.waitFor({ timeout: 2000 });
+    assert.equal(await terminal.getAttribute('href'), `#/grids/${gridB}/items`);
+});
+
 test('real page browses API resources under a proxy prefix, with search and filters', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     await page.goto(base);

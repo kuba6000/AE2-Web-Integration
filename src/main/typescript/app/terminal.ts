@@ -140,6 +140,13 @@ export function createTerminal(
         settings: settings.state
     };
 
+    function restoreSelectedGrid() {
+        const key = state.route.gridKey || state.selectedGridKey || preferences.values.selectedGridKey;
+        state.selectedGridKey = state.grids.some((grid) => grid.key === key) ? key : null;
+        if (state.selectedGridKey && state.selectedGridKey !== preferences.values.selectedGridKey)
+            preferences.set('selectedGridKey', state.selectedGridKey);
+    }
+
     function invalidateItems() {
         serial++;
         itemRequest?.abort();
@@ -288,7 +295,7 @@ export function createTerminal(
                     }
                 }
                 state.grids = grids;
-                if (!state.grids.some((grid) => grid.key === state.selectedGridKey)) state.selectedGridKey = null;
+                restoreSelectedGrid();
                 state.gridStatus = 'ready';
                 state.gridError = null;
                 notify();
@@ -352,7 +359,10 @@ export function createTerminal(
         route(route: Route) {
             invalidateItems();
             state.route = route;
-            if (route.gridKey) state.selectedGridKey = route.gridKey;
+            if (route.gridKey) {
+                state.selectedGridKey = route.gridKey;
+                if (state.gridStatus === 'ready') restoreSelectedGrid();
+            }
             crafting.route(route);
             cpus.route(route);
             history.route(route);
