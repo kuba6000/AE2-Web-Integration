@@ -1848,11 +1848,13 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
     await historyLink.waitFor();
     await assertFormatted(historyLink);
     await historyLink.click();
-    const historyResource = page.getByRole('cell', { name: /Cobalt Ingot/ });
+    const historyResource = page.getByRole('region', { name: 'Cobalt Ingot', exact: true });
     await historyResource.waitFor();
     await assertFormatted(historyResource);
+    await historyResource.locator('summary').click();
+    await historyResource.locator('code').waitFor();
     assert.equal(await historyResource.getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
-    await assertFormatted(page.getByRole('heading', { name: 'Cobalt Ingot × 12', exact: true }));
+    await assertFormatted(page.getByRole('heading', { name: 'Cobalt Ingot', level: 3, exact: true }));
     const timeline = page.getByRole('region', { name: 'Cobalt Ingot', exact: true });
     await timeline.waitFor();
     assert.equal(await timeline.getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
@@ -2204,10 +2206,10 @@ test('CPU work, plans and history retain resources with unavailable registry met
     await search.fill('essentia');
     await cpuResource.waitFor();
     await page.goto(`${base}#/grids/${gridA}/history/1`);
-    const historyResource = page.getByRole('cell', { name: 'Essentia', exact: true });
+    const historyResource = page.getByRole('region', { name: 'Essentia', exact: true });
     await historyResource.waitFor();
     assert.equal(await historyResource.locator('code').count(), 0);
-    await page.getByRole('heading', { name: 'Essentia × 12', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Essentia', level: 3, exact: true }).waitFor();
     const timeline = page.getByRole('region', { name: 'Essentia', exact: true });
     await timeline.waitFor();
     assert.equal(await timeline.locator('code').count(), 0);
@@ -2446,7 +2448,7 @@ test('history rows keep product names primary and scroll beneath a stationary he
     assert.equal(options.requests.filter((request) => /crafting-history\/\d+$/.test(request.path)).length, 0);
     await first.focus();
     await page.keyboard.press('Enter');
-    await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
     assert.match(page.url(), /\/history\/100$/);
     await page.getByRole('link', { name: 'History', exact: true }).click();
     await first.waitFor();
@@ -2514,12 +2516,21 @@ for (const language of ['en', 'pl']) {
             assert.equal(await rows.nth(index).locator('dd').last().innerText(), expected[index]);
         const row = rows.nth(5);
         await row.locator('time').click();
-        await page.getByRole('table').waitFor();
+        await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
         assert.match(page.url(), /history\/6$/);
-        assert.equal(await page.getByRole('cell', { name: expected[5], exact: true }).count(), 1);
+        assert.equal(
+            await page
+                .getByRole('region', { name: 'Iron Ingot', exact: true })
+                .getByText(expected[5], { exact: true })
+                .count(),
+            1
+        );
         const resource = page.getByRole('region', { name: 'Iron Ingot', exact: true });
         await resource.locator('summary').click();
         assert.ok((await resource.innerText()).includes(expected[5]));
+        await page
+            .getByRole('button', { name: language === 'en' ? 'Pattern providers' : 'Dostawcy wzorców', exact: true })
+            .click();
         assert.ok((await page.getByRole('region', { name: 'Smelter', exact: true }).innerText()).includes(expected[5]));
         await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
         const item = page.getByRole('button', { name: /Iron Ingot/ });
@@ -2532,12 +2543,12 @@ for (const language of ['en', 'pl']) {
         await first.waitFor();
         const box = await first.boundingBox();
         await first.click({ position: { x: box.width - 5, y: box.height - 5 } });
-        await page.getByRole('table').waitFor();
+        await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
         assert.match(page.url(), /history\/1$/);
         await page.goto(`${base}#/grids/${gridA}/history`);
         await first.focus();
         await page.keyboard.press('Enter');
-        await page.getByRole('table').waitFor();
+        await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
         assert.match(page.url(), /history\/1$/);
     });
 }
@@ -2548,19 +2559,22 @@ test('history preserves entry identity and opens measured cancelled work through
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('link', { name: 'History', exact: true }).click({ timeout: 3000 });
     await page.getByRole('link', { name: /Iron Ingot.*#2/ }).click();
-    await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
     assert.match(page.url(), /\/history\/2$/);
     await page
         .getByRole('status')
         .filter({ hasText: /cancelled/i })
         .waitFor();
-    assert.equal(await page.getByRole('cell', { name: '10', exact: true }).count(), 1);
+    assert.equal(
+        await page.getByRole('region', { name: 'Iron Ingot', exact: true }).getByText('10', { exact: true }).count(),
+        1
+    );
     await (
         await page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'))
     ).finished();
     assert.equal(options.requests.filter((request) => request.path.endsWith('/crafting-history/2')).length, 1);
     await page.reload();
-    await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
 });
@@ -2575,9 +2589,9 @@ test('history opens a deeply scrolled job at the start of its detail and preserv
     const region = page.getByRole('region', { name: 'History', exact: true });
     assert.ok(await region.evaluate((node) => node.scrollTop > 0));
     await last.click();
-    await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
     assert.equal(await region.evaluate((node) => node.scrollTop), 0, 'new detail starts at its summary');
-    await page.getByRole('region', { name: 'Smelter', exact: true }).scrollIntoViewIfNeeded();
+    await page.getByRole('region', { name: 'Iron Ingot', exact: true }).last().scrollIntoViewIfNeeded();
     const readingPosition = await region.evaluate((node) => node.scrollTop);
     assert.ok(readingPosition > 0);
     await poll(page);
@@ -2663,10 +2677,11 @@ for (const appearance of ['light', 'dark']) {
             });
         }
         await page.getByRole('link', { name: /Precision assembly.*#100/ }).click();
-        await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).waitFor();
+        await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
         const historyRegion = page.getByRole('region', { name: 'History', exact: true });
+        await page.getByRole('button', { name: 'Pattern providers', exact: true }).click();
         const provider = page.getByRole('region', { name: 'Smelter', exact: true });
-        await provider.getByText(/Intervals/).click();
+        await provider.locator('summary').click();
         await provider.locator('time').last().scrollIntoViewIfNeeded();
         assert.ok(await historyRegion.evaluate((node) => node.scrollTop > 0));
         assert.equal(await provider.locator('time').count(), 2);
@@ -2765,14 +2780,17 @@ test('history exposes resource and provider intervals with their correct locatio
         items: [...historyDetail.items, { ...historyDetail.items[0], timings: [] }]
     };
     await page.goto(`${base}#/grids/${gridA}/history/1`);
+    await page.getByRole('list', { name: 'Resources', exact: true }).waitFor();
+    assert.equal(await page.getByRole('region', { name: 'Iron Ingot', exact: true }).count(), 2);
+    await page.getByRole('button', { name: 'Pattern providers', exact: true }).click();
     const provider = page.getByRole('region', { name: 'Smelter', exact: true });
-    await provider.waitFor({ timeout: 3000 });
+    await provider.locator('summary').click();
     await provider.getByText(/minecraft:overworld.*120.*64.*-32/).waitFor();
-    await provider.getByText(/Intervals/).click();
     assert.deepEqual(await provider.locator('time').evaluateAll((times) => times.map((time) => time.dateTime)), [
         '2023-11-14T22:13:21.000Z',
         '2023-11-14T22:13:26.000Z'
     ]);
+    await page.getByRole('button', { name: 'Resources', exact: true }).click();
     assert.equal(await page.getByRole('region', { name: 'Iron Ingot', exact: true }).count(), 2);
     options.historyDetail = { ...historyDetail, timeDone: historyDetail.timeStarted, items: [], interfaceShare: [] };
     await page.reload();
@@ -2866,7 +2884,7 @@ test('settings drafts survive transient discovery failures and pending saves rec
 test('history reentry during grid discovery clears unavailable snapshots', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/history/1`);
-    await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
     let release;
     const captured = new Promise((resolve) => {
         release = resolve;
@@ -2888,7 +2906,7 @@ test('history reentry during grid discovery clears unavailable snapshots', async
         .getByRole('status')
         .filter({ hasText: /history entry.*available/i })
         .waitFor({ timeout: 3000 });
-    assert.equal(await page.getByRole('columnheader', { name: 'Crafted total', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).count(), 0);
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
 });
 
@@ -6827,3 +6845,101 @@ for (const deviceScaleFactor of [1, 1.25, 1.5]) {
         }
     });
 }
+
+// Public browser/HTTP seam: large histories remain bounded while every resource and exact interval is reachable.
+test('large history analysis paginates resources and exact intervals without dropping the tail', async (t) => {
+    const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
+    const started = historyDetail.timeStarted;
+    options.historyDetail = {
+        ...historyDetail,
+        timeDone: started + 200000,
+        interfaceShare: [
+            {
+                ...historyDetail.interfaceShare[0],
+                location: Array.from({ length: 60 }, (_, index) => ({
+                    dimensionId: 'test:world',
+                    x: index,
+                    y: 1,
+                    z: 2
+                }))
+            }
+        ],
+        items: Array.from({ length: 61 }, (_, index) => ({
+            ...historyDetail.items[0],
+            displayName: `Resource ${String(index).padStart(2, '0')}`,
+            craftedTotal: index + 1,
+            timeSpentOn: (index + 1) * 1000,
+            timings: Array.from({ length: index === 60 ? 10001 : 3 }, (_, interval) => ({
+                started: started + interval * 10,
+                ended: started + interval * 10 + 5
+            }))
+        }))
+    };
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    const resources = page.getByRole('list', { name: 'Resources', exact: true });
+    await resources.waitFor({ timeout: 3000 });
+    assert.equal(await resources.getByRole('listitem').count(), 25);
+    assert.equal(await resources.getByRole('heading').first().innerText(), 'Resource 60');
+    assert.equal(await resources.locator('time').count(), 0, 'exact intervals stay unmounted until expansion');
+    const pagination = page.getByRole('navigation', { name: 'History pages', exact: true });
+    await pagination.getByRole('button', { name: 'Next page', exact: true }).click();
+    await pagination.getByRole('button', { name: 'Next page', exact: true }).click();
+    assert.equal(await resources.getByRole('heading').count(), 11);
+    assert.equal(await resources.getByRole('heading').last().innerText(), 'Resource 00');
+    await page.getByRole('searchbox', { name: 'Search history', exact: true }).fill('Resource 60');
+    const target = resources.getByRole('region', { name: 'Resource 60', exact: true });
+    const overview = target.getByRole('img', { name: 'Activity overview', exact: true });
+    await page.waitForFunction(() => document.querySelector('[aria-label="Activity overview"][aria-busy="false"] svg'));
+    assert.ok(
+        (await overview.locator('*').count()) < 20,
+        'overview geometry is bounded despite ten thousand intervals'
+    );
+    await target.locator('summary').click();
+    const intervals = target.getByRole('list', { name: 'Exact intervals', exact: true });
+    await intervals.waitFor();
+    assert.equal(await intervals.getByRole('listitem').count(), 50);
+    await target.getByRole('button', { name: 'Last page', exact: true }).click();
+    assert.equal(await intervals.getByRole('listitem').count(), 1);
+    assert.equal(
+        await intervals.locator('time').last().getAttribute('datetime'),
+        new Date(started + 100005).toISOString()
+    );
+    await target.locator('summary').click();
+    await target.locator('time').first().waitFor({ state: 'detached' });
+    assert.equal(await target.locator('time').count(), 0, 'closing releases mounted exact intervals');
+    await page.getByRole('searchbox', { name: 'Search history', exact: true }).fill('');
+    await page.getByRole('combobox', { name: 'Sort by', exact: true }).selectOption('name');
+    assert.equal(await resources.getByRole('heading').first().innerText(), 'Resource 00');
+    await page.getByRole('button', { name: 'Pattern providers', exact: true }).click();
+    const provider = page.getByRole('region', { name: 'Smelter', exact: true });
+    await provider.waitFor();
+    assert.equal(await resources.count(), 0);
+    await provider.locator('summary').click();
+    await provider.getByRole('list', { name: 'Exact intervals', exact: true }).waitFor();
+    const locations = provider.getByRole('navigation', { name: 'Location pages', exact: true });
+    await locations.getByRole('button', { name: 'Last page', exact: true }).click();
+    await provider.getByText(/test:world.*59.*1.*2/).waitFor();
+    assert.equal(
+        await provider.getByRole('list', { name: 'Exact intervals', exact: true }).getByRole('listitem').count(),
+        1
+    );
+});
+
+test('history preserves subsecond timeline scale and distinguishes very slow production from zero', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.historyDetail = {
+        ...historyDetail,
+        timeDone: historyDetail.timeStarted + 500,
+        items: [{ ...historyDetail.items[0], craftsPerSec: 0.00001 }]
+    };
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    const row = page.getByRole('region', { name: 'Iron Ingot', exact: true });
+    await row.locator('summary').click();
+    await row.getByText('<0.001/s', { exact: true }).waitFor({ timeout: 3000 });
+    const axis = page.getByLabel('Elapsed time from the start of this craft', { exact: true });
+    assert.deepEqual(await axis.innerText(), '0 s\n0.25 s\n0.5 s');
+    options.historyDetail.items[0].craftsPerSec = 0;
+    await page.reload();
+    await row.locator('summary').click();
+    await row.getByText('0/s', { exact: true }).waitFor();
+});

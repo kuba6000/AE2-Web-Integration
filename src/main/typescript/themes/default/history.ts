@@ -99,6 +99,8 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
             if (route.view !== 'history' || route.entryId !== null) icons.update([], null);
             if (route.view !== 'history') {
                 lastRoute = '';
+                detail.replaceChildren();
+                lastDetail = undefined;
                 return;
             }
             const currentRoute = historyHref(route.gridKey, route.entryId);
@@ -123,7 +125,7 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
                 : state.status === 'loading'
                   ? t('loading')
                   : state.detail
-                    ? t(state.detail.wasCancelled ? 'historyCancelled' : 'historyCompleted')
+                    ? ''
                     : state.entries.length
                       ? ''
                       : t('historyEmpty');
@@ -172,58 +174,32 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
             detail.replaceChildren();
             const snapshot = state.detail;
             if (!snapshot) return;
+            const summary = element('section');
+            summary.className = 'history-summary';
+            const product = element('div');
+            product.className = 'history-summary-product';
             const heading = element('h3');
-            heading.append(
-                renderMinecraftText(snapshot.finalOutput.displayName),
-                ` × ${number(snapshot.finalOutput.quantity)}`
-            );
-            detail.append(
-                heading,
-                ...(registryId(snapshot.finalOutput) ? [element('code', registryId(snapshot.finalOutput))] : []),
-                element('p', t('cpuStarted', { time: dateTime(snapshot.timeStarted) })),
-                element('p', t('historyEnded', { time: dateTime(snapshot.timeDone) })),
-                element('p', t('cpuElapsed', { duration: locale.duration(snapshot.timeDone - snapshot.timeStarted) }))
-            );
-            const tableScroll = element('div');
-            tableScroll.className = 'plan-table';
-            const table = element('table');
-            const header = element('thead');
-            const headings = element('tr');
-            header.append(headings);
-            for (const key of [
-                'resource',
-                'cpuCraftedTotal',
-                'cpuTimeSpent',
-                'cpuRate',
-                'cpuElapsedShare',
-                'cpuProcessingShare'
+            heading.append(renderMinecraftText(snapshot.finalOutput.displayName));
+            product.append(heading, element('span', `× ${number(snapshot.finalOutput.quantity)}`));
+            const outcome = element('span', t(snapshot.wasCancelled ? 'historyCancelled' : 'historyCompleted'));
+            outcome.className = 'history-outcome';
+            outcome.dataset.outcome = snapshot.wasCancelled ? 'cancelled' : 'completed';
+            outcome.role = 'status';
+            const stats = element('dl');
+            stats.className = 'history-summary-stats';
+            for (const [label, value] of [
+                [t('historyDurationLabel'), locale.duration(snapshot.timeDone - snapshot.timeStarted)],
+                [t('historyStartedLabel'), dateTime(snapshot.timeStarted)],
+                [t('historyFinishedLabel'), dateTime(snapshot.timeDone)]
             ]) {
-                const th = element('th', t(key));
-                th.scope = 'col';
-                headings.append(th);
+                const pair = element('div');
+                pair.append(element('dt', label), element('dd', value));
+                stats.append(pair);
             }
-            const body = element('tbody');
-            for (const item of snapshot.items) {
-                const row = element('tr');
-                const name = element('td');
-                name.append(
-                    renderMinecraftText(item.displayName),
-                    ...(registryId(item) ? [element('code', registryId(item))] : [])
-                );
-                row.append(name);
-                for (const value of [
-                    number(item.craftedTotal),
-                    locale.duration(item.timeSpentOn),
-                    `${number(item.craftsPerSec)}/s`,
-                    `${number(item.shareInCraftingTimeCombined * 100)}%`,
-                    `${number(item.shareInCraftingTime * 100)}%`
-                ])
-                    row.append(element('td', value));
-                body.append(row);
-            }
-            table.append(header, body);
-            tableScroll.append(table);
-            detail.append(tableScroll);
+            const productId = registryId(snapshot.finalOutput);
+            if (productId) product.append(element('code', productId));
+            summary.append(product, outcome, stats);
+            detail.append(summary);
             detail.append(renderHistoryTimeline(snapshot, locale));
         },
         dispose() {
