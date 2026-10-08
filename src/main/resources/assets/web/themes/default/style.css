@@ -723,6 +723,7 @@ label {
     gap: 12px;
 }
 .brand {
+    container: brand / inline-size;
     flex: 0 1 320px;
     min-width: 0;
     display: flex;
@@ -730,10 +731,25 @@ label {
     gap: 12px;
 }
 .brand h1 {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    margin: 0;
     white-space: nowrap;
+}
+.brand h1 > span {
+    margin: 0;
+    color: inherit;
+    font-weight: inherit;
+    letter-spacing: inherit;
+}
+.brand-short {
+    display: none;
+}
+@container brand (max-width: 300px) {
+    .brand-full {
+        display: none;
+    }
+    .brand-short {
+        display: inline;
+    }
 }
 .brand-mark {
     display: block;
