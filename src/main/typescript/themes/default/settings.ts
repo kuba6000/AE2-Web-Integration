@@ -49,9 +49,11 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     const owner = element('dd');
     const identityLabel = element('dt');
     const identity = element('dd');
+    const identityHelp = element('p');
+    identityHelp.className = 'hint';
     identity.append(element('code'));
     metadata.append(ownerLabel, owner, identityLabel, identity);
-    information.append(networkTitle, metadata);
+    information.append(networkTitle, metadata, identityHelp);
     const access = element('section');
     const accessTitle = element('h3');
     const accessHelp = element('p');
@@ -185,10 +187,11 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             if (state.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
             status.hidden = !status.textContent;
             information.hidden = state.status !== 'ready' || !grid;
-            networkTitle.textContent = grid ? networkLabel({ ...grid, name: state.current?.name || '' }, locale) : '';
+            networkTitle.textContent = grid ? networkLabel({ ...grid, name: state.current?.name || '' }) : '';
             ownerLabel.textContent = t('owner');
             owner.textContent = grid?.owner || t('unknownOwner');
             identityLabel.textContent = t('networkIdentifier');
+            identityHelp.textContent = t('networkIdentifierHelp');
             identity.querySelector('code')!.textContent = route.gridKey;
             form.hidden = state.current === null;
             if (form.hidden) {

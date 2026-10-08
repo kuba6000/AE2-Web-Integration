@@ -110,7 +110,8 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
-summary:focus-visible {
+summary:focus-visible,
+#selected-network:focus-visible {
     outline: 1px solid var(--focus);
     outline-offset: 1px;
 }
@@ -719,8 +720,10 @@ label {
     flex-wrap: wrap;
     align-items: center;
     margin: 0 0 27px;
+    gap: 12px 24px;
 }
 .brand {
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -734,6 +737,7 @@ label {
     image-rendering: pixelated;
 }
 .account-controls {
+    margin-left: auto;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -836,20 +840,12 @@ label {
     vertical-align: top;
     padding: 8px 12px 8px 0;
 }
-.network-summary {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin: 0;
+#selected-network {
+    flex: 0 1 240px;
     min-width: 0;
-    font-size: 12px;
-}
-.network-summary dt {
-    flex-shrink: 0;
-}
-.network-summary dd {
-    margin: 0;
-    min-width: 0;
+    max-width: 100%;
+    font-size: 11px;
+    color: var(--muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1507,6 +1503,13 @@ footer a {
         gap: 14px;
         margin-bottom: 18px;
     }
+    #selected-network {
+        flex-basis: auto;
+        align-self: stretch;
+    }
+    .account-controls {
+        margin-left: 0;
+    }
     .history-list > li > a {
         grid-template-columns: minmax(0, 1fr);
         padding-inline: 10px;
@@ -1748,6 +1751,7 @@ footer a {
     font-size: 13px;
 }
 .network-choice-link strong {
+    overflow-wrap: anywhere;
     grid-column: 1 / -1;
 }
 .network-choice-link span {
@@ -1788,7 +1792,6 @@ footer a {
     margin: 0 0 14px;
     overflow-wrap: anywhere;
 }
-.home-selected-owner,
 .home-selected-identity,
 .home-network-details {
     font-size: 11px;
@@ -1833,6 +1836,15 @@ footer a {
 }
 .network-information dt {
     color: var(--muted);
+}
+@media (max-width: 560px) {
+    .network-information dl {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+    }
+    .network-information dd {
+        margin-bottom: 8px;
+    }
 }
 .network-access {
     background: color-mix(in srgb, var(--panel) 65%, var(--slot));

@@ -1656,7 +1656,8 @@ test('Home retains the selected network and owns switching while Web settings ow
     assert.equal(await page.getByRole('button', { name: 'Refresh', exact: true }).count(), 0);
     assert.equal(await page.getByRole('checkbox', { name: 'Refresh automatically' }).count(), 0);
     assert.equal(await page.locator('header').getByRole('combobox').count(), 0);
-    assert.match(await page.locator('#selected-network').innerText(), new RegExp(`Alpha.*${gridA.slice(0, 8)}`));
+    assert.equal(await page.locator('#selected-network').isVisible(), false);
+    await page.locator('#home-network-panel').getByRole('heading', { name: gridA, exact: true }).waitFor();
     const scopedReads = options.requests.filter(
         (request) => request.path.endsWith('/items') || /\/cpus\/[^/]+$/.test(request.path)
     ).length;
@@ -1669,7 +1670,10 @@ test('Home retains the selected network and owns switching while Web settings ow
         scopedReads
     );
     await network.click();
-    await page.getByRole('dialog').getByRole('link', { name: /Beta/ }).click();
+    await page
+        .getByRole('dialog')
+        .getByRole('link', { name: new RegExp(gridB) })
+        .click();
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     assert.equal(await network.count(), 0, 'The network selector belongs only to Home');
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
@@ -1688,7 +1692,10 @@ test('real page browses API resources under a proxy prefix, with search and filt
     const { page, options, base } = await fixture(t, '/ae2');
     await page.goto(base);
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
-    await page.getByRole('dialog').getByRole('link', { name: /Alpha/ }).click();
+    await page
+        .getByRole('dialog')
+        .getByRole('link', { name: new RegExp(gridA) })
+        .click();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     await page.getByRole('searchbox', { name: 'Search resources' }).fill('quartz');
     await page.getByRole('button', { name: /Certus Quartz Crystal/ }).waitFor();
@@ -2941,7 +2948,7 @@ test('old settings reads cannot replace saved data and denied saves clear access
         .filter({ hasText: /no longer have access/i })
         .waitFor();
     assert.equal(await tracking.count(), 0);
-    assert.equal(await page.getByRole('heading', { name: 'Players with explicit access', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('heading', { name: 'Network access', exact: true }).count(), 0);
 });
 
 test('late history details cannot enter another grid and denied reads remove the selected snapshot', async (t) => {
@@ -4834,7 +4841,10 @@ test('changing networks cannot publish a delayed response from the previous netw
     await page.goto(base);
     const requested = page.waitForRequest((request) => request.url().includes(gridA + '/items'));
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
-    await page.getByRole('dialog').getByRole('link', { name: /Alpha/ }).click();
+    await page
+        .getByRole('dialog')
+        .getByRole('link', { name: new RegExp(gridA) })
+        .click();
     await requested;
     await page.goto(`${base}#/grids/${gridB}/items`);
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
@@ -5283,7 +5293,10 @@ test('empty discovery and unavailable bookmarked networks stay usable', async (t
     options.empty = false;
     await poll(page);
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
-    await page.getByRole('dialog').getByRole('link', { name: /Alpha/ }).click();
+    await page
+        .getByRole('dialog')
+        .getByRole('link', { name: new RegExp(gridA) })
+        .click();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
 });
 
@@ -5291,13 +5304,13 @@ test('home network links keep keyboard focus when polling refreshes the list', a
     const { page, options, base } = await fixture(t);
     await page.goto(base);
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
-    const network = page.getByRole('link', { name: /Alpha/ });
+    const network = page.getByRole('link', { name: new RegExp(gridA) });
     await network.focus();
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'));
     await (await refreshed).finished();
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await network.evaluate((link) => link === document.activeElement), true);
-    const secondNetwork = page.getByRole('link', { name: /Beta/ });
+    const secondNetwork = page.getByRole('link', { name: new RegExp(gridB) });
     await secondNetwork.focus();
     options.reverseGrids = true;
     await (
@@ -6023,7 +6036,7 @@ test('Home shows current work across networks and opens the exact CPU or a keybo
     await page.keyboard.press('Escape');
     assert.equal(await choose.evaluate((node) => node === document.activeElement), true);
     await choose.click();
-    const beta = dialog.getByRole('link', { name: /Beta/ });
+    const beta = dialog.getByRole('link', { name: new RegExp(gridB) });
     await beta.focus();
     await page.keyboard.press('Enter');
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
@@ -6050,7 +6063,10 @@ test('Home renders summary icons and keeps unavailable networks explicit in the 
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
     options.cpuErrors = { [gridA]: 'NO_PERMISSIONS' };
     await poll(page);
-    await page.getByRole('dialog').getByRole('link', { name: /Beta/ }).waitFor();
+    await page
+        .getByRole('dialog')
+        .getByRole('link', { name: new RegExp(gridB) })
+        .waitFor();
     await page.keyboard.press('Escape');
     await page.getByText(/no longer have access/).waitFor();
     assert.equal(await product.count(), 0);
@@ -6064,7 +6080,7 @@ test('Home renders summary icons and keeps unavailable networks explicit in the 
     options.gridError = null;
     options.cpuErrors = {};
     await dialog.getByRole('button', { name: 'Try again', exact: true }).click();
-    await dialog.getByRole('link', { name: /Alpha/ }).waitFor();
+    await dialog.getByRole('link', { name: new RegExp(gridA) }).waitFor();
 });
 
 // Discovery must supersede pending summaries even when an icon/route refresh started first.
@@ -6089,7 +6105,13 @@ test('Home clears revoked sources during pending reads and stops reading summari
         `#/grids/${gridB}/cpus/running`
     );
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
-    assert.equal(await page.getByRole('dialog').getByRole('link', { name: /Alpha/ }).count(), 0);
+    assert.equal(
+        await page
+            .getByRole('dialog')
+            .getByRole('link', { name: new RegExp(gridA) })
+            .count(),
+        0
+    );
     await page.keyboard.press('Escape');
     const refresh = page.waitForRequest((request) => request.url().endsWith(`${gridB}/cpus`));
     await poll(page);
@@ -6180,16 +6202,21 @@ test('Home can retry empty discovery without automatic refresh', async (t) => {
     options.empty = false;
     await page.getByRole('button', { name: 'Try again', exact: true }).click({ timeout: 2000 });
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
-    await page.getByRole('dialog').getByRole('link', { name: /Alpha/ }).waitFor();
+    await page
+        .getByRole('dialog')
+        .getByRole('link', { name: new RegExp(gridA) })
+        .waitFor();
 });
 
 test('Home and its chooser contain long identities on mobile in light and dark appearances', async (t) => {
     const { page, options, base } = await fixture(t, '', { viewport: { width: 390, height: 844 } });
     const longName = 'LongUnbrokenIdentity'.repeat(8);
     options.grids = [
-        { key: gridA, owner: longName, cpuCount: 1, accessSources: {} },
-        { key: gridB, owner: longName, cpuCount: 1, accessSources: {} }
+        { key: gridA, name: longName, owner: 'Owner', cpuCount: 1, accessSources: {} },
+        { key: gridB, name: longName, owner: 'Owner', cpuCount: 1, accessSources: {} }
     ];
+    options.settings[gridA].name = longName;
+    options.settings[gridB].name = longName;
     options.cpusByGrid = {
         [gridA]: { running: { ...cpu, name: longName, isBusy: true, finalOutput: { ...iron, displayName: longName } } },
         [gridB]: { running: { ...cpu, isBusy: true, isPaused: true, finalOutput: null } }
@@ -6241,6 +6268,63 @@ test('Home keeps failed logout visible and allows an explicit retry', async (t) 
 });
 
 // Public settings/HTTP seam: the server-backed name is shared presentation, independent of tracking.
+test('network identity uses its name or full identifier, with scoped header and shared tooltip', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    options.settings[gridB].name = 'Remote factory';
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    const header = page.locator('header');
+    const current = header.getByText(gridA, { exact: true });
+    await current.waitFor({ timeout: 2000 });
+    assert.doesNotMatch(await header.innerText(), /Alpha/);
+    assert.equal(await current.getAttribute('title'), null);
+    await current.focus();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.waitFor();
+    assert.match(await tooltip.innerText(), /Current network/);
+    assert.match(await tooltip.innerText(), new RegExp(gridA));
+    await page.keyboard.press('Escape');
+    assert.equal(await tooltip.isVisible(), false);
+    for (const route of ['cpus', 'cpus/cpu-a', 'history', 'history/1', 'plans/1', 'settings']) {
+        await page.goto(`${base}#/grids/${gridA}/${route}`);
+        await current.waitFor();
+        assert.equal(await current.innerText(), gridA);
+    }
+    for (const route of ['/', '/web-settings', '/server-settings', '/about']) {
+        await page.goto(`${base}#${route}`);
+        assert.equal(await current.isVisible(), false, `Network context is not shown on ${route}`);
+    }
+    await page.goto(`${base}#/`);
+    const panel = page.locator('#home-network-panel');
+    await panel.getByText(gridA, { exact: true }).waitFor();
+    assert.equal(await panel.getByText(gridA, { exact: true }).count(), 1);
+    assert.doesNotMatch(await panel.innerText(), /Alpha/);
+    await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    assert.doesNotMatch(await dialog.innerText(), /Alpha|Beta/);
+    await dialog.getByRole('link', { name: /Remote factory/ }).click();
+    await header.getByText('Remote factory', { exact: true }).waitFor();
+    await page.getByRole('link', { name: 'Network', exact: true }).click();
+    const name = page.getByRole('textbox', { name: 'Network name', exact: true });
+    await name.fill('Renamed network');
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await header.getByText('Renamed network', { exact: true }).waitFor();
+    await page
+        .getByRole('region', { name: 'Network details', exact: true })
+        .getByText('Beta', { exact: true })
+        .waitFor();
+    await header.getByText('Renamed network', { exact: true }).hover();
+    await tooltip.waitFor();
+    assert.match(await tooltip.innerText(), new RegExp(gridB));
+    await page.keyboard.press('Escape');
+    await name.fill('');
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await header.getByText(gridB, { exact: true }).waitFor();
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await panel.getByText(gridB, { exact: true }).waitFor();
+});
+
 test('Network details save and clear a name without resending tracking, and update Home immediately', async (t) => {
     const { page, options, base } = await fixture(t);
     await seedAutomaticRefresh(page, base, false);
@@ -6261,7 +6345,7 @@ test('Network details save and clear a name without resending tracking, and upda
     await page.getByRole('link', { name: 'Home', exact: true }).click();
     const panel = page.locator('#home-network-panel');
     await panel.getByText('Main factory', { exact: true }).waitFor();
-    await panel.getByText('Owner: Alpha', { exact: true }).waitFor();
+    assert.equal(await panel.getByText('Owner: Alpha', { exact: true }).count(), 0);
     await panel.getByText(gridA, { exact: true }).waitFor();
     await panel.getByRole('link', { name: 'Network details', exact: true }).click();
     await name.fill('');
@@ -6523,6 +6607,17 @@ test('Network details scroll long access lists under a fixed heading and keep mo
         await page.goto(`${base}#/grids/${gridA}/settings`);
         const heading = page.getByRole('heading', { name: 'Network details', exact: true });
         await heading.waitFor();
+        const current = page.locator('header').getByText(options.settings[gridA].name, { exact: true });
+        await current.focus();
+        const tooltip = page.getByRole('tooltip');
+        await tooltip.waitFor();
+        assert.ok((await tooltip.innerText()).includes(options.settings[gridA].name));
+        for (const target of [current, page.locator('header').getByRole('button', { name: 'Log out', exact: true })]) {
+            const box = await target.boundingBox();
+            assert.ok(box.width > 0 && box.x >= 0 && box.x + box.width <= 390);
+        }
+        await page.keyboard.press('Tab');
+        assert.equal(await tooltip.isVisible(), false);
         const before = await heading.boundingBox();
         const person = page.locator('details').filter({ has: page.getByText(player.name, { exact: true }) });
         if (!(await person.evaluate((node) => node.open))) await person.locator('summary').click();

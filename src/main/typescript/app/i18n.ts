@@ -15,6 +15,8 @@ const translations: Dictionaries = {
         processingTotal: 'Total processing time: {duration}',
         gridSettings: 'Settings',
         networkDetails: 'Network details',
+        currentNetwork: 'Current network',
+        networkIdentifierHelp: 'The network identifier is associated with its ME controllers.',
         trackingDisabledTip:
             'Tracking is disabled for this network. Enable it in network settings to see crafting item and order details and record order history.',
         trackingDisabledHistory:
@@ -22,11 +24,12 @@ const translations: Dictionaries = {
         enableTracking: 'Enable tracking',
         notices: 'Information',
         networkName: 'Network name',
-        networkNameHelp: 'Up to 128 characters. Leave empty to use the owner and identifier.',
+        networkNameHelp: 'Up to 128 characters. Leave empty to use the identifier.',
         networkNameInvalid: 'Use at most 128 characters, without control characters.',
         owner: 'Owner',
-        explicitAccess: 'Players with explicit access',
-        explicitAccessHelp: 'These are the access sources reported by the network. Administrator access is not listed.',
+        explicitAccess: 'Network access',
+        explicitAccessHelp:
+            'Players receive access through the blocks and terminals listed here. Expand a player to see these sources and their locations. Administrator access is not listed.',
         accessSourceCount: { one: '{count} source', other: '{count} sources' },
         serverSettings: 'Server settings',
         webSettings: 'Web settings',
@@ -193,7 +196,6 @@ const translations: Dictionaries = {
         close: 'Close',
         homeHelp: 'Choose a network to browse its resources.',
         openNetwork: 'Open {owner} network',
-        gridOwner: 'Owner: {owner}',
         cpuCount: { one: '{count} CPU', other: '{count} CPUs' },
         search: 'Search resources',
         searchHint: 'Search…',
@@ -252,6 +254,8 @@ const translations: Dictionaries = {
         processingTotal: 'Łączny czas przetwarzania: {duration}',
         gridSettings: 'Ustawienia',
         networkDetails: 'Szczegóły sieci',
+        currentNetwork: 'Aktualna sieć',
+        networkIdentifierHelp: 'Identyfikator sieci jest powiązany z jej kontrolerami ME.',
         trackingDisabledTip:
             'Śledzenie tej sieci jest wyłączone. Włącz je w ustawieniach sieci, aby widzieć szczegóły wytwarzanych przedmiotów i zleceń oraz zapisywać historię zleceń.',
         trackingDisabledHistory:
@@ -259,11 +263,12 @@ const translations: Dictionaries = {
         enableTracking: 'Włącz śledzenie',
         notices: 'Informacje',
         networkName: 'Nazwa sieci',
-        networkNameHelp: 'Do 128 znaków. Pozostaw puste, aby użyć właściciela i identyfikatora.',
+        networkNameHelp: 'Do 128 znaków. Pozostaw puste, aby użyć identyfikatora.',
         networkNameInvalid: 'Użyj najwyżej 128 znaków, bez znaków sterujących.',
         owner: 'Właściciel',
-        explicitAccess: 'Gracze z jawnym dostępem',
-        explicitAccessHelp: 'Źródła dostępu zgłoszone przez sieć. Dostęp administratorów nie jest wymieniony.',
+        explicitAccess: 'Dostęp do sieci',
+        explicitAccessHelp:
+            'Gracze otrzymują dostęp przez wymienione tutaj bloki i terminale. Rozwiń gracza, aby zobaczyć te źródła i ich lokalizacje. Dostęp administratorów nie jest wymieniony.',
         accessSourceCount: { one: '{count} źródło', few: '{count} źródła', other: '{count} źródeł' },
         serverSettings: 'Ustawienia serwera',
         webSettings: 'Ustawienia strony',
@@ -430,7 +435,6 @@ const translations: Dictionaries = {
         close: 'Zamknij',
         homeHelp: 'Wybierz sieć, aby przeglądać jej zasoby.',
         openNetwork: 'Otwórz sieć: {owner}',
-        gridOwner: 'Właściciel: {owner}',
         cpuCount: {
             one: '{count} procesor CPU',
             few: '{count} procesory CPU',

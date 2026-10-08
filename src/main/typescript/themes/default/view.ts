@@ -13,7 +13,7 @@ import { createCraftingView } from './crafting.js';
 import { createHomeView } from './home.js';
 import { createCpuView } from './cpus.js';
 import { createHistoryView } from './history.js';
-import { networkLabel, networkOwner } from './network.js';
+import { networkLabel } from './network.js';
 import { createSettingsView } from './settings.js';
 import { createAboutView } from './about.js';
 import { slotQuantity } from './resource-quantity.js';
@@ -151,9 +151,8 @@ export function mount(
     application.displayIcons(terminalDisplay !== 'names');
     let effectiveDisplay: TerminalDisplay = 'names';
     let iconSuggestionDismissed = settings.get('iconSuggestionDismissed') === true;
-    root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1>AE2 <span>Web Integration</span></h1></div><div class="account-controls">
+    root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1>AE2 <span>Web Integration</span></h1></div><span id="selected-network" tabindex="0" hidden></span><div class="account-controls">
         <span class="account-user">${userIcon}<span id="username"></span></span><button id="logout" data-text="logout"></button></div></header>
-        <dl class="network-summary"><dt><span data-text="network"></span>:</dt><dd id="selected-network"></dd></dl>
         <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="settings-link" data-view="settings" data-text="network" hidden></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav><p id="session-message" role="alert" hidden></p></div>
         <div class="info-notices" id="info-notices" role="region" data-label="notices" tabindex="0" hidden><section class="window-frame info-notice" id="icon-notice" aria-labelledby="icon-notice-text" hidden>
         ${infoCircle}<p id="icon-notice-text" data-theme-text="iconsOffer"></p>
@@ -202,7 +201,7 @@ export function mount(
         '#logout': HTMLElementTagNameMap['button'];
         '#session-message': HTMLElementTagNameMap['p'];
         '#username': HTMLElementTagNameMap['span'];
-        '#selected-network': HTMLElementTagNameMap['dd'];
+        '#selected-network': HTMLElementTagNameMap['span'];
         '#auto-refresh': HTMLElementTagNameMap['input'];
         '#terminal-link': HTMLElementTagNameMap['a'];
         '#cpu-link': HTMLElementTagNameMap['a'];
@@ -426,16 +425,21 @@ export function mount(
         find('#previous-page').setAttribute('aria-label', locale.common('previousPage'));
         find('#next-page').setAttribute('aria-label', locale.common('nextPage'));
     }
+    bindTooltip(find('#selected-network'), () => {
+        const grid = state.grids.find((grid) => grid.key === state.route.gridKey);
+        const lines = [element('strong', locale.common('currentNetwork'))];
+        if (grid?.name) lines.push(element('span', grid.name));
+        lines.push(element('code', state.route.gridKey || ''));
+        return lines;
+    });
     function renderNetworks() {
-        const gridKey = state.route.gridKey || state.selectedGridKey;
+        const gridKey = state.route.gridKey;
         const grid = state.grids.find((grid) => grid.key === gridKey);
         const selectedNetwork = find('#selected-network');
-        selectedNetwork.textContent = gridKey
-            ? grid
-                ? networkLabel(grid, locale)
-                : gridKey
-            : locale.common('noNetworkSelected');
-        selectedNetwork.title = grid ? `${networkOwner(grid, locale)} · ${grid.key}` : selectedNetwork.textContent;
+        selectedNetwork.hidden = !gridKey;
+        const label = grid ? networkLabel(grid) : gridKey || '';
+        if (selectedNetwork.textContent !== label) selectedNetwork.textContent = label;
+        selectedNetwork.setAttribute('aria-label', `${locale.common('currentNetwork')}: ${label}`);
         const networkMessage =
             state.gridStatus === 'loading'
                 ? locale.common('loading')
