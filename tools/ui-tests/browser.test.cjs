@@ -6297,6 +6297,43 @@ test('Home keeps failed logout visible and allows an explicit retry', async (t) 
 });
 
 // Public settings/HTTP seam: the server-backed name is shared presentation, independent of tracking.
+test('current network stays on the brand and account row at narrow widths without changing header geometry', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    for (const width of [1280, 800, 560, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        let previous;
+        for (const name of ['Factory', 'VeryLongNetworkName'.repeat(6)]) {
+            options.settings[gridA].name = name;
+            await page.goto(`${base}#/grids/${gridA}/settings`);
+            await page.reload();
+            const network = page.locator('header').getByText(name, { exact: true });
+            await network.waitFor();
+            const brand = await page.getByRole('heading', { name: 'AE2 Web Integration' }).boundingBox();
+            const account = await page.getByRole('button', { name: 'Log out', exact: true }).boundingBox();
+            const label = await network.boundingBox();
+            const header = await page.locator('header').boundingBox();
+            assert.ok(
+                Math.abs(label.y + label.height / 2 - brand.y - brand.height / 2) < 2,
+                `brand alignment at ${width}`
+            );
+            assert.ok(
+                Math.abs(label.y + label.height / 2 - account.y - account.height / 2) < 2,
+                `account alignment at ${width}`
+            );
+            assert.ok(label.x >= brand.x + brand.width && label.x + label.width <= account.x);
+            assert.ok(label.width > 0 && account.x + account.width <= width);
+            if (previous)
+                assert.deepEqual(
+                    { brand, account, header },
+                    previous,
+                    'A long network name cannot move the surrounding header'
+                );
+            previous = { brand, account, header };
+        }
+    }
+});
+
 test('network identity uses its name or full identifier, with scoped header and shared tooltip', async (t) => {
     const { page, options, base } = await fixture(t);
     await seedAutomaticRefresh(page, base, false);
@@ -6637,6 +6674,10 @@ test('Network details scroll long access lists under a fixed heading and keep mo
         const heading = page.getByRole('heading', { name: 'Network details', exact: true });
         await heading.waitFor();
         const current = page.locator('header').getByText(options.settings[gridA].name, { exact: true });
+        await page.getByRole('textbox', { name: 'Network name', exact: true }).waitFor();
+        await page.evaluate(
+            () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        );
         await current.focus();
         const tooltip = page.getByRole('tooltip');
         await tooltip.waitFor();

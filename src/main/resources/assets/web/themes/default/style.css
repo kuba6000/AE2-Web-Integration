@@ -717,16 +717,23 @@ label {
 }
 .site-header {
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     margin: 0 0 27px;
-    gap: 12px 24px;
+    gap: 12px;
 }
 .brand {
+    flex: 0 1 320px;
     min-width: 0;
     display: flex;
     align-items: center;
     gap: 12px;
+}
+.brand h1 {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .brand-mark {
     display: block;
@@ -736,16 +743,22 @@ label {
     object-fit: contain;
     image-rendering: pixelated;
 }
+.brand-mark .theme-icon {
+    width: 100%;
+    height: 100%;
+}
 .account-controls {
+    flex: 0 1 220px;
     margin-left: auto;
     display: flex;
     align-items: center;
     gap: 12px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     min-width: 0;
     font-size: 12px;
 }
 .account-user {
+    flex: 1;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -757,8 +770,10 @@ label {
     flex-shrink: 0;
 }
 #username {
-    overflow-wrap: anywhere;
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .account-controls button {
     flex-shrink: 0;
@@ -841,7 +856,7 @@ label {
     padding: 8px 12px 8px 0;
 }
 #selected-network {
-    flex: 0 1 240px;
+    flex: 1 1 140px;
     min-width: 0;
     max-width: 100%;
     font-size: 11px;
@@ -1451,16 +1466,6 @@ footer a {
     }
 }
 @media (max-width: 900px) {
-    .site-header {
-        align-items: start;
-    }
-    .account-controls {
-        justify-content: end;
-    }
-    .brand h1 span {
-        display: block;
-        margin: 3px 0 0;
-    }
     #app {
         --details-width: 180px;
     }
@@ -1499,16 +1504,31 @@ footer a {
         padding: 12px 8px;
     }
     .site-header {
-        flex-direction: column;
-        gap: 14px;
-        margin-bottom: 18px;
+        gap: 8px;
     }
-    #selected-network {
-        flex-basis: auto;
-        align-self: stretch;
+    .brand {
+        flex-basis: 180px;
+        gap: 6px;
+    }
+    .brand h1 {
+        font-size: 14px;
+    }
+    .brand-mark {
+        width: 24px;
+        height: 24px;
     }
     .account-controls {
-        margin-left: 0;
+        flex-basis: 200px;
+        gap: 6px;
+        font-size: 10px;
+    }
+    .account-controls button {
+        font-size: 10px;
+        padding: 6px;
+    }
+    .user-icon {
+        width: 16px;
+        height: 16px;
     }
     .history-list > li > a {
         grid-template-columns: minmax(0, 1fr);
@@ -1519,10 +1539,6 @@ footer a {
     }
     .preferences {
         justify-content: start;
-    }
-    .brand h1 span {
-        display: inline;
-        margin-left: 4px;
     }
     .window-frame {
         padding: 4px 1px;
