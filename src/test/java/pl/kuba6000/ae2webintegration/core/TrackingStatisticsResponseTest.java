@@ -106,6 +106,10 @@ class TrackingStatisticsResponseTest extends GridTestScope {
             item.get("damage")
                 .getAsInt());
         assertFalse(item.has("itemId"));
+        assertEquals(
+            output.itemKey,
+            item.get("itemKey")
+                .getAsString());
         assertFalse(item.has("itemName"));
         assertFalse(item.has("itemid"));
         assertFalse(item.has("itemname"));

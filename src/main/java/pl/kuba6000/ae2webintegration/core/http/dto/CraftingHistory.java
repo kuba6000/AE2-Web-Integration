@@ -59,6 +59,7 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
      *                                    unsupported resources
      * @param registryPath                native registry path without namespace or damage, or null when unavailable
      * @param displayName                 resource display name
+     * @param itemKey                     exact stable resource identity, or null when it could not be captured
      * @param timeSpentOn                 measured processing time for this resource, in milliseconds
      * @param craftedTotal                total resource units produced during the measured work
      * @param shareInCraftingTime         fraction of summed resource processing time attributed to this resource; one
@@ -80,7 +81,7 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
     public record ResourceTiming(@Nullable String registryNamespace, @Nullable String registryPath,
         @NotNull String displayName, @Nullable Integer componentCount, @Nullable Integer damage, long timeSpentOn,
         long craftedTotal, double shareInCraftingTime, double shareInCraftingTimeCombined, double craftsPerSec,
-        @NotNull ArrayList<Timing> timings, @Nullable IconMappings.Reference icon) {}
+        @NotNull ArrayList<Timing> timings, @Nullable IconMappings.Reference icon, @Nullable String itemKey) {}
 
     /**
      * Processing measurements combined for pattern providers sharing a display name.
@@ -125,7 +126,8 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
                     combinedShare,
                     rate,
                     timings,
-                    resolveIcon(resource, mappings)));
+                    resolveIcon(resource, mappings),
+                    resource.itemKey));
         }
         items.sort((first, second) -> Double.compare(second.shareInCraftingTime(), first.shareInCraftingTime()));
         ArrayList<ProviderTiming> interfaceShare = new ArrayList<>();

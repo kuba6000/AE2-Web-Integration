@@ -5,6 +5,7 @@ export type MessageValues = { count?: number } & Record<string, string | number 
 export type Translator = ReturnType<typeof createTranslator>;
 const translations: Dictionaries = {
     en: {
+        historyFinalProduct: 'Final product',
         bootstrapLoading: 'Loading server settings…',
         bootstrapError: 'Could not load server settings. Check the connection and try again.',
         historyStartedLabel: 'Started',
@@ -263,6 +264,7 @@ const translations: Dictionaries = {
         INVALID_RESPONSE: 'The server returned an unreadable response.'
     },
     pl: {
+        historyFinalProduct: 'Produkt końcowy',
         bootstrapLoading: 'Wczytywanie ustawień serwera…',
         bootstrapError: 'Nie udało się wczytać ustawień serwera. Sprawdź połączenie i spróbuj ponownie.',
         historyStartedLabel: 'Rozpoczęcie',

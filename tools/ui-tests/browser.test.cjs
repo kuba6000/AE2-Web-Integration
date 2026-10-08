@@ -121,6 +121,49 @@ const historyDetail = {
     ]
 };
 
+test('history prioritizes only the measured final resource identity and keeps search effective', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const result = {
+        ...historyDetail.items[0],
+        itemKey: 'final',
+        displayName: 'Zeta',
+        timeSpentOn: 0,
+        craftedTotal: 1,
+        timings: []
+    };
+    options.historyDetail = {
+        ...historyDetail,
+        finalOutput: { ...iron, itemKey: 'final', displayName: 'Zeta' },
+        items: [
+            { ...result, itemKey: 'other-variant', craftedTotal: 99, timeSpentOn: 9000 },
+            { ...result, itemKey: 'ingredient', displayName: 'Alpha', craftedTotal: 50, timeSpentOn: 5000 },
+            result
+        ]
+    };
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    const resources = page.getByRole('list', { name: 'Resources', exact: true });
+    for (const sort of ['time', 'quantity', 'name']) {
+        await page.getByRole('combobox', { name: 'Sort by', exact: true }).selectOption(sort);
+        const first = resources.getByRole('listitem').first();
+        await first.getByRole('img', { name: 'Final product', exact: true }).waitFor({ timeout: 2000 });
+        assert.match(await first.locator('summary').innerText(), /0 s/);
+        assert.equal(await resources.getByRole('img', { name: 'Final product', exact: true }).count(), 1);
+    }
+    const marker = resources.getByRole('img', { name: 'Final product', exact: true });
+    await marker.scrollIntoViewIfNeeded();
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await marker.hover();
+    await page.getByRole('tooltip').filter({ hasText: 'Final product' }).waitFor({ timeout: 2000 });
+    await page.getByRole('searchbox', { name: 'Search history', exact: true }).fill('Alpha');
+    assert.equal(await resources.getByRole('listitem').count(), 1);
+    assert.equal(await resources.getByRole('img', { name: 'Final product', exact: true }).count(), 0);
+    options.historyDetail.items = options.historyDetail.items.slice(0, 2);
+    await page.reload();
+    await resources.getByRole('heading', { name: 'Alpha', exact: true }).waitFor();
+    assert.equal(await resources.getByRole('listitem').count(), 2);
+    assert.equal(await resources.getByRole('img', { name: 'Final product', exact: true }).count(), 0);
+});
+
 async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } = {}) {
     const options = {
         delayA: 0,

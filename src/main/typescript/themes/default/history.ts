@@ -5,7 +5,7 @@ import type { Translator as Locale } from '../../app/i18n.js';
 
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 import { historyHref } from '../../app/router.js';
-import { renderHistoryTimeline } from './history-timeline.js';
+import { renderHistoryTimeline, type HistoryTooltipBinder } from './history-timeline.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
@@ -17,7 +17,11 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): 
     return node;
 }
 
-export function createHistoryView(root: HTMLElement, application: ReturnType<typeof createTerminal>) {
+export function createHistoryView(
+    root: HTMLElement,
+    application: ReturnType<typeof createTerminal>,
+    bindTooltip: HistoryTooltipBinder
+) {
     const view = element('section');
     view.hidden = true;
     view.className = 'history-view';
@@ -220,10 +224,15 @@ export function createHistoryView(root: HTMLElement, application: ReturnType<typ
             summary.append(product, outcome, stats);
             detail.append(summary);
             detail.append(
-                renderHistoryTimeline(snapshot, locale, (targets) => {
-                    detailIcons = targets;
-                    updateDetailIcons();
-                })
+                renderHistoryTimeline(
+                    snapshot,
+                    locale,
+                    (targets) => {
+                        detailIcons = targets;
+                        updateDetailIcons();
+                    },
+                    bindTooltip
+                )
             );
             updateDetailIcons();
         },

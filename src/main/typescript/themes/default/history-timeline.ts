@@ -6,6 +6,8 @@ import { renderMinecraftText } from './minecraft-text.js';
 import { createResourceIcon } from './resource-icon.js';
 import type { IconTarget } from '../../app/icons.js';
 
+export type HistoryTooltipBinder = (target: HTMLElement, content: () => Node[], focusTarget?: HTMLElement) => void;
+
 function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
     node.textContent = text;
@@ -29,6 +31,7 @@ function activityTrack(timings: Timing[], started: number, duration: number, lab
         const end = Math.min(index + 4096, timings.length);
         for (; index < end; index++) {
             const interval = timings[index];
+            if (interval.ended <= interval.started) continue;
             const left = Math.max(0, Math.min(bins - 1, Math.floor(((interval.started - started) / duration) * bins)));
             const right = Math.max(left + 1, Math.min(bins, Math.ceil(((interval.ended - started) / duration) * bins)));
             if (interval.ended < started || interval.started > started + duration) continue;
@@ -94,7 +97,8 @@ function pager(total: number, pageSize: number, label: string, locale: Translato
 export function renderHistoryTimeline(
     snapshot: CraftingHistory,
     locale: Translator,
-    visibleIcons: (targets: IconTarget[]) => void
+    visibleIcons: (targets: IconTarget[]) => void,
+    bindTooltip: HistoryTooltipBinder
 ) {
     const { common: t, duration: formatDuration, preciseTime, number } = locale;
     const container = element('div');
@@ -152,6 +156,9 @@ export function renderHistoryTimeline(
     let iconTargets: IconTarget[] = [];
     container.append(tabs, toolbar, legend, columns, axis, list, empty, pagination);
 
+    const isFinalProduct = (row: ResourceTiming | ProviderTiming) =>
+        'displayName' in row && !!row.itemKey && row.itemKey === snapshot.finalOutput.itemKey;
+
     function createRow(row: ResourceTiming | ProviderTiming) {
         const resource = 'displayName' in row ? row : null;
         const provider = 'name' in row ? row : null;
@@ -164,6 +171,15 @@ export function renderHistoryTimeline(
         summary.className = 'history-analysis-summary';
         const heading = element('h4');
         heading.append(renderMinecraftText(name));
+        if (isFinalProduct(row)) {
+            section.classList.add('history-final-product');
+            const marker = element('span', '★');
+            marker.className = 'history-final-marker';
+            marker.role = 'img';
+            marker.setAttribute('aria-label', t('historyFinalProduct'));
+            heading.prepend(marker);
+            bindTooltip(marker, () => [element('span', t('historyFinalProduct'))], summary);
+        }
         const identity = element('div');
         identity.className = 'history-analysis-name';
         if (resource) {
@@ -267,6 +283,8 @@ export function renderHistoryTimeline(
                     .includes(query)
         );
         matching.sort((a, b) => {
+            const priority = Number(isFinalProduct(b)) - Number(isFinalProduct(a));
+            if (priority) return priority;
             if (sort.value === 'name') return displayName(a).localeCompare(displayName(b));
             const amount = (row: ResourceTiming | ProviderTiming) =>
                 sort.value === 'quantity'
