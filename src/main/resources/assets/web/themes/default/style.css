@@ -764,6 +764,7 @@ label {
 .web-preferences {
     display: grid;
     gap: 20px;
+    max-width: 420px;
 }
 .web-preferences-section {
     display: grid;
@@ -780,35 +781,27 @@ label {
 }
 .web-preferences label {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(180px, 320px);
-    align-items: center;
-    gap: 12px 24px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
 }
 .web-preferences select {
     width: 100%;
     min-width: 0;
 }
+.web-preferences .web-preference-toggle {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
 .web-preference-toggle input {
-    justify-self: start;
+    order: -1;
 }
 .web-preference-field .hint {
-    max-width: 320px;
-    margin: 8px 0 0 auto;
+    margin: 8px 0 0;
 }
 .web-preference-field .hint:empty {
     display: none;
-}
-@media (max-width: 600px) {
-    .web-preferences label {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 8px;
-    }
-    .web-preferences .web-preference-toggle {
-        grid-template-columns: minmax(0, 1fr) auto;
-    }
-    .web-preference-field .hint {
-        max-width: none;
-    }
 }
 .about-view {
     overflow-wrap: anywhere;
