@@ -199,6 +199,11 @@ export function renderHistoryTimeline(
         quantity.className = 'history-analysis-quantity';
         const processing = element('span', formatDuration(resource ? resource.timeSpentOn : provider!.timingsCombined));
         processing.className = 'history-analysis-processing';
+        if (resource) {
+            const share = element('span', ` (${number(resource.shareInCraftingTimeCombined * 100)}%)`);
+            share.className = 'history-processing-share';
+            processing.append(share);
+        }
         summary.append(
             identity,
             quantity,

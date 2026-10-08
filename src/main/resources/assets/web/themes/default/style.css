@@ -741,6 +741,10 @@ details[open] > .history-analysis-summary::before {
     font-weight: 400;
     line-height: 1.6;
 }
+.history-processing-share {
+    white-space: nowrap;
+    color: var(--muted);
+}
 .history-analysis-quantity,
 .history-analysis-processing {
     text-align: right;

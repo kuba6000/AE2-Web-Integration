@@ -7204,6 +7204,18 @@ test('large history analysis paginates resources and exact intervals without dro
     );
 });
 
+test('history resource summaries pair processing time with its share of total elapsed crafting time', async (t) => {
+    const { page, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    const summary = page.getByRole('region', { name: 'Iron Ingot', exact: true }).locator('summary');
+    await summary.waitFor();
+    assert.match(await summary.innerText(), /5 s\s*\(50%\)/);
+    assert.doesNotMatch(await summary.innerText(), /40%/);
+    await page.getByRole('button', { name: 'Pattern providers', exact: true }).click();
+    const provider = page.getByRole('region', { name: 'Smelter', exact: true }).locator('summary');
+    assert.doesNotMatch(await provider.innerText(), /%/);
+});
+
 test('history preserves subsecond timeline scale and distinguishes very slow production from zero', async (t) => {
     const { page, options, base } = await fixture(t);
     options.historyDetail = {
