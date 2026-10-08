@@ -213,7 +213,7 @@ export function createHistoryView(
             for (const [label, value] of [
                 [t('historyDurationLabel'), locale.duration(snapshot.timeDone - snapshot.timeStarted)],
                 [t('historyStartedLabel'), dateTime(snapshot.timeStarted)],
-                [t('historyFinishedLabel'), dateTime(snapshot.timeDone)]
+                [t('historyFinishedLabel'), dateTime(snapshot.timeDone, snapshot.timeStarted)]
             ]) {
                 const pair = element('div');
                 pair.append(element('dt', label), element('dd', value));

@@ -107,7 +107,7 @@ export function renderHistoryTimeline(
     visibleIcons: (targets: IconTarget[]) => void,
     bindTooltip: HistoryTooltipBinder
 ) {
-    const { common: t, duration: formatDuration, preciseTime, number } = locale;
+    const { common: t, duration: formatDuration, dateTime, number } = locale;
     const container = element('div');
     container.className = 'history-analysis';
     const elapsed = snapshot.timeDone - snapshot.timeStarted;
@@ -277,9 +277,9 @@ export function renderHistoryTimeline(
                     const interval = row.timings[i];
                     const item = element('li');
                     item.value = i + 1;
-                    const start = element('time', preciseTime(interval.started));
+                    const start = element('time', dateTime(interval.started, snapshot.timeStarted));
                     start.dateTime = new Date(interval.started).toISOString();
-                    const end = element('time', preciseTime(interval.ended));
+                    const end = element('time', dateTime(interval.ended, interval.started));
                     end.dateTime = new Date(interval.ended).toISOString();
                     item.append(start, ' — ', end, ` · ${formatDuration(interval.ended - interval.started)}`);
                     intervals.append(item);

@@ -562,16 +562,11 @@ function createTranslator(language: string, dictionaries: Dictionaries) {
     const numbers = new Intl.NumberFormat(language);
     const plural = new Intl.PluralRules(language);
     const englishPlural = new Intl.PluralRules('en');
-    const times = new Intl.DateTimeFormat(language, { timeStyle: 'medium' });
-    const dates = new Intl.DateTimeFormat(language, { dateStyle: 'medium', timeStyle: 'medium' });
-    const preciseTimes = new Intl.DateTimeFormat(language, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        fractionalSecondDigits: 3
+    const times = new Intl.DateTimeFormat(language, { timeStyle: 'medium', hourCycle: 'h23' });
+    const dates = new Intl.DateTimeFormat(language, {
+        dateStyle: 'medium',
+        timeStyle: 'medium',
+        hourCycle: 'h23'
     });
     function translate(source: Dictionaries, key: string, values: MessageValues) {
         const selected = Object.hasOwn(source, language) ? source[language] : {};
@@ -608,7 +603,18 @@ function createTranslator(language: string, dictionaries: Dictionaries) {
         },
         number: (value: number) => numbers.format(value),
         time: (value: number) => times.format(value),
-        dateTime: (value: number) => dates.format(value),
-        preciseTime: (value: number) => preciseTimes.format(value)
+        dateTime(value: number, reference?: number) {
+            if (reference !== undefined) {
+                const date = new Date(value);
+                const referenceDate = new Date(reference);
+                if (
+                    date.getFullYear() === referenceDate.getFullYear() &&
+                    date.getMonth() === referenceDate.getMonth() &&
+                    date.getDate() === referenceDate.getDate()
+                )
+                    return times.format(value);
+            }
+            return dates.format(value);
+        }
     };
 }

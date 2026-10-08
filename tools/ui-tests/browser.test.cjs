@@ -2790,12 +2790,10 @@ for (const language of ['en', 'pl']) {
         await row.locator('time').click();
         await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
         assert.match(page.url(), /history\/6$/);
-        assert.equal(
-            await page
-                .getByRole('region', { name: 'Iron Ingot', exact: true })
-                .getByText(expected[5], { exact: true })
-                .count(),
-            1
+        assert.ok(
+            (
+                await page.getByRole('region', { name: 'Iron Ingot', exact: true }).locator('summary').innerText()
+            ).includes(expected[5])
         );
         const resource = page.getByRole('region', { name: 'Iron Ingot', exact: true });
         await resource.locator('summary').click();
@@ -7203,6 +7201,51 @@ test('large history analysis paginates resources and exact intervals without dro
         1
     );
 });
+
+// Public browser/HTTP seam: local calendar boundaries determine when history needs a date.
+for (const language of ['en', 'pl']) {
+    test(`history timestamps use contextual dates and 24-hour whole seconds (${language})`, async (t) => {
+        const { page, options, base } = await fixture(t, '', { timezoneId: 'Europe/Warsaw' });
+        const started = Date.parse('2025-12-31T22:58:00.123Z');
+        const timings = [
+            { started: started + 1000, ended: started + 2000 },
+            { started: Date.parse('2025-12-31T22:59:59.456Z'), ended: Date.parse('2025-12-31T23:00:01.789Z') },
+            { started: Date.parse('2025-12-31T23:01:00.123Z'), ended: Date.parse('2025-12-31T23:01:30.456Z') }
+        ];
+        options.historyDetail = {
+            ...historyDetail,
+            timeStarted: started,
+            timeDone: Date.parse('2025-12-31T23:02:00.789Z'),
+            items: [{ ...historyDetail.items[0], timings }]
+        };
+        await page.goto(`${base}#/web-settings`);
+        await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption(language);
+        await page.goto(`${base}#/grids/${gridA}/history/1`);
+        const row = page.getByRole('region', { name: 'Iron Ingot', exact: true });
+        await row.locator('summary').click();
+        const times = row.locator('time');
+        assert.equal(await times.nth(0).innerText(), '23:58:01');
+        assert.equal(await times.nth(1).innerText(), '23:58:02');
+        assert.equal(await times.nth(2).innerText(), '23:59:59');
+        assert.match(await times.nth(3).innerText(), /2026.*00:00:01/);
+        assert.match(await times.nth(4).innerText(), /2026.*00:01:00/);
+        assert.equal(await times.nth(5).innerText(), '00:01:30');
+        assert.equal(await times.nth(3).getAttribute('datetime'), '2025-12-31T23:00:01.789Z');
+        const startedLabel = language === 'en' ? 'Started' : 'Rozpoczęcie';
+        const finishedLabel = language === 'en' ? 'Finished' : 'Zakończenie';
+        const summaryValue = (label) =>
+            page
+                .locator('dl > div')
+                .filter({ has: page.getByText(label, { exact: true }) })
+                .locator('dd');
+        assert.match(await summaryValue(startedLabel).innerText(), /2025.*23:58:00/);
+        assert.match(await summaryValue(finishedLabel).innerText(), /2026.*00:02:00/);
+        options.historyDetail.timeDone = started + 30000;
+        await page.reload();
+        await row.locator('summary').waitFor();
+        assert.equal(await summaryValue(finishedLabel).innerText(), '23:58:30');
+    });
+}
 
 test('history resource summaries pair processing time with its share of total elapsed crafting time', async (t) => {
     const { page, base } = await fixture(t);
