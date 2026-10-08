@@ -1,7 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.http.dto;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -69,6 +71,8 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
      * @param icon                        resource atlas reference; null when not requested, unavailable, or absent from
      *                                    the pack
      * @param timings                     measured processing intervals
+     * @param providers                   distinct provider group names used for this resource, matching names in
+     *                                    interfaceShare; empty when no provider was recorded
      * @example registryPath iron_ingot
      * @example displayName Iron Ingot
      * @example timeSpentOn 10000
@@ -81,7 +85,8 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
     public record ResourceTiming(@Nullable String registryNamespace, @Nullable String registryPath,
         @NotNull String displayName, @Nullable Integer componentCount, @Nullable Integer damage, long timeSpentOn,
         long craftedTotal, double shareInCraftingTime, double shareInCraftingTimeCombined, double craftsPerSec,
-        @NotNull ArrayList<Timing> timings, @Nullable IconMappings.Reference icon, @Nullable String itemKey) {}
+        @NotNull ArrayList<Timing> timings, @Nullable IconMappings.Reference icon, @Nullable String itemKey,
+        @NotNull List<String> providers) {}
 
     /**
      * Processing measurements combined for pattern providers sharing a display name.
@@ -113,6 +118,10 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
             for (Pair<Long, Long> interval : info.itemShare.get(key)) {
                 timings.add(new Timing(interval.getKey(), interval.getValue()));
             }
+            ArrayList<String> providers = new ArrayList<>();
+            HashSet<String> recordedProviders = info.resourceProviders.get(key);
+            if (recordedProviders != null) providers.addAll(recordedProviders);
+            Collections.sort(providers);
             items.add(
                 new ResourceTiming(
                     resource.registryNamespace,
@@ -127,7 +136,8 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
                     rate,
                     timings,
                     resolveIcon(resource, mappings),
-                    resource.itemKey));
+                    resource.itemKey,
+                    providers));
         }
         items.sort((first, second) -> Double.compare(second.shareInCraftingTime(), first.shareInCraftingTime()));
         ArrayList<ProviderTiming> interfaceShare = new ArrayList<>();

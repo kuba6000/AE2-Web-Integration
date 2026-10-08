@@ -6,6 +6,8 @@ export type Translator = ReturnType<typeof createTranslator>;
 const translations: Dictionaries = {
     en: {
         historyFinalProduct: 'Final product',
+        historyCraftedBy: 'Crafted by',
+        historyProviderPages: 'Provider pages',
         bootstrapLoading: 'Loading server settings…',
         bootstrapError: 'Could not load server settings. Check the connection and try again.',
         historyStartedLabel: 'Started',
@@ -265,6 +267,8 @@ const translations: Dictionaries = {
     },
     pl: {
         historyFinalProduct: 'Produkt końcowy',
+        historyCraftedBy: 'Wytworzone przez',
+        historyProviderPages: 'Strony dostawców',
         bootstrapLoading: 'Wczytywanie ustawień serwera…',
         bootstrapError: 'Nie udało się wczytać ustawień serwera. Sprawdź połączenie i spróbuj ponownie.',
         historyStartedLabel: 'Rozpoczęcie',

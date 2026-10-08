@@ -121,6 +121,125 @@ const historyDetail = {
     ]
 };
 
+// Public browser/HTTP seam: resource-to-provider relationships navigate the existing history,
+// including later pages and names whose rendered text matches while their raw identity differs.
+test('history resource provider links reveal the exact group across sorting and pagination without refetching', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const provider = historyDetail.interfaceShare[0];
+    options.historyDetail = {
+        ...historyDetail,
+        items: [{ ...historyDetail.items[0], providers: ['§aShared machine', '§bShared machine', 'Unavailable'] }],
+        interfaceShare: [
+            {
+                ...provider,
+                name: '§aShared machine',
+                timingsCombined: 10000,
+                location: [{ dimensionId: 'test:green', x: 1, y: 2, z: 3 }]
+            },
+            ...Array.from({ length: 30 }, (_, index) => ({
+                ...provider,
+                name: `Machine ${index}`,
+                timingsCombined: 5000
+            })),
+            {
+                ...provider,
+                name: '§bShared machine',
+                timingsCombined: 1,
+                location: [{ dimensionId: 'test:blue', x: 4, y: 5, z: 6 }]
+            }
+        ]
+    };
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    const search = page.getByRole('searchbox', { name: 'Search history', exact: true });
+    const resource = page.getByRole('region', { name: 'Iron Ingot', exact: true });
+    await search.fill('Iron');
+    await resource.locator('summary').click();
+    const names = resource.getByRole('list', { name: 'Crafted by', exact: true });
+    await names.waitFor({ timeout: 2000 });
+    assert.equal(await names.getByRole('button').count(), 2);
+    assert.equal(await names.getByText('Unavailable', { exact: true }).count(), 1);
+    const initialRequests = options.requests.filter((request) => request.path.endsWith('/crafting-history/1')).length;
+    assert.equal(initialRequests, 1);
+    await names.getByRole('button', { name: 'Shared machine', exact: true }).nth(1).click();
+    await page.getByRole('list', { name: 'Pattern providers', exact: true }).waitFor();
+    assert.equal(await search.inputValue(), '');
+    const target = page.getByRole('region', { name: 'Shared machine', exact: true });
+    await target.getByText(/test:blue.*4.*5.*6/).waitFor({ timeout: 2000 });
+    assert.equal(await target.locator('summary').evaluate((node) => node === document.activeElement), true);
+    const pager = page.getByRole('navigation', { name: 'History pages', exact: true });
+    assert.equal(await pager.getByRole('button', { name: 'Previous page', exact: true }).isEnabled(), true);
+    assert.equal(await pager.getByRole('button', { name: 'Next page', exact: true }).isDisabled(), true);
+    const summaryBounds = await target.locator('summary').boundingBox();
+    const viewportBounds = await page.getByRole('region', { name: 'History', exact: true }).boundingBox();
+    const intervalHeading = await target.getByRole('heading', { name: 'Exact intervals', exact: true }).boundingBox();
+    assert.ok(
+        intervalHeading.y + intervalHeading.height <= viewportBounds.y + viewportBounds.height,
+        'Lookup must reveal expanded details, not only the target summary'
+    );
+    assert.ok(
+        summaryBounds.y >= viewportBounds.y - 1 &&
+            summaryBounds.y + summaryBounds.height <= viewportBounds.y + viewportBounds.height + 1,
+        JSON.stringify({ summaryBounds, viewportBounds })
+    );
+    await poll(page);
+    assert.equal(await target.locator('details').getAttribute('open'), '');
+    assert.equal(
+        options.requests.filter((request) => request.path.endsWith('/crafting-history/1')).length,
+        initialRequests
+    );
+    await page.getByRole('button', { name: 'Resources', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Sort by', exact: true }).selectOption('name');
+    await resource.locator('summary').click();
+    await names.getByRole('button', { name: 'Shared machine', exact: true }).first().click();
+    const targets = page.getByRole('region', { name: 'Shared machine', exact: true });
+    await targets
+        .first()
+        .getByText(/test:green.*1.*2.*3/)
+        .waitFor({ timeout: 2000 });
+    assert.equal(
+        await targets
+            .first()
+            .locator('summary')
+            .evaluate((node) => node === document.activeElement),
+        true
+    );
+    assert.equal(await targets.last().locator('details').getAttribute('open'), null);
+});
+
+test('history mounts provider links only for expanded resources and keeps every large relation reachable', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const names = Array.from({ length: 61 }, (_, index) => `Machine ${String(index).padStart(2, '0')}`);
+    options.historyDetail = {
+        ...historyDetail,
+        items: [
+            { ...historyDetail.items[0], providers: names },
+            { ...historyDetail.items[0], displayName: 'Unmeasured resource', providers: [] }
+        ],
+        interfaceShare: names.map((name) => ({ ...historyDetail.interfaceShare[0], name }))
+    };
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    const resource = page.getByRole('region', { name: 'Iron Ingot', exact: true });
+    await resource.waitFor();
+    assert.equal(await resource.getByRole('list', { name: 'Crafted by', exact: true }).count(), 0);
+    await resource.locator('summary').click();
+    const providers = resource.getByRole('list', { name: 'Crafted by', exact: true });
+    await providers.waitFor();
+    assert.equal(await providers.getByRole('button').count(), 25);
+    const pages = resource.getByRole('navigation', { name: 'Provider pages', exact: true });
+    await pages.getByRole('button', { name: 'Last page', exact: true }).click();
+    assert.equal(await providers.getByRole('button').count(), 11);
+    await providers.getByRole('button', { name: 'Machine 60', exact: true }).click();
+    const group = page.getByRole('region', { name: 'Machine 60', exact: true });
+    await group.getByRole('list', { name: 'Exact intervals', exact: true }).waitFor();
+    assert.equal(await group.locator('summary').evaluate((node) => node === document.activeElement), true);
+    await page.getByRole('button', { name: 'Resources', exact: true }).click();
+    const empty = page.getByRole('region', { name: 'Unmeasured resource', exact: true });
+    await empty.locator('summary').click();
+    await empty.getByRole('list', { name: 'Exact intervals', exact: true }).waitFor();
+    assert.equal(await empty.getByRole('list', { name: 'Crafted by', exact: true }).count(), 0);
+    assert.equal(await empty.getByRole('button').count(), 0);
+});
+
 test('history prioritizes only the measured final resource identity and keeps search effective', async (t) => {
     const { page, options, base } = await fixture(t);
     const result = {

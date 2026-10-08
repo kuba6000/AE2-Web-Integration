@@ -66,7 +66,14 @@ function activityTrack(timings: Timing[], started: number, duration: number, lab
     return track;
 }
 
-function pager(total: number, pageSize: number, label: string, locale: Translator, render: (page: number) => void) {
+function pager(
+    total: number,
+    pageSize: number,
+    label: string,
+    locale: Translator,
+    render: (page: number) => void,
+    initialPage = 0
+) {
     let page = 0;
     const last = Math.max(0, Math.ceil(total / pageSize) - 1);
     const nav = element('nav');
@@ -90,7 +97,7 @@ function pager(total: number, pageSize: number, label: string, locale: Translato
     final.onclick = () => update(last);
     nav.append(previous, count, next, final);
     nav.hidden = total <= pageSize;
-    update(0);
+    update(initialPage);
     return nav;
 }
 
@@ -154,6 +161,7 @@ export function renderHistoryTimeline(
     const empty = element('p', t('historyNoMatches'));
     const pagination = element('div');
     let iconTargets: IconTarget[] = [];
+    const providerGroups = new Map(snapshot.interfaceShare.map((provider) => [provider.name, provider]));
     container.append(tabs, toolbar, legend, columns, axis, list, empty, pagination);
 
     const isFinalProduct = (row: ResourceTiming | ProviderTiming) =>
@@ -220,6 +228,38 @@ export function renderHistoryTimeline(
                 metric(t('cpuRate'), `${rate}/s`);
                 metric(t('cpuElapsedShare'), `${number(resource.shareInCraftingTimeCombined * 100)}%`);
                 metric(t('cpuProcessingShare'), `${number(resource.shareInCraftingTime * 100)}%`);
+                if (resource.providers?.length) {
+                    const names = element('ul');
+                    names.className = 'history-resource-providers';
+                    names.setAttribute('aria-label', t('historyCraftedBy'));
+                    const namesPager = pager(
+                        resource.providers.length,
+                        25,
+                        t('historyProviderPages'),
+                        locale,
+                        (page) => {
+                            names.replaceChildren();
+                            for (const name of resource.providers.slice(page * 25, (page + 1) * 25)) {
+                                const item = element('li');
+                                const group = providerGroups.get(name);
+                                if (group) {
+                                    const link = element('button');
+                                    link.type = 'button';
+                                    link.className = 'history-provider-link';
+                                    link.append(renderMinecraftText(name));
+                                    link.onclick = () => {
+                                        providers = true;
+                                        search.value = '';
+                                        render(group);
+                                    };
+                                    item.append(link);
+                                } else item.append(renderMinecraftText(name));
+                                names.append(item);
+                            }
+                        }
+                    );
+                    content.append(element('h5', t('historyCraftedBy')), names, namesPager);
+                }
             }
             metric(t('historyIntervalCount'), number(row.timings.length));
             content.append(metrics);
@@ -260,10 +300,10 @@ export function renderHistoryTimeline(
         section.append(details);
         const item = element('li');
         item.append(section);
-        return item;
+        return { item, section, details, summary };
     }
 
-    function render() {
+    function render(targetProvider?: ProviderTiming) {
         resourcesButton.setAttribute('aria-pressed', String(!providers));
         providersButton.setAttribute('aria-pressed', String(providers));
         const modeName = t(providers ? 'historyProviders' : 'resources');
@@ -297,17 +337,42 @@ export function renderHistoryTimeline(
             return amount(b) - amount(a);
         });
         empty.hidden = matching.length > 0;
-        let currentPage = 0;
+        const targetIndex = targetProvider ? matching.indexOf(targetProvider) : -1;
+        let currentPage = Math.max(0, Math.floor(targetIndex / 25));
         pagination.replaceChildren(
-            pager(matching.length, 25, t('historyPages'), locale, (page) => {
-                iconTargets = [];
-                list.replaceChildren();
-                for (let i = page * 25; i < Math.min((page + 1) * 25, matching.length); i++)
-                    list.append(createRow(matching[i]));
-                visibleIcons(iconTargets);
-                if (page !== currentPage) columns.scrollIntoView({ block: 'start' });
-                currentPage = page;
-            })
+            pager(
+                matching.length,
+                25,
+                t('historyPages'),
+                locale,
+                (page) => {
+                    iconTargets = [];
+                    list.replaceChildren();
+                    let target: ReturnType<typeof createRow> | null = null;
+                    for (let i = page * 25; i < Math.min((page + 1) * 25, matching.length); i++) {
+                        const row = createRow(matching[i]);
+                        list.append(row.item);
+                        if (matching[i] === targetProvider) target = row;
+                    }
+                    visibleIcons(iconTargets);
+                    if (target) {
+                        const heading = target.summary;
+                        target.details.addEventListener(
+                            'toggle',
+                            () => {
+                                if (heading.isConnected) heading.scrollIntoView({ block: 'start' });
+                            },
+                            { once: true }
+                        );
+                        target.details.open = true;
+                        target.section.classList.add('history-provider-target');
+                        target.summary.focus({ preventScroll: true });
+                        targetProvider = undefined;
+                    } else if (page !== currentPage) columns.scrollIntoView({ block: 'start' });
+                    currentPage = page;
+                },
+                currentPage
+            )
         );
     }
     resourcesButton.onclick = () => {
@@ -320,8 +385,8 @@ export function renderHistoryTimeline(
         search.value = '';
         render();
     };
-    search.oninput = render;
-    sort.onchange = render;
+    search.oninput = () => render();
+    sort.onchange = () => render();
     render();
     return container;
 }

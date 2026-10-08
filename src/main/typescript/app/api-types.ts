@@ -119,6 +119,7 @@ export type HistoryEntry = {
 export type Timing = { started: number; ended: number };
 export type ResourceTiming = {
     itemKey: string | null;
+    providers: string[];
     icon?: IconReference | null;
     displayName: string;
     registryNamespace: string | null;

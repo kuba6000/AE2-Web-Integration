@@ -65,6 +65,8 @@ public class AE2JobTracker {
         public HashMap<IAEKey, Long> craftedTotal = new HashMap<>();
         public HashMap<IAEKey, Long> waitingFor = new HashMap<>();
         public HashMap<IAEKey, ArrayList<Pair<Long, Long>>> itemShare = new HashMap<>();
+        /** Provider groups used for each output, retained after the active waiting intervals are removed. */
+        public final HashMap<IAEKey, HashSet<String>> resourceProviders = new HashMap<>();
         public HashMap<AEInterface, ArrayList<Pair<Long, Long>>> interfaceShare = new HashMap<>();
         public HashMap<AEInterface, Long> interfaceStarted = new HashMap<>();
         public HashMap<String, AEInterface> interfaceLookup = new HashMap<>();
@@ -207,6 +209,8 @@ public class AE2JobTracker {
             IAEGenericStack[] condensedOutputs = details.web$getCondensedOutputs();
             for (IAEGenericStack out : condensedOutputs) {
                 IAEKey outKey = out.web$what();
+                info.resourceProviders.computeIfAbsent(outKey, k -> new HashSet<>())
+                    .add(aeInterface.name);
                 info.interfaceWaitingForLookup.computeIfAbsent(outKey, k -> new HashMap<>())
                     .putIfAbsent(aeInterface, itemList);
                 itemList.add(outKey);

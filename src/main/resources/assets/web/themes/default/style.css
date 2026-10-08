@@ -703,6 +703,7 @@ nav {
 }
 .history-analysis-summary {
     position: relative;
+    scroll-margin-top: 24px;
     padding: 14px 12px 14px 26px;
     list-style: none;
     cursor: pointer;
@@ -790,6 +791,46 @@ details[open] > .history-analysis-summary::before {
     display: block;
     color: var(--muted);
     margin-bottom: 12px;
+}
+.history-resource-providers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 16px;
+    padding: 0;
+    margin: 0 0 16px;
+    list-style: none;
+}
+.history-provider-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    color: light-dark(#35566d, #b2cedd);
+    font: inherit;
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    overflow-wrap: anywhere;
+}
+.history-provider-link:hover {
+    background: none;
+    color: var(--text);
+}
+.history-provider-target {
+    animation: history-provider-arrival 1.5s ease-out;
+}
+@keyframes history-provider-arrival {
+    from {
+        box-shadow: inset 0 0 0 2px light-dark(#496c80, #8eb0c4);
+    }
+    to {
+        box-shadow: inset 0 0 0 2px transparent;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .history-provider-target {
+        animation: none;
+    }
 }
 .history-analysis-details ol {
     padding-left: 28px;
