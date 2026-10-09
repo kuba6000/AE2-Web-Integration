@@ -14,7 +14,6 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.api.ResourceDescription;
 import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -25,7 +24,6 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
  * A completed or cancelled crafting job with resource and pattern-provider timing measurements.
  *
  * @param finalOutput    detached snapshot of the final crafting output
- * @param icon           product atlas reference; null when not requested, unavailable, or absent from the pack
  * @param timeStarted    crafting start in Unix epoch milliseconds
  * @param timeDone       crafting completion or cancellation in Unix epoch milliseconds
  * @param wasCancelled   whether the crafting work was cancelled
@@ -36,9 +34,8 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
  * @example wasCancelled false
  */
 @Desugar
-public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable IconMappings.Reference icon,
-    long timeStarted, long timeDone, boolean wasCancelled, @NotNull ArrayList<ResourceTiming> items,
-    @NotNull ArrayList<ProviderTiming> interfaceShare) {
+public record CraftingHistory(@NotNull ResourceOutput finalOutput, long timeStarted, long timeDone,
+    boolean wasCancelled, @NotNull ArrayList<ResourceTiming> items, @NotNull ArrayList<ProviderTiming> interfaceShare) {
 
     /**
      * One measured processing interval with absolute timestamps.
@@ -53,7 +50,7 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
 
     /** Completed processing measurements for one resource identity. */
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
-    public static final class ResourceTiming extends ResourceDescription {
+    public static final class ResourceTiming extends ResourceView {
 
         /**
          * Measured processing time for this resource, in milliseconds.
@@ -88,10 +85,6 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
         public final double craftsPerSec;
         /** Measured processing intervals. */
         public final @NotNull ArrayList<Timing> timings;
-        /** Resource atlas reference; null when not requested, unavailable, or absent from the pack. */
-        public final @Nullable IconMappings.Reference icon;
-        /** Exact stable resource identity, or null when it could not be captured. */
-        public final @Nullable String itemKey;
         /**
          * Distinct provider group names used for this resource, matching names in interfaceShare; empty when no
          * provider was recorded.
@@ -101,17 +94,15 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
         public ResourceTiming(@Nullable String registryNamespace, @Nullable String registryPath,
             @NotNull String displayName, int componentCount, int damage, long timeSpentOn, long craftedTotal,
             double shareInCraftingTime, double shareInCraftingTimeCombined, double craftsPerSec,
-            @NotNull ArrayList<Timing> timings, @Nullable IconMappings.Reference icon, @Nullable String itemKey,
+            @NotNull ArrayList<Timing> timings, @Nullable IconMappings.Reference icon, @Nullable StableKey itemKey,
             @NotNull List<String> providers) {
-            super(registryNamespace, registryPath, displayName, componentCount, damage);
+            super(registryNamespace, registryPath, displayName, componentCount, damage, itemKey, icon);
             this.timeSpentOn = timeSpentOn;
             this.craftedTotal = craftedTotal;
             this.shareInCraftingTime = shareInCraftingTime;
             this.shareInCraftingTimeCombined = shareInCraftingTimeCombined;
             this.craftsPerSec = craftsPerSec;
             this.timings = timings;
-            this.icon = icon;
-            this.itemKey = itemKey;
             this.providers = providers;
         }
     }
@@ -180,8 +171,7 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
         }
         interfaceShare.sort((first, second) -> Long.compare(second.timingsCombined(), first.timingsCombined()));
         return new CraftingHistory(
-            info.finalOutput,
-            resolveIcon(info.finalOutput, mappings),
+            new ResourceOutput(info.finalOutput, mappings),
             info.timeStarted,
             info.timeDone,
             info.wasCancelled,
@@ -192,6 +182,6 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
     private static @Nullable IconMappings.Reference resolveIcon(@NotNull ResourceStack resource,
         @Nullable IconMappings mappings) {
         return mappings == null || resource.itemKey == null ? null
-            : mappings.resolve(StableKey.parse(resource.itemKey), resource.iconBaseKey);
+            : mappings.resolve(resource.itemKey, resource.iconBaseKey);
     }
 }

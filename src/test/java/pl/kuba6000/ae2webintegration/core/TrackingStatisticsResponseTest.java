@@ -107,7 +107,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 .getAsInt());
         assertFalse(item.has("itemId"));
         assertEquals(
-            output.itemKey,
+            output.itemKey.toString(),
             item.get("itemKey")
                 .getAsString());
         assertFalse(item.has("itemName"));
@@ -144,6 +144,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 .isJsonNull());
         assertTrue(
             withoutPack.getAsJsonObject("data")
+                .getAsJsonObject("finalOutput")
                 .get("icon")
                 .isJsonNull());
         assertTrue(
@@ -170,6 +171,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 case "web$getKey" -> StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
                 case "web$getName" -> "cpu";
                 case "web$isBusy" -> true;
+                case "web$getSelectionMode" -> null;
                 case "web$acceptsPlayerJobs" -> false;
                 case "web$getAvailableStorage" -> 64L;
                 case "web$getAllItems" -> null;

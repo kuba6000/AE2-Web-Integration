@@ -15,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
@@ -232,6 +233,10 @@ class CoreEngineLifecycleTest extends GridTestScope {
         }
 
         @Override
+        public CpuSelectionMode web$getSelectionMode() {
+            return null;
+        }
+
         public boolean web$acceptsPlayerJobs() {
             return !web$isBusy();
         }

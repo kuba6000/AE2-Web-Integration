@@ -20,21 +20,14 @@ public final class ResourceStack extends ResourceDescription {
      * @example 64
      */
     public final long quantity;
-    /**
-     * Stable resource key, or null when an identity could not be captured.
-     *
-     * @example AAAAAAAAAAAAAAAAAAAAAA
-     */
-    public final @Nullable String itemKey;
     /** Detached fallback identity for tracked history; captured only when the installed pack lacks the exact icon. */
     public final transient @Nullable StableKey iconBaseKey;
 
     private ResourceStack(@Nullable String registryNamespace, @Nullable String registryPath, int componentCount,
-        int damage, @NotNull String displayName, long quantity, @Nullable String itemKey,
+        int damage, @NotNull String displayName, long quantity, @Nullable StableKey itemKey,
         @Nullable StableKey iconBaseKey) {
-        super(registryNamespace, registryPath, displayName, componentCount, damage);
+        super(registryNamespace, registryPath, displayName, componentCount, damage, itemKey);
         this.quantity = quantity;
-        this.itemKey = itemKey;
         this.iconBaseKey = iconBaseKey;
     }
 
@@ -86,7 +79,7 @@ public final class ResourceStack extends ResourceDescription {
             damage,
             displayName,
             quantity,
-            itemKey.toString(),
+            itemKey,
             base);
     }
 

@@ -16,6 +16,7 @@ import java.util.LinkedHashSet;
 
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,7 @@ import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpServer;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPUList;
@@ -99,6 +101,33 @@ class CpuPauseHttpTest extends GridTestScope {
     void stop() {
         if (server != null) server.stop(0);
         AE2Controller.AE2Interface = previousAe;
+    }
+
+    @Test
+    void selectionModeRoundTripsIndependentlyOfPlayerAdmissionAndSupportsUnknown() throws Exception {
+        CpuSelectionMode[] modes = { CpuSelectionMode.PLAYER_ONLY, CpuSelectionMode.ALL,
+            CpuSelectionMode.AUTOMATION_ONLY, null };
+        String[] wireValues = { "PLAYER_ONLY", "ALL", "AUTOMATION_ONLY", null };
+        for (int index = 0; index < modes.length; index++) {
+            first.selectionMode = modes[index];
+            first.acceptsPlayerJobs = index % 2 == 0;
+            JsonObject summary = get(base).getAsJsonObject(first.id);
+            JsonObject detail = get(base + "/" + first.id);
+            for (JsonObject data : Arrays.asList(summary, detail)) {
+                assertTrue(data.has("selectionMode"));
+                if (wireValues[index] == null) assertTrue(
+                    data.get("selectionMode")
+                        .isJsonNull());
+                else assertEquals(
+                    wireValues[index],
+                    data.get("selectionMode")
+                        .getAsString());
+            }
+            assertEquals(
+                first.acceptsPlayerJobs,
+                summary.get("acceptsPlayerJobs")
+                    .getAsBoolean());
+        }
     }
 
     @Test
@@ -339,6 +368,8 @@ class CpuPauseHttpTest extends GridTestScope {
         final long storage;
         boolean busy;
         boolean acceptsPlayerJobs;
+        @Nullable
+        CpuSelectionMode selectionMode;
 
         TestCpu(String id, String name, long storage) {
             this.id = id;
@@ -369,6 +400,10 @@ class CpuPauseHttpTest extends GridTestScope {
 
         public boolean web$acceptsPlayerJobs() {
             return acceptsPlayerJobs;
+        }
+
+        public @Nullable CpuSelectionMode web$getSelectionMode() {
+            return selectionMode;
         }
 
         public boolean web$isBusy() {

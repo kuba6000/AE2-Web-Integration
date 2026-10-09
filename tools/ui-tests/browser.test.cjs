@@ -18,7 +18,8 @@ const iron = {
     quantity: 128640,
     craftable: true,
     resourceType: 'ITEM',
-    itemKey: 'iron'
+    itemKey: 'iron',
+    icon: null
 };
 const quartz = {
     displayName: 'Certus Quartz Crystal',
@@ -29,7 +30,8 @@ const quartz = {
     quantity: 42,
     craftable: false,
     resourceType: 'ITEM',
-    itemKey: 'quartz'
+    itemKey: 'quartz',
+    icon: null
 };
 const readyPlan = {
     isDone: true,
@@ -42,6 +44,8 @@ const readyPlan = {
             componentCount: 0,
             damage: 0,
             displayName: 'Iron Ingot',
+            itemKey: null,
+            icon: null,
             stored: 4,
             requested: 12,
             missing: 0,
@@ -52,6 +56,7 @@ const readyPlan = {
 };
 const cpu = {
     acceptsPlayerJobs: true,
+    selectionMode: null,
     name: 'Assembler',
     isBusy: false,
     supportsPause: false,
@@ -61,6 +66,7 @@ const cpu = {
     coProcessors: 1
 };
 const cpuWork = {
+    selectionMode: null,
     size: 8192,
     isBusy: true,
     supportsPause: false,
@@ -76,6 +82,8 @@ const cpuWork = {
             componentCount: 0,
             damage: 0,
             displayName: 'Iron Ingot',
+            itemKey: null,
+            icon: null,
             active: 4,
             pending: 6,
             stored: 2,
@@ -99,6 +107,8 @@ const historyDetail = {
     items: [
         {
             displayName: 'Iron Ingot',
+            itemKey: null,
+            icon: null,
             registryNamespace: 'minecraft',
             registryPath: 'iron_ingot',
             componentCount: 0,
@@ -1293,13 +1303,13 @@ test('CPU overview and history products share atlas pages and respect the displa
     await atlasFixture(page, options);
     const icon = { page: 0, x: 0, y: 0 };
     options.cpus = {
-        busy: { ...cpu, name: 'Busy processor', isBusy: true, finalOutput: iron, icon },
-        idle: { ...cpu, name: 'Idle processor', finalOutput: iron, icon },
-        unknown: { ...cpu, name: 'Unknown output', isBusy: true, finalOutput: null, icon }
+        busy: { ...cpu, name: 'Busy processor', isBusy: true, finalOutput: { ...iron, icon } },
+        idle: { ...cpu, name: 'Idle processor', finalOutput: { ...iron, icon } },
+        unknown: { ...cpu, name: 'Unknown output', isBusy: true, finalOutput: null }
     };
     options.history = [
-        { ...historyEntry, icon },
-        { ...historyEntry, id: 2, icon: null }
+        { ...historyEntry, finalOutput: { ...historyEntry.finalOutput, icon } },
+        { ...historyEntry, id: 2, finalOutput: { ...historyEntry.finalOutput, icon: null } }
     ];
     const atlasReads = () => options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
     await page.goto(`${base}#/grids/${gridA}/cpus`);
@@ -1379,7 +1389,7 @@ test('history details display product and paged resource icons only when enabled
     const icon = { page: 0, x: 0, y: 0 };
     options.historyDetail = {
         ...historyDetail,
-        icon,
+        finalOutput: { ...historyDetail.finalOutput, icon },
         items: Array.from({ length: 27 }, (_, index) => ({
             ...historyDetail.items[0],
             displayName: `Material ${index}`,
@@ -1437,7 +1447,7 @@ test('history detail icons refresh after late pack discovery and pack replacemen
     options.packDelay = 150;
     options.historyDetail = {
         ...historyDetail,
-        icon: { page: 0, x: 0, y: 0 },
+        finalOutput: { ...historyDetail.finalOutput, icon: { page: 0, x: 0, y: 0 } },
         items: [{ ...historyDetail.items[0], icon: { page: 0, x: 64, y: 0 } }]
     };
     await page.goto(`${base}#/grids/${gridA}/history/1`);
@@ -1481,8 +1491,8 @@ for (const view of ['cpus', 'history']) {
         const { page, options, base } = await fixture(t);
         await atlasFixture(page, options);
         const icon = { page: 0, x: 0, y: 0 };
-        options.cpus = { busy: { ...cpu, name: 'Busy processor', isBusy: true, finalOutput: iron, icon } };
-        options.history = [{ ...historyEntry, icon }];
+        options.cpus = { busy: { ...cpu, name: 'Busy processor', isBusy: true, finalOutput: { ...iron, icon } } };
+        options.history = [{ ...historyEntry, finalOutput: { ...historyEntry.finalOutput, icon } }];
         const endpoint = view === 'cpus' ? '/cpus' : '/crafting-history';
         const iconSelector = view === 'cpus' ? '.cpu-card .resource-icon' : '.history-list .resource-icon';
         options.pageStatus = 404;
@@ -1530,8 +1540,8 @@ for (const view of ['cpus', 'history']) {
         const { page, options, base } = await fixture(t);
         await atlasFixture(page, options);
         const icon = { page: 0, x: 0, y: 0 };
-        options.cpus = { busy: { ...cpu, name: 'Busy processor', isBusy: true, finalOutput: iron, icon } };
-        options.history = [{ ...historyEntry, icon }];
+        options.cpus = { busy: { ...cpu, name: 'Busy processor', isBusy: true, finalOutput: { ...iron, icon } } };
+        options.history = [{ ...historyEntry, finalOutput: { ...historyEntry.finalOutput, icon } }];
         const endpoint = view === 'cpus' ? '/cpus' : '/crafting-history';
         let release;
         const captured = new Promise((resolve) => {
@@ -1574,12 +1584,11 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
     options.cpuDetails = {
         'cpu-a': {
             ...cpuWork,
-            finalOutput: quartz,
-            icon: { page: 0, x: 64, y: 0 },
+            finalOutput: { ...quartz, icon: { page: 0, x: 64, y: 0 } },
             items: [{ ...cpuWork.items[0], itemKey: 'iron', icon: { page: 0, x: 0, y: 0 } }]
         }
     };
-    options.cpus['cpu-a'] = { ...cpu, isBusy: true, finalOutput: quartz, icon: { page: 0, x: 64, y: 0 } };
+    options.cpus['cpu-a'] = { ...cpu, isBusy: true, finalOutput: { ...quartz, icon: { page: 0, x: 64, y: 0 } } };
     const pages = () => options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.waitForFunction(
@@ -1963,7 +1972,8 @@ test('Home retains the selected network and owns switching while Web settings ow
         `#/grids/${gridA}/settings`
     );
     assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
-    assert.equal(await page.getByRole('button', { name: 'Refresh', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Refresh', exact: true }).count(), 1);
+    assert.equal(await page.locator('header').getByRole('button', { name: 'Refresh', exact: true }).isVisible(), true);
     assert.equal(await page.getByRole('checkbox', { name: 'Refresh automatically' }).count(), 0);
     assert.equal(await page.locator('header').getByRole('combobox').count(), 0);
     assert.equal(await page.locator('#selected-network').isVisible(), false);
@@ -2490,7 +2500,7 @@ test('CPU work, plans and history retain resources with unavailable registry met
         componentCount: 0,
         damage: 0
     };
-    const finalOutput = { ...metadata, itemKey: null, quantity: 12 };
+    const finalOutput = { ...metadata, itemKey: null, icon: null, quantity: 12 };
     options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], ...metadata }] };
     options.cpuDetails = { 'cpu-a': { ...cpuWork, finalOutput, items: [{ ...cpuWork.items[0], ...metadata }] } };
     options.history = [{ ...historyEntry, finalOutput }];
@@ -3773,6 +3783,72 @@ test('CPU memory uses binary units through exabytes in overview and current work
 });
 
 // Public browser/HTTP seam: navigation keeps a bounded selector and never mutates CPU work.
+test('CPU automation sorting uses native modes, keeps unknown last, and preserves saved intent without capability', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.capabilities.cpuSelectionMode = true;
+    options.cpus = {
+        'cpu-c': { ...cpu, name: 'Alpha', selectionMode: 'AUTOMATION_ONLY', acceptsPlayerJobs: true },
+        'cpu-a': { ...cpu, name: 'Beta', selectionMode: 'PLAYER_ONLY', acceptsPlayerJobs: false },
+        'cpu-d': { ...cpu, name: 'Gamma', selectionMode: 'ALL' },
+        'cpu-b': { ...cpu, name: 'Gamma', selectionMode: 'ALL' },
+        'cpu-z': { ...cpu, name: 'Aardvark', selectionMode: null },
+        'cpu-y': { ...cpu, name: 'Zulu', selectionMode: null }
+    };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, selectionMode: 'PLAYER_ONLY' };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const panel = page.getByRole('complementary', { name: 'CPUs', exact: true });
+    const links = panel.getByRole('region', { name: 'CPU selector', exact: true }).getByRole('link');
+    const order = () => links.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href').split('/').at(-1)));
+    for (const criterion of ['Name', 'Capacity', 'Coprocessors', 'Busy state'])
+        await panel.getByRole('button', { name: `Sort CPUs: ${criterion}`, exact: true }).click();
+    await panel.getByRole('button', { name: 'Sort CPUs: Automation', exact: true }).waitFor({ timeout: 2000 });
+    assert.deepEqual(await order(), ['cpu-a', 'cpu-b', 'cpu-d', 'cpu-c', 'cpu-z', 'cpu-y']);
+    await panel.getByRole('button', { name: 'CPU sort order: Ascending', exact: true }).click();
+    assert.deepEqual(await order(), ['cpu-c', 'cpu-b', 'cpu-d', 'cpu-a', 'cpu-z', 'cpu-y']);
+    await page.mouse.move(0, 0);
+    await panel.getByRole('link', { name: /cpu-c/ }).scrollIntoViewIfNeeded();
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await panel.getByRole('link', { name: /cpu-c/ }).focus();
+    await page
+        .getByRole('tooltip')
+        .filter({ hasText: /Automatic selection: Automation only/ })
+        .waitFor();
+    assert.match(await page.getByRole('tooltip').innerText(), /not permission to submit work/);
+    await panel.getByRole('link', { name: /cpu-z/ }).scrollIntoViewIfNeeded();
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await panel.getByRole('link', { name: /cpu-z/ }).focus();
+    await page
+        .getByRole('tooltip')
+        .filter({ hasText: /Automatic selection: Unsupported or unknown/ })
+        .waitFor();
+    options.capabilities.cpuSelectionMode = false;
+    await page.reload();
+    await panel.getByRole('button', { name: 'Sort CPUs: Name', exact: true }).waitFor();
+    assert.equal(await panel.getByRole('button', { name: 'Sort CPUs: Automation', exact: true }).count(), 0);
+    await links.first().waitFor();
+    assert.deepEqual(await order(), ['cpu-y', 'cpu-b', 'cpu-d', 'cpu-a', 'cpu-c', 'cpu-z']);
+    await panel.getByRole('link', { name: /cpu-y/ }).focus();
+    await page.getByRole('tooltip').waitFor();
+    assert.doesNotMatch(await page.getByRole('tooltip').innerText(), /Automatic selection/);
+    options.capabilities.cpuSelectionMode = true;
+    await page.reload();
+    await panel.getByRole('button', { name: 'Sort CPUs: Automation', exact: true }).waitFor();
+    await links.first().waitFor();
+    assert.deepEqual(await order(), ['cpu-c', 'cpu-b', 'cpu-d', 'cpu-a', 'cpu-z', 'cpu-y']);
+    options.cpus['cpu-a'].selectionMode = 'AUTOMATION_ONLY';
+    options.cpuDetails['cpu-a'].selectionMode = 'ALL';
+    await poll(page);
+    await page.getByRole('region', { name: 'Current job', exact: true }).focus();
+    await page
+        .getByRole('tooltip')
+        .filter({ hasText: /Automatic selection: Players and automation/ })
+        .waitFor();
+    assert.equal(
+        options.requests.some((request) => request.method !== 'GET'),
+        false
+    );
+});
+
 test('CPU selector cycles summary sorting with stable ties and remembers criterion and direction', async (t) => {
     const { page, options, base } = await fixture(t);
     options.cpus = {
@@ -7095,8 +7171,8 @@ test('Home renders summary icons and keeps unavailable networks explicit in the 
     await seedAutomaticRefresh(page, base, true);
     await atlasFixture(page, options);
     options.cpusByGrid = {
-        [gridA]: { shared: { ...cpu, isBusy: true, finalOutput: iron, icon: { page: 0, x: 0, y: 0 } } },
-        [gridB]: { shared: { ...cpu, isBusy: true, finalOutput: quartz, icon: { page: 0, x: 64, y: 0 } } }
+        [gridA]: { shared: { ...cpu, isBusy: true, finalOutput: { ...iron, icon: { page: 0, x: 0, y: 0 } } } },
+        [gridB]: { shared: { ...cpu, isBusy: true, finalOutput: { ...quartz, icon: { page: 0, x: 64, y: 0 } } } }
     };
     await page.goto(base);
     const product = page.getByRole('link', { name: /Iron Ingot/ });
@@ -7172,8 +7248,8 @@ test('Home bounds cross-network reads and keeps per-response atlas identity and 
     await seedAutomaticRefresh(page, base, false);
     await atlasFixture(page, options);
     options.cpusByGrid = {
-        [gridA]: { running: { ...cpu, isBusy: true, finalOutput: iron, icon: { page: 0, x: 0, y: 0 } } },
-        [gridB]: { running: { ...cpu, isBusy: true, finalOutput: quartz, icon: { page: 0, x: 64, y: 0 } } }
+        [gridA]: { running: { ...cpu, isBusy: true, finalOutput: { ...iron, icon: { page: 0, x: 0, y: 0 } } } },
+        [gridB]: { running: { ...cpu, isBusy: true, finalOutput: { ...quartz, icon: { page: 0, x: 64, y: 0 } } } }
     };
     options.iconsByGrid = {
         [gridA]: options.icons,

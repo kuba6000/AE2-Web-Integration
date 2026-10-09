@@ -3,6 +3,8 @@ package pl.kuba6000.ae2webintegration.core.api;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+
 /** Shared resource metadata captured from native data on the server thread. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class ResourceDescription {
@@ -29,12 +31,20 @@ public class ResourceDescription {
      */
     public final @NotNull String displayName;
 
+    /**
+     * Stable resource key, or null when an identity could not be captured.
+     *
+     * @example AAAAAAAAAAAAAAAAAAAAAA
+     */
+    public final @Nullable StableKey itemKey;
+
     protected ResourceDescription(@Nullable String registryNamespace, @Nullable String registryPath,
-        @NotNull String displayName, int componentCount, int damage) {
+        @NotNull String displayName, int componentCount, int damage, @Nullable StableKey itemKey) {
         this.registryNamespace = registryNamespace;
         this.registryPath = registryPath;
         this.displayName = displayName;
         this.componentCount = componentCount;
         this.damage = damage;
+        this.itemKey = itemKey;
     }
 }

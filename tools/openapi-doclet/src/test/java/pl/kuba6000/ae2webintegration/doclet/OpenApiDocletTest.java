@@ -33,6 +33,53 @@ class OpenApiDocletTest {
     Path directory;
 
     @Test
+    void nullableSelectionPolicyDocumentsUnknownSeparatelyFromAllSources() throws Exception {
+        List<Path> sources = fixture("""
+            /** CPU metadata.
+             * @response 200 {@link Cpu} CPU metadata.
+             */
+            @Endpoint(method = HttpMethod.GET, path = "/api/cpus")
+            public class Grids {
+                public enum SelectionMode { PLAYER_ONLY, AUTOMATION_ONLY, ALL }
+                public static class Cpu {
+                    /** Native automatic-selection policy; null when unsupported or unknown. */
+                    public @org.jetbrains.annotations.Nullable SelectionMode selectionMode;
+                }
+            }
+            """);
+        Path output = directory.resolve("selection-mode.json");
+        Result result = generate(sources, output);
+        assertTrue(result.success(), result.diagnostics());
+        JsonObject schema = JsonParser.parseString(Files.readString(output))
+            .getAsJsonObject()
+            .getAsJsonObject("components")
+            .getAsJsonObject("schemas")
+            .getAsJsonObject("GridsCpu");
+        assertTrue(
+            schema.getAsJsonArray("required")
+                .contains(JsonParser.parseString("\"selectionMode\"")));
+        JsonObject mode = schema.getAsJsonObject("properties")
+            .getAsJsonObject("selectionMode");
+        assertTrue(
+            mode.get("description")
+                .getAsString()
+                .contains("automatic-selection"));
+        assertEquals(
+            JsonParser.parseString("[\"PLAYER_ONLY\",\"AUTOMATION_ONLY\",\"ALL\"]"),
+            mode.getAsJsonArray("anyOf")
+                .get(0)
+                .getAsJsonObject()
+                .getAsJsonArray("enum"));
+        assertEquals(
+            "null",
+            mode.getAsJsonArray("anyOf")
+                .get(1)
+                .getAsJsonObject()
+                .get("type")
+                .getAsString());
+    }
+
+    @Test
     void resourceResponseKeepsFlatDocumentedMetadataAndExcludesTransientState() throws Exception {
         List<Path> sources = fixture("""
             /** Lists resources.
@@ -53,8 +100,17 @@ class OpenApiDocletTest {
                     public int damage;
                     /** Component count; zero when absent or unsupported. */
                     public int componentCount;
+                    /** Stable resource identifier; null when unavailable.
+                     * @example AAAAAAAAAAAAAAAAAAAAAA
+                     */
+                    public @org.jetbrains.annotations.Nullable StableKey itemKey;
                 }
-                public static class Resource extends Description {
+                public static class View extends Description {
+                    /** Atlas reference within this response; null when unavailable. */
+                    public @org.jetbrains.annotations.Nullable Icon icon;
+                }
+                public record Icon(int page, int x, int y) {}
+                public static class Resource extends View {
                     /** Number of resource units.
                      * @example 64
                      */
@@ -72,9 +128,16 @@ class OpenApiDocletTest {
             .getAsJsonObject("schemas")
             .getAsJsonObject("GridsResource");
         JsonObject properties = schema.getAsJsonObject("properties");
-        assertEquals(6, properties.size());
-        for (String field : List
-            .of("registryNamespace", "registryPath", "displayName", "damage", "componentCount", "quantity")) {
+        assertEquals(8, properties.size());
+        for (String field : List.of(
+            "registryNamespace",
+            "registryPath",
+            "displayName",
+            "damage",
+            "componentCount",
+            "quantity",
+            "itemKey",
+            "icon")) {
             assertTrue(
                 schema.getAsJsonArray("required")
                     .contains(JsonParser.parseString("\"" + field + "\"")));
@@ -92,7 +155,7 @@ class OpenApiDocletTest {
                     .getAsString());
             assertFalse(value.has("anyOf"));
         }
-        for (String field : List.of("registryNamespace", "registryPath")) {
+        for (String field : List.of("registryNamespace", "registryPath", "itemKey", "icon")) {
             assertEquals(
                 "null",
                 properties.getAsJsonObject(field)
@@ -114,6 +177,20 @@ class OpenApiDocletTest {
                 .getAsJsonArray("examples")
                 .get(0)
                 .getAsInt());
+        JsonObject identity = properties.getAsJsonObject("itemKey")
+            .getAsJsonArray("anyOf")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            "string",
+            identity.get("type")
+                .getAsString());
+        assertEquals(
+            "AAAAAAAAAAAAAAAAAAAAAA",
+            properties.getAsJsonObject("itemKey")
+                .getAsJsonArray("examples")
+                .get(0)
+                .getAsString());
         assertFalse(properties.has("iconBaseKey"));
         assertFalse(schema.has("allOf"));
     }

@@ -4,7 +4,8 @@ package pl.kuba6000.ae2webintegration.core.api;
 public enum ServerCapability {
 
     CRAFTING_LIGHT_MODE("craftingLightMode"),
-    CRAFTING_PLAN_STEPS("craftingPlanSteps");
+    CRAFTING_PLAN_STEPS("craftingPlanSteps"),
+    CPU_SELECTION_MODE("cpuSelectionMode");
 
     private final String wireName;
 

@@ -29,6 +29,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
@@ -716,6 +717,10 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         }
 
         @Override
+        public CpuSelectionMode web$getSelectionMode() {
+            return null;
+        }
+
         public boolean web$acceptsPlayerJobs() {
             return !web$isBusy();
         }

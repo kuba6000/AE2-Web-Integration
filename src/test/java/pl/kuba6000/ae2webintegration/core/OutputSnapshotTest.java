@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -12,7 +14,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -20,8 +24,12 @@ import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceOutput;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPUList;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -90,6 +98,77 @@ class OutputSnapshotTest extends GridTestScope {
                         .getAsString())));
         AE2Controller.itemIdentities.beginListing(grid)
             .commit();
+    }
+
+    @Test
+    void outputIconsBelongToIndependentResponsePageTables(@TempDir Path directory) throws Exception {
+        Resource key = new Resource();
+        ResourceStack snapshot = ResourceStack.capture(TestGridFixtures.grid(990125), new Stack(key, 5));
+        assertNotNull(snapshot);
+        StableKey otherKey = TestGridFixtures.key(8831);
+        IconPack.Metadata metadata = new IconPack.Metadata(
+            "1.7.10",
+            "forge",
+            "test",
+            "test",
+            "today",
+            Collections.emptyMap(),
+            Collections.emptyList());
+        Path archive;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata, 64)) {
+            int[] pixels = new int[4096];
+            Arrays.fill(pixels, 0xff112233);
+            writer.add(otherKey, pixels);
+            Arrays.fill(pixels, 0xff445566);
+            writer.add(snapshot.itemKey, pixels);
+            archive = writer.finish();
+        }
+        key.unavailable = true;
+        try (IconPack pack = IconPack.open(archive, "1.7.10", "forge", "test")) {
+            IconMappings first = new IconMappings(pack);
+            first.resolve(otherKey, (StableKey) null);
+            ResourceOutput firstOutput = new ResourceOutput(snapshot, first);
+            IconMappings second = new IconMappings(pack);
+            ResourceOutput secondOutput = new ResourceOutput(snapshot, second);
+            ResourceOutput withoutIcons = new ResourceOutput(snapshot, null);
+            Gson gson = GSONUtils.GSON_BUILDER.create();
+            JsonObject firstJson = new JsonParser().parse(gson.toJson(firstOutput))
+                .getAsJsonObject();
+            JsonObject secondJson = new JsonParser().parse(gson.toJson(secondOutput))
+                .getAsJsonObject();
+            assertEquals(
+                1,
+                firstJson.getAsJsonObject("icon")
+                    .get("page")
+                    .getAsInt());
+            assertEquals(
+                0,
+                secondJson.getAsJsonObject("icon")
+                    .get("page")
+                    .getAsInt());
+            assertEquals(
+                first.pages.get(1)
+                    .digest(),
+                second.pages.get(0)
+                    .digest());
+            assertEquals(
+                snapshot.itemKey.toString(),
+                firstJson.get("itemKey")
+                    .getAsString());
+            assertTrue(
+                new JsonParser().parse(gson.toJson(withoutIcons))
+                    .getAsJsonObject()
+                    .get("icon")
+                    .isJsonNull());
+            JsonObject retained = new JsonParser().parse(gson.toJson(snapshot))
+                .getAsJsonObject();
+            assertFalse(retained.has("icon"));
+            assertFalse(firstJson.has("iconBaseKey"));
+            assertEquals(
+                5,
+                firstJson.get("quantity")
+                    .getAsInt());
+        }
     }
 
     @Test
@@ -162,6 +241,7 @@ class OutputSnapshotTest extends GridTestScope {
                 case "web$getKey" -> StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
                 case "web$getName" -> "cpu";
                 case "web$isBusy" -> true;
+                case "web$getSelectionMode" -> null;
                 case "web$acceptsPlayerJobs" -> false;
                 case "web$getAvailableStorage" -> 64L;
                 case "web$getUsedStorage" -> 16L;

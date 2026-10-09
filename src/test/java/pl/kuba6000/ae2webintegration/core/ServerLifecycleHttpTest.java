@@ -466,6 +466,7 @@ class ServerLifecycleHttpTest {
         JsonObject expected = new JsonObject();
         expected.addProperty("craftingLightMode", true);
         expected.addProperty("craftingPlanSteps", true);
+        expected.addProperty("cpuSelectionMode", true);
         assertEquals(
             expected,
             new Gson().fromJson(get("/api/context", login()).body(), JsonObject.class)
@@ -480,6 +481,12 @@ class ServerLifecycleHttpTest {
         HttpURLConnection connection = connection("/api/context", token);
         Response response = read(connection);
         assertEquals(HttpURLConnection.HTTP_OK, response.status());
+        assertFalse(
+            new Gson().fromJson(response.body(), JsonObject.class)
+                .getAsJsonObject("data")
+                .getAsJsonObject("capabilities")
+                .get("cpuSelectionMode")
+                .getAsBoolean());
         assertFalse(
             new Gson().fromJson(response.body(), JsonObject.class)
                 .getAsJsonObject("data")

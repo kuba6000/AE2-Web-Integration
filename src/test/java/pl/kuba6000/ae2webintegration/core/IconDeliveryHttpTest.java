@@ -592,7 +592,10 @@ class IconDeliveryHttpTest {
         JsonObject enabledOverview = syncedJson(gridPath + "/cpus?icons=true");
         JsonObject product = enabledOverview.getAsJsonObject("data")
             .getAsJsonObject(cpuKey.toString());
-        assertNotNull(product.getAsJsonObject("icon"));
+        assertFalse(product.has("icon"), "Product icons belong to the resource, not its containing CPU");
+        assertNotNull(
+            product.getAsJsonObject("finalOutput")
+                .getAsJsonObject("icon"));
         assertEquals(
             11,
             product.getAsJsonObject("finalOutput")
@@ -608,18 +611,23 @@ class IconDeliveryHttpTest {
         assertTrue(
             plain.has("icons") && plain.get("icons")
                 .isJsonNull());
-        assertTrue(
+        assertFalse(
             plain.getAsJsonObject("data")
                 .has("icon"));
         assertTrue(
             plain.getAsJsonObject("data")
+                .getAsJsonObject("finalOutput")
                 .get("icon")
                 .isJsonNull());
         assertEquals(0, normalizations.get());
         for (int poll = 0; poll < 2; poll++) {
             JsonObject response = syncedJson(path + "?icons=true");
             JsonObject detail = response.getAsJsonObject("data");
-            assertEquals(product.get("icon"), detail.get("icon"));
+            assertEquals(
+                product.getAsJsonObject("finalOutput")
+                    .get("icon"),
+                detail.getAsJsonObject("finalOutput")
+                    .get("icon"));
             assertEquals(
                 baseKey.toString(),
                 detail.getAsJsonObject("finalOutput")
@@ -667,6 +675,7 @@ class IconDeliveryHttpTest {
                     .isJsonNull());
             assertTrue(
                 disabled.getAsJsonObject("data")
+                    .getAsJsonObject("finalOutput")
                     .get("icon")
                     .isJsonNull());
             syncedJson(gridPath + "/items?icons=true");
@@ -679,14 +688,14 @@ class IconDeliveryHttpTest {
             0,
             outputOnly.getAsJsonArray("items")
                 .size());
-        assertNotNull(outputOnly.getAsJsonObject("icon"));
+        assertNotNull(
+            outputOnly.getAsJsonObject("finalOutput")
+                .getAsJsonObject("icon"));
         resources.set(stacks(resource, resource));
         busy.set(false);
         JsonObject idle = syncedJson(gridPath + "/cpus?icons=true").getAsJsonObject("data")
             .getAsJsonObject(cpuKey.toString());
-        assertTrue(
-            idle.get("icon")
-                .isJsonNull());
+        assertFalse(idle.has("icon"));
         assertTrue(
             idle.get("finalOutput")
                 .isJsonNull());
@@ -697,9 +706,7 @@ class IconDeliveryHttpTest {
         assertTrue(
             idleDetail.get("finalOutput")
                 .isJsonNull());
-        assertTrue(
-            idleDetail.get("icon")
-                .isJsonNull());
+        assertFalse(idleDetail.has("icon"));
 
         busy.set(true);
         output.set(null);
@@ -707,9 +714,7 @@ class IconDeliveryHttpTest {
         assertTrue(
             unavailable.get("finalOutput")
                 .isJsonNull());
-        assertTrue(
-            unavailable.get("icon")
-                .isJsonNull());
+        assertFalse(unavailable.has("icon"));
         assertEquals(
             1,
             unavailable.getAsJsonArray("items")
@@ -719,7 +724,9 @@ class IconDeliveryHttpTest {
         output.set(iconResource("fallback-product", 13, TestGridFixtures.key(94), baseKey, normalizations));
         for (int poll = 0; poll < 2; poll++) {
             JsonObject fallback = syncedJson(path + "?icons=true").getAsJsonObject("data");
-            assertNotNull(fallback.getAsJsonObject("icon"));
+            assertNotNull(
+                fallback.getAsJsonObject("finalOutput")
+                    .getAsJsonObject("icon"));
             assertEquals(
                 13,
                 fallback.getAsJsonObject("finalOutput")
@@ -735,7 +742,8 @@ class IconDeliveryHttpTest {
             iconResource("missing-product", 17, TestGridFixtures.key(95), TestGridFixtures.key(96), normalizations));
         JsonObject missing = syncedJson(path + "?icons=true").getAsJsonObject("data");
         assertTrue(
-            missing.get("icon")
+            missing.getAsJsonObject("finalOutput")
+                .get("icon")
                 .isJsonNull());
         assertEquals(
             17,
@@ -763,7 +771,8 @@ class IconDeliveryHttpTest {
         });
         JsonObject unsupported = syncedJson(path + "?icons=true").getAsJsonObject("data");
         assertTrue(
-            unsupported.get("icon")
+            unsupported.getAsJsonObject("finalOutput")
+                .get("icon")
                 .isJsonNull());
         assertEquals(
             19,
@@ -785,7 +794,8 @@ class IconDeliveryHttpTest {
         });
         JsonObject unidentified = syncedJson(path + "?icons=true").getAsJsonObject("data");
         assertTrue(
-            unidentified.get("icon")
+            unidentified.getAsJsonObject("finalOutput")
+                .get("icon")
                 .isJsonNull());
         assertTrue(
             unidentified.getAsJsonObject("finalOutput")
@@ -809,6 +819,7 @@ class IconDeliveryHttpTest {
                 .isJsonNull());
         assertTrue(
             noPack.getAsJsonObject("data")
+                .getAsJsonObject("finalOutput")
                 .get("icon")
                 .isJsonNull());
         assertEquals(
@@ -949,6 +960,7 @@ class IconDeliveryHttpTest {
         for (com.google.gson.JsonElement entry : response.getAsJsonArray("data")) {
             JsonObject row = entry.getAsJsonObject();
             JsonObject product = row.getAsJsonObject("finalOutput");
+            assertFalse(row.has("icon"));
             assertFalse(product.has("iconBaseKey"), "Detached icon identity is not part of the stack wire contract");
             assertFalse(
                 product.get("itemKey")
@@ -959,7 +971,7 @@ class IconDeliveryHttpTest {
                 .equals("product-2");
             assertEquals(
                 missing,
-                row.get("icon")
+                product.get("icon")
                     .isJsonNull());
             if (product.get("registryPath")
                 .getAsString()
@@ -978,6 +990,7 @@ class IconDeliveryHttpTest {
             for (com.google.gson.JsonElement entry : plain.getAsJsonArray("data")) {
                 assertTrue(
                     entry.getAsJsonObject()
+                        .getAsJsonObject("finalOutput")
                         .get("icon")
                         .isJsonNull());
             }
@@ -988,10 +1001,13 @@ class IconDeliveryHttpTest {
                 .getAsInt();
             JsonObject detail = json(connection(path + "/" + id + "?icons=true"));
             JsonObject detailData = detail.getAsJsonObject("data");
+            assertFalse(detailData.has("icon"));
             assertEquals(
                 entry.getAsJsonObject()
+                    .getAsJsonObject("finalOutput")
                     .get("icon"),
-                detailData.get("icon"));
+                detailData.getAsJsonObject("finalOutput")
+                    .get("icon"));
             assertEquals(
                 packId,
                 detail.getAsJsonObject("icons")
@@ -1016,6 +1032,7 @@ class IconDeliveryHttpTest {
                         .isJsonNull());
                 assertTrue(
                     plain.getAsJsonObject("data")
+                        .getAsJsonObject("finalOutput")
                         .get("icon")
                         .isJsonNull());
                 for (com.google.gson.JsonElement resource : plain.getAsJsonObject("data")

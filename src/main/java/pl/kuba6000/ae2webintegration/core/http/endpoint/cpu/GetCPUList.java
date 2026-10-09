@@ -11,15 +11,16 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceOutput;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -100,14 +101,14 @@ public final class GetCPUList extends ISyncedRequest {
          * admit compatible merges on supported platforms; submission rechecks live native state.
          */
         public boolean acceptsPlayerJobs;
+        /** Native automatic-selection policy; null when unsupported or unknown. Not a submission permission. */
+        public @Nullable CpuSelectionMode selectionMode;
         /** Whether this CPU supports pausing the scheduling of its current job. */
         public boolean supportsPause;
         /** Whether the active job is paused; false for idle or unsupported CPUs. */
         public boolean isPaused;
         /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
-        public @Nullable ResourceStack finalOutput;
-        /** Product atlas reference; null when not requested, idle, unavailable, or absent from the pack. */
-        public @Nullable IconMappings.Reference icon;
+        public @Nullable ResourceOutput finalOutput;
         /**
          * Total CPU crafting storage in bytes.
          *
@@ -177,19 +178,13 @@ public final class GetCPUList extends ISyncedRequest {
             cpuInfo.coProcessors = cluster.web$getCoProcessors();
             cpuInfo.isBusy = cluster.web$isBusy();
             cpuInfo.acceptsPlayerJobs = cluster.web$acceptsPlayerJobs();
+            cpuInfo.selectionMode = cluster.web$getSelectionMode();
             cpuInfo.supportsPause = cluster instanceof IPausableCraftingCPU;
             cpuInfo.isPaused = cpuInfo.isBusy && cluster instanceof IPausableCraftingCPU pausable
                 && pausable.web$isPaused();
             if (cpuInfo.isBusy) {
-                cpuInfo.finalOutput = ResourceStack.capture(grid, cluster.web$getFinalOutput());
-                if (mappings != null && cpuInfo.finalOutput != null && cpuInfo.finalOutput.itemKey != null) {
-                    try {
-                        cpuInfo.icon = mappings
-                            .resolve(StableKey.parse(cpuInfo.finalOutput.itemKey), AE2Controller.itemIdentities);
-                    } catch (RuntimeException ignored) {
-                        // Optional icon failures must not hide the CPU or its output.
-                    }
-                }
+                ResourceStack output = ResourceStack.capture(grid, cluster.web$getFinalOutput(), pack);
+                cpuInfo.finalOutput = output == null ? null : new ResourceOutput(output, mappings);
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cluster);
                 if (trackingInfo != null) {
                     cpuInfo.hasTrackingInfo = true;

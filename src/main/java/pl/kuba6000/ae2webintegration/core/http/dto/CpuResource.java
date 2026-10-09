@@ -3,8 +3,8 @@ package pl.kuba6000.ae2webintegration.core.http.dto;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import pl.kuba6000.ae2webintegration.core.api.ResourceDescription;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 /**
@@ -12,12 +12,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
  * Tracking measurements remain zero when this CPU has no tracked job.
  */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
-public class CpuResource extends ResourceDescription {
-
-    /** Exact resource identity, or null when the native identity cannot be captured. */
-    public @Nullable String itemKey;
-    /** Atlas location within the response's page table; null when unavailable. */
-    public @Nullable IconMappings.Reference icon;
+public class CpuResource extends ResourceView {
 
     /**
      * Resource units currently being processed.
@@ -69,13 +64,15 @@ public class CpuResource extends ResourceDescription {
      */
     public double craftsPerSec = 0d;
 
-    public CpuResource(@NotNull IAEKey key) {
+    public CpuResource(@NotNull IAEKey key, @Nullable StableKey itemKey, @Nullable IconMappings.Reference icon) {
         super(
             key.web$getRegistryNamespace(),
             key.web$getRegistryPath(),
             key.web$getDisplayName(),
             key.web$getComponentCount(),
-            key.web$getDamage());
+            key.web$getDamage(),
+            itemKey,
+            icon);
     }
 
 }

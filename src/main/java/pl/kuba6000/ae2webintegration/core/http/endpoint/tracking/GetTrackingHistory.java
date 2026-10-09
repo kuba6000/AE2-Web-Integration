@@ -12,15 +12,14 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
-import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceOutput;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
-import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 /**
@@ -74,7 +73,6 @@ public final class GetTrackingHistory extends IAsyncRequest {
      * @param timeDone     completion time in Unix epoch milliseconds
      * @param wasCancelled whether the crafting work was cancelled
      * @param finalOutput  detached snapshot of the final crafting output
-     * @param icon         product atlas reference; null when not requested, unavailable, or absent from the pack
      * @param id           runtime history entry identifier
      * @example timeStarted 1700000000000
      * @example timeDone 1700000010000
@@ -83,7 +81,7 @@ public final class GetTrackingHistory extends IAsyncRequest {
      */
     @Desugar
     public record HistoryEntry(long timeStarted, long timeDone, boolean wasCancelled,
-        @NotNull ResourceStack finalOutput, @Nullable IconMappings.Reference icon, int id) {}
+        @NotNull ResourceOutput finalOutput, int id) {}
 
     @Override
     public void handle() {
@@ -99,18 +97,12 @@ public final class GetTrackingHistory extends IAsyncRequest {
         for (Map.Entry<Integer, AE2JobTracker.JobTrackingInfo> integerJobTrackingInfoEntry : grid.trackingInfo.trackingInfos
             .entrySet()) {
             AE2JobTracker.JobTrackingInfo info = integerJobTrackingInfoEntry.getValue();
-            ResourceStack finalOutput = info.finalOutput;
-            IconMappings.Reference icon = null;
-            if (mappings != null && finalOutput.itemKey != null) {
-                icon = mappings.resolve(StableKey.parse(finalOutput.itemKey), finalOutput.iconBaseKey);
-            }
             jobs.add(
                 new HistoryEntry(
                     info.timeStarted,
                     info.timeDone,
                     info.wasCancelled,
-                    finalOutput,
-                    icon,
+                    new ResourceOutput(info.finalOutput, mappings),
                     integerJobTrackingInfoEntry.getKey()));
         }
 

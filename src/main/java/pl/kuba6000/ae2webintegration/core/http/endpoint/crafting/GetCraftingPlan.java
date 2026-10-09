@@ -15,13 +15,13 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.api.ResourceDescription;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceView;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
@@ -99,7 +99,7 @@ public final class GetCraftingPlan extends ISyncedRequest {
 
         /** One resource required by the calculated crafting plan. */
         @SuppressWarnings("unused") // Gson reads the fields reflectively.
-        public static final class JobItem extends ResourceDescription {
+        public static final class JobItem extends ResourceView {
 
             /**
              * Resource units taken from network storage.
@@ -132,22 +132,16 @@ public final class GetCraftingPlan extends ISyncedRequest {
              * @example 0.0
              */
             public final double usedPercent;
-            /** Stable resource identity, or null when unavailable. */
-            public final @Nullable String itemKey;
-            /** Atlas reference; null when not requested or unavailable. */
-            public final @Nullable IconMappings.Reference icon;
 
             public JobItem(@Nullable String registryNamespace, @Nullable String registryPath,
                 @NotNull String displayName, int componentCount, int damage, long stored, long requested, long missing,
-                long steps, double usedPercent, @Nullable String itemKey, @Nullable IconMappings.Reference icon) {
-                super(registryNamespace, registryPath, displayName, componentCount, damage);
+                long steps, double usedPercent, @Nullable StableKey itemKey, @Nullable IconMappings.Reference icon) {
+                super(registryNamespace, registryPath, displayName, componentCount, damage, itemKey, icon);
                 this.stored = stored;
                 this.requested = requested;
                 this.missing = missing;
                 this.steps = steps;
                 this.usedPercent = usedPercent;
-                this.itemKey = itemKey;
-                this.icon = icon;
             }
         }
 
@@ -227,7 +221,7 @@ public final class GetCraftingPlan extends ISyncedRequest {
                             missing,
                             steps,
                             usedPercent,
-                            itemKey == null ? null : itemKey.toString(),
+                            itemKey,
                             icon));
                 }
                 identities.commit();

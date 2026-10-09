@@ -1,7 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.interfaces;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 public interface ICraftingCPUCluster extends IIdentityHolder {
@@ -25,6 +27,10 @@ public interface ICraftingCPUCluster extends IIdentityHolder {
      * Read on the server thread; native submission remains authoritative.
      */
     boolean web$acceptsPlayerJobs();
+
+    /** Native automatic-selection policy; null when unsupported or unknown. Read on the server thread. */
+    @Nullable
+    CpuSelectionMode web$getSelectionMode();
 
     void web$cancel();
 

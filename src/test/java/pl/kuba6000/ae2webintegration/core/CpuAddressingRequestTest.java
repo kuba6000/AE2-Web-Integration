@@ -29,6 +29,7 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.CancelCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
@@ -414,6 +415,10 @@ class CpuAddressingRequestTest extends GridTestScope {
 
         public long web$getCoProcessors() {
             return 0;
+        }
+
+        public CpuSelectionMode web$getSelectionMode() {
+            return null;
         }
 
         public boolean web$acceptsPlayerJobs() {

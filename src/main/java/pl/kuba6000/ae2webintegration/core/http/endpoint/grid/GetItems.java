@@ -117,13 +117,13 @@ public final class GetItems extends ISyncedRequest {
         String displayName = key.web$getDisplayName();
         long quantity = stack.web$amount();
         boolean craftable = key.web$isCraftable(grid);
-        String itemKey = null;
+        StableKey itemKey = null;
         String identityStatus = null;
         IconMappings.Reference icon = null;
 
         try {
             StableKey identity = listing.remember(key);
-            itemKey = identity.toString();
+            itemKey = identity;
             if (mappings != null) icon = mappings.resolve(identity, AE2Controller.itemIdentities);
 
         } catch (ItemIdentityRegistry.Ambiguous e) {

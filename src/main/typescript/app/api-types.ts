@@ -3,13 +3,15 @@
  * These declarations describe the wire format; they do not validate responses at runtime.
  */
 export type ApplicationContext = {
-    capabilities: { craftingLightMode?: boolean; craftingPlanSteps?: boolean };
+    capabilities: { craftingLightMode?: boolean; craftingPlanSteps?: boolean; cpuSelectionMode?: boolean };
     publicMode: boolean;
     modVersion: string | null;
     isOutdated: boolean;
     user: { username: string; isAdmin: boolean } | null;
 };
 export type ResourceDescription = {
+    itemKey: string | null;
+    icon: IconReference | null;
     displayName: string;
     registryNamespace: string | null;
     registryPath: string | null;
@@ -18,7 +20,6 @@ export type ResourceDescription = {
 };
 export type ResourceStack = ResourceDescription & {
     quantity: number;
-    itemKey: string | null;
 };
 export type IconReference = { page: number; x: number; y: number };
 export type IconMetadata = {
@@ -32,7 +33,6 @@ export type StoredResource = ResourceStack & {
     resourceType: 'ITEM' | 'FLUID' | 'OTHER';
     craftable: boolean;
     identityStatus: string | null;
-    icon?: IconReference | null;
 };
 export type Position = { dimensionId: string; x: number; y: number; z: number };
 export type AccessSource = {
@@ -53,9 +53,10 @@ export type Grid = {
     accessSources: AccessSources;
 };
 export type GridSettings = { isTracked: boolean; name: string };
+export type CpuSelectionMode = 'PLAYER_ONLY' | 'AUTOMATION_ONLY' | 'ALL';
 export type CpuInfo = {
     acceptsPlayerJobs: boolean;
-    icon?: IconReference | null;
+    selectionMode: CpuSelectionMode | null;
     name: string;
     isBusy: boolean;
     supportsPause: boolean;
@@ -68,8 +69,6 @@ export type CpuInfo = {
     timeStarted: number;
 };
 export type CpuResource = ResourceDescription & {
-    itemKey?: string | null;
-    icon?: IconReference | null;
     active: number;
     pending: number;
     stored: number;
@@ -80,7 +79,7 @@ export type CpuResource = ResourceDescription & {
     craftsPerSec: number;
 };
 export type CpuDetail = {
-    icon?: IconReference | null;
+    selectionMode: CpuSelectionMode | null;
     size: number;
     isBusy: boolean;
     supportsPause: boolean;
@@ -92,8 +91,6 @@ export type CpuDetail = {
     timeElapsed: number;
 };
 export type PlanItem = ResourceDescription & {
-    itemKey: string | null;
-    icon?: IconReference | null;
     stored: number;
     requested: number;
     missing: number;
@@ -102,7 +99,6 @@ export type PlanItem = ResourceDescription & {
 };
 export type Plan = { isDone: boolean; isSimulating: boolean; bytesTotal: number; plan: PlanItem[] | null };
 export type HistoryEntry = {
-    icon?: IconReference | null;
     timeStarted: number;
     timeDone: number;
     wasCancelled: boolean;
@@ -111,9 +107,7 @@ export type HistoryEntry = {
 };
 export type Timing = { started: number; ended: number };
 export type ResourceTiming = ResourceDescription & {
-    itemKey: string | null;
     providers: string[];
-    icon?: IconReference | null;
     timeSpentOn: number;
     craftedTotal: number;
     shareInCraftingTime: number;
@@ -123,7 +117,6 @@ export type ResourceTiming = ResourceDescription & {
 };
 export type ProviderTiming = { name: string; timings: Timing[]; timingsCombined: number; location: Position[] };
 export type CraftingHistory = {
-    icon?: IconReference | null;
     finalOutput: ResourceStack;
     timeStarted: number;
     timeDone: number;

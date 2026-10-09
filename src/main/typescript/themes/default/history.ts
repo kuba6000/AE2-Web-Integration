@@ -174,7 +174,10 @@ export function createHistoryView(
             entries = current;
             if (route.entryId === null)
                 icons.update(
-                    state.entries.map((entry) => ({ element: current.get(entry.id)!.link, icon: entry.icon })),
+                    state.entries.map((entry) => ({
+                        element: current.get(entry.id)!.link,
+                        icon: entry.finalOutput.icon
+                    })),
                     state.icons
                 );
             if (focused?.isConnected && list.contains(focused) && focused !== document.activeElement)
@@ -200,7 +203,7 @@ export function createHistoryView(
             const iconHost = element('span');
             iconHost.className = 'history-summary-icon';
             iconHost.append(createResourceIcon());
-            productIcon = { element: iconHost, icon: snapshot.icon };
+            productIcon = { element: iconHost, icon: snapshot.finalOutput.icon };
             const heading = element('h3');
             heading.append(renderMinecraftText(snapshot.finalOutput.displayName));
             product.append(iconHost, heading, element('span', `× ${number(snapshot.finalOutput.quantity)}`));

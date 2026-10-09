@@ -1,11 +1,16 @@
 import { registryId } from './resource-metadata.js';
 import type { CpuOutcome } from '../../app/cpus.js';
 import type { TerminalState, createTerminal } from '../../app/terminal.js';
-import type { CpuResource } from '../../app/api-types.js';
+import type { CpuResource, CpuSelectionMode } from '../../app/api-types.js';
 import type { Translator as Locale } from '../../app/i18n.js';
 import type { createThemeContext } from '../../app/theme-context.js';
 type Terminal = ReturnType<typeof createTerminal>;
 type ResourceSort = 'name' | 'active' | 'pending' | 'stored' | 'shareInCraftingTime';
+const selectionModes: Record<CpuSelectionMode, { order: number; label: string }> = {
+    PLAYER_ONLY: { order: 0, label: 'cpuPlayerOnly' },
+    ALL: { order: 1, label: 'cpuAllSources' },
+    AUTOMATION_ONLY: { order: 2, label: 'cpuAutomationOnly' }
+};
 
 import { cpuHref } from '../../app/router.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
@@ -154,12 +159,19 @@ export function createCpuView(
         { value: 'name', label: 'name', icon: terminalIcons.name },
         { value: 'capacity', label: 'cpuCapacityLabel', icon: terminalIcons.stored },
         { value: 'coprocessors', label: 'cpuCoprocessorsLabel', icon: cpuChipIcon },
-        { value: 'state', label: 'cpuBusyState', icon: craftingHammer }
+        { value: 'state', label: 'cpuBusyState', icon: craftingHammer },
+        { value: 'automation', label: 'cpuAutomation', icon: terminalIcons.all }
     ] as const;
+    const hasSelectionMode = application.state.capabilities.cpuSelectionMode === true;
+    const availableSelectorCriteria = selectorCriteria.filter(
+        (criterion) => hasSelectionMode || criterion.value !== 'automation'
+    );
     const savedSelectorSort = settings.get('cpuSelectorSort');
     let selectorSort =
         selectorCriteria.find((criterion) => criterion.value === savedSelectorSort) || selectorCriteria[0];
     let selectorDescending = settings.get('cpuSelectorSortOrder') === 'descending';
+    const effectiveSelectorSort = () =>
+        availableSelectorCriteria.find((criterion) => criterion === selectorSort) || availableSelectorCriteria[0];
 
     let itemRows: Map<string, ReturnType<typeof createResourceRow>> = new Map();
     let hideStored = false;
@@ -255,7 +267,10 @@ export function createCpuView(
             });
     }
     selectorSortButton.addEventListener('click', () => {
-        selectorSort = selectorCriteria[(selectorCriteria.indexOf(selectorSort) + 1) % selectorCriteria.length];
+        selectorSort =
+            availableSelectorCriteria[
+                (availableSelectorCriteria.indexOf(effectiveSelectorSort()) + 1) % availableSelectorCriteria.length
+            ];
         settings.set('cpuSelectorSort', selectorSort.value);
         selectorScroll.scrollTop = 0;
         renderSelector();
@@ -313,6 +328,14 @@ export function createCpuView(
             ),
             element('span', `${t('cpuCoprocessorsLabel')}: ${locale.number(cpu.coProcessors)}`)
         ];
+        if (hasSelectionMode)
+            values.push(
+                element(
+                    'span',
+                    `${t('cpuAutomaticSelection')}: ${t(current.selectionMode ? selectionModes[current.selectionMode].label : 'cpuSelectionUnknown')}`
+                ),
+                element('span', t('cpuSelectionModeHelp'))
+            );
         if (current.isBusy) {
             const product = element('span');
             if (current.finalOutput)
@@ -772,18 +795,23 @@ export function createCpuView(
 
     function renderSelector() {
         const t = locale.common;
+        const criterion = effectiveSelectorSort();
         selectorButtons.setAttribute('aria-label', t('cpuSelector'));
         selectorSearchLabel.hidden = !selectorSearchOpen;
         selectorSearchToggle.setAttribute('aria-expanded', String(selectorSearchOpen));
         selectorSearchToggle.setAttribute('aria-label', t(selectorSearchOpen ? 'closeCpuSearch' : 'searchCpus'));
         if (selectorSearchOpen) selectorSearchToggle.setAttribute('aria-description', t('clearCpuSearch'));
         else selectorSearchToggle.removeAttribute('aria-description');
-        selectorSortButton.innerHTML = selectorSort.icon;
-        selectorSortButton.setAttribute('aria-label', `${t('cpuSelectorSort')}: ${t(selectorSort.label)}`);
+        selectorSortButton.innerHTML = criterion.icon;
+        selectorSortButton.setAttribute('aria-label', `${t('cpuSelectorSort')}: ${t(criterion.label)}`);
         selectorSortButton.setAttribute(
             'aria-description',
             locale.t('nextState', {
-                state: t(selectorCriteria[(selectorCriteria.indexOf(selectorSort) + 1) % selectorCriteria.length].label)
+                state: t(
+                    availableSelectorCriteria[
+                        (availableSelectorCriteria.indexOf(criterion) + 1) % availableSelectorCriteria.length
+                    ].label
+                )
             })
         );
         selectorDirection.innerHTML = terminalIcons[selectorDescending ? 'descending' : 'ascending'];
@@ -791,7 +819,7 @@ export function createCpuView(
             'aria-label',
             `${t('cpuSelectorDirection')}: ${t(selectorDescending ? 'descending' : 'ascending')}`
         );
-        if (selectorSort.value === 'state')
+        if (criterion.value === 'state')
             selectorDirection.setAttribute('aria-description', t(selectorDescending ? 'cpuBusyFirst' : 'cpuIdleFirst'));
         else selectorDirection.removeAttribute('aria-description');
         if (toolTooltip && selectorButtons.contains(toolTooltip)) showToolTooltip(toolTooltip);
@@ -808,14 +836,20 @@ export function createCpuView(
                     plainMinecraftText(b.name).trim() || b.key,
                     document.documentElement.lang
                 );
+                const aMode = a.selectionMode ? selectionModes[a.selectionMode].order : null;
+                const bMode = b.selectionMode ? selectionModes[b.selectionMode].order : null;
+                if (criterion.value === 'automation' && (aMode === null) !== (bMode === null))
+                    return aMode === null ? 1 : -1;
                 const primary =
-                    selectorSort.value === 'capacity'
+                    criterion.value === 'capacity'
                         ? a.availableStorage - b.availableStorage
-                        : selectorSort.value === 'coprocessors'
+                        : criterion.value === 'coprocessors'
                           ? a.coProcessors - b.coProcessors
-                          : selectorSort.value === 'state'
+                          : criterion.value === 'state'
                             ? Number(a.isBusy) - Number(b.isBusy)
-                            : name;
+                            : criterion.value === 'automation'
+                              ? (aMode ?? 0) - (bMode ?? 0)
+                              : name;
                 return (
                     (selectorDescending ? -primary : primary) || name || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
                 );
@@ -859,7 +893,7 @@ export function createCpuView(
         selectorIcons.update(
             visible
                 .filter((cpu) => cpu.isBusy && cpu.finalOutput)
-                .map((cpu) => ({ element: current.get(cpu.key)!.link, icon: cpu.icon })),
+                .map((cpu) => ({ element: current.get(cpu.key)!.link, icon: cpu.finalOutput?.icon })),
             state.overviewIcons
         );
     }
@@ -935,7 +969,7 @@ export function createCpuView(
                 overviewIcons.update(
                     state.cpus
                         .filter((cpu) => cpu.isBusy && cpu.finalOutput)
-                        .map((cpu) => ({ element: current.get(cpu.key)!.output, icon: cpu.icon })),
+                        .map((cpu) => ({ element: current.get(cpu.key)!.output, icon: cpu.finalOutput?.icon })),
                     state.overviewIcons
                 );
                 return;
@@ -988,7 +1022,7 @@ export function createCpuView(
             tracking.textContent = detail?.isBusy && !detail.hasTrackingInfo ? t('cpuTrackingUnavailable') : '';
             tracking.hidden = !tracking.textContent;
             outputIcons.update(
-                detail?.isBusy && detail.finalOutput ? [{ element: output, icon: detail.icon }] : [],
+                detail?.isBusy && detail.finalOutput ? [{ element: output, icon: detail.finalOutput.icon }] : [],
                 state.icons
             );
             renderActions(actions, route.cpuKey || '', detail);

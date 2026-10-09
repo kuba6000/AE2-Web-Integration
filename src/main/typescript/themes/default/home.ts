@@ -220,7 +220,7 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
                 group.icons.update(
                     cpus
                         .filter((cpu) => cpu.finalOutput)
-                        .map((cpu) => ({ element: group.rows.get(cpu.key)!.product, icon: cpu.icon })),
+                        .map((cpu) => ({ element: group.rows.get(cpu.key)!.product, icon: cpu.finalOutput?.icon })),
                     network.icons
                 );
                 if (!group.section.parentNode) work.append(group.section);
