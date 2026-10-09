@@ -68,19 +68,19 @@ public abstract class AEItemMixin implements IAEKey {
     }
 
     @Override
-    public @Nullable Integer web$getComponentCount() {
+    public int web$getComponentCount() {
         AEKey key = (AEKey) (Object) this;
         if (key instanceof AEItemKey item) return item.getReadOnlyStack()
             .getComponents()
             .size();
-        return null;
+        return 0;
     }
 
     @Override
-    public @Nullable Integer web$getDamage() {
+    public int web$getDamage() {
         AEKey key = (AEKey) (Object) this;
         return key instanceof AEItemKey item ? item.getReadOnlyStack()
-            .getDamageValue() : null;
+            .getDamageValue() : 0;
     }
 
     @Override
