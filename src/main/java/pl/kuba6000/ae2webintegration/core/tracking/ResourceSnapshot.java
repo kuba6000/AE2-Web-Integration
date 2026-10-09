@@ -1,7 +1,9 @@
-package pl.kuba6000.ae2webintegration.core.api;
+package pl.kuba6000.ae2webintegration.core.tracking;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
@@ -10,40 +12,21 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
-/** Immutable output data captured on the server thread, safe for later asynchronous serialization. */
-@SuppressWarnings("unused") // Gson reads the fields reflectively.
-public final class ResourceStack extends ResourceDescription {
-
-    /**
-     * Number of resource units.
-     *
-     * @example 64
-     */
-    public final long quantity;
-    /** Detached fallback identity for tracked history; captured only when the installed pack lacks the exact icon. */
-    public final transient @Nullable StableKey iconBaseKey;
-
-    private ResourceStack(@Nullable String registryNamespace, @Nullable String registryPath, int componentCount,
-        int damage, @NotNull String displayName, long quantity, @Nullable StableKey itemKey,
-        @Nullable StableKey iconBaseKey) {
-        super(registryNamespace, registryPath, displayName, componentCount, damage, itemKey);
-        this.quantity = quantity;
-        this.iconBaseKey = iconBaseKey;
-    }
-
-    public static @Nullable ResourceStack capture(@NotNull IAEGrid grid, @Nullable IAEGenericStack stack) {
-        return capture(grid, stack, null);
-    }
+/** Detached resource data retained by tracking, captured only on the server thread. */
+@Desugar
+public record ResourceSnapshot(@Nullable String registryNamespace, @Nullable String registryPath, int componentCount,
+    int damage, @NotNull String displayName, long quantity, @Nullable StableKey itemKey,
+    @Nullable StableKey iconBaseKey) {
 
     /** Captures history's optional fallback on the server thread before native identity ownership can expire. */
-    public static @Nullable ResourceStack capture(@NotNull IAEGrid grid, @Nullable IAEGenericStack stack,
+    public static @Nullable ResourceSnapshot capture(@NotNull IAEGrid grid, @Nullable IAEGenericStack stack,
         @Nullable IconPack pack) {
         if (stack == null) return null;
         return capture(grid, stack.web$what(), stack.web$amount(), pack);
     }
 
     /** Captures a measured resource directly, without allocating a temporary native stack. */
-    public static @NotNull ResourceStack capture(@NotNull IAEGrid grid, @NotNull IAEKey key, long quantity,
+    public static @NotNull ResourceSnapshot capture(@NotNull IAEGrid grid, @NotNull IAEKey key, long quantity,
         @Nullable IconPack pack) {
         String registryNamespace = key.web$getRegistryNamespace();
         String registryPath = key.web$getRegistryPath();
@@ -54,7 +37,7 @@ public final class ResourceStack extends ResourceDescription {
         try {
             itemKey = AE2Controller.itemIdentities.remember(grid, key);
         } catch (RuntimeException exception) {
-            return new ResourceStack(
+            return new ResourceSnapshot(
                 registryNamespace,
                 registryPath,
                 componentCount,
@@ -72,7 +55,7 @@ public final class ResourceStack extends ResourceDescription {
                 // Optional fallback must not discard a successfully captured exact identity.
             }
         }
-        return new ResourceStack(
+        return new ResourceSnapshot(
             registryNamespace,
             registryPath,
             componentCount,

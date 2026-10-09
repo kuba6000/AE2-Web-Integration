@@ -14,11 +14,11 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /**
  * A completed or cancelled crafting job with resource and pattern-provider timing measurements.
@@ -34,8 +34,8 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
  * @example wasCancelled false
  */
 @Desugar
-public record CraftingHistory(@NotNull ResourceOutput finalOutput, long timeStarted, long timeDone,
-    boolean wasCancelled, @NotNull ArrayList<ResourceTiming> items, @NotNull ArrayList<ProviderTiming> interfaceShare) {
+public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStarted, long timeDone, boolean wasCancelled,
+    @NotNull ArrayList<ResourceTiming> items, @NotNull ArrayList<ProviderTiming> interfaceShare) {
 
     /**
      * One measured processing interval with absolute timestamps.
@@ -50,7 +50,7 @@ public record CraftingHistory(@NotNull ResourceOutput finalOutput, long timeStar
 
     /** Completed processing measurements for one resource identity. */
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
-    public static final class ResourceTiming extends ResourceView {
+    public static final class ResourceTiming extends ResourceDescription {
 
         /**
          * Measured processing time for this resource, in milliseconds.
@@ -128,7 +128,7 @@ public record CraftingHistory(@NotNull ResourceOutput finalOutput, long timeStar
         for (Map.Entry<IAEKey, Long> entry : info.timeSpentOn.entrySet()) {
             IAEKey key = entry.getKey();
             long spent = entry.getValue();
-            ResourceStack resource = info.resourceSnapshots.get(key);
+            ResourceSnapshot resource = info.resourceSnapshots.get(key);
             long craftedTotal = info.craftedTotal.get(key);
             double share = info.getShareInCraftingTime(key);
             double combinedShare = elapsed > 0 ? Math.min((double) spent / (double) elapsed, 1d) : 0d;
@@ -143,11 +143,11 @@ public record CraftingHistory(@NotNull ResourceOutput finalOutput, long timeStar
             Collections.sort(providers);
             items.add(
                 new ResourceTiming(
-                    resource.registryNamespace,
-                    resource.registryPath,
-                    resource.displayName,
-                    resource.componentCount,
-                    resource.damage,
+                    resource.registryNamespace(),
+                    resource.registryPath(),
+                    resource.displayName(),
+                    resource.componentCount(),
+                    resource.damage(),
                     spent,
                     craftedTotal,
                     share,
@@ -155,7 +155,7 @@ public record CraftingHistory(@NotNull ResourceOutput finalOutput, long timeStar
                     rate,
                     timings,
                     resolveIcon(resource, mappings),
-                    resource.itemKey,
+                    resource.itemKey(),
                     providers));
         }
         items.sort((first, second) -> Double.compare(second.shareInCraftingTime, first.shareInCraftingTime));
@@ -171,7 +171,7 @@ public record CraftingHistory(@NotNull ResourceOutput finalOutput, long timeStar
         }
         interfaceShare.sort((first, second) -> Long.compare(second.timingsCombined(), first.timingsCombined()));
         return new CraftingHistory(
-            new ResourceOutput(info.finalOutput, mappings),
+            new ResourceStack(info.finalOutput, mappings),
             info.timeStarted,
             info.timeDone,
             info.wasCancelled,
@@ -179,9 +179,9 @@ public record CraftingHistory(@NotNull ResourceOutput finalOutput, long timeStar
             interfaceShare);
     }
 
-    private static @Nullable IconMappings.Reference resolveIcon(@NotNull ResourceStack resource,
+    private static @Nullable IconMappings.Reference resolveIcon(@NotNull ResourceSnapshot resource,
         @Nullable IconMappings mappings) {
-        return mappings == null || resource.itemKey == null ? null
-            : mappings.resolve(resource.itemKey, resource.iconBaseKey);
+        return mappings == null || resource.itemKey() == null ? null
+            : mappings.resolve(resource.itemKey(), resource.iconBaseKey());
     }
 }

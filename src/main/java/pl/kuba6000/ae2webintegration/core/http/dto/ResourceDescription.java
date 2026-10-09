@@ -1,11 +1,12 @@
-package pl.kuba6000.ae2webintegration.core.api;
+package pl.kuba6000.ae2webintegration.core.http.dto;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
-/** Shared resource metadata captured from native data on the server thread. */
+/** Shared resource identity, metadata and response-local icon contract. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class ResourceDescription {
 
@@ -38,13 +39,20 @@ public class ResourceDescription {
      */
     public final @Nullable StableKey itemKey;
 
+    /**
+     * Atlas location within this response's page table; null when not requested, unavailable, or absent from the pack.
+     */
+    public final @Nullable IconMappings.Reference icon;
+
     protected ResourceDescription(@Nullable String registryNamespace, @Nullable String registryPath,
-        @NotNull String displayName, int componentCount, int damage, @Nullable StableKey itemKey) {
+        @NotNull String displayName, int componentCount, int damage, @Nullable StableKey itemKey,
+        @Nullable IconMappings.Reference icon) {
         this.registryNamespace = registryNamespace;
         this.registryPath = registryPath;
         this.displayName = displayName;
         this.componentCount = componentCount;
         this.damage = damage;
         this.itemKey = itemKey;
+        this.icon = icon;
     }
 }

@@ -17,7 +17,7 @@ import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
-import pl.kuba6000.ae2webintegration.core.http.dto.ResourceOutput;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
@@ -81,7 +81,7 @@ public final class GetTrackingHistory extends IAsyncRequest {
      */
     @Desugar
     public record HistoryEntry(long timeStarted, long timeDone, boolean wasCancelled,
-        @NotNull ResourceOutput finalOutput, int id) {}
+        @NotNull ResourceStack finalOutput, int id) {}
 
     @Override
     public void handle() {
@@ -102,7 +102,7 @@ public final class GetTrackingHistory extends IAsyncRequest {
                     info.timeStarted,
                     info.timeDone,
                     info.wasCancelled,
-                    new ResourceOutput(info.finalOutput, mappings),
+                    new ResourceStack(info.finalOutput, mappings),
                     integerJobTrackingInfoEntry.getKey()));
         }
 

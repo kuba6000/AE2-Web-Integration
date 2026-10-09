@@ -14,13 +14,12 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
-import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
-import pl.kuba6000.ae2webintegration.core.http.dto.ResourceOutput;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -29,6 +28,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /**
  * Lists the crafting CPUs on a grid.
@@ -108,7 +108,7 @@ public final class GetCPUList extends ISyncedRequest {
         /** Whether the active job is paused; false for idle or unsupported CPUs. */
         public boolean isPaused;
         /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
-        public @Nullable ResourceOutput finalOutput;
+        public @Nullable ResourceStack finalOutput;
         /**
          * Total CPU crafting storage in bytes.
          *
@@ -183,8 +183,8 @@ public final class GetCPUList extends ISyncedRequest {
             cpuInfo.isPaused = cpuInfo.isBusy && cluster instanceof IPausableCraftingCPU pausable
                 && pausable.web$isPaused();
             if (cpuInfo.isBusy) {
-                ResourceStack output = ResourceStack.capture(grid, cluster.web$getFinalOutput(), pack);
-                cpuInfo.finalOutput = output == null ? null : new ResourceOutput(output, mappings);
+                ResourceSnapshot output = ResourceSnapshot.capture(grid, cluster.web$getFinalOutput(), pack);
+                cpuInfo.finalOutput = output == null ? null : new ResourceStack(output, mappings);
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cluster);
                 if (trackingInfo != null) {
                     cpuInfo.hasTrackingInfo = true;

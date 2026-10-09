@@ -22,9 +22,8 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
-import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.http.dto.ResourceOutput;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPUList;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
@@ -39,6 +38,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
@@ -54,12 +54,12 @@ class OutputSnapshotTest extends GridTestScope {
         Resource key = new Resource();
         Stack stack = new Stack(key, 5);
         IAEGrid grid = TestGridFixtures.grid(990125);
-        ResourceStack snapshot = ResourceStack.capture(grid, stack);
+        ResourceSnapshot snapshot = ResourceSnapshot.capture(grid, stack, null);
         key.unavailable = true;
         stack.unavailable = true;
         JsonObject json = new JsonParser().parse(
             GSONUtils.GSON_BUILDER.create()
-                .toJson(snapshot))
+                .toJson(new ResourceStack(snapshot, null)))
             .getAsJsonObject();
         assertEquals(
             "example",
@@ -103,7 +103,7 @@ class OutputSnapshotTest extends GridTestScope {
     @Test
     void outputIconsBelongToIndependentResponsePageTables(@TempDir Path directory) throws Exception {
         Resource key = new Resource();
-        ResourceStack snapshot = ResourceStack.capture(TestGridFixtures.grid(990125), new Stack(key, 5));
+        ResourceSnapshot snapshot = ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 5), null);
         assertNotNull(snapshot);
         StableKey otherKey = TestGridFixtures.key(8831);
         IconPack.Metadata metadata = new IconPack.Metadata(
@@ -120,17 +120,17 @@ class OutputSnapshotTest extends GridTestScope {
             Arrays.fill(pixels, 0xff112233);
             writer.add(otherKey, pixels);
             Arrays.fill(pixels, 0xff445566);
-            writer.add(snapshot.itemKey, pixels);
+            writer.add(snapshot.itemKey(), pixels);
             archive = writer.finish();
         }
         key.unavailable = true;
         try (IconPack pack = IconPack.open(archive, "1.7.10", "forge", "test")) {
             IconMappings first = new IconMappings(pack);
             first.resolve(otherKey, (StableKey) null);
-            ResourceOutput firstOutput = new ResourceOutput(snapshot, first);
+            ResourceStack firstOutput = new ResourceStack(snapshot, first);
             IconMappings second = new IconMappings(pack);
-            ResourceOutput secondOutput = new ResourceOutput(snapshot, second);
-            ResourceOutput withoutIcons = new ResourceOutput(snapshot, null);
+            ResourceStack secondOutput = new ResourceStack(snapshot, second);
+            ResourceStack withoutIcons = new ResourceStack(snapshot, null);
             Gson gson = GSONUtils.GSON_BUILDER.create();
             JsonObject firstJson = new JsonParser().parse(gson.toJson(firstOutput))
                 .getAsJsonObject();
@@ -152,7 +152,8 @@ class OutputSnapshotTest extends GridTestScope {
                 second.pages.get(0)
                     .digest());
             assertEquals(
-                snapshot.itemKey.toString(),
+                snapshot.itemKey()
+                    .toString(),
                 firstJson.get("itemKey")
                     .getAsString());
             assertTrue(
@@ -160,9 +161,6 @@ class OutputSnapshotTest extends GridTestScope {
                     .getAsJsonObject()
                     .get("icon")
                     .isJsonNull());
-            JsonObject retained = new JsonParser().parse(gson.toJson(snapshot))
-                .getAsJsonObject();
-            assertFalse(retained.has("icon"));
             assertFalse(firstJson.has("iconBaseKey"));
             assertEquals(
                 5,
@@ -175,10 +173,10 @@ class OutputSnapshotTest extends GridTestScope {
     void failedIdentityPreservesDisplayWithOrdinaryNullableJsonFields() {
         Resource key = new Resource();
         key.brokenIdentity = true;
-        ResourceStack snapshot = assertDoesNotThrow(
-            () -> ResourceStack.capture(TestGridFixtures.grid(990125), new Stack(key, 9)));
+        ResourceSnapshot snapshot = assertDoesNotThrow(
+            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 9), null));
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("output", snapshot);
+        response.put("output", new ResourceStack(snapshot, null));
         response.put("unrelated", null);
         JsonObject json = new JsonParser().parse(
             GSONUtils.GSON_BUILDER.create()
@@ -206,11 +204,11 @@ class OutputSnapshotTest extends GridTestScope {
     void unsupportedNativeIdentityCannotEscapeSnapshotCapture() {
         Resource key = new Resource();
         key.unsupportedIdentity = true;
-        ResourceStack snapshot = assertDoesNotThrow(
-            () -> ResourceStack.capture(TestGridFixtures.grid(990125), new Stack(key, 4)));
+        ResourceSnapshot snapshot = assertDoesNotThrow(
+            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 4), null));
         JsonObject json = new JsonParser().parse(
             GSONUtils.GSON_BUILDER.create()
-                .toJson(snapshot))
+                .toJson(new ResourceStack(snapshot, null)))
             .getAsJsonObject();
         assertEquals(
             4,
@@ -227,7 +225,7 @@ class OutputSnapshotTest extends GridTestScope {
         key.brokenName = true;
         assertThrows(
             IllegalStateException.class,
-            () -> ResourceStack.capture(TestGridFixtures.grid(990125), new Stack(key, 6)));
+            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 6), null));
     }
 
     @Test
@@ -325,21 +323,21 @@ class OutputSnapshotTest extends GridTestScope {
                 throw new AssertionError("Unexpected native CPU call");
             });
         AE2JobTracker.addJob(cpu, grid, false);
-        Object initial = AE2JobTracker.findActiveJob(cpu).finalOutput;
+        ResourceSnapshot initial = AE2JobTracker.findActiveJob(cpu).finalOutput;
         output.get().unavailable = true;
         output.get().key.unavailable = true;
         output.set(new Stack(new Resource(), 9));
         AE2JobTracker.addJob(cpu, grid, true);
-        Object merged = AE2JobTracker.findActiveJob(cpu).finalOutput;
+        ResourceSnapshot merged = AE2JobTracker.findActiveJob(cpu).finalOutput;
         output.get().unavailable = true;
         output.get().key.unavailable = true;
         JsonObject before = new JsonParser().parse(
             GSONUtils.GSON_BUILDER.create()
-                .toJson(initial))
+                .toJson(new ResourceStack(initial, null)))
             .getAsJsonObject();
         JsonObject after = new JsonParser().parse(
             GSONUtils.GSON_BUILDER.create()
-                .toJson(merged))
+                .toJson(new ResourceStack(merged, null)))
             .getAsJsonObject();
         assertEquals(
             5,

@@ -12,7 +12,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
  * Tracking measurements remain zero when this CPU has no tracked job.
  */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
-public class CpuResource extends ResourceView {
+public class CpuResource extends ResourceDescription {
 
     /**
      * Resource units currently being processed.

@@ -104,13 +104,11 @@ class OpenApiDocletTest {
                      * @example AAAAAAAAAAAAAAAAAAAAAA
                      */
                     public @org.jetbrains.annotations.Nullable StableKey itemKey;
-                }
-                public static class View extends Description {
                     /** Atlas reference within this response; null when unavailable. */
                     public @org.jetbrains.annotations.Nullable Icon icon;
                 }
                 public record Icon(int page, int x, int y) {}
-                public static class Resource extends View {
+                public static class Resource extends Description {
                     /** Number of resource units.
                      * @example 64
                      */

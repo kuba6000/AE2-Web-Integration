@@ -15,7 +15,6 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
-import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -23,7 +22,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.http.dto.CpuResource;
-import pl.kuba6000.ae2webintegration.core.http.dto.ResourceOutput;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
@@ -36,6 +35,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /**
  * Reads a crafting CPU and its current work.
@@ -106,7 +106,7 @@ public final class GetCPU extends ISyncedRequest {
         /** Whether the active job is paused; false for idle or unsupported CPUs. */
         public boolean isPaused;
         /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
-        public @Nullable ResourceOutput finalOutput;
+        public @Nullable ResourceStack finalOutput;
         /** Resource details for current work; null when the CPU is idle. */
         public @Nullable ArrayList<CpuResource> items;
         /**
@@ -159,8 +159,8 @@ public final class GetCPU extends ISyncedRequest {
         clusterData.isPaused = clusterData.isBusy && cpu instanceof IPausableCraftingCPU pausable
             && pausable.web$isPaused();
         if (clusterData.isBusy) {
-            ResourceStack output = ResourceStack.capture(grid, cpu.web$getFinalOutput(), pack);
-            clusterData.finalOutput = output == null ? null : new ResourceOutput(output, mappings);
+            ResourceSnapshot output = ResourceSnapshot.capture(grid, cpu.web$getFinalOutput(), pack);
+            clusterData.finalOutput = output == null ? null : new ResourceStack(output, mappings);
             AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cpu);
             clusterData.hasTrackingInfo = trackingInfo != null;
 

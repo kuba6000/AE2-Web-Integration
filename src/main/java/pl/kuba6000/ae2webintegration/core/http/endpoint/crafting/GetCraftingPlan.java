@@ -21,7 +21,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
-import pl.kuba6000.ae2webintegration.core.http.dto.ResourceView;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceDescription;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
@@ -99,7 +99,7 @@ public final class GetCraftingPlan extends ISyncedRequest {
 
         /** One resource required by the calculated crafting plan. */
         @SuppressWarnings("unused") // Gson reads the fields reflectively.
-        public static final class JobItem extends ResourceView {
+        public static final class JobItem extends ResourceDescription {
 
             /**
              * Resource units taken from network storage.

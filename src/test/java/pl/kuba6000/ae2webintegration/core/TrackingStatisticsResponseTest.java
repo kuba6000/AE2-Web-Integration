@@ -18,7 +18,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
-import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
@@ -30,6 +29,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class TrackingStatisticsResponseTest extends GridTestScope {
@@ -59,7 +59,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
         double expectedShare, double expectedRate) {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(GRID);
         OutputSnapshotTest.Resource key = new OutputSnapshotTest.Resource();
-        ResourceStack output = ResourceStack.capture(grid, new OutputSnapshotTest.Stack(key, 10));
+        ResourceSnapshot output = ResourceSnapshot.capture(grid, new OutputSnapshotTest.Stack(key, 10), null);
         assertNotNull(output);
         AE2JobTracker.JobTrackingInfo info = new AE2JobTracker.JobTrackingInfo(output);
         // Completed measurement records, including legitimate sub-millisecond intervals rounded to zero.
@@ -68,7 +68,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
         info.isDone = true;
         info.timeSpentOn.put(key, spent);
         info.craftedTotal.put(key, crafted);
-        info.resourceSnapshots.put(key, ResourceStack.capture(grid, key, crafted, null));
+        info.resourceSnapshots.put(key, ResourceSnapshot.capture(grid, key, crafted, null));
         info.itemShare.put(key, new ArrayList<>(Collections.singletonList(Pair.of(1000L, 1000L + spent))));
         StableKey actualKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
         GridData.getOrCreate(actualKey).trackingInfo.trackingInfos.put(1, info);
@@ -107,7 +107,8 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 .getAsInt());
         assertFalse(item.has("itemId"));
         assertEquals(
-            output.itemKey.toString(),
+            output.itemKey()
+                .toString(),
             item.get("itemKey")
                 .getAsString());
         assertFalse(item.has("itemName"));

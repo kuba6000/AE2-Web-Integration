@@ -9,7 +9,7 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /** A stored or craftable resource with its currently available web identity. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
-public final class StoredResource extends ResourceView {
+public final class StoredResource extends ResourceDescription {
 
     /**
      * Native resource category for item and fluid filtering.

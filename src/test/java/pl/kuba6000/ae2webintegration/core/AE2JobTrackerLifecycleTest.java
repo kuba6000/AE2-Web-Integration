@@ -102,7 +102,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
             CoreEngine.onServerTick();
             assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(changing));
             assertSame(info, GridData.getOrCreate(key).trackingInfo.trackingInfos.get(1));
-            assertEquals(9, info.finalOutput.quantity);
+            assertEquals(9, info.finalOutput.quantity());
         } finally {
             AE2Controller.AE2Interface = previous;
         }
@@ -154,7 +154,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         AE2JobTracker.addJob(cpu, stable, true);
         AE2JobTracker.completeCrafting(stable, cpu);
 
-        assertEquals(9, GridData.getOrCreate(stableKey).trackingInfo.trackingInfos.get(1).finalOutput.quantity);
+        assertEquals(9, GridData.getOrCreate(stableKey).trackingInfo.trackingInfos.get(1).finalOutput.quantity());
     }
 
     @Test
@@ -201,7 +201,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         AE2JobTracker.addJob(cpu, grid, true);
 
         assertSame(info, AE2JobTracker.findActiveJob(cpu));
-        assertEquals(9, info.finalOutput.quantity);
+        assertEquals(9, info.finalOutput.quantity());
     }
 
     @Test
@@ -394,8 +394,8 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         assertNull(AE2JobTracker.findActiveJob(cpu));
         assertSame(info, GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.get(1));
         assertTrue(info.isDone);
-        assertEquals(5, info.finalOutput.quantity);
-        assertEquals("resource", info.finalOutput.registryPath);
+        assertEquals(5, info.finalOutput.quantity());
+        assertEquals("resource", info.finalOutput.registryPath());
     }
 
     @Test
