@@ -100,30 +100,27 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     selectorStatus.role = 'status';
     selectorScroll.append(selectorStatus, selectorList);
     const selectorIcons = application.icons.observe(selectorScroll, paintResourceIcon);
-    const details = element('section', '', 'cpu-selected-details');
-    details.role = 'region';
-    details.tabIndex = 0;
     const panelState = element('span', '', 'sr-only');
     panelState.role = 'status';
-    const summary = element('dl', '', 'cpu-detail-metrics cpu-detail-specs');
     const work = element('section', '', 'cpu-detail-work');
-    const outputLabel = element('h4');
+    work.role = 'region';
+    work.tabIndex = 0;
     const output = element('p', '', 'cpu-detail-output');
     const outputIcon = createResourceIcon();
-    const timing = element('dl', '', 'cpu-detail-metrics');
+    const timing = element('p', '', 'cpu-detail-note');
     const tracking = element('p', '', 'cpu-detail-note');
-    work.append(outputLabel, output, timing, tracking);
+    work.append(panelState, output, timing, tracking);
     const actions = element('div');
     const footer = element('div', '', 'cpu-footer');
-    footer.append(status, actions);
+    footer.append(work, actions, status);
     terminal.append(footer);
-    details.append(panelState, work, summary);
-    panel.append(selectorTitle, selectorSearchLabel, selectorScroll, details);
+    panel.append(selectorTitle, selectorSearchLabel, selectorScroll);
     workspace.append(panel);
-    const outputIcons = application.icons.observe(details, paintResourceIcon);
+    const outputIcons = application.icons.observe(footer, paintResourceIcon);
     const tooltip = element('div', '', 'tooltip');
     tooltip.id = 'cpu-resource-tooltip';
     tooltip.role = 'tooltip';
+    tooltip.tabIndex = -1;
     tooltip.hidden = true;
     workspace.append(tooltip);
     type CpuRow = ReturnType<typeof createOverviewRow>;
@@ -149,12 +146,17 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         null;
 
     let toolTooltip: HTMLElement | null = null;
+    let cpuTooltip: { target: HTMLElement; key: string; pointer: boolean; x: number; y: number } | null = null;
 
     function hideTooltip() {
         selectedTooltip?.row.button.removeAttribute('aria-describedby');
+        cpuTooltip?.target.removeAttribute('aria-describedby');
         selectedTooltip = null;
+        cpuTooltip = null;
         toolTooltip = null;
         tooltip.hidden = true;
+        tooltip.classList.remove('cpu-info-tooltip');
+        tooltip.scrollTop = 0;
     }
 
     function positionTooltip(x: number, y: number) {
@@ -208,6 +210,123 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         const box = button.getBoundingClientRect();
         positionTooltip(box.right, box.top);
     }
+
+    function refreshCpuTooltip() {
+        if (!cpuTooltip) return;
+        const { target, key, pointer, x, y } = cpuTooltip;
+        const cpu = state.cpus.find((entry) => entry.key === key);
+        if (
+            !cpu ||
+            !target.isConnected ||
+            target.hidden ||
+            (pointer &&
+                document.activeElement !== tooltip &&
+                !tooltip.matches(':hover') &&
+                !target.contains(document.elementFromPoint(x, y)))
+        ) {
+            hideTooltip();
+            return;
+        }
+        const current = key === selectedCpu && state.detail && !state.error ? state.detail : cpu;
+        const t = locale.common;
+        const name = element('strong');
+        name.append(renderMinecraftText(plainMinecraftText(cpu.name).trim() ? cpu.name : cpu.key));
+        const values = [
+            element('span', t(current.isBusy ? (current.isPaused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle')),
+            element('span', `${t('cpuCapacityLabel')}: ${locale.bytes(cpu.availableStorage)}`),
+            element(
+                'span',
+                `${t('cpuUsedStorageLabel')}: ${cpu.usedStorage >= 0 ? locale.bytes(cpu.usedStorage) : t('cpuValueUnavailable')}`
+            ),
+            element('span', `${t('cpuCoprocessorsLabel')}: ${locale.number(cpu.coProcessors)}`)
+        ];
+        if (current.isBusy) {
+            const product = element('span');
+            if (current.finalOutput)
+                product.append(
+                    renderMinecraftText(current.finalOutput.displayName),
+                    ` × ${locale.number(current.finalOutput.quantity)}`
+                );
+            else product.textContent = t('cpuOutputUnknown');
+            values.push(product);
+            if (current.hasTrackingInfo) {
+                if ('timeElapsed' in current)
+                    values.push(element('span', `${t('cpuElapsedLabel')}: ${locale.duration(current.timeElapsed)}`));
+                values.push(element('span', `${t('historyStartedLabel')}: ${locale.dateTime(current.timeStarted)}`));
+            } else values.push(element('span', t('cpuTrackingUnavailable')));
+        }
+        const readingPosition = tooltip.scrollTop;
+        tooltip.replaceChildren(name, element('code', cpu.key), ...values);
+        tooltip.classList.add('cpu-info-tooltip');
+        tooltip.hidden = false;
+        tooltip.scrollTop = readingPosition;
+        const box = target.getBoundingClientRect();
+        positionTooltip(pointer ? x : box.left, pointer ? y : box.bottom);
+    }
+
+    function bindCpuTooltip(target: HTMLElement, key: () => string) {
+        const show = (pointer = false, x = 0, y = 0) => {
+            hideTooltip();
+            cpuTooltip = { target, key: key(), pointer, x, y };
+            target.setAttribute('aria-describedby', tooltip.id);
+            refreshCpuTooltip();
+        };
+        target.addEventListener('pointerenter', (event) => {
+            if (event.pointerType !== 'touch') show(true, event.clientX, event.clientY);
+        });
+        target.addEventListener('pointermove', (event) => {
+            if (cpuTooltip?.target === target && cpuTooltip.pointer) {
+                cpuTooltip.x = event.clientX;
+                cpuTooltip.y = event.clientY;
+                positionTooltip(event.clientX, event.clientY);
+            }
+        });
+        target.addEventListener('focus', () => show());
+        target.addEventListener('click', () => show());
+        target.addEventListener('pointerleave', (event) => {
+            if (
+                cpuTooltip?.target === target &&
+                event.relatedTarget !== tooltip &&
+                !(event.relatedTarget instanceof Node && tooltip.contains(event.relatedTarget)) &&
+                document.activeElement !== tooltip
+            )
+                hideTooltip();
+        });
+        target.addEventListener('blur', (event) => {
+            if (cpuTooltip?.target === target && event.relatedTarget !== tooltip) hideTooltip();
+        });
+        target.addEventListener('keydown', (event) => {
+            if (
+                event.key === 'Tab' &&
+                !event.shiftKey &&
+                cpuTooltip?.target === target &&
+                tooltip.scrollHeight > tooltip.clientHeight
+            ) {
+                event.preventDefault();
+                cpuTooltip.pointer = false;
+                tooltip.focus({ preventScroll: true });
+            }
+        });
+    }
+    bindCpuTooltip(work, () => selectedCpu);
+    tooltip.addEventListener('blur', (event) => {
+        if (cpuTooltip && event.relatedTarget !== cpuTooltip.target) hideTooltip();
+    });
+    tooltip.addEventListener('pointerleave', (event) => {
+        if (
+            cpuTooltip &&
+            event.relatedTarget !== cpuTooltip.target &&
+            !(event.relatedTarget instanceof Node && cpuTooltip.target.contains(event.relatedTarget)) &&
+            document.activeElement !== tooltip
+        )
+            hideTooltip();
+    });
+    tooltip.addEventListener('keydown', (event) => {
+        if (event.key === 'Tab' && event.shiftKey && cpuTooltip) {
+            event.preventDefault();
+            cpuTooltip.target.focus({ preventScroll: true });
+        }
+    });
 
     function createResourceRow(item: CpuResource) {
         const li = element('li');
@@ -413,7 +532,10 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     document.addEventListener(
         'keydown',
         (event) => {
-            if (event.key === 'Escape') hideTooltip();
+            if (event.key === 'Escape') {
+                if (document.activeElement === tooltip) cpuTooltip?.target.focus({ preventScroll: true });
+                hideTooltip();
+            }
         },
         { signal: lifetime.signal }
     );
@@ -421,6 +543,13 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         'pointerdown',
         (event) => {
             if (selectedTooltip && event.target instanceof Node && !selectedTooltip.row.button.contains(event.target))
+                hideTooltip();
+            if (
+                cpuTooltip &&
+                event.target instanceof Node &&
+                !cpuTooltip.target.contains(event.target) &&
+                !tooltip.contains(event.target)
+            )
                 hideTooltip();
         },
         { signal: lifetime.signal }
@@ -480,16 +609,6 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     function renderCpuState(target: HTMLElement, busy: boolean, paused: boolean) {
         target.innerHTML = busy && paused ? pauseIcon : '';
         target.append(element('span', locale.common(busy ? (paused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle')));
-    }
-
-    function renderMetrics(target: HTMLDListElement, values: [string, string][]) {
-        target.replaceChildren(
-            ...values.map(([label, value]) => {
-                const field = element('div');
-                field.append(element('dt', locale.common(label)), element('dd', value));
-                return field;
-            })
-        );
     }
 
     function createOverviewRow() {
@@ -564,21 +683,14 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         entry.notice.hidden = !entry.notice.textContent;
     }
 
-    function createSelectorRow() {
+    function createSelectorRow(key: string) {
         const li = element('li');
         const link = element('a', '', 'cpu-selector-link');
         const name = element('span', '', 'cpu-selector-name');
         const badge = element('span', '', 'cpu-card-state');
         const icon = createResourceIcon();
         link.append(icon, name, badge);
-        link.addEventListener('pointerenter', (event) => {
-            if (event.pointerType !== 'touch') showToolTooltip(link);
-        });
-        link.addEventListener('focus', () => showToolTooltip(link));
-        for (const event of ['pointerleave', 'blur'])
-            link.addEventListener(event, () => {
-                if (toolTooltip === link) hideTooltip();
-            });
+        bindCpuTooltip(link, () => key);
         li.append(link);
         return { li, link, name, badge, icon };
     }
@@ -593,26 +705,25 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         const current = new Map<string, ReturnType<typeof createSelectorRow>>();
         const scrollTop = selectorScroll.scrollTop;
         for (const [index, cpu] of visible.entries()) {
-            const row = selectorRows.get(cpu.key) || createSelectorRow();
+            const row = selectorRows.get(cpu.key) || createSelectorRow(cpu.key);
             const displayName = plainMinecraftText(cpu.name).trim() ? cpu.name : cpu.key;
             row.link.href = cpuHref(selectorGrid, cpu.key);
             row.link.setAttribute(
                 'aria-label',
-                `${plainMinecraftText(displayName)} · ${cpu.key} · ${t(cpu.isBusy ? (cpu.isPaused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle')}`
+                `${plainMinecraftText(displayName)} · ${cpu.key} · ${t(cpu.isBusy ? (cpu.isPaused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle')} · ${locale.bytes(cpu.availableStorage)}`
             );
-            if (toolTooltip === row.link) tooltip.textContent = row.link.getAttribute('aria-label');
             if (cpu.key === selectedCpu) row.link.setAttribute('aria-current', 'page');
             else row.link.removeAttribute('aria-current');
             row.name.replaceChildren(renderMinecraftText(displayName));
             row.icon.hidden = !cpu.isBusy || !cpu.finalOutput;
             renderCpuState(row.badge, cpu.isBusy, cpu.isPaused);
+            row.badge.append(element('span', `· ${locale.bytes(cpu.availableStorage)}`));
             if (selectorList.children[index] !== row.li)
                 selectorList.insertBefore(row.li, selectorList.children[index] || null);
             current.set(cpu.key, row);
         }
         for (const [key, row] of selectorRows) if (!current.has(key)) row.li.remove();
         selectorRows = current;
-        if (toolTooltip && !toolTooltip.isConnected) hideTooltip();
         selectorStatus.textContent = visible.length
             ? ''
             : state.cpus.length
@@ -661,7 +772,6 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                 itemRows.clear();
                 search.value = '';
                 scroll.scrollTop = 0;
-                details.scrollTop = 0;
             }
             if (!selected) {
                 icons.update([], null);
@@ -677,7 +787,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             selectorSearchName.textContent = t('searchCpus');
             selectorSearch.placeholder = t('searchCpus');
             selectorScroll.setAttribute('aria-label', t('cpuSelector'));
-            details.setAttribute('aria-label', t('cpuDetails'));
+            work.setAttribute('aria-label', t('cpuCurrentJob'));
             title.textContent = t('cpus');
             listScroll.setAttribute('aria-label', t('cpus'));
             listStatus.textContent = state.error
@@ -732,47 +842,28 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                 status.textContent += ` ${t(selectedOutcome.notice)}`;
             if (selectedOutcome?.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
             status.hidden = !status.textContent;
-            panel.setAttribute('aria-label', t('cpuDetails'));
+            panel.setAttribute('aria-label', t('cpus'));
             panelState.hidden = !detail;
             if (detail) renderCpuState(panelState, detail.isBusy, detail.isPaused);
             else panelState.replaceChildren();
-            summary.hidden = !cpu;
-            renderMetrics(
-                summary,
-                cpu
-                    ? [
-                          ['cpuCapacityLabel', locale.bytes(cpu.availableStorage)],
-                          [
-                              'cpuUsedStorageLabel',
-                              cpu.usedStorage >= 0 ? locale.bytes(cpu.usedStorage) : t('cpuValueUnavailable')
-                          ],
-                          ['cpuCoprocessorsLabel', locale.number(cpu.coProcessors)]
-                      ]
-                    : []
-            );
             work.hidden = !detail;
-            outputLabel.textContent = t('cpuCurrentJob');
             output.replaceChildren();
             if (detail?.isBusy) {
                 if (detail.finalOutput) {
-                    const product = element('span');
-                    product.append(
-                        renderMinecraftText(detail.finalOutput.displayName),
-                        ' ',
+                    const product = element('span', '', 'cpu-job-name');
+                    product.append(renderMinecraftText(detail.finalOutput.displayName));
+                    output.append(
+                        outputIcon,
+                        product,
                         element('span', `× ${locale.number(detail.finalOutput.quantity)}`, 'cpu-detail-quantity')
                     );
-                    output.append(outputIcon, product);
                 } else output.textContent = t('cpuOutputUnknown');
             } else if (detail) output.textContent = t('cpuIdleMessage');
-            renderMetrics(
-                timing,
+            timing.textContent =
                 detail?.isBusy && detail.hasTrackingInfo
-                    ? [
-                          ['cpuElapsedLabel', locale.duration(detail.timeElapsed)],
-                          ['historyStartedLabel', locale.dateTime(detail.timeStarted)]
-                      ]
-                    : []
-            );
+                    ? `${t('cpuElapsedLabel')}: ${locale.duration(detail.timeElapsed)}`
+                    : '';
+            timing.hidden = !timing.textContent;
             tracking.textContent = detail?.isBusy && !detail.hasTrackingInfo ? t('cpuTrackingUnavailable') : '';
             tracking.hidden = !tracking.textContent;
             outputIcons.update(
@@ -781,6 +872,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             );
             renderActions(actions, route.cpuKey || '', detail);
             renderResources();
+            refreshCpuTooltip();
         },
         dispose() {
             lifetime.abort();

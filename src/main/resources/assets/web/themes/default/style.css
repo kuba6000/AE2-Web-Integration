@@ -407,7 +407,7 @@ header {
 }
 #cpu-panel {
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 42%);
+    grid-template-rows: auto auto minmax(0, 1fr);
     gap: 10px;
     height: calc(100% - 52px);
     min-height: 0;
@@ -422,8 +422,7 @@ header {
     min-width: 0;
     font-size: 12px;
 }
-.cpu-selector-scroll,
-.cpu-selected-details {
+.cpu-selector-scroll {
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -478,18 +477,25 @@ header {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.cpu-selector-link .cpu-card-state > span:first-of-type {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cpu-selector-link .cpu-card-state > span:last-child {
+    flex-shrink: 0;
+}
 .cpu-selector-link .cpu-card-state {
+    min-width: 0;
     padding: 0;
     background: none;
     font-size: 10px;
+    gap: 4px;
+    white-space: nowrap;
 }
 .cpu-selector-status {
     margin: 8px;
     font-size: 12px;
-}
-.cpu-selected-details {
-    border-top: 1px solid var(--border);
-    padding-top: 10px;
 }
 .cpu-footer {
     display: flex;
@@ -501,7 +507,7 @@ header {
     margin: 12px var(--grid-inset, 22px) 0;
 }
 .cpu-footer .cpu-status {
-    flex: 1 1 140px;
+    flex: 1 1 100%;
     margin: 0;
 }
 .cpu-footer .cpu-actions {
@@ -512,51 +518,32 @@ header {
     padding: 6px 10px;
     font-size: 12px;
 }
-.cpu-detail-metrics {
-    display: grid;
-    gap: 4px;
-    margin: 0;
+.cpu-detail-work {
+    flex: 1 1 140px;
+    min-width: 0;
 }
-.cpu-detail-metrics dt,
-.cpu-detail-work h4 {
-    margin: 0;
-    color: var(--surface-muted);
-    font-size: 11px;
-    font-weight: 400;
-}
-.cpu-detail-metrics dd {
-    margin: 0;
-    font-size: 11px;
-    line-height: 1.4;
-    overflow-wrap: anywhere;
-    text-align: right;
-}
-.cpu-detail-metrics dt {
-    flex-shrink: 0;
-    white-space: nowrap;
-}
-.cpu-detail-metrics > div {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-}
-.cpu-detail-specs {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
+.cpu-detail-work:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
 }
 .cpu-detail-output {
+    --resource-icon-size: 24px;
+
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 6px 0 8px;
+    height: 24px;
+    margin: 0;
     font-size: 12px;
     line-height: 1.4;
-    overflow-wrap: anywhere;
-}
-.cpu-detail-output > span:last-child {
     min-width: 0;
+}
+.cpu-job-name {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .cpu-actions button {
     display: flex;
@@ -578,9 +565,18 @@ header {
     height: 16px;
 }
 .cpu-detail-quantity {
+    flex: 0 1 auto;
+    max-width: 45%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 .cpu-detail-note {
+    margin: 2px 0 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
     font-size: 11px;
     line-height: 1.5;
     color: var(--muted);
@@ -1587,8 +1583,7 @@ label {
     .info-notices,
     #plan-panel,
     #cpu-panel,
-    .cpu-selector-scroll,
-    .cpu-selected-details
+    .cpu-selector-scroll
 )::-webkit-scrollbar {
     width: 18px;
 }
@@ -1599,8 +1594,7 @@ label {
     .info-notices,
     #plan-panel,
     #cpu-panel,
-    .cpu-selector-scroll,
-    .cpu-selected-details
+    .cpu-selector-scroll
 )::-webkit-scrollbar-track {
     background: var(--slot);
     border: 2px solid;
@@ -1613,8 +1607,7 @@ label {
     .info-notices,
     #plan-panel,
     #cpu-panel,
-    .cpu-selector-scroll,
-    .cpu-selected-details
+    .cpu-selector-scroll
 )::-webkit-scrollbar-thumb {
     min-height: 28px;
     background: var(--panel);
@@ -1628,22 +1621,12 @@ label {
         .info-notices,
         #plan-panel,
         #cpu-panel,
-        .cpu-selector-scroll,
-        .cpu-selected-details
+        .cpu-selector-scroll
     )::-webkit-scrollbar-thumb:hover {
     background: var(--selected);
 }
 @supports not selector(::-webkit-scrollbar) {
-    :is(
-        #item-scroll,
-        .terminal-scroll,
-        .network-dialog,
-        .info-notices,
-        #plan-panel,
-        #cpu-panel,
-        .cpu-selector-scroll,
-        .cpu-selected-details
-    ) {
+    :is(#item-scroll, .terminal-scroll, .network-dialog, .info-notices, #plan-panel, #cpu-panel, .cpu-selector-scroll) {
         scrollbar-color: var(--border) var(--slot);
     }
 }
@@ -2043,6 +2026,13 @@ footer a {
 .tooltip .resource-components {
     color: #aaa;
 }
+.tooltip.cpu-info-tooltip {
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+}
 @media (min-width: 1500px) {
     body {
         padding-top: 45px;
@@ -2087,21 +2077,11 @@ footer a {
         max-height: min(180px, 25dvh);
     }
     #cpu-panel {
-        display: block;
-        height: auto;
-        overflow-y: auto;
+        height: min(180px, 25dvh);
+        max-height: none;
     }
-    #cpu-panel > h3,
-    .cpu-selector-search {
-        display: block;
-        margin-bottom: 8px;
-    }
-    .cpu-selector-scroll {
-        height: 140px;
-        margin-bottom: 10px;
-    }
-    .cpu-selected-details {
-        max-height: 220px;
+    .cpu-detail-work {
+        flex-basis: 100%;
     }
 }
 @media (max-width: 560px) {

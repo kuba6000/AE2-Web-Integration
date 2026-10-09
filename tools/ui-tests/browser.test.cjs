@@ -1623,7 +1623,7 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
         { timeout: 3000 }
     );
     assert.equal(pages().length, 1);
-    const product = page.getByRole('region', { name: 'CPU details', exact: true }).locator('.resource-icon');
+    const product = page.getByRole('region', { name: 'Current job', exact: true }).locator('.resource-icon');
     await product.scrollIntoViewIfNeeded();
     await page.waitForFunction(
         () => document.querySelector('.cpu-detail-output .resource-icon')?.style.backgroundImage,
@@ -1632,7 +1632,11 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
             timeout: 3000
         }
     );
-    assert.equal(await product.evaluate((icon) => getComputedStyle(icon).backgroundPosition), '-32px 0px');
+    const productCrop = await product.evaluate((icon) => ({
+        x: parseFloat(getComputedStyle(icon).backgroundPositionX),
+        width: icon.getBoundingClientRect().width
+    }));
+    assert.equal(productCrop.x, -productCrop.width, 'The product uses the second atlas cell at its rendered size');
     const selectorIcon = page
         .getByRole('region', { name: 'CPU selector', exact: true })
         .locator('.resource-icon:visible');
@@ -1653,7 +1657,7 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
     assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query, '');
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     await page
-        .getByRole('region', { name: 'CPU details', exact: true })
+        .getByRole('region', { name: 'Current job', exact: true })
         .getByText('Certus Quartz Crystal', { exact: false })
         .waitFor();
     assert.equal(await product.isVisible(), false);
@@ -2839,7 +2843,13 @@ for (const language of ['en', 'pl']) {
         await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
         const item = page.getByRole('button', { name: /Iron Ingot/ });
         await item.waitFor();
-        assert.ok((await page.locator('#cpu-panel').innerText()).includes(expected[5]));
+        assert.ok(
+            (
+                await page
+                    .getByRole('region', { name: language === 'en' ? 'Current job' : 'Bieżące zlecenie', exact: true })
+                    .innerText()
+            ).includes(expected[5])
+        );
         await item.focus();
         assert.ok((await page.getByRole('tooltip').innerText()).includes(expected[5]));
         await page.goto(`${base}#/grids/${gridA}/history`);
@@ -3510,25 +3520,18 @@ test('CPU memory uses binary units through exabytes in overview and current work
     }
     options.cpuDetails['cpu-4'] = cpuWork;
     await page.getByRole('link', { name: 'Assembler · cpu-4', exact: true }).click();
-    const panel = page.getByRole('complementary', { name: 'CPU details', exact: true });
-    await panel
+    const panel = page.getByRole('complementary', { name: 'CPUs', exact: true });
+    await page
         .getByRole('status')
         .filter({ hasText: /^Busy$/ })
         .waitFor();
-    assert.equal(
-        await panel
-            .locator('dl > div')
-            .filter({ has: page.getByText('Capacity', { exact: true }) })
-            .locator('dd')
-            .innerText(),
-        '1.5 MB'
-    );
+    assert.match(await panel.getByRole('link', { name: /cpu-4/ }).innerText(), /1\.5 MB/);
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-4`);
     await page
-        .getByRole('complementary', { name: 'Szczegóły CPU', exact: true })
-        .getByText('1,5 MB', { exact: true })
+        .getByRole('complementary', { name: 'CPU', exact: true })
+        .getByRole('link', { name: /cpu-4.*1,5 MB/ })
         .waitFor();
 });
 
@@ -3573,12 +3576,12 @@ test('CPU selector searches forty processors and preserves reading position acro
     assert.equal(await selector.evaluate((node) => node.scrollTop), scrollBefore);
     const resources = await page.getByRole('region', { name: 'CPU resources', exact: true }).boundingBox();
     const listBounds = await selector.boundingBox();
-    const details = await page.getByRole('region', { name: 'CPU details', exact: true }).boundingBox();
+    const job = await page.getByRole('region', { name: 'Current job', exact: true }).boundingBox();
     const cancel = await page.getByRole('button', { name: 'Cancel current work', exact: true }).boundingBox();
     assert.ok(listBounds.x >= resources.x + resources.width - 1);
-    assert.ok(details.y >= listBounds.y + listBounds.height - 1);
+    assert.ok(job.y >= resources.y + resources.height - 1);
     assert.ok(cancel.y >= resources.y + resources.height - 1);
-    assert.ok(details.y + details.height <= 800 && cancel.y + cancel.height <= 800);
+    assert.ok(job.y + job.height <= 800 && cancel.y + cancel.height <= 800);
     await search.fill('processor-39');
     assert.equal(await selector.getByRole('link').count(), 1);
     await selector.getByRole('link', { name: /processor-39/ }).click();
@@ -3603,7 +3606,7 @@ test('CPU selector searches forty processors and preserves reading position acro
     );
 });
 
-test('CPU selector keeps current job visible and bounds long details without shifting its list', async (t) => {
+test('CPU list fills its attachment and current job stays in a low footer even with long output', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.setViewportSize({ width: 1280, height: 720 });
     options.cpus = Object.fromEntries(
@@ -3614,10 +3617,10 @@ test('CPU selector keeps current job visible and bounds long details without shi
     );
     options.cpuDetails['cpu-0'] = { ...cpuWork, supportsPause: true };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-0`);
-    const details = page.getByRole('region', { name: 'CPU details', exact: true });
+    const details = page.getByRole('region', { name: 'Current job', exact: true });
     const selector = page.getByRole('region', { name: 'CPU selector', exact: true });
     const output = details.getByText(/^Iron Ingot/);
-    await output.waitFor();
+    await output.waitFor({ timeout: 2000 });
     const detailsBounds = await details.boundingBox();
     const outputBounds = await output.boundingBox();
     assert.ok(
@@ -3626,6 +3629,10 @@ test('CPU selector keeps current job visible and bounds long details without shi
         'An ordinary current job is visible without scrolling past hardware metadata'
     );
     const listBounds = await selector.boundingBox();
+    const resources = await page.getByRole('region', { name: 'CPU resources', exact: true }).boundingBox();
+    assert.ok(detailsBounds.y >= resources.y + resources.height - 1);
+    assert.ok(listBounds.height >= resources.height * 0.7, 'CPU list uses the attachment height');
+    assert.match(await selector.getByRole('link').first().innerText(), /8 KB/);
     options.cpuDetails['cpu-0'] = {
         ...cpuWork,
         supportsPause: true,
@@ -3635,7 +3642,16 @@ test('CPU selector keeps current job visible and bounds long details without shi
     await details.getByText(/^Long product/).waitFor();
     assert.deepEqual(await selector.boundingBox(), listBounds);
     assert.deepEqual(await details.boundingBox(), detailsBounds);
-    assert.ok(await details.evaluate((node) => node.scrollHeight > node.clientHeight));
+    assert.ok(
+        await details.evaluate((node) => node.scrollHeight <= node.clientHeight),
+        'The job footer does not gain internal scrolling'
+    );
+    await details.focus();
+    await page
+        .getByRole('tooltip')
+        .filter({ hasText: 'Long product '.repeat(60).trim() })
+        .waitFor();
+    await page.keyboard.press('Escape');
     const cancel = page.getByRole('button', { name: 'Cancel current work', exact: true });
     const actionBounds = await cancel.boundingBox();
     assert.ok(actionBounds.y + actionBounds.height <= 720);
@@ -3646,7 +3662,8 @@ test('CPU selector keeps current job visible and bounds long details without shi
     const search = page.getByRole('searchbox', { name: 'Search CPUs', exact: true });
     await search.fill('Processor 39');
     assert.equal(await selector.getByRole('link').count(), 1);
-    await details.getByText('Coprocessors', { exact: true }).scrollIntoViewIfNeeded();
+    await details.scrollIntoViewIfNeeded();
+    assert.ok((await details.boundingBox()).height < 80, 'The narrow job footer remains low');
     await cancel.scrollIntoViewIfNeeded();
     assert.deepEqual(
         await page.evaluate(() => ({
@@ -3656,6 +3673,125 @@ test('CPU selector keeps current job visible and bounds long details without shi
             height: document.documentElement.scrollHeight
         })),
         { x: 0, y: 0, width: 390, height: 844 }
+    );
+});
+
+test('CPU oversized tooltip stays inside the viewport and exposes its end through keyboard scrolling', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.setViewportSize({ width: 800, height: 650 });
+    options.cpuDetails['cpu-a'] = {
+        ...cpuWork,
+        finalOutput: { ...iron, displayName: 'Oversized product '.repeat(400) }
+    };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const work = page.getByRole('region', { name: 'Current job', exact: true });
+    await work.focus();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.waitFor();
+    const bounds = await tooltip.boundingBox();
+    assert.ok(
+        bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= 800 && bounds.y + bounds.height <= 650,
+        'Long CPU details stay inside the viewport'
+    );
+    await page.keyboard.press('Tab');
+    assert.equal(await tooltip.evaluate((node) => node === document.activeElement), true);
+    await page.keyboard.press('End');
+    await page.waitForFunction(() => document.querySelector('[role="tooltip"]')?.scrollTop > 0);
+    const started = tooltip.getByText(/^Started:/);
+    await started.scrollIntoViewIfNeeded();
+    const lastBounds = await started.boundingBox();
+    assert.ok(lastBounds.y >= bounds.y && lastBounds.y + lastBounds.height <= bounds.y + bounds.height);
+    const readingPosition = await tooltip.evaluate((node) => node.scrollTop);
+    await poll(page);
+    assert.equal(await tooltip.evaluate((node) => node.scrollTop), readingPosition);
+    await page.keyboard.press('Escape');
+    assert.equal(await tooltip.isVisible(), false);
+    assert.equal(await work.evaluate((node) => node === document.activeElement), true);
+    await poll(page);
+    assert.equal(await tooltip.isVisible(), false);
+});
+
+test('CPU selector keeps paused localized state and capacity inside intermediate-width attachments', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus['cpu-a'] = {
+        ...cpu,
+        isBusy: true,
+        isPaused: true,
+        supportsPause: true,
+        finalOutput: iron,
+        availableStorage: JSON.parse('9223372036854775807')
+    };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, isPaused: true, supportsPause: true };
+    await page.goto(`${base}#/web-settings`);
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const selector = page.getByRole('region', { name: 'Wybór CPU', exact: true });
+    const row = selector.getByRole('link', { name: /cpu-a.*Wstrzymany.*8 EB/ });
+    await row.waitFor();
+    for (const width of [601, 800, 900]) {
+        await page.setViewportSize({ width, height: 800 });
+        const bounds = await selector.boundingBox();
+        const capacity = await row.getByText('· 8 EB', { exact: true }).boundingBox();
+        assert.ok(
+            await selector.evaluate((node) => node.scrollWidth <= node.clientWidth),
+            `Selector must not scroll horizontally at ${width}px`
+        );
+        assert.ok(
+            capacity.x >= bounds.x && capacity.x + capacity.width <= bounds.x + bounds.width,
+            'Capacity remains visible'
+        );
+    }
+});
+
+test('CPU tooltips expose live hardware and recorded start without extra detail reads and clear on filter or access loss', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus['cpu-b'] = {
+        ...cpu,
+        name: 'Molecular processor',
+        isBusy: true,
+        finalOutput: iron,
+        usedStorage: 2048,
+        coProcessors: 3,
+        hasTrackingInfo: true,
+        timeStarted: cpuWork.timeStarted
+    };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const row = page.getByRole('region', { name: 'CPU selector', exact: true }).getByRole('link', { name: /cpu-b/ });
+    await row.focus();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.filter({ hasText: 'Molecular processor' }).waitFor();
+    assert.match(await tooltip.innerText(), /Used storage: 2 KB/);
+    assert.match(await tooltip.innerText(), /Coprocessors: 3/);
+    assert.match(await tooltip.innerText(), /Started: .*2023/);
+    assert.equal(await row.getAttribute('aria-describedby'), await tooltip.getAttribute('id'));
+    assert.equal(
+        options.requests.some((request) => request.path.endsWith('/cpus/cpu-b')),
+        false
+    );
+    options.cpus['cpu-b'] = { ...options.cpus['cpu-b'], name: 'Updated processor', usedStorage: 4096, coProcessors: 7 };
+    await poll(page);
+    await tooltip.filter({ hasText: 'Updated processor' }).waitFor();
+    assert.match(await tooltip.innerText(), /Used storage: 4 KB/);
+    assert.match(await tooltip.innerText(), /Coprocessors: 7/);
+    await page.keyboard.press('Escape');
+    await poll(page);
+    assert.equal(await tooltip.isVisible(), false);
+    await page.getByRole('searchbox', { name: 'Search CPUs', exact: true }).focus();
+    await row.focus();
+    await tooltip.waitFor();
+    await page.getByRole('searchbox', { name: 'Search CPUs', exact: true }).fill('cpu-a');
+    assert.equal(await tooltip.isVisible(), false);
+    const work = page.getByRole('region', { name: 'Current job', exact: true });
+    await work.focus();
+    await tooltip.filter({ hasText: 'Iron Ingot' }).waitFor();
+    options.detailError = 'NO_PERMISSIONS';
+    await poll(page);
+    await work.waitFor({ state: 'hidden' });
+    assert.equal(await tooltip.isVisible(), false);
+    assert.equal(await page.getByRole('region', { name: 'CPU selector', exact: true }).getByRole('link').count(), 0);
+    assert.equal(
+        options.requests.some((request) => request.method !== 'GET'),
+        false
     );
 });
 
@@ -3691,22 +3827,16 @@ test('CPU terminal shows selected resources beside CPU navigation and returns to
     ]) {
         assert.equal(await page.getByRole('button', { name, exact: true }).isVisible(), true);
     }
-    const details = page.getByRole('complementary', { name: 'CPU details', exact: true });
+    const details = page.getByRole('complementary', { name: 'CPUs', exact: true });
     assert.equal(
         await page.getByRole('heading', { name: 'Selected assembler', level: 2, exact: true }).isVisible(),
         true
     );
     assert.match(await details.textContent(), /8 KB/);
-    assert.match(await details.textContent(), /2 KB/);
-    assert.equal(
-        await details
-            .locator('dl > div')
-            .filter({ has: page.getByText('Coprocessors', { exact: true }) })
-            .locator('dd')
-            .innerText(),
-        '3'
-    );
-    assert.match(await details.textContent(), /Iron Ingot.*12/);
+    await details.getByRole('link', { name: /Selected assembler/ }).focus();
+    assert.match(await page.getByRole('tooltip').textContent(), /Used storage: 2 KB/);
+    assert.match(await page.getByRole('tooltip').textContent(), /Coprocessors: 3/);
+    assert.match(await page.getByRole('region', { name: 'Current job', exact: true }).textContent(), /Iron Ingot.*12/);
     assert.equal(await page.getByRole('button', { name: 'Pause current work', exact: true }).isEnabled(), true);
     await page.getByRole('link', { name: 'CPUs', exact: true }).click();
     await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
@@ -4005,10 +4135,10 @@ test('CPU terminal scrolls resources within desktop and mobile viewports while c
         await search.fill('');
         const before = await search.boundingBox();
         const bounds = await resources.boundingBox();
-        const panel = await page.getByRole('complementary', { name: 'CPU details', exact: true }).boundingBox();
+        const panel = await page.getByRole('complementary', { name: 'CPUs', exact: true }).boundingBox();
         assert.ok(bounds.height > 100, 'Resources need a usable scroll viewport');
-        if (viewport.width > 600) assert.ok(panel.x >= bounds.x + bounds.width - 1, 'CPU details sit beside resources');
-        else assert.ok(panel.y >= bounds.y + bounds.height - 1, 'Mobile CPU details sit below resources');
+        if (viewport.width > 600) assert.ok(panel.x >= bounds.x + bounds.width - 1, 'CPU list sits beside resources');
+        else assert.ok(panel.y >= bounds.y + bounds.height - 1, 'Mobile CPU list sits below resources');
         await resources.getByRole('button').last().scrollIntoViewIfNeeded();
         assert.ok(
             await resources.evaluate((node) => node.scrollTop > 0),
