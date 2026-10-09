@@ -730,6 +730,7 @@ export function mount(
                     ? locale.t('iconsLoading')
                     : '';
         find('#items').dataset.display = effectiveDisplay;
+        find('#workspace').dataset.resourceDisplay = effectiveDisplay;
         find('#items').classList.toggle('resource-icons-enabled', effectiveDisplay !== 'names');
         find('#workspace').classList.toggle('cpu-icons-enabled', effectiveDisplay !== 'names');
         find('#workspace').classList.toggle('product-icons-enabled', effectiveDisplay !== 'names');

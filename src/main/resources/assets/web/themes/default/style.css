@@ -366,6 +366,18 @@ header {
 .resource-grid.cpu-items-tracked {
     --slot-height: 120px;
 }
+#workspace[data-resource-display='icons'] .resource-grid.cpu-items {
+    --slot-height: 80px;
+}
+#workspace[data-resource-display='icons'] .resource-grid.cpu-items-tracked {
+    --slot-height: 100px;
+}
+#workspace[data-resource-display='icons'] .cpu-item > strong {
+    display: none;
+}
+#workspace[data-resource-display='icons'] .cpu-item-amounts {
+    margin-block: auto;
+}
 .cpu-item-amounts {
     display: flex;
     flex-direction: column;
