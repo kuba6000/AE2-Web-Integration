@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -23,14 +24,18 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTrackingHistory;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
@@ -97,7 +102,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
             CoreEngine.onServerTick();
             assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(changing));
             assertSame(info, GridData.getOrCreate(key).trackingInfo.trackingInfos.get(1));
-            assertEquals(9, info.finalOutput.quantity);
+            assertEquals(9, info.finalOutput.quantity());
         } finally {
             AE2Controller.AE2Interface = previous;
         }
@@ -149,7 +154,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         AE2JobTracker.addJob(cpu, stable, true);
         AE2JobTracker.completeCrafting(stable, cpu);
 
-        assertEquals(9, GridData.getOrCreate(stableKey).trackingInfo.trackingInfos.get(1).finalOutput.quantity);
+        assertEquals(9, GridData.getOrCreate(stableKey).trackingInfo.trackingInfos.get(1).finalOutput.quantity());
     }
 
     @Test
@@ -196,7 +201,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         AE2JobTracker.addJob(cpu, grid, true);
 
         assertSame(info, AE2JobTracker.findActiveJob(cpu));
-        assertEquals(9, info.finalOutput.quantity);
+        assertEquals(9, info.finalOutput.quantity());
     }
 
     @Test
@@ -389,8 +394,8 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         assertNull(AE2JobTracker.findActiveJob(cpu));
         assertSame(info, GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.get(1));
         assertTrue(info.isDone);
-        assertEquals(5, info.finalOutput.quantity);
-        assertEquals("example:resource:7", info.finalOutput.itemid);
+        assertEquals(5, info.finalOutput.quantity());
+        assertEquals("resource", info.finalOutput.registryPath());
     }
 
     @Test
@@ -482,7 +487,92 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         assertEquals(2, grouped.location.size());
     }
 
-    private static void push(EqualCpu cpu, String name, DimensionalCoords location, Resource resource) {
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void historyRetainsEachResourcesProviderGroupsAcrossDeliveriesAndJobTermination(boolean cancelled) {
+        EqualCpu cpu = new EqualCpu();
+        AE2JobTracker.addJob(cpu, grid, false);
+        Resource first = new Resource(1, 0);
+        Resource second = new Resource(1, 1);
+        Resource unknownProvider = new Resource(2, 0);
+        DimensionalCoords firstLocation = new DimensionalCoords(0, 1, 2, 3);
+        DimensionalCoords secondLocation = new DimensionalCoords(0, 4, 5, 6);
+        push(cpu, "Aa", firstLocation, first, second);
+        push(cpu, "Aa", secondLocation, first);
+        push(cpu, "BB", firstLocation, first);
+        update(cpu, first, 10);
+        update(cpu, second, 20);
+        update(cpu, first, 0);
+        update(cpu, second, 0);
+        // A later processing cycle must retain the earlier groups and not duplicate names.
+        push(cpu, "Aa", firstLocation, first);
+        push(cpu, "Assembly", firstLocation, second);
+        update(cpu, first, 3);
+        update(cpu, second, 4);
+        AE2JobTracker.pushedPattern(cpu, null, pattern(unknownProvider));
+        update(cpu, unknownProvider, 2);
+        if (cancelled) AE2JobTracker.cancelCrafting(grid, cpu);
+        else AE2JobTracker.completeCrafting(grid, cpu);
+
+        GetTracking request = new GetTracking();
+        request.handle(TestGridFixtures.context(TestGridFixtures.OWNER_ID, "grid=" + gridKey + "&id=1"));
+        JsonObject response = JsonParser.parseString(request.getJSON())
+            .getAsJsonObject();
+        assertEquals(
+            "OK",
+            response.get("status")
+                .getAsString());
+        JsonObject history = response.getAsJsonObject("data");
+        assertEquals(
+            cancelled,
+            history.get("wasCancelled")
+                .getAsBoolean());
+        HashMap<String, Set<String>> providersByResource = new HashMap<>();
+        for (JsonElement element : history.getAsJsonArray("items")) {
+            JsonObject item = element.getAsJsonObject();
+            Set<String> names = new LinkedHashSet<>();
+            assertNotNull(item.getAsJsonArray("providers"));
+            for (JsonElement name : item.getAsJsonArray("providers")) names.add(name.getAsString());
+            assertEquals(
+                names.size(),
+                item.getAsJsonArray("providers")
+                    .size());
+            providersByResource.put(
+                item.get("itemKey")
+                    .getAsString(),
+                names);
+        }
+        assertEquals(
+            new LinkedHashSet<>(Arrays.asList("Aa", "BB")),
+            providersByResource.get(
+                first.web$getKey()
+                    .toString()));
+        assertEquals(
+            new LinkedHashSet<>(Arrays.asList("Aa", "Assembly")),
+            providersByResource.get(
+                second.web$getKey()
+                    .toString()));
+        assertEquals(
+            Collections.emptySet(),
+            providersByResource.get(
+                unknownProvider.web$getKey()
+                    .toString()));
+        Set<String> groups = new LinkedHashSet<>();
+        for (JsonElement element : history.getAsJsonArray("interfaceShare")) {
+            JsonObject provider = element.getAsJsonObject();
+            String name = provider.get("name")
+                .getAsString();
+            groups.add(name);
+            if (name.equals("Aa")) assertEquals(
+                2,
+                provider.getAsJsonArray("location")
+                    .size());
+        }
+        assertEquals(new LinkedHashSet<>(Arrays.asList("Aa", "BB", "Assembly")), groups);
+        for (Set<String> names : providersByResource.values()) assertTrue(groups.containsAll(names));
+    }
+
+    private static void push(EqualCpu cpu, String name, DimensionalCoords location, Resource... resources) {
         IPatternProviderViewable provider = new IPatternProviderViewable() {
 
             @Override
@@ -495,21 +585,26 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
                 return location;
             }
         };
-        IAEGenericStack output = new IAEGenericStack() {
+        AE2JobTracker.pushedPattern(cpu, provider, pattern(resources));
+    }
 
-            @Override
-            public @NotNull IAEKey web$what() {
-                return resource;
-            }
+    private static IAECraftingPatternDetails pattern(Resource... resources) {
+        IAEGenericStack[] outputs = Arrays.stream(resources)
+            .map(resource -> new IAEGenericStack() {
 
-            @Override
-            public long web$amount() {
-                return 1;
-            }
+                @Override
+                public @NotNull IAEKey web$what() {
+                    return resource;
+                }
 
-        };
-        IAECraftingPatternDetails pattern = () -> new IAEGenericStack[] { output };
-        AE2JobTracker.pushedPattern(cpu, provider, pattern);
+                @Override
+                public long web$amount() {
+                    return 1;
+                }
+
+            })
+            .toArray(IAEGenericStack[]::new);
+        return () -> outputs;
     }
 
     private static void update(EqualCpu cpu, Resource resource, long remaining) {
@@ -527,7 +622,9 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
 
         @Override
         public @NotNull StableKey web$getKey() {
-            throw new AssertionError("Tracking must not encode stable resource IDs");
+            return StableKey.create(
+                sink -> sink.putInt(id)
+                    .putInt(variant));
         }
 
         @Override
@@ -536,7 +633,24 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         }
 
         @Override
-        public @NotNull String web$getItemID() {
+        public @NotNull ResourceType web$getResourceType() {
+            return ResourceType.ITEM;
+        }
+
+        @Override
+        public @NotNull String web$getRegistryNamespace() {
+            return "example";
+        }
+
+        public int web$getComponentCount() {
+            return 2;
+        }
+
+        public int web$getDamage() {
+            return 7;
+        }
+
+        public @NotNull String web$getRegistryPath() {
             return "test:resource";
         }
 
@@ -600,6 +714,15 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         @Override
         public long web$getCoProcessors() {
             return 0;
+        }
+
+        @Override
+        public CpuSelectionMode web$getSelectionMode() {
+            return null;
+        }
+
+        public boolean web$acceptsPlayerJobs() {
+            return !web$isBusy();
         }
 
         @Override

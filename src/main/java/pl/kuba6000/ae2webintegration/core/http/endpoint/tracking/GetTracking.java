@@ -3,16 +3,21 @@ package pl.kuba6000.ae2webintegration.core.http.endpoint.tracking;
 import java.net.HttpURLConnection;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
-import pl.kuba6000.ae2webintegration.core.api.JSON_CompactedJobTrackingInfo;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
+import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.CraftingHistory;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 /**
@@ -45,15 +50,20 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/crafting-history/{entryId}")
 public final class GetTracking extends IAsyncRequest {
 
+    /** Include product and resource icon references and atlas metadata; omitted means false. */
+    @QueryParam("icons")
+    private boolean icons;
+
     /**
      * Successful operation result.
      * 
      * @param status {@code OK} for a successful request
      * @param data   completed or cancelled crafting measurements for the selected history entry
+     * @param icons  atlas metadata for product and resource references; null when not requested or no pack is available
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull JSON_CompactedJobTrackingInfo data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull CraftingHistory data, @Nullable IconMappings icons) {}
 
     @PathParam("entryId")
     private int id;
@@ -72,7 +82,11 @@ public final class GetTracking extends IAsyncRequest {
             return;
         }
 
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, new JSON_CompactedJobTrackingInfo(info)));
+        IconPack pack = icons ? CoreEngine.getIconPack() : null;
+        IconMappings mappings = pack == null ? null : new IconMappings(pack);
+        respond(
+            HttpURLConnection.HTTP_OK,
+            new Response(ApiStatus.OK, CraftingHistory.capture(info, mappings), mappings));
     }
 
 }

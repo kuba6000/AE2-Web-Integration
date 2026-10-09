@@ -22,6 +22,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.google.common.collect.MapMaker;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
@@ -31,10 +33,23 @@ import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
+import pl.kuba6000.ae2webintegration.core.utils.AtomicFileWriter;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 /** Persisted identities and weak live-grid bindings for one save; native reads run on the server thread. */
 public final class GridIdentityRegistry {
+
+    // Saved grid identities retain their established coordinate spelling independently of HTTP JSON.
+    private static final Gson STORAGE_GSON = new GsonBuilder()
+        .registerTypeAdapter(
+            StableKey.class,
+            GSONUtils.GSON_BUILDER.create()
+                .getAdapter(StableKey.class))
+        .serializeNulls()
+        .setFieldNamingStrategy(
+            field -> field.getDeclaringClass() == DimensionalCoords.class && field.getName()
+                .equals("dimensionId") ? "dimid" : field.getName())
+        .create();
 
     private @Nullable File file;
     private boolean dirty;
@@ -164,7 +179,7 @@ public final class GridIdentityRegistry {
         File file = storageFile();
         if (Files.notExists(file.toPath())) return;
         try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
-            Map<StableKey, GridPersistentData> stored = GSONUtils.GSON_BUILDER.create()
+            Map<StableKey, GridPersistentData> stored = STORAGE_GSON
                 .fromJson(reader, new TypeToken<Map<StableKey, GridPersistentData>>() {}.getType());
             if (stored == null) throw new IOException("Empty grid identity file: " + file);
             for (Map.Entry<StableKey, GridPersistentData> entry : stored.entrySet()) {
@@ -250,7 +265,7 @@ public final class GridIdentityRegistry {
     private void writeRecords(Map<StableKey, GridPersistentData> data) throws IOException {
         Map<StableKey, GridPersistentData> ordered = new TreeMap<>(Comparator.comparing(StableKey::toString));
         ordered.putAll(data);
-        GSONUtils.writeAtomically(storageFile(), ordered);
+        AtomicFileWriter.write(storageFile(), writer -> STORAGE_GSON.toJson(ordered, writer));
         dirty = false;
     }
 }

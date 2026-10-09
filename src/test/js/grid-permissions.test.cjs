@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { terminal } = require('./terminal-fixture.cjs');
 
-for (const page of ['../../main/resources/assets/webpage.html', '../../../example_website/index.php']) {
+for (const page of ['../../main/resources/assets/webpage.html']) {
     test(`${page}: grouped permission sources retain every player's access explanation`, () => {
         const { context } = terminal(page);
         function element(tag) {
@@ -14,7 +14,7 @@ for (const page of ['../../main/resources/assets/webpage.html', '../../../exampl
         const container = context.document.getElementById('gridaccessdetails');
         Object.assign(container, element('div'));
         const source = (uuid, name, kind) => ({player: {uuid, name}, kind,
-            position: {dimid: 'world', x: 1, y: 2, z: 3}, reason: 'node_owner'});
+            position: {dimensionId: 'world', x: 1, y: 2, z: 3}, reason: 'node_owner'});
         context.showGridAccess({
             'anna-id': [source('anna-id', 'Anna', 'controller'), source('anna-id', 'Anna', 'terminal')],
             'piotr-id': [source('piotr-id', 'Piotr', 'wireless_access_point')]

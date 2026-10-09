@@ -110,7 +110,7 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
     private @NotNull Input input;
 
     @PathParam("planId")
-    private int jobID;
+    private int jobId;
 
     @Override
     protected void handle(IAEGrid grid) {
@@ -118,7 +118,7 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        Future<IAECraftingJob> job = gridData.getJob(jobID);
+        Future<IAECraftingJob> job = gridData.getJob(jobId);
         if (job == null) {
             deny(ApiStatus.INVALID_ID);
             return;
@@ -140,7 +140,7 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
                 if (error != null) {
                     respond(HttpURLConnection.HTTP_CONFLICT, new FailureResponse(ApiStatus.FAIL, error));
                 } else {
-                    gridData.removeJob(this.jobID);
+                    gridData.removeJob(this.jobId);
                     respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
                 }
             } catch (InterruptedException | ExecutionException e) {

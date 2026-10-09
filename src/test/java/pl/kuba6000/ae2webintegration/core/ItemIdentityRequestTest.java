@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -21,6 +22,8 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.CreateCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -29,6 +32,139 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class ItemIdentityRequestTest extends GridTestScope {
+
+    @Test
+    void listingExposesTheResourceTypeForTerminalFiltering() {
+        Resource fluid = new Resource("virtual:fluid_drop", 8000, true) {
+
+            @Override
+            public int web$getDamage() {
+                return 0;
+            }
+
+            @Override
+            public int web$getComponentCount() {
+                return 0;
+            }
+
+            @Override
+            public @NotNull ResourceType web$getResourceType() {
+                return ResourceType.FLUID;
+            }
+        };
+        Resource other = new Resource("addon:chemical", 42, false) {
+
+            @Override
+            public @Nullable String web$getRegistryNamespace() {
+                return null;
+            }
+
+            @Override
+            public @Nullable String web$getRegistryPath() {
+                return null;
+            }
+
+            @Override
+            public int web$getComponentCount() {
+                return 0;
+            }
+
+            @Override
+            public int web$getDamage() {
+                return 0;
+            }
+
+            @Override
+            public @NotNull ResourceType web$getResourceType() {
+                return ResourceType.OTHER;
+            }
+
+            @Override
+            public @NotNull StableKey web$getKey() {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public @NotNull IAEKey web$copyIdentity() {
+                return this;
+            }
+        };
+        Resource recipe = new Resource("fluid:recipe", 0, true) {
+
+            @Override
+            public @NotNull ResourceType web$getResourceType() {
+                return ResourceType.FLUID;
+            }
+        };
+        Grid grid = new Grid(910012, new Resource("minecraft:water_bucket", 5, false), fluid, other);
+        grid.recipes = Collections.singleton(recipe);
+        JsonArray rows = run(new GetItems(), grid, "").getAsJsonArray("data");
+        assertEquals(4, rows.size());
+        assertEquals(
+            "ITEM",
+            rows.get(0)
+                .getAsJsonObject()
+                .get("resourceType")
+                .getAsString());
+        JsonObject fluidRow = rows.get(1)
+            .getAsJsonObject();
+        assertEquals(
+            "FLUID",
+            fluidRow.get("resourceType")
+                .getAsString());
+        assertEquals(
+            8000,
+            fluidRow.get("quantity")
+                .getAsLong());
+        assertEquals(
+            0,
+            fluidRow.get("damage")
+                .getAsInt());
+        assertEquals(
+            0,
+            fluidRow.get("componentCount")
+                .getAsInt());
+        JsonObject otherRow = rows.get(2)
+            .getAsJsonObject();
+        assertEquals(
+            "OTHER",
+            otherRow.get("resourceType")
+                .getAsString());
+        assertEquals(
+            "UNSUPPORTED",
+            otherRow.get("identityStatus")
+                .getAsString());
+        assertEquals(
+            "addon:chemical",
+            otherRow.get("displayName")
+                .getAsString());
+        for (String field : new String[] { "registryNamespace", "registryPath" }) {
+            assertTrue(
+                otherRow.get(field)
+                    .isJsonNull());
+        }
+        assertEquals(
+            0,
+            otherRow.get("componentCount")
+                .getAsInt());
+        assertEquals(
+            0,
+            otherRow.get("damage")
+                .getAsInt());
+        JsonObject recipeRow = rows.get(3)
+            .getAsJsonObject();
+        assertEquals(
+            "FLUID",
+            recipeRow.get("resourceType")
+                .getAsString());
+        assertEquals(
+            0,
+            recipeRow.get("quantity")
+                .getAsLong());
+        assertTrue(
+            recipeRow.get("craftable")
+                .getAsBoolean());
+    }
 
     @Test
     @SuppressWarnings("BusyWait") // Wait for GC to release ownership, bounded by the deadline below.
@@ -125,7 +261,7 @@ class ItemIdentityRequestTest extends GridTestScope {
             "variantB",
             rows.get(1)
                 .getAsJsonObject()
-                .get("itemid")
+                .get("registryPath")
                 .getAsString());
     }
 
@@ -179,6 +315,30 @@ class ItemIdentityRequestTest extends GridTestScope {
         JsonObject normal = rows.get(0)
             .getAsJsonObject();
         assertTrue(normal.has("itemKey"));
+        assertEquals(
+            "example",
+            normal.get("registryNamespace")
+                .getAsString());
+        assertEquals(
+            2,
+            normal.get("componentCount")
+                .getAsInt());
+        assertEquals(
+            7,
+            normal.get("damage")
+                .getAsInt());
+        assertFalse(normal.has("itemId"));
+        assertFalse(normal.has("itemName"));
+        assertEquals(
+            "iron",
+            normal.get("registryPath")
+                .getAsString());
+        assertEquals(
+            "iron",
+            normal.get("displayName")
+                .getAsString());
+        assertFalse(normal.has("itemid"));
+        assertFalse(normal.has("itemname"));
         assertTrue(
             normal.get("identityStatus")
                 .isJsonNull());
@@ -202,7 +362,7 @@ class ItemIdentityRequestTest extends GridTestScope {
                 .getAsLong());
         assertEquals(
             "unsupported",
-            unsupported.get("itemname")
+            unsupported.get("displayName")
                 .getAsString());
     }
 
@@ -223,7 +383,7 @@ class ItemIdentityRequestTest extends GridTestScope {
             "OK",
             run(new CreateCraftingPlan(), grid, "&itemKey=" + first + "&quantity=1").get("status")
                 .getAsString());
-        assertEquals("Aa", grid.ordered.web$getItemID());
+        assertEquals("Aa", grid.ordered.web$getRegistryPath());
     }
 
     @Test
@@ -252,7 +412,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         request.runOnServerThread(TestGridFixtures.ae(grid));
         assertEquals(
             "NO_PERMISSIONS",
-            JsonParser.parseString(request.getJSON())
+            new JsonParser().parse(request.getJSON())
                 .getAsJsonObject()
                 .get("status")
                 .getAsString());
@@ -290,7 +450,7 @@ class ItemIdentityRequestTest extends GridTestScope {
                 .getAsString());
         assertEquals(1, first.jobs);
         assertEquals(2147483648L, first.orderedAmount);
-        assertEquals("iron", first.ordered.web$getItemID());
+        assertEquals("iron", first.ordered.web$getRegistryPath());
     }
 
     @Test
@@ -312,6 +472,9 @@ class ItemIdentityRequestTest extends GridTestScope {
             result.get("status")
                 .getAsString());
         assertTrue(
+            result.getAsJsonObject("data")
+                .has("jobId"));
+        assertFalse(
             result.getAsJsonObject("data")
                 .has("jobID"));
         assertEquals(1, grid.jobs);
@@ -338,7 +501,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         AE2Controller.AE2Interface = ae;
         if (request.init(TestGridFixtures.context(-1, "grid=" + TestGridFixtures.resolvedKey(grid) + params)))
             request.runOnServerThread(ae);
-        return JsonParser.parseString(request.getJSON())
+        return new JsonParser().parse(request.getJSON())
             .getAsJsonObject();
     }
 
@@ -362,7 +525,23 @@ class ItemIdentityRequestTest extends GridTestScope {
             return new Resource(id, 0, false);
         }
 
-        public @NotNull String web$getItemID() {
+        public @NotNull ResourceType web$getResourceType() {
+            return ResourceType.ITEM;
+        }
+
+        public @Nullable String web$getRegistryNamespace() {
+            return "example";
+        }
+
+        public int web$getComponentCount() {
+            return 2;
+        }
+
+        public int web$getDamage() {
+            return 7;
+        }
+
+        public @Nullable String web$getRegistryPath() {
             return id;
         }
 
@@ -434,11 +613,14 @@ class ItemIdentityRequestTest extends GridTestScope {
                     (proxy, method, args) -> {
                         if (method.getName()
                             .equals("web$isBusy")) return false;
+                        if (method.getName()
+                            .equals("web$acceptsPlayerJobs")) return true;
                         throw new AssertionError("Unexpected CPU operation: " + method.getName());
                     }));
         }
 
-        public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey key, long amount) {
+        public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey key, long amount,
+            CraftingOptions options) {
             jobs++;
             ordered = key;
             orderedAmount = amount;

@@ -55,12 +55,14 @@ public final class OpenApiDoclet implements Doclet {
     private static final List<Category> CATEGORIES = List.of(
         new Category("grid", "Grids", "Discover accessible ME grids, browse their items and manage grid settings."),
         new Category("cpu", "CPUs", "Inspect crafting CPUs and cancel their current work."),
+        new Category("icons", "Icons", "Discover the server's icon pack and retrieve its atlas pages."),
         new Category("crafting", "Crafting plans", "Create, inspect, submit and discard crafting plans."),
         new Category("tracking", "Crafting history", "Browse recorded crafting jobs and their measurements."),
         new Category("auth", "Authentication", "Obtain or revoke session tokens and start account registration."));
 
     private static final String ENDPOINT = "pl.kuba6000.ae2webintegration.core.http.contract.Endpoint";
     private static final String PATH_PARAM = "pl.kuba6000.ae2webintegration.core.http.contract.PathParam";
+    private static final String QUERY_PARAM = "pl.kuba6000.ae2webintegration.core.http.contract.QueryParam";
     private static final String BODY = "pl.kuba6000.ae2webintegration.core.http.contract.Body";
     private static final String OPTIONAL_INPUT = "pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput";
     private static final String STABLE_KEY = "pl.kuba6000.ae2webintegration.core.identity.StableKey";
@@ -245,9 +247,21 @@ public final class OpenApiDoclet implements Doclet {
         if (comment == null) throw problem(endpoint, "Missing endpoint Javadoc and @response declarations");
         Map<String, Object> responses = new TreeMap<>();
         Map<String, JsonElement> responseExamples = new TreeMap<>();
+        Map<String, String> responseMedia = new TreeMap<>();
+        Map<String, Map<String, Object>> responseHeaders = new TreeMap<>();
         Map<String, String> pathDescriptions = new TreeMap<>();
         for (DocTree tag : comment.getBlockTags()) {
             if (!(tag instanceof UnknownBlockTagTree block)) continue;
+            if (block.getTagName()
+                .equals("responseMedia")) {
+                readResponseMedia(endpoint, block, responseMedia);
+                continue;
+            }
+            if (block.getTagName()
+                .equals("responseHeader")) {
+                readResponseHeader(endpoint, block, responseHeaders);
+                continue;
+            }
             if (block.getTagName()
                 .equals("pathParam")) {
                 String[] parameter = text(block.getContent()).split("\\s+", 2);
@@ -333,9 +347,12 @@ public final class OpenApiDoclet implements Doclet {
         if (responses.isEmpty()) throw problem(endpoint, "Missing @response declarations");
         JsonObject documentedResponses = JSON.toJsonTree(responses)
             .getAsJsonObject();
+        applyResponseMetadata(endpoint, documentedResponses, responseMedia, responseHeaders);
         for (Map.Entry<String, JsonElement> example : responseExamples.entrySet()) {
             JsonObject response = documentedResponses.getAsJsonObject(example.getKey());
-            if (response == null || !response.has("content")) {
+            if (response == null || !response.has("content")
+                || !response.getAsJsonObject("content")
+                    .has("application/json")) {
                 throw problem(endpoint, "@responseExample requires a declared response body: " + example.getKey());
             }
             response.getAsJsonObject("content")
@@ -353,8 +370,69 @@ public final class OpenApiDoclet implements Doclet {
             "responses",
             documentedResponses);
         addInputs(endpoint, routePath, pathDescriptions, operation);
-        if (Boolean.FALSE.equals(annotationValue(route, "authenticated"))) operation.put("security", List.of());
+        switch (annotationValue(route, "authentication").toString()) {
+            case "REQUIRED" -> {
+            }
+            case "OPTIONAL" -> operation
+                .put("security", List.of(object(), object("bearerAuth", List.of()), object("cookieAuth", List.of())));
+            case "NONE" -> operation.put("security", List.of());
+            default -> throw problem(endpoint, "Unsupported authentication policy");
+        }
         return operation;
+    }
+
+    private void readResponseMedia(TypeElement endpoint, UnknownBlockTagTree block, Map<String, String> responseMedia) {
+        String[] media = text(block.getContent()).split("\\s+", 2);
+        if (media.length != 2 || !media[0].matches("[1-5][0-9]{2}")
+            || !media[1].matches("[a-zA-Z0-9!#$&^_.+-]+/[a-zA-Z0-9!#$&^_.+-]+")) {
+            throw problem(endpoint, "Expected @responseMedia <status> <media-type>");
+        }
+        if (responseMedia.putIfAbsent(media[0], media[1]) != null) {
+            throw problem(endpoint, "Duplicate @responseMedia status: " + media[0]);
+        }
+    }
+
+    private void readResponseHeader(TypeElement endpoint, UnknownBlockTagTree block,
+        Map<String, Map<String, Object>> responseHeaders) {
+        String[] header = text(block.getContent()).split("\\s+", 3);
+        if (header.length != 3 || !header[0].matches("[1-5][0-9]{2}")
+            || !header[1].matches("[!#$%&'*+.^_`|~a-zA-Z0-9-]+")
+            || header[2].isBlank()) {
+            throw problem(endpoint, "Expected @responseHeader <status> <name> <description>");
+        }
+        Map<String, Object> headers = responseHeaders
+            .computeIfAbsent(header[0], ignored -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER));
+        if (headers.putIfAbsent(header[1], object("description", header[2], "schema", object("type", "string")))
+            != null) {
+            throw problem(endpoint, "Duplicate @responseHeader: " + header[1]);
+        }
+    }
+
+    private void applyResponseMetadata(TypeElement endpoint, JsonObject documentedResponses,
+        Map<String, String> responseMedia, Map<String, Map<String, Object>> responseHeaders) {
+        for (Map.Entry<String, String> media : responseMedia.entrySet()) {
+            JsonObject response = documentedResponses.getAsJsonObject(media.getKey());
+            if (response == null || response.has("content")
+                || media.getKey()
+                    .equals("204")
+                || media.getKey()
+                    .equals("304")
+                || media.getKey()
+                    .startsWith("1")
+                || media.getValue()
+                    .equalsIgnoreCase("application/json")) {
+                throw problem(
+                    endpoint,
+                    "@responseMedia requires a body-bearing response without a JSON schema: " + media.getKey());
+            }
+            response.add("content", JSON.toJsonTree(object(media.getValue(), object())));
+        }
+        for (Map.Entry<String, Map<String, Object>> headers : responseHeaders.entrySet()) {
+            JsonObject response = documentedResponses.getAsJsonObject(headers.getKey());
+            if (response == null)
+                throw problem(endpoint, "@responseHeader requires a declared response: " + headers.getKey());
+            response.add("headers", JSON.toJsonTree(headers.getValue()));
+        }
     }
 
     private void addInputs(TypeElement endpoint, String path, Map<String, String> descriptions,
@@ -373,6 +451,7 @@ public final class OpenApiDoclet implements Doclet {
             throw problem(endpoint, "@pathParam declarations must match route placeholders: " + placeholders);
         }
         Map<String, Element> fields = new TreeMap<>();
+        Map<String, Element> queryFields = new TreeMap<>();
         Element body = null;
         TypeElement current = endpoint;
         while (current != null) {
@@ -383,6 +462,13 @@ public final class OpenApiDoclet implements Doclet {
                     String name = annotationValue(parameter, "value").toString();
                     if (placeholders.contains(name) && fields.putIfAbsent(name, field) != null) {
                         throw problem(endpoint, "Duplicate @PathParam field: " + name);
+                    }
+                }
+                AnnotationMirror query = annotation(field, QUERY_PARAM);
+                if (query != null) {
+                    String name = annotationValue(query, "value").toString();
+                    if (!name.matches("[a-zA-Z][a-zA-Z0-9_]*") || queryFields.putIfAbsent(name, field) != null) {
+                        throw problem(field, "Invalid or duplicate @QueryParam: " + name);
                     }
                 }
                 if (annotation(field, BODY) != null) {
@@ -419,6 +505,28 @@ public final class OpenApiDoclet implements Doclet {
                     descriptions.get(name),
                     "schema",
                     value));
+        }
+        for (Map.Entry<String, Element> query : queryFields.entrySet()) {
+            Element field = query.getValue();
+            if (field.getModifiers()
+                .contains(Modifier.STATIC)
+                || environment.getTypeUtils()
+                    .asMemberOf(endpointType, field)
+                    .getKind() != TypeKind.BOOLEAN) {
+                throw problem(field, "@QueryParam requires a nonstatic boolean field");
+            }
+            parameters.add(
+                object(
+                    "name",
+                    query.getKey(),
+                    "in",
+                    "query",
+                    "required",
+                    false,
+                    "description",
+                    description(field),
+                    "schema",
+                    object("type", "boolean", "default", false)));
         }
         if (!parameters.isEmpty()) operation.put("parameters", parameters);
         if (body != null) {

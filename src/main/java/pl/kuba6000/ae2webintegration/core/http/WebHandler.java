@@ -1,16 +1,13 @@
 package pl.kuba6000.ae2webintegration.core.http;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.Nullable;
@@ -19,12 +16,10 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
-import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService.LoginResult;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService.RegistrationResult;
-import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 /** Serves browser pages and adapts shared authentication operations to forms, cookies and redirects. */
@@ -32,14 +27,19 @@ public final class WebHandler implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI()
+            .getPath();
+        if (path.startsWith("/assets/web/")) {
+            // Loading public modules must not consume the unauthenticated login request budget.
+            serveAsset(exchange, path);
+            return;
+        }
         if (AuthService.isRateLimited(exchange)) {
             exchange.getResponseHeaders()
                 .set("Content-Type", "text/plain");
             sendText(exchange, 429, "Too Many Requests"); // NOPMD - HTTP Too Many Requests.
             return;
         }
-        String path = exchange.getRequestURI()
-            .getPath();
         if (path.equals("/favicon.ico")) {
             exchange.getResponseHeaders()
                 .set("Content-Type", "image/x-icon");
@@ -74,6 +74,34 @@ public final class WebHandler implements HttpHandler {
                 }
         }
         renderPage(exchange, authenticated);
+    }
+
+    private static void serveAsset(HttpExchange exchange, String path) throws IOException {
+        String method = exchange.getRequestMethod();
+        if (!method.equals("GET") && !method.equals("HEAD")) {
+            exchange.getResponseHeaders()
+                .set("Allow", "GET, HEAD");
+            sendText(exchange, HttpURLConnection.HTTP_BAD_METHOD, "Method not allowed");
+            return;
+        }
+        String contentType = path.endsWith(".mjs") || path.endsWith(".js") ? "text/javascript; charset=UTF-8"
+            : path.endsWith(".css") ? "text/css; charset=UTF-8"
+                : path.endsWith(".woff2") ? "font/woff2" : path.endsWith(".svg") ? "image/svg+xml" : null;
+        if (contentType == null || !path.matches("/assets/web/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+")) {
+            sendText(exchange, HttpURLConnection.HTTP_NOT_FOUND, "Not found");
+            return;
+        }
+        try (InputStream input = WebHandler.class.getResourceAsStream(path)) {
+            if (input == null) {
+                sendText(exchange, HttpURLConnection.HTTP_NOT_FOUND, "Not found");
+                return;
+            }
+            exchange.getResponseHeaders()
+                .set("Content-Type", contentType);
+            exchange.getResponseHeaders()
+                .set("X-Content-Type-Options", "nosniff");
+            sendBytes(exchange, HttpURLConnection.HTTP_OK, IOUtils.toByteArray(input));
+        }
     }
 
     /** Returns whether the form produced its own response instead of rendering the login page. */
@@ -126,35 +154,35 @@ public final class WebHandler implements HttpHandler {
 
     private static void renderPage(HttpExchange exchange, @Nullable RequestContext context) throws IOException {
         String site = context == null ? "/assets/login.html" : "/assets/webpage.html";
-        String response;
-        try (InputStream input = WebHandler.class.getResourceAsStream(site)) {
-            if (input == null) return;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
-                response = reader.lines()
-                    .collect(Collectors.joining(System.lineSeparator()));
-            }
+        if (context != null && usesNextUi(exchange)) {
+            site = "/assets/web/index.html";
         }
-        response = response
-            .replace("_REPLACE_ME_IS_PUBLIC_MODE", Config.INSTANCE.general.publicMode ? "true" : "false");
-        response = response.replace(
-            "_REPLACE_ME_VERSION_OUTDATED",
-            Config.INSTANCE.general.checkForUpdates && CoreEngine.getAvailableUpdate() != null ? "true" : "false");
-        if (context != null) {
-            response = response.replace(
-                "_REPLACE_ME_USERNAME",
-                context.getPrincipal()
-                    .getUsername());
-            response = response.replace("_REPLACE_ME_IS_ADMIN", context.isAdmin() ? "true" : "false");
-        }
+        // The selected document depends on authentication even though its bytes are static.
+        exchange.getResponseHeaders()
+            .set("Cache-Control", "no-store");
         exchange.getResponseHeaders()
             .set("Content-Type", "text/html; charset=UTF-8");
-        sendBytes(exchange, HttpURLConnection.HTTP_OK, response.getBytes(StandardCharsets.UTF_8));
+        try (InputStream input = WebHandler.class.getResourceAsStream(site)) {
+            if (input == null) return;
+            sendBytes(exchange, HttpURLConnection.HTTP_OK, IOUtils.toByteArray(input));
+        }
     }
 
     private static void redirect(HttpExchange exchange, String location) throws IOException {
+        if (usesNextUi(exchange)) {
+            location = location.equals(".") ? "?ui=next" : location + "&ui=next";
+        }
         exchange.getResponseHeaders()
             .add("Location", location);
         exchange.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
+    }
+
+    private static boolean usesNextUi(HttpExchange exchange) {
+        return "next".equals(
+            HTTPUtils.parseQueryString(
+                exchange.getRequestURI()
+                    .getRawQuery())
+                .get("ui"));
     }
 
     private static void sendText(HttpExchange exchange, int status, String text) throws IOException {
@@ -162,6 +190,14 @@ public final class WebHandler implements HttpHandler {
     }
 
     private static void sendBytes(HttpExchange exchange, int status, byte[] bytes) throws IOException {
+        if (exchange.getRequestMethod()
+            .equals("HEAD")) {
+            exchange.getResponseHeaders()
+                .set("Content-Length", Integer.toString(bytes.length));
+            exchange.sendResponseHeaders(status, -1);
+            exchange.close();
+            return;
+        }
         exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream output = exchange.getResponseBody()) {
             output.write(bytes);

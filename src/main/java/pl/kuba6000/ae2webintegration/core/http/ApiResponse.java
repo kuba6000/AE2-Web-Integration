@@ -31,8 +31,9 @@ public record ApiResponse(int httpStatus, @NotNull String json) {
         byte[] body = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders()
             .set("Content-Type", "application/json; charset=UTF-8");
-        exchange.getResponseHeaders()
-            .set("Cache-Control", "no-store");
+        if (httpStatus >= HttpURLConnection.HTTP_BAD_REQUEST || exchange.getResponseHeaders()
+            .getFirst("Cache-Control") == null) exchange.getResponseHeaders()
+                .set("Cache-Control", "no-store");
         if (httpStatus == HttpURLConnection.HTTP_UNAUTHORIZED) {
             exchange.getResponseHeaders()
                 .set("WWW-Authenticate", "Bearer");

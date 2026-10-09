@@ -11,6 +11,7 @@ import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService.RegistrationResult;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
@@ -43,7 +44,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
  * @responseExample 503 {"status":"SERVER_BUSY","data":null}
  */
-@Endpoint(method = HttpMethod.POST, path = "/api/auth/register", authenticated = false)
+@Endpoint(method = HttpMethod.POST, path = "/api/auth/register", authentication = Authentication.NONE)
 public final class Register extends IAsyncRequest {
 
     /** Credentials for the account being registered by an online Minecraft player. */

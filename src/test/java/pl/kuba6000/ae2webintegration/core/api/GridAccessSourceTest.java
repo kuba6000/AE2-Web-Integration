@@ -29,7 +29,7 @@ class GridAccessSourceTest {
             "security_card");
         String expected = "{\"player\":{\"uuid\":\"00000000-0000-0000-0000-000000000001\",\"name\":\"Anna\"},"
             + "\"kind\":\"security_terminal\","
-            + "\"position\":{\"dimid\":\"world\",\"x\":1,\"y\":2,\"z\":3},"
+            + "\"position\":{\"dimensionId\":\"world\",\"x\":1,\"y\":2,\"z\":3},"
             + "\"side\":null,\"reason\":\"security_card\"}";
         assertEquals(gson.fromJson(expected, JsonObject.class), gson.toJsonTree(source));
         GridAccessSource restored = gson.fromJson(expected, GridAccessSource.class);

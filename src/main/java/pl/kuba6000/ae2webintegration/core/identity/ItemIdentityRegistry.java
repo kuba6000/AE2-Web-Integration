@@ -9,14 +9,14 @@ import org.jetbrains.annotations.Nullable;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
 
-/** Server-thread-only shared identities retained by the grids that last reported them. */
+/** Server-thread-only shared identities retained by the grids, CPUs and plans that last reported them. */
 public final class ItemIdentityRegistry {
 
-    // Values must not refer back to their grid: that would defeat the weak owner key.
-    private final Cache<IAEGrid, Set<Entry>> owners = CacheBuilder.newBuilder()
+    // Values must not refer back to their owner: that would defeat the weak owner key.
+    private final Cache<IIdentityHolder, Set<Entry>> owners = CacheBuilder.newBuilder()
         .weakKeys()
         .build();
     private final Cache<StableKey, Entry> entries = CacheBuilder.newBuilder()
@@ -28,20 +28,38 @@ public final class ItemIdentityRegistry {
     // Remember observed conflicts until world teardown, without retaining native resource data.
     private final Set<StableKey> ambiguous = new HashSet<>();
 
-    /** Retain an output identity until the grid next publishes its complete item list. */
-    public @NotNull StableKey remember(@NotNull IAEGrid grid, @NotNull IAEKey resource) {
+    /** Retain an output identity until its owner next publishes a complete resource snapshot. */
+    public @NotNull StableKey remember(@NotNull IIdentityHolder owner, @NotNull IAEKey resource) {
         cleanUp();
         Entry entry = findOrCreate(resource);
         owners.asMap()
-            .computeIfAbsent(grid, ignored -> new HashSet<>())
+            .computeIfAbsent(owner, ignored -> new HashSet<>())
             .add(entry);
         return entry.key;
     }
 
     /** Start a replacement list; the previous list stays owned until commit succeeds. */
-    public @NotNull Listing beginListing(@NotNull IAEGrid grid) {
+    public @NotNull Listing beginListing(@NotNull IIdentityHolder owner) {
         cleanUp();
-        return new Listing(grid);
+        return new Listing(owner);
+    }
+
+    /** Resolve only after an exact icon miss; absence is memoized for the retained identity too. */
+    public @Nullable StableKey resolveIconBase(@NotNull StableKey key) {
+        cleanUp();
+        if (ambiguous.contains(key)) throw new Ambiguous();
+        Entry entry = entries.getIfPresent(key);
+        if (entry == null) return null;
+        if (!entry.baseComputed) {
+            try {
+                entry.base = entry.identity.web$getIconBaseKey();
+            } catch (RuntimeException unavailable) {
+                // A failing optional native normalizer must neither break the listing nor run every poll.
+                entry.base = null;
+            }
+            entry.baseComputed = true;
+        }
+        return entry.base;
     }
 
     public @Nullable IAEKey resolve(@NotNull StableKey key) {
@@ -84,7 +102,7 @@ public final class ItemIdentityRegistry {
     }
 
     private void cleanUp() {
-        // Weak grid keys use instance identity. Remove collected owners before cleaning global
+        // Weak owner keys use instance identity. Remove collected owners before cleaning global
         // weak-value indexes; neither operation scans the live item catalogues.
         owners.cleanUp();
         entries.cleanUp();
@@ -94,11 +112,11 @@ public final class ItemIdentityRegistry {
     /** Temporary ownership for one synchronous server-thread traversal; never retain across world cleanup. */
     public final class Listing {
 
-        private IAEGrid grid;
+        private IIdentityHolder owner;
         private Set<Entry> collected = new HashSet<>();
 
-        private Listing(@NotNull IAEGrid grid) {
-            this.grid = grid;
+        private Listing(@NotNull IIdentityHolder owner) {
+            this.owner = owner;
         }
 
         public @NotNull StableKey remember(@NotNull IAEKey resource) {
@@ -110,9 +128,9 @@ public final class ItemIdentityRegistry {
 
         public void commit() {
             requireOpen();
-            owners.put(grid, collected);
+            owners.put(owner, collected);
             collected = null;
-            grid = null;
+            owner = null;
         }
 
         private void requireOpen() {
@@ -135,6 +153,8 @@ public final class ItemIdentityRegistry {
 
         private final StableKey key;
         private final IAEKey identity;
+        private boolean baseComputed;
+        private @Nullable StableKey base;
 
         private Entry(@NotNull StableKey key, @NotNull IAEKey identity) {
             this.key = key;

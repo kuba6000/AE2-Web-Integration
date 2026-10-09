@@ -12,22 +12,30 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.api.JSON_CompactedItem;
-import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
+import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.CpuResource;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /**
  * Reads a crafting CPU and its current work.
@@ -70,7 +78,11 @@ public final class GetCPU extends ISyncedRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull ClusterData data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull ClusterData data, @Nullable IconMappings icons) {}
+
+    /** Include atlas references. Absent or false skips all native icon normalization. */
+    @QueryParam("icons")
+    private boolean icons;
 
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
     public static class ClusterData {
@@ -87,10 +99,16 @@ public final class GetCPU extends ISyncedRequest {
          * @example true
          */
         public boolean isBusy;
+        /** Native automatic-selection policy; null when unsupported or unknown. Not a submission permission. */
+        public @Nullable CpuSelectionMode selectionMode;
+        /** Whether this CPU supports pausing the scheduling of its current job. */
+        public boolean supportsPause;
+        /** Whether the active job is paused; false for idle or unsupported CPUs. */
+        public boolean isPaused;
         /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
-        public @Nullable JSON_Stack finalOutput;
+        public @Nullable ResourceStack finalOutput;
         /** Resource details for current work; null when the CPU is idle. */
-        public @Nullable ArrayList<JSON_CompactedItem> items;
+        public @Nullable ArrayList<CpuResource> items;
         /**
          * Whether measurements are available for the active job.
          *
@@ -131,19 +149,28 @@ public final class GetCPU extends ISyncedRequest {
         }
 
         ClusterData clusterData = new ClusterData();
+        IconPack pack = icons ? CoreEngine.getIconPack() : null;
+        IconMappings mappings = pack == null ? null : new IconMappings(pack);
+        ItemIdentityRegistry.Listing listing = AE2Controller.itemIdentities.beginListing(cpu);
         clusterData.size = cpu.web$getAvailableStorage();
         clusterData.isBusy = cpu.web$isBusy();
+        clusterData.selectionMode = cpu.web$getSelectionMode();
+        clusterData.supportsPause = cpu instanceof IPausableCraftingCPU;
+        clusterData.isPaused = clusterData.isBusy && cpu instanceof IPausableCraftingCPU pausable
+            && pausable.web$isPaused();
         if (clusterData.isBusy) {
-            clusterData.finalOutput = JSON_Stack.capture(grid, cpu.web$getFinalOutput());
+            ResourceSnapshot output = ResourceSnapshot.capture(grid, cpu.web$getFinalOutput(), pack);
+            clusterData.finalOutput = output == null ? null : new ResourceStack(output, mappings);
             AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cpu);
             clusterData.hasTrackingInfo = trackingInfo != null;
 
-            Map<IAEKey, JSON_CompactedItem> prep = new HashMap<>();
+            Map<IAEKey, CpuResource> prep = new HashMap<>();
             IStackList allItems = AE2Controller.AE2Interface.web$createStackList();
             cpu.web$getAllItems(allItems);
             for (IAEGenericStack stack : allItems.web$stacks()) {
                 IAEKey key = stack.web$what();
-                JSON_CompactedItem compactedItem = prep.computeIfAbsent(key, JSON_CompactedItem::new);
+                CpuResource compactedItem = prep
+                    .computeIfAbsent(key, resource -> captureResource(resource, listing, mappings));
                 compactedItem.active += cpu.web$getActiveItems(key);
                 compactedItem.pending += cpu.web$getPendingItems(key);
                 compactedItem.stored += cpu.web$getStorageItems(key);
@@ -153,7 +180,8 @@ public final class GetCPU extends ISyncedRequest {
                 clusterData.timeStarted = trackingInfo.timeStarted;
                 clusterData.timeElapsed = (System.currentTimeMillis()) - clusterData.timeStarted;
                 for (IAEKey key : trackingInfo.timeSpentOn.keySet()) {
-                    JSON_CompactedItem compactedItem = prep.computeIfAbsent(key, JSON_CompactedItem::new);
+                    CpuResource compactedItem = prep
+                        .computeIfAbsent(key, resource -> captureResource(resource, listing, mappings));
                     compactedItem.timeSpentCrafting += trackingInfo.getTimeSpentOn(key);
                     compactedItem.craftedTotal += trackingInfo.craftedTotal.getOrDefault(key, 0L);
                     compactedItem.shareInCraftingTime += trackingInfo.getShareInCraftingTime(key);
@@ -180,7 +208,21 @@ public final class GetCPU extends ISyncedRequest {
 
         }
 
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, clusterData));
+        listing.commit();
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, clusterData, mappings));
+    }
+
+    private static @NotNull CpuResource captureResource(@NotNull IAEKey resource,
+        @NotNull ItemIdentityRegistry.Listing listing, @Nullable IconMappings mappings) {
+        StableKey itemKey = null;
+        IconMappings.Reference icon = null;
+        try {
+            itemKey = listing.remember(resource);
+            if (mappings != null) icon = mappings.resolve(itemKey, AE2Controller.itemIdentities);
+        } catch (RuntimeException unavailable) {
+            // Optional identity or icon failures must not hide accumulated work or a successfully captured key.
+        }
+        return new CpuResource(resource, itemKey, icon);
     }
 
 }

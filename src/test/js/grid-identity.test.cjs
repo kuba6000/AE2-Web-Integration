@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { terminal } = require('./terminal-fixture.cjs');
 
-for (const page of ['../../main/resources/assets/webpage.html', '../../../example_website/index.php']) {
+for (const page of ['../../main/resources/assets/webpage.html']) {
     test(page + ': selecting a grid preserves its opaque key in requests', () => {
         const { context, requests } = terminal(page);
         const key = 'EjRWeJCrze8BI0VniavN7w';
@@ -23,7 +23,7 @@ for (const page of ['../../main/resources/assets/webpage.html', '../../../exampl
     });
 }
 
-for (const page of ['../../main/resources/assets/webpage.html', '../../../example_website/index.php']) {
+for (const page of ['../../main/resources/assets/webpage.html']) {
     test(page + ': grid listing uses the API route and reports HTTP errors', () => {
         const { context, requests } = terminal(page);
         const alerts = [];

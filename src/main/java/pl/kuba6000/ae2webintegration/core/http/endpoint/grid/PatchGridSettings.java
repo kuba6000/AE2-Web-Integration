@@ -55,6 +55,11 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 @Endpoint(method = HttpMethod.PATCH, path = "/api/grids/{gridKey}/settings")
 public final class PatchGridSettings extends IAsyncRequest {
 
+    private static final int MAX_NAME_LENGTH = 128;
+    // Explicit ECMAScript whitespace keeps Java 8's older Unicode categories from trimming U+180E.
+    // C0/C1 controls, including tabs and line breaks, are rejected before trimming.
+    private static final String NAME_WHITESPACE = " \u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF";
+
     /**
      * Successful operation result.
      * 
@@ -75,6 +80,17 @@ public final class PatchGridSettings extends IAsyncRequest {
          */
         @OptionalInput
         public @Nullable Boolean isTracked;
+
+        /**
+         * Custom network name; empty clears it. Outer Unicode spaces and U+FEFF are trimmed,
+         * matching JavaScript String.trim after control characters are rejected.
+         * At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
+         * U+007F–009F) are rejected even at the edges. Null is invalid; omission preserves the name.
+         *
+         * @example Factory
+         */
+        @OptionalInput
+        public @Nullable String name;
     }
 
     @Body
@@ -83,6 +99,13 @@ public final class PatchGridSettings extends IAsyncRequest {
 
     @Override
     public void handle() {
+        String name;
+        try {
+            name = input.name == null ? null : normalizeName(input.name);
+        } catch (IllegalArgumentException e) {
+            deny(ApiStatus.BAD_PARAM);
+            return;
+        }
         if (gridKey == null) {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
@@ -96,15 +119,28 @@ public final class PatchGridSettings extends IAsyncRequest {
             }
             GridSettingsData settings = data.getSettings();
             try {
+                if (name != null) settings.setName(name);
                 if (input.isTracked != null) {
                     settings.setTracked(input.isTracked);
-                    registry.saveIfDirty();
                 }
+                if (input.name != null || input.isTracked != null) registry.saveIfDirty();
                 // Completion serializes under the same monitor used by settings mutations and file writes.
                 respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, settings));
             } catch (IOException e) {
                 deny(ApiStatus.INTERNAL_ERROR);
             }
         }
+    }
+
+    private static @NotNull String normalizeName(@NotNull String name) {
+        for (int index = 0; index < name.length(); index++) {
+            if (Character.isISOControl(name.charAt(index))) throw new IllegalArgumentException("Control in grid name");
+        }
+        int start = 0;
+        int end = name.length();
+        while (start < end && NAME_WHITESPACE.indexOf(name.charAt(start)) >= 0) start++;
+        while (end > start && NAME_WHITESPACE.indexOf(name.charAt(end - 1)) >= 0) end--;
+        if (end - start > MAX_NAME_LENGTH) throw new IllegalArgumentException("Grid name is too long");
+        return name.substring(start, end);
     }
 }

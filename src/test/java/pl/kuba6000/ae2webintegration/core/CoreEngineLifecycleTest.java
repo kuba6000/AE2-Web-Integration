@@ -15,9 +15,11 @@ import java.util.concurrent.CompletableFuture;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
@@ -80,6 +82,26 @@ class CoreEngineLifecycleTest extends GridTestScope {
             IServerPlatform processPlatform = new IServerPlatform() {
 
                 @Override
+                public @NotNull String getModVersion() {
+                    return "test-version";
+                }
+
+                @Override
+                public @NotNull String getLoader() {
+                    return "forge";
+                }
+
+                @Override
+                public @NotNull String getMinecraftVersion() {
+                    return "1.20.1";
+                }
+
+                @Override
+                public @NotNull String getIconPackCompatibilityVersion() {
+                    return "test-compatibility";
+                }
+
+                @Override
                 public UUID getOnlinePlayerUUID(String username) {
                     return null;
                 }
@@ -139,7 +161,24 @@ class CoreEngineLifecycleTest extends GridTestScope {
         }
 
         @Override
-        public @NotNull String web$getItemID() {
+        public @NotNull ResourceType web$getResourceType() {
+            return ResourceType.ITEM;
+        }
+
+        @Override
+        public @NotNull String web$getRegistryNamespace() {
+            return "example";
+        }
+
+        public int web$getComponentCount() {
+            return 2;
+        }
+
+        public int web$getDamage() {
+            return 7;
+        }
+
+        public @NotNull String web$getRegistryPath() {
             return "test:output";
         }
 
@@ -191,6 +230,15 @@ class CoreEngineLifecycleTest extends GridTestScope {
         @Override
         public long web$getCoProcessors() {
             return 0;
+        }
+
+        @Override
+        public CpuSelectionMode web$getSelectionMode() {
+            return null;
+        }
+
+        public boolean web$acceptsPlayerJobs() {
+            return !web$isBusy();
         }
 
         @Override

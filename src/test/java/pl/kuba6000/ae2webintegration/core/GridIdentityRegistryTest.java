@@ -16,11 +16,15 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class GridIdentityRegistryTest {
@@ -94,6 +98,37 @@ class GridIdentityRegistryTest {
         GridIdentityRegistry restarted = new GridIdentityRegistry(file);
         assertEquals(tracked, restarted.findIdentity(controller(1)));
         assertTrue(TestGridFixtures.isTracked(restarted, tracked));
+    }
+
+    @Test
+    void mergePrefersNamedUntrackedIdentityAndPreservesNameAfterRestart() throws Exception {
+        File file = directory.resolve("named-merge.json")
+            .toFile();
+        GridIdentityRegistry registry = new GridIdentityRegistry(file);
+        StableKey first = resolve(registry, controller(1));
+        StableKey second = resolve(registry, controller(2));
+        StableKey named = first.toString()
+            .compareTo(second.toString()) > 0 ? first : second;
+        GridPersistentData data = registry.getPersistentData(named);
+        assertNotNull(data);
+        data.getSettings()
+            .setName("Factory");
+        registry.saveIfDirty();
+        assertEquals(named, resolve(registry, controller(1), controller(2)));
+        GridPersistentData loaded = new GridIdentityRegistry(file).getPersistentData(named);
+        assertNotNull(loaded);
+        assertEquals(
+            "Factory",
+            loaded.getSettings()
+                .getName());
+        assertFalse(
+            loaded.getSettings()
+                .isTracked());
+        loaded.getSettings()
+            .setName("");
+        assertTrue(
+            loaded.getSettings()
+                .isDefault());
     }
 
     @Test
@@ -288,6 +323,48 @@ class GridIdentityRegistryTest {
                 .isDefault());
         TestGridFixtures.setTracked(registry, key, true);
         assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
+    }
+
+    @Test
+    @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
+    void historicalDimensionEncodingSurvivesSaveWhileHttpUsesCamelCase() throws Exception {
+        Path file = directory.resolve("legacy-coordinates.json");
+        StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        String saved = "{\"" + key
+            + "\":{\"controllers\":["
+            + "{\"dimid\":\"-1\",\"x\":-32,\"y\":64,\"z\":120},"
+            + "{\"dimid\":\"minecraft:overworld\",\"x\":-32,\"y\":64,\"z\":120}],\"settings\":{}}}";
+        Files.write(file, saved.getBytes(StandardCharsets.UTF_8));
+        DimensionalCoords legacy = new DimensionalCoords(-1, -32, 64, 120);
+        DimensionalCoords modern = new DimensionalCoords("minecraft:overworld", -32, 64, 120);
+        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+        assertEquals(key, registry.findIdentity(legacy));
+        assertEquals(key, registry.findIdentity(modern));
+        TestGridFixtures.setTracked(registry, key, true);
+        JsonObject stored = new JsonParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8))
+            .getAsJsonObject()
+            .getAsJsonObject(key.toString());
+        for (com.google.gson.JsonElement value : stored.getAsJsonArray("controllers")) {
+            assertTrue(
+                value.getAsJsonObject()
+                    .has("dimid"));
+            assertFalse(
+                value.getAsJsonObject()
+                    .has("dimensionId"));
+        }
+        GridIdentityRegistry restarted = new GridIdentityRegistry(file.toFile());
+        assertEquals(key, restarted.findIdentity(legacy));
+        assertEquals(key, restarted.findIdentity(modern));
+        assertTrue(TestGridFixtures.isTracked(restarted, key));
+        JsonObject http = new JsonParser().parse(
+            GSONUtils.GSON_BUILDER.create()
+                .toJson(modern))
+            .getAsJsonObject();
+        assertEquals(
+            "minecraft:overworld",
+            http.get("dimensionId")
+                .getAsString());
+        assertFalse(http.has("dimid"));
     }
 
     private static StableKey resolve(GridIdentityRegistry registry, DimensionalCoords... positions) {

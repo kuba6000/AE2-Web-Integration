@@ -626,7 +626,7 @@
     </section>
 </section>
 <h1>UNIVERSAL WEB TERMINAL</h1>
-<section id="overlay">
+<section id="overlay" style="display: none;">
     <section id="overlaytext">
         LOADING...
     </section>
@@ -636,7 +636,9 @@
         Error: Invalid grid
     </section> -->
 </section>
-<section id="terminalgrid">
+<p id="bootstrapStatus" role="status">Loading server settings…</p>
+<button id="bootstrapRetry" type="button" hidden>Retry</button>
+<section id="terminalgrid" style="display: none;">
     <button class='collapsible' id='currentgrid'>No grid selected</button>
     <section style='display: none;'>
         <section class="grid-options">
@@ -655,7 +657,7 @@
         <section id="gridaccessdetails" aria-live="polite"></section>
     </section>
 </section>
-<section id="terminalcontainer">
+<section id="terminalcontainer" style="display: none;">
     <section id="terminaltypes">
         <section id='terminalOptions'>
             <button class='collapsible mobile-only'>Terminal options</button>
@@ -737,10 +739,52 @@
 
 <script>
     document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7;
-    const username = "_REPLACE_ME_USERNAME";
-    const isAdmin = _REPLACE_ME_IS_ADMIN;
-    const isOutdated = _REPLACE_ME_VERSION_OUTDATED;
-    document.getElementById('username').innerText = username;
+    let isAdmin = false;
+    let isOutdated = false;
+    const bootstrapController = new AbortController();
+    let pageDisposed = false;
+    window.addEventListener('pagehide', () => {
+        pageDisposed = true;
+        bootstrapController.abort();
+    }, { once: true });
+    window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
+    async function startLegacy() {
+        const status = document.getElementById('bootstrapStatus');
+        const retry = document.getElementById('bootstrapRetry');
+        retry.hidden = true;
+        status.hidden = false;
+        status.setAttribute('role', 'status');
+        status.textContent = 'Loading server settings…';
+        try {
+            const { createApi } = await import('./assets/web/app/api.js');
+            if (pageDisposed) return;
+            const metadata = await createApi(new URL('./', location.href), () => location.reload())
+                .context(bootstrapController.signal);
+            if (pageDisposed) return;
+            if (!metadata.user) {
+                location.reload();
+                return;
+            }
+            isAdmin = metadata.user.isAdmin;
+            isOutdated = metadata.isOutdated;
+            document.getElementById('username').textContent = metadata.user.username;
+            document.getElementById('terminalgrid').style.display = '';
+            document.getElementById('terminalcontainer').style.display = '';
+            status.hidden = true;
+            updateGridList();
+            updateCPUList();
+            getItemList();
+            showAlertIfOutdated();
+            setTimeout(autoRefresher, 10000);
+        } catch {
+            if (pageDisposed) return;
+            status.hidden = false;
+            status.setAttribute('role', 'alert');
+            status.textContent = 'Could not load server settings. Check the connection and try again.';
+            retry.hidden = false;
+        }
+    }
+    document.getElementById('bootstrapRetry').addEventListener('click', startLegacy);
     selectedGrid = -1;
     globalItemList = {};
     globalCPUList = {};
@@ -791,7 +835,7 @@
         let sortOrder = sortingOptions.sortOrder == 1 ? -1 : 1;
         if (sortingOptions.sortBy == 0){
             globalItemList.sort(function(i1,i2){
-                return skipSpecialFormat(i1['itemname']).localeCompare(skipSpecialFormat(i2['itemname'])) * sortOrder;
+                return skipSpecialFormat(i1['displayName']).localeCompare(skipSpecialFormat(i2['displayName'])) * sortOrder;
             });
         }
         else if(sortingOptions.sortBy == 1){
@@ -801,8 +845,8 @@
         }
         else if(sortingOptions.sortBy == 2){
             globalItemList.sort(function(i1,i2){
-                let mod1 = i1['itemid'].substring(0, i1['itemid'].indexOf(':'));
-                let mod2 = i2['itemid'].substring(0, i2['itemid'].indexOf(':'));
+                const mod1 = i1.registryNamespace ?? '';
+                const mod2 = i2.registryNamespace ?? '';
                 return mod1.localeCompare(mod2) * sortOrder;
             });
         }
@@ -813,11 +857,12 @@
             return false;
         }
         if (filteringOptions.itemsType != 2
-            && (item['itemid'] == 'ae2fc:fluid_drop:0') != (filteringOptions.itemsType == 1)){
+            && item.resourceType !== 'OTHER'
+            && (item.resourceType === 'FLUID') !== (filteringOptions.itemsType == 1)){
             return false;
         }
         if (filteringOptions.searchString && filteringOptions.searchString != ""){
-            return item['itemname'].toLowerCase().indexOf(filteringOptions.searchString) !== -1;
+            return item['displayName'].toLowerCase().indexOf(filteringOptions.searchString) !== -1;
         }
         return true;
     }
@@ -1020,14 +1065,14 @@
     }
     const extraSpecialFormatChars = "klmno";
     const extraSpecialFormatResetChar = 'r';
-    function parseSpecialFormat(itemName) {
+    function parseSpecialFormat(displayName) {
         let formattedItemName = "";
         let spanCounter = 0;
         let extraSpecialCounter = 0;
-        for (let i = 0; i < itemName.length; i++){
-            char = itemName[i];
+        for (let i = 0; i < displayName.length; i++){
+            char = displayName[i];
             if (char == '§'){
-                let specialChar = itemName[++i];
+                let specialChar = displayName[++i];
                 if (extraSpecialFormatChars.indexOf(specialChar) != -1) {
                     extraSpecialCounter++;
                 }
@@ -1059,13 +1104,13 @@
         }
         return formattedItemName;
     }
-    function skipSpecialFormat(itemName) {
-        if (itemName.indexOf('§') == -1){
-            return itemName;
+    function skipSpecialFormat(displayName) {
+        if (displayName.indexOf('§') == -1){
+            return displayName;
         }
         let skippedItemName = "";
-        for (let i = 0; i < itemName.length; i++){
-            char = itemName[i];
+        for (let i = 0; i < displayName.length; i++){
+            char = displayName[i];
             if (char == '§'){
                 i++;
                 continue;
@@ -1074,14 +1119,20 @@
         }
         return skippedItemName;
     }
+    function resourceRegistryId(resource) {
+        return resource.registryNamespace !== null && resource.registryPath !== null
+            ? `${resource.registryNamespace}:${resource.registryPath}`
+            : '';
+    }
     function formatItemName(itemObject, allowNewLines=true) {
-        let itemName = '<b>' + itemObject['itemname'] + '</b>';
-        if (itemName.indexOf('§') != -1){
-            itemName = parseSpecialFormat(itemName);
+        let displayName = '<b>' + itemObject['displayName'] + '</b>';
+        if (displayName.indexOf('§') != -1){
+            displayName = parseSpecialFormat(displayName);
         }
-        let html = itemName;
-        if (settings.showItemID)
-            html += (allowNewLines ? "<br>" : "") + " " + itemObject['itemid'];
+        let html = displayName;
+        const registryId = resourceRegistryId(itemObject);
+        if (settings.showItemID && registryId)
+            html += (allowNewLines ? "<br>" : "") + " " + registryId;
         return html;
     }
     function escapeCPUText(value) {
@@ -1248,7 +1299,6 @@
                 : 'HTTP ' + response.status + ': Could not load grids.');
         });
     }
-    updateGridList();
     function showGridAccess(groups) {
         const container = document.getElementById('gridaccessdetails');
         const expanded = container.children.length > 0 && container.children[0].open;
@@ -1292,7 +1342,7 @@
                 const location = document.createElement('div');
                 const pos = source.position;
                 appendText(location, 'code', 'grid-access-position', pos.x + ', ' + pos.y + ', ' + pos.z);
-                appendText(location, 'span', 'grid-access-world', 'Dimension: ' + pos.dimid +
+                appendText(location, 'span', 'grid-access-world', 'Dimension: ' + pos.dimensionId +
                     (source.side ? ' · Side: ' + source.side : ''));
                 item.appendChild(block);
                 item.appendChild(location);
@@ -1583,7 +1633,7 @@
                                         let locations = context.dataset.data[context.label][2];
                                         for(let i = 0; i < locations.length; i++){
                                             let location = locations[i];
-                                            label.push(i + ': ' + location.dimid + ', ' + location.x + ', ' + location.y + ', ' + location.z);
+                                            label.push(i + ': ' + location.dimensionId + ', ' + location.x + ', ' + location.y + ', ' + location.z);
                                         }
                                     }
                                     return label;
@@ -1721,9 +1771,10 @@
             itemShareData = [];
             for(let i = 0; i < items.length; i++){
                 let item = items[i];
-                let name = skipSpecialFormat(item['itemname']);
-                if (settings.showItemID)
-                    name += " " + item['itemid'];
+                let name = skipSpecialFormat(item['displayName']);
+                const registryId = resourceRegistryId(item);
+                if (settings.showItemID && registryId)
+                    name += " " + registryId;
                 itemShareData.push({'name': name, 'timings': item['timings']});
 
                 html += "<td class='storage'>" + formatItemName(item, false) + " x" + formatNumber(item['craftedTotal']);
@@ -1798,12 +1849,12 @@
                     return;
                 }
                 data = data.data;
-                if (data['jobID']){
+                if (data['jobId']){
                     setCurrentScreen(2);
                     document.getElementById("terminalcontent").innerHTML = ";)";
                     document.getElementById("terminalJobHeaderText").innerHTML = "Calculating, please wait...";
                     cpuForJob = "";
-                    currentJob.id = data['jobID'];
+                    currentJob.id = data['jobId'];
                     currentJob.bytesTotal = -1;
                     currentJob.itemKey = itemKey;
                     setTimeout(updateCraftingPlan, 1000);
@@ -1975,6 +2026,7 @@
     }
 
     function autoRefresher(){
+        if (pageDisposed) return;
         setTimeout(autoRefresher, 10000);
         if (loadingMessages.length > 0)
             return;
@@ -1983,8 +2035,6 @@
             refreshTerminal();
         }
     }
-    setTimeout(autoRefresher, 10000);
-
     loadingMessages = [];
 
     function pushLoadingScreen(message){
@@ -2012,9 +2062,6 @@
             document.getElementById('overlay').style.display = 'none';
     }
 
-    updateCPUList();
-    getItemList();
-
     function showAlertIfOutdated() {
         if (isOutdated && isAdmin){
             if (getCookie("DoNotShowUpdateMessage") == 1) return;
@@ -2025,7 +2072,7 @@
             setCookie("DoNotShowUpdateMessage", 0, 0);
         }
     }
-    setTimeout(showAlertIfOutdated, 100);
+
 
     function updateDoNotShowAgain(el){
         setCookie("DoNotShowUpdateMessage", 1, 7);
@@ -2081,6 +2128,7 @@
         });
     }
 
+    startLegacy();
 </script>
 <br><br>
 <footer>

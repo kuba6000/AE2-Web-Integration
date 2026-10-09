@@ -3,6 +3,8 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -20,6 +22,67 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 class GridPersistentDataTest extends GridTestScope {
+
+    @Test
+    void namePersistsWithoutTrackingAndClearingRestoresDefaults() throws Exception {
+        var grid = TestGridFixtures.grid(1);
+        var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        var data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        var settings = data.getSettings();
+        assertEquals("", settings.getName());
+        settings.setName("Factory");
+        CoreEngine.GRID_IDENTITIES.saveIfDirty();
+        settings.setName("Factory");
+        assertSaveDoesNotRewrite(CoreEngine.GRID_IDENTITIES);
+        File file = new File(gridSave, "ae2webintegration/grid-identities.json");
+        var restarted = new GridIdentityRegistry(file);
+        var loaded = restarted.getPersistentData(key);
+        assertNotNull(loaded);
+        assertEquals(
+            "Factory",
+            loaded.getSettings()
+                .getName());
+        assertFalse(
+            loaded.getSettings()
+                .isTracked());
+        assertFalse(
+            loaded.getSettings()
+                .isDefault());
+        loaded.getSettings()
+            .setName("");
+        restarted.saveIfDirty();
+        var cleared = new GridIdentityRegistry(file).getPersistentData(key);
+        assertNotNull(cleared);
+        assertEquals(
+            "",
+            cleared.getSettings()
+                .getName());
+        assertTrue(
+            cleared.getSettings()
+                .isDefault());
+    }
+
+    @Test
+    void oldSavedSettingsDefaultToUnnamedButNullNameIsRejected() throws Exception {
+        Path file = gridSave.toPath()
+            .resolve("old-settings.json");
+        StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        String prefix = "{\"" + key + "\":{\"controllers\":[],\"settings\":{\"isTracked\":false";
+        Files.write(file, (prefix + "}}}").getBytes(StandardCharsets.UTF_8));
+        var data = new GridIdentityRegistry(file.toFile()).getPersistentData(key);
+        assertNotNull(data);
+        assertEquals(
+            "",
+            data.getSettings()
+                .getName());
+        assertTrue(
+            data.getSettings()
+                .isDefault());
+        Files.write(file, (prefix + ",\"name\":null}}}").getBytes(StandardCharsets.UTF_8));
+        assertThrows(IOException.class, () -> new GridIdentityRegistry(file.toFile()));
+    }
 
     @Test
     void settingsRemainTheSameObjectWhenEdited() throws Exception {

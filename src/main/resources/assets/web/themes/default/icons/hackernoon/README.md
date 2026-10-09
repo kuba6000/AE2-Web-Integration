@@ -1,0 +1,29 @@
+# HackerNoon Pixel Icon Library
+
+Pixel icons by HackerNoon, distributed under the [MIT license](LICENSE).
+
+The inline `info-circle` SVG uses the original 24 × 24 geometry from
+[`info-circle.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/info-circle.svg).
+The theme renders it as a filled blue circle with a white information symbol.
+
+The `user` icon uses the original outlines from
+[`user.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/user.svg)
+with colored interior fills beside the signed-in user's name.
+
+The Home and Network headings use original 24 × 24 outlines from
+[`home.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/home.svg)
+and [`chart-network.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/chart-network.svg),
+rendered in the theme text color.
+
+CPU pause/resume controls use the original 24 × 24 outlines from
+[`pause.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/pause.svg)
+and [`play.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/play.svg),
+rendered in the button text color.
+
+CPU cancellation uses the original 24 × 24 outline from
+[`times.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/times.svg),
+rendered in the cancellation button text color. The pause outline also marks paused CPU statuses.
+
+The header refresh control uses the original 24 × 24 geometry from
+[`refresh.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/refresh.svg),
+rendered in the button text color.

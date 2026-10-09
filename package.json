@@ -1,0 +1,28 @@
+{
+  "name": "ae2-web-integration-frontend",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^22.13.0 || >=24"
+  },
+  "scripts": {
+    "build": "node tools/build-frontend.mjs",
+    "watch": "tsc --project tsconfig.json --watch --preserveWatchOutput",
+    "format": "prettier --write src/main/typescript src/main/resources/assets/web tools/ui-tests tools/build-frontend.mjs package.json package-lock.json tsconfig.json eslint.config.mjs stylelint.config.mjs .prettierrc.json .github/workflows/build-and-test.yml",
+    "format:check": "prettier --check src/main/typescript src/main/resources/assets/web tools/ui-tests tools/build-frontend.mjs package.json package-lock.json tsconfig.json eslint.config.mjs stylelint.config.mjs .prettierrc.json .github/workflows/build-and-test.yml",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "npm run lint:js && npm run lint:css",
+    "lint:js": "eslint src/main/typescript tools/ui-tests tools/build-frontend.mjs eslint.config.mjs stylelint.config.mjs --max-warnings 0",
+    "lint:css": "stylelint \"src/main/resources/assets/web/**/*.css\" --max-warnings 0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.11.0",
+    "globals": "17.12.0",
+    "prettier": "3.9.9",
+    "stylelint": "17.15.0",
+    "stylelint-config-recommended": "18.0.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0"
+  }
+}

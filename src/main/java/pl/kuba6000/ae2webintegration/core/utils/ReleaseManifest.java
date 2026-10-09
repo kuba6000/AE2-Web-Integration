@@ -73,11 +73,9 @@ public final class ReleaseManifest {
             readRelease(releases, "prerelease", Channel.PRERELEASE));
     }
 
-    public @Nullable Release findUpdate(@NotNull String installedVersion, @NotNull String versionIdentifier) {
-        if (!versionIdentifier.endsWith("-" + minecraftVersion)) return null;
-        String loader = versionIdentifier.substring(0, versionIdentifier.length() - minecraftVersion.length());
+    public @Nullable Release findUpdate(@NotNull String installedVersion, @NotNull String loader) {
         Matcher platform = Pattern
-            .compile(Pattern.quote(loader) + "(pre-)?" + Pattern.quote(minecraftVersion) + "(?=$|[-+])(.*)")
+            .compile(Pattern.quote("-" + loader + "-") + "(pre-)?" + Pattern.quote(minecraftVersion) + "(?=$|[-+])(.*)")
             .matcher(installedVersion);
         boolean platformFound = platform.find();
         if (!platformFound && Pattern.compile("-(?:neo)?forge-")

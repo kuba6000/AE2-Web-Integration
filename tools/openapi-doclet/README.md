@@ -47,10 +47,15 @@ public final class GetGrids {
 | --- | --- |
 | `@response <status> {@link Type} <description>` | Response schema and description. Omit the type for a response without a body. |
 | `@responseExample <status> <JSON>` | Complete example overriding the generated response example. |
+| `@responseMedia <status> <media-type>` | Raw response body, such as `image/png`, without a Java DTO or JSON example. |
+| `@responseHeader <status> <name> <description>` | Response header with a string value, such as ETag or Cache-Control. |
 | `@PathParam("name")` and `@pathParam name Description.` | Path field binding and its endpoint Javadoc description. |
+| `@QueryParam("name")` on a boolean field | Optional query flag, false when omitted; field Javadoc describes its meaning. |
 | `@Body` | Field whose DTO describes the required JSON request body. |
 | `@OptionalInput` | Input member that may be omitted; explicit null remains disallowed. |
-| `@Endpoint(authenticated = false, ...)` | Operation without an authentication requirement. |
+| `@Endpoint(authentication = Authentication.REQUIRED, ...)` (default) | Authentication is required; the operation inherits the global Bearer-or-cookie security alternatives. |
+| `@Endpoint(authentication = Authentication.OPTIONAL, ...)` | The operation accepts anonymous requests and uses valid credentials when supplied; security lists anonymous, Bearer and cookie alternatives. |
+| `@Endpoint(authentication = Authentication.NONE, ...)` | The operation ignores existing request credentials and declares an empty security array. |
 
 Endpoint packages determine the operation categories through the doclet's category mapping.
 
@@ -65,7 +70,10 @@ For record components, include the component name: `@example owner ExamplePlayer
 The generator combines these hints into request and response examples.
 Use `@responseExample` when a response needs a specific complete example, such as an error.
 
-In IntelliJ IDEA, add `response`, `responseExample`, `pathParam`, `example` and `keyExample`
+Binary responses use an ordinary `@response` without a linked type, plus
+`@responseMedia 200 image/png`. A `304` response has no body and can declare cache headers.
+
+In IntelliJ IDEA, add `response`, `responseExample`, `responseMedia`, `responseHeader`, `pathParam`, `example` and `keyExample`
 to the additional Javadoc tags in the **Declaration has Javadoc problems** inspection.
 
 ## Supported schemas
@@ -74,5 +82,5 @@ The generator supports scalar types, UUID, StableKey, enums, concrete DTOs and r
 arrays, lists, sets and maps with String, UUID or StableKey keys. It respects
 `@SerializedName`, omits static and transient fields, and uses `@Nullable` for response nullability.
 
-Query bindings, custom Gson adapters, generic or polymorphic DTOs, and raw containers are
+Non-boolean query bindings, custom Gson adapters, generic or polymorphic DTOs, and raw containers are
 unsupported. Invalid declarations, unresolved response types and incompatible examples fail generation.

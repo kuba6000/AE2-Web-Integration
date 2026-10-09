@@ -11,8 +11,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,7 +29,7 @@ public final class VersionChecker implements AutoCloseable {
     private static final int HTTP_TIMEOUT_MILLIS = (int) TimeUnit.SECONDS.toMillis(5);
     private static final int MAX_RESPONSE_BYTES = 64 * 1024;
     private final @NotNull String currentVersion;
-    private final @NotNull String versionIdentifier;
+    private final @NotNull String loader;
     private final @NotNull String minecraftVersion;
     private final @NotNull URL feedUrl;
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(task -> {
@@ -44,14 +42,11 @@ public final class VersionChecker implements AutoCloseable {
     private @Nullable ScheduledFuture<?> scheduled;
     private boolean closed;
 
-    public VersionChecker(@NotNull URL feedBaseUrl, @NotNull String currentVersion, @NotNull String versionIdentifier) {
+    public VersionChecker(@NotNull URL feedBaseUrl, @NotNull String currentVersion, @NotNull String loader,
+        @NotNull String minecraftVersion) {
         this.currentVersion = currentVersion;
-        this.versionIdentifier = versionIdentifier;
-        Matcher target = Pattern.compile("-(?:neo)?forge-(\\d+\\.\\d+\\.\\d+)")
-            .matcher(versionIdentifier);
-        if (!target.matches())
-            throw new IllegalArgumentException("Unsupported version identifier: " + versionIdentifier);
-        minecraftVersion = target.group(1);
+        this.loader = loader;
+        this.minecraftVersion = minecraftVersion;
         try {
             feedUrl = new URL(feedBaseUrl, minecraftVersion + ".json");
         } catch (MalformedURLException e) {
@@ -83,7 +78,7 @@ public final class VersionChecker implements AutoCloseable {
 
     private void refresh(CompletableFuture<ReleaseManifest.Release> result) {
         try {
-            ReleaseManifest.Release release = fetch().findUpdate(currentVersion, versionIdentifier);
+            ReleaseManifest.Release release = fetch().findUpdate(currentVersion, loader);
             synchronized (this) {
                 if (closed) return;
                 ReleaseManifest.Release previous = availableUpdate;

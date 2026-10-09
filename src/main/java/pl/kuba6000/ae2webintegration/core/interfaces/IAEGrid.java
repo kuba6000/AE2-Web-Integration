@@ -15,7 +15,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
-public interface IAEGrid {
+public interface IAEGrid extends IIdentityHolder {
 
     @NotNull
     Set<DimensionalCoords> web$getControllers();

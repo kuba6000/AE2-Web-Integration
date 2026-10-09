@@ -53,9 +53,17 @@ class GridListPermissionsTest extends GridTestScope {
             }
         };
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        var persistent = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(persistent);
+        persistent.getSettings()
+            .setName("Factory");
         GetGrids request = new GetGrids();
         request.init(TestGridFixtures.context(42, ""));
         request.runOnServerThread(TestGridFixtures.ae(grid));
+        persistent.getSettings()
+            .setName("Renamed after response");
         grid.web$getPermissions()
             .values()
             .forEach(List::clear);
@@ -67,6 +75,13 @@ class GridListPermissionsTest extends GridTestScope {
         assertEquals(
             "OK",
             response.get("status")
+                .getAsString());
+        assertEquals(
+            "Factory",
+            response.getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject()
+                .get("name")
                 .getAsString());
         JsonObject sources = response.getAsJsonArray("data")
             .get(0)

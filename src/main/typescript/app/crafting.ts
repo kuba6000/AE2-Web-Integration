@@ -1,0 +1,408 @@
+import type { Plan, CpuInfo, StoredResource, IconMetadata } from './api-types.js';
+import type { Api, ApiFailure } from './api.js';
+import type { Route } from './router.js';
+import type { Preferences, createPreferences } from './preferences.js';
+import { navigateToPlan, navigateToGrid } from './router.js';
+
+export type PlanMetadata = { itemKey: string; displayName: string; quantity: number };
+export type Mutation = 'create' | 'submit' | 'delete';
+export type PlanSort = Preferences['planSort'];
+export type CraftingState = {
+    search: string;
+    sort: PlanSort;
+    descending: boolean;
+    icons: IconMetadata | null;
+    status: 'idle' | 'loading' | 'calculating' | 'ready' | 'submitted' | 'deleted' | 'unavailable' | 'error';
+    plan: Plan | null;
+    cpus: (CpuInfo & { key: string; eligible: boolean | undefined })[];
+    selectedCpu: string;
+    mutation: Mutation | null;
+    uncertain: Mutation | null;
+    error: string | null | undefined;
+    errorDetail: string | null;
+    metadata: PlanMetadata | null;
+};
+export type CraftingOutcome = Partial<Pick<CraftingState, 'mutation' | 'uncertain' | 'status'>>;
+
+/** Calculation state and actions. The application supplies route lifetime and scheduling. */
+export function createCrafting(
+    api: Api,
+    changed: () => void,
+    iconsEnabled: () => boolean,
+    preferences: ReturnType<typeof createPreferences>
+) {
+    const state: CraftingState = {
+        search: '',
+        sort: preferences.values.planSort,
+        descending: preferences.values.planSortOrder === 'descending',
+        icons: null,
+        status: 'idle',
+        plan: null,
+        cpus: [],
+        selectedCpu: '',
+        mutation: null,
+        uncertain: null,
+        error: null,
+        errorDetail: null,
+        metadata: null
+    };
+    const metadata = new Map<string, PlanMetadata>();
+    const outcomes = new Map<string, CraftingOutcome>();
+    let route: Route | { view?: undefined; gridKey?: undefined } = {};
+    let generation = 0;
+    let request: AbortController | undefined;
+    let reading = false;
+    let selectedOnce = false;
+    let readFailed = false;
+    let activePlan: { gridKey: string; planId: string | number } | null = null;
+    let autoStart = false;
+    let planIcons: boolean | null = null;
+    let iconRevision = 0;
+    let handoff: { key: string; state: CraftingState } | null = null;
+    const identity = () =>
+        `${route.gridKey}/${activePlan?.planId ?? (route.view === 'plan' ? route.planId : 'create')}`;
+    function showPlan() {
+        autoStart = false;
+        if (route.view !== 'items' || !activePlan) return;
+        handoff = { key: identity(), state: { ...state } };
+        navigateToPlan(activePlan.gridKey, activePlan.planId);
+    }
+    function finishMutation(key: string, outcome: CraftingOutcome | null) {
+        if (outcome) outcomes.set(key, outcome);
+        else outcomes.delete(key);
+        if (identity() === key && state.mutation) {
+            Object.assign(state, { mutation: null }, outcome);
+            changed();
+        }
+    }
+    const isUncertain = (error: ApiFailure) =>
+        !error.status || ['NETWORK_ERROR', 'INVALID_RESPONSE', 'TIMEOUT', 'INTERNAL_ERROR'].includes(error.status);
+    const eligible = (cpu: CpuInfo) =>
+        cpu.acceptsPlayerJobs &&
+        state.plan?.isDone &&
+        !state.plan.isSimulating &&
+        !state.plan.plan?.some((row) => row.missing > 0) &&
+        cpu.availableStorage >= state.plan.bytesTotal &&
+        (!cpu.isBusy ||
+            (!!state.metadata?.itemKey &&
+                cpu.finalOutput?.itemKey === state.metadata.itemKey &&
+                cpu.usedStorage >= 0 &&
+                cpu.availableStorage >= cpu.usedStorage + state.plan.bytesTotal));
+
+    async function refresh() {
+        if (!activePlan || reading || state.mutation || ['submitted', 'deleted', 'unavailable'].includes(state.status))
+            return;
+        const version = generation;
+        const current = activePlan;
+        reading = true;
+        request = new AbortController();
+        if (readFailed) {
+            state.error = null;
+            readFailed = false;
+        }
+        try {
+            if (!state.plan?.isDone || state.uncertain || planIcons !== iconsEnabled()) {
+                const requestedIcons = iconsEnabled();
+                const requestedRevision = iconRevision;
+                const response = await api.plan(current.gridKey, current.planId, request.signal, requestedIcons);
+                if (version !== generation) return;
+                const plan = response.data;
+                state.plan = plan;
+                state.icons = requestedRevision === iconRevision ? response.icons : null;
+                planIcons = requestedRevision === iconRevision ? requestedIcons : null;
+                state.status = plan.isDone ? 'ready' : 'calculating';
+            }
+            if (state.plan.isDone && autoStart) {
+                autoStart = false;
+                if (state.plan.isSimulating || state.plan.plan?.some((row) => row.missing > 0)) showPlan();
+                else await actions.submit(true);
+            } else if (state.plan.isDone) {
+                const cpus = await api.cpus(current.gridKey, request.signal);
+                if (version !== generation) return;
+                state.cpus = Object.entries(cpus.data).map(([key, cpu]) => ({ ...cpu, key, eligible: eligible(cpu) }));
+                if (state.selectedCpu && !state.cpus.some((cpu) => cpu.key === state.selectedCpu && cpu.eligible))
+                    state.selectedCpu = '';
+                if (!selectedOnce) {
+                    state.selectedCpu = state.cpus.find((cpu) => cpu.eligible)?.key || '';
+                    selectedOnce = true;
+                }
+            }
+        } catch (caught) {
+            const error = caught as ApiFailure;
+            if (version !== generation || error.name === 'AbortError') return;
+            state.error = error.status;
+            readFailed = true;
+            state.cpus = [];
+            state.selectedCpu = '';
+            if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
+                state.plan = null;
+                state.icons = null;
+                state.metadata = null;
+                state.status = error.status === 'INVALID_ID' ? 'unavailable' : 'error';
+            }
+            showPlan();
+        } finally {
+            if (version === generation) {
+                reading = false;
+                changed();
+                if (!readFailed && planIcons === null) void refresh();
+            }
+        }
+    }
+    const actions = {
+        state,
+        invalidateIcons() {
+            iconRevision++;
+            state.icons = null;
+            planIcons = null;
+        },
+        search(value: string) {
+            state.search = value;
+            changed();
+        },
+        sort(value: PlanSort) {
+            preferences.set('planSort', value);
+            state.sort = value;
+            changed();
+        },
+        reverse() {
+            state.descending = !state.descending;
+            preferences.set('planSortOrder', state.descending ? 'descending' : 'ascending');
+            changed();
+        },
+        get pending() {
+            return !!activePlan && state.status === 'calculating' && !state.error;
+        },
+        get active() {
+            return !!activePlan;
+        },
+        route(next: Route) {
+            generation++;
+            request?.abort();
+            reading = false;
+            route = next;
+            activePlan = next.view === 'plan' ? { gridKey: next.gridKey, planId: next.planId } : null;
+            autoStart = false;
+            selectedOnce = false;
+            readFailed = false;
+            Object.assign(state, {
+                status: next.view === 'plan' ? 'loading' : 'idle',
+                search: '',
+                icons: null,
+                plan: null,
+                cpus: [],
+                selectedCpu: '',
+                mutation: null,
+                uncertain: null,
+                error: null,
+                errorDetail: null,
+                metadata: metadata.get(identity()) || null
+            });
+            Object.assign(state, outcomes.get(identity()));
+            if (handoff?.key === identity()) Object.assign(state, handoff.state);
+            handoff = null;
+            if (['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.error ?? '')) activePlan = null;
+        },
+        refresh,
+        block(error: string | null) {
+            generation++;
+            request?.abort();
+            reading = false;
+            readFailed = true;
+            autoStart = false;
+            Object.assign(state, {
+                status: 'error',
+                plan: null,
+                icons: null,
+                metadata: null,
+                cpus: [],
+                selectedCpu: '',
+                error,
+                errorDetail: null
+            });
+            changed();
+        },
+        selectCpu(key: string) {
+            state.selectedCpu = state.cpus.find((cpu) => cpu.key === key && cpu.eligible)?.key || '';
+            changed();
+        },
+        async create(item: StoredResource | null, quantity: number, automatic = false, lightMode = false) {
+            if (
+                route.view !== 'items' ||
+                state.mutation ||
+                state.uncertain ||
+                (activePlan && ['calculating', 'ready'].includes(state.status)) ||
+                !item?.craftable ||
+                !item.itemKey ||
+                !Number.isSafeInteger(quantity) ||
+                quantity <= 0
+            )
+                return;
+            const version = generation;
+            const gridKey = route.gridKey;
+            activePlan = null;
+            const key = identity();
+            autoStart = automatic;
+            outcomes.set(key, { mutation: 'create' });
+            state.mutation = 'create';
+            state.status = 'idle';
+            state.plan = null;
+            state.icons = null;
+            state.metadata = null;
+            state.cpus = [];
+            state.selectedCpu = '';
+            state.error = null;
+            state.errorDetail = null;
+            changed();
+            try {
+                const { jobId } = await api.createPlan(gridKey, {
+                    itemKey: item.itemKey,
+                    quantity,
+                    ...(lightMode ? { lightMode: true } : {})
+                });
+                metadata.set(`${gridKey}/${jobId}`, { itemKey: item.itemKey, displayName: item.displayName, quantity });
+                finishMutation(key, null);
+                if (version !== generation) return;
+                if (automatic) {
+                    activePlan = { gridKey, planId: jobId };
+                    state.metadata = metadata.get(identity())!;
+                    state.plan = null;
+                    state.icons = null;
+                    state.status = 'calculating';
+                    state.mutation = null;
+                    await refresh();
+                } else navigateToPlan(gridKey, jobId);
+            } catch (caught) {
+                const error = caught as ApiFailure;
+                finishMutation(key, isUncertain(error) ? { uncertain: 'create' } : null);
+                if (version === generation) state.error = error.status;
+            } finally {
+                if (version === generation) {
+                    state.mutation = null;
+                    changed();
+                }
+            }
+        },
+        async submit(automatic = false) {
+            if (
+                state.mutation ||
+                state.uncertain ||
+                state.status !== 'ready' ||
+                !activePlan ||
+                (!automatic && !state.cpus.some((cpu) => cpu.key === state.selectedCpu && cpu.eligible))
+            )
+                return;
+            const key = identity();
+            const version = ++generation;
+            request?.abort();
+            reading = false;
+            outcomes.set(key, { mutation: 'submit' });
+            state.mutation = 'submit';
+            state.error = null;
+            state.errorDetail = null;
+            changed();
+            try {
+                // A ready plan and eligible CPU belong to the active plan route.
+                const current = activePlan;
+                await api.submitPlan(current.gridKey, current.planId, automatic ? undefined : state.selectedCpu);
+                finishMutation(key, { status: 'submitted' });
+                if (version === generation) {
+                    state.status = 'submitted';
+                    if (!automatic) navigateToGrid(current.gridKey);
+                }
+            } catch (caught) {
+                const error = caught as ApiFailure;
+                finishMutation(key, isUncertain(error) ? { uncertain: 'submit' } : null);
+                if (version === generation) {
+                    if (isUncertain(error)) state.uncertain = 'submit';
+                    state.error = error.status;
+                    state.errorDetail = typeof error.data === 'string' ? error.data : null;
+                    if (error.status === 'CPU_NOT_FOUND') {
+                        state.selectedCpu = '';
+                        selectedOnce = true;
+                        state.mutation = null;
+                        await refresh();
+                    }
+                    if (error.status === 'JOB_NOT_DONE') {
+                        state.plan = null;
+                        state.icons = null;
+                        state.status = 'calculating';
+                        state.cpus = [];
+                        state.selectedCpu = '';
+                        readFailed = true;
+                    }
+                    if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
+                        state.status = error.status === 'INVALID_ID' ? 'unavailable' : 'error';
+                        state.plan = null;
+                        state.icons = null;
+                        state.metadata = null;
+                        state.cpus = [];
+                        state.selectedCpu = '';
+                        readFailed = true;
+                    }
+                    if (automatic) {
+                        state.mutation = null;
+                        showPlan();
+                    }
+                }
+            } finally {
+                if (version === generation) {
+                    state.mutation = null;
+                    changed();
+                }
+            }
+        },
+        async remove() {
+            if (
+                route.view !== 'plan' ||
+                state.mutation ||
+                state.uncertain ||
+                ['submitted', 'deleted', 'unavailable', 'error'].includes(state.status)
+            )
+                return;
+            const version = ++generation;
+            const key = identity();
+            outcomes.set(key, { mutation: 'delete' });
+            request?.abort();
+            reading = false;
+            state.mutation = 'delete';
+            state.error = null;
+            changed();
+            try {
+                await api.deletePlan(route.gridKey, route.planId);
+                finishMutation(key, { status: 'deleted' });
+                if (version === generation) {
+                    state.status = 'deleted';
+                    navigateToGrid(route.gridKey);
+                }
+            } catch (caught) {
+                const error = caught as ApiFailure;
+                finishMutation(key, isUncertain(error) ? { uncertain: 'delete' } : null);
+                if (version === generation) {
+                    state.error = error.status;
+                    if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
+                        state.status = error.status === 'INVALID_ID' ? 'unavailable' : 'error';
+                        state.plan = null;
+                        state.icons = null;
+                        state.metadata = null;
+                        state.cpus = [];
+                        state.selectedCpu = '';
+                        readFailed = true;
+                    }
+                }
+            } finally {
+                if (version === generation) {
+                    state.mutation = null;
+                    changed();
+                }
+            }
+        },
+        dispose() {
+            generation++;
+            request?.abort();
+            metadata.clear();
+            outcomes.clear();
+        }
+    };
+    return actions;
+}

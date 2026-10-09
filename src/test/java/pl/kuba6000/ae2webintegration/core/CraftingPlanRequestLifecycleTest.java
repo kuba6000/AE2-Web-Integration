@@ -12,9 +12,11 @@ import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.DeleteCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
@@ -26,6 +28,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 class CraftingPlanRequestLifecycleTest extends GridTestScope {
 
@@ -95,7 +98,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
             poll.getResponse()
                 .httpStatus());
         assertFalse(
-            JsonParser.parseString(poll.getJSON())
+            new JsonParser().parse(poll.getJSON())
                 .getAsJsonObject()
                 .getAsJsonObject("data")
                 .get("isDone")
@@ -111,6 +114,71 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
             HttpURLConnection.HTTP_CONFLICT,
             submit.getResponse()
                 .httpStatus());
+    }
+
+    @Test
+    void calculatedResourceSerializesCamelCaseIdentityAndMeasurements() {
+        GetCraftingPlan.PlanData.JobItem row = new GetCraftingPlan.PlanData.JobItem(
+            "example",
+            "resource",
+            "Resource",
+            2,
+            7,
+            8,
+            12,
+            3,
+            4,
+            0.5,
+            null,
+            null);
+        JsonObject json = new JsonParser().parse(
+            GSONUtils.GSON_BUILDER.create()
+                .toJson(row))
+            .getAsJsonObject();
+        assertEquals(
+            "resource",
+            json.get("registryPath")
+                .getAsString());
+        assertEquals(
+            "Resource",
+            json.get("displayName")
+                .getAsString());
+        assertEquals(
+            8,
+            json.get("stored")
+                .getAsLong());
+        assertEquals(
+            12,
+            json.get("requested")
+                .getAsLong());
+        assertEquals(
+            3,
+            json.get("missing")
+                .getAsLong());
+        assertEquals(
+            4,
+            json.get("steps")
+                .getAsLong());
+        assertEquals(
+            0.5,
+            json.get("usedPercent")
+                .getAsDouble());
+        assertEquals(
+            "example",
+            json.get("registryNamespace")
+                .getAsString());
+        assertEquals(
+            2,
+            json.get("componentCount")
+                .getAsInt());
+        assertEquals(
+            7,
+            json.get("damage")
+                .getAsInt());
+        assertFalse(json.has("itemId"));
+        assertFalse(json.has("itemName"));
+        assertFalse(json.has("itemid"));
+        assertFalse(json.has("itemname"));
     }
 
     private static String submit(TestGrid grid, int id) {
@@ -161,7 +229,8 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         }
 
         @Override
-        public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey key, long amount) {
+        public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey key, long amount,
+            CraftingOptions options) {
             throw new UnsupportedOperationException();
         }
 

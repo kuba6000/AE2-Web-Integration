@@ -66,7 +66,7 @@ public final class DeleteCraftingPlan extends ISyncedRequest {
     public record Response(@NotNull ApiStatus status, @Nullable Void data) {}
 
     @PathParam("planId")
-    private int jobID;
+    private int jobId;
 
     @Override
     protected void handle(IAEGrid grid) {
@@ -74,12 +74,12 @@ public final class DeleteCraftingPlan extends ISyncedRequest {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        Future<IAECraftingJob> job = gridData.getJob(jobID);
+        Future<IAECraftingJob> job = gridData.getJob(jobId);
         if (job == null) {
             deny(ApiStatus.INVALID_ID);
             return;
         }
-        gridData.cancelJob(jobID);
+        gridData.cancelJob(jobId);
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
     }
 }
