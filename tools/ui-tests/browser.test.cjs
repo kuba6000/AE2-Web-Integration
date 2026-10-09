@@ -2113,7 +2113,7 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
     await assertFormatted(cpuResource);
     await cpuResource.hover();
     assert.equal(await page.getByRole('tooltip').getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
-    const cpuOutput = page.getByRole('paragraph').filter({ hasText: /^[^§]*: Cobalt Ingot × 12$/ });
+    const cpuOutput = page.getByRole('paragraph').filter({ hasText: /^Cobalt Ingot\s*× 12$/ });
     await assertFormatted(cpuOutput);
     await page.getByRole('link', { name: 'History', exact: true }).click();
     const historyLink = page.getByRole('link', { name: /Cobalt Ingot.*#1/ });
@@ -3333,12 +3333,12 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
         await complete(result);
         await page
             .getByRole('status')
-            .filter({ hasText: result === 'OK' ? /CPU is idle/i : /outcome.*unknown/i })
+            .filter({ hasText: result === 'OK' ? /^Idle$/i : /outcome.*unknown/i })
             .waitFor();
         await poll(page);
         await page
             .getByRole('status')
-            .filter({ hasText: result === 'OK' ? /CPU is idle/i : /outcome.*unknown/i })
+            .filter({ hasText: result === 'OK' ? /^Idle$/i : /outcome.*unknown/i })
             .waitFor();
     }
     await page.unroute('**/cancel');
@@ -3366,7 +3366,7 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
     await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
     await page
         .getByRole('status')
-        .filter({ hasText: /CPU is idle/i })
+        .filter({ hasText: /^Idle$/i })
         .waitFor();
     await delayed.fulfill({
         status: 200,
@@ -3417,9 +3417,9 @@ test('busy CPU eligibility uses known output identity and missing selections req
     const { page, options, base } = await fixture(t);
     options.cpus = {
         'cpu-a': cpu,
-        'cpu-b': { ...cpu, isBusy: true, usedStorage: 2048, finalOutput: { itemKey: 'iron' } },
-        'other-output': { ...cpu, isBusy: true, finalOutput: { itemKey: 'other-variant' } },
-        'unknown-storage': { ...cpu, isBusy: true, usedStorage: -1, finalOutput: { itemKey: 'iron' } }
+        'cpu-b': { ...cpu, isBusy: true, usedStorage: 2048, finalOutput: { ...iron, itemKey: 'iron' } },
+        'other-output': { ...cpu, isBusy: true, finalOutput: { ...iron, itemKey: 'other-variant' } },
+        'unknown-storage': { ...cpu, isBusy: true, usedStorage: -1, finalOutput: { ...iron, itemKey: 'iron' } }
     };
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
@@ -3441,7 +3441,7 @@ test('busy CPU eligibility uses known output identity and missing selections req
     await cpus.getByRole('radio', { name: /cpu-b/ }).waitFor({ state: 'detached' });
     assert.equal(await cpus.getByRole('radio', { checked: true }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
-    options.cpus['cpu-b'] = { ...cpu, isBusy: true, finalOutput: { itemKey: 'iron' } };
+    options.cpus['cpu-b'] = { ...cpu, isBusy: true, finalOutput: { ...iron, itemKey: 'iron' } };
     await page.reload();
     await cpus.waitFor();
     assert.equal(await cpus.getByRole('radio', { name: /cpu-b/ }).evaluate((option) => option.disabled), true);
@@ -3483,10 +3483,20 @@ test('CPU terminal replaces the CPU list with selected resources and returns to 
         assert.equal(await page.getByRole('button', { name, exact: true }).isVisible(), true);
     }
     const details = page.getByRole('complementary', { name: 'CPU details', exact: true });
-    assert.match(await details.textContent(), /Selected assembler/);
+    assert.equal(
+        await page.getByRole('heading', { name: 'Selected assembler', level: 2, exact: true }).isVisible(),
+        true
+    );
     assert.match(await details.textContent(), /8,192/);
     assert.match(await details.textContent(), /2,048/);
-    assert.match(await details.textContent(), /3 coprocessors/);
+    assert.equal(
+        await details
+            .locator('dl > div')
+            .filter({ has: page.getByText('Coprocessors', { exact: true }) })
+            .locator('dd')
+            .innerText(),
+        '3'
+    );
     assert.match(await details.textContent(), /Iron Ingot.*12/);
     assert.equal(await details.getByRole('button', { name: 'Pause current work', exact: true }).isEnabled(), true);
     await page.getByRole('link', { name: 'CPUs', exact: true }).click();
@@ -4239,7 +4249,7 @@ test('CPU monitoring opens stable current work and explicitly cancels it without
     await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
     await page
         .getByRole('status')
-        .filter({ hasText: /CPU is idle/i })
+        .filter({ hasText: /^Idle$/i })
         .waitFor();
     assert.equal(
         await page
@@ -4332,7 +4342,7 @@ test('known CPU cancellation rejections refresh stale work or clear unavailable 
     await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
     await page
         .getByRole('status')
-        .filter({ hasText: /CPU is idle/i })
+        .filter({ hasText: /^Idle$/i })
         .waitFor({ timeout: 3000 });
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).count(), 0);
     for (const status of ['CPU_NOT_FOUND', 'NO_PERMISSIONS', 'GRID_NOT_FOUND']) {
@@ -4372,7 +4382,7 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
     await page.getByText('Current output unavailable', { exact: true }).waitFor();
     await page
         .getByRole('status')
-        .filter({ hasText: /CPU is crafting/i })
+        .filter({ hasText: /^Busy$/i })
         .waitFor();
     await delayed.fulfill({
         status: 200,

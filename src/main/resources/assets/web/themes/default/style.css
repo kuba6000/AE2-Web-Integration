@@ -413,6 +413,57 @@ header {
 #cpu-panel h3 {
     margin-top: 0;
 }
+.cpu-detail-state {
+    display: inline-block;
+    margin-bottom: 12px;
+}
+.cpu-detail-metrics {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+}
+.cpu-detail-metrics dt,
+.cpu-detail-work h4 {
+    margin: 0;
+    color: var(--surface-muted);
+    font-size: 11px;
+    font-weight: 400;
+}
+.cpu-detail-metrics dd {
+    margin: 4px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+.cpu-detail-specs > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+.cpu-detail-specs dd {
+    margin: 0;
+    text-align: right;
+}
+.cpu-detail-work {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+.cpu-detail-output {
+    margin: 8px 0 16px;
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+.cpu-detail-quantity {
+    white-space: nowrap;
+}
+.cpu-detail-note {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--muted);
+}
 .history-view {
     min-width: 0;
     overflow-wrap: anywhere;

@@ -90,12 +90,17 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     panelTitle.innerHTML = infoCircle;
     const panelTitleText = element('span');
     panelTitle.append(panelTitleText);
-    const panelName = element('h4');
-    const summary = element('div', '', 'cpu-summary');
-    const output = element('p');
-    const timing = element('p');
+    const panelState = element('span', '', 'cpu-card-state cpu-detail-state');
+    panelState.role = 'status';
+    const summary = element('dl', '', 'cpu-detail-metrics cpu-detail-specs');
+    const work = element('section', '', 'cpu-detail-work');
+    const outputLabel = element('h4');
+    const output = element('p', '', 'cpu-detail-output');
+    const timing = element('dl', '', 'cpu-detail-metrics');
+    const tracking = element('p', '', 'cpu-detail-note');
+    work.append(outputLabel, output, timing, tracking);
     const actions = element('div');
-    panel.append(panelTitle, status, panelName, summary, output, timing, actions);
+    panel.append(panelTitle, panelState, summary, work, status, actions);
     workspace.append(panel);
     const tooltip = element('div', '', 'tooltip');
     tooltip.id = 'cpu-resource-tooltip';
@@ -450,25 +455,16 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         }
     }
 
-    function summaryText(cpu: TerminalState['cpus']['cpus'][number]) {
-        const t = locale.common;
-        return `${t(cpu.isBusy ? (cpu.isPaused ? 'cpuPaused' : 'cpuBusy') : 'cpuIdle')} · ${t('cpuCapacity', { count: cpu.availableStorage })} · ${t('coprocessors', { count: cpu.coProcessors })} · ${cpu.usedStorage >= 0 ? t('cpuUsedStorage', { count: cpu.usedStorage }) : t('cpuStorageUnknown')}`;
+    function renderMetrics(target: HTMLDListElement, values: [string, string][]) {
+        target.replaceChildren(
+            ...values.map(([label, value]) => {
+                const field = element('div');
+                field.append(element('dt', locale.common(label)), element('dd', value));
+                return field;
+            })
+        );
     }
 
-    function renderOutput(
-        target: HTMLParagraphElement,
-        cpu: TerminalState['cpus']['detail'] | TerminalState['cpus']['cpus'][number]
-    ) {
-        target.replaceChildren();
-        if (!cpu?.isBusy) return;
-        if (cpu.finalOutput)
-            target.append(
-                `${locale.common('cpuOutput')}: `,
-                renderMinecraftText(cpu.finalOutput.displayName),
-                ` × ${locale.number(cpu.finalOutput.quantity)}`
-            );
-        else target.append(locale.common('cpuOutputUnknown'));
-    }
     function createOverviewRow() {
         const li = element('li', '', 'inset-frame cpu-card');
         const header = element('div', '', 'cpu-card-heading');
@@ -612,24 +608,56 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                       ? t(state.error)
                       : state.status === 'loading'
                         ? t('loading')
-                        : detail
-                          ? t(detail.isBusy ? (detail.isPaused ? 'cpuPaused' : 'cpuWorking') : 'cpuIdleMessage')
-                          : '';
+                        : '';
             if (selectedOutcome?.notice && selectedOutcome.notice !== state.error)
                 status.textContent += ` ${t(selectedOutcome.notice)}`;
             if (selectedOutcome?.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
             status.hidden = !status.textContent;
             panel.setAttribute('aria-label', t('cpuDetails'));
             panelTitleText.textContent = t('cpuDetails');
-            panelName.replaceChildren(renderMinecraftText(cpu?.name || route.cpuKey || ''));
-            summary.textContent = cpu ? summaryText(cpu) : '';
-            output.replaceChildren();
-            if (detail) renderOutput(output, detail);
-            timing.textContent = detail?.isBusy
-                ? detail.hasTrackingInfo
-                    ? `${t('cpuStarted', { time: locale.dateTime(detail.timeStarted) })} · ${t('cpuElapsed', { duration: locale.duration(detail.timeElapsed) })}`
-                    : t('cpuTrackingUnavailable')
+            panelState.hidden = !detail;
+            panelState.textContent = detail
+                ? t(detail.isBusy ? (detail.isPaused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle')
                 : '';
+            summary.hidden = !cpu;
+            renderMetrics(
+                summary,
+                cpu
+                    ? [
+                          ['cpuCapacityLabel', t('cpuBytes', { count: cpu.availableStorage })],
+                          [
+                              'cpuUsedStorageLabel',
+                              cpu.usedStorage >= 0
+                                  ? t('cpuBytes', { count: cpu.usedStorage })
+                                  : t('cpuValueUnavailable')
+                          ],
+                          ['cpuCoprocessorsLabel', locale.number(cpu.coProcessors)]
+                      ]
+                    : []
+            );
+            work.hidden = !detail?.isBusy;
+            outputLabel.textContent = t('cpuOutput');
+            output.replaceChildren();
+            if (detail?.isBusy) {
+                if (detail.finalOutput)
+                    output.append(
+                        renderMinecraftText(detail.finalOutput.displayName),
+                        ' ',
+                        element('span', `× ${locale.number(detail.finalOutput.quantity)}`, 'cpu-detail-quantity')
+                    );
+                else output.textContent = t('cpuOutputUnknown');
+            }
+            renderMetrics(
+                timing,
+                detail?.isBusy && detail.hasTrackingInfo
+                    ? [
+                          ['historyStartedLabel', locale.dateTime(detail.timeStarted)],
+                          ['cpuElapsedLabel', locale.duration(detail.timeElapsed)]
+                      ]
+                    : []
+            );
+            tracking.textContent = detail?.isBusy && !detail.hasTrackingInfo ? t('cpuTrackingUnavailable') : '';
+            tracking.hidden = !tracking.textContent;
             renderActions(actions, route.cpuKey || '', detail);
             renderResources();
         },
