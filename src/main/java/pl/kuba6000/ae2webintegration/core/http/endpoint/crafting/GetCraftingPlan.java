@@ -15,6 +15,7 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.api.ResourceDescription;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -96,39 +97,59 @@ public final class GetCraftingPlan extends ISyncedRequest {
         /** Calculated resource rows; null while calculation is pending. */
         public @Nullable ArrayList<JobItem> plan;
 
-        /**
-         * One resource required by the calculated crafting plan.
-         *
-         * @param registryNamespace native registry namespace, or null when unavailable
-         * @param componentCount    root NBT entry count on 1.7.10/1.12.2/1.20.1; effective component count on 1.21.1;
-         *                          null when
-         *                          unsupported
-         * @param damage            raw legacy item damage/metadata or modern damage value; null for fluids and
-         *                          unsupported resources
-         * @param registryPath      native registry path without namespace or damage, or null when unavailable
-         * @param displayName       resource display name
-         * @param stored            resource units taken from network storage
-         * @param requested         resource units to be crafted
-         * @param missing           resource units missing from a simulation
-         * @param steps             number of crafting steps; zero when the platform cannot report it
-         * @param usedPercent       fraction of currently available stored units consumed by a storage-only row; zero
-         *                          when the
-         *                          row requests crafting, has missing units or has no available storage
-         * @param itemKey           stable resource identity, or null when unavailable
-         * @param icon              atlas reference; null when not requested or unavailable
-         * @example registryPath iron_ingot
-         * @example displayName Iron Ingot
-         * @example stored 0
-         * @example requested 64
-         * @example missing 0
-         * @example steps 64
-         * @example usedPercent 0.0
-         */
-        @Desugar
-        public record JobItem(@Nullable String registryNamespace, @Nullable String registryPath,
-            @NotNull String displayName, @Nullable Integer componentCount, @Nullable Integer damage, long stored,
-            long requested, long missing, long steps, double usedPercent, @Nullable String itemKey,
-            @Nullable IconMappings.Reference icon) {}
+        /** One resource required by the calculated crafting plan. */
+        @SuppressWarnings("unused") // Gson reads the fields reflectively.
+        public static final class JobItem extends ResourceDescription {
+
+            /**
+             * Resource units taken from network storage.
+             *
+             * @example 0
+             */
+            public final long stored;
+            /**
+             * Resource units to be crafted.
+             *
+             * @example 64
+             */
+            public final long requested;
+            /**
+             * Resource units missing from a simulation.
+             *
+             * @example 0
+             */
+            public final long missing;
+            /**
+             * Number of crafting steps; zero when the platform cannot report it.
+             *
+             * @example 64
+             */
+            public final long steps;
+            /**
+             * Fraction of currently available stored units consumed by a storage-only row; zero when the row requests
+             * crafting, has missing units or has no available storage.
+             *
+             * @example 0.0
+             */
+            public final double usedPercent;
+            /** Stable resource identity, or null when unavailable. */
+            public final @Nullable String itemKey;
+            /** Atlas reference; null when not requested or unavailable. */
+            public final @Nullable IconMappings.Reference icon;
+
+            public JobItem(@Nullable String registryNamespace, @Nullable String registryPath,
+                @NotNull String displayName, int componentCount, int damage, long stored, long requested, long missing,
+                long steps, double usedPercent, @Nullable String itemKey, @Nullable IconMappings.Reference icon) {
+                super(registryNamespace, registryPath, displayName, componentCount, damage);
+                this.stored = stored;
+                this.requested = requested;
+                this.missing = missing;
+                this.steps = steps;
+                this.usedPercent = usedPercent;
+                this.itemKey = itemKey;
+                this.icon = icon;
+            }
+        }
 
     }
 
@@ -211,13 +232,13 @@ public final class GetCraftingPlan extends ISyncedRequest {
                 }
                 identities.commit();
                 jobData.plan.sort((i1, i2) -> {
-                    if (i1.missing() > 0 && i2.missing() > 0) return Long.compare(i2.missing(), i1.missing());
-                    else if (i1.missing() > 0 && i2.missing() == 0) return -1;
-                    else if (i1.missing() == 0 && i2.missing() > 0) return 1;
-                    if (i1.requested() > 0 && i2.requested() > 0) return Long.compare(i2.steps(), i1.steps());
-                    else if (i1.requested() > 0 && i2.requested() == 0) return -1;
-                    else if (i1.requested() == 0 && i2.requested() > 0) return 1;
-                    return Long.compare(i2.stored(), i1.stored());
+                    if (i1.missing > 0 && i2.missing > 0) return Long.compare(i2.missing, i1.missing);
+                    else if (i1.missing > 0 && i2.missing == 0) return -1;
+                    else if (i1.missing == 0 && i2.missing > 0) return 1;
+                    if (i1.requested > 0 && i2.requested > 0) return Long.compare(i2.steps, i1.steps);
+                    else if (i1.requested > 0 && i2.requested == 0) return -1;
+                    else if (i1.requested == 0 && i2.requested > 0) return 1;
+                    return Long.compare(i2.stored, i1.stored);
                 });
             } catch (InterruptedException | ExecutionException e) {
                 LOG.error("Failed to read crafting job", e);

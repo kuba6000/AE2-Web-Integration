@@ -2414,7 +2414,7 @@ test('terminal displays structured registry and optional resource metadata witho
             registryNamespace: 'minecraft',
             registryPath: 'water',
             componentCount: 0,
-            damage: null,
+            damage: 0,
             quantity: 1000,
             craftable: false,
             resourceType: 'FLUID',
@@ -2424,8 +2424,8 @@ test('terminal displays structured registry and optional resource metadata witho
             displayName: 'Essentia',
             registryNamespace: null,
             registryPath: null,
-            componentCount: null,
-            damage: null,
+            componentCount: 0,
+            damage: 0,
             quantity: 12,
             craftable: false,
             resourceType: 'OTHER',
@@ -2487,8 +2487,8 @@ test('CPU work, plans and history retain resources with unavailable registry met
         displayName: 'Essentia',
         registryNamespace: null,
         registryPath: null,
-        componentCount: null,
-        damage: null
+        componentCount: 0,
+        damage: 0
     };
     const finalOutput = { ...metadata, itemKey: null, quantity: 12 };
     options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], ...metadata }] };
@@ -2572,7 +2572,7 @@ test('terminal item and fluid switches intersect filters and preserve other reso
             registryPath: 'water',
             itemKey: 'water',
             resourceType: 'FLUID',
-            damage: null
+            damage: 0
         },
         {
             ...iron,
@@ -2581,7 +2581,7 @@ test('terminal item and fluid switches intersect filters and preserve other reso
             registryPath: 'steam',
             itemKey: 'steam',
             resourceType: 'FLUID',
-            damage: null,
+            damage: 0,
             quantity: 0
         },
         {
@@ -2591,8 +2591,8 @@ test('terminal item and fluid switches intersect filters and preserve other reso
             registryPath: 'energy',
             itemKey: 'energy',
             resourceType: 'OTHER',
-            componentCount: null,
-            damage: null
+            componentCount: 0,
+            damage: 0
         }
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);

@@ -311,10 +311,10 @@ export function mount(
     ) {
         const id = registryId(item);
         const lines: HTMLElement[] = id ? [element('code', id)] : [];
-        if (item.damage !== null && item.damage !== 0) {
+        if (item.damage !== 0) {
             lines.push(element(tag, `${locale.t('damage')}: ${locale.number(item.damage)}`));
         }
-        if (item.componentCount !== null && item.componentCount !== 0) {
+        if (item.componentCount !== 0) {
             lines.push(
                 element(
                     tag,

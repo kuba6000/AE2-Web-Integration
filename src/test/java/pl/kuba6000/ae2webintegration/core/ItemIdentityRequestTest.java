@@ -38,12 +38,12 @@ class ItemIdentityRequestTest extends GridTestScope {
         Resource fluid = new Resource("virtual:fluid_drop", 8000, true) {
 
             @Override
-            public @Nullable Integer web$getDamage() {
-                return null;
+            public int web$getDamage() {
+                return 0;
             }
 
             @Override
-            public @Nullable Integer web$getComponentCount() {
+            public int web$getComponentCount() {
                 return 0;
             }
 
@@ -65,13 +65,13 @@ class ItemIdentityRequestTest extends GridTestScope {
             }
 
             @Override
-            public @Nullable Integer web$getComponentCount() {
-                return null;
+            public int web$getComponentCount() {
+                return 0;
             }
 
             @Override
-            public @Nullable Integer web$getDamage() {
-                return null;
+            public int web$getDamage() {
+                return 0;
             }
 
             @Override
@@ -116,9 +116,10 @@ class ItemIdentityRequestTest extends GridTestScope {
             8000,
             fluidRow.get("quantity")
                 .getAsLong());
-        assertTrue(
+        assertEquals(
+            0,
             fluidRow.get("damage")
-                .isJsonNull());
+                .getAsInt());
         assertEquals(
             0,
             fluidRow.get("componentCount")
@@ -137,11 +138,19 @@ class ItemIdentityRequestTest extends GridTestScope {
             "addon:chemical",
             otherRow.get("displayName")
                 .getAsString());
-        for (String field : new String[] { "registryNamespace", "registryPath", "componentCount", "damage" }) {
+        for (String field : new String[] { "registryNamespace", "registryPath" }) {
             assertTrue(
                 otherRow.get(field)
                     .isJsonNull());
         }
+        assertEquals(
+            0,
+            otherRow.get("componentCount")
+                .getAsInt());
+        assertEquals(
+            0,
+            otherRow.get("damage")
+                .getAsInt());
         JsonObject recipeRow = rows.get(3)
             .getAsJsonObject();
         assertEquals(
@@ -524,11 +533,11 @@ class ItemIdentityRequestTest extends GridTestScope {
             return "example";
         }
 
-        public @Nullable Integer web$getComponentCount() {
+        public int web$getComponentCount() {
             return 2;
         }
 
-        public @Nullable Integer web$getDamage() {
+        public int web$getDamage() {
             return 7;
         }
 

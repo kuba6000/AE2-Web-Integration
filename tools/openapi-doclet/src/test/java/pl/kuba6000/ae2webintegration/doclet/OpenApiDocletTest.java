@@ -33,6 +33,92 @@ class OpenApiDocletTest {
     Path directory;
 
     @Test
+    void resourceResponseKeepsFlatDocumentedMetadataAndExcludesTransientState() throws Exception {
+        List<Path> sources = fixture("""
+            /** Lists resources.
+             * @response 200 {@link Resource} Resource.
+             */
+            @Endpoint(method = HttpMethod.GET, path = "/api/resources")
+            public class Grids {
+                public static class Description {
+                    /** Native registry namespace; null when unavailable. */
+                    public @org.jetbrains.annotations.Nullable String registryNamespace;
+                    /** Native registry path; null when unavailable. */
+                    public @org.jetbrains.annotations.Nullable String registryPath;
+                    /** Resource display name.
+                     * @example Iron Ingot
+                     */
+                    public String displayName;
+                    /** Damage value; zero when absent or unsupported. */
+                    public int damage;
+                    /** Component count; zero when absent or unsupported. */
+                    public int componentCount;
+                }
+                public static class Resource extends Description {
+                    /** Number of resource units.
+                     * @example 64
+                     */
+                    public long quantity;
+                    public transient Object iconBaseKey;
+                }
+            }
+            """);
+        Path output = directory.resolve("resources.json");
+        Result result = generate(sources, output);
+        assertTrue(result.success(), result.diagnostics());
+        JsonObject document = JsonParser.parseString(Files.readString(output))
+            .getAsJsonObject();
+        JsonObject schema = document.getAsJsonObject("components")
+            .getAsJsonObject("schemas")
+            .getAsJsonObject("GridsResource");
+        JsonObject properties = schema.getAsJsonObject("properties");
+        assertEquals(6, properties.size());
+        for (String field : List
+            .of("registryNamespace", "registryPath", "displayName", "damage", "componentCount", "quantity")) {
+            assertTrue(
+                schema.getAsJsonArray("required")
+                    .contains(JsonParser.parseString("\"" + field + "\"")));
+            assertFalse(
+                properties.getAsJsonObject(field)
+                    .get("description")
+                    .getAsString()
+                    .isBlank());
+        }
+        for (String field : List.of("damage", "componentCount")) {
+            JsonObject value = properties.getAsJsonObject(field);
+            assertEquals(
+                "integer",
+                value.get("type")
+                    .getAsString());
+            assertFalse(value.has("anyOf"));
+        }
+        for (String field : List.of("registryNamespace", "registryPath")) {
+            assertEquals(
+                "null",
+                properties.getAsJsonObject(field)
+                    .getAsJsonArray("anyOf")
+                    .get(1)
+                    .getAsJsonObject()
+                    .get("type")
+                    .getAsString());
+        }
+        assertEquals(
+            "Iron Ingot",
+            properties.getAsJsonObject("displayName")
+                .getAsJsonArray("examples")
+                .get(0)
+                .getAsString());
+        assertEquals(
+            64,
+            properties.getAsJsonObject("quantity")
+                .getAsJsonArray("examples")
+                .get(0)
+                .getAsInt());
+        assertFalse(properties.has("iconBaseKey"));
+        assertFalse(schema.has("allOf"));
+    }
+
+    @Test
     void documentsOptionalIconQueryWithoutChangingResponseShape() throws Exception {
         List<Path> sources = fixture("""
             /** Lists stored resources.

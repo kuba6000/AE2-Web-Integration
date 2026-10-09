@@ -298,12 +298,12 @@ class OutputSnapshotTest extends GridTestScope {
             return "resource";
         }
 
-        public @NotNull Integer web$getComponentCount() {
+        public int web$getComponentCount() {
             available();
             return 2;
         }
 
-        public @NotNull Integer web$getDamage() {
+        public int web$getDamage() {
             available();
             return 7;
         }

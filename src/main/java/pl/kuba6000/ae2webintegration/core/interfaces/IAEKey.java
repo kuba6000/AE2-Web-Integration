@@ -34,13 +34,14 @@ public interface IAEKey {
     @Nullable
     String web$getRegistryPath();
 
-    /** Root NBT entry count on 1.7.10/1.12.2/1.20.1; effective component count on 1.21.1. Null when unsupported. */
-    @Nullable
-    Integer web$getComponentCount();
+    /**
+     * Root NBT entry count on 1.7.10/1.12.2/1.20.1; effective component count on 1.21.1. Zero when absent or
+     * unsupported.
+     */
+    int web$getComponentCount();
 
-    /** Raw legacy item damage/metadata or modern damage value; null for fluids and unsupported resources. */
-    @Nullable
-    Integer web$getDamage();
+    /** Raw legacy item damage/metadata or modern damage value; zero for fluids and unsupported resources. */
+    int web$getDamage();
 
     @NotNull
     String web$getDisplayName();

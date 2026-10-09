@@ -72,7 +72,7 @@ test(page + ': stale CPU detail response cannot overwrite a newer selection', ()
     context.globalCPUList = { [first]: { name: 'First' }, [second]: { name: 'Second' } };
     context.selectCPU({ name: first });
     context.selectCPU({ name: second });
-    requests[1].success({ status: 'OK', data: { items: [], finalOutput: { displayName: 'Second job', registryNamespace: null, registryPath: null, componentCount: null, damage: null, itemKey: null, quantity: 2 } } });
+    requests[1].success({ status: 'OK', data: { items: [], finalOutput: { displayName: 'Second job', registryNamespace: null, registryPath: null, componentCount: 0, damage: 0, itemKey: null, quantity: 2 } } });
     const newer = elements.get('terminalCPUHeaderText').innerHTML;
     requests[0].success({ status: 'OK', data: { isBusy: false } });
     assert.equal(elements.get('terminalCPUHeaderText').innerHTML, newer);

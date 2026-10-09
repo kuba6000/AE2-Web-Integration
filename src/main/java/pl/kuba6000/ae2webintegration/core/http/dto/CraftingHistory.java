@@ -14,6 +14,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.ResourceDescription;
 import pl.kuba6000.ae2webintegration.core.api.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -50,43 +51,70 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
     @Desugar
     public record Timing(long started, long ended) {}
 
-    /**
-     * Completed processing measurements for one resource identity.
-     *
-     * @param registryNamespace           native registry namespace, or null when unavailable
-     * @param componentCount              root NBT entry count on 1.7.10/1.12.2/1.20.1; effective component count on
-     *                                    1.21.1; null when
-     *                                    unsupported
-     * @param damage                      raw legacy item damage/metadata or modern damage value; null for fluids and
-     *                                    unsupported resources
-     * @param registryPath                native registry path without namespace or damage, or null when unavailable
-     * @param displayName                 resource display name
-     * @param itemKey                     exact stable resource identity, or null when it could not be captured
-     * @param timeSpentOn                 measured processing time for this resource, in milliseconds
-     * @param craftedTotal                total resource units produced during the measured work
-     * @param shareInCraftingTime         fraction of summed resource processing time attributed to this resource; one
-     *                                    when no processing time is recorded
-     * @param shareInCraftingTimeCombined fraction of job elapsed time spent processing this resource, capped at one
-     * @param craftsPerSec                produced resource units per second of measured processing time
-     * @param icon                        resource atlas reference; null when not requested, unavailable, or absent from
-     *                                    the pack
-     * @param timings                     measured processing intervals
-     * @param providers                   distinct provider group names used for this resource, matching names in
-     *                                    interfaceShare; empty when no provider was recorded
-     * @example registryPath iron_ingot
-     * @example displayName Iron Ingot
-     * @example timeSpentOn 10000
-     * @example craftedTotal 64
-     * @example shareInCraftingTime 1.0
-     * @example shareInCraftingTimeCombined 1.0
-     * @example craftsPerSec 6.4
-     */
-    @Desugar
-    public record ResourceTiming(@Nullable String registryNamespace, @Nullable String registryPath,
-        @NotNull String displayName, @Nullable Integer componentCount, @Nullable Integer damage, long timeSpentOn,
-        long craftedTotal, double shareInCraftingTime, double shareInCraftingTimeCombined, double craftsPerSec,
-        @NotNull ArrayList<Timing> timings, @Nullable IconMappings.Reference icon, @Nullable String itemKey,
-        @NotNull List<String> providers) {}
+    /** Completed processing measurements for one resource identity. */
+    @SuppressWarnings("unused") // Gson reads the fields reflectively.
+    public static final class ResourceTiming extends ResourceDescription {
+
+        /**
+         * Measured processing time for this resource, in milliseconds.
+         *
+         * @example 10000
+         */
+        public final long timeSpentOn;
+        /**
+         * Total resource units produced during the measured work.
+         *
+         * @example 64
+         */
+        public final long craftedTotal;
+        /**
+         * Fraction of summed resource processing time attributed to this resource; one when no processing time is
+         * recorded.
+         *
+         * @example 1.0
+         */
+        public final double shareInCraftingTime;
+        /**
+         * Fraction of job elapsed time spent processing this resource, capped at one.
+         *
+         * @example 1.0
+         */
+        public final double shareInCraftingTimeCombined;
+        /**
+         * Produced resource units per second of measured processing time.
+         *
+         * @example 6.4
+         */
+        public final double craftsPerSec;
+        /** Measured processing intervals. */
+        public final @NotNull ArrayList<Timing> timings;
+        /** Resource atlas reference; null when not requested, unavailable, or absent from the pack. */
+        public final @Nullable IconMappings.Reference icon;
+        /** Exact stable resource identity, or null when it could not be captured. */
+        public final @Nullable String itemKey;
+        /**
+         * Distinct provider group names used for this resource, matching names in interfaceShare; empty when no
+         * provider was recorded.
+         */
+        public final @NotNull List<String> providers;
+
+        public ResourceTiming(@Nullable String registryNamespace, @Nullable String registryPath,
+            @NotNull String displayName, int componentCount, int damage, long timeSpentOn, long craftedTotal,
+            double shareInCraftingTime, double shareInCraftingTimeCombined, double craftsPerSec,
+            @NotNull ArrayList<Timing> timings, @Nullable IconMappings.Reference icon, @Nullable String itemKey,
+            @NotNull List<String> providers) {
+            super(registryNamespace, registryPath, displayName, componentCount, damage);
+            this.timeSpentOn = timeSpentOn;
+            this.craftedTotal = craftedTotal;
+            this.shareInCraftingTime = shareInCraftingTime;
+            this.shareInCraftingTimeCombined = shareInCraftingTimeCombined;
+            this.craftsPerSec = craftsPerSec;
+            this.timings = timings;
+            this.icon = icon;
+            this.itemKey = itemKey;
+            this.providers = providers;
+        }
+    }
 
     /**
      * Processing measurements combined for pattern providers sharing a display name.
@@ -139,7 +167,7 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, @Nullable Icon
                     resource.itemKey,
                     providers));
         }
-        items.sort((first, second) -> Double.compare(second.shareInCraftingTime(), first.shareInCraftingTime()));
+        items.sort((first, second) -> Double.compare(second.shareInCraftingTime, first.shareInCraftingTime));
         ArrayList<ProviderTiming> interfaceShare = new ArrayList<>();
         for (Map.Entry<AE2JobTracker.AEInterface, ArrayList<Pair<Long, Long>>> entry : info.interfaceShare.entrySet()) {
             ArrayList<Timing> timings = new ArrayList<>();

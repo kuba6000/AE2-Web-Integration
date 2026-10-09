@@ -169,11 +169,11 @@ class CoreEngineLifecycleTest extends GridTestScope {
             return "example";
         }
 
-        public @NotNull Integer web$getComponentCount() {
+        public int web$getComponentCount() {
             return 2;
         }
 
-        public @NotNull Integer web$getDamage() {
+        public int web$getDamage() {
             return 7;
         }
 

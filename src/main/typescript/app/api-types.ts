@@ -9,12 +9,14 @@ export type ApplicationContext = {
     isOutdated: boolean;
     user: { username: string; isAdmin: boolean } | null;
 };
-export type ResourceStack = {
+export type ResourceDescription = {
     displayName: string;
     registryNamespace: string | null;
     registryPath: string | null;
-    componentCount: number | null;
-    damage: number | null;
+    componentCount: number;
+    damage: number;
+};
+export type ResourceStack = ResourceDescription & {
     quantity: number;
     itemKey: string | null;
 };
@@ -65,14 +67,9 @@ export type CpuInfo = {
     hasTrackingInfo: boolean;
     timeStarted: number;
 };
-export type CpuResource = {
+export type CpuResource = ResourceDescription & {
     itemKey?: string | null;
     icon?: IconReference | null;
-    displayName: string;
-    registryNamespace: string | null;
-    registryPath: string | null;
-    componentCount: number | null;
-    damage: number | null;
     active: number;
     pending: number;
     stored: number;
@@ -94,14 +91,9 @@ export type CpuDetail = {
     timeStarted: number;
     timeElapsed: number;
 };
-export type PlanItem = {
+export type PlanItem = ResourceDescription & {
     itemKey: string | null;
     icon?: IconReference | null;
-    displayName: string;
-    registryNamespace: string | null;
-    registryPath: string | null;
-    componentCount: number | null;
-    damage: number | null;
     stored: number;
     requested: number;
     missing: number;
@@ -118,15 +110,10 @@ export type HistoryEntry = {
     id: number;
 };
 export type Timing = { started: number; ended: number };
-export type ResourceTiming = {
+export type ResourceTiming = ResourceDescription & {
     itemKey: string | null;
     providers: string[];
     icon?: IconReference | null;
-    displayName: string;
-    registryNamespace: string | null;
-    registryPath: string | null;
-    componentCount: number | null;
-    damage: number | null;
     timeSpentOn: number;
     craftedTotal: number;
     shareInCraftingTime: number;

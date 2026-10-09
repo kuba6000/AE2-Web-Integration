@@ -12,26 +12,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 /** Immutable output data captured on the server thread, safe for later asynchronous serialization. */
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
-public final class ResourceStack {
+public final class ResourceStack extends ResourceDescription {
 
-    /**
-     * Native registry path without namespace or damage; null when unavailable.
-     *
-     * @example iron_ingot
-     */
-    public final @Nullable String registryPath;
-    /** Native registry namespace, or null when unavailable. */
-    public final @Nullable String registryNamespace;
-    /** Root NBT entry count on 1.7.10/1.12.2/1.20.1; effective component count on 1.21.1. Null when unsupported. */
-    public final @Nullable Integer componentCount;
-    /** Raw legacy item damage/metadata or modern damage value; null for fluids and unsupported resources. */
-    public final @Nullable Integer damage;
-    /**
-     * Resource display name.
-     *
-     * @example Iron Ingot
-     */
-    public final @NotNull String displayName;
     /**
      * Number of resource units.
      *
@@ -47,14 +29,10 @@ public final class ResourceStack {
     /** Detached fallback identity for tracked history; captured only when the installed pack lacks the exact icon. */
     public final transient @Nullable StableKey iconBaseKey;
 
-    private ResourceStack(@Nullable String registryNamespace, @Nullable String registryPath,
-        @Nullable Integer componentCount, @Nullable Integer damage, @NotNull String displayName, long quantity,
-        @Nullable String itemKey, @Nullable StableKey iconBaseKey) {
-        this.registryNamespace = registryNamespace;
-        this.registryPath = registryPath;
-        this.componentCount = componentCount;
-        this.damage = damage;
-        this.displayName = displayName;
+    private ResourceStack(@Nullable String registryNamespace, @Nullable String registryPath, int componentCount,
+        int damage, @NotNull String displayName, long quantity, @Nullable String itemKey,
+        @Nullable StableKey iconBaseKey) {
+        super(registryNamespace, registryPath, displayName, componentCount, damage);
         this.quantity = quantity;
         this.itemKey = itemKey;
         this.iconBaseKey = iconBaseKey;
@@ -76,8 +54,8 @@ public final class ResourceStack {
         @Nullable IconPack pack) {
         String registryNamespace = key.web$getRegistryNamespace();
         String registryPath = key.web$getRegistryPath();
-        Integer componentCount = key.web$getComponentCount();
-        Integer damage = key.web$getDamage();
+        int componentCount = key.web$getComponentCount();
+        int damage = key.web$getDamage();
         String displayName = key.web$getDisplayName();
         StableKey itemKey;
         try {
