@@ -255,7 +255,7 @@ export function mount(
     });
     const itemIcons = application.icons.observe(find('#item-scroll'), paintResourceIcon);
     const slots = createSlotGrid(find('#items'), find('#item-scroll'), find('#terminal'));
-    const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace') });
+    const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace'), settings });
     const historyView = createHistoryView(find('#window'), application, bindTooltip);
     const settingsView = createSettingsView(find('#window'), application);
     const aboutView = createAboutView(find('#window'), modVersion);

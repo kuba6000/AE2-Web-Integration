@@ -3773,6 +3773,142 @@ test('CPU memory uses binary units through exabytes in overview and current work
 });
 
 // Public browser/HTTP seam: navigation keeps a bounded selector and never mutates CPU work.
+test('CPU selector cycles summary sorting with stable ties and remembers criterion and direction', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus = {
+        'cpu-c': { ...cpu, name: 'Beta', availableStorage: 8192, coProcessors: 1 },
+        'cpu-b': { ...cpu, name: 'Alpha', availableStorage: 16384, coProcessors: 2, isBusy: true },
+        'cpu-d': { ...cpu, name: 'Delta', availableStorage: 4096, coProcessors: 2 },
+        'cpu-a': { ...cpu, name: '§aAlpha', availableStorage: 8192, coProcessors: 3, isBusy: true, isPaused: true }
+    };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
+    const panel = page.getByRole('complementary', { name: 'CPUs', exact: true });
+    const links = panel.getByRole('region', { name: 'CPU selector', exact: true }).getByRole('link');
+    const order = () => links.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href').split('/').at(-1)));
+    const initialRequests = options.requests.length;
+    await panel.getByRole('button', { name: 'Sort CPUs: Name', exact: true }).waitFor({ timeout: 2000 });
+    assert.deepEqual(await order(), ['cpu-a', 'cpu-b', 'cpu-c', 'cpu-d']);
+    await panel.getByRole('button', { name: 'Sort CPUs: Name', exact: true }).click();
+    assert.deepEqual(await order(), ['cpu-d', 'cpu-a', 'cpu-c', 'cpu-b']);
+    await panel.getByRole('button', { name: 'CPU sort order: Ascending', exact: true }).click();
+    assert.deepEqual(await order(), ['cpu-b', 'cpu-a', 'cpu-c', 'cpu-d']);
+    await panel.getByRole('button', { name: 'Sort CPUs: Capacity', exact: true }).click();
+    assert.deepEqual(await order(), ['cpu-a', 'cpu-b', 'cpu-d', 'cpu-c']);
+    await panel.getByRole('button', { name: 'CPU sort order: Descending', exact: true }).click();
+    assert.deepEqual(await order(), ['cpu-c', 'cpu-b', 'cpu-d', 'cpu-a']);
+    await panel.getByRole('button', { name: 'Sort CPUs: Coprocessors', exact: true }).click();
+    assert.deepEqual(await order(), ['cpu-c', 'cpu-d', 'cpu-a', 'cpu-b']);
+    const direction = panel.getByRole('button', { name: 'CPU sort order: Ascending', exact: true });
+    assert.equal(await direction.getAttribute('aria-pressed'), null);
+    await direction.click();
+    assert.deepEqual(await order(), ['cpu-a', 'cpu-b', 'cpu-c', 'cpu-d']);
+    assert.equal(options.requests.length, initialRequests, 'Client sorting must not trigger HTTP work');
+    await page.reload();
+    await panel.getByRole('button', { name: 'Sort CPUs: Busy state', exact: true }).waitFor();
+    await links.first().waitFor();
+    assert.deepEqual(await order(), ['cpu-a', 'cpu-b', 'cpu-c', 'cpu-d']);
+    assert.equal(
+        await panel.getByRole('button', { name: 'CPU sort order: Descending', exact: true }).isVisible(),
+        true
+    );
+    options.cpus = Object.fromEntries(Object.entries(options.cpus).reverse());
+    await poll(page);
+    assert.deepEqual(await order(), ['cpu-a', 'cpu-b', 'cpu-c', 'cpu-d']);
+    assert.equal(await panel.getByRole('link', { name: /cpu-a/ }).getAttribute('aria-current'), 'page');
+    assert.match(page.url(), /\/cpus\/cpu-a$/);
+});
+
+test('CPU selector ignores unsupported saved sorting choices', async (t) => {
+    const { page, base } = await fixture(t);
+    await page.addInitScript(() =>
+        localStorage.setItem(
+            'ae2web:/:theme:default',
+            JSON.stringify({ cpuSelectorSort: 'progress', cpuSelectorSortOrder: 'sideways' })
+        )
+    );
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const panel = page.getByRole('complementary', { name: 'CPUs', exact: true });
+    await panel.getByRole('button', { name: 'Sort CPUs: Name', exact: true }).waitFor();
+    assert.equal(await panel.getByRole('button', { name: 'CPU sort order: Ascending', exact: true }).isVisible(), true);
+    await panel.getByRole('link', { name: /cpu-a/ }).waitFor();
+    assert.equal(await panel.getByRole('link', { name: /cpu-a/ }).getAttribute('aria-current'), 'page');
+});
+
+test('CPU search opens from the magnifier, focuses the field and clears its filter when closed', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus['cpu-b'] = { ...cpu, name: 'Other processor' };
+    for (const width of [390, 1280]) {
+        await page.setViewportSize({ width, height: 844 });
+        await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+        const panel = page.getByRole('complementary', { name: 'CPUs', exact: true });
+        const search = panel.getByRole('searchbox', { name: 'Search CPUs', exact: true });
+        const toggle = panel.getByRole('button', { name: 'Search CPUs', exact: true });
+        await toggle.waitFor({ timeout: 2000 });
+        assert.equal(await search.isVisible(), false);
+        const before = await toggle.boundingBox();
+        await toggle.click();
+        assert.equal(await search.evaluate((node) => node === document.activeElement), true);
+        await search.fill('Other');
+        assert.equal(await panel.getByRole('link').count(), 1);
+        const listBounds = await panel.getByRole('region', { name: 'CPU selector', exact: true }).boundingBox();
+        const rowBounds = await panel.getByRole('link').boundingBox();
+        assert.ok(listBounds.height >= rowBounds.height, 'Expanded search leaves a complete CPU result readable');
+        assert.ok(
+            (await page.getByRole('region', { name: 'CPU resources', exact: true }).boundingBox()).height > 100,
+            'Search must not take the resource viewport away'
+        );
+        await panel.getByRole('button', { name: 'Close CPU search', exact: true }).click();
+        assert.equal(await search.isVisible(), false);
+        assert.equal(await panel.getByRole('link').count(), 2);
+        assert.deepEqual(await toggle.boundingBox(), before);
+        await toggle.click();
+        assert.equal(await search.inputValue(), '');
+        await search.fill('cpu-a');
+        await search.press('Escape');
+        assert.equal(await search.isVisible(), false);
+        assert.equal(await toggle.evaluate((node) => node === document.activeElement), true);
+        assert.equal(await panel.getByRole('link').count(), 2);
+        assert.ok(await panel.evaluate((node) => node.scrollWidth <= node.clientWidth));
+    }
+});
+
+test('CPU sorting preserves keyboard focus and reading position when polling moves the focused CPU', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.setViewportSize({ width: 1280, height: 650 });
+    options.cpus = {
+        'cpu-a': { ...cpu, name: 'Alpha', isBusy: true },
+        'cpu-b': { ...cpu, name: 'Bravo', isBusy: true },
+        'cpu-c': { ...cpu, name: 'Charlie' },
+        'cpu-d': { ...cpu, name: 'Delta' }
+    };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-b`);
+    const panel = page.getByRole('complementary', { name: 'CPUs', exact: true });
+    for (const criterion of ['Name', 'Capacity', 'Coprocessors'])
+        await panel.getByRole('button', { name: `Sort CPUs: ${criterion}`, exact: true }).click();
+    const selector = panel.getByRole('region', { name: 'CPU selector', exact: true });
+    const target = selector.getByRole('link', { name: /cpu-a/ });
+    await page.mouse.move(5, 5);
+    await target.focus();
+    await page.keyboard.press('Escape');
+    const readingPosition = await selector.evaluate((node) => node.scrollTop);
+    options.cpus['cpu-a'].isBusy = false;
+    await poll(page);
+    await page.waitForFunction(() =>
+        document.querySelector('[aria-label="CPU selector"] a')?.getAttribute('href')?.endsWith('/cpu-a')
+    );
+    assert.equal(await target.evaluate((node) => node === document.activeElement), true);
+    assert.equal(await selector.evaluate((node) => node.scrollTop), readingPosition);
+    assert.equal(
+        await page.getByRole('tooltip').isVisible(),
+        false,
+        'A dismissed tooltip must not reopen while restoring focus'
+    );
+});
+
 test('CPU selector searches forty processors and preserves reading position across selection and polling', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -3796,6 +3932,7 @@ test('CPU selector searches forty processors and preserves reading position acro
     await selector.getByRole('link', { name: /Production 00/ }).waitFor({ timeout: 2000 });
     assert.equal(await selector.getByRole('link').count(), 40);
     assert.ok(await selector.evaluate((node) => node.scrollHeight > node.clientHeight));
+    await page.getByRole('button', { name: 'Search CPUs', exact: true }).click();
     await search.fill('Production');
     assert.equal(await selector.getByRole('link').count(), 39);
     const target = selector.getByRole('link', { name: /Production 25/ });
@@ -3897,6 +4034,7 @@ test('CPU list fills its attachment and current job stays in a low footer even w
     await last.scrollIntoViewIfNeeded();
     assert.ok(await selector.evaluate((node) => node.scrollTop > 0));
     const search = page.getByRole('searchbox', { name: 'Search CPUs', exact: true });
+    await page.getByRole('button', { name: 'Search CPUs', exact: true }).click();
     await search.fill('Processor 39');
     assert.equal(await selector.getByRole('link').count(), 1);
     await details.scrollIntoViewIfNeeded();
@@ -4013,6 +4151,7 @@ test('CPU tooltips expose live hardware and recorded start without extra detail 
     await page.keyboard.press('Escape');
     await poll(page);
     assert.equal(await tooltip.isVisible(), false);
+    await page.getByRole('button', { name: 'Search CPUs', exact: true }).click();
     await page.getByRole('searchbox', { name: 'Search CPUs', exact: true }).focus();
     await row.focus();
     await tooltip.waitFor();

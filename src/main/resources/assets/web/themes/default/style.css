@@ -422,6 +422,22 @@ header {
     min-width: 0;
     font-size: 12px;
 }
+.cpu-selector-controls {
+    display: grid;
+    gap: 8px;
+}
+.cpu-selector-buttons {
+    display: flex;
+    gap: 6px;
+}
+.cpu-selector-buttons .tool-button {
+    width: 32px;
+    height: 32px;
+}
+.cpu-selector-buttons .tool-button .theme-icon {
+    width: 24px;
+    height: 24px;
+}
 .cpu-selector-scroll {
     min-height: 0;
     overflow-y: auto;
@@ -2105,6 +2121,23 @@ footer a {
     #cpu-panel {
         height: min(180px, 25dvh);
         max-height: none;
+    }
+    .cpu-selector-controls:has(.cpu-selector-search:not([hidden])) {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .cpu-selector-controls:has(.cpu-selector-search:not([hidden])) .cpu-selector-buttons {
+        grid-column: 2;
+        grid-row: 1;
+    }
+    .cpu-selector-controls:has(.cpu-selector-search:not([hidden])) .cpu-selector-buttons > :not(:last-child) {
+        display: none;
+    }
+    .cpu-selector-search {
+        grid-column: 1;
+        grid-row: 1;
+    }
+    .cpu-selector-search input {
+        height: 32px;
     }
     .cpu-detail-work {
         flex-basis: 100%;

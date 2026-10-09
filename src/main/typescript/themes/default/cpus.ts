@@ -3,6 +3,7 @@ import type { CpuOutcome } from '../../app/cpus.js';
 import type { TerminalState, createTerminal } from '../../app/terminal.js';
 import type { CpuResource } from '../../app/api-types.js';
 import type { Translator as Locale } from '../../app/i18n.js';
+import type { createThemeContext } from '../../app/theme-context.js';
 type Terminal = ReturnType<typeof createTerminal>;
 type ResourceSort = 'name' | 'active' | 'pending' | 'stored' | 'shareInCraftingTime';
 
@@ -14,6 +15,7 @@ import { terminalIcons, craftingHammer, craftingQueue, craftingPriorityIcon } fr
 import { slotQuantity } from './resource-quantity.js';
 import { createSlotGrid } from './slot-grid.js';
 import { cancelIcon, pauseIcon, playIcon } from './icons/hackernoon/playback.js';
+import { cpuChipIcon, cpuSearchIcon } from './icons/pixel/cpu-controls.js';
 
 function element<Tag extends keyof HTMLElementTagNameMap>(
     tag: Tag,
@@ -28,7 +30,11 @@ function element<Tag extends keyof HTMLElementTagNameMap>(
 
 /* Presentation only: CPU requests, mutations and refresh lifetime belong to the application. */
 
-export function createCpuView(root: HTMLElement, application: Terminal, { workspace }: { workspace: HTMLElement }) {
+export function createCpuView(
+    root: HTMLElement,
+    application: Terminal,
+    { workspace, settings }: { workspace: HTMLElement; settings: ReturnType<typeof createThemeContext>['settings'] }
+) {
     const lifetime = new AbortController();
     const view = element('section', '', 'cpu-view');
     view.hidden = true;
@@ -87,11 +93,25 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     const panel = element('aside');
     panel.id = 'cpu-panel';
     const selectorTitle = element('h3');
+    const selectorControls = element('div', '', 'cpu-selector-controls');
+    const selectorButtons = element('div', '', 'cpu-selector-buttons');
+    selectorButtons.role = 'group';
+    const selectorSortButton = element('button', '', 'tool-button');
+    selectorSortButton.type = 'button';
+    const selectorDirection = element('button', '', 'tool-button');
+    selectorDirection.type = 'button';
+    const selectorSearchToggle = element('button', '', 'tool-button');
+    selectorSearchToggle.type = 'button';
+    selectorSearchToggle.innerHTML = cpuSearchIcon;
+    selectorButtons.append(selectorSortButton, selectorDirection, selectorSearchToggle);
     const selectorSearchLabel = element('label', '', 'cpu-selector-search');
     const selectorSearchName = element('span', '', 'sr-only');
     const selectorSearch = element('input');
     selectorSearch.type = 'search';
+    selectorSearch.id = 'cpu-selector-search-input';
+    selectorSearchToggle.setAttribute('aria-controls', selectorSearch.id);
     selectorSearchLabel.append(selectorSearchName, selectorSearch);
+    selectorControls.append(selectorButtons, selectorSearchLabel);
     const selectorScroll = element('div', '', 'cpu-selector-scroll inset-frame');
     selectorScroll.role = 'region';
     selectorScroll.tabIndex = 0;
@@ -114,7 +134,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     const footer = element('div', '', 'cpu-footer');
     footer.append(work, actions, status);
     terminal.append(footer);
-    panel.append(selectorTitle, selectorSearchLabel, selectorScroll);
+    panel.append(selectorTitle, selectorControls, selectorScroll);
     workspace.append(panel);
     const outputIcons = application.icons.observe(footer, paintResourceIcon);
     const tooltip = element('div', '', 'tooltip');
@@ -129,6 +149,17 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     let selectorRows = new Map<string, ReturnType<typeof createSelectorRow>>();
     let selectorGrid = '';
     let selectedCpu = '';
+    let selectorSearchOpen = false;
+    const selectorCriteria = [
+        { value: 'name', label: 'name', icon: terminalIcons.name },
+        { value: 'capacity', label: 'cpuCapacityLabel', icon: terminalIcons.stored },
+        { value: 'coprocessors', label: 'cpuCoprocessorsLabel', icon: cpuChipIcon },
+        { value: 'state', label: 'cpuBusyState', icon: craftingHammer }
+    ] as const;
+    const savedSelectorSort = settings.get('cpuSelectorSort');
+    let selectorSort =
+        selectorCriteria.find((criterion) => criterion.value === savedSelectorSort) || selectorCriteria[0];
+    let selectorDescending = settings.get('cpuSelectorSortOrder') === 'descending';
 
     let itemRows: Map<string, ReturnType<typeof createResourceRow>> = new Map();
     let hideStored = false;
@@ -205,11 +236,53 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     function showToolTooltip(button: HTMLElement) {
         hideTooltip();
         toolTooltip = button;
-        tooltip.textContent = button.getAttribute('aria-label');
+        tooltip.replaceChildren(
+            ...[button.getAttribute('aria-label'), button.getAttribute('aria-description')]
+                .filter((text): text is string => !!text)
+                .map((text) => element('span', text))
+        );
         tooltip.hidden = false;
         const box = button.getBoundingClientRect();
         positionTooltip(box.right, box.top);
     }
+
+    for (const button of [selectorSortButton, selectorDirection, selectorSearchToggle]) {
+        button.addEventListener('pointerenter', () => showToolTooltip(button));
+        button.addEventListener('focus', () => showToolTooltip(button));
+        for (const event of ['pointerleave', 'blur'])
+            button.addEventListener(event, () => {
+                if (toolTooltip === button) hideTooltip();
+            });
+    }
+    selectorSortButton.addEventListener('click', () => {
+        selectorSort = selectorCriteria[(selectorCriteria.indexOf(selectorSort) + 1) % selectorCriteria.length];
+        settings.set('cpuSelectorSort', selectorSort.value);
+        selectorScroll.scrollTop = 0;
+        renderSelector();
+    });
+    selectorDirection.addEventListener('click', () => {
+        selectorDescending = !selectorDescending;
+        settings.set('cpuSelectorSortOrder', selectorDescending ? 'descending' : 'ascending');
+        selectorScroll.scrollTop = 0;
+        renderSelector();
+    });
+    function setSelectorSearch(open: boolean) {
+        selectorSearchOpen = open;
+        if (!open) selectorSearch.value = '';
+        selectorScroll.scrollTop = 0;
+        hideTooltip();
+        renderSelector();
+        if (open) selectorSearch.focus();
+    }
+    selectorSearchToggle.addEventListener('click', () => setSelectorSearch(!selectorSearchOpen));
+    selectorSearch.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            event.stopPropagation();
+            setSelectorSearch(false);
+            selectorSearchToggle.focus();
+            hideTooltip();
+        }
+    });
 
     function refreshCpuTooltip() {
         if (!cpuTooltip) return;
@@ -281,7 +354,9 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                 positionTooltip(event.clientX, event.clientY);
             }
         });
-        target.addEventListener('focus', () => show());
+        target.addEventListener('focus', () => {
+            if (!updatingRows) show();
+        });
         target.addEventListener('click', () => show());
         target.addEventListener('pointerleave', (event) => {
             if (
@@ -293,7 +368,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                 hideTooltip();
         });
         target.addEventListener('blur', (event) => {
-            if (cpuTooltip?.target === target && event.relatedTarget !== tooltip) hideTooltip();
+            if (!updatingRows && cpuTooltip?.target === target && event.relatedTarget !== tooltip) hideTooltip();
         });
         target.addEventListener('keydown', (event) => {
             if (
@@ -697,13 +772,58 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
 
     function renderSelector() {
         const t = locale.common;
+        selectorButtons.setAttribute('aria-label', t('cpuSelector'));
+        selectorSearchLabel.hidden = !selectorSearchOpen;
+        selectorSearchToggle.setAttribute('aria-expanded', String(selectorSearchOpen));
+        selectorSearchToggle.setAttribute('aria-label', t(selectorSearchOpen ? 'closeCpuSearch' : 'searchCpus'));
+        if (selectorSearchOpen) selectorSearchToggle.setAttribute('aria-description', t('clearCpuSearch'));
+        else selectorSearchToggle.removeAttribute('aria-description');
+        selectorSortButton.innerHTML = selectorSort.icon;
+        selectorSortButton.setAttribute('aria-label', `${t('cpuSelectorSort')}: ${t(selectorSort.label)}`);
+        selectorSortButton.setAttribute(
+            'aria-description',
+            locale.t('nextState', {
+                state: t(selectorCriteria[(selectorCriteria.indexOf(selectorSort) + 1) % selectorCriteria.length].label)
+            })
+        );
+        selectorDirection.innerHTML = terminalIcons[selectorDescending ? 'descending' : 'ascending'];
+        selectorDirection.setAttribute(
+            'aria-label',
+            `${t('cpuSelectorDirection')}: ${t(selectorDescending ? 'descending' : 'ascending')}`
+        );
+        if (selectorSort.value === 'state')
+            selectorDirection.setAttribute('aria-description', t(selectorDescending ? 'cpuBusyFirst' : 'cpuIdleFirst'));
+        else selectorDirection.removeAttribute('aria-description');
+        if (toolTooltip && selectorButtons.contains(toolTooltip)) showToolTooltip(toolTooltip);
         const terms = selectorSearch.value.trim().toLocaleLowerCase(document.documentElement.lang).split(/\s+/);
-        const visible = state.cpus.filter((cpu) => {
-            const text = `${plainMinecraftText(cpu.name)} ${cpu.key}`.toLocaleLowerCase(document.documentElement.lang);
-            return terms.every((term) => text.includes(term));
-        });
+        const visible = state.cpus
+            .filter((cpu) => {
+                const text = `${plainMinecraftText(cpu.name)} ${cpu.key}`.toLocaleLowerCase(
+                    document.documentElement.lang
+                );
+                return terms.every((term) => text.includes(term));
+            })
+            .sort((a, b) => {
+                const name = (plainMinecraftText(a.name).trim() || a.key).localeCompare(
+                    plainMinecraftText(b.name).trim() || b.key,
+                    document.documentElement.lang
+                );
+                const primary =
+                    selectorSort.value === 'capacity'
+                        ? a.availableStorage - b.availableStorage
+                        : selectorSort.value === 'coprocessors'
+                          ? a.coProcessors - b.coProcessors
+                          : selectorSort.value === 'state'
+                            ? Number(a.isBusy) - Number(b.isBusy)
+                            : name;
+                return (
+                    (selectorDescending ? -primary : primary) || name || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
+                );
+            });
         const current = new Map<string, ReturnType<typeof createSelectorRow>>();
         const scrollTop = selectorScroll.scrollTop;
+        const focused = [...selectorRows.values()].find((row) => row.link === document.activeElement);
+        updatingRows = true;
         for (const [index, cpu] of visible.entries()) {
             const row = selectorRows.get(cpu.key) || createSelectorRow(cpu.key);
             const displayName = plainMinecraftText(cpu.name).trim() ? cpu.name : cpu.key;
@@ -724,6 +844,9 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         }
         for (const [key, row] of selectorRows) if (!current.has(key)) row.li.remove();
         selectorRows = current;
+        if (focused?.link.isConnected && document.activeElement !== focused.link)
+            focused.link.focus({ preventScroll: true });
+        updatingRows = false;
         selectorStatus.textContent = visible.length
             ? ''
             : state.cpus.length
@@ -755,6 +878,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             const nextGrid = route.view === 'cpus' ? route.gridKey : '';
             if (selectorGrid !== nextGrid) {
                 selectorGrid = nextGrid;
+                selectorSearchOpen = false;
                 selectorSearch.value = '';
                 selectorScroll.scrollTop = 0;
             }
