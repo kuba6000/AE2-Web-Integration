@@ -1579,6 +1579,7 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
             items: [{ ...cpuWork.items[0], itemKey: 'iron', icon: { page: 0, x: 0, y: 0 } }]
         }
     };
+    options.cpus['cpu-a'] = { ...cpu, isBusy: true, finalOutput: quartz, icon: { page: 0, x: 64, y: 0 } };
     const pages = () => options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.waitForFunction(
@@ -1622,11 +1623,24 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
         { timeout: 3000 }
     );
     assert.equal(pages().length, 1);
-    const product = page.getByRole('complementary', { name: 'CPU details', exact: true }).locator('.resource-icon');
-    await page.waitForFunction(() => document.querySelector('#cpu-panel .resource-icon')?.style.backgroundImage, null, {
-        timeout: 3000
-    });
+    const product = page.getByRole('region', { name: 'CPU details', exact: true }).locator('.resource-icon');
+    await product.scrollIntoViewIfNeeded();
+    await page.waitForFunction(
+        () => document.querySelector('.cpu-detail-output .resource-icon')?.style.backgroundImage,
+        null,
+        {
+            timeout: 3000
+        }
+    );
     assert.equal(await product.evaluate((icon) => getComputedStyle(icon).backgroundPosition), '-32px 0px');
+    const selectorIcon = page
+        .getByRole('region', { name: 'CPU selector', exact: true })
+        .locator('.resource-icon:visible');
+    assert.equal(await selectorIcon.count(), 1);
+    await page.waitForFunction(
+        () => document.querySelector('.cpu-selector-link .resource-icon')?.style.backgroundImage
+    );
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).at(-1).query, '?icons=true');
     assert.equal(pages().length, 1, 'job and resource icons share the existing atlas fetch');
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
@@ -1639,10 +1653,12 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
     assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query, '');
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     await page
-        .getByRole('complementary', { name: 'CPU details', exact: true })
+        .getByRole('region', { name: 'CPU details', exact: true })
         .getByText('Certus Quartz Crystal', { exact: false })
         .waitFor();
     assert.equal(await product.isVisible(), false);
+    assert.equal(await selectorIcon.count(), 0);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).at(-1).query, '');
     assert.equal(pages().length, before);
 });
 
@@ -3499,7 +3515,14 @@ test('CPU memory uses binary units through exabytes in overview and current work
         .getByRole('status')
         .filter({ hasText: /^Busy$/ })
         .waitFor();
-    assert.equal(await panel.locator('dd').first().innerText(), '1.5 MB');
+    assert.equal(
+        await panel
+            .locator('dl > div')
+            .filter({ has: page.getByText('Capacity', { exact: true }) })
+            .locator('dd')
+            .innerText(),
+        '1.5 MB'
+    );
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-4`);
@@ -3509,7 +3532,134 @@ test('CPU memory uses binary units through exabytes in overview and current work
         .waitFor();
 });
 
-test('CPU terminal replaces the CPU list with selected resources and returns to the list', async (t) => {
+// Public browser/HTTP seam: navigation keeps a bounded selector and never mutates CPU work.
+test('CPU selector searches forty processors and preserves reading position across selection and polling', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    options.cpus = Object.fromEntries(
+        Array.from({ length: 40 }, (_, index) => [
+            `processor-${index}`,
+            {
+                ...cpu,
+                name: index === 39 ? '' : `§aProduction ${String(index).padStart(2, '0')}`,
+                isBusy: true,
+                supportsPause: true
+            }
+        ])
+    );
+    options.cpuDetails = Object.fromEntries(
+        Object.keys(options.cpus).map((key) => [key, { ...cpuWork, supportsPause: true }])
+    );
+    await page.goto(`${base}#/grids/${gridA}/cpus/processor-0`);
+    const selector = page.getByRole('region', { name: 'CPU selector', exact: true });
+    const search = page.getByRole('searchbox', { name: 'Search CPUs', exact: true });
+    await selector.getByRole('link', { name: /Production 00/ }).waitFor({ timeout: 2000 });
+    assert.equal(await selector.getByRole('link').count(), 40);
+    assert.ok(await selector.evaluate((node) => node.scrollHeight > node.clientHeight));
+    await search.fill('Production');
+    assert.equal(await selector.getByRole('link').count(), 39);
+    const target = selector.getByRole('link', { name: /Production 25/ });
+    await target.scrollIntoViewIfNeeded();
+    const before = await target.boundingBox();
+    const scrollBefore = await selector.evaluate((node) => node.scrollTop);
+    await target.click();
+    await page.getByRole('heading', { name: 'Production 25', level: 2, exact: true }).waitFor();
+    assert.equal(await target.getAttribute('aria-current'), 'page');
+    assert.equal(await search.inputValue(), 'Production');
+    assert.equal(await selector.evaluate((node) => node.scrollTop), scrollBefore);
+    assert.deepEqual(await target.boundingBox(), before, 'Selection must not expand or shift rows');
+    await poll(page);
+    assert.equal(await search.inputValue(), 'Production');
+    assert.equal(await selector.evaluate((node) => node.scrollTop), scrollBefore);
+    const resources = await page.getByRole('region', { name: 'CPU resources', exact: true }).boundingBox();
+    const listBounds = await selector.boundingBox();
+    const details = await page.getByRole('region', { name: 'CPU details', exact: true }).boundingBox();
+    const cancel = await page.getByRole('button', { name: 'Cancel current work', exact: true }).boundingBox();
+    assert.ok(listBounds.x >= resources.x + resources.width - 1);
+    assert.ok(details.y >= listBounds.y + listBounds.height - 1);
+    assert.ok(cancel.y >= resources.y + resources.height - 1);
+    assert.ok(details.y + details.height <= 800 && cancel.y + cancel.height <= 800);
+    await search.fill('processor-39');
+    assert.equal(await selector.getByRole('link').count(), 1);
+    await selector.getByRole('link', { name: /processor-39/ }).click();
+    await page.getByRole('heading', { name: 'processor-39', level: 2, exact: true }).waitFor();
+    await page.goBack();
+    await page.getByRole('heading', { name: 'Production 25', level: 2, exact: true }).waitFor();
+    await search.fill('no-such-processor');
+    assert.equal(await selector.getByRole('link').count(), 0);
+    assert.match(await selector.textContent(), /No matching/);
+    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+    await page.getByRole('link', { name: /Production 00/ }).waitFor();
+    assert.equal(await search.isVisible(), false);
+    assert.equal(
+        options.requests.some((request) => request.method !== 'GET'),
+        false
+    );
+    assert.ok(
+        options.requests
+            .filter((request) => /\/cpus\/[^/]+$/.test(request.path))
+            .every((request) => /processor-(0|25|39)$/.test(request.path)),
+        'Only selected CPUs need detail requests'
+    );
+});
+
+test('CPU selector keeps current job visible and bounds long details without shifting its list', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    options.cpus = Object.fromEntries(
+        Array.from({ length: 40 }, (_, index) => [
+            `cpu-${index}`,
+            { ...cpu, name: `Processor ${index}`, isBusy: true, supportsPause: true }
+        ])
+    );
+    options.cpuDetails['cpu-0'] = { ...cpuWork, supportsPause: true };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-0`);
+    const details = page.getByRole('region', { name: 'CPU details', exact: true });
+    const selector = page.getByRole('region', { name: 'CPU selector', exact: true });
+    const output = details.getByText(/^Iron Ingot/);
+    await output.waitFor();
+    const detailsBounds = await details.boundingBox();
+    const outputBounds = await output.boundingBox();
+    assert.ok(
+        outputBounds.y >= detailsBounds.y &&
+            outputBounds.y + outputBounds.height <= detailsBounds.y + detailsBounds.height,
+        'An ordinary current job is visible without scrolling past hardware metadata'
+    );
+    const listBounds = await selector.boundingBox();
+    options.cpuDetails['cpu-0'] = {
+        ...cpuWork,
+        supportsPause: true,
+        finalOutput: { ...iron, displayName: 'Long product '.repeat(60) }
+    };
+    await poll(page);
+    await details.getByText(/^Long product/).waitFor();
+    assert.deepEqual(await selector.boundingBox(), listBounds);
+    assert.deepEqual(await details.boundingBox(), detailsBounds);
+    assert.ok(await details.evaluate((node) => node.scrollHeight > node.clientHeight));
+    const cancel = page.getByRole('button', { name: 'Cancel current work', exact: true });
+    const actionBounds = await cancel.boundingBox();
+    assert.ok(actionBounds.y + actionBounds.height <= 720);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const last = selector.getByRole('link', { name: /Processor 39/ });
+    await last.scrollIntoViewIfNeeded();
+    assert.ok(await selector.evaluate((node) => node.scrollTop > 0));
+    const search = page.getByRole('searchbox', { name: 'Search CPUs', exact: true });
+    await search.fill('Processor 39');
+    assert.equal(await selector.getByRole('link').count(), 1);
+    await details.getByText('Coprocessors', { exact: true }).scrollIntoViewIfNeeded();
+    await cancel.scrollIntoViewIfNeeded();
+    assert.deepEqual(
+        await page.evaluate(() => ({
+            x: scrollX,
+            y: scrollY,
+            width: document.documentElement.scrollWidth,
+            height: document.documentElement.scrollHeight
+        })),
+        { x: 0, y: 0, width: 390, height: 844 }
+    );
+});
+
+test('CPU terminal shows selected resources beside CPU navigation and returns to the overview', async (t) => {
     const { page, options, base } = await fixture(t);
     options.cpus['cpu-b'] = {
         ...cpu,
@@ -3525,8 +3675,8 @@ test('CPU terminal replaces the CPU list with selected resources and returns to 
     await page.getByRole('button', { name: 'Cancel current work', exact: true }).waitFor();
     assert.equal(
         await page.getByRole('link', { name: /Assembler.*cpu-a/ }).count(),
-        0,
-        'Opening current work must hide the CPU selection list'
+        1,
+        'Opening current work keeps other CPUs available in the selector'
     );
     const resources = page.getByRole('region', { name: 'CPU resources', exact: true });
     await resources.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -3557,10 +3707,11 @@ test('CPU terminal replaces the CPU list with selected resources and returns to 
         '3'
     );
     assert.match(await details.textContent(), /Iron Ingot.*12/);
-    assert.equal(await details.getByRole('button', { name: 'Pause current work', exact: true }).isEnabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Pause current work', exact: true }).isEnabled(), true);
     await page.getByRole('link', { name: 'CPUs', exact: true }).click();
     await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
     assert.match(page.url(), /\/cpus$/);
+    await resources.waitFor({ state: 'hidden' });
     assert.equal(await resources.isVisible(), false);
     assert.equal(await details.isVisible(), false);
 });

@@ -14,7 +14,6 @@ import { terminalIcons, craftingHammer, craftingQueue, craftingPriorityIcon } fr
 import { slotQuantity } from './resource-quantity.js';
 import { createSlotGrid } from './slot-grid.js';
 import { cancelIcon, pauseIcon, playIcon } from './icons/hackernoon/playback.js';
-import { infoCircle } from './icons/hackernoon/info-circle.js';
 
 function element<Tag extends keyof HTMLElementTagNameMap>(
     tag: Tag,
@@ -87,11 +86,24 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     workspace.insertBefore(tools, root);
     const panel = element('aside');
     panel.id = 'cpu-panel';
-    const panelTitle = element('h3');
-    panelTitle.innerHTML = infoCircle;
-    const panelTitleText = element('span');
-    panelTitle.append(panelTitleText);
-    const panelState = element('span', '', 'cpu-card-state cpu-detail-state');
+    const selectorTitle = element('h3');
+    const selectorSearchLabel = element('label', '', 'cpu-selector-search');
+    const selectorSearchName = element('span', '', 'sr-only');
+    const selectorSearch = element('input');
+    selectorSearch.type = 'search';
+    selectorSearchLabel.append(selectorSearchName, selectorSearch);
+    const selectorScroll = element('div', '', 'cpu-selector-scroll inset-frame');
+    selectorScroll.role = 'region';
+    selectorScroll.tabIndex = 0;
+    const selectorList = element('ul', '', 'cpu-selector-list');
+    const selectorStatus = element('p', '', 'cpu-selector-status');
+    selectorStatus.role = 'status';
+    selectorScroll.append(selectorStatus, selectorList);
+    const selectorIcons = application.icons.observe(selectorScroll, paintResourceIcon);
+    const details = element('section', '', 'cpu-selected-details');
+    details.role = 'region';
+    details.tabIndex = 0;
+    const panelState = element('span', '', 'sr-only');
     panelState.role = 'status';
     const summary = element('dl', '', 'cpu-detail-metrics cpu-detail-specs');
     const work = element('section', '', 'cpu-detail-work');
@@ -102,9 +114,13 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     const tracking = element('p', '', 'cpu-detail-note');
     work.append(outputLabel, output, timing, tracking);
     const actions = element('div');
-    panel.append(panelTitle, panelState, summary, work, status, actions);
+    const footer = element('div', '', 'cpu-footer');
+    footer.append(status, actions);
+    terminal.append(footer);
+    details.append(panelState, work, summary);
+    panel.append(selectorTitle, selectorSearchLabel, selectorScroll, details);
     workspace.append(panel);
-    const outputIcons = application.icons.observe(panel, paintResourceIcon);
+    const outputIcons = application.icons.observe(details, paintResourceIcon);
     const tooltip = element('div', '', 'tooltip');
     tooltip.id = 'cpu-resource-tooltip';
     tooltip.role = 'tooltip';
@@ -113,6 +129,9 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     type CpuRow = ReturnType<typeof createOverviewRow>;
 
     let rows: Map<string, CpuRow> = new Map();
+    let selectorRows = new Map<string, ReturnType<typeof createSelectorRow>>();
+    let selectorGrid = '';
+    let selectedCpu = '';
 
     let itemRows: Map<string, ReturnType<typeof createResourceRow>> = new Map();
     let hideStored = false;
@@ -129,7 +148,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     let selectedTooltip: { row: ReturnType<typeof createResourceRow>; x: number; y: number; pointer: boolean } | null =
         null;
 
-    let toolTooltip: HTMLButtonElement | null = null;
+    let toolTooltip: HTMLElement | null = null;
 
     function hideTooltip() {
         selectedTooltip?.row.button.removeAttribute('aria-describedby');
@@ -181,7 +200,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         refreshTooltip();
     }
 
-    function showToolTooltip(button: HTMLButtonElement) {
+    function showToolTooltip(button: HTMLElement) {
         hideTooltip();
         toolTooltip = button;
         tooltip.textContent = button.getAttribute('aria-label');
@@ -545,11 +564,90 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         entry.notice.hidden = !entry.notice.textContent;
     }
 
+    function createSelectorRow() {
+        const li = element('li');
+        const link = element('a', '', 'cpu-selector-link');
+        const name = element('span', '', 'cpu-selector-name');
+        const badge = element('span', '', 'cpu-card-state');
+        const icon = createResourceIcon();
+        link.append(icon, name, badge);
+        link.addEventListener('pointerenter', (event) => {
+            if (event.pointerType !== 'touch') showToolTooltip(link);
+        });
+        link.addEventListener('focus', () => showToolTooltip(link));
+        for (const event of ['pointerleave', 'blur'])
+            link.addEventListener(event, () => {
+                if (toolTooltip === link) hideTooltip();
+            });
+        li.append(link);
+        return { li, link, name, badge, icon };
+    }
+
+    function renderSelector() {
+        const t = locale.common;
+        const terms = selectorSearch.value.trim().toLocaleLowerCase(document.documentElement.lang).split(/\s+/);
+        const visible = state.cpus.filter((cpu) => {
+            const text = `${plainMinecraftText(cpu.name)} ${cpu.key}`.toLocaleLowerCase(document.documentElement.lang);
+            return terms.every((term) => text.includes(term));
+        });
+        const current = new Map<string, ReturnType<typeof createSelectorRow>>();
+        const scrollTop = selectorScroll.scrollTop;
+        for (const [index, cpu] of visible.entries()) {
+            const row = selectorRows.get(cpu.key) || createSelectorRow();
+            const displayName = plainMinecraftText(cpu.name).trim() ? cpu.name : cpu.key;
+            row.link.href = cpuHref(selectorGrid, cpu.key);
+            row.link.setAttribute(
+                'aria-label',
+                `${plainMinecraftText(displayName)} · ${cpu.key} · ${t(cpu.isBusy ? (cpu.isPaused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle')}`
+            );
+            if (toolTooltip === row.link) tooltip.textContent = row.link.getAttribute('aria-label');
+            if (cpu.key === selectedCpu) row.link.setAttribute('aria-current', 'page');
+            else row.link.removeAttribute('aria-current');
+            row.name.replaceChildren(renderMinecraftText(displayName));
+            row.icon.hidden = !cpu.isBusy || !cpu.finalOutput;
+            renderCpuState(row.badge, cpu.isBusy, cpu.isPaused);
+            if (selectorList.children[index] !== row.li)
+                selectorList.insertBefore(row.li, selectorList.children[index] || null);
+            current.set(cpu.key, row);
+        }
+        for (const [key, row] of selectorRows) if (!current.has(key)) row.li.remove();
+        selectorRows = current;
+        if (toolTooltip && !toolTooltip.isConnected) hideTooltip();
+        selectorStatus.textContent = visible.length
+            ? ''
+            : state.cpus.length
+              ? t('noMatchingCpus')
+              : state.status === 'loading'
+                ? t('loading')
+                : t('noCpus');
+        selectorStatus.hidden = !selectorStatus.textContent;
+        selectorScroll.scrollTop = scrollTop;
+        selectorIcons.update(
+            visible
+                .filter((cpu) => cpu.isBusy && cpu.finalOutput)
+                .map((cpu) => ({ element: current.get(cpu.key)!.link, icon: cpu.icon })),
+            state.overviewIcons
+        );
+    }
+    selectorSearch.addEventListener('input', () => {
+        hideTooltip();
+        selectorScroll.scrollTop = 0;
+        renderSelector();
+    });
+    selectorScroll.addEventListener('scroll', hideTooltip);
+
     return {
         render(route: TerminalState['route'], nextState: TerminalState['cpus'], nextLocale: Locale) {
             state = nextState;
             locale = nextLocale;
             const selected = route.view === 'cpus' && !!route.cpuKey;
+            const nextGrid = route.view === 'cpus' ? route.gridKey : '';
+            if (selectorGrid !== nextGrid) {
+                selectorGrid = nextGrid;
+                selectorSearch.value = '';
+                selectorScroll.scrollTop = 0;
+            }
+            selectedCpu = selected ? route.cpuKey || '' : '';
             view.hidden = route.view !== 'cpus';
             overview.hidden = selected;
             terminal.hidden = !selected;
@@ -563,14 +661,23 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                 itemRows.clear();
                 search.value = '';
                 scroll.scrollTop = 0;
+                details.scrollTop = 0;
             }
             if (!selected) {
                 icons.update([], null);
                 outputIcons.update([], null);
+                selectorIcons.update([], null);
+                selectorList.replaceChildren();
+                selectorRows.clear();
             }
             if (route.view !== 'cpus' || selected) overviewIcons.update([], null);
             if (route.view !== 'cpus') return;
             const t = locale.common;
+            selectorTitle.textContent = t('cpus');
+            selectorSearchName.textContent = t('searchCpus');
+            selectorSearch.placeholder = t('searchCpus');
+            selectorScroll.setAttribute('aria-label', t('cpuSelector'));
+            details.setAttribute('aria-label', t('cpuDetails'));
             title.textContent = t('cpus');
             listScroll.setAttribute('aria-label', t('cpus'));
             listStatus.textContent = state.error
@@ -602,6 +709,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             // Hidden list rows must not retain private data after a failed selected-CPU read.
             list.replaceChildren();
             rows.clear();
+            renderSelector();
             const cpu = state.error ? undefined : state.cpus.find((entry) => entry.key === route.cpuKey);
             const detail = state.error ? null : state.detail;
             const selectedOutcome = state.outcomes[route.cpuKey || ''];
@@ -625,7 +733,6 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             if (selectedOutcome?.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
             status.hidden = !status.textContent;
             panel.setAttribute('aria-label', t('cpuDetails'));
-            panelTitleText.textContent = t('cpuDetails');
             panelState.hidden = !detail;
             if (detail) renderCpuState(panelState, detail.isBusy, detail.isPaused);
             else panelState.replaceChildren();
@@ -643,7 +750,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                       ]
                     : []
             );
-            work.hidden = !detail?.isBusy;
+            work.hidden = !detail;
             outputLabel.textContent = t('cpuCurrentJob');
             output.replaceChildren();
             if (detail?.isBusy) {
@@ -656,13 +763,13 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                     );
                     output.append(outputIcon, product);
                 } else output.textContent = t('cpuOutputUnknown');
-            }
+            } else if (detail) output.textContent = t('cpuIdleMessage');
             renderMetrics(
                 timing,
                 detail?.isBusy && detail.hasTrackingInfo
                     ? [
-                          ['historyStartedLabel', locale.dateTime(detail.timeStarted)],
-                          ['cpuElapsedLabel', locale.duration(detail.timeElapsed)]
+                          ['cpuElapsedLabel', locale.duration(detail.timeElapsed)],
+                          ['historyStartedLabel', locale.dateTime(detail.timeStarted)]
                       ]
                     : []
             );
@@ -679,6 +786,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             lifetime.abort();
             overviewSize.disconnect();
             overviewIcons.dispose();
+            selectorIcons.dispose();
             outputIcons.dispose();
             icons.dispose();
             slots.dispose();

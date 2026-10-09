@@ -60,7 +60,7 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
         request = new AbortController();
         state.error = null;
         try {
-            const cpus = await api.cpus(current.gridKey, request.signal, !current.cpuKey && iconsEnabled());
+            const cpus = await api.cpus(current.gridKey, request.signal, iconsEnabled());
             if (version !== generation) return;
             state.cpus = Object.entries(cpus.data).map(([key, cpu]) => ({ ...cpu, key }));
             state.overviewIcons = cpus.icons;
@@ -135,15 +135,16 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
         },
         route(next: Route) {
             invalidateRead();
+            const sameGrid = route.view === 'cpus' && next.view === 'cpus' && route.gridKey === next.gridKey;
             route = next;
             const gridOutcomes = next.view === 'cpus' ? outcomes.get(next.gridKey) || {} : {};
             if (next.view === 'cpus') outcomes.set(next.gridKey, gridOutcomes);
             Object.assign(state, {
                 status: next.view === 'cpus' ? 'loading' : 'idle',
-                cpus: [],
+                cpus: sameGrid ? state.cpus : [],
                 detail: null,
                 icons: null,
-                overviewIcons: null,
+                overviewIcons: sameGrid ? state.overviewIcons : null,
                 error: null,
                 outcomes: gridOutcomes
             });
