@@ -14,3 +14,8 @@ The Home and Network headings use original 24 × 24 outlines from
 [`home.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/home.svg)
 and [`chart-network.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/chart-network.svg),
 rendered in the theme text color.
+
+CPU pause/resume controls use the original 24 × 24 outlines from
+[`pause.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/pause.svg)
+and [`play.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/play.svg),
+rendered in the button text color.

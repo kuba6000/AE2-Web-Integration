@@ -83,6 +83,7 @@ export type CpuResource = {
     craftsPerSec: number;
 };
 export type CpuDetail = {
+    icon?: IconReference | null;
     size: number;
     isBusy: boolean;
     supportsPause: boolean;

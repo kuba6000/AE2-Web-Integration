@@ -103,6 +103,8 @@ public final class GetCPU extends ISyncedRequest {
         public boolean isPaused;
         /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
         public @Nullable ResourceStack finalOutput;
+        /** Product atlas reference; null when not requested, idle, unavailable, or absent from the pack. */
+        public @Nullable IconMappings.Reference icon;
         /** Resource details for current work; null when the CPU is idle. */
         public @Nullable ArrayList<CpuResource> items;
         /**
@@ -155,6 +157,14 @@ public final class GetCPU extends ISyncedRequest {
             && pausable.web$isPaused();
         if (clusterData.isBusy) {
             clusterData.finalOutput = ResourceStack.capture(grid, cpu.web$getFinalOutput());
+            if (mappings != null && clusterData.finalOutput != null && clusterData.finalOutput.itemKey != null) {
+                try {
+                    clusterData.icon = mappings
+                        .resolve(StableKey.parse(clusterData.finalOutput.itemKey), AE2Controller.itemIdentities);
+                } catch (RuntimeException ignored) {
+                    // Optional icon failures must not hide the CPU or its output.
+                }
+            }
             AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cpu);
             clusterData.hasTrackingInfo = trackingInfo != null;
 

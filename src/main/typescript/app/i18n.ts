@@ -107,11 +107,10 @@ const translations: Dictionaries = {
         cpuSortPending: 'Pending quantity',
         cpuSortStored: 'Stored quantity',
         noCpus: 'This network has no crafting CPUs.',
-        cpuCapacity: 'Capacity: {count} B',
+        cpuCapacity: 'Capacity: {bytes}',
         cpuCapacityLabel: 'Capacity',
         cpuUsedStorageLabel: 'Used storage',
         cpuCoprocessorsLabel: 'Coprocessors',
-        cpuBytes: '{count} B',
         cpuValueUnavailable: 'Unavailable',
         cpuUnnamed: 'Unnamed CPU',
         cpuIdentifier: 'CPU identifier',
@@ -119,21 +118,22 @@ const translations: Dictionaries = {
         pauseCpuShort: 'Pause',
         resumeCpuShort: 'Resume',
         cancelCpuShort: 'Cancel',
-        cpuUsedStorage: 'Used: {count} B',
+        cpuUsedStorage: 'Used: {bytes}',
         cpuStorageUnknown: 'Used storage unavailable',
         cpuOutput: 'Currently crafting',
+        cpuCurrentJob: 'Current job',
         cpuOutputUnknown: 'Current output unavailable',
         cpuIdleMessage: 'CPU is idle.',
         cpuTrackingUnavailable: 'Tracking measurements are unavailable for this work.',
         cpuActive: 'Active',
         cpuPending: 'Pending',
-        cpuStored: 'Stored in CPU',
+        cpuStored: 'Stored',
         cpuTimeSpent: 'Processing time',
         cpuCraftedTotal: 'Crafted total',
         cpuRate: 'Produced per second',
         cpuElapsedShare: 'Share of elapsed time',
         cpuProcessingShare: 'Share of processing time',
-        cpuTimeShare: 'Time share',
+        cpuTimeShare: 'Share',
         durationDays: '{count} d',
         durationHours: '{count} h',
         durationMinutes: '{count} min',
@@ -171,7 +171,7 @@ const translations: Dictionaries = {
         steps: 'Crafting steps',
         craftingCpu: 'Crafting CPU',
         startCrafting: 'Start crafting',
-        planBytes: 'Required storage: {count} B',
+        planBytes: 'Required storage: {bytes}',
         calculating: 'Calculating plan…',
         ready: 'Plan ready',
         submitted: 'Crafting submitted.',
@@ -365,11 +365,10 @@ const translations: Dictionaries = {
         cpuSortPending: 'Ilość oczekująca',
         cpuSortStored: 'Ilość przechowywana',
         noCpus: 'Ta sieć nie ma CPU craftingu.',
-        cpuCapacity: 'Pojemność: {count} B',
+        cpuCapacity: 'Pojemność: {bytes}',
         cpuCapacityLabel: 'Pojemność',
         cpuUsedStorageLabel: 'Używana pamięć',
         cpuCoprocessorsLabel: 'Koprocesory',
-        cpuBytes: '{count} B',
         cpuValueUnavailable: 'Niedostępne',
         cpuUnnamed: 'CPU bez nazwy',
         cpuIdentifier: 'Identyfikator CPU',
@@ -377,21 +376,22 @@ const translations: Dictionaries = {
         pauseCpuShort: 'Wstrzymaj',
         resumeCpuShort: 'Wznów',
         cancelCpuShort: 'Anuluj',
-        cpuUsedStorage: 'Używane: {count} B',
+        cpuUsedStorage: 'Używane: {bytes}',
         cpuStorageUnknown: 'Zużycie pamięci niedostępne',
         cpuOutput: 'Aktualnie wytwarza',
+        cpuCurrentJob: 'Bieżące zlecenie',
         cpuOutputUnknown: 'Bieżący produkt niedostępny',
         cpuIdleMessage: 'CPU jest wolny.',
         cpuTrackingUnavailable: 'Pomiary śledzenia są niedostępne dla tej pracy.',
         cpuActive: 'Aktywne',
         cpuPending: 'Oczekujące',
-        cpuStored: 'W magazynie CPU',
+        cpuStored: 'W magazynie',
         cpuTimeSpent: 'Czas przetwarzania',
         cpuCraftedTotal: 'Wytworzono łącznie',
         cpuRate: 'Wytwarzane na sekundę',
         cpuElapsedShare: 'Udział w czasie trwania',
         cpuProcessingShare: 'Udział w czasie przetwarzania',
-        cpuTimeShare: 'Udział czasu',
+        cpuTimeShare: 'Udział',
         durationDays: { one: '{count} dzień', other: '{count} dni' },
         durationHours: '{count} godz.',
         durationMinutes: '{count} min',
@@ -429,7 +429,7 @@ const translations: Dictionaries = {
         steps: 'Kroki craftingu',
         craftingCpu: 'CPU craftingu',
         startCrafting: 'Rozpocznij crafting',
-        planBytes: 'Wymagana pamięć: {count} B',
+        planBytes: 'Wymagana pamięć: {bytes}',
         calculating: 'Obliczanie planu…',
         ready: 'Plan gotowy',
         submitted: 'Crafting rozpoczęty.',
@@ -554,6 +554,7 @@ export function createI18n() {
 
 function createTranslator(language: string, dictionaries: Dictionaries) {
     const numbers = new Intl.NumberFormat(language);
+    const byteNumbers = new Intl.NumberFormat(language, { maximumFractionDigits: 2 });
     const plural = new Intl.PluralRules(language);
     const englishPlural = new Intl.PluralRules('en');
     const times = new Intl.DateTimeFormat(language, { timeStyle: 'medium', hourCycle: 'h23' });
@@ -596,6 +597,16 @@ function createTranslator(language: string, dictionaries: Dictionaries) {
             return parts.join(' ');
         },
         number: (value: number) => numbers.format(value),
+        bytes(value: number) {
+            // AE2 uses binary steps with KB/MB labels, independently of item-count abbreviations.
+            const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+            let unit = 0;
+            while (value >= 1024 && unit < units.length - 1) {
+                value /= 1024;
+                unit++;
+            }
+            return `${byteNumbers.format(value)} ${units[unit]}`;
+        },
         time: (value: number) => times.format(value),
         dateTime(value: number, reference?: number) {
             if (reference !== undefined) {

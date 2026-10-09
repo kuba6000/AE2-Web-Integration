@@ -13,6 +13,7 @@ import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { terminalIcons, craftingHammer, craftingQueue, craftingPriorityIcon } from './icons/pixel/terminal.js';
 import { slotQuantity } from './resource-quantity.js';
 import { createSlotGrid } from './slot-grid.js';
+import { pauseIcon, playIcon } from './icons/hackernoon/playback.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 
 function element<Tag extends keyof HTMLElementTagNameMap>(
@@ -96,12 +97,14 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     const work = element('section', '', 'cpu-detail-work');
     const outputLabel = element('h4');
     const output = element('p', '', 'cpu-detail-output');
+    const outputIcon = createResourceIcon();
     const timing = element('dl', '', 'cpu-detail-metrics');
     const tracking = element('p', '', 'cpu-detail-note');
     work.append(outputLabel, output, timing, tracking);
     const actions = element('div');
     panel.append(panelTitle, panelState, summary, work, status, actions);
     workspace.append(panel);
+    const outputIcons = application.icons.observe(panel, paintResourceIcon);
     const tooltip = element('div', '', 'tooltip');
     tooltip.id = 'cpu-resource-tooltip';
     tooltip.role = 'tooltip';
@@ -434,9 +437,8 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         pause.hidden = !cpu?.isBusy || !cpu.supportsPause;
         const pauseLabel = locale.common(cpu?.isPaused ? 'resumeCpuWork' : 'pauseCpuWork');
         const cancelLabel = locale.common('cancelCpuWork');
-        pause.textContent = overviewIdentity
-            ? locale.common(cpu?.isPaused ? 'resumeCpuShort' : 'pauseCpuShort')
-            : pauseLabel;
+        pause.innerHTML = cpu?.isPaused ? playIcon : pauseIcon;
+        pause.append(element('span', locale.common(cpu?.isPaused ? 'resumeCpuShort' : 'pauseCpuShort')));
         pause.disabled = disabled;
         pause.onclick = () => application.cpus.pause(key, !cpu?.isPaused);
         cancel.hidden = !cpu?.isBusy;
@@ -451,7 +453,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             [cancel, cancelLabel]
         ] as const) {
             if (overviewIdentity) button.setAttribute('aria-label', `${description} · ${overviewIdentity}`);
-            else button.removeAttribute('aria-label');
+            else button.setAttribute('aria-label', description);
         }
     }
 
@@ -522,8 +524,8 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             entry.output.textContent = t(cpu.isBusy ? 'cpuOutputUnknown' : 'cpuIdleMessage');
         }
         const values = [
-            t('cpuBytes', { count: cpu.availableStorage }),
-            cpu.usedStorage >= 0 ? t('cpuBytes', { count: cpu.usedStorage }) : t('cpuValueUnavailable'),
+            locale.bytes(cpu.availableStorage),
+            cpu.usedStorage >= 0 ? locale.bytes(cpu.usedStorage) : t('cpuValueUnavailable'),
             locale.number(cpu.coProcessors)
         ];
         entry.fields.forEach((field, index) => {
@@ -556,7 +558,10 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                 search.value = '';
                 scroll.scrollTop = 0;
             }
-            if (!selected) icons.update([], null);
+            if (!selected) {
+                icons.update([], null);
+                outputIcons.update([], null);
+            }
             if (route.view !== 'cpus' || selected) overviewIcons.update([], null);
             if (route.view !== 'cpus') return;
             const t = locale.common;
@@ -624,28 +629,28 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
                 summary,
                 cpu
                     ? [
-                          ['cpuCapacityLabel', t('cpuBytes', { count: cpu.availableStorage })],
+                          ['cpuCapacityLabel', locale.bytes(cpu.availableStorage)],
                           [
                               'cpuUsedStorageLabel',
-                              cpu.usedStorage >= 0
-                                  ? t('cpuBytes', { count: cpu.usedStorage })
-                                  : t('cpuValueUnavailable')
+                              cpu.usedStorage >= 0 ? locale.bytes(cpu.usedStorage) : t('cpuValueUnavailable')
                           ],
                           ['cpuCoprocessorsLabel', locale.number(cpu.coProcessors)]
                       ]
                     : []
             );
             work.hidden = !detail?.isBusy;
-            outputLabel.textContent = t('cpuOutput');
+            outputLabel.textContent = t('cpuCurrentJob');
             output.replaceChildren();
             if (detail?.isBusy) {
-                if (detail.finalOutput)
-                    output.append(
+                if (detail.finalOutput) {
+                    const product = element('span');
+                    product.append(
                         renderMinecraftText(detail.finalOutput.displayName),
                         ' ',
                         element('span', `× ${locale.number(detail.finalOutput.quantity)}`, 'cpu-detail-quantity')
                     );
-                else output.textContent = t('cpuOutputUnknown');
+                    output.append(outputIcon, product);
+                } else output.textContent = t('cpuOutputUnknown');
             }
             renderMetrics(
                 timing,
@@ -658,6 +663,10 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             );
             tracking.textContent = detail?.isBusy && !detail.hasTrackingInfo ? t('cpuTrackingUnavailable') : '';
             tracking.hidden = !tracking.textContent;
+            outputIcons.update(
+                detail?.isBusy && detail.finalOutput ? [{ element: output, icon: detail.icon }] : [],
+                state.icons
+            );
             renderActions(actions, route.cpuKey || '', detail);
             renderResources();
         },
@@ -665,6 +674,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             lifetime.abort();
             overviewSize.disconnect();
             overviewIcons.dispose();
+            outputIcons.dispose();
             icons.dispose();
             slots.dispose();
             hideTooltip();

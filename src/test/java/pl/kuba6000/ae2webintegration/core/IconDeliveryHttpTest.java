@@ -534,7 +534,9 @@ class IconDeliveryHttpTest {
         AtomicInteger normalizations = new AtomicInteger();
         AtomicBoolean busy = new AtomicBoolean(true);
         ItemIdentityRequestTest.Resource resource = iconResource("worn", 7, exactKey, baseKey, normalizations);
-        IStackList resources = stacks(resource, resource);
+        AtomicReference<IAEGenericStack> output = new AtomicReference<>(
+            iconResource("product", 11, baseKey, baseKey, normalizations));
+        AtomicReference<IStackList> resources = new AtomicReference<>(stacks(resource, resource));
         ICraftingCPUCluster cpu = (ICraftingCPUCluster) Proxy.newProxyInstance(
             getClass().getClassLoader(),
             new Class<?>[] { ICraftingCPUCluster.class },
@@ -545,7 +547,7 @@ class IconDeliveryHttpTest {
                 case "web$getName" -> "CPU";
                 case "web$getAvailableStorage" -> 1024L;
                 case "web$getUsedStorage", "web$getCoProcessors" -> 0L;
-                case "web$getFinalOutput" -> resource;
+                case "web$getFinalOutput" -> output.get();
                 case "web$getActiveItems" -> 6L;
                 case "web$getPendingItems" -> 2L;
                 case "web$getStorageItems" -> 3L;
@@ -577,7 +579,7 @@ class IconDeliveryHttpTest {
         AE2Controller.AE2Interface = new TestGridFixtures.TestAE(grid) {
 
             public IStackList web$createStackList() {
-                return resources;
+                return resources.get();
             }
         };
         String gridPath = "/api/grids/" + TestGridFixtures.resolvedKey(grid);
@@ -592,7 +594,7 @@ class IconDeliveryHttpTest {
             .getAsJsonObject(cpuKey.toString());
         assertNotNull(product.getAsJsonObject("icon"));
         assertEquals(
-            7,
+            11,
             product.getAsJsonObject("finalOutput")
                 .get("quantity")
                 .getAsLong());
@@ -601,14 +603,33 @@ class IconDeliveryHttpTest {
             enabledOverview.getAsJsonObject("icons")
                 .get("packId")
                 .getAsString());
-        assertEquals(1, normalizations.get());
+        assertEquals(0, normalizations.get());
         JsonObject plain = syncedJson(path);
         assertTrue(
             plain.has("icons") && plain.get("icons")
                 .isJsonNull());
-        assertEquals(1, normalizations.get());
+        assertTrue(
+            plain.getAsJsonObject("data")
+                .has("icon"));
+        assertTrue(
+            plain.getAsJsonObject("data")
+                .get("icon")
+                .isJsonNull());
+        assertEquals(0, normalizations.get());
         for (int poll = 0; poll < 2; poll++) {
             JsonObject response = syncedJson(path + "?icons=true");
+            JsonObject detail = response.getAsJsonObject("data");
+            assertEquals(product.get("icon"), detail.get("icon"));
+            assertEquals(
+                baseKey.toString(),
+                detail.getAsJsonObject("finalOutput")
+                    .get("itemKey")
+                    .getAsString());
+            assertEquals(
+                11,
+                detail.getAsJsonObject("finalOutput")
+                    .get("quantity")
+                    .getAsLong());
             assertEquals(
                 packId,
                 response.getAsJsonObject("icons")
@@ -640,11 +661,26 @@ class IconDeliveryHttpTest {
                 6,
                 row.get("stored")
                     .getAsLong());
-            syncedJson(path + "?icons=false");
+            JsonObject disabled = syncedJson(path + "?icons=false");
+            assertTrue(
+                disabled.get("icons")
+                    .isJsonNull());
+            assertTrue(
+                disabled.getAsJsonObject("data")
+                    .get("icon")
+                    .isJsonNull());
             syncedJson(gridPath + "/items?icons=true");
             System.gc();
         }
         assertEquals(1, normalizations.get());
+        resources.set(stacks());
+        JsonObject outputOnly = syncedJson(path + "?icons=true").getAsJsonObject("data");
+        assertEquals(
+            0,
+            outputOnly.getAsJsonArray("items")
+                .size());
+        assertNotNull(outputOnly.getAsJsonObject("icon"));
+        resources.set(stacks(resource, resource));
         busy.set(false);
         JsonObject idle = syncedJson(gridPath + "/cpus?icons=true").getAsJsonObject("data")
             .getAsJsonObject(cpuKey.toString());
@@ -654,10 +690,134 @@ class IconDeliveryHttpTest {
         assertTrue(
             idle.get("finalOutput")
                 .isJsonNull());
+        JsonObject idleDetail = syncedJson(path + "?icons=true").getAsJsonObject("data");
         assertTrue(
-            syncedJson(path + "?icons=true").getAsJsonObject("data")
-                .get("items")
+            idleDetail.get("items")
                 .isJsonNull());
+        assertTrue(
+            idleDetail.get("finalOutput")
+                .isJsonNull());
+        assertTrue(
+            idleDetail.get("icon")
+                .isJsonNull());
+
+        busy.set(true);
+        output.set(null);
+        JsonObject unavailable = syncedJson(path + "?icons=true").getAsJsonObject("data");
+        assertTrue(
+            unavailable.get("finalOutput")
+                .isJsonNull());
+        assertTrue(
+            unavailable.get("icon")
+                .isJsonNull());
+        assertEquals(
+            1,
+            unavailable.getAsJsonArray("items")
+                .size());
+
+        int beforeProductFallback = normalizations.get();
+        output.set(iconResource("fallback-product", 13, TestGridFixtures.key(94), baseKey, normalizations));
+        for (int poll = 0; poll < 2; poll++) {
+            JsonObject fallback = syncedJson(path + "?icons=true").getAsJsonObject("data");
+            assertNotNull(fallback.getAsJsonObject("icon"));
+            assertEquals(
+                13,
+                fallback.getAsJsonObject("finalOutput")
+                    .get("quantity")
+                    .getAsLong());
+        }
+        assertEquals(
+            beforeProductFallback + 1,
+            normalizations.get(),
+            "Repeated product polls reuse the retained fallback identity");
+
+        output.set(
+            iconResource("missing-product", 17, TestGridFixtures.key(95), TestGridFixtures.key(96), normalizations));
+        JsonObject missing = syncedJson(path + "?icons=true").getAsJsonObject("data");
+        assertTrue(
+            missing.get("icon")
+                .isJsonNull());
+        assertEquals(
+            17,
+            missing.getAsJsonObject("finalOutput")
+                .get("quantity")
+                .getAsLong());
+        assertEquals(
+            1,
+            missing.getAsJsonArray("items")
+                .size());
+
+        output.set(new ItemIdentityRequestTest.Resource("unsupported-product", 19, false) {
+
+            public @NotNull IAEKey web$copyIdentity() {
+                return this;
+            }
+
+            public @NotNull StableKey web$getKey() {
+                return TestGridFixtures.key(97);
+            }
+
+            public StableKey web$getIconBaseKey() {
+                throw new IllegalStateException("Unsupported base identity");
+            }
+        });
+        JsonObject unsupported = syncedJson(path + "?icons=true").getAsJsonObject("data");
+        assertTrue(
+            unsupported.get("icon")
+                .isJsonNull());
+        assertEquals(
+            19,
+            unsupported.getAsJsonObject("finalOutput")
+                .get("quantity")
+                .getAsLong());
+        assertEquals(
+            TestGridFixtures.key(97)
+                .toString(),
+            unsupported.getAsJsonObject("finalOutput")
+                .get("itemKey")
+                .getAsString());
+
+        output.set(new ItemIdentityRequestTest.Resource("unidentified-product", 23, false) {
+
+            public @NotNull IAEKey web$copyIdentity() {
+                throw new IllegalStateException("Unsupported identity");
+            }
+        });
+        JsonObject unidentified = syncedJson(path + "?icons=true").getAsJsonObject("data");
+        assertTrue(
+            unidentified.get("icon")
+                .isJsonNull());
+        assertTrue(
+            unidentified.getAsJsonObject("finalOutput")
+                .get("itemKey")
+                .isJsonNull());
+        assertEquals(
+            23,
+            unidentified.getAsJsonObject("finalOutput")
+                .get("quantity")
+                .getAsLong());
+
+        CoreEngine.onServerStopped();
+        Files.delete(directory.resolve("ae2webintegration/icons.ae2wi-icons"));
+        CoreEngine.onServerStarted();
+        output.set(iconResource("product", 11, baseKey, baseKey, normalizations));
+        int previousNormalizations = normalizations.get();
+        JsonObject noPack = syncedJson(
+            "/api/grids/" + TestGridFixtures.resolvedKey(grid) + "/cpus/" + cpuKey + "?icons=true");
+        assertTrue(
+            noPack.get("icons")
+                .isJsonNull());
+        assertTrue(
+            noPack.getAsJsonObject("data")
+                .get("icon")
+                .isJsonNull());
+        assertEquals(
+            11,
+            noPack.getAsJsonObject("data")
+                .getAsJsonObject("finalOutput")
+                .get("quantity")
+                .getAsLong());
+        assertEquals(previousNormalizations, normalizations.get());
     }
 
     private static IStackList stacks(IAEGenericStack... rows) {

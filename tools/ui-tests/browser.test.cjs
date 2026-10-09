@@ -1572,7 +1572,12 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
         { ...quartz, icon: { page: 0, x: 64, y: 0 } }
     ];
     options.cpuDetails = {
-        'cpu-a': { ...cpuWork, items: [{ ...cpuWork.items[0], itemKey: 'iron', icon: { page: 0, x: 0, y: 0 } }] }
+        'cpu-a': {
+            ...cpuWork,
+            finalOutput: quartz,
+            icon: { page: 0, x: 64, y: 0 },
+            items: [{ ...cpuWork.items[0], itemKey: 'iron', icon: { page: 0, x: 0, y: 0 } }]
+        }
     };
     const pages = () => options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
     await page.goto(`${base}#/grids/${gridA}/items`);
@@ -1617,6 +1622,12 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
         { timeout: 3000 }
     );
     assert.equal(pages().length, 1);
+    const product = page.getByRole('complementary', { name: 'CPU details', exact: true }).locator('.resource-icon');
+    await page.waitForFunction(() => document.querySelector('#cpu-panel .resource-icon')?.style.backgroundImage, null, {
+        timeout: 3000
+    });
+    assert.equal(await product.evaluate((icon) => getComputedStyle(icon).backgroundPosition), '-32px 0px');
+    assert.equal(pages().length, 1, 'job and resource icons share the existing atlas fetch');
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
     await page.reload();
@@ -1626,6 +1637,13 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(pages().length, before);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query, '');
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await page
+        .getByRole('complementary', { name: 'CPU details', exact: true })
+        .getByText('Certus Quartz Crystal', { exact: false })
+        .waitFor();
+    assert.equal(await product.isVisible(), false);
+    assert.equal(pages().length, before);
 });
 
 // Public seam: global settings are navigable without a grid, preserve the selected grid's
@@ -3450,6 +3468,47 @@ test('busy CPU eligibility uses known output identity and missing selections req
 });
 
 // Public seam: selecting a CPU opens its terminal, with separate resource tools and CPU controls.
+test('CPU memory uses binary units through exabytes in overview and current work', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const capacities = [
+        0,
+        1023,
+        1024,
+        65536,
+        1572864,
+        1073741824,
+        1099511627776,
+        1125899906842624,
+        JSON.parse('9223372036854775807')
+    ];
+    const expected = ['0 B', '1,023 B', '1 KB', '64 KB', '1.5 MB', '1 GB', '1 TB', '1 PB', '8 EB'];
+    options.cpus = Object.fromEntries(
+        capacities.map((availableStorage, index) => [`cpu-${index}`, { ...cpu, availableStorage, usedStorage: 18432 }])
+    );
+    await page.goto(`${base}#/grids/${gridA}/cpus`);
+    for (let index = 0; index < capacities.length; index++) {
+        const card = page.getByRole('link', { name: `Assembler · cpu-${index}`, exact: true });
+        await card.waitFor();
+        assert.equal(await card.locator('dd').first().innerText(), expected[index]);
+        assert.equal(await card.locator('dd').nth(1).innerText(), '18 KB');
+    }
+    options.cpuDetails['cpu-4'] = cpuWork;
+    await page.getByRole('link', { name: 'Assembler · cpu-4', exact: true }).click();
+    const panel = page.getByRole('complementary', { name: 'CPU details', exact: true });
+    await panel
+        .getByRole('status')
+        .filter({ hasText: /^Busy$/ })
+        .waitFor();
+    assert.equal(await panel.locator('dd').first().innerText(), '1.5 MB');
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-4`);
+    await page
+        .getByRole('complementary', { name: 'Szczegóły CPU', exact: true })
+        .getByText('1,5 MB', { exact: true })
+        .waitFor();
+});
+
 test('CPU terminal replaces the CPU list with selected resources and returns to the list', async (t) => {
     const { page, options, base } = await fixture(t);
     options.cpus['cpu-b'] = {
@@ -3487,8 +3546,8 @@ test('CPU terminal replaces the CPU list with selected resources and returns to 
         await page.getByRole('heading', { name: 'Selected assembler', level: 2, exact: true }).isVisible(),
         true
     );
-    assert.match(await details.textContent(), /8,192/);
-    assert.match(await details.textContent(), /2,048/);
+    assert.match(await details.textContent(), /8 KB/);
+    assert.match(await details.textContent(), /2 KB/);
     assert.equal(
         await details
             .locator('dl > div')
@@ -4724,8 +4783,8 @@ test('plan CPU tooltip shows live capacity work and state after polling', async 
     await tooltip.getByText('Assembly', { exact: true }).waitFor({ timeout: 3000 });
     assert.equal((await textStyle(tooltip, 'Assembly')).color, 'rgb(85, 255, 85)');
     assert.match(await tooltip.innerText(), /Paused/);
-    assert.match(await tooltip.innerText(), /65,536 B/);
-    assert.match(await tooltip.innerText(), /12,345 B/);
+    assert.match(await tooltip.innerText(), /64 KB/);
+    assert.match(await tooltip.innerText(), /12\.06 KB/);
     assert.match(await tooltip.innerText(), /8 coprocessors/);
     assert.match(await tooltip.innerText(), /Iron × 640/);
     assert.equal((await textStyle(tooltip, 'Iron')).color, 'rgb(85, 255, 255)');
@@ -4739,10 +4798,10 @@ test('plan CPU tooltip shows live capacity work and state after polling', async 
     await choice.locator('..').hover();
     await tooltip.getByText('Updated CPU', { exact: true }).waitFor();
     assert.match(await tooltip.innerText(), /Idle/);
-    assert.match(await tooltip.innerText(), /8,192 B/);
+    assert.match(await tooltip.innerText(), /8 KB/);
     assert.match(await tooltip.innerText(), /4 coprocessors/);
     assert.match(await tooltip.innerText(), /Used storage unavailable/);
-    assert.doesNotMatch(await tooltip.innerText(), /Iron|Paused|12,345/);
+    assert.doesNotMatch(await tooltip.innerText(), /Iron|Paused|12\.06 KB/);
 });
 
 test('plan tooltips clear on scroll resize navigation and access denial', async (t) => {
@@ -6038,8 +6097,8 @@ test('CPU overview keeps names primary and exposes identity without extra detail
     assert.equal((await first.textContent()).includes('cpu-a'), false, 'opaque identity is not the visible CPU title');
     const row = page.getByRole('listitem').filter({ has: first });
     await row.getByText('Iron Ingot', { exact: true }).waitFor();
-    assert.match(await row.textContent(), /2,048 B/);
-    assert.match(await row.textContent(), /8,192 B/);
+    assert.match(await row.textContent(), /2 KB/);
+    assert.match(await row.textContent(), /8 KB/);
     await row.getByText('CPU identifier', { exact: true }).click();
     await row.getByText('cpu-a', { exact: true }).waitFor({ state: 'visible' });
     const unnamed = page.locator(`a[href$="/cpus/cpu-unnamed"]`);
@@ -6075,7 +6134,7 @@ test('CPU overview opens from product, metrics and summary padding while identif
     await link.waitFor();
     for (const open of [
         () => card.getByText('Iron Ingot', { exact: true }).click(),
-        () => card.getByText('8,192 B', { exact: true }).click(),
+        () => card.getByText('8 KB', { exact: true }).click(),
         () => card.click({ position: { x: 6, y: 6 } })
     ]) {
         await open();

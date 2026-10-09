@@ -451,10 +451,27 @@ header {
     border-top: 1px solid var(--border);
 }
 .cpu-detail-output {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin: 8px 0 16px;
     font-size: 13px;
     line-height: 1.5;
     overflow-wrap: anywhere;
+}
+.cpu-detail-output > span:last-child {
+    min-width: 0;
+}
+.cpu-actions button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.cpu-actions .theme-icon {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
 }
 .cpu-detail-quantity {
     white-space: nowrap;
@@ -1547,7 +1564,7 @@ label {
 .resource-icons-enabled .resource-icon,
 .cpu-icons-enabled .cpu-item .resource-icon,
 .product-icons-enabled
-    :is(.cpu-card-output-value, .history-product, .history-summary-icon, .history-analysis-name)
+    :is(.cpu-card-output-value, .cpu-detail-output, .history-product, .history-summary-icon, .history-analysis-name)
     .resource-icon {
     display: grid;
     place-items: center;
@@ -1564,7 +1581,7 @@ label {
 .resource-icons-enabled .resource-icon-ready,
 .cpu-icons-enabled .cpu-item .resource-icon-ready,
 .product-icons-enabled
-    :is(.cpu-card-output-value, .history-product, .history-summary-icon, .history-analysis-name)
+    :is(.cpu-card-output-value, .cpu-detail-output, .history-product, .history-summary-icon, .history-analysis-name)
     .resource-icon-ready {
     outline: none;
 }
@@ -1579,6 +1596,9 @@ label {
     left: 6px;
     top: 50%;
     transform: translateY(-50%);
+}
+.cpu-icons-enabled .cpu-item {
+    padding-left: 52px;
 }
 .history-list:not(:empty),
 .inset-frame,

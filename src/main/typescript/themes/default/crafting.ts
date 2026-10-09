@@ -338,7 +338,9 @@ export function createCraftingView(
                     ? t('simulation')
                     : t(state.status);
             reason.textContent = state.errorDetail || '';
-            bytes.textContent = state.plan?.isDone ? t('planBytes', { count: state.plan.bytesTotal }) : '';
+            bytes.textContent = state.plan?.isDone
+                ? t('planBytes', { bytes: locale.bytes(state.plan.bytesTotal) })
+                : '';
             searchName.textContent = t('searchPlanResources');
             search.placeholder = t('searchHint');
             search.setAttribute('aria-description', t('searchHelp'));
@@ -484,11 +486,11 @@ export function createCraftingView(
                     const lines: Node[] = [
                         name,
                         element('span', t(cpu.isBusy ? (cpu.isPaused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle')),
-                        element('span', t('cpuCapacity', { count: cpu.availableStorage })),
+                        element('span', t('cpuCapacity', { bytes: locale.bytes(cpu.availableStorage) })),
                         element(
                             'span',
                             cpu.usedStorage >= 0
-                                ? t('cpuUsedStorage', { count: cpu.usedStorage })
+                                ? t('cpuUsedStorage', { bytes: locale.bytes(cpu.usedStorage) })
                                 : t('cpuStorageUnknown')
                         ),
                         element('span', t('coprocessors', { count: cpu.coProcessors }))
@@ -509,7 +511,7 @@ export function createCraftingView(
                     return lines;
                 };
                 row.name.replaceChildren(renderMinecraftText(cpu.name || t('cpuUnnamed')));
-                const description = `${number(cpu.availableStorage)} B · ${t('coprocessors', { count: cpu.coProcessors })} · ${t(cpu.isBusy ? 'cpuBusy' : 'cpuIdle')}`;
+                const description = `${locale.bytes(cpu.availableStorage)} · ${t('coprocessors', { count: cpu.coProcessors })} · ${t(cpu.isBusy ? 'cpuBusy' : 'cpuIdle')}`;
                 row.details.textContent = description;
                 row.input.setAttribute(
                     'aria-label',
