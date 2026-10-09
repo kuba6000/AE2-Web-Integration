@@ -96,11 +96,11 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
     }
 
     @Override
-    default @Nullable Integer web$getComponentCount() {
+    default int web$getComponentCount() {
         if (this instanceof IAEItemStack item && web$getResourceType() == ResourceType.FLUID) {
-            return FluidCraftResources.getFluid(item) == null ? null : FluidCraftResources.getComponentCount(item);
+            return FluidCraftResources.getFluid(item) == null ? 0 : FluidCraftResources.getComponentCount(item);
         }
-        if (!(this instanceof IAEItemStack) && !(this instanceof IAEFluidStack)) return null;
+        if (!(this instanceof IAEItemStack) && !(this instanceof IAEFluidStack)) return 0;
         NBTTagCompound tag = (NBTTagCompound) getTagCompound();
         return tag == null ? 0
             : tag.func_150296_c()
@@ -108,9 +108,9 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
     }
 
     @Override
-    default @Nullable Integer web$getDamage() {
+    default int web$getDamage() {
         return this instanceof IAEItemStack item && web$getResourceType() == ResourceType.ITEM ? item.getItemDamage()
-            : null;
+            : 0;
     }
 
     @Override
