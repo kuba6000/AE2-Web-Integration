@@ -9,7 +9,6 @@ import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import net.minecraftforge.fml.common.event.FMLServerStoppedEvent;
 import net.minecraftforge.fml.common.event.FMLServerStoppingEvent;
 
-import pl.kuba6000.ae2webintegration.Tags;
 import pl.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration;
 import pl.kuba6000.ae2webintegration.ae2interface.FMLEventHandler;
 import pl.kuba6000.ae2webintegration.ae2interface.commands.BaseCommandHandler;
@@ -22,7 +21,7 @@ import pl.kuba6000.ae2webintegration.core.commands.CommandBootstrap;
 public class CommonProxy {
 
     public void preInit(FMLPreInitializationEvent event) {
-        CoreEngine.init(new Platform(event.getModConfigurationDirectory()), Tags.VERSION, "-forge-1.12.2");
+        CoreEngine.init(new Platform(event.getModConfigurationDirectory()));
 
         AE2WebIntegration.LOG.info("AE2WebIntegration loading at version {}", CoreEngine.getModVersion());
 

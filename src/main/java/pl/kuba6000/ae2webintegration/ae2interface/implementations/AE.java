@@ -1,7 +1,10 @@
 package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 import net.minecraft.world.World;
 
@@ -13,6 +16,7 @@ import appeng.api.storage.data.IAEStack;
 import appeng.hooks.TickHandler;
 import appeng.me.Grid;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.PlayerSourceLifecycle;
+import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -20,6 +24,21 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 public class AE implements IAE {
+
+    private static final Map<ServerCapability, Boolean> CAPABILITIES;
+
+    static {
+        Map<ServerCapability, Boolean> capabilities = new EnumMap<>(ServerCapability.class);
+        capabilities.put(ServerCapability.CRAFTING_LIGHT_MODE, false);
+        capabilities.put(ServerCapability.CRAFTING_PLAN_STEPS, false);
+        capabilities.put(ServerCapability.CPU_SELECTION_MODE, false);
+        CAPABILITIES = Collections.unmodifiableMap(capabilities);
+    }
+
+    @Override
+    public @NotNull Map<ServerCapability, Boolean> web$getCapabilities() {
+        return CAPABILITIES;
+    }
 
     public static AE instance = new AE();
 

@@ -6,6 +6,7 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 
+import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 
 import com.google.common.collect.ImmutableSet;
@@ -21,6 +22,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.accessors.GridWorldAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -50,7 +52,8 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
 
     @Override
     @SuppressWarnings("unchecked")
-    default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
+    default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount,
+        @NotNull CraftingOptions options) {
         if (!(stack instanceof IAEItemStack)) {
             throw new UnsupportedOperationException("Only item crafting is supported on AE2 1.12.2");
         }
