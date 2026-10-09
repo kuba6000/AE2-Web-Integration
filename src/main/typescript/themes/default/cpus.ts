@@ -13,7 +13,7 @@ import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { terminalIcons, craftingHammer, craftingQueue, craftingPriorityIcon } from './icons/pixel/terminal.js';
 import { slotQuantity } from './resource-quantity.js';
 import { createSlotGrid } from './slot-grid.js';
-import { pauseIcon, playIcon } from './icons/hackernoon/playback.js';
+import { cancelIcon, pauseIcon, playIcon } from './icons/hackernoon/playback.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 
 function element<Tag extends keyof HTMLElementTagNameMap>(
@@ -427,7 +427,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         if (!target.firstChild) {
             const pause = element('button');
             pause.type = 'button';
-            const cancel = element('button');
+            const cancel = element('button', '', 'cpu-cancel');
             cancel.type = 'button';
             target.append(pause, cancel);
         }
@@ -442,7 +442,8 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         pause.disabled = disabled;
         pause.onclick = () => application.cpus.pause(key, !cpu?.isPaused);
         cancel.hidden = !cpu?.isBusy;
-        cancel.textContent = overviewIdentity ? locale.common('cancelCpuShort') : cancelLabel;
+        cancel.innerHTML = cancelIcon;
+        cancel.append(element('span', locale.common('cancelCpuShort')));
         cancel.disabled = disabled;
         cancel.onclick = () => {
             if (window.confirm(locale.common('confirmCancelCpu', { cpu: overviewIdentity || key })))
@@ -455,6 +456,11 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             if (overviewIdentity) button.setAttribute('aria-label', `${description} · ${overviewIdentity}`);
             else button.setAttribute('aria-label', description);
         }
+    }
+
+    function renderCpuState(target: HTMLElement, busy: boolean, paused: boolean) {
+        target.innerHTML = busy && paused ? pauseIcon : '';
+        target.append(element('span', locale.common(busy ? (paused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle')));
     }
 
     function renderMetrics(target: HTMLDListElement, values: [string, string][]) {
@@ -509,7 +515,7 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
         entry.link.setAttribute('aria-label', identity);
         entry.link.title = cpu.key;
         entry.li.dataset.state = cpu.isBusy ? (cpu.isPaused ? 'paused' : 'busy') : 'idle';
-        entry.badge.textContent = t(cpu.isBusy ? (cpu.isPaused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle');
+        renderCpuState(entry.badge, cpu.isBusy, cpu.isPaused);
         entry.outputLabel.textContent = t('cpuOutput');
         entry.output.replaceChildren();
         if (cpu.isBusy && cpu.finalOutput) {
@@ -621,9 +627,8 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             panel.setAttribute('aria-label', t('cpuDetails'));
             panelTitleText.textContent = t('cpuDetails');
             panelState.hidden = !detail;
-            panelState.textContent = detail
-                ? t(detail.isBusy ? (detail.isPaused ? 'cpuPausedState' : 'cpuBusy') : 'cpuIdle')
-                : '';
+            if (detail) renderCpuState(panelState, detail.isBusy, detail.isPaused);
+            else panelState.replaceChildren();
             summary.hidden = !cpu;
             renderMetrics(
                 summary,

@@ -245,6 +245,9 @@ header {
     text-decoration: underline;
 }
 .cpu-card-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 5px 7px;
     background: var(--surface);
     color: var(--surface-text);
@@ -414,7 +417,6 @@ header {
     margin-top: 0;
 }
 .cpu-detail-state {
-    display: inline-block;
     margin-bottom: 12px;
 }
 .cpu-detail-metrics {
@@ -467,6 +469,14 @@ header {
     align-items: center;
     justify-content: center;
     gap: 8px;
+}
+.cpu-card-state .theme-icon {
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+}
+.cpu-actions .cpu-cancel:not(:disabled) {
+    color: light-dark(#862323, #ffb4ab);
 }
 .cpu-actions .theme-icon {
     flex: 0 0 16px;
