@@ -30,11 +30,6 @@ public class AE2WebIntegration {
 
     public AE2WebIntegration() {
         Platform platform = new Platform();
-        String version = ModLoadingContext.get()
-            .getActiveContainer()
-            .getModInfo()
-            .getVersion()
-            .toString();
 
         ModLoadingContext.get()
             .registerExtensionPoint(
@@ -43,8 +38,8 @@ public class AE2WebIntegration {
                     () -> NetworkConstants.IGNORESERVERONLY,
                     (remote, isServer) -> true));
 
-        CoreEngine.init(platform, version, "-forge-1.20.1");
-        LOG.info("AE2WebIntegration loading at version {}", version);
+        CoreEngine.init(platform);
+        LOG.info("AE2WebIntegration loading at version {}", CoreEngine.getModVersion());
     }
 
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD)

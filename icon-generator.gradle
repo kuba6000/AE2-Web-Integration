@@ -1,0 +1,102 @@
+sourceSets {
+    main.java.srcDir('src/identityCommon/java')
+    iconGenerator {
+        java.srcDir('src/identityCommon/java')
+    }
+}
+
+legacyForge.addModdingDependenciesTo(sourceSets.iconGenerator)
+legacyForge.accessTransformers.from('src/iconGenerator/resources/META-INF/accesstransformer.cfg')
+
+configurations {
+    iconGeneratorShared {
+        canBeConsumed = false
+    }
+    iconGeneratorImplementation.extendsFrom(iconGeneratorShared)
+}
+
+obfuscation.createRemappingConfiguration(configurations.iconGeneratorImplementation)
+obfuscation.createRemappingConfiguration(configurations.iconGeneratorCompileOnly)
+obfuscation.createRemappingConfiguration(configurations.iconGeneratorRuntimeOnly)
+
+dependencies {
+    iconGeneratorShared(project(path: ':core', configuration: 'iconPackElements')) {
+        transitive = false
+    }
+    modIconGeneratorImplementation(forge.ae2)
+    modIconGeneratorCompileOnly(forge.emi)
+    modIconGeneratorRuntimeOnly(forge.guideme)
+    iconGeneratorCompileOnly(libs.jetbrains.annotations)
+}
+
+tasks.named('processIconGeneratorResources') {
+    inputs.property('version', project.version)
+    filesMatching('META-INF/mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+def shadowJarType = tasks.named('shadowJar').get().class.classLoader.loadClass(
+    'com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar')
+def generatorJar = tasks.register('iconGeneratorJar', shadowJarType) {
+    group = 'build'
+    description = 'Builds the standalone client icon generator in development mappings.'
+    archiveBaseName = 'ae2webintegration-icon-generator'
+    archiveVersion = project.version
+    archiveClassifier = 'dev'
+    from(sourceSets.iconGenerator.output)
+    from('LICENSE')
+    configurations = [project.configurations.iconGeneratorShared]
+    relocate('pl.kuba6000.ae2webintegration.core.icons', 'pl.kuba6000.ae2webintegration.icongenerator.internal.icons')
+    relocate('pl.kuba6000.ae2webintegration.core.identity', 'pl.kuba6000.ae2webintegration.icongenerator.internal.identity')
+    relocate('pl.kuba6000.ae2webintegration.core.utils', 'pl.kuba6000.ae2webintegration.icongenerator.internal.utils')
+    relocate('pl.kuba6000.ae2webintegration.ae2interface.platform', 'pl.kuba6000.ae2webintegration.icongenerator.internal.platform')
+    relocate('pl.kuba6000.ae2webintegration.ae2interface.implementations', 'pl.kuba6000.ae2webintegration.icongenerator.internal.identitynative')
+}
+
+def generatorRelease = obfuscation.reobfuscate(generatorJar, sourceSets.iconGenerator) {
+    archiveClassifier = ''
+    // This artifact has no mixins from the server integration source set.
+    remapOperation.mappings.setFrom(obfuscation.namedToSrgMappings)
+}
+
+tasks.named('assemble') {
+    dependsOn(generatorRelease)
+}
+
+afterEvaluate {
+    generatorJar.configure {
+        // The server mod's manifest declares its own integration mixins.
+        manifest.attributes.clear()
+        manifest.attributes('Manifest-Version': '1.0', 'Implementation-Version': project.version,
+            'FMLAT': 'accesstransformer.cfg')
+    }
+}
+
+// Keep the existing dev configurations scoped to the normal integration mod.
+legacyForge.runs.each { run ->
+    run.loadedMods.set([legacyForge.mods.getByName(project.mod_id)])
+    run.programArguments.addAll('--mixin.config', 'mixins.ae2webintegration.json')
+}
+legacyForge.mods.create('ae2webintegration_icon_generator') {
+    sourceSet(sourceSets.iconGenerator)
+}
+legacyForge.runs.create('iconGeneratorClient') {
+    client()
+    sourceSet = sourceSets.iconGenerator
+    additionalRuntimeClasspathConfiguration.extendsFrom(configurations.iconGeneratorShared)
+    loadedMods.set([legacyForge.mods.getByName('ae2webintegration_icon_generator')])
+    gameDirectory.set(file('run/icon-generator'))
+    ideName = 'Standalone icon generator'
+}
+
+spotless.java {
+    target('src/main/java/**/*.java', 'src/test/java/**/*.java', 'src/identityCommon/java/**/*.java',
+        'src/iconGenerator/java/**/*.java')
+}
+
+idea.module {
+    sourceDirs += sourceSets.iconGenerator.java.srcDirs
+    resourceDirs += sourceSets.iconGenerator.resources.srcDirs
+    scopes.COMPILE.plus += [configurations.iconGeneratorCompileClasspath]
+}

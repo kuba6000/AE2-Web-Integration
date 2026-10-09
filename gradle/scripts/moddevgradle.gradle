@@ -8,7 +8,6 @@ mixin {
         from refmap
     }
     slimJar.from refmap
-    config 'mixins.ae2webintegration.json'
 }
 
 // we have to force LWJGL version 3.3.2, because RenderNurse requires Java 21, and LWJGL 3.3.1 cannot run on Java 21.
