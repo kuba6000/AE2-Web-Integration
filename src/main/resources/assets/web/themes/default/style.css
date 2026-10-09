@@ -409,7 +409,7 @@ header {
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 42%);
     gap: 10px;
-    height: calc(100% - 26px);
+    height: calc(100% - 52px);
     min-height: 0;
     overflow: hidden;
 }
