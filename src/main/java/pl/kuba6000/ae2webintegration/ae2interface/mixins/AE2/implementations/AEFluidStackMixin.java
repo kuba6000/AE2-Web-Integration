@@ -55,14 +55,14 @@ public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStac
     }
 
     @Override
-    default @NotNull Integer web$getComponentCount() {
+    default int web$getComponentCount() {
         NBTTagCompound tag = getFluidStack().tag;
         return tag == null ? 0 : tag.getSize();
     }
 
     @Override
-    default @Nullable Integer web$getDamage() {
-        return null;
+    default int web$getDamage() {
+        return 0;
     }
 
     @Override

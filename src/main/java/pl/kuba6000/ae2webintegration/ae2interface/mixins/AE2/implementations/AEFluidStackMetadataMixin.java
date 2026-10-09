@@ -2,7 +2,6 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import net.minecraft.nbt.NBTTagCompound;
 
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -18,7 +17,7 @@ public abstract class AEFluidStackMetadataMixin implements IAEKey {
     private @Nullable NBTTagCompound tagCompound;
 
     @Override
-    public @NotNull Integer web$getComponentCount() {
+    public int web$getComponentCount() {
         return tagCompound == null ? 0 : tagCompound.getSize();
     }
 }

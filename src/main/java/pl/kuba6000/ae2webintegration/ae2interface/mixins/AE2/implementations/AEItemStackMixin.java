@@ -66,13 +66,13 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
     }
 
     @Override
-    default @NotNull Integer web$getComponentCount() {
+    default int web$getComponentCount() {
         NBTTagCompound tag = getDefinition().getTagCompound();
         return tag == null ? 0 : tag.getSize();
     }
 
     @Override
-    default @NotNull Integer web$getDamage() {
+    default int web$getDamage() {
         return getItemDamage();
     }
 
