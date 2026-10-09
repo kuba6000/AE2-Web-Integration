@@ -1,0 +1,19 @@
+<component name="EntryPointsManager">
+  <!-- Forge constructs these mod entry points and sided proxies reflectively. -->
+  <entry_points version="2.0">
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration AE2WebIntegration()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.ae2interface.proxy.ClientProxy ClientProxy()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.ae2interface.proxy.CommonProxy CommonProxy()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.IconGeneratorMod IconGeneratorMod()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.client.ClientBootstrap ClientBootstrap()" />
+    <entry_point TYPE="method" FQNAME="pl.kuba6000.ae2webintegration.icongenerator.GeneratorProxy GeneratorProxy()" />
+  </entry_points>
+  <list size="3">
+    <item index="0" class="java.lang.String" itemvalue="cpw.mods.fml.common.Mod" />
+    <item index="1" class="java.lang.String" itemvalue="cpw.mods.fml.common.Mod.EventHandler" />
+    <item index="2" class="java.lang.String" itemvalue="cpw.mods.fml.common.eventhandler.SubscribeEvent" />
+  </list>
+  <writeAnnotations>
+    <writeAnnotation name="cpw.mods.fml.common.SidedProxy" />
+  </writeAnnotations>
+</component>

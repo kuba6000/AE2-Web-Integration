@@ -1,0 +1,116 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar
+import com.gtnewhorizons.retrofuturagradle.mcp.GenSrgMappingsTask
+import org.gradle.jvm.tasks.Jar
+
+sourceSets {
+    main.java.srcDir('src/identityCommon/java')
+    iconGenerator {
+        java.srcDir('src/identityCommon/java')
+        compileClasspath += sourceSets.patchedMc.output
+    }
+}
+
+configurations {
+    iconGeneratorShared {
+        canBeConsumed = false
+    }
+    iconGeneratorNativeApi {
+        canBeConsumed = false
+    }
+    iconGeneratorCompileClasspath.extendsFrom(iconGeneratorShared, iconGeneratorNativeApi, patchedMinecraft, lwjgl2Classpath)
+    iconGeneratorAnnotationProcessor.extendsFrom(annotationProcessor)
+}
+
+dependencies {
+    iconGeneratorShared(project(path: ':core', configuration: 'iconPackElements')) {
+        transitive = false
+    }
+    iconGeneratorCompileOnly('com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-1030-GTNH:dev') {
+        transitive = false
+    }
+    iconGeneratorCompileOnly('com.github.GTNewHorizons:NotEnoughItems:2.8.125-GTNH:dev') {
+        transitive = false
+    }
+    iconGeneratorCompileOnly('org.jetbrains:annotations:26.0.2')
+    iconGeneratorNativeApi('com.github.GTNewHorizons:GTNHLib:0.11.39:dev') {
+        transitive = false
+    }
+}
+
+// Compile against the same Tessellator visibility GTNHLib supplies to the installed client.
+minecraft.useDependencyAccessTransformers.set(true)
+minecraft.dependenciesForAccessTransformerScan.setFrom(configurations.iconGeneratorNativeApi)
+
+tasks.named('compileIconGeneratorJava', JavaCompile) {
+    javaCompiler = tasks.named('compileJava', JavaCompile).flatMap { it.javaCompiler }
+    sourceCompatibility = '17'
+    targetCompatibility = '8'
+    options.release = 8
+}
+
+def generatorJar = tasks.register('iconGeneratorJar', ShadowJar) {
+    group = 'build'
+    description = 'Builds the standalone icon generator in development mappings.'
+    archiveBaseName = 'ae2webintegration-icon-generator'
+    archiveClassifier = 'dev'
+    from(sourceSets.iconGenerator.output)
+    from('LICENSE')
+    configurations = [project.configurations.iconGeneratorShared]
+    relocate('pl.kuba6000.ae2webintegration.core.icons', 'pl.kuba6000.ae2webintegration.icongenerator.internal.icons')
+    relocate('pl.kuba6000.ae2webintegration.core.identity', 'pl.kuba6000.ae2webintegration.icongenerator.internal.identity')
+    relocate('pl.kuba6000.ae2webintegration.core.utils', 'pl.kuba6000.ae2webintegration.icongenerator.internal.utils')
+    relocate('pl.kuba6000.ae2webintegration.ae2interface.platform', 'pl.kuba6000.ae2webintegration.icongenerator.internal.platform')
+    relocate('pl.kuba6000.ae2webintegration.ae2interface.legacy', 'pl.kuba6000.ae2webintegration.icongenerator.internal.legacy')
+}
+
+def mappings = tasks.named('generateForgeSrgMappings', GenSrgMappingsTask)
+def patchedMinecraftJar = tasks.named('packagePatchedMc', Jar)
+def generatorReleaseJar = tasks.register('reobfIconGeneratorJar', ReobfuscatedJar) {
+    group = 'build'
+    description = 'Builds the standalone icon generator in production SRG mappings.'
+    dependsOn(mappings, patchedMinecraftJar, generatorJar)
+    setInputJarFromTask(generatorJar)
+    mcVersion.set(minecraft.mcVersion)
+    srg.set(mappings.flatMap { it.mcpToSrg })
+    fieldCsv.set(mappings.flatMap { it.fieldsCsv })
+    methodCsv.set(mappings.flatMap { it.methodsCsv })
+    exceptorCfg.set(mappings.flatMap { it.srgExc })
+    recompMcJar.set(patchedMinecraftJar.flatMap { it.archiveFile })
+    extraSrgEntries.set([])
+    extraSrgFiles.setFrom([])
+}
+
+tasks.named('assemble') {
+    dependsOn(generatorReleaseJar)
+}
+
+afterEvaluate {
+    tasks.named('iconGeneratorJar', ShadowJar) {
+        // The normal mod's convention manifest contains its integration mixin bootstrap.
+        manifest.attributes.clear()
+        manifest.attributes('Manifest-Version': '1.0')
+    }
+}
+
+tasks.withType(ReobfuscatedJar).configureEach {
+    // Read rebuilt native classes directly; URLClassLoader may retain a stale patched-JAR handle.
+    if (name == 'reobfIconGeneratorJar') {
+        referenceClasspath.setFrom(sourceSets.patchedMc.output, sourceSets.iconGenerator.compileClasspath)
+    } else if (name == 'reobfJar') {
+        def originalSources = new ArrayList<>(referenceClasspath.from)
+        referenceClasspath.setFrom(sourceSets.patchedMc.output, originalSources)
+    }
+}
+
+spotless.java {
+    target('src/main/java/**/*.java', 'src/identityCommon/java/**/*.java', 'src/iconGenerator/java/**/*.java')
+}
+
+plugins.withId('idea') {
+    idea.module {
+        sourceDirs += sourceSets.iconGenerator.java.srcDirs
+        resourceDirs += sourceSets.iconGenerator.resources.srcDirs
+        scopes.PROVIDED.plus += [configurations.iconGeneratorCompileClasspath]
+    }
+}

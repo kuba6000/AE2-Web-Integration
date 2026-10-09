@@ -6,10 +6,12 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 
+import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Mixin;
 
 import com.google.common.collect.ImmutableSet;
 
+import appeng.api.config.CraftingMode;
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingGrid;
@@ -17,9 +19,11 @@ import appeng.api.networking.crafting.ICraftingJob;
 import appeng.api.networking.crafting.ICraftingLink;
 import appeng.api.networking.security.PlayerSource;
 import appeng.api.storage.data.IAEStack;
+import appeng.me.cache.CraftingGridCache;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.ChatCapturingPlayerSource;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -49,12 +53,28 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
 
     @Override
     @SuppressWarnings("unchecked")
-    default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
+    default Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount,
+        @NotNull CraftingOptions options) {
         PlayerSource actionSrc = ((IGridPlayerSource) grid).web$getPlayerSource();
         IAEStack<?> aeStack = ((IAEStack<?>) (Object) stack).copy();
         aeStack.setStackSize(amount);
-        final Future<ICraftingJob> job = ((ICraftingGrid) (Object) this)
-            .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, aeStack, null);
+        final Future<ICraftingJob> job;
+        if (options.lightMode()) {
+            if (!((Object) this instanceof CraftingGridCache crafting)) {
+                throw new UnsupportedOperationException("This crafting service does not support light mode");
+            }
+            job = crafting.beginCraftingJob(
+                actionSrc.player.worldObj,
+                (IGrid) grid,
+                actionSrc,
+                aeStack,
+                CraftingMode.STANDARD,
+                true,
+                null);
+        } else {
+            job = ((ICraftingGrid) (Object) this)
+                .beginCraftingJob(actionSrc.player.worldObj, (IGrid) grid, actionSrc, aeStack, null);
+        }
         return (Future<IAECraftingJob>) (Object) job;
     }
 
