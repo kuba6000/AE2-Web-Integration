@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface;
 
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.ModLoadingContext;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
@@ -29,14 +28,9 @@ public class AE2WebIntegration {
 
     public AE2WebIntegration() {
         Platform platform = new Platform();
-        String version = ModLoadingContext.get()
-            .getActiveContainer()
-            .getModInfo()
-            .getVersion()
-            .toString();
 
-        CoreEngine.init(platform, version, "-neoforge-1.21.1");
-        LOG.info("AE2WebIntegration loading at version {}", version);
+        CoreEngine.init(platform);
+        LOG.info("AE2WebIntegration loading at version {}", CoreEngine.getModVersion());
     }
 
     @EventBusSubscriber(modid = MODID)
