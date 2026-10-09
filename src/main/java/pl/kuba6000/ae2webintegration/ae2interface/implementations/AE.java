@@ -29,6 +29,7 @@ public class AE implements IAE {
         Map<ServerCapability, Boolean> capabilities = new EnumMap<>(ServerCapability.class);
         capabilities.put(ServerCapability.CRAFTING_LIGHT_MODE, true);
         capabilities.put(ServerCapability.CRAFTING_PLAN_STEPS, true);
+        capabilities.put(ServerCapability.CPU_SELECTION_MODE, true);
         CAPABILITIES = Collections.unmodifiableMap(capabilities);
     }
 

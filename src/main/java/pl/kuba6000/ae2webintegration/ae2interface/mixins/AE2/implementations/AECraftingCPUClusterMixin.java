@@ -17,6 +17,7 @@ import appeng.api.util.WorldCoord;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import appeng.util.item.IAEStackList;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -100,6 +101,15 @@ public abstract class AECraftingCPUClusterMixin implements IPausableCraftingCPU,
     @Override
     public long web$getCoProcessors() {
         return ((CraftingCPUCluster) (Object) this).getCoProcessors();
+    }
+
+    @Override
+    public @NotNull CpuSelectionMode web$getSelectionMode() {
+        return switch (((CraftingCPUCluster) (Object) this).getCraftingAllowMode()) {
+            case ONLY_PLAYER -> CpuSelectionMode.PLAYER_ONLY;
+            case ONLY_NONPLAYER -> CpuSelectionMode.AUTOMATION_ONLY;
+            case ALLOW_ALL -> CpuSelectionMode.ALL;
+        };
     }
 
     @Override
