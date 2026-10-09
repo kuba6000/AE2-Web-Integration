@@ -1144,6 +1144,11 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await page.getByRole('textbox', { name: 'Craft quantity' }).fill('12');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor();
+    const planItem = page
+        .getByRole('region', { name: 'Plan resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ });
+    await planItem.waitFor();
+    assert.equal(await planItem.getByText(iron.displayName, { exact: true }).isVisible(), false);
     assert.deepEqual(
         options.requests.find((request) => request.method === 'POST' && request.path.endsWith('/crafting-plans')).body,
         { itemKey: 'iron', quantity: 12 }
@@ -1155,7 +1160,10 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await cpuItem.waitFor();
     const cpuBox = await cpuItem.boundingBox();
     assert.ok(cpuBox.width > cpuBox.height, 'CPU resources retain their rectangular layout');
-    assert.equal(await cpuItem.getByText(iron.displayName, { exact: true }).isVisible(), true);
+    assert.equal(await cpuItem.getByText(iron.displayName, { exact: true }).isVisible(), false);
+    await cpuItem.focus();
+    await page.getByRole('tooltip').getByText(iron.displayName, { exact: true }).waitFor();
+    await page.keyboard.press('Escape');
     await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     await mode.selectOption('both');
     await page.reload();
@@ -1165,6 +1173,9 @@ test('compact terminal mode persists and preserves accessible selection and craf
         await mode.elementHandle()
     );
     assert.equal(await mode.inputValue(), 'both');
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await cpuItem.waitFor();
+    assert.equal(await cpuItem.getByText(iron.displayName, { exact: true }).isVisible(), true);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await item.waitFor();
     assert.equal(await item.getByText(iron.displayName, { exact: true }).isVisible(), true);
@@ -4227,11 +4238,13 @@ test('CPU tooltips expose live hardware and recorded start without extra detail 
     await page.keyboard.press('Escape');
     await poll(page);
     assert.equal(await tooltip.isVisible(), false);
-    await page.getByRole('button', { name: 'Search CPUs', exact: true }).click();
+    await page.getByRole('button', { name: 'Search CPUs', exact: true }).focus();
+    await page.keyboard.press('Enter');
     await page.getByRole('searchbox', { name: 'Search CPUs', exact: true }).focus();
     await row.focus();
-    await tooltip.waitFor();
+    await tooltip.filter({ hasText: 'Updated processor' }).waitFor();
     await page.getByRole('searchbox', { name: 'Search CPUs', exact: true }).fill('cpu-a');
+    await row.waitFor({ state: 'hidden' });
     assert.equal(await tooltip.isVisible(), false);
     const work = page.getByRole('region', { name: 'Current job', exact: true });
     await work.focus();
@@ -7863,6 +7876,11 @@ test('Network details scroll long access lists under a fixed heading and keep mo
             assert.ok(box.width > 0 && box.x >= 0 && box.x + box.width <= 390);
         }
         await page.keyboard.press('Tab');
+        const logout = page.locator('header').getByRole('button', { name: 'Log out', exact: true });
+        assert.ok(await logout.evaluate((node) => node === document.activeElement));
+        await tooltip.getByText(await logout.getAttribute('aria-label'), { exact: true }).waitFor();
+        assert.equal((await tooltip.innerText()).includes(options.settings[gridA].name), false);
+        await page.keyboard.press('Escape');
         assert.equal(await tooltip.isVisible(), false);
         const before = await heading.boundingBox();
         const person = page.locator('details').filter({ has: page.getByText(player.name, { exact: true }) });
