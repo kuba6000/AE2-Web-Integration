@@ -5639,6 +5639,81 @@ test('plan icon pack replacement supersedes a delayed completed-plan mapping', a
     assert.ok(options.requests.some((request) => request.path.includes(`/icon-packs/${'c'.repeat(64)}/`)));
 });
 
+for (const [width, height] of [
+    [1280, 900],
+    [390, 844],
+    [390, 720]
+]) {
+    test(`plan grid matches CPU slots and forty CPU choices scroll independently at ${width}x${height}`, async (t) => {
+        const { page, options, base } = await fixture(t, '', { viewport: { width, height } });
+        options.cpuDetails['cpu-a'] = { ...cpuWork, hasTrackingInfo: false };
+        await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+        const cpuResource = page
+            .getByRole('region', { name: 'CPU resources', exact: true })
+            .getByRole('button')
+            .first();
+        await cpuResource.waitFor();
+        const cpuSlot = await cpuResource.boundingBox();
+        options.cpus = Object.fromEntries(
+            Array.from({ length: 40 }, (_, index) => [
+                `choice-${index}`,
+                { ...cpu, name: `Processor ${index}`, acceptsPlayerJobs: index !== 38 }
+            ])
+        );
+        options.itemsA = [{ ...iron, displayName: 'Iron Ingot assembly component '.repeat(8) }];
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.getByRole('button', { name: /Iron Ingot/ }).click();
+        await page.getByRole('button', { name: 'Craft', exact: true }).click();
+        await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+        const resource = page.getByRole('region', { name: 'Plan resources', exact: true }).getByRole('button').first();
+        await resource.waitFor();
+        const planSlot = await resource.boundingBox();
+        await page
+            .locator('aside p')
+            .filter({ hasText: /Iron Ingot assembly component/ })
+            .focus();
+        await page.getByRole('tooltip').waitFor({ timeout: 2000 });
+        assert.ok((await page.getByRole('tooltip').innerText()).includes(options.itemsA[0].displayName));
+        assert.ok(Math.abs(planSlot.width - cpuSlot.width) < 2, 'plan and three-row CPU slots share width');
+        assert.ok(Math.abs(planSlot.height - cpuSlot.height) < 2, 'plan and three-row CPU slots share height');
+        const choices = page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true });
+        const bounds = await choices.evaluate((node) => ({ height: node.clientHeight, content: node.scrollHeight }));
+        assert.ok(bounds.content > bounds.height, 'CPU choices overflow their own bounded viewport');
+        const last = choices.getByRole('radio', { name: /choice-39/ });
+        const firstRow = await choices.getByRole('radio').first().boundingBox();
+        assert.ok(
+            bounds.height >= firstRow.height,
+            `at least one complete choice fits (${bounds.height}/${firstRow.height})`
+        );
+        const heading = page.getByRole('heading', { name: 'Crafting CPU', exact: true });
+        const before = await heading.boundingBox();
+        await last.scrollIntoViewIfNeeded();
+        await last.check();
+        assert.equal(await last.isChecked(), true);
+        assert.equal(await choices.getByRole('radio', { name: /choice-38/ }).isDisabled(), true);
+        const after = await heading.boundingBox();
+        assert.ok(Math.abs(after.y - before.y) < 1, 'list scrolling leaves the CPU heading stationary');
+        assert.ok(await choices.evaluate((node) => node.scrollTop > 0));
+        const visible = await choices.boundingBox();
+        const selected = await last.boundingBox();
+        assert.ok(selected.y >= visible.y && selected.y + selected.height <= visible.y + visible.height + 1);
+        assert.ok(await page.getByRole('button', { name: 'Start crafting', exact: true }).isEnabled());
+        await last.focus();
+        await page.keyboard.press('ArrowUp');
+        assert.equal(await choices.getByRole('radio', { name: /choice-37/ }).isChecked(), true);
+        const readingPosition = await choices.evaluate((node) => node.scrollTop);
+        await poll(page);
+        assert.equal(await choices.getByRole('radio', { name: /choice-37/ }).isChecked(), true);
+        assert.equal(await choices.evaluate((node) => node.scrollTop), readingPosition);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        assert.equal(
+            options.requests.filter((request) => request.method !== 'GET').length,
+            1,
+            'only explicit plan calculation mutates'
+        );
+    });
+}
+
 for (const width of [1280, 390]) {
     test(`plan frame, search, CPU attachment and footer remain usable at ${width}px`, async (t) => {
         const { page, options, base } = await fixture(

@@ -181,7 +181,7 @@ export function createCraftingView(
     scroll.role = 'region';
     scroll.tabIndex = 0;
     const grid = element('ul');
-    grid.className = 'resource-grid cpu-items plan-items';
+    grid.className = 'resource-grid cpu-items';
     scroll.append(grid);
     planBody.append(scroll);
     const slots = createSlotGrid(grid, scroll, planView);
@@ -227,16 +227,22 @@ export function createCraftingView(
     panel.id = 'plan-panel';
     const cpuTitle = element('h3');
     const output = element('p');
+    output.className = 'plan-output';
+    tooltip.bind(output, () => [element('span', output.textContent || '')]);
     const status = element('p');
     status.role = 'status';
     const reason = element('p');
     const bytes = element('p');
     const mergeHint = element('p');
     const cpuHint = element('p');
+    const cpuHeading = element('div');
+    cpuHeading.className = 'plan-cpu-heading';
+    cpuHeading.append(cpuTitle, bytes);
     const cpuList = element('div');
-    cpuList.className = 'plan-cpu-list';
+    cpuList.className = 'cpu-selector-list cpu-selector-scroll inset-frame';
     cpuList.role = 'radiogroup';
-    panel.append(output, status, reason, bytes, cpuTitle, mergeHint, cpuHint, cpuList);
+    cpuList.addEventListener('scroll', () => tooltip.hide());
+    panel.append(output, status, reason, cpuHeading, mergeHint, cpuHint, cpuList);
     workspace.append(panel);
     const start = element('button');
     start.type = 'button';
@@ -328,6 +334,7 @@ export function createCraftingView(
             }
             title.textContent = t('craftingPlan');
             output.replaceChildren();
+            output.tabIndex = state.metadata ? 0 : -1;
             if (state.metadata)
                 output.append(renderMinecraftText(state.metadata.displayName), ` × ${number(state.metadata.quantity)}`);
             status.textContent = state.uncertain
@@ -465,13 +472,14 @@ export function createCraftingView(
                 let row = cpuRows.get(cpu.key);
                 if (!row) {
                     const label = element('label');
-                    label.className = 'inset-frame plan-cpu';
+                    label.className = 'plan-cpu';
                     const input = element('input');
                     input.type = 'radio';
                     input.name = 'plan-cpu';
                     input.value = cpu.key;
                     input.addEventListener('change', () => application.crafting.selectCpu(cpu.key));
                     const name = element('strong');
+                    name.className = 'cpu-selector-name';
                     const details = element('span');
                     label.append(input, name, details);
                     const entry = { label, input, name, details, tooltipContent: (): Node[] => [] };
@@ -511,7 +519,7 @@ export function createCraftingView(
                     return lines;
                 };
                 row.name.replaceChildren(renderMinecraftText(cpu.name || t('cpuUnnamed')));
-                const description = `${locale.bytes(cpu.availableStorage)} · ${t('coprocessors', { count: cpu.coProcessors })} · ${t(cpu.isBusy ? 'cpuBusy' : 'cpuIdle')}`;
+                const description = `${t(cpu.isBusy ? 'cpuBusy' : 'cpuIdle')} · ${locale.bytes(cpu.availableStorage)} · ${t('coprocessors', { count: cpu.coProcessors })}`;
                 row.details.textContent = description;
                 row.input.setAttribute(
                     'aria-label',
@@ -519,6 +527,7 @@ export function createCraftingView(
                 );
                 row.input.disabled = !cpu.eligible || !!state.mutation || !!state.uncertain;
                 row.input.checked = state.selectedCpu === cpu.key;
+                row.label.dataset.eligibility = !cpu.eligible ? 'invalid' : cpu.isBusy ? 'merge' : 'ready';
                 remaining.delete(cpu.key);
             }
             for (const key of remaining) {
