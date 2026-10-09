@@ -1296,6 +1296,32 @@ label {
     font-size: 12px;
     padding: 6px 9px;
 }
+.account-controls .account-action {
+    width: 32px;
+    height: 32px;
+    padding: 6px;
+}
+.account-action .theme-icon {
+    display: block;
+    width: 18px;
+    height: 18px;
+}
+#logout {
+    color: light-dark(#862323, #ffb4ab);
+}
+#refresh[aria-busy='true'] .theme-icon {
+    animation: refresh-spin 0.8s linear infinite;
+}
+@keyframes refresh-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    #refresh[aria-busy='true'] .theme-icon {
+        animation: none;
+    }
+}
 .web-preferences {
     display: grid;
     gap: 20px;

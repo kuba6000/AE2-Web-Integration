@@ -3349,6 +3349,243 @@ test('late history details cannot enter another grid and denied reads remove the
     );
 });
 
+for (const selected of [true, false])
+    test(`CPU ${selected ? 'footer' : 'overview'} stays stable through a delayed action and authoritative read`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        await page.setViewportSize({ width: 1280, height: 800 });
+        options.cpus['cpu-a'] = { ...cpu, isBusy: true, supportsPause: true };
+        options.cpuDetails['cpu-a'] = { ...cpuWork, supportsPause: true };
+        await page.goto(`${base}#/grids/${gridA}/cpus${selected ? '/cpu-a' : ''}`);
+        const pause = page.getByRole('button', { name: /^Pause current work/ });
+        await pause.waitFor();
+        const surface = selected
+            ? page.getByRole('region', { name: 'CPU resources', exact: true })
+            : page.getByRole('listitem').filter({ has: page.getByRole('link', { name: /Assembler.*cpu-a/ }) });
+        const geometry = async () => [
+            await surface.boundingBox(),
+            await pause.boundingBox(),
+            await page.getByRole('link', { name: 'Home', exact: true }).boundingBox(),
+            await page.getByRole('heading', { name: 'AE2 Web Integration', exact: true }).boundingBox()
+        ];
+        const before = await geometry();
+        let captureMutation;
+        const mutationRequest = new Promise((resolve) => {
+            captureMutation = resolve;
+        });
+        await page.route('**/pause', (route) => captureMutation(route));
+        await pause.click();
+        const mutation = await mutationRequest;
+        assert.equal(await pause.isDisabled(), true);
+        assert.deepEqual(await geometry(), before, 'Pending work must not insert a footer or card status line');
+        const activity = page.getByRole('status', { name: 'Activity', exact: true });
+        await activity.waitFor({ timeout: 2000 });
+        if (selected && process.env.UI_SCREENSHOT_DIR) {
+            await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+            await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'cpu-action-progress.png') });
+        }
+        let captureRead;
+        const readRequest = new Promise((resolve) => {
+            captureRead = resolve;
+        });
+        await page.route(
+            (url) => url.pathname.endsWith('/cpus'),
+            (route) => captureRead(route)
+        );
+        options.cpus['cpu-a'].isPaused = true;
+        options.cpuDetails['cpu-a'].isPaused = true;
+        await mutation.fulfill({ contentType: 'application/json', body: JSON.stringify({ status: 'OK', data: null }) });
+        const read = await readRequest;
+        assert.equal(await activity.isVisible(), true);
+        assert.equal(await pause.isDisabled(), true);
+        assert.deepEqual(await geometry(), before, 'The authoritative read keeps the same geometry and locks');
+        await read.continue();
+        const resume = page.getByRole('button', { name: /^Resume current work/ });
+        await resume.waitFor();
+        assert.equal(await resume.isEnabled(), true);
+        await activity.waitFor({ state: 'hidden' });
+    });
+
+test('CPU cancellation waits for the authoritative read before showing completion', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus['cpu-a'] = { ...cpu, isBusy: true };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    let captureRead;
+    const readRequest = new Promise((resolve) => {
+        captureRead = resolve;
+    });
+    await page.getByRole('button', { name: 'Cancel current work', exact: true }).waitFor();
+    await page.route(
+        (url) => url.pathname.endsWith('/cpus'),
+        (route) => captureRead(route)
+    );
+    await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
+    const read = await readRequest;
+    const completed = page.getByRole('status').filter({ hasText: /Cancellation completed/i });
+    assert.equal(await completed.isVisible(), false, 'Success requires the post-mutation snapshot');
+    assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isDisabled(), true);
+    await read.continue();
+    await completed.waitFor();
+});
+
+test('header icon controls refresh the current history entry and retain dirty settings drafts', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
+    const header = page.locator('header');
+    const refresh = header.getByRole('button', { name: 'Refresh', exact: true });
+    await refresh.waitFor({ timeout: 2000 });
+    assert.equal(await header.getByRole('button', { name: 'Log out', exact: true }).innerText(), '');
+    const before = options.requests.filter((request) => request.path.endsWith('/crafting-history/1')).length;
+    options.historyDetail = { ...historyDetail, finalOutput: quartz };
+    await refresh.click();
+    await page.getByRole('heading', { name: 'Certus Quartz Crystal', level: 3, exact: true }).waitFor();
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/crafting-history/1')).length, before + 1);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    const name = page.getByRole('textbox', { name: 'Network name', exact: true });
+    await name.fill('Unsaved workshop');
+    await refresh.click();
+    await page.waitForFunction(() => document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false');
+    assert.equal(await name.inputValue(), 'Unsaved workshop');
+    assert.equal(
+        options.requests.some((request) => request.method !== 'GET'),
+        false
+    );
+});
+
+test('header refresh stays active through a history detail read queued behind automatic discovery', async (t) => {
+    const { page, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/history/1`);
+    await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
+    let captureGrids;
+    const gridsRequest = new Promise((resolve) => {
+        captureGrids = resolve;
+    });
+    let captureDetail;
+    const detailRequest = new Promise((resolve) => {
+        captureDetail = resolve;
+    });
+    await page.route(
+        (url) => url.pathname.endsWith('/api/grids'),
+        (route) => captureGrids(route)
+    );
+    await page.route(
+        (url) => url.pathname.endsWith('/crafting-history/1'),
+        (route) => captureDetail(route)
+    );
+    await poll(page);
+    const grids = await gridsRequest;
+    const refresh = page.locator('header').getByRole('button', { name: 'Refresh', exact: true });
+    await refresh.click();
+    await grids.continue();
+    const detail = await detailRequest;
+    assert.equal(
+        await refresh.getAttribute('aria-busy'),
+        'true',
+        'Queued detail loading remains part of visible activity'
+    );
+    assert.equal(await refresh.isEnabled(), true);
+    await detail.continue();
+    await page.waitForFunction(() => document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false');
+});
+
+test('CPU background refresh signals activity without disabling or dimming existing controls', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpus['cpu-a'] = { ...cpu, isBusy: true, supportsPause: true };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, supportsPause: true };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    const pause = page.getByRole('button', { name: 'Pause current work', exact: true });
+    await pause.waitFor();
+    const refresh = page.locator('header').getByRole('button', { name: 'Refresh', exact: true });
+    const controls = [
+        pause,
+        page.getByRole('button', { name: 'Cancel current work', exact: true }),
+        page.getByRole('searchbox', { name: 'Search CPU resources', exact: true }),
+        page.getByRole('button', { name: 'Hide stored-only resources', exact: true }),
+        refresh
+    ];
+    const appearance = async () =>
+        Promise.all(
+            controls.map(async (control) => ({
+                enabled: await control.isEnabled(),
+                box: await control.boundingBox(),
+                opacity: await control.evaluate((node) => getComputedStyle(node).opacity)
+            }))
+        );
+    const before = await appearance();
+    let captureRead;
+    const readRequest = new Promise((resolve) => {
+        captureRead = resolve;
+    });
+    await page.route(
+        (url) => url.pathname.endsWith('/cpus'),
+        (route) => captureRead(route)
+    );
+    await poll(page);
+    const read = await readRequest;
+    const activity = page.getByRole('status', { name: 'Activity', exact: true });
+    await activity.waitFor({ timeout: 2000 });
+    assert.equal(await activity.getAttribute('aria-live'), 'off');
+    assert.deepEqual(await appearance(), before, 'Automatic refresh must keep the ready UI fully interactive');
+    const requestsBefore = options.requests.length;
+    await refresh.click();
+    await refresh.click();
+    assert.equal(options.requests.length, requestsBefore, 'Repeated refresh uses the in-flight application refresh');
+    await read.continue();
+    await activity.waitFor({ state: 'hidden' });
+    assert.deepEqual(await appearance(), before);
+});
+
+for (const width of [390, 1280])
+    test(`header refresh keeps icon controls stable at ${width}px and honors reduced motion`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        await page.setViewportSize({ width, height: 844 });
+        await seedAutomaticRefresh(page, base, false);
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+        const header = page.locator('header');
+        const refresh = header.getByRole('button', { name: 'Refresh', exact: true });
+        const logout = header.getByRole('button', { name: 'Log out', exact: true });
+        const geometry = async () => [
+            await refresh.boundingBox(),
+            await logout.boundingBox(),
+            await page.getByRole('link', { name: 'Home', exact: true }).boundingBox()
+        ];
+        const before = await geometry();
+        assert.ok(before[0].x >= before[1].x + before[1].width, 'Refresh sits to the right of logout');
+        assert.ok(before[0].x + before[0].width <= width);
+        let capture;
+        const requested = new Promise((resolve) => {
+            capture = resolve;
+        });
+        await page.route(
+            (url) => url.pathname.endsWith('/api/grids'),
+            (route) => capture(route)
+        );
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await refresh.click();
+        const read = await requested;
+        assert.equal(await refresh.isEnabled(), true);
+        assert.equal(await refresh.getAttribute('aria-busy'), 'true');
+        assert.equal(await refresh.locator('svg').evaluate((node) => getComputedStyle(node).animationName), 'none');
+        assert.deepEqual(await geometry(), before);
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        assert.notEqual(await refresh.locator('svg').evaluate((node) => getComputedStyle(node).animationName), 'none');
+        await logout.focus();
+        await page
+            .getByRole('tooltip')
+            .filter({ hasText: /^Log out$/ })
+            .waitFor();
+        await page.keyboard.press('Escape');
+        await read.continue();
+        await page.waitForFunction(() => document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false');
+        assert.deepEqual(await geometry(), before);
+        assert.equal(
+            options.requests.some((request) => request.method !== 'GET'),
+            false
+        );
+    });
+
 test('pending CPU cancellation settles on the revisited CPU and older reads cannot override it', async (t) => {
     const { page, options, base } = await fixture(t);
     let complete;

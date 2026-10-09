@@ -145,6 +145,8 @@ const translations: Dictionaries = {
         pauseCpuWork: 'Pause current work',
         resumeCpuWork: 'Resume current work',
         cpuUpdating: 'Updating CPU work…',
+        activity: 'Activity',
+        cpuRefreshing: 'Refreshing CPU work…',
         CPU_PAUSE_UNSUPPORTED: 'This CPU does not support pausing.',
         cpuMutationUncertain:
             'Operation outcome is unknown. Check the refreshed current work. No further operation will be sent for this CPU; reload only to deliberately change its current work again.',
@@ -405,6 +407,8 @@ const translations: Dictionaries = {
         pauseCpuWork: 'Wstrzymaj bieżącą pracę',
         resumeCpuWork: 'Wznów bieżącą pracę',
         cpuUpdating: 'Aktualizowanie pracy CPU…',
+        activity: 'Aktywność',
+        cpuRefreshing: 'Odświeżanie pracy CPU…',
         CPU_PAUSE_UNSUPPORTED: 'Ten CPU nie obsługuje wstrzymywania.',
         cpuMutationUncertain:
             'Wynik operacji jest nieznany. Sprawdź odświeżony stan pracy. Kolejne operacje dla tego CPU są zablokowane; przeładuj stronę tylko, aby świadomie zmienić jego bieżącą pracę.',

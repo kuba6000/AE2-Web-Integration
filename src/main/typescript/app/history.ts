@@ -4,6 +4,7 @@ import type { Route } from './router.js';
 
 export type HistoryState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
+    reading: boolean;
     entries: HistoryEntry[];
     detail: CraftingHistory | null;
     icons: IconMetadata | null;
@@ -11,11 +12,10 @@ export type HistoryState = {
 };
 /** Completed history snapshots are read on entry or explicit refresh, not on each polling tick. */
 export function createHistory(api: Api, changed: () => void, iconsEnabled: () => boolean) {
-    const state: HistoryState = { status: 'idle', entries: [], detail: null, icons: null, error: null };
+    const state: HistoryState = { status: 'idle', reading: false, entries: [], detail: null, icons: null, error: null };
     let route: Route | { view?: undefined; gridKey?: undefined } = {};
     let generation = 0;
     let request: AbortController | undefined;
-    let reading = false;
     let detailIconsStale = false;
     return {
         state,
@@ -25,12 +25,12 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
             detailIconsStale = true;
             generation++;
             request?.abort();
-            reading = false;
+            state.reading = false;
         },
         route(next: Route) {
             generation++;
             request?.abort();
-            reading = false;
+            state.reading = false;
             route = next;
             detailIconsStale = false;
             Object.assign(state, {
@@ -44,14 +44,15 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
         async refresh(reloadDetail = false) {
             if (
                 route.view !== 'history' ||
-                reading ||
+                state.reading ||
                 (route.entryId !== null && state.detail && !reloadDetail && !detailIconsStale)
             )
                 return;
             const current = route;
             const version = generation;
             request = new AbortController();
-            reading = true;
+            state.reading = true;
+            changed();
             try {
                 if (current.entryId !== null) {
                     const data = await api.historyEntry(
@@ -84,7 +85,7 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
                 });
             } finally {
                 if (version === generation) {
-                    reading = false;
+                    state.reading = false;
                     changed();
                 }
             }
@@ -92,13 +93,14 @@ export function createHistory(api: Api, changed: () => void, iconsEnabled: () =>
         block(error: string | null) {
             generation++;
             request?.abort();
-            reading = false;
+            state.reading = false;
             Object.assign(state, { status: 'error', entries: [], detail: null, icons: null, error });
             changed();
         },
         dispose() {
             generation++;
             request?.abort();
+            state.reading = false;
         }
     };
 }

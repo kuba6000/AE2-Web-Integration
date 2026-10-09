@@ -31,6 +31,7 @@ export type TerminalData = {
     preferences: Preferences;
 };
 export type TerminalState = TerminalData & {
+    readonly refreshingView: boolean;
     selectedGridKey: string | null;
     crafting: CraftingState;
     cpus: CpuState;
@@ -117,6 +118,9 @@ export function createTerminal(
     );
 
     const state: TerminalState = {
+        get refreshingView() {
+            return refreshingGrids !== null;
+        },
         capabilities,
         route: { view: 'home', gridKey: null },
         selectedGridKey: null,
@@ -322,9 +326,11 @@ export function createTerminal(
             } finally {
                 discoveryUpdates.clear();
                 refreshingGrids = null;
+                notify();
                 schedule();
             }
         })();
+        notify();
         return refreshingGrids;
     }
     return {

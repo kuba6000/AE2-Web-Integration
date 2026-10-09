@@ -5,6 +5,7 @@ import type { Route } from './router.js';
 export type CpuOutcome = { mutation?: 'cancel' | 'pause' | 'resume'; uncertain?: boolean; notice?: string };
 export type CpuState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
+    reading: boolean;
     cpus: (CpuInfo & { key: string })[];
     detail: CpuDetail | null;
     icons: IconMetadata | null;
@@ -16,6 +17,7 @@ export type CpuState = {
 export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: () => boolean) {
     const state: CpuState = {
         status: 'idle',
+        reading: false,
         cpus: [],
         detail: null,
         icons: null,
@@ -28,13 +30,12 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
     let route: Route | { view?: undefined; gridKey?: undefined } = {};
     let generation = 0;
     let request: AbortController | undefined;
-    let reading = false;
     let disposed = false;
 
     function invalidateRead() {
         generation++;
         request?.abort();
-        reading = false;
+        state.reading = false;
     }
 
     function fail(
@@ -53,12 +54,13 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
     }
 
     async function refresh() {
-        if (route.view !== 'cpus' || reading) return;
+        if (route.view !== 'cpus' || state.reading) return;
         const version = generation;
         const current = route;
-        reading = true;
+        state.reading = true;
         request = new AbortController();
         state.error = null;
+        changed();
         try {
             const cpus = await api.cpus(current.gridKey, request.signal, iconsEnabled());
             if (version !== generation) return;
@@ -81,7 +83,7 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
             fail(error.status || 'NETWORK_ERROR');
         } finally {
             if (version === generation) {
-                reading = false;
+                state.reading = false;
                 changed();
             }
         }

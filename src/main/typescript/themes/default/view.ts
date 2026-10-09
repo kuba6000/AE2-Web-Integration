@@ -21,6 +21,8 @@ import { createSlotGrid } from './slot-grid.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 import { terminalIcons as symbols, craftingHammer } from './icons/pixel/terminal.js';
 import { userIcon } from './icons/hackernoon/user.js';
+import { refreshIcon } from './icons/hackernoon/refresh.js';
+import { powerIcon } from './icons/pixel/account.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 
 const PAGE_SIZE = 100;
@@ -152,7 +154,7 @@ export function mount(
     let effectiveDisplay: TerminalDisplay = 'names';
     let iconSuggestionDismissed = settings.get('iconSuggestionDismissed') === true;
     root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1 aria-label="AE2 Web Integration"><span class="brand-full">AE2 <span>Web Integration</span></span><span class="brand-short" aria-hidden="true">AE2<span>WI</span></span></h1></div><span id="selected-network" tabindex="0" hidden></span><div class="account-controls">
-        <span class="account-user">${userIcon}<span id="username"></span></span><button id="logout" data-text="logout"></button></div></header>
+        <span class="account-user">${userIcon}<span id="username"></span></span><button id="logout" class="account-action" data-label="logout">${powerIcon}</button><button id="refresh" class="account-action" data-label="refresh" aria-busy="false">${refreshIcon}</button><span id="activity" class="sr-only" role="status" aria-live="off" hidden><span id="activity-text"></span></span></div></header>
         <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="settings-link" data-view="settings" data-text="network" hidden></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav><p id="session-message" role="alert" hidden></p></div>
         <div class="info-notices" id="info-notices" role="region" data-label="notices" tabindex="0" hidden><section class="window-frame info-notice" id="icon-notice" aria-labelledby="icon-notice-text" hidden>
         ${infoCircle}<p id="icon-notice-text" data-theme-text="iconsOffer"></p>
@@ -202,6 +204,9 @@ export function mount(
         '#session-message': HTMLElementTagNameMap['p'];
         '#username': HTMLElementTagNameMap['span'];
         '#selected-network': HTMLElementTagNameMap['span'];
+        '#refresh': HTMLButtonElement;
+        '#activity': HTMLSpanElement;
+        '#activity-text': HTMLSpanElement;
         '#auto-refresh': HTMLElementTagNameMap['input'];
         '#terminal-link': HTMLElementTagNameMap['a'];
         '#cpu-link': HTMLElementTagNameMap['a'];
@@ -738,7 +743,9 @@ export function mount(
         const trackingUnavailable =
             routeGrid?.isTrackingEnabled === false &&
             ((state.route.view === 'items' && state.itemStatus === 'ready') ||
-                (state.route.view === 'cpus' && state.cpus.status === 'ready'));
+                (state.route.view === 'cpus' &&
+                    (state.cpus.status === 'ready' ||
+                        (state.cpus.status === 'loading' && state.cpus.cpus.length > 0))));
         find('#tracking-notice').hidden = !trackingUnavailable;
         find('#tracking-notice-text').textContent = locale.common('trackingDisabledTip');
         find('#tracking-settings-link').textContent = locale.common('enableTracking');
@@ -847,6 +854,36 @@ export function mount(
         if (state.route.view !== 'items' || state.itemStatus === 'error' || menuGrid !== state.route.gridKey)
             closeResourceMenu(false);
         cpuView.render(state.route, state.cpus, locale);
+        const cpuMutations =
+            state.route.view === 'cpus' ? Object.values(state.cpus.outcomes).filter((outcome) => outcome.mutation) : [];
+        const craftingVisible = state.route.view === 'items' || state.route.view === 'plan';
+        const actionPending =
+            cpuMutations.length > 0 ||
+            (craftingVisible && !!state.crafting.mutation) ||
+            (state.route.view === 'settings' && state.settings.saving);
+        const viewLoading =
+            (state.route.view === 'cpus' && (state.cpus.reading || state.cpus.status === 'loading')) ||
+            (craftingVisible && ['loading', 'calculating'].includes(state.crafting.status)) ||
+            (state.route.view === 'history' && (state.history.reading || state.history.status === 'loading')) ||
+            (state.route.view === 'settings' && state.settings.status === 'loading') ||
+            (state.route.view === 'home' && state.home.networks.some((network) => network.status === 'loading'));
+        const active =
+            state.refreshingView || state.refreshing || state.gridStatus === 'loading' || viewLoading || actionPending;
+        find('#refresh').setAttribute('aria-busy', String(active));
+        find('#activity').hidden = !active;
+        find('#activity').setAttribute('aria-label', locale.common('activity'));
+        find('#activity').setAttribute('aria-live', actionPending ? 'polite' : 'off');
+        find('#activity-text').textContent = active
+            ? locale.common(
+                  cpuMutations.some((outcome) => outcome.mutation === 'cancel')
+                      ? 'cpuCancelling'
+                      : cpuMutations.length
+                        ? 'cpuUpdating'
+                        : state.route.view === 'cpus'
+                          ? 'cpuRefreshing'
+                          : 'loading'
+              )
+            : '';
         historyView.render(state, locale);
         settingsView.render(state, locale);
         aboutView.render(state.route, locale);
@@ -974,6 +1011,11 @@ export function mount(
         page++;
         renderPage();
         find('#item-scroll').scrollTop = 0;
+    });
+    for (const button of [find('#logout'), find('#refresh')])
+        bindTooltip(button, () => [element('span', button.getAttribute('aria-label') || '')]);
+    find('#refresh').addEventListener('click', () => {
+        void application.refresh({ reloadDetail: true });
     });
     find('#logout').addEventListener('click', async () => {
         find('#logout').disabled = true;

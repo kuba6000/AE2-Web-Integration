@@ -23,3 +23,7 @@ rendered in the button text color.
 CPU cancellation uses the original 24 × 24 outline from
 [`times.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/times.svg),
 rendered in the cancellation button text color. The pause outline also marks paused CPU statuses.
+
+The header refresh control uses the original 24 × 24 geometry from
+[`refresh.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/refresh.svg),
+rendered in the button text color.

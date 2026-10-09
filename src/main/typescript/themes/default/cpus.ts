@@ -559,11 +559,11 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
     const outcomeText = (outcome: CpuOutcome | undefined) =>
         outcome?.uncertain
             ? locale.common('cpuMutationUncertain')
-            : outcome?.mutation
-              ? locale.common(outcome.mutation === 'cancel' ? 'cpuCancelling' : 'cpuUpdating')
-              : outcome?.notice
-                ? locale.common(outcome.notice)
-                : '';
+            : outcome?.notice
+              ? outcome.notice === 'cpuCancelled' && state.status !== 'ready'
+                  ? ''
+                  : locale.common(outcome.notice)
+              : '';
 
     function renderActions(
         target: HTMLDivElement,
@@ -792,10 +792,10 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             listScroll.setAttribute('aria-label', t('cpus'));
             listStatus.textContent = state.error
                 ? t(state.error)
-                : state.status === 'loading'
-                  ? t('loading')
-                  : state.cpus.length
-                    ? ''
+                : state.cpus.length
+                  ? ''
+                  : state.status === 'loading'
+                    ? t('loading')
                     : t('noCpus');
             listStatus.hidden = !listStatus.textContent;
             if (!selected) {
@@ -830,16 +830,13 @@ export function createCpuView(root: HTMLElement, application: Terminal, { worksp
             search.setAttribute('aria-description', t('searchHelp'));
             scroll.setAttribute('aria-label', t('cpuResources'));
             grid.setAttribute('aria-label', t('cpuResources'));
-            status.textContent =
-                selectedOutcome?.uncertain || selectedOutcome?.mutation
-                    ? outcomeText(selectedOutcome)
-                    : state.error
-                      ? t(state.error)
-                      : state.status === 'loading'
-                        ? t('loading')
-                        : '';
-            if (selectedOutcome?.notice && selectedOutcome.notice !== state.error)
-                status.textContent += ` ${t(selectedOutcome.notice)}`;
+            status.textContent = selectedOutcome?.uncertain
+                ? outcomeText(selectedOutcome)
+                : state.error
+                  ? t(state.error)
+                  : '';
+            const selectedNotice = selectedOutcome?.notice ? outcomeText(selectedOutcome) : '';
+            if (selectedNotice && selectedOutcome?.notice !== state.error) status.textContent += ` ${selectedNotice}`;
             if (selectedOutcome?.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
             status.hidden = !status.textContent;
             panel.setAttribute('aria-label', t('cpus'));
