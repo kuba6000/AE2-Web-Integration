@@ -15,5 +15,7 @@
   </list>
   <writeAnnotations>
     <writeAnnotation name="cpw.mods.fml.common.SidedProxy" />
+    <writeAnnotation name="pl.kuba6000.ae2webintegration.core.http.contract.Body" />
+    <writeAnnotation name="pl.kuba6000.ae2webintegration.core.http.contract.PathParam" />
   </writeAnnotations>
 </component>

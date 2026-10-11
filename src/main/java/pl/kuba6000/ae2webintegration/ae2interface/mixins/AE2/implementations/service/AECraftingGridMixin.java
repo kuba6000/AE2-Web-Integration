@@ -59,17 +59,18 @@ public interface AECraftingGridMixin extends IAECraftingGrid {
         IAEStack<?> aeStack = ((IAEStack<?>) (Object) stack).copy();
         aeStack.setStackSize(amount);
         final Future<ICraftingJob> job;
-        if (options.lightMode()) {
+        if (options.lightMode() || options.ignoreMissing()) {
             if (!((Object) this instanceof CraftingGridCache crafting)) {
-                throw new UnsupportedOperationException("This crafting service does not support light mode");
+                throw new UnsupportedOperationException(
+                    "This crafting service does not support the requested calculation options");
             }
             job = crafting.beginCraftingJob(
                 actionSrc.player.worldObj,
                 (IGrid) grid,
                 actionSrc,
                 aeStack,
-                CraftingMode.STANDARD,
-                true,
+                options.ignoreMissing() ? CraftingMode.IGNORE_MISSING : CraftingMode.STANDARD,
+                options.lightMode(),
                 null);
         } else {
             job = ((ICraftingGrid) (Object) this)
