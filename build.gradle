@@ -80,9 +80,9 @@ tasks.named('processResources') {
     // Copy's stale-output tracking can be lost when switching the core checkout or build directory.
     // Recreate this resource subtree whenever processing runs, including all static web assets.
     doFirst { task ->
-        def webResources = new File(task.destinationDir, 'assets/web')
+        def assetResources = new File(task.destinationDir, 'assets')
         frontendResourceFiles.operations.delete {
-            delete(webResources)
+            delete(assetResources)
         }
     }
 }

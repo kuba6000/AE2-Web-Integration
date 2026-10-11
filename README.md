@@ -45,9 +45,8 @@ If you only want to use the mod, download a version-specific JAR from
 For development, install Node.js 22.13+ on the 22.x line or Node.js 24+ with npm on PATH, then run
 core checks with `./gradlew test spotlessCheck`. Gradle compiles the TypeScript frontend and packages
 its JavaScript output; Node.js is not required to run the mod. See [frontend development](tools/ui-tests/README.md).
-The two shipped web interfaces
-also have dependency-free behavioral checks: `node --test src/test/js/item-identity.test.cjs`
-(Node.js 18 or newer).
+The standalone login page also has dependency-free status checks:
+`node --test src/test/js/login-status.test.cjs`.
 
 ## Showcase on YouTube
 

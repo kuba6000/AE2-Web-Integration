@@ -6,7 +6,7 @@ Install the frontend build tools from the core repository root:
 npm ci
 ```
 
-Then run the new terminal against a controlled HTTP API in a real browser from `tools/ui-tests`:
+Then run the terminal against a controlled HTTP API in a real browser from `tools/ui-tests`:
 
 ```sh
 npm ci
@@ -56,6 +56,6 @@ Node.js and npm must be available on PATH when building; the Minecraft server ne
 Prettier formats TypeScript, static assets, browser tests and tooling configuration.
 ESLint checks TypeScript and JavaScript; Stylelint checks CSS. `npm run typecheck`
 checks strict types without writing output. CI runs formatting, lint and type checks.
-The legacy web assets are outside this scope. These dependencies stay outside `resources`
+The standalone login page is outside this formatter scope. These dependencies stay outside `resources`
 and are not packaged in mod JARs. In IntelliJ IDEA, select the root
 `node_modules/prettier` package to use the same formatter and configuration on save.

@@ -659,7 +659,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
     const errors = [];
     page.on('pageerror', (error) => errors.push(String(error)));
     t.after(() => assert.deepEqual(errors, []));
-    return { page, options, base: `http://127.0.0.1:${server.address().port}${mount}/?ui=next` };
+    return { page, options, base: `http://127.0.0.1:${server.address().port}${mount}/` };
 }
 
 async function settleResponse(page, request) {
@@ -3201,7 +3201,7 @@ test('uncertain settings saves preserve the draft and remain unconfirmed until e
     const { page, options, base } = await fixture(t);
     for (const status of ['INTERNAL_ERROR', 'TIMEOUT', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
         options.settings[gridA] = { isTracked: false, name: '' };
-        await page.goto(`${base}&case=${status}#/grids/${gridA}/settings`);
+        await page.goto(`${base}?case=${status}#/grids/${gridA}/settings`);
         const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
         await tracking.check();
         options.settings[gridA] = { isTracked: true, name: '' };
@@ -3681,7 +3681,7 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
     });
     for (const result of ['OK', 'TIMEOUT']) {
         options.cpuDetails['cpu-a'] = cpuWork;
-        await page.goto(`${base}&case=${result}#/grids/${gridA}/cpus/cpu-a`);
+        await page.goto(`${base}?case=${result}#/grids/${gridA}/cpus/cpu-a`);
         await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
         assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isDisabled(), true);
         await page.getByRole('link', { name: 'CPUs', exact: true }).click();
@@ -3706,7 +3706,7 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
     }
     await page.unroute('**/cancel');
     options.cpuDetails['cpu-a'] = cpuWork;
-    await page.goto(`${base}&case=late-read#/grids/${gridA}/cpus/cpu-a`);
+    await page.goto(`${base}?case=late-read#/grids/${gridA}/cpus/cpu-a`);
     await page
         .getByRole('region', { name: 'CPU resources', exact: true })
         .getByRole('button', { name: /Iron Ingot/ })
@@ -5280,7 +5280,7 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
 test('uncertain CPU cancellation never replays after refresh or route reentry', async (t) => {
     const { page, options, base } = await fixture(t);
     for (const status of ['TIMEOUT', 'INTERNAL_ERROR', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
-        await page.goto(`${base}&case=${status}#/grids/${gridA}/cpus/cpu-a`);
+        await page.goto(`${base}?case=${status}#/grids/${gridA}/cpus/cpu-a`);
         options.fault = { operation: 'cancel', status };
         await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
         await page
@@ -6307,11 +6307,11 @@ test('pending submission resolves after route reentry and older CPU reads cannot
     assert.match(page.url(), new RegExp(`/grids/${gridA}/items$`));
 });
 
-test('login errors keep the new UI selector and destination without loading a theme', async (t) => {
+test('login errors clear transient parameters and preserve destination without loading a theme', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
-    await page.goto(`${base}&INVALID_PASSWORD#/grids/${gridA}/items`);
+    await page.goto(`${base}?INVALID_PASSWORD#/grids/${gridA}/items`);
     await page.waitForFunction(() => !location.search.includes('INVALID_PASSWORD'));
-    assert.equal(new URL(page.url()).searchParams.get('ui'), 'next');
+    assert.equal(new URL(page.url()).search, '');
     assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/items`);
     assert.equal(
         options.requests.some((request) => request.path.includes('/assets/web/themes/')),
@@ -6324,7 +6324,7 @@ test('logout returns to the login document even when its URL matches the current
     await page.goto(`${base}#/`);
     await page.getByRole('button', { name: 'Log out', exact: true }).click();
     await page.getByPlaceholder('Enter password', { exact: true }).first().waitFor({ timeout: 5000 });
-    assert.equal(new URL(page.url()).searchParams.get('ui'), 'next');
+    assert.equal(new URL(page.url()).search, '');
     assert.equal(new URL(page.url()).hash, '#/');
 });
 
@@ -7006,7 +7006,7 @@ test('a session lost before bootstrap returns to login with the destination inta
     });
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByLabel('Username', { exact: true }).waitFor({ timeout: 3000 });
-    assert.equal(new URL(page.url()).searchParams.get('ui'), 'next');
+    assert.equal(new URL(page.url()).search, '');
     assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/items`);
     assert.equal(
         options.requests.some((request) => request.path === '/api/grids'),
@@ -8731,4 +8731,21 @@ test('update notice needs release metadata and an unconfirmed skip is reconciled
     await page.reload();
     await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
     assert.equal(await notice.isVisible(), false);
+});
+
+test('default terminal opens without an interface selector or legacy navigation', async (t) => {
+    const { page, base } = await fixture(t, '/ae2');
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#items .item').first().waitFor();
+    assert.equal(new URL(page.url()).search, '');
+    assert.equal(await page.getByRole('link', { name: /previous interface/i }).count(), 0);
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await page.reload();
+    await page.getByRole('heading', { name: 'Web settings', exact: true }).waitFor();
+    assert.equal(new URL(page.url()).search, '');
+    await page.getByRole('button', { name: 'Log out', exact: true }).click();
+    await page.getByLabel('Username', { exact: true }).waitFor();
+    assert.equal(new URL(page.url()).pathname, '/ae2/');
+    assert.equal(new URL(page.url()).search, '');
+    assert.equal(new URL(page.url()).hash, '#/web-settings');
 });

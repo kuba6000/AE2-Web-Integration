@@ -48,7 +48,6 @@ export function mount(
     root: HTMLElement,
     application: Terminal,
     {
-        base,
         user,
         modVersion,
         updateNotice,
@@ -56,7 +55,6 @@ export function mount(
         settings,
         i18n
     }: ReturnType<typeof createThemeContext> & {
-        base: URL;
         user: { username: string; isAdmin: boolean };
         modVersion: string | null;
         updateNotice: ReturnType<typeof createUpdateNotice>;
@@ -202,7 +200,7 @@ export function mount(
         <div id="pages"><button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button></div></div></section>
         <p id="missing" data-text="invalidRoute" hidden></p></div>
         <aside id="resource-panel" hidden><h3>${infoCircle}<span data-text="details"></span></h3><div id="details"></div><div id="order"></div></aside></div>
-        <footer><span id="updated" aria-live="off"></span><a id="legacy" data-text="previous"></a></footer>`;
+        <footer><span id="updated" aria-live="off"></span></footer>`;
     /* IDs and element types belong to the static markup created above. */
     type ViewElements = {
         '#terminal-display': HTMLSelectElement;
@@ -256,7 +254,6 @@ export function mount(
         '#details': HTMLElementTagNameMap['div'];
         '#order': HTMLElementTagNameMap['div'];
         '#updated': HTMLElementTagNameMap['span'];
-        '#legacy': HTMLElementTagNameMap['a'];
     };
 
     const find = <Selector extends keyof ViewElements>(selector: Selector): ViewElements[Selector] =>
@@ -291,7 +288,6 @@ export function mount(
     const historyView = createHistoryView(find('#window'), application, bindTooltip);
     const settingsView = createSettingsView(find('#window'), application);
     const aboutView = createAboutView(find('#window'), modVersion);
-    find('#legacy').href = base.href;
     const tooltip = element('div', '', 'tooltip');
     tooltip.id = 'resource-tooltip';
     tooltip.role = 'tooltip';

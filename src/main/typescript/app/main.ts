@@ -21,7 +21,7 @@ function returnToLogin() {
     if (leaving || disposed) return;
     leaving = true;
     application?.dispose();
-    const target = new URL('?ui=next', base);
+    const target = new URL(base);
     target.hash = location.hash;
     // Replacing the same hash URL can stay in this document, even after the session expires.
     if (target.href === location.href) location.reload();
@@ -67,7 +67,6 @@ async function start() {
         );
         unmount = mount(root, application, {
             ...theme,
-            base,
             user: metadata.user,
             modVersion: metadata.modVersion,
             updateNotice: createUpdateNotice(

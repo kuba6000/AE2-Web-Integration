@@ -148,8 +148,6 @@
         }
     </style>
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <title>AE2</title>
 </head>
 <body>
@@ -238,7 +236,7 @@
     loadLoginSettings();
 
     const url = new URL(window.location.href);
-    const cleanUrl = url.pathname + (url.searchParams.get('ui') === 'next' ? '?ui=next' : '') + url.hash;
+    const cleanUrl = url.pathname + url.hash;
     if (url.searchParams.get("NOT_ONLINE") !== null){
         document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>You have to be on the server (online) to perform this action!</b><br><br>";
         window.history.replaceState(null, document.title, cleanUrl); // Clear transient status without losing the selected view.

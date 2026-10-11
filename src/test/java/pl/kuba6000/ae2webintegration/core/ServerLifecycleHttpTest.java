@@ -246,8 +246,8 @@ class ServerLifecycleHttpTest {
             assertEquals(HttpURLConnection.HTTP_OK, read(style).status());
             assertEquals("text/css; charset=UTF-8", style.getHeaderField("Content-Type"));
         }
-        assertEquals(HttpURLConnection.HTTP_OK, get("/?ui=next", null).status());
-        assertEquals(429, get("/?ui=next", null).status());
+        assertEquals(HttpURLConnection.HTTP_OK, get("/", null).status());
+        assertEquals(429, get("/", null).status());
     }
 
     @Test
@@ -273,7 +273,7 @@ class ServerLifecycleHttpTest {
             content.body()
                 .getBytes(StandardCharsets.UTF_8).length,
             head.getContentLength());
-        assertEquals(HttpURLConnection.HTTP_OK, get("/?ui=next", null).status());
+        assertEquals(HttpURLConnection.HTTP_OK, get("/", null).status());
     }
 
     @Test
@@ -298,7 +298,7 @@ class ServerLifecycleHttpTest {
             assertEquals("", metadata.body());
             assertEquals(content.length, head.getContentLength());
         }
-        assertEquals(HttpURLConnection.HTTP_OK, get("/?ui=next", null).status());
+        assertEquals(HttpURLConnection.HTTP_OK, get("/", null).status());
     }
 
     @Test
@@ -328,17 +328,15 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void browserLoginKeepsTheRequestedUiOnSuccessAndFailure() throws Exception {
+    void browserLoginRedirectsWithoutPropagatingObsoleteUiSelectors() throws Exception {
         startApi();
-        for (String selector : new String[] { "", "?ui=next" }) {
+        for (String selector : new String[] { "", "?ui=next", "?ui=previous" }) {
             HttpURLConnection failure = browserForm("/" + selector, "username=admin&password=wrong");
             assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(failure).status());
-            assertEquals(
-                "?INVALID_PASSWORD" + (selector.isEmpty() ? "" : "&ui=next"),
-                failure.getHeaderField("Location"));
+            assertEquals("?INVALID_PASSWORD", failure.getHeaderField("Location"));
             HttpURLConnection success = browserForm("/" + selector, "username=admin&password=lifecycle-password");
             assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, read(success).status());
-            assertEquals(selector.isEmpty() ? "." : "?ui=next", success.getHeaderField("Location"));
+            assertEquals(".", success.getHeaderField("Location"));
             assertTrue(
                 success.getHeaderField("Set-Cookie")
                     .contains("HttpOnly"));
@@ -346,7 +344,7 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void browserRegistrationKeepsTheRequestedUiOnTheConfirmationPage() throws Exception {
+    void browserRegistrationRedirectsToConfirmationWithoutObsoleteUiSelectors() throws Exception {
         BlockingPlayerLookup platform = new BlockingPlayerLookup(
             UUID.fromString("11111111-2222-3333-4444-555555555555"));
         platform.release.countDown();
@@ -357,7 +355,7 @@ class ServerLifecycleHttpTest {
         assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, performSyncedRequest(() -> read(registration)).status());
         String location = registration.getHeaderField("Location");
         assertTrue(location.startsWith("?confirmregistration&token="));
-        assertTrue(location.endsWith("&ui=next"));
+        assertFalse(location.contains("&ui="));
         Response confirmation = get("/" + location, null);
         assertEquals(HttpURLConnection.HTTP_OK, confirmation.status());
         assertTrue(
@@ -369,31 +367,27 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void nextUiRequiresAuthenticationAndLeavesTheExistingPageAsDefault() throws Exception {
+    void defaultUiRequiresAuthenticationAndIgnoresObsoleteSelectors() throws Exception {
         startApi();
-        Response loginPage = get("/?ui=next", null);
-        assertEquals(HttpURLConnection.HTTP_OK, loginPage.status());
-        assertTrue(
-            loginPage.body()
-                .contains("type=\"password\""));
-        assertFalse(
-            loginPage.body()
-                .contains("type=\"module\""));
-
         String token = login();
-        Response legacy = get("/", token);
-        assertEquals(HttpURLConnection.HTTP_OK, legacy.status());
-        assertFalse(
-            legacy.body()
-                .contains("type=\"module\""));
-        Response next = get("/?ui=next", token);
-        assertEquals(HttpURLConnection.HTTP_OK, next.status());
-        assertTrue(
-            next.body()
-                .contains("type=\"module\""));
-        assertFalse(
-            next.body()
-                .contains("type=\"password\""));
+        for (String path : new String[] { "/", "/index.html", "/index.php", "/?ui=next", "/?ui=previous" }) {
+            Response loginPage = get(path, null);
+            assertEquals(HttpURLConnection.HTTP_OK, loginPage.status());
+            assertTrue(
+                loginPage.body()
+                    .contains("type=\"password\""));
+            assertFalse(
+                loginPage.body()
+                    .contains("type=\"module\""));
+            Response page = get(path, token);
+            assertEquals(HttpURLConnection.HTTP_OK, page.status());
+            assertTrue(
+                page.body()
+                    .contains("type=\"module\""));
+            assertFalse(
+                page.body()
+                    .contains("type=\"password\""));
+        }
     }
 
     @Test
@@ -537,7 +531,7 @@ class ServerLifecycleHttpTest {
                 PasswordHelper.generateStrongPasswordHash("player-password")));
         startApi();
         String token = login(username, "player-password");
-        Response page = get("/?ui=next", token);
+        Response page = get("/", token);
         assertEquals(HttpURLConnection.HTTP_OK, page.status());
         JsonObject user = contextUser(get("/api/context", token).body());
         assertFalse(
@@ -564,7 +558,6 @@ class ServerLifecycleHttpTest {
             user.entrySet()
                 .size());
         assertEquals(pageResource("/assets/web/index.html"), page.body());
-        assertEquals(pageResource("/assets/webpage.html"), get("/", token).body());
     }
 
     @ParameterizedTest
@@ -618,7 +611,7 @@ class ServerLifecycleHttpTest {
             CoreEngine.init(platform);
             startApi();
             String token = login();
-            Response page = get("/?ui=next", token);
+            Response page = get("/", token);
             assertEquals(HttpURLConnection.HTTP_OK, page.status());
             Response context = get("/api/context", token);
             JsonObject metadata = new Gson().fromJson(context.body(), JsonObject.class)
@@ -632,8 +625,7 @@ class ServerLifecycleHttpTest {
                 contextUser(context.body()).get("username")
                     .getAsString());
             assertEquals(pageResource("/assets/web/index.html"), page.body());
-            assertEquals(pageResource("/assets/login.html"), get("/?ui=next", null).body());
-            assertEquals(pageResource("/assets/webpage.html"), get("/", token).body());
+            assertEquals(pageResource("/assets/login.html"), get("/", null).body());
         } finally {
             CoreEngine.onServerStopped();
         }
@@ -652,16 +644,15 @@ class ServerLifecycleHttpTest {
     }
 
     @Test
-    void selectedPagesAreServedVerbatimWithoutCachingAuthenticationDecisions() throws Exception {
+    void pagesAreServedVerbatimWithoutCachingAuthenticationDecisions() throws Exception {
         startApi();
         String token = login();
-        for (String path : new String[] { "/", "/?ui=next" }) {
+        for (String path : new String[] { "/", "/index.html" }) {
             HttpURLConnection anonymous = connection(path, null);
             assertEquals(pageResource("/assets/login.html"), read(anonymous).body());
             assertEquals("no-store", anonymous.getHeaderField("Cache-Control"));
             HttpURLConnection authenticated = connection(path, token);
-            String resource = path.equals("/") ? "/assets/webpage.html" : "/assets/web/index.html";
-            String expected = pageResource(resource);
+            String expected = pageResource("/assets/web/index.html");
             assertEquals(expected, read(authenticated).body());
             assertEquals("no-store", authenticated.getHeaderField("Cache-Control"));
             HttpURLConnection head = connection(path, token);

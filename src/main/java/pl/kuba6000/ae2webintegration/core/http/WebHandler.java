@@ -162,10 +162,7 @@ public final class WebHandler implements HttpHandler {
     }
 
     private static void renderPage(HttpExchange exchange, @Nullable RequestContext context) throws IOException {
-        String site = context == null ? "/assets/login.html" : "/assets/webpage.html";
-        if (context != null && usesNextUi(exchange)) {
-            site = "/assets/web/index.html";
-        }
+        String site = context == null ? "/assets/login.html" : "/assets/web/index.html";
         // The selected document depends on authentication even though its bytes are static.
         exchange.getResponseHeaders()
             .set("Cache-Control", "no-store");
@@ -178,20 +175,9 @@ public final class WebHandler implements HttpHandler {
     }
 
     private static void redirect(HttpExchange exchange, String location) throws IOException {
-        if (usesNextUi(exchange)) {
-            location = location.equals(".") ? "?ui=next" : location + "&ui=next";
-        }
         exchange.getResponseHeaders()
             .add("Location", location);
         exchange.sendResponseHeaders(HttpURLConnection.HTTP_MOVED_TEMP, -1);
-    }
-
-    private static boolean usesNextUi(HttpExchange exchange) {
-        return "next".equals(
-            HTTPUtils.parseQueryString(
-                exchange.getRequestURI()
-                    .getRawQuery())
-                .get("ui"));
     }
 
     private static void sendText(HttpExchange exchange, int status, String text) throws IOException {
