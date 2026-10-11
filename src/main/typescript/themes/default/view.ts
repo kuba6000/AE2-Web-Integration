@@ -1,44 +1,32 @@
+import { createWebSettings, type TerminalDisplay } from './web-settings.js';
+import { createNotices } from './notices.js';
+import { createHeader } from './header.js';
+import { element } from './dom.js';
+import { translations } from './translations.js';
 import { createMobilePanels, type MobilePane } from './mobile-panels.js';
 import { filterIcon } from './icons/hackernoon/filter.js';
 import { networkIcon } from './icons/hackernoon/chart-network.js';
 import { cpuChipIcon } from './icons/pixel/cpu-controls.js';
 import { registryId, selectResources } from '../../app/resource-helpers.js';
-import type { ApiError } from '../../app/api.js';
 import type { ThemeContext } from '../../app/theme-api.js';
 import type { ThemeState as TerminalState, ThemeApplication as Terminal } from '../../app/theme-api.js';
 import type { Translator as Locale } from '../../app/i18n.js';
 
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
-import { cpuHref, historyHref } from '../../app/router.js';
 import { createCraftingView } from './crafting.js';
 import { createHomeView } from './home.js';
 import { createCpuView } from './cpus.js';
 import { createHistoryView } from './history.js';
-import { networkLabel } from './network.js';
 import { createSettingsView } from './settings.js';
 import { createAboutView } from './about.js';
 import { slotQuantity } from './resource-quantity.js';
 import { createSlotGrid } from './slot-grid.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 import { terminalIcons as symbols, craftingHammer } from './icons/pixel/terminal.js';
-import { userIcon } from './icons/hackernoon/user.js';
-import { refreshIcon } from './icons/hackernoon/refresh.js';
-import { powerIcon } from './icons/pixel/account.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 
 const PAGE_SIZE = 100;
-
-function element<Tag extends keyof HTMLElementTagNameMap>(
-    tag: Tag,
-    text = '',
-    className = ''
-): HTMLElementTagNameMap[Tag] {
-    const node = document.createElement(tag);
-    node.textContent = text;
-    if (className) node.className = className;
-    return node;
-}
 
 function iconButton(group: 'filter' | 'sort' | 'sortOrder' | 'showItems' | 'showFluids', value: keyof typeof symbols) {
     return `<button type="button" class="tool-button" data-preference="${group}" data-value="${value}">${symbols[value]}</button>`;
@@ -46,200 +34,49 @@ function iconButton(group: 'filter' | 'sort' | 'sortOrder' | 'showItems' | 'show
 
 /* Theme renderer. Server operations and preference ownership are supplied by the application. */
 
-export function mount(
-    root: HTMLElement,
-    application: Terminal,
-    { user, modVersion, updateNotice, logout, settings, i18n, lifetime, themes }: ThemeContext
-) {
-    lifetime.onCleanup(() => {
-        delete document.documentElement.dataset.appearance;
-        delete document.documentElement.dataset.font;
-    });
-    i18n.register({
-        en: {
-            navigation: 'Navigation',
-            mobileFilters: 'Filters and sorting',
-            closePanel: 'Close panel',
-            showItems: 'Items',
-            showFluids: 'Fluids',
-            on: 'On',
-            off: 'Off',
-            resourceKinds: 'Resource types',
-            componentCount: 'Components',
-            damage: 'Damage',
-            sortOrder: 'Sort order',
-            ascending: 'Ascending',
-            descending: 'Descending',
-            availability: 'Availability',
-            nextState: 'Next: {state}',
-            appearance: 'Appearance',
-            font: 'Font',
-            resourceColumns: 'Resource columns',
-            automaticColumns: 'Auto',
-            updateAvailable: 'AE2 Web Integration {version} is available.',
-            skipUpdate: 'Skip this version',
-            skipUpdateHelp:
-                'Hide this release for all administrators of this server. Newer releases will still be shown.',
-            updateChanged: 'The available update changed. Reload this page before choosing a release to skip.',
-            updateSkipFailed: 'Could not save the skipped version. Try again or close this notice.',
-            updateSkipUnconfirmed:
-                'Could not confirm whether the version was skipped. Reload this page to check before trying again.',
-            viewReleases: 'View releases',
-            remindLater: 'Remind me later',
-            remindLaterHelp: 'Hide this notice for 7 days in this browser.',
-            dismissUpdate: 'Dismiss update notice',
-            light: 'Light',
-            dark: 'Dark',
-            system: 'System',
-            manageThemes: 'Choose a theme',
-            defaultTheme: 'Default',
-            generalOptions: 'General',
-            terminalDisplay: 'Terminal display',
-            detailedItems: 'Icons and names',
-            compactItems: 'Icons only',
-            namesOnly: 'Names only',
-            iconsUnavailable: 'The server does not provide an icon pack.',
-            iconsLoading: 'Checking server icon availability…',
-            iconsError: 'Could not check server icon availability.',
-            iconsOffer: 'The server provides item icons.',
-            enableIcons: 'Enable icons',
-            dismissIcons: 'Dismiss icon suggestion'
-        },
-        pl: {
-            navigation: 'Nawigacja',
-            mobileFilters: 'Filtry i sortowanie',
-            closePanel: 'Zamknij panel',
-            showItems: 'Przedmioty',
-            showFluids: 'Płyny',
-            on: 'Włączone',
-            off: 'Wyłączone',
-            resourceKinds: 'Rodzaje zasobów',
-            componentCount: 'Komponenty',
-            damage: 'Uszkodzenie',
-            sortOrder: 'Kierunek sortowania',
-            ascending: 'Rosnąco',
-            descending: 'Malejąco',
-            availability: 'Dostępność',
-            nextState: 'Następnie: {state}',
-            appearance: 'Wygląd',
-            font: 'Czcionka',
-            resourceColumns: 'Kolumny zasobów',
-            automaticColumns: 'Automatycznie',
-            updateAvailable: 'Dostępna jest wersja {version} AE2 Web Integration.',
-            skipUpdate: 'Pomiń tę wersję',
-            skipUpdateHelp:
-                'Ukryj to wydanie dla wszystkich administratorów serwera. Nowsze wydania nadal będą pokazywane.',
-            updateChanged: 'Dostępna aktualizacja zmieniła się. Odśwież stronę przed wybraniem wersji do pominięcia.',
-            updateSkipFailed: 'Nie udało się zapisać pominiętej wersji. Spróbuj ponownie lub zamknij powiadomienie.',
-            updateSkipUnconfirmed: 'Nie udało się potwierdzić pominięcia wersji. Odśwież stronę przed ponowną próbą.',
-            viewReleases: 'Zobacz wydania',
-            remindLater: 'Przypomnij później',
-            remindLaterHelp: 'Ukryj powiadomienie na 7 dni w tej przeglądarce.',
-            dismissUpdate: 'Zamknij powiadomienie o aktualizacji',
-            light: 'Jasny',
-            dark: 'Ciemny',
-            system: 'Systemowy',
-            manageThemes: 'Wybierz motyw',
-            defaultTheme: 'Domyślny',
-            generalOptions: 'Ogólne',
-            terminalDisplay: 'Wyświetlanie terminala',
-            detailedItems: 'Ikony i nazwy',
-            compactItems: 'Same ikony',
-            namesOnly: 'Same nazwy',
-            iconsUnavailable: 'Serwer nie udostępnia paczki ikon.',
-            iconsLoading: 'Sprawdzanie dostępności ikon na serwerze…',
-            iconsError: 'Nie udało się sprawdzić dostępności ikon na serwerze.',
-            iconsOffer: 'Serwer udostępnia ikony przedmiotów.',
-            enableIcons: 'Włącz ikony',
-            dismissIcons: 'Zamknij podpowiedź o ikonach'
-        }
-    });
-    const appearances = ['light', 'dark', 'system'];
-    const savedAppearance = settings.get('appearance');
-    let appearance =
-        typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
-    let font = settings.get('font') === 'montserrat' ? 'montserrat' : 'monocraft';
-    const savedColumns = settings.get('resourceColumns');
-    let resourceColumns =
-        typeof savedColumns === 'number' && Number.isInteger(savedColumns) && savedColumns >= 1 && savedColumns <= 8
-            ? savedColumns
-            : 0;
-    type TerminalDisplay = 'names' | 'both' | 'icons';
-    const savedDisplay = settings.get('terminalDisplay');
-    let terminalDisplay: TerminalDisplay =
-        savedDisplay === 'names' || savedDisplay === 'both' || savedDisplay === 'icons' ? savedDisplay : 'both';
-    application.displayIcons(terminalDisplay !== 'names');
+export function mount(root: HTMLElement, application: Terminal, context: ThemeContext) {
+    const { modVersion, updateNotice, settings, i18n, lifetime } = context;
+    i18n.register(translations);
     let effectiveDisplay: TerminalDisplay = 'names';
-    let iconSuggestionDismissed = settings.get('iconSuggestionDismissed') === true;
-    root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1 aria-label="AE2 Web Integration"><span class="brand-full">AE2 <span>Web Integration</span></span><span class="brand-short" aria-hidden="true">AE2<span>WI</span></span></h1></div><span id="selected-network" tabindex="0" hidden></span><div class="account-controls">
-        <span class="account-user">${userIcon}<span id="username"></span></span><span class="account-actions"><button id="logout" class="account-action" data-label="logout">${powerIcon}</button><button id="refresh" class="account-action" data-label="refresh" aria-busy="false">${refreshIcon}</button></span><span id="activity" class="sr-only" role="status" aria-live="off" hidden><span id="activity-text"></span></span></div></header>
-        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="settings-link" data-view="settings" data-text="network" hidden></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a><span id="updated" aria-live="off"></span></nav><p id="session-message" role="alert" hidden></p></div>
-        <div class="info-notices" id="info-notices" role="region" data-label="notices" tabindex="0" hidden><section class="window-frame info-notice" id="update-notice" aria-labelledby="update-notice-text" hidden>${infoCircle}<p><span id="update-notice-text"></span> <a id="update-releases" data-theme-text="viewReleases"></a></p><button type="button" id="dismiss-update">×</button><div class="update-notice-actions"><button type="button" id="snooze-update" data-theme-text="remindLater"></button><button type="button" id="skip-update" data-theme-text="skipUpdate"></button></div><p id="update-notice-error" role="alert" hidden></p></section><section class="window-frame info-notice" id="icon-notice" aria-labelledby="icon-notice-text" hidden>
-        ${infoCircle}<p id="icon-notice-text" data-theme-text="iconsOffer"></p>
-        <button type="button" id="enable-icons" data-theme-text="enableIcons"></button>
-        <button type="button" id="dismiss-icons">×</button></section><section class="window-frame info-notice" id="tracking-notice" aria-labelledby="tracking-notice-text" hidden>${infoCircle}<p><span id="tracking-notice-text"></span> <a id="tracking-settings-link"></a></p></section></div>
+    root.innerHTML = `
         <div class="workspace" id="workspace">
-        <div class="terminal-tools" id="terminal-tools" hidden>
-        <div role="group" data-label="resources">${iconButton('filter', 'all')}</div>
-        <div role="group" data-theme-label="resourceKinds">${iconButton('showItems', 'itemsOn')}${iconButton('showFluids', 'fluidsOn')}</div>
-        <div role="group" data-label="sort">${iconButton('sort', 'name')}${iconButton('sortOrder', 'ascending')}</div></div>
-        <div class="window-frame" id="window">
-        <div id="network-message" role="status"></div>
-        <section id="server-settings" hidden><h2 data-text="serverSettings"></h2></section>
-        <section id="web-settings" hidden><h2 data-text="webSettings"></h2><div class="web-preferences">
-        <section class="web-preferences-section" aria-labelledby="general-options-title"><h3 id="general-options-title" data-theme-text="generalOptions"></h3>
-        <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
-        <label class="web-preference-toggle"><span data-text="autoRefresh"></span><input type="checkbox" id="auto-refresh"></label></section>
-        <section class="web-preferences-section" aria-labelledby="appearance-options-title"><h3 id="appearance-options-title" data-theme-text="appearance"></h3>
-        <div id="theme-settings"><button type="button" id="manage-themes" data-theme-text="manageThemes"></button></div>
-        <label><span data-theme-text="font"></span><select id="font"><option value="monocraft">Monocraft</option><option value="montserrat">Montserrat</option></select></label>
-        <label><span data-theme-text="resourceColumns"></span><select id="resource-columns"><option value="auto" data-theme-text="automaticColumns"></option>${Array.from({ length: 8 }, (_, index) => `<option value="${index + 1}">${index + 1}</option>`).join('')}</select></label>
-        <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label></section>
-        <section class="web-preferences-section" aria-labelledby="terminal-options-title"><h3 id="terminal-options-title" data-text="terminal"></h3>
-        <div class="web-preference-field"><label><span data-theme-text="terminalDisplay"></span><select id="terminal-display" aria-describedby="icon-availability"><option value="names" data-theme-text="namesOnly"></option><option value="both" data-theme-text="detailedItems"></option><option value="icons" data-theme-text="compactItems"></option></select></label>
-        <p class="hint" id="icon-availability" role="status"></p></div>
-        </section></div></section>
-        <section id="terminal" hidden><div class="terminal-heading"><h2 data-text="terminal"></h2>
-        <label class="search"><span class="sr-only" data-text="search"></span><input id="search" type="search"></label></div>
-        <div class="terminal-body"><p id="item-message" role="status"></p>
-        <div id="item-scroll" role="region" data-label="resources" tabindex="0"><ul id="items"></ul></div>
-        <div id="pages"><button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button></div></div></section>
-        <p id="missing" data-text="invalidRoute" hidden></p></div>
-        <aside id="resource-panel" hidden><h3>${infoCircle}<span data-text="details"></span></h3><div id="details"></div><div id="order"></div></aside></div>`;
+            <div class="terminal-tools" id="terminal-tools" hidden>
+                <div role="group" data-label="resources">${iconButton('filter', 'all')}</div>
+                <div role="group" data-theme-label="resourceKinds">
+                    ${iconButton('showItems', 'itemsOn')}${iconButton('showFluids', 'fluidsOn')}
+                </div>
+                <div role="group" data-label="sort">
+                    ${iconButton('sort', 'name')}${iconButton('sortOrder', 'ascending')}
+                </div>
+            </div>
+            <div class="window-frame" id="window">
+                <div id="network-message" role="status"></div>
+                <section id="server-settings" hidden><h2 data-text="serverSettings"></h2></section>
+                <section id="web-settings" hidden></section>
+                <section id="terminal" hidden>
+                    <div class="terminal-heading">
+                        <h2 data-text="terminal"></h2>
+                        <label class="search">
+                            <span class="sr-only" data-text="search"></span><input id="search" type="search">
+                        </label>
+                    </div>
+                    <div class="terminal-body">
+                        <p id="item-message" role="status"></p>
+                        <div id="item-scroll" role="region" data-label="resources" tabindex="0"><ul id="items"></ul></div>
+                        <div id="pages">
+                            <button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button>
+                        </div>
+                    </div>
+                </section>
+                <p id="missing" data-text="invalidRoute" hidden></p>
+            </div>
+            <aside id="resource-panel" hidden>
+                <h3>${infoCircle}<span data-text="details"></span></h3>
+                <div id="details"></div><div id="order"></div>
+            </aside>
+        </div>`;
     /* IDs and element types belong to the static markup created above. */
     type ViewElements = {
-        '#terminal-display': HTMLSelectElement;
-        '#icon-availability': HTMLParagraphElement;
-        '#icon-notice': HTMLElement;
-        '#update-notice': HTMLElement;
-        '#update-releases': HTMLAnchorElement;
-        '#snooze-update': HTMLButtonElement;
-        '#dismiss-update': HTMLButtonElement;
-        '#skip-update': HTMLButtonElement;
-        '#update-notice-text': HTMLSpanElement;
-        '#update-notice-error': HTMLParagraphElement;
-        '#info-notices': HTMLElement;
-        '#tracking-notice': HTMLElement;
-        '#tracking-notice-text': HTMLElement;
-        '#tracking-settings-link': HTMLAnchorElement;
-        '#enable-icons': HTMLButtonElement;
-        '#dismiss-icons': HTMLButtonElement;
-        '#language': HTMLElementTagNameMap['select'];
-        '#appearance': HTMLElementTagNameMap['select'];
-        '#font': HTMLSelectElement;
-        '#resource-columns': HTMLSelectElement;
-        '#logout': HTMLElementTagNameMap['button'];
-        '#session-message': HTMLElementTagNameMap['p'];
-        '#username': HTMLElementTagNameMap['span'];
-        '#selected-network': HTMLElementTagNameMap['span'];
-        '#refresh': HTMLButtonElement;
-        '#activity': HTMLSpanElement;
-        '#activity-text': HTMLSpanElement;
-        '#auto-refresh': HTMLElementTagNameMap['input'];
-        '#terminal-link': HTMLElementTagNameMap['a'];
-        '#cpu-link': HTMLElementTagNameMap['a'];
-        '#history-link': HTMLElementTagNameMap['a'];
-        '#settings-link': HTMLElementTagNameMap['a'];
         '#workspace': HTMLElementTagNameMap['div'];
         '#terminal-tools': HTMLElementTagNameMap['div'];
         '#window': HTMLElementTagNameMap['div'];
@@ -259,21 +96,10 @@ export function mount(
         '#resource-panel': HTMLElementTagNameMap['aside'];
         '#details': HTMLElementTagNameMap['div'];
         '#order': HTMLElementTagNameMap['div'];
-        '#updated': HTMLElementTagNameMap['span'];
     };
 
     const find = <Selector extends keyof ViewElements>(selector: Selector): ViewElements[Selector] =>
         root.querySelector(selector) as ViewElements[Selector];
-    find('#username').textContent = user.username;
-    if (updateNotice.update) find('#update-releases').href = updateNotice.update.releaseUrl;
-    function renderColumns() {
-        find('#resource-columns').value = resourceColumns ? String(resourceColumns) : 'auto';
-        if (resourceColumns)
-            find('#workspace').style.setProperty('--resource-column-width', `calc(100% / ${resourceColumns})`);
-        else find('#workspace').style.removeProperty('--resource-column-width');
-    }
-    renderColumns();
-
     const toolButtons: NodeListOf<
         HTMLButtonElement & {
             dataset: {
@@ -282,7 +108,24 @@ export function mount(
             };
         }
     > = root.querySelectorAll('.tool-button');
-    const mobile = createMobilePanels(root, find('#workspace'), root.querySelector('.view-tabs')!, hideTooltip);
+    const header = createHeader(application, context, { bind: bindTooltip, hide: hideTooltip });
+    root.prepend(header.element);
+    const notices = createNotices(
+        context,
+        {
+            enableIcons: () => webSettings.selectDisplay('both'),
+            focusSearch: () => find('#search').focus(),
+            focusRefresh: header.focusRefresh,
+            refresh: renderDisplay
+        },
+        { bind: bindTooltip, hide: hideTooltip }
+    );
+    header.element.after(notices.element);
+    const webSettings = createWebSettings(find('#web-settings'), find('#workspace'), application, context, () => {
+        notices.acknowledgeIcons();
+        renderDisplay();
+    });
+    const mobile = createMobilePanels(root, find('#workspace'), header.navigation, hideTooltip);
     lifetime.onCleanup(() => mobile.dispose());
     const homeView = createHomeView(find('#workspace'), application, mobile.beforeDialog);
     lifetime.onCleanup(() => homeView.dispose());
@@ -472,29 +315,12 @@ export function mount(
         (root.querySelectorAll('[data-theme-label]') as NodeListOf<HTMLElement>).forEach((node) =>
             node.setAttribute('aria-label', locale.t(node.dataset.themeLabel!))
         );
-        find('#dismiss-icons').setAttribute('aria-label', locale.t('dismissIcons'));
-        find('#dismiss-update').setAttribute('aria-label', locale.t('dismissUpdate'));
-        find('#snooze-update').setAttribute('aria-description', locale.t('remindLaterHelp'));
         find('#search').placeholder = locale.common('searchHint');
         find('#search').setAttribute('aria-description', locale.common('searchHelp'));
         find('#previous-page').setAttribute('aria-label', locale.common('previousPage'));
         find('#next-page').setAttribute('aria-label', locale.common('nextPage'));
     }
-    bindTooltip(find('#selected-network'), () => {
-        const grid = state.grids.find((grid) => grid.key === state.route.gridKey);
-        const lines = [element('strong', locale.common('currentNetwork'))];
-        if (grid?.name) lines.push(element('span', grid.name));
-        lines.push(element('code', state.route.gridKey || ''));
-        return lines;
-    });
     function renderNetworks() {
-        const gridKey = state.route.gridKey;
-        const grid = state.grids.find((grid) => grid.key === gridKey);
-        const selectedNetwork = find('#selected-network');
-        selectedNetwork.hidden = !gridKey;
-        const label = grid ? networkLabel(grid) : gridKey || '';
-        if (selectedNetwork.textContent !== label) selectedNetwork.textContent = label;
-        selectedNetwork.setAttribute('aria-label', `${locale.common('currentNetwork')}: ${label}`);
         let networkMessage = '';
         if (state.gridStatus === 'loading') networkMessage = locale.common('loading');
         else if (state.gridError) networkMessage = locale.common(state.gridError);
@@ -729,55 +555,15 @@ export function mount(
     }
 
     function renderDisplay() {
-        const { available, status } = state.iconPack;
-        const nextDisplay = available === true ? terminalDisplay : 'names';
+        const nextDisplay = webSettings.render(state, locale);
         const changed = effectiveDisplay !== nextDisplay;
         effectiveDisplay = nextDisplay;
-        const select = find('#terminal-display');
-        select.value = effectiveDisplay;
-        for (const option of select.options) option.disabled = option.value !== 'names' && available !== true;
-        find('#icon-availability').textContent =
-            status === 'error'
-                ? locale.t('iconsError')
-                : available === false
-                  ? locale.t('iconsUnavailable')
-                  : status === 'loading'
-                    ? locale.t('iconsLoading')
-                    : '';
         find('#items').dataset.display = effectiveDisplay;
         find('#workspace').dataset.resourceDisplay = effectiveDisplay;
         find('#items').classList.toggle('resource-icons-enabled', effectiveDisplay !== 'names');
         find('#workspace').classList.toggle('cpu-icons-enabled', effectiveDisplay !== 'names');
         find('#workspace').classList.toggle('product-icons-enabled', effectiveDisplay !== 'names');
-        find('#icon-notice').hidden =
-            state.route.view !== 'items' ||
-            effectiveDisplay !== 'names' ||
-            available !== true ||
-            iconSuggestionDismissed;
-        const routeGrid =
-            state.gridStatus === 'ready' ? state.grids.find((grid) => grid.key === state.route.gridKey) : undefined;
-        const trackingUnavailable =
-            routeGrid?.isTrackingEnabled === false &&
-            ((state.route.view === 'items' && state.itemStatus === 'ready') ||
-                (state.route.view === 'cpus' &&
-                    (state.cpus.status === 'ready' ||
-                        (state.cpus.status === 'loading' && state.cpus.cpus.length > 0))));
-        find('#tracking-notice').hidden = !trackingUnavailable;
-        find('#tracking-notice-text').textContent = locale.common('trackingDisabledTip');
-        find('#tracking-settings-link').textContent = locale.common('enableTracking');
-        find('#tracking-settings-link').href = routeGrid
-            ? `#/grids/${encodeURIComponent(routeGrid.key)}/settings`
-            : '#/';
-        find('#update-notice').hidden = !updateNotice.visible;
-        find('#update-notice-text').textContent = locale.t('updateAvailable', {
-            version: updateNotice.update?.version || ''
-        });
-        find('#skip-update').disabled = updateNotice.pending;
-        find('#snooze-update').disabled = updateNotice.pending;
-        find('#update-notice-error').hidden = !updateNotice.error;
-        find('#update-notice-error').textContent = updateNotice.error ? locale.t(updateNotice.error) : '';
-        find('#info-notices').hidden =
-            find('#icon-notice').hidden && find('#tracking-notice').hidden && find('#update-notice').hidden;
+        notices.render(state, locale, effectiveDisplay === 'names');
         if (changed) {
             renderPage();
             hideTooltip();
@@ -790,18 +576,8 @@ export function mount(
             language = state.preferences.language;
             updateLabels();
         }
+        header.render(state, locale);
         renderDisplay();
-        document.documentElement.dataset.appearance = appearance;
-        const languageSelect = find('#language');
-        if (![...languageSelect.options].some((option) => option.value === language)) {
-            const option = element('option', language);
-            option.value = language;
-            languageSelect.append(option);
-        }
-        languageSelect.value = language;
-        find('#appearance').value = appearance;
-        find('#font').value = font;
-        document.documentElement.dataset.font = font;
         toolButtons.forEach((button) => {
             if (button.dataset.preference === 'filter') {
                 const current = state.preferences.filter;
@@ -848,20 +624,10 @@ export function mount(
             }
         });
         if (toolTooltip) showToolTooltip(toolTooltip);
-        (root.querySelectorAll('[data-view]') as NodeListOf<HTMLAnchorElement>).forEach((link) => {
-            if (
-                link.dataset.view === state.route.view ||
-                (link.dataset.view === 'items' && state.route.view === 'plan')
-            )
-                link.setAttribute('aria-current', 'page');
-            else link.removeAttribute('aria-current');
-        });
-        find('#auto-refresh').checked = state.preferences.autoRefresh;
         if (find('#search').value !== state.search) find('#search').value = state.search;
         find('#window').hidden = state.route.view === 'home';
         find('#workspace').classList.toggle('with-home', state.route.view === 'home');
         homeView.render(state, locale);
-        find('#web-settings').hidden = state.route.view !== 'web-settings';
         find('#server-settings').hidden = state.route.view !== 'server-settings';
         find('#terminal').hidden = state.route.view !== 'items';
         find('#terminal-tools').hidden = state.route.view !== 'items';
@@ -881,31 +647,6 @@ export function mount(
         if (state.route.view !== 'items' || state.itemStatus === 'error' || menuGrid !== state.route.gridKey)
             closeResourceMenu(false);
         cpuView.render(state.route, state.cpus, locale);
-        const cpuMutations =
-            state.route.view === 'cpus' ? Object.values(state.cpus.outcomes).filter((outcome) => outcome.mutation) : [];
-        const craftingVisible = state.route.view === 'items' || state.route.view === 'plan';
-        const actionPending =
-            updateNotice.pending ||
-            cpuMutations.length > 0 ||
-            (craftingVisible && !!state.crafting.mutation) ||
-            (state.route.view === 'settings' && state.settings.saving);
-        const viewLoading =
-            (state.route.view === 'cpus' && (state.cpus.reading || state.cpus.status === 'loading')) ||
-            (craftingVisible && ['loading', 'calculating'].includes(state.crafting.status)) ||
-            (state.route.view === 'history' && (state.history.reading || state.history.status === 'loading')) ||
-            (state.route.view === 'settings' && state.settings.status === 'loading') ||
-            (state.route.view === 'home' && state.home.networks.some((network) => network.status === 'loading'));
-        const active =
-            state.refreshingView || state.refreshing || state.gridStatus === 'loading' || viewLoading || actionPending;
-        find('#refresh').setAttribute('aria-busy', String(active));
-        find('#activity').hidden = !active;
-        find('#activity').setAttribute('aria-label', locale.common('activity'));
-        find('#activity').setAttribute('aria-live', actionPending ? 'polite' : 'off');
-        let activityLabel = 'loading';
-        if (cpuMutations.some((outcome) => outcome.mutation === 'cancel')) activityLabel = 'cpuCancelling';
-        else if (cpuMutations.length) activityLabel = 'cpuUpdating';
-        else if (state.route.view === 'cpus') activityLabel = 'cpuRefreshing';
-        find('#activity-text').textContent = active ? locale.common(activityLabel) : '';
         historyView.render(state, locale);
         settingsView.render(state, locale);
         aboutView.render(state.route, locale);
@@ -954,18 +695,6 @@ export function mount(
             },
             mobileHeading
         );
-        const gridKey = state.route.gridKey || state.selectedGridKey;
-        find('#cpu-link').hidden = !gridKey;
-        find('#terminal-link').hidden = !gridKey;
-        find('#terminal-link').href = `#/grids/${encodeURIComponent(String(gridKey))}/items`;
-        find('#cpu-link').href = cpuHref(gridKey);
-        find('#history-link').hidden = !gridKey;
-        find('#history-link').href = historyHref(gridKey);
-        find('#settings-link').hidden = !gridKey;
-        find('#settings-link').href = `#/grids/${encodeURIComponent(String(gridKey))}/settings`;
-        find('#updated').textContent = state.updatedAt
-            ? locale.common('updated', { time: locale.time(state.updatedAt) })
-            : '';
     }
     const search = find('#search');
     search.addEventListener('input', () => {
@@ -990,74 +719,6 @@ export function mount(
     search.addEventListener('focus', showSearchHelp);
     search.addEventListener('pointerleave', hideTooltip);
     search.addEventListener('blur', hideTooltip);
-    const languageSelect = find('#language');
-    languageSelect.addEventListener('change', () => application.preference('language', languageSelect.value));
-    const manageThemes = root.querySelector<HTMLButtonElement>('#manage-themes')!;
-    root.querySelector<HTMLElement>('#theme-settings')!.hidden = !themes;
-    manageThemes.addEventListener('click', () => themes?.open());
-    const appearanceSelect = find('#appearance');
-    const fontSelect = find('#font');
-    find('#resource-columns').addEventListener('change', () => {
-        const value = find('#resource-columns').value;
-        const count = value === 'auto' ? 0 : Number(value);
-        if (!Number.isInteger(count) || count < 0 || count > 8) return;
-        resourceColumns = count;
-        settings.set('resourceColumns', resourceColumns);
-        renderColumns();
-    });
-    const displaySelect = find('#terminal-display');
-    function acknowledgeIconSuggestion() {
-        iconSuggestionDismissed = true;
-        settings.set('iconSuggestionDismissed', true);
-    }
-    function selectDisplay(value: TerminalDisplay) {
-        terminalDisplay = value;
-        settings.set('terminalDisplay', terminalDisplay);
-        acknowledgeIconSuggestion();
-        application.displayIcons(terminalDisplay !== 'names');
-        renderDisplay();
-    }
-    displaySelect.addEventListener('change', () => {
-        if (!['names', 'both', 'icons'].includes(displaySelect.value)) return;
-        if (displaySelect.value !== 'names' && state.iconPack.available !== true) return;
-        selectDisplay(displaySelect.value as TerminalDisplay);
-    });
-    find('#enable-icons').addEventListener('click', () => {
-        selectDisplay('both');
-        find('#search').focus();
-    });
-    bindTooltip(find('#snooze-update'), () => [element('span', locale.t('remindLaterHelp'))]);
-    bindTooltip(find('#skip-update'), () => [element('span', locale.t('skipUpdateHelp'))]);
-    find('#skip-update').addEventListener('click', async () => {
-        hideTooltip();
-        await updateNotice.skip();
-        if (!updateNotice.visible && !disposed) find('#refresh').focus();
-    });
-    function dismissUpdate(snooze: boolean) {
-        updateNotice.dismiss(snooze);
-        hideTooltip();
-        renderDisplay();
-        find('#refresh').focus();
-    }
-    find('#dismiss-update').addEventListener('click', () => dismissUpdate(false));
-    find('#snooze-update').addEventListener('click', () => dismissUpdate(true));
-    find('#dismiss-icons').addEventListener('click', () => {
-        acknowledgeIconSuggestion();
-        renderDisplay();
-        find('#search').focus();
-    });
-    fontSelect.addEventListener('change', () => {
-        if (fontSelect.value !== 'monocraft' && fontSelect.value !== 'montserrat') return;
-        font = fontSelect.value;
-        settings.set('font', font);
-        document.documentElement.dataset.font = font;
-    });
-    appearanceSelect.addEventListener('change', () => {
-        if (!appearances.includes(appearanceSelect.value)) return;
-        appearance = appearanceSelect.value;
-        settings.set('appearance', appearance);
-        document.documentElement.dataset.appearance = appearance;
-    });
     function showToolTooltip(button: HTMLButtonElement) {
         hideTooltip();
         itemTooltip = null;
@@ -1106,8 +767,6 @@ export function mount(
         button.addEventListener('focus', show);
         button.addEventListener('blur', hideTooltip);
     });
-    const autoRefresh = find('#auto-refresh');
-    autoRefresh.addEventListener('change', () => application.preference('autoRefresh', autoRefresh.checked));
     find('#previous-page').addEventListener('click', () => {
         page--;
         renderPage();
@@ -1117,27 +776,6 @@ export function mount(
         page++;
         renderPage();
         find('#item-scroll').scrollTop = 0;
-    });
-    bindTooltip(find('#logout'), () => [element('span', locale.common('logout'))]);
-    bindTooltip(find('#refresh'), () => {
-        const lines = [element('span', locale.common('refresh'))];
-        if (state.updatedAt)
-            lines.push(element('span', locale.common('updated', { time: locale.time(state.updatedAt) })));
-        return lines;
-    });
-    find('#refresh').addEventListener('click', () => {
-        void application.refresh({ reloadDetail: true });
-    });
-    find('#logout').addEventListener('click', async () => {
-        find('#logout').disabled = true;
-        find('#session-message').hidden = true;
-        try {
-            await logout();
-        } catch (error) {
-            find('#session-message').textContent = locale.common((error as ApiError).status);
-            find('#session-message').hidden = false;
-            find('#logout').disabled = false;
-        }
     });
 
     const keydown = (event: KeyboardEvent) => {
@@ -1149,9 +787,7 @@ export function mount(
     window.addEventListener('scroll', hideTooltip, { capture: true, signal: lifetime.signal });
     window.addEventListener('resize', hideTooltip, { signal: lifetime.signal });
     window.addEventListener('keydown', keydown, { signal: lifetime.signal });
-    let disposed = false;
     lifetime.onCleanup(() => {
-        disposed = true;
         resourceMenu.remove();
         hideTooltip();
     });
