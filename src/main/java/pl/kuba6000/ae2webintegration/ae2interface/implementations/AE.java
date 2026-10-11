@@ -30,6 +30,7 @@ public class AE implements IAE {
     static {
         Map<ServerCapability, Boolean> capabilities = new EnumMap<>(ServerCapability.class);
         capabilities.put(ServerCapability.CRAFTING_LIGHT_MODE, false);
+        capabilities.put(ServerCapability.CRAFTING_IGNORE_MISSING, false);
         capabilities.put(ServerCapability.CRAFTING_PLAN_STEPS, false);
         capabilities.put(ServerCapability.CPU_SELECTION_MODE, false);
         CAPABILITIES = Collections.unmodifiableMap(capabilities);
