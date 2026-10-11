@@ -1,10 +1,9 @@
-import type { TerminalState, createTerminal } from '../../app/terminal.js';
+import type { ThemeState as TerminalState, ThemeApplication as Terminal } from '../../app/theme-api.js';
 import type { AccessSource } from '../../app/api-types.js';
 import type { Translator as Locale } from '../../app/i18n.js';
 import { networkNameError } from '../../app/settings.js';
 import { networkIcon } from './icons/hackernoon/chart-network.js';
 import { networkLabel } from './network.js';
-type Terminal = ReturnType<typeof createTerminal>;
 
 function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
@@ -142,7 +141,7 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
         identity.append(element('span', 'UUID'), element('code', uuid));
         const list = element('ul');
         details.append(summary, identity, list);
-        const person = { details, name, count, list, entries: [] as AccessSource[] };
+        const person = { details, name, count, list, entries: [] as readonly AccessSource[] };
         details.addEventListener('toggle', () => renderSources(person));
         return person;
     }

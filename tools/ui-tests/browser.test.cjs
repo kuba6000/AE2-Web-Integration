@@ -349,6 +349,19 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
             headers: request.headers,
             body: body.length ? JSON.parse(Buffer.concat(body).toString()) : null
         });
+        // Test-owned theme modules exercise the same bootstrap and HTTP services as production.
+        if (options.themeEntry && resource === '/__theme-test.js') {
+            response.writeHead(200, { 'Content-Type': 'text/javascript' }).end(options.themeEntry);
+            return;
+        }
+        if (options.themeEntry && resource === '/') {
+            response
+                .writeHead(200, { 'Content-Type': 'text/html' })
+                .end(
+                    '<!doctype html><title>Theme fixture</title><main id="app"></main><script type="module" src="./__theme-test.js"></script>'
+                );
+            return;
+        }
         if (resource.startsWith('/api/')) {
             if (resource.startsWith('/api/icon-packs/')) {
                 options.activePages = (options.activePages || 0) + 1;
@@ -9027,4 +9040,122 @@ test('phone panel icon buttons belong to the window heading with search below', 
     await page.getByRole('dialog', { name: 'Resource details', exact: true }).waitFor();
     await page.keyboard.press('Escape');
     assert.equal(await details.evaluate((node) => document.activeElement === node), true);
+});
+
+// Public theme/browser/HTTP seam: recovery must release presentation resources while preserving
+// successful server data and the application operation already started by the user's action.
+test('theme partial mount failure releases external nodes and aborts event handlers before retry', async (t) => {
+    const { page, options, base } = await fixture(t);
+    page.setDefaultTimeout(3000);
+    page.setDefaultNavigationTimeout(5000);
+    options.themeEntry = `
+        import { boot } from './assets/web/app/boot.js';
+        let mounts = 0;
+        boot(document.getElementById('app'), {
+            id: 'mount-fault', name: 'Mount fault', supportedModVersion: '1.2.x', views: ['home'],
+            mount(root, application, context) {
+                mounts++;
+                const external = document.createElement('aside');
+                external.textContent = 'External presentation resource';
+                external.dataset.external = String(mounts);
+                document.body.append(external);
+                context.lifetime.onCleanup(() => external.remove());
+                window.addEventListener('theme-probe', () => { document.title += '!'; }, { signal: context.lifetime.signal });
+                if (mounts === 1) throw new Error('Test theme partial mount failure');
+                const output = document.createElement('output');
+                output.setAttribute('aria-label', 'Theme data');
+                root.append(output);
+                application.subscribe(state => { output.textContent = state.gridStatus; });
+            }
+        });`;
+    await page.goto(base);
+    await page.getByRole('alert').waitFor();
+    assert.equal(await page.locator('[data-external]').count(), 0);
+    await page.evaluate(() => window.dispatchEvent(new Event('theme-probe')));
+    assert.equal(await page.title(), 'Theme fixture');
+    await page.getByRole('button', { name: 'Try again', exact: true }).click();
+    await page.getByRole('status', { name: 'Theme data' }).filter({ hasText: 'ready' }).waitFor();
+    assert.equal(await page.locator('[data-external]').count(), 1);
+    await page.evaluate(() => window.dispatchEvent(new Event('theme-probe')));
+    assert.equal(await page.title(), 'Theme fixture!');
+    assert.equal(options.requests.filter((request) => request.path === '/api/context').length, 1);
+});
+
+test('theme render failure preserves loaded resources and pending crafting without replay on retry', async (t) => {
+    const { page, options, base } = await fixture(t);
+    page.setDefaultTimeout(3000);
+    page.setDefaultNavigationTimeout(5000);
+    let release;
+    const pending = new Promise((resolve) => {
+        release = resolve;
+    });
+    await page.route('**/api/grids/*/crafting-plans', async (route) => {
+        await pending;
+        await route.continue();
+    });
+    options.themeEntry = `
+        import { boot } from './assets/web/app/boot.js';
+        let mounts = 0;
+        boot(document.getElementById('app'), {
+            id: 'render-fault', name: 'Render fault', supportedModVersion: '1.2.x', views: ['items', 'plan'],
+            mount(root, application) {
+                mounts++;
+                const output = document.createElement('output');
+                output.setAttribute('aria-label', 'Theme data');
+                const calculate = document.createElement('button');
+                calculate.textContent = 'Calculate';
+                calculate.onclick = () => application.crafting.create(application.state.items[0], 12);
+                root.append(output, calculate);
+                application.subscribe(state => {
+                    if (mounts === 1 && state.crafting.mutation === 'create') throw new Error('Test renderer failure');
+                    output.textContent = JSON.stringify({
+                        itemStatus: state.itemStatus, items: state.items.map(item => item.displayName),
+                        grids: state.grids.length, mutation: state.crafting.mutation, craftingStatus: state.crafting.status
+                    });
+                    calculate.disabled = state.itemStatus !== 'ready' || !!state.crafting.mutation;
+                });
+            }
+        });`;
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const data = page.getByRole('status', { name: 'Theme data' });
+    await data.filter({ hasText: 'Iron Ingot' }).waitFor();
+    const request = page.waitForRequest(
+        (request) => request.method() === 'POST' && request.url().endsWith('/crafting-plans')
+    );
+    await page.getByRole('button', { name: 'Calculate', exact: true }).click();
+    await request;
+    await page.getByRole('alert').waitFor();
+    const reads = options.requests.filter(
+        (request) => request.path.startsWith('/api/') && request.method === 'GET'
+    ).length;
+    await page.getByRole('button', { name: 'Try again', exact: true }).click();
+    const snapshot = JSON.parse(await data.textContent());
+    assert.equal(snapshot.itemStatus, 'ready');
+    assert.deepEqual(snapshot.items, [iron.displayName, quartz.displayName]);
+    assert.equal(snapshot.grids, 2);
+    assert.equal(snapshot.mutation, 'create');
+    assert.equal(await page.getByRole('button', { name: 'Calculate', exact: true }).isDisabled(), true);
+    assert.equal(
+        options.requests.filter((request) => request.path.startsWith('/api/') && request.method === 'GET').length,
+        reads
+    );
+    release();
+    await page.waitForURL(`**/#/grids/${gridA}/plans/7`);
+    await data.filter({ hasText: '"craftingStatus":"ready"' }).waitFor();
+    assert.equal(options.requests.filter((request) => request.path === '/api/context').length, 1);
+    assert.equal(options.requests.filter((request) => request.method === 'POST').length, 1);
+});
+
+test('a restored cached page reloads its disposed application', async (t) => {
+    const { page, options, base } = await fixture(t);
+    page.setDefaultTimeout(3000);
+    page.setDefaultNavigationTimeout(5000);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('searchbox', { name: 'Search resources', exact: true }).waitFor();
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+    const reload = page.waitForRequest((request) => new URL(request.url()).pathname === '/api/context');
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+    await reload;
+    await page.getByRole('searchbox', { name: 'Search resources', exact: true }).waitFor();
+    assert.equal(options.requests.filter((request) => request.path === '/api/context').length, 2);
 });

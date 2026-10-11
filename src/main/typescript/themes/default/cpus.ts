@@ -1,10 +1,9 @@
-import { registryId } from './resource-metadata.js';
+import { registryId } from '../../app/resource-helpers.js';
 import type { CpuOutcome } from '../../app/cpus.js';
-import type { TerminalState, createTerminal } from '../../app/terminal.js';
+import type { ThemeState as TerminalState, ThemeApplication as Terminal, ThemeLifetime } from '../../app/theme-api.js';
 import type { CpuResource, CpuSelectionMode } from '../../app/api-types.js';
 import type { Translator as Locale } from '../../app/i18n.js';
 import type { createThemeContext } from '../../app/theme-context.js';
-type Terminal = ReturnType<typeof createTerminal>;
 type ResourceSort = 'name' | 'active' | 'pending' | 'stored' | 'shareInCraftingTime';
 const selectionModes: Record<CpuSelectionMode, { order: number; label: string }> = {
     PLAYER_ONLY: { order: 0, label: 'cpuPlayerOnly' },
@@ -38,9 +37,14 @@ function element<Tag extends keyof HTMLElementTagNameMap>(
 export function createCpuView(
     root: HTMLElement,
     application: Terminal,
-    { workspace, settings }: { workspace: HTMLElement; settings: ReturnType<typeof createThemeContext>['settings'] }
+    {
+        workspace,
+        settings,
+        lifetime: themeLifetime
+    }: { lifetime: ThemeLifetime; workspace: HTMLElement; settings: ReturnType<typeof createThemeContext>['settings'] }
 ) {
     const lifetime = new AbortController();
+    themeLifetime.onCleanup(() => lifetime.abort());
     const view = element('section', '', 'cpu-view');
     view.hidden = true;
     const overview = element('div', '', 'cpu-overview');
@@ -82,6 +86,7 @@ export function createCpuView(
     const grid = element('ul', '', 'resource-grid cpu-items');
     const icons = application.icons.observe(scroll, paintResourceIcon);
     const slots = createSlotGrid(grid, scroll, terminal);
+    themeLifetime.onCleanup(slots.dispose);
     const empty = element('p', '', 'cpu-empty');
     scroll.append(grid);
     body.append(empty, scroll);

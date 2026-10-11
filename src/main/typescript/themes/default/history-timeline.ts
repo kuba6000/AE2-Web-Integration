@@ -1,6 +1,15 @@
-import { registryId } from './resource-metadata.js';
+import type { ReadonlyData } from '../../app/theme-api.js';
+type CraftingHistory = ReadonlyData<MutableHistory>;
+type ResourceTiming = ReadonlyData<MutableResource>;
+type ProviderTiming = ReadonlyData<MutableProvider>;
+import { registryId } from '../../app/resource-helpers.js';
 import type { Translator } from '../../app/i18n.js';
-import type { CraftingHistory, ResourceTiming, ProviderTiming, Timing } from '../../app/api-types.js';
+import type {
+    CraftingHistory as MutableHistory,
+    ResourceTiming as MutableResource,
+    ProviderTiming as MutableProvider,
+    Timing
+} from '../../app/api-types.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { createResourceIcon } from './resource-icon.js';
@@ -15,7 +24,7 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): 
 }
 
 // Resolution bounds chart geometry independently of the number of recorded intervals.
-function activityTrack(timings: Timing[], started: number, duration: number, label: string) {
+function activityTrack(timings: readonly Timing[], started: number, duration: number, label: string) {
     const track = element('div');
     track.className = 'history-track';
     track.role = 'img';
@@ -317,7 +326,9 @@ export function renderHistoryTimeline(
         quantityColumn.textContent = t(providers ? 'historyIntervalCount' : 'cpuCraftedTotal');
         sort.options[1].textContent = t(providers ? 'historyIntervalCount' : 'quantity');
         const query = search.value.trim().toLocaleLowerCase();
-        const rows: Array<ResourceTiming | ProviderTiming> = providers ? snapshot.interfaceShare : snapshot.items;
+        const rows: ReadonlyArray<ResourceTiming | ProviderTiming> = providers
+            ? snapshot.interfaceShare
+            : snapshot.items;
         const displayName = (row: ResourceTiming | ProviderTiming) =>
             plainMinecraftText('displayName' in row ? row.displayName : row.name);
         const matching = rows.filter(

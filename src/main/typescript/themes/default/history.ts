@@ -1,6 +1,6 @@
-import { registryId } from './resource-metadata.js';
+import { registryId } from '../../app/resource-helpers.js';
 import type { HistoryEntry } from '../../app/api-types.js';
-import type { TerminalState, createTerminal } from '../../app/terminal.js';
+import type { ThemeState as TerminalState, ThemeApplication as Terminal } from '../../app/theme-api.js';
 import type { Translator as Locale } from '../../app/i18n.js';
 
 import { infoCircle } from './icons/hackernoon/info-circle.js';
@@ -17,11 +17,7 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): 
     return node;
 }
 
-export function createHistoryView(
-    root: HTMLElement,
-    application: ReturnType<typeof createTerminal>,
-    bindTooltip: HistoryTooltipBinder
-) {
+export function createHistoryView(root: HTMLElement, application: Terminal, bindTooltip: HistoryTooltipBinder) {
     const view = element('section');
     view.hidden = true;
     view.className = 'history-view';

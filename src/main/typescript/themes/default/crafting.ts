@@ -1,8 +1,7 @@
-import { registryId } from './resource-metadata.js';
+import { selectPlanResources } from '../../app/resource-helpers.js';
 import type { StoredResource, ResourceStack } from '../../app/api-types.js';
-import type { TerminalState, createTerminal } from '../../app/terminal.js';
+import type { ThemeState as TerminalState, ThemeApplication as Terminal, ThemeLifetime } from '../../app/theme-api.js';
 import type { Translator as Locale } from '../../app/i18n.js';
-type Terminal = ReturnType<typeof createTerminal>;
 
 import { createSlotGrid } from './slot-grid.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
@@ -39,9 +38,14 @@ export function createCraftingView(
     application: Terminal,
     workspace: HTMLElement,
     tooltip: CraftingTooltipPresenter,
-    beforeDialog: (source: HTMLElement) => HTMLElement
+    beforeDialog: (source: HTMLElement) => HTMLElement,
+    lifetime: ThemeLifetime
 ) {
     const dialog = element('dialog');
+    lifetime.onCleanup(() => {
+        dialog.close();
+        dialog.remove();
+    });
     dialog.className = 'window-frame crafting-dialog';
     dialog.setAttribute('aria-labelledby', 'craft-dialog-title');
     const dialogTitle = element('h2');
@@ -201,6 +205,7 @@ export function createCraftingView(
     scroll.append(grid);
     planBody.append(scroll);
     const slots = createSlotGrid(grid, scroll, planView);
+    lifetime.onCleanup(slots.dispose);
     const icons = application.icons.observe(scroll, paintResourceIcon);
     const tools = element('div');
     tools.className = 'terminal-tools plan-tools';
@@ -468,32 +473,12 @@ export function createCraftingView(
                 lastLocale = locale;
                 lastPresentation = presentation;
                 const language = document.documentElement.lang;
-                const terms = state.search.trim().toLocaleLowerCase(language).split(/\s+/);
-                const rows = (state.plan?.plan || [])
-                    .filter((row) => {
-                        const text = `${plainMinecraftText(row.displayName)} ${registryId(row)}`.toLocaleLowerCase(
-                            language
-                        );
-                        return terms.every((term) =>
-                            term.startsWith('@')
-                                ? (row.registryNamespace || '').toLocaleLowerCase(language).includes(term.slice(1))
-                                : text.includes(term)
-                        );
-                    })
-                    .sort((a, b) => {
-                        const groupA = a.missing > 0 ? 0 : a.requested > 0 ? 1 : 2;
-                        const groupB = b.missing > 0 ? 0 : b.requested > 0 ? 1 : 2;
-                        if (groupA !== groupB) return groupA - groupB;
-                        const names = plainMinecraftText(a.displayName).localeCompare(
-                            plainMinecraftText(b.displayName),
-                            language
-                        );
-                        const amount =
-                            sortBy === 'quantity'
-                                ? a.stored + a.requested + a.missing - (b.stored + b.requested + b.missing)
-                                : a.steps - b.steps;
-                        return (sortBy === 'name' ? names : amount) * (state.descending ? -1 : 1) || names;
-                    });
+                const rows = selectPlanResources(state.plan?.plan || [], {
+                    search: state.search,
+                    language,
+                    sort: sortBy,
+                    sortOrder: state.descending ? 'descending' : 'ascending'
+                });
                 // Let the shared grid own its decorative cells across updates.
                 for (const row of [...grid.children]) if (!row.classList.contains('empty-slot')) row.remove();
                 let metricRows = 0;

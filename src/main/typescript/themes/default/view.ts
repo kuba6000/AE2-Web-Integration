@@ -2,13 +2,11 @@ import { createMobilePanels, type MobilePane } from './mobile-panels.js';
 import { filterIcon } from './icons/hackernoon/filter.js';
 import { networkIcon } from './icons/hackernoon/chart-network.js';
 import { cpuChipIcon } from './icons/pixel/cpu-controls.js';
-import { registryId } from './resource-metadata.js';
+import { registryId, selectResources } from '../../app/resource-helpers.js';
 import type { ApiError } from '../../app/api.js';
-import type { createUpdateNotice } from '../../app/update-notice.js';
-import type { createThemeContext } from '../../app/theme-context.js';
-import type { TerminalState, createTerminal } from '../../app/terminal.js';
+import type { ThemeContext } from '../../app/theme-api.js';
+import type { ThemeState as TerminalState, ThemeApplication as Terminal } from '../../app/theme-api.js';
 import type { Translator as Locale } from '../../app/i18n.js';
-type Terminal = ReturnType<typeof createTerminal>;
 
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
@@ -51,20 +49,11 @@ function iconButton(group: 'filter' | 'sort' | 'sortOrder' | 'showItems' | 'show
 export function mount(
     root: HTMLElement,
     application: Terminal,
-    {
-        user,
-        modVersion,
-        updateNotice,
-        logout,
-        settings,
-        i18n
-    }: ReturnType<typeof createThemeContext> & {
-        user: { username: string; isAdmin: boolean };
-        modVersion: string | null;
-        updateNotice: ReturnType<typeof createUpdateNotice>;
-        logout: () => Promise<void>;
-    }
+    { user, modVersion, updateNotice, logout, settings, i18n, lifetime }: ThemeContext
 ) {
+    lifetime.onCleanup(() => {
+        delete document.documentElement.dataset.appearance;
+    });
     i18n.register({
         en: {
             navigation: 'Navigation',
@@ -286,7 +275,9 @@ export function mount(
         }
     > = root.querySelectorAll('.tool-button');
     const mobile = createMobilePanels(root, find('#workspace'), root.querySelector('.view-tabs')!, hideTooltip);
+    lifetime.onCleanup(() => mobile.dispose());
     const homeView = createHomeView(find('#workspace'), application, mobile.beforeDialog);
+    lifetime.onCleanup(() => homeView.dispose());
     const craftingView = createCraftingView(
         find('#window'),
         application,
@@ -296,12 +287,17 @@ export function mount(
             hide: hideTooltip,
             metadata: (resource) => resourceMetadata(resource, 'span')
         },
-        mobile.beforeDialog
+        mobile.beforeDialog,
+        lifetime
     );
+    lifetime.onCleanup(() => craftingView.dispose());
     const itemIcons = application.icons.observe(find('#item-scroll'), paintResourceIcon);
     const slots = createSlotGrid(find('#items'), find('#item-scroll'), find('#terminal'));
-    const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace'), settings });
+    lifetime.onCleanup(() => slots.dispose());
+    const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace'), settings, lifetime });
+    lifetime.onCleanup(() => cpuView.dispose());
     const historyView = createHistoryView(find('#window'), application, bindTooltip);
+    lifetime.onCleanup(() => historyView.dispose());
     const settingsView = createSettingsView(find('#window'), application);
     const aboutView = createAboutView(find('#window'), modVersion);
     const tooltip = element('div', '', 'tooltip');
@@ -515,43 +511,15 @@ export function mount(
                 page = 0;
                 find('#item-scroll').scrollTop = 0;
             }
-            const terms = state.search.trim().toLocaleLowerCase(language).split(/\s+/);
-            allFiltered = state.items
-                .map((item) => ({ item, name: plainMinecraftText(item.displayName) }))
-                .filter(({ item, name }) => {
-                    const text = `${name} ${registryId(item)}`.toLocaleLowerCase(language);
-                    const mod = (item.registryNamespace ?? '').toLocaleLowerCase(language);
-                    return terms.every((term) =>
-                        term.startsWith('@') ? mod.includes(term.slice(1)) : text.includes(term)
-                    );
-                })
-                .filter(({ item }) =>
-                    item.resourceType === 'ITEM'
-                        ? state.preferences.showItems
-                        : item.resourceType === 'FLUID'
-                          ? state.preferences.showFluids
-                          : true
-                )
-                .filter(
-                    ({ item }) =>
-                        state.preferences.filter === 'all' ||
-                        (state.preferences.filter === 'stored' ? item.quantity > 0 : item.craftable)
-                )
-                .sort((a, b) => {
-                    const primary =
-                        state.preferences.sort === 'quantity'
-                            ? a.item.quantity - b.item.quantity
-                            : state.preferences.sort === 'id'
-                              ? registryId(a.item).localeCompare(registryId(b.item), language)
-                              : a.name.localeCompare(b.name, language);
-                    return (
-                        primary * (state.preferences.sortOrder === 'ascending' ? 1 : -1) ||
-                        a.name.localeCompare(b.name, language) ||
-                        registryId(a.item).localeCompare(registryId(b.item), language) ||
-                        (a.item.itemKey || '').localeCompare(b.item.itemKey || '')
-                    );
-                })
-                .map(({ item }) => item);
+            allFiltered = selectResources(state.items, {
+                search: state.search,
+                language,
+                filter: state.preferences.filter,
+                showItems: state.preferences.showItems,
+                showFluids: state.preferences.showFluids,
+                sort: state.preferences.sort,
+                sortOrder: state.preferences.sortOrder
+            });
             listInput = { items: state.items, signature };
             renderPage();
         }
@@ -617,7 +585,7 @@ export function mount(
     const outsideResourceMenu = (event: PointerEvent) => {
         if (!resourceMenu.contains(event.target as Node)) closeResourceMenu(false);
     };
-    window.addEventListener('pointerdown', outsideResourceMenu);
+    window.addEventListener('pointerdown', outsideResourceMenu, { signal: lifetime.signal });
 
     function createItemRow(item: TerminalState['items'][number]) {
         const row = {
@@ -1151,30 +1119,15 @@ export function mount(
             closeResourceMenu(true);
         }
     };
-    window.addEventListener('scroll', hideTooltip, true);
-    window.addEventListener('resize', hideTooltip);
-    window.addEventListener('keydown', keydown);
+    window.addEventListener('scroll', hideTooltip, { capture: true, signal: lifetime.signal });
+    window.addEventListener('resize', hideTooltip, { signal: lifetime.signal });
+    window.addEventListener('keydown', keydown, { signal: lifetime.signal });
     let disposed = false;
-    const unsubscribe = application.subscribe(render);
-    const unsubscribeUpdate = updateNotice.subscribe(() => render(state));
-    return () => {
+    lifetime.onCleanup(() => {
         disposed = true;
-        unsubscribeUpdate();
-        unsubscribe();
-        mobile.dispose();
-        slots.dispose();
-        cpuView.dispose();
-        homeView.dispose();
-        craftingView.dispose();
         resourceMenu.remove();
-        window.removeEventListener('pointerdown', outsideResourceMenu);
-        historyView.dispose();
-        itemIcons.dispose();
         hideTooltip();
-        window.removeEventListener('scroll', hideTooltip, true);
-        window.removeEventListener('resize', hideTooltip);
-        window.removeEventListener('keydown', keydown);
-        delete document.documentElement.dataset.appearance;
-        root.replaceChildren();
-    };
+    });
+    application.subscribe(render);
+    updateNotice.subscribe(() => render(state));
 }

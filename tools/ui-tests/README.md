@@ -14,7 +14,10 @@ npx playwright install chromium
 npm test
 ```
 
-`npm test` compiles the frontend before starting the browser tests.
+`npm test` compiles the frontend, generates the theme SDK and builds the standalone theme example
+before starting the tests. It also checks optional public resource helpers and runs the example
+against its local simulated HTTP API. Theme lifecycle tests cover partial mount cleanup, presentation
+failure during an in-flight mutation, retry without replay, and persisted-page restoration events.
 
 Tests cover discovery, item browsing, navigation, preferences, delayed responses,
 access failures and login destination preservation. Crafting coverage uses visible

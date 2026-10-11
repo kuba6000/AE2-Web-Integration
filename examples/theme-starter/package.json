@@ -1,0 +1,12 @@
+{
+  "name": "ae2wi-list-theme-starter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@ae2wi/theme-api": "file:./sdk",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,4 +1,4 @@
-import type { TerminalState, createTerminal } from '../../app/terminal.js';
+import type { ThemeState as TerminalState, ThemeApplication as Terminal } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
 import { homeIcon } from './icons/hackernoon/home.js';
 import { networkIcon } from './icons/hackernoon/chart-network.js';
@@ -16,7 +16,7 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className = 
 /** Home presentation and chooser lifetime; discovery and CPU reads belong to the application. */
 export function createHomeView(
     root: HTMLElement,
-    application: ReturnType<typeof createTerminal>,
+    application: Terminal,
     beforeDialog: (source: HTMLElement) => HTMLElement
 ) {
     const view = element('section', 'window-frame home-dashboard');

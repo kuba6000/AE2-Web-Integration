@@ -8,6 +8,7 @@ const translations: Dictionaries = {
         historyFinalProduct: 'Final product',
         historyCraftedBy: 'Crafted by',
         historyProviderPages: 'Provider pages',
+        themeFailed: 'This theme could not display the page. Your data and pending operations are preserved.',
         bootstrapLoading: 'Loading server settings…',
         bootstrapError: 'Could not load server settings. Check the connection and try again.',
         historyStartedLabel: 'Started',
