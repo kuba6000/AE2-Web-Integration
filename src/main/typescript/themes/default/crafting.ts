@@ -38,7 +38,8 @@ export function createCraftingView(
     root: HTMLElement,
     application: Terminal,
     workspace: HTMLElement,
-    tooltip: CraftingTooltipPresenter
+    tooltip: CraftingTooltipPresenter,
+    beforeDialog: (source: HTMLElement) => HTMLElement
 ) {
     const dialog = element('dialog');
     dialog.className = 'window-frame crafting-dialog';
@@ -129,7 +130,7 @@ export function createCraftingView(
         if (!selected.craftable || !selected.itemKey || application.state.route.view !== 'items') return;
         item = selected;
         gridKey = application.state.route.gridKey;
-        opener = source;
+        opener = beforeDialog(source);
         quantity.value = '1';
         quantity.setCustomValidity('');
         quantity.removeAttribute('aria-invalid');

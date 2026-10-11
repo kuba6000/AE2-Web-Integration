@@ -14,7 +14,11 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className = 
 }
 
 /** Home presentation and chooser lifetime; discovery and CPU reads belong to the application. */
-export function createHomeView(root: HTMLElement, application: ReturnType<typeof createTerminal>) {
+export function createHomeView(
+    root: HTMLElement,
+    application: ReturnType<typeof createTerminal>,
+    beforeDialog: (source: HTMLElement) => HTMLElement
+) {
     const view = element('section', 'window-frame home-dashboard');
     view.id = 'home';
     view.innerHTML = `<div class="terminal-heading"><h2>${homeIcon}<span></span></h2></div>
@@ -48,7 +52,14 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
     const options = dialog.querySelector<HTMLElement>('.network-options')!;
     root.append(view, panel);
     root.after(dialog);
-    choose.addEventListener('click', () => dialog.showModal());
+    let opener: HTMLElement = choose;
+    choose.addEventListener('click', () => {
+        opener = beforeDialog(choose);
+        dialog.showModal();
+    });
+    dialog.addEventListener('close', () => {
+        if (opener.isConnected && opener.getClientRects().length) opener.focus({ preventScroll: true });
+    });
     close.addEventListener('click', () => dialog.close());
     retry.addEventListener('click', () => void application.refresh());
     const choices = new Map<string, ReturnType<typeof createChoice>>();

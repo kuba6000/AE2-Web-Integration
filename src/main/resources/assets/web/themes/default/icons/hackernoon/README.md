@@ -20,6 +20,10 @@ CPU pause/resume controls use the original 24 × 24 outlines from
 and [`play.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/play.svg),
 rendered in the button text color.
 
+Mobile filter controls use the original 24 × 24 outline from
+[`filter.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/filter.svg),
+rendered in the button text color.
+
 CPU cancellation uses the original 24 × 24 outline from
 [`times.svg`](https://github.com/hackernoon/pixel-icon-library/blob/fa562540941211a9f7e2fb236b9cbd40810d95f1/icons/SVG/regular/times.svg),
 rendered in the cancellation button text color. The pause outline also marks paused CPU statuses.

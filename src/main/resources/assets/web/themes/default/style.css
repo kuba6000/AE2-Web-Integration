@@ -1338,6 +1338,12 @@ label {
     gap: 6px;
     min-width: 0;
 }
+.account-actions {
+    display: flex;
+    align-items: center;
+    flex: none;
+    gap: inherit;
+}
 .user-icon {
     width: 24px;
     height: 24px;
@@ -1354,12 +1360,16 @@ label {
     font-size: 12px;
     padding: 6px 9px;
 }
-.account-controls .account-action {
+.account-controls .account-action,
+.mobile-toolbar button {
+    display: grid;
+    place-items: center;
     width: 32px;
     height: 32px;
-    padding: 6px;
+    padding: 0;
 }
-.account-action .theme-icon {
+.account-action .theme-icon,
+.mobile-toolbar button > svg {
     display: block;
     width: 18px;
     height: 18px;
@@ -2035,16 +2045,8 @@ code {
 #item-message:empty {
     display: none;
 }
-footer {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    margin: 15px 4px;
-    font-size: 11px;
-    color: #a9a2b4;
-}
-footer a {
-    color: #a9a2b4;
+#updated {
+    display: none;
 }
 .sr-only {
     position: absolute;
@@ -2294,9 +2296,6 @@ footer a {
     .item .quantity {
         font-size: 13px;
     }
-    footer {
-        font-size: 10px;
-    }
 }
 @media (max-height: 600px) {
     body {
@@ -2328,9 +2327,6 @@ footer a {
     }
     #item-message {
         margin-bottom: 4px;
-    }
-    footer {
-        margin-block: 6px;
     }
 }
 @media (max-width: 560px) and (max-height: 600px) {
@@ -2876,4 +2872,262 @@ footer a {
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+.mobile-navigation-toggle,
+.mobile-toolbar,
+.mobile-panel:not([open]) {
+    display: none;
+}
+@media (max-width: 600px) {
+    body {
+        padding: 6px 4px;
+    }
+    #app {
+        --tools-width: 0px;
+        --details-width: 0px;
+        width: 100%;
+        max-width: none;
+        margin: 0;
+    }
+    .control-panel {
+        margin: 0 0 6px;
+        padding: 4px;
+        gap: 0;
+        max-height: none;
+    }
+    .control-panel .site-header {
+        display: grid;
+        grid-template-columns: 32px auto minmax(0, 1fr) auto;
+        gap: 6px 10px;
+    }
+    .mobile-navigation-toggle {
+        display: grid;
+        place-items: center;
+        grid-row: 1;
+        padding: 0;
+        font-size: 18px;
+        width: 32px;
+        height: 32px;
+    }
+    .brand {
+        justify-content: flex-start;
+        grid-column: 2;
+        grid-row: 1;
+    }
+    .brand-full {
+        display: none;
+    }
+    .brand-short {
+        display: inline;
+    }
+    .brand h1 {
+        font-size: 18px;
+    }
+    .account-controls {
+        display: contents;
+        font-size: 12px;
+    }
+    .account-user {
+        grid-column: 3 / 5;
+        grid-row: 1;
+        justify-content: flex-end;
+    }
+    .account-user .user-icon {
+        order: 1;
+    }
+    .account-actions {
+        grid-column: 4;
+        grid-row: 2;
+        justify-self: end;
+        gap: 8px;
+    }
+    #selected-network {
+        grid-column: 1 / 4;
+        grid-row: 2;
+        font-size: 11px;
+        line-height: 1.3;
+    }
+    .control-panel > .view-tabs {
+        display: none;
+    }
+    .workspace:is(.with-terminal, .with-home),
+    .workspace:not(.with-terminal, .with-home) {
+        display: flex;
+        flex-direction: column;
+        margin: 0;
+        min-width: 0;
+        gap: 6px;
+    }
+    .workspace > .window-frame {
+        flex: 1;
+        height: auto;
+        width: 100%;
+    }
+    .workspace > :is(#resource-panel, #cpu-panel, #plan-panel, #home-network-panel, .terminal-tools) {
+        display: none;
+    }
+    .mobile-toolbar {
+        display: flex;
+        flex: none;
+        gap: 6px;
+        justify-content: flex-end;
+    }
+    .terminal-heading:has(> .mobile-toolbar:not([hidden])) {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+    }
+    .terminal-heading > .mobile-toolbar {
+        grid-column: 2;
+        grid-row: 1;
+    }
+    .terminal-heading:has(> .mobile-toolbar:not([hidden])) > h2 {
+        grid-column: 1;
+        grid-row: 1;
+    }
+    .terminal-heading:has(> .mobile-toolbar:not([hidden])) > .search {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        width: 100%;
+    }
+    #items[data-display='icons'] {
+        --resource-min-width: 48px;
+        --resource-icon-size: 32px;
+    }
+    #items[data-display='icons'] .quantity {
+        font-size: 11px;
+    }
+    #items[data-display='icons'] .craftable-marker {
+        width: 14px;
+        height: 14px;
+    }
+    .resource-grid.cpu-items {
+        --resource-min-width: 130px;
+    }
+    .cpu-icons-enabled .cpu-item {
+        --resource-icon-size: 24px;
+        padding-left: 38px;
+    }
+    .item.cpu-item .quantity {
+        font-size: 10px;
+    }
+    .mobile-panel[open] {
+        display: flex;
+        flex-direction: column;
+        width: calc(100vw - 8px);
+        max-width: none;
+        max-height: 85dvh;
+        height: fit-content;
+        inset: auto 0 0;
+        margin: auto auto 4px;
+        padding: 8px;
+        overflow: visible;
+    }
+    .mobile-panel::backdrop {
+        background: rgb(0 0 0 / 55%);
+    }
+    .mobile-panel.mobile-navigation {
+        width: min(320px, 90vw);
+        height: calc(100dvh - 8px);
+        max-height: none;
+        margin: 4px auto 4px 4px;
+        inset: 0 auto 0 0;
+    }
+    .mobile-panel-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex: none;
+        margin-bottom: 12px;
+    }
+    .mobile-panel-heading h2 {
+        font-size: 17px;
+        margin: 0;
+    }
+    .mobile-panel-heading button {
+        display: grid;
+        place-items: center;
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        flex: none;
+    }
+    .mobile-panel-body {
+        min-height: 0;
+        overflow: auto;
+        overscroll-behavior: contain;
+    }
+    .mobile-panel-body .view-tabs {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        flex-wrap: nowrap;
+        border: 0;
+        padding: 0;
+    }
+    .mobile-panel-body .view-tabs a {
+        padding: 12px 8px;
+        font-size: 14px;
+    }
+    .mobile-navigation #updated:not(:empty) {
+        display: block;
+        margin-top: 8px;
+        padding: 12px 8px;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 11px;
+    }
+    .mobile-panel-body > :is(#resource-panel, #cpu-panel, #plan-panel, #home-network-panel) {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: none;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: none;
+        overflow: visible;
+    }
+    .mobile-panel-body > :is(#resource-panel, #cpu-panel, #home-network-panel) > h3 {
+        display: none;
+    }
+    .mobile-panel-body > :is(#cpu-panel, #plan-panel) {
+        display: flex;
+        flex-direction: column;
+        max-height: calc(85dvh - 96px);
+        overflow: hidden;
+    }
+    .mobile-panel-body:has(> #cpu-panel, > #plan-panel) {
+        overflow: hidden;
+    }
+    .mobile-panel-body .cpu-selector-scroll {
+        overflow: auto;
+        max-height: none;
+    }
+    .mobile-panel-body .terminal-tools {
+        display: flex;
+        position: static;
+        width: auto;
+        margin: 0;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 18px;
+    }
+    .mobile-panel-body .tool-button {
+        width: 42px;
+        height: 42px;
+    }
+    .mobile-panel .cpu-info-tooltip:not(:focus) {
+        pointer-events: none;
+    }
+    .mobile-panel-body .terminal-tools > div {
+        display: flex;
+        gap: 6px;
+    }
+    .info-notice {
+        margin-inline: 0;
+        margin-bottom: 6px;
+    }
 }

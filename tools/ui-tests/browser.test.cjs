@@ -662,6 +662,22 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
     return { page, options, base: `http://127.0.0.1:${server.address().port}${mount}/` };
 }
 
+async function clickTab(page, name) {
+    const link = page.getByRole('link', { name, exact: true });
+    if (page.viewportSize().width <= 600 && !(await link.isVisible()))
+        await page.getByRole('button', { name: /^(Navigation|Nawigacja)$/ }).click();
+    await link.click();
+}
+
+async function openMobilePane(page, name) {
+    if (page.viewportSize().width <= 600) await page.getByRole('button', { name, exact: true }).click();
+}
+
+async function closeMobilePane(page) {
+    const close = page.getByRole('button', { name: 'Close panel', exact: true });
+    if (await close.isVisible()) await close.click();
+}
+
 async function settleResponse(page, request) {
     const response = await request.response();
     if (response) await response.finished();
@@ -955,7 +971,7 @@ test('unavailable icons override the saved mode and recover without losing it', 
         null,
         { timeout: 3000 }
     );
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     assert.equal(await mode.inputValue(), 'icons');
     await page.reload();
     await mode.waitFor();
@@ -979,7 +995,7 @@ test('pending icon discovery leaves inventory usable and failures preserve confi
     options.packDelay = 0;
     options.packError = true;
     await poll(page);
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByText(/could not check.*icon/i).waitFor();
     assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'both');
 });
@@ -1093,7 +1109,7 @@ test('saved names choice receives a dismissible icon notice outside the terminal
     await page.reload();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await enable.isVisible(), false);
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'names');
 });
 
@@ -1111,11 +1127,11 @@ test('enabling suggested icons persists and a later names choice does not nag', 
     await page.reload();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await enable.isVisible(), false);
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
     assert.equal(await mode.inputValue(), 'both');
     await mode.selectOption('names');
-    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await clickTab(page, 'Terminal');
     await page.reload();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await enable.isVisible(), false);
@@ -1130,11 +1146,11 @@ test('missing resource sprites share a question mark in detailed inventory and C
     const fallback = () =>
         item.locator('.resource-icon').evaluate((icon) => getComputedStyle(icon, '::before').content);
     assert.equal(await fallback(), '"?"');
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
-    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await clickTab(page, 'Terminal');
     assert.equal(await item.locator('.resource-icon').isVisible(), false);
-    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+    await clickTab(page, 'CPUs');
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     const cpuItem = page
         .getByRole('region', { name: 'CPU resources', exact: true })
@@ -1142,7 +1158,7 @@ test('missing resource sprites share a question mark in detailed inventory and C
     await cpuItem.waitFor();
     assert.equal(await cpuItem.locator('.resource-icon').isVisible(), false);
     assert.equal(options.requests.filter((r) => r.path.endsWith('/cpus/cpu-a')).at(-1).query, '');
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('both');
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     await cpuItem.waitFor();
@@ -1162,7 +1178,7 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await item.waitFor();
     const original = await item.boundingBox();
     assert.ok(original.width > original.height);
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
     await mode.waitFor({ timeout: 3000 });
     assert.equal(await mode.inputValue(), 'both');
@@ -1212,7 +1228,7 @@ test('compact terminal mode persists and preserves accessible selection and craf
     await cpuItem.focus();
     await page.getByRole('tooltip').getByText(iron.displayName, { exact: true }).waitFor();
     await page.keyboard.press('Escape');
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await mode.selectOption('both');
     await page.reload();
     await mode.waitFor();
@@ -1285,8 +1301,8 @@ for (const deviceScaleFactor of [1, 1.25, 1.5, 1.75, 2]) {
             await items.first().hover();
             assert.deepEqual(await read(), before, 'hover does not move or scale sprites');
             for (const icon of before) {
-                assert.equal(icon.width, 40);
-                assert.equal(icon.height, 40);
+                assert.equal(icon.width, width <= 600 ? 32 : 40);
+                assert.equal(icon.height, width <= 600 ? 32 : 40);
                 assert.ok(Math.abs(icon.slotWidth - icon.slotHeight) < 0.02, 'slots remain square');
             }
             await items.nth(35).scrollIntoViewIfNeeded();
@@ -1307,9 +1323,9 @@ test('compact terminal keeps quantities and craftability readable with missing i
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('icons');
-    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await clickTab(page, 'Terminal');
     const missing = page.getByRole('button', { name: /Certus Quartz Crystal/ });
     await missing.waitFor();
     await page.evaluate(() => document.fonts.ready);
@@ -1343,9 +1359,9 @@ test('compact terminal keeps quantities and craftability readable with missing i
     }
     await missing.focus();
     await page.getByRole('tooltip').getByText(quartz.displayName, { exact: true }).waitFor();
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
-    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await clickTab(page, 'Terminal');
     await page.getByRole('button', { name: /Iron Ingot/ }).focus();
     await page.getByRole('tooltip').getByText(iron.displayName, { exact: true }).waitFor();
     await page.keyboard.press('Enter');
@@ -1389,7 +1405,7 @@ test('CPU overview and history products share atlas pages and respect the displa
         await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
         await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'product-icons-cpu.png') });
     }
-    await page.getByRole('link', { name: 'History', exact: true }).click();
+    await clickTab(page, 'History');
     const first = page.getByRole('link', { name: /Iron Ingot.*#1$/ });
     const missing = page.getByRole('link', { name: /Iron Ingot.*#2$/ });
     await page.waitForFunction(
@@ -1412,12 +1428,12 @@ test('CPU overview and history products share atlas pages and respect the displa
     if (process.env.UI_SCREENSHOT_DIR) {
         await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'product-icons-history-mobile.png') });
     }
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('icons');
     await page.goto(`${base}#/grids/${gridA}/history`);
     await first.waitFor();
     assert.ok((await first.innerText()).includes('Iron Ingot'), 'history remains readable in terminal icons-only mode');
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
     const before = atlasReads().length;
     for (const route of ['history', 'cpus']) {
@@ -1490,7 +1506,7 @@ test('history details display product and paged resource icons only when enabled
     );
     await page.getByRole('button', { name: 'Pattern providers', exact: true }).click();
     assert.equal(await page.getByRole('region', { name: 'Smelter', exact: true }).locator('.resource-icon').count(), 0);
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
     const reads = options.requests.filter((r) => r.path.startsWith('/api/icon-packs/')).length;
     await page.goto(`${base}#/grids/${gridA}/history/1`);
@@ -1609,7 +1625,7 @@ for (const view of ['cpus', 'history']) {
         await page.route(`**${endpoint}?icons=true`, (route) => release(route));
         await page.goto(`${base}#/grids/${gridA}/${view}`);
         const delayed = await captured;
-        await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+        await clickTab(page, 'Web settings');
         await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
         await page.goto(`${base}#/grids/${gridA}/${view}`);
         await page.getByRole('link', { name: view === 'cpus' ? /Busy processor/ : /Iron Ingot.*#1$/ }).waitFor();
@@ -1714,7 +1730,7 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
     );
     assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).at(-1).query, '?icons=true');
     assert.equal(pages().length, 1, 'job and resource icons share the existing atlas fetch');
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
     await page.reload();
     assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'names');
@@ -1905,7 +1921,7 @@ test('global settings tabs preserve grid navigation and browser preferences', as
     assert.deepEqual(await theme.getByRole('option').allTextContents(), ['Default']);
     const appearance = page.getByRole('combobox', { name: 'Appearance', exact: true });
     await appearance.selectOption('dark');
-    await page.getByRole('link', { name: 'Server settings', exact: true }).click();
+    await clickTab(page, 'Server settings');
     assert.match(page.url(), /#\/server-settings$/);
     await page.getByRole('heading', { name: 'Server settings', exact: true }).waitFor();
     assert.equal(await page.getByRole('combobox', { name: 'Appearance', exact: true }).isVisible(), false);
@@ -1913,9 +1929,9 @@ test('global settings tabs preserve grid navigation and browser preferences', as
         await page.getByRole('link', { name: 'Network', exact: true }).getAttribute('href'),
         `#/grids/${gridA}/settings`
     );
-    await page.getByRole('link', { name: 'Network', exact: true }).click();
+    await clickTab(page, 'Network');
     await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).waitFor();
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
     await page.reload();
     const language = page.getByRole('combobox', { name: 'Język', exact: true });
@@ -1979,7 +1995,7 @@ test('About shows runtime metadata and resource links while retaining the select
     ])
         assert.ok(await about.locator(`a[href="${href}"]`).count(), `About must link to ${href}`);
     assert.doesNotMatch(await about.innerText(), /Lucide|Font Awesome|Material Icons|TERMS AND CONDITIONS|PREAMBLE/i);
-    await page.getByRole('link', { name: 'Network', exact: true }).click();
+    await clickTab(page, 'Network');
     assert.match(page.url(), new RegExp(`#/grids/${gridA}/settings$`));
     await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).waitFor();
     assert.equal(
@@ -1996,10 +2012,11 @@ test('About opens without a grid and remains usable in a translated narrow viewp
     await page.getByRole('heading', { name: 'About', exact: true }).waitFor({ timeout: 3000 });
     await page.getByText(options.modVersion).waitFor();
     assert.equal(options.requests.filter((request) => request.path.startsWith('/api/grids/')).length, 0);
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
     const aboutLink = page.locator('a[href="#/about"]');
     assert.notEqual(await aboutLink.innerText(), 'About');
+    await page.getByRole('button', { name: 'Nawigacja', exact: true }).click();
     await aboutLink.click();
     await page.getByText(options.modVersion).waitFor();
     assert.equal(await page.locator('html').getAttribute('lang'), 'pl');
@@ -2019,7 +2036,7 @@ test('Home retains the selected network and owns switching while Web settings ow
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     await page.getByRole('heading', { name: 'Home', exact: true }).waitFor();
     const network = page.getByRole('button', { name: 'Choose a network', exact: true });
     assert.equal(
@@ -2055,7 +2072,7 @@ test('Home retains the selected network and owns switching while Web settings ow
         .click();
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     assert.equal(await network.count(), 0, 'The network selector belongs only to Home');
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     const automatic = page.getByRole('checkbox', { name: 'Refresh automatically' });
     await automatic.uncheck();
     await page.reload();
@@ -2222,7 +2239,7 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
     assert.equal(await page.getByRole('tooltip').getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
     const cpuOutput = page.getByRole('paragraph').filter({ hasText: /^Cobalt Ingot\s*× 12$/ });
     await assertFormatted(cpuOutput);
-    await page.getByRole('link', { name: 'History', exact: true }).click();
+    await clickTab(page, 'History');
     const historyLink = page.getByRole('link', { name: /Cobalt Ingot.*#1/ });
     await historyLink.waitFor();
     await assertFormatted(historyLink);
@@ -2539,7 +2556,7 @@ test('terminal displays structured registry and optional resource metadata witho
     await sort.click();
     await sort.click();
     assert.deepEqual(await names(), ['Essentia', 'Plain Tool', 'Damaged Tool', 'Water']);
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Plain Tool/ }).click();
@@ -2773,7 +2790,7 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor({ timeout: 5000 });
     assert.match(page.url(), /\/plans\/7$/);
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('checkbox', { name: 'Refresh automatically' }).check();
     await page.goBack();
     await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor();
@@ -2792,7 +2809,7 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
             .isChecked(),
         true
     );
-    await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.waitForURL(new RegExp(`/grids/${gridA}/items$`));
     const create = options.requests.filter(
         (request) => request.method === 'POST' && request.path.endsWith('/crafting-plans')
@@ -2842,7 +2859,7 @@ test('history rows keep product names primary and scroll beneath a stationary he
     await page.keyboard.press('Enter');
     await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
     assert.match(page.url(), /\/history\/100$/);
-    await page.getByRole('link', { name: 'History', exact: true }).click();
+    await clickTab(page, 'History');
     await first.waitFor();
 });
 
@@ -2996,7 +3013,7 @@ test('history opens a deeply scrolled job at the start of its detail and preserv
         readingPosition,
         'polling does not reset reading position'
     );
-    await page.getByRole('link', { name: 'History', exact: true }).click();
+    await clickTab(page, 'History');
     await page.getByRole('link', { name: /Iron Ingot.*#1$/ }).waitFor();
     assert.equal(await region.evaluate((node) => node.scrollTop), 0, 'return to the list starts at its beginning');
 });
@@ -3021,7 +3038,14 @@ for (const appearance of ['light', 'dark']) {
             locator.evaluate((node) => {
                 const box = node.getBoundingClientRect(),
                     style = getComputedStyle(node);
-                return { x: box.x, y: box.y, right: box.right, fontSize: style.fontSize, color: style.color };
+                return {
+                    x: box.x,
+                    y: innerWidth <= 600 ? box.y - node.closest('#window').getBoundingClientRect().y : box.y,
+                    height: box.height,
+                    right: box.right,
+                    fontSize: style.fontSize,
+                    color: style.color
+                };
             });
         for (const viewport of [
             { width: 1184, height: 900 },
@@ -3032,17 +3056,21 @@ for (const appearance of ['light', 'dark']) {
             await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
             const expected = await measure(page.getByRole('heading', { name: 'Terminal', exact: true }));
             const expectedScroll = await measure(page.getByRole('region', { name: 'Resources', exact: true }));
-            await page.getByRole('link', { name: 'History', exact: true }).click();
+            await clickTab(page, 'History');
             const first = page.getByRole('link', { name: /Precision assembly.*#100/ });
             await first.waitFor();
             const heading = await measure(page.getByRole('heading', { name: 'History', exact: true }));
-            for (const key of ['x', 'y'])
+            for (const key of viewport.width > 600 ? ['x', 'y'] : ['x'])
                 assert.ok(Math.abs(heading[key] - expected[key]) < 0.1, `${key} history heading matches terminal`);
             for (const key of ['fontSize', 'color']) assert.equal(heading[key], expected[key]);
             const region = page.getByRole('region', { name: 'History', exact: true });
             const actualScroll = await measure(region);
-            for (const key of ['x', 'y', 'right'])
+            for (const key of viewport.width > 600 ? ['x', 'y', 'right'] : ['x', 'right'])
                 assert.ok(Math.abs(actualScroll[key] - expectedScroll[key]) < 0.1, `${key} scroll viewport matches`);
+            assert.ok(
+                heading.y >= 0 && actualScroll.y >= heading.y + heading.height,
+                'History content stays below its heading'
+            );
             const rows = region.getByRole('listitem');
             assert.equal(await rows.count(), 12);
             assert.deepEqual(
@@ -3095,7 +3123,7 @@ for (const appearance of ['light', 'dark']) {
             });
         }
         options.history = [options.history[0]];
-        await page.getByRole('link', { name: 'History', exact: true }).click();
+        await clickTab(page, 'History');
         await page.getByRole('link', { name: /Precision assembly.*#100/ }).waitFor();
         await page.reload();
         await page.getByRole('link', { name: /Precision assembly.*#100/ }).waitFor();
@@ -3213,7 +3241,7 @@ test('uncertain settings saves preserve the draft and remain unconfirmed until e
             .waitFor({ timeout: 3000 });
         const count = options.requests.filter((request) => request.method === 'PATCH').length;
         await poll(page);
-        await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+        await clickTab(page, 'Terminal');
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.goBack();
         await tracking.waitFor();
@@ -3293,7 +3321,7 @@ test('history reentry during grid discovery clears unavailable snapshots', async
     });
     await poll(page);
     const discovery = await captured;
-    await page.getByRole('link', { name: 'History', exact: true }).click();
+    await clickTab(page, 'History');
     await page.getByRole('link', { name: /Iron Ingot.*#1/ }).waitFor();
     options.historyError = 'TRACKING_NOT_FOUND';
     await page.getByRole('link', { name: /Iron Ingot.*#1/ }).click();
@@ -3631,7 +3659,11 @@ for (const width of [390, 1280])
         const geometry = async () => [
             await refresh.boundingBox(),
             await logout.boundingBox(),
-            await page.getByRole('link', { name: 'Home', exact: true }).boundingBox()
+            await (
+                width <= 600
+                    ? page.getByRole('button', { name: 'Navigation', exact: true })
+                    : page.getByRole('link', { name: 'Home', exact: true })
+            ).boundingBox()
         ];
         const before = await geometry();
         assert.ok(before[0].x >= before[1].x + before[1].width, 'Refresh sits to the right of logout');
@@ -3684,7 +3716,7 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
         await page.goto(`${base}?case=${result}#/grids/${gridA}/cpus/cpu-a`);
         await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
         assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isDisabled(), true);
-        await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+        await clickTab(page, 'CPUs');
         await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
         await page.goBack();
         await page
@@ -3769,7 +3801,7 @@ test('direct plan entry only reads, and explicit cancellation stops calculation 
         options.requests.filter((request) => request.method !== 'GET').map((request) => request.method),
         ['DELETE']
     );
-    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await clickTab(page, 'Terminal');
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 1);
 });
@@ -3803,7 +3835,7 @@ test('busy CPU eligibility uses known output identity and missing selections req
     await (await refreshed).finished();
     await cpus.getByRole('radio', { name: /cpu-b/ }).waitFor({ state: 'detached' });
     assert.equal(await cpus.getByRole('radio', { checked: true }).count(), 0);
-    assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
     options.cpus['cpu-b'] = { ...cpu, isBusy: true, finalOutput: { ...iron, itemKey: 'iron' } };
     await page.reload();
     await cpus.waitFor();
@@ -3846,7 +3878,7 @@ test('CPU memory uses binary units through exabytes in overview and current work
         .filter({ hasText: /^Busy$/ })
         .waitFor();
     assert.match(await panel.getByRole('link', { name: /cpu-4/ }).innerText(), /1\.5 MB/);
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('pl');
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-4`);
     await page
@@ -3993,6 +4025,7 @@ test('CPU search opens from the magnifier, focuses the field and clears its filt
     for (const width of [390, 1280]) {
         await page.setViewportSize({ width, height: 844 });
         await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+        await openMobilePane(page, 'CPUs');
         const panel = page.getByRole('complementary', { name: 'CPUs', exact: true });
         const search = panel.getByRole('searchbox', { name: 'Search CPUs', exact: true });
         const toggle = panel.getByRole('button', { name: 'Search CPUs', exact: true });
@@ -4114,7 +4147,7 @@ test('CPU selector searches forty processors and preserves reading position acro
     await search.fill('no-such-processor');
     assert.equal(await selector.getByRole('link').count(), 0);
     assert.match(await selector.textContent(), /No matching/);
-    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+    await clickTab(page, 'CPUs');
     await page.getByRole('link', { name: /Production 00/ }).waitFor();
     assert.equal(await search.isVisible(), false);
     assert.equal(
@@ -4179,6 +4212,7 @@ test('CPU list fills its attachment and current job stays in a low footer even w
     const actionBounds = await cancel.boundingBox();
     assert.ok(actionBounds.y + actionBounds.height <= 720);
     await page.setViewportSize({ width: 390, height: 844 });
+    await openMobilePane(page, 'CPUs');
     const last = selector.getByRole('link', { name: /Processor 39/ });
     await last.scrollIntoViewIfNeeded();
     assert.ok(await selector.evaluate((node) => node.scrollTop > 0));
@@ -4186,6 +4220,7 @@ test('CPU list fills its attachment and current job stays in a low footer even w
     await page.getByRole('button', { name: 'Search CPUs', exact: true }).click();
     await search.fill('Processor 39');
     assert.equal(await selector.getByRole('link').count(), 1);
+    await closeMobilePane(page);
     await details.scrollIntoViewIfNeeded();
     assert.ok((await details.boundingBox()).height < 80, 'The narrow job footer remains low');
     await cancel.scrollIntoViewIfNeeded();
@@ -4365,7 +4400,7 @@ test('CPU terminal shows selected resources beside CPU navigation and returns to
     assert.match(await page.getByRole('tooltip').textContent(), /Coprocessors: 3/);
     assert.match(await page.getByRole('region', { name: 'Current job', exact: true }).textContent(), /Iron Ingot.*12/);
     assert.equal(await page.getByRole('button', { name: 'Pause current work', exact: true }).isEnabled(), true);
-    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+    await clickTab(page, 'CPUs');
     await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
     assert.match(page.url(), /\/cpus$/);
     await resources.waitFor({ state: 'hidden' });
@@ -4466,7 +4501,7 @@ test('CPU terminal hides stored-only resources, sorts explicit quantities and pr
     assert.equal(await resources.getByRole('button').count(), 4);
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus/cpu-a')).length, 1);
-    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await clickTab(page, 'Terminal');
     assert.equal(
         await page.getByRole('button', { name: 'Sort by: Name', exact: true }).isVisible(),
         true,
@@ -4623,7 +4658,7 @@ test('CPU resource tooltip preserves exact counts and tracking through polling a
     await tooltip.waitFor({ state: 'visible' });
     await page.keyboard.press('Escape');
     await tooltip.waitFor({ state: 'hidden' });
-    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+    await clickTab(page, 'CPUs');
     assert.equal(await tooltip.isVisible(), false);
     await page.getByRole('link', { name: /Assembler.*cpu-b/ }).click();
     await resource.focus();
@@ -4662,10 +4697,10 @@ test('CPU terminal scrolls resources within desktop and mobile viewports while c
         await search.fill('');
         const before = await search.boundingBox();
         const bounds = await resources.boundingBox();
-        const panel = await page.getByRole('complementary', { name: 'CPUs', exact: true }).boundingBox();
+        const panel = await page.locator('#cpu-panel').boundingBox();
         assert.ok(bounds.height > 100, 'Resources need a usable scroll viewport');
         if (viewport.width > 600) assert.ok(panel.x >= bounds.x + bounds.width - 1, 'CPU list sits beside resources');
-        else assert.ok(panel.y >= bounds.y + bounds.height - 1, 'Mobile CPU list sits below resources');
+        else assert.equal(panel, null, 'Phone CPU list is opened on demand');
         await resources.getByRole('button').last().scrollIntoViewIfNeeded();
         assert.ok(
             await resources.evaluate((node) => node.scrollTop > 0),
@@ -4684,8 +4719,12 @@ test('CPU terminal scrolls resources within desktop and mobile viewports while c
         assert.equal(documentSize.left, 0);
         for (const control of [
             search,
-            page.getByRole('link', { name: 'CPUs', exact: true }),
-            page.getByRole('button', { name: 'Hide stored-only resources', exact: true }),
+            viewport.width <= 600
+                ? page.getByRole('button', { name: 'CPUs', exact: true })
+                : page.getByRole('link', { name: 'CPUs', exact: true }),
+            viewport.width <= 600
+                ? page.getByRole('button', { name: 'Filters and sorting', exact: true })
+                : page.getByRole('button', { name: 'Hide stored-only resources', exact: true }),
             page.getByRole('button', { name: 'Cancel current work', exact: true })
         ]) {
             await control.scrollIntoViewIfNeeded();
@@ -4819,7 +4858,7 @@ test('CPU list and detail pause controls use capability, busy state and stable C
         ]
     );
     assert.ok(requests.every((request) => request.headers['x-ae2-request'] === 'true'));
-    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+    await clickTab(page, 'CPUs');
     await row('unsupported').getByRole('link').click();
     await page.getByRole('button', { name: /^(Pause|Resume) current work$/ }).waitFor({ state: 'hidden' });
     assert.equal(await page.getByRole('button', { name: /^(Pause|Resume) current work$/ }).count(), 0);
@@ -5158,7 +5197,7 @@ test('CPU removal and denied reads clear current work without selecting a replac
         0
     );
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).count(), 0);
-    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+    await clickTab(page, 'CPUs');
     await page.getByRole('link', { name: /Assembler.*cpu-a/ }).click();
     await page
         .getByRole('region', { name: 'CPU resources', exact: true })
@@ -5244,7 +5283,7 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
     );
     await poll(page);
     const delayed = await captured;
-    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+    await clickTab(page, 'CPUs');
     await page.getByRole('link', { name: /Assembler.*cpu-b/ }).click();
     await page.getByText('Current output unavailable', { exact: true }).waitFor();
     await page
@@ -5289,7 +5328,7 @@ test('uncertain CPU cancellation never replays after refresh or route reentry', 
             .waitFor({ timeout: 3000 });
         const count = options.requests.filter((request) => request.path.endsWith('/cancel')).length;
         await poll(page);
-        await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+        await clickTab(page, 'CPUs');
         await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
         await page.goBack();
         await page
@@ -5311,7 +5350,7 @@ test('known submission rejection retains the plan and permits deliberate correct
     options.submitStatus = 'FAIL';
     options.submitReason = '<img src=x onerror=alert(1)> Native ingredients disappeared';
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
-    await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.getByText(options.submitReason, { exact: true }).waitFor({ timeout: 3000 });
     assert.equal(
         await page
@@ -5323,7 +5362,7 @@ test('known submission rejection retains the plan and permits deliberate correct
     assert.equal(await page.locator('img[src="x"]').count(), 0);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/submit')).length, 1);
     options.submitStatus = 'CPU_NOT_FOUND';
-    await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page
         .getByRole('status')
         .filter({ hasText: /CPU.*available/i })
@@ -5335,13 +5374,13 @@ test('known submission rejection retains the plan and permits deliberate correct
             .count(),
         0
     );
-    assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
     await page
         .getByRole('radiogroup', { name: 'Crafting CPU', exact: true })
         .getByRole('radio', { name: /cpu-b/ })
         .check();
     options.submitStatus = 'OK';
-    await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.waitForURL(new RegExp(`/grids/${gridA}/items$`));
     assert.equal(options.requests.filter((request) => request.path.endsWith('/submit')).length, 3);
 });
@@ -5357,7 +5396,7 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
         .filter({ hasText: /plan.*unavailable/i })
         .waitFor({ timeout: 3000 });
     assert.equal(await page.getByRole('button', { name: 'Cancel', exact: true }).count(), 0);
-    assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
     options.planStatus = 'OK';
     options.plan = { ...readyPlan, isSimulating: true };
     await page.reload();
@@ -5365,14 +5404,14 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
         .getByRole('status')
         .filter({ hasText: /missing resources/i })
         .waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
     options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], missing: 8 }] };
     await page.reload();
     await page
         .getByRole('list', { name: 'Plan resources', exact: true })
         .getByRole('button', { name: /Missing: 8/ })
         .waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
     options.plan = readyPlan;
     await page.reload();
     await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor();
@@ -5389,7 +5428,7 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
             .count(),
         0
     );
-    assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
     options.cpuError = null;
     await poll(page);
     await page
@@ -5413,21 +5452,21 @@ test('uncertain submission outcomes cannot be retried by polling or route reentr
     for (const status of ['TIMEOUT', 'INTERNAL_ERROR', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
         await page.goto(`${base}#/grids/${gridA}/plans/${planId++}`);
         options.fault = { operation: 'submit', status };
-        await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
+        await page.getByRole('button', { name: 'Start', exact: true }).click();
         await page
             .getByRole('status')
             .filter({ hasText: /outcome.*unknown/i })
             .waitFor({ timeout: 3000 });
         const count = options.requests.filter((request) => request.path.endsWith('/submit')).length;
         await poll(page);
-        await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+        await clickTab(page, 'Terminal');
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.goBack();
         await page
             .getByRole('status')
             .filter({ hasText: /outcome.*unknown/i })
             .waitFor();
-        assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
         assert.equal(options.requests.filter((request) => request.path.endsWith('/submit')).length, count);
     }
 });
@@ -5460,7 +5499,7 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
         .waitFor();
     await poll(page);
     assert.equal(await page.getByRole('button', { name: 'Cancel', exact: true }).isDisabled(), true);
-    assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
     assert.deepEqual(
         options.requests.filter((request) => request.method !== 'GET').map((request) => request.method),
         ['POST', 'DELETE']
@@ -5639,7 +5678,7 @@ test('plan tooltips clear on scroll resize navigation and access denial', async 
     await resource.evaluate((node) => node.blur());
     await resource.focus();
     await tooltip.getByText('Ingredient 0', { exact: true }).waitFor();
-    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await clickTab(page, 'Terminal');
     await page.getByRole('searchbox', { name: 'Search resources', exact: true }).waitFor();
     assert.equal(await tooltip.isVisible(), false);
     await page.goBack();
@@ -5743,6 +5782,7 @@ for (const [width, height] of [
         const resource = page.getByRole('region', { name: 'Plan resources', exact: true }).getByRole('button').first();
         await resource.waitFor();
         const planSlot = await resource.boundingBox();
+        await openMobilePane(page, 'CPUs');
         await page
             .locator('aside p')
             .filter({ hasText: /Iron Ingot assembly component/ })
@@ -5772,7 +5812,7 @@ for (const [width, height] of [
         const visible = await choices.boundingBox();
         const selected = await last.boundingBox();
         assert.ok(selected.y >= visible.y && selected.y + selected.height <= visible.y + visible.height + 1);
-        assert.ok(await page.getByRole('button', { name: 'Start crafting', exact: true }).isEnabled());
+        assert.ok(await page.getByRole('button', { name: 'Start', exact: true }).isEnabled());
         await last.focus();
         await page.keyboard.press('ArrowUp');
         assert.equal(await choices.getByRole('radio', { name: /choice-37/ }).isChecked(), true);
@@ -5819,6 +5859,7 @@ for (const width of [1280, 390]) {
         assert.ok(search.y + search.height <= card.y, 'search stays above resources');
         assert.ok(footer.y >= viewport.y + viewport.height, 'actions stay below the scroll viewport');
         assert.ok(footer.y + footer.height <= 900, 'actions stay within the viewport');
+        await openMobilePane(page, 'CPUs');
         assert.ok(await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).isVisible());
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     });
@@ -5886,7 +5927,7 @@ test('crafting plan persists independent name total quantity and steps sorting w
     }
     await page.getByRole('searchbox', { name: 'Search plan resources' }).fill('ta');
     assert.deepEqual(await names(), ['Beta', 'Zeta', 'Delta', 'Yotta']);
-    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await clickTab(page, 'Terminal');
     await page.getByRole('button', { name: 'Sort by: Registry ID', exact: true }).waitFor();
     assert.ok(await page.getByRole('button', { name: 'Sort order: Descending', exact: true }).isVisible());
 });
@@ -5978,7 +6019,7 @@ test('plan recalculation preserves the order and light mode, supports autostart 
     await page.getByRole('textbox', { name: 'Craft quantity' }).fill('32');
     await page.getByRole('checkbox', { name: 'Light mode', exact: true }).check();
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
-    const start = page.getByRole('button', { name: 'Start crafting', exact: true });
+    const start = page.getByRole('button', { name: 'Start', exact: true });
     await start.waitFor();
     assert.ok(await start.isDisabled());
     const more = page.getByRole('button', { name: 'Recalculate options', exact: true });
@@ -6171,7 +6212,7 @@ test('crafting plan resources search and sort while CPU choice and actions stay 
     await page.getByRole('searchbox', { name: 'Search plan resources' }).fill('Resource 03');
     assert.equal(await resources.getByRole('button').count(), 1);
     await page.getByRole('searchbox', { name: 'Search plan resources' }).fill('');
-    const start = page.getByRole('button', { name: 'Start crafting', exact: true });
+    const start = page.getByRole('button', { name: 'Start', exact: true });
     const before = await start.boundingBox();
     await resources.evaluate((list) => {
         list.parentElement.scrollTop = list.parentElement.scrollHeight;
@@ -6250,7 +6291,7 @@ test('deletion rejection makes unavailable or denied plans non-actionable', asyn
             .getByRole('list', { name: 'Plan resources', exact: true })
             .getByRole('button', { name: /Iron Ingot/ })
             .waitFor({ state: 'hidden', timeout: 3000 });
-        assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
     }
 });
 
@@ -6270,8 +6311,8 @@ test('pending submission resolves after route reentry and older CPU reads cannot
         [31, 'TIMEOUT']
     ]) {
         await page.goto(`${base}#/grids/${gridA}/plans/${planId}`);
-        await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
-        await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+        await page.getByRole('button', { name: 'Start', exact: true }).click();
+        await clickTab(page, 'Terminal');
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.goBack();
         await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor();
@@ -6296,7 +6337,7 @@ test('pending submission resolves after route reentry and older CPU reads cannot
     await page.route('**/cpus', (route) => releaseCpus(route));
     await poll(page);
     const cpuRequest = await captured;
-    await page.getByRole('button', { name: 'Start crafting', exact: true }).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.waitForURL(new RegExp(`/grids/${gridA}/items$`));
     await cpuRequest.fulfill({
         status: 403,
@@ -6348,7 +6389,7 @@ test('changing networks cannot publish a delayed response from the previous netw
     await page.goBack();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.match(page.url(), new RegExp(gridA));
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
     assert.equal(
         await page.getByRole('link', { name: 'Terminal', exact: true }).getAttribute('href'),
@@ -6562,7 +6603,7 @@ test('appearance, language and terminal preferences survive reload and direct li
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     await page.getByRole('button', { name: /^Sort by:/ }).click();
     await page.getByRole('button', { name: /^Sort order:/ }).click();
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
     await page.getByRole('combobox', { name: 'Appearance' }).selectOption('dark');
     await page.getByRole('combobox', { name: 'Language' }).selectOption('pl');
@@ -6777,7 +6818,7 @@ test('empty discovery and unavailable bookmarked networks stay usable', async (t
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByText('This network is not available.').waitFor();
     assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     await page
         .getByRole('status')
         .filter({ hasText: /No accessible networks/ })
@@ -7026,7 +7067,7 @@ for (const deviceScaleFactor of [1.25, 1.5]) {
         await grid.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         await page.evaluate(() => document.fonts.ready);
         for (const display of ['both', 'icons', 'names']) {
-            await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+            await clickTab(page, 'Web settings');
             await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption(display);
             await page.goto(`${base}#/grids/${gridA}/items`);
             await grid.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -7177,7 +7218,7 @@ test('empty slots remain decorative through selection, zero matches and CPU row-
     assert.ok(measured.real < trackedHeight, 'untracked CPU rows preserve their more compact layout');
     assert.ok(measured.empty.every((height) => Math.abs(height - measured.real) < 0.03));
     assert.equal(await cpuResources.getByRole('button').count(), 1);
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await ironButton.waitFor();
     assert.equal(await grid.getByRole('button').count(), 2, 'returning to a hidden grid does not duplicate resources');
@@ -7246,7 +7287,7 @@ test('CPU overview opens from product, metrics and summary padding while identif
         await open();
         await page.waitForURL(`**#/grids/${gridA}/cpus/cpu-a`, { timeout: 3000 });
         await page.getByRole('region', { name: 'CPU resources', exact: true }).waitFor();
-        await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+        await clickTab(page, 'CPUs');
         await link.waitFor();
     }
     await card.getByText('CPU identifier', { exact: true }).click();
@@ -7351,7 +7392,8 @@ test('CPU overview aligns with the terminal and scrolls only real processor pane
             const style = getComputedStyle(node);
             return {
                 x: rect.x,
-                y: rect.y,
+                y: innerWidth <= 600 ? rect.y - node.closest('#window').getBoundingClientRect().y : rect.y,
+                height: rect.height,
                 right: rect.right,
                 fontSize: style.fontSize,
                 fontWeight: style.fontWeight,
@@ -7372,11 +7414,11 @@ test('CPU overview aligns with the terminal and scrolls only real processor pane
         const resources = await measure(page.getByRole('region', { name: 'Resources', exact: true }));
         const items = await measure(page.locator('#items'));
         options.cpus = many;
-        await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+        await clickTab(page, 'CPUs');
         await page.getByRole('link', { name: /Processor 0 .*cpu-0/ }).waitFor();
         const cpuHeading = page.getByRole('heading', { name: 'CPUs', exact: true });
         const actual = await measure(cpuHeading);
-        for (const key of ['x', 'y'])
+        for (const key of viewport.width > 600 ? ['x', 'y'] : ['x'])
             assert.ok(
                 Math.abs(actual[key] - heading[key]) < 0.1,
                 `${key} heading position matches at ${viewport.width}x${viewport.height}`
@@ -7385,8 +7427,9 @@ test('CPU overview aligns with the terminal and scrolls only real processor pane
         assert.equal(await page.getByRole('link', { name: 'Back to resources', exact: true }).count(), 0);
         const region = page.getByRole('region', { name: 'CPUs', exact: true });
         const bounds = await measure(region);
-        for (const key of ['x', 'y', 'right'])
+        for (const key of viewport.width > 600 ? ['x', 'y', 'right'] : ['x', 'right'])
             assert.ok(Math.abs(bounds[key] - resources[key]) < 0.1, `${key} scroll viewport matches`);
+        assert.ok(actual.y >= 0 && bounds.y >= actual.y + actual.height, 'CPU list stays below its heading');
         const cards = region.getByRole('listitem');
         assert.equal(await cards.count(), 18);
         const first = await measure(cards.first());
@@ -7475,7 +7518,7 @@ test('selected CPU aligns its heading search and resource viewport with the main
         assert.ok(await region.evaluate((node) => node.scrollTop > 0));
         assert.deepEqual(await measure(heading), actualHeading);
         assert.deepEqual(await measure(search), actualSearch);
-        await page.getByRole('link', { name: 'CPUs', exact: true }).click();
+        await clickTab(page, 'CPUs');
         await page.getByRole('link', { name: /Assembler.*cpu-a/ }).waitFor();
     }
     options.cpus['cpu-a'].name = 'A very long processor name that must not push the search outside the terminal';
@@ -7488,7 +7531,9 @@ test('selected CPU aligns its heading search and resource viewport with the main
     assert.equal(await page.getByRole('region', { name: 'CPU resources', exact: true }).getByRole('button').count(), 1);
     const nameBox = await measure(longHeading),
         searchBox = await measure(search);
-    assert.ok(nameBox.right <= searchBox.x, 'long title does not overlap search');
+    assert.ok(nameBox.y + nameBox.height <= searchBox.y, 'search stays below the long title on mobile');
+    const toolsBox = await page.getByRole('button', { name: 'Filters and sorting', exact: true }).boundingBox();
+    assert.ok(nameBox.right <= toolsBox.x, 'long title does not overlap the mobile panel buttons');
     assert.ok(searchBox.right - searchBox.x >= 80, 'search remains usable on mobile');
     assert.ok(
         await page.evaluate(
@@ -7533,7 +7578,7 @@ test('Home shows current work across networks and opens the exact CPU or a keybo
     await page.keyboard.press('Enter');
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     assert.equal(await dialog.isVisible(), false);
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     await ironWork.waitFor();
     await quartzWork.waitFor();
 });
@@ -7586,7 +7631,7 @@ test('Home clears revoked sources during pending reads and stops reading summari
     options.gridDelay = 100;
     options.grids = [{ key: gridB, owner: 'Beta', cpuCount: 1, accessSources: {} }];
     const oldRead = page.waitForRequest((request) => request.url().includes(`${gridA}/cpus`));
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     const pending = await oldRead;
     await poll(page);
     await settleResponse(page, pending);
@@ -7608,7 +7653,7 @@ test('Home clears revoked sources during pending reads and stops reading summari
     const refresh = page.waitForRequest((request) => request.url().endsWith(`${gridB}/cpus`));
     await poll(page);
     const late = await refresh;
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await settleResponse(page, late);
     const reads = options.requests.filter((request) => request.path.endsWith('/cpus')).length;
     await poll(page);
@@ -7647,7 +7692,7 @@ test('Home bounds cross-network reads and keeps per-response atlas identity and 
         await display.elementHandle()
     );
     options.requests.length = 0;
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     const first = page.getByRole('link', { name: /Iron Ingot/ });
     const second = page.getByRole('link', { name: /Certus Quartz Crystal/ });
     await second.waitFor();
@@ -7668,10 +7713,10 @@ test('Home bounds cross-network reads and keeps per-response atlas identity and 
         options.requests.some((request) => /\/cpus\/[^/]+$/.test(request.path)),
         false
     );
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
     options.requests.length = 0;
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     await second.waitFor();
     assert.equal(await first.locator('.resource-icon').isVisible(), false);
     assert.ok(
@@ -7716,7 +7761,7 @@ test('Home and its chooser contain long identities on mobile in light and dark a
     for (const appearance of ['light', 'dark']) {
         await page.goto(`${base}#/web-settings`);
         await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption(appearance);
-        await page.getByRole('link', { name: 'Home', exact: true }).click();
+        await clickTab(page, 'Home');
         await page.getByRole('link', { name: /Current output unavailable/ }).waitFor();
         const work = page.getByRole('link', { name: new RegExp(`^${longName} ×`) });
         await work.focus();
@@ -7724,6 +7769,7 @@ test('Home and its chooser contain long identities on mobile in light and dark a
         assert.equal(await work.evaluate((node) => node === document.activeElement), true);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         assert.ok(await page.locator('#workspace').evaluate((node) => node.scrollWidth <= node.clientWidth));
+        await openMobilePane(page, 'Network');
         await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
         const dialog = page.getByRole('dialog');
         const firstChoice = dialog
@@ -7742,7 +7788,9 @@ test('Home and its chooser contain long identities on mobile in light and dark a
         const bounds = await dialog.boundingBox();
         assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
         await page.keyboard.press('Escape');
-        await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
+        if (page.viewportSize().width <= 600)
+            await page.getByRole('button', { name: 'Network', exact: true }).waitFor();
+        else await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
     }
 });
 
@@ -7760,7 +7808,7 @@ test('Home keeps failed logout visible and allows an explicit retry', async (t) 
 });
 
 // Public settings/HTTP seam: the server-backed name is shared presentation, independent of tracking.
-test('current network stays on the brand and account row at narrow widths without changing header geometry', async (t) => {
+test('current network preserves desktop alignment and shares the second phone row with account actions', async (t) => {
     const { page, options, base } = await fixture(t);
     await seedAutomaticRefresh(page, base, false);
     for (const width of [1280, 800, 560, 390]) {
@@ -7783,19 +7831,29 @@ test('current network stays on the brand and account row at narrow widths withou
                         .evaluate((node) => node.scrollWidth <= node.clientWidth),
                     'The account name must use available header space before being shortened'
                 );
-            assert.ok(
-                Math.abs(label.y + label.height / 2 - brand.y - brand.height / 2) < 2,
-                `brand alignment at ${width}`
-            );
-            assert.ok(
-                Math.abs(label.y + label.height / 2 - account.y - account.height / 2) < 2,
-                `account alignment at ${width}`
-            );
-            assert.ok(label.x >= brand.x + brand.width && label.x + label.width <= account.x);
-            assert.ok(
-                label.x - (brand.x + brand.width) <= 24,
-                'The brand must not reserve empty space after its visible text'
-            );
+            if (width > 600) {
+                assert.ok(
+                    Math.abs(label.y + label.height / 2 - brand.y - brand.height / 2) < 2,
+                    `brand alignment at ${width}`
+                );
+                assert.ok(
+                    Math.abs(label.y + label.height / 2 - account.y - account.height / 2) < 2,
+                    `account alignment at ${width}`
+                );
+                assert.ok(label.x >= brand.x + brand.width && label.x + label.width <= account.x);
+                assert.ok(
+                    label.x - (brand.x + brand.width) <= 24,
+                    'The brand must not reserve empty space after its visible text'
+                );
+            } else {
+                const user = await page.getByText(options.username, { exact: true }).boundingBox();
+                const menu = await page.getByRole('button', { name: 'Navigation', exact: true }).boundingBox();
+                assert.ok(Math.abs(user.y + user.height / 2 - menu.y - menu.height / 2) < 2);
+                assert.ok(brand.x >= menu.x + menu.width && user.x >= brand.x + brand.width);
+                assert.ok(account.y >= brand.y + brand.height);
+                assert.ok(Math.abs(label.y + label.height / 2 - account.y - account.height / 2) < 2);
+                assert.ok(label.x + label.width <= account.x);
+            }
             assert.ok(label.width > 0 && account.x + account.width <= width);
             if (previous)
                 assert.deepEqual(
@@ -7845,7 +7903,7 @@ test('network identity uses its name or full identifier, with scoped header and 
     assert.doesNotMatch(await dialog.innerText(), /Alpha|Beta/);
     await dialog.getByRole('link', { name: /Remote factory/ }).click();
     await header.getByText('Remote factory', { exact: true }).waitFor();
-    await page.getByRole('link', { name: 'Network', exact: true }).click();
+    await clickTab(page, 'Network');
     const name = page.getByRole('textbox', { name: 'Network name', exact: true });
     await name.fill('Renamed network');
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
@@ -7861,7 +7919,7 @@ test('network identity uses its name or full identifier, with scoped header and 
     await name.fill('');
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     await header.getByText(gridB, { exact: true }).waitFor();
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     await panel.getByText(gridB, { exact: true }).waitFor();
 });
 
@@ -7882,7 +7940,7 @@ test('Network details save and clear a name without resending tracking, and upda
     });
     const navigation = page.locator('nav').getByRole('link');
     assert.deepEqual((await navigation.allTextContents()).slice(0, 3), ['Home', 'Network', 'Terminal']);
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     const panel = page.locator('#home-network-panel');
     await panel.getByText('Main factory', { exact: true }).waitFor();
     assert.equal(await panel.getByText('Owner: Alpha', { exact: true }).count(), 0);
@@ -7916,17 +7974,17 @@ test('tracking notices use the current network, update after saving, and retain 
         .getByRole('status')
         .filter({ hasText: /settings saved/i })
         .waitFor();
-    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await clickTab(page, 'Terminal');
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await enable.count(), 0);
-    await page.getByRole('link', { name: 'Network', exact: true }).click();
+    await clickTab(page, 'Network');
     await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).uncheck();
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     await page
         .getByRole('status')
         .filter({ hasText: /settings saved/i })
         .waitFor();
-    await page.getByRole('link', { name: 'History', exact: true }).click();
+    await clickTab(page, 'History');
     await page.getByRole('link', { name: /Iron Ingot.*#1/ }).waitFor();
     await enable.waitFor();
     assert.equal(await enable.getAttribute('href'), `#/grids/${gridA}/settings`);
@@ -7934,7 +7992,7 @@ test('tracking notices use the current network, update after saving, and retain 
         .getByRole('region', { name: 'History', exact: true })
         .getByText(/tracking is disabled/i)
         .waitFor();
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     await page.getByRole('heading', { name: 'Home', exact: true }).waitFor();
     assert.equal(await enable.count(), 0);
     await page.goto(`${base}#/grids/${gridB}/cpus`);
@@ -7976,9 +8034,9 @@ test('late discovery cannot undo a confirmed name or tracking save', async (t) =
         })
     });
     await settleResponse(page, oldDiscovery.request());
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     await page.locator('#home-network-panel').getByRole('heading', { name: 'Factory', exact: true }).waitFor();
-    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await clickTab(page, 'Terminal');
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await page.getByRole('link', { name: 'Enable tracking', exact: true }).count(), 0);
     assert.equal(options.requests.filter((request) => request.method === 'PATCH').length, 1);
@@ -8034,7 +8092,7 @@ test('Network pending and uncertain name saves retain source identity and notify
     );
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     const pending = await captured;
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     options.settings[gridA] = { name: 'Canonical', isTracked: true };
     await pending.fulfill({
         status: 200,
@@ -8043,7 +8101,7 @@ test('Network pending and uncertain name saves retain source identity and notify
     });
     await page.locator('#home-network-panel').getByRole('heading', { name: 'Canonical', exact: true }).waitFor();
     await page.unroute('**/settings');
-    await page.getByRole('link', { name: 'Network', exact: true }).click();
+    await clickTab(page, 'Network');
     await name.fill('Unconfirmed');
     options.fault = { operation: 'settings', status: 'INTERNAL_ERROR' };
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
@@ -8110,7 +8168,7 @@ test('Network groups explicit people with collapsed source lists and keeps discl
     await settleResponse(page, (await read).request());
     assert.equal(await bob.getByRole('listitem').count(), 19);
     assert.equal(await bob.locator('summary').evaluate((node) => node === document.activeElement), true);
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     assert.equal(
         await page
             .locator('#home, #home-network-panel, #selected-network')
@@ -8211,6 +8269,7 @@ for (const height of [844, 600]) {
         assert.ok(bounds.height >= 44, `Notices must leave a usable resource viewport at ${height}px`);
         assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight));
         await page.getByRole('button', { name: /Iron Ingot/ }).click();
+        await closeMobilePane(page);
         const information = page.getByRole('region', { name: 'Information', exact: true });
         await information.focus();
         await page.keyboard.press('End');
@@ -8250,12 +8309,12 @@ test('Network refetch publishes remote name and tracking changes with polling di
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('link', { name: 'Enable tracking', exact: true }).waitFor();
     options.settings[gridA] = { name: 'Remote factory', isTracked: true };
-    await page.getByRole('link', { name: 'Network', exact: true }).click();
+    await clickTab(page, 'Network');
     await page.getByRole('textbox', { name: 'Network name', exact: true }).waitFor();
     assert.equal(await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).isChecked(), true);
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     await page.locator('#home-network-panel').getByRole('heading', { name: 'Remote factory', exact: true }).waitFor();
-    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await clickTab(page, 'Terminal');
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await page.getByRole('link', { name: 'Enable tracking', exact: true }).count(), 0);
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
@@ -8271,21 +8330,46 @@ for (const deviceScaleFactor of [1, 1.25, 1.5]) {
             await page.getByRole('button', { name: /Iron Ingot/ }).click();
             await page.evaluate(() => document.fonts.ready);
             const frame = await page.locator('#window').boundingBox();
-            const details = await page.getByRole('complementary').filter({ visible: true }).boundingBox();
-            const tools = await page.getByRole('group', { name: 'Resources', exact: true }).boundingBox();
             assert.ok(frame.x >= 0 && frame.x + frame.width <= width, `main frame fits at ${width}`);
-            assert.ok(details.x >= 0 && details.x + details.width <= width, `attached details fit at ${width}`);
-            assert.ok(tools.x >= 0 && tools.x + tools.width <= frame.x + 1, `tools fit beside frame at ${width}`);
+            if (width > 600) {
+                const details = await page.getByRole('complementary').filter({ visible: true }).boundingBox();
+                const tools = await page.getByRole('group', { name: 'Resources', exact: true }).boundingBox();
+                assert.ok(details.x >= 0 && details.x + details.width <= width, `attached details fit at ${width}`);
+                assert.ok(tools.x >= 0 && tools.x + tools.width <= frame.x + 1, `tools fit beside frame at ${width}`);
+                assert.ok(Math.abs(details.x - (frame.x + frame.width)) <= 3, `details remain docked at ${width}`);
+            } else {
+                const details = page.getByRole('dialog', { name: 'Resource details', exact: true });
+                const sheet = await details.boundingBox();
+                assert.ok(sheet.x >= 0 && sheet.x + sheet.width <= width, `details sheet fits at ${width}`);
+                assert.ok(sheet.y >= 0 && sheet.y + sheet.height <= 900, 'details stay inside the viewport');
+                await closeMobilePane(page);
+                assert.deepEqual(
+                    await page.locator('#window').boundingBox(),
+                    frame,
+                    'closing details preserves the terminal frame'
+                );
+                await openMobilePane(page, 'Filters and sorting');
+                const panel = await page
+                    .getByRole('dialog', { name: 'Filters and sorting', exact: true })
+                    .boundingBox();
+                const tools = await page.getByRole('group', { name: 'Resources', exact: true }).boundingBox();
+                assert.ok(
+                    tools.x >= panel.x && tools.x + tools.width <= panel.x + panel.width,
+                    'filters stay inside their sheet'
+                );
+                assert.ok(tools.y >= panel.y && tools.y + tools.height <= panel.y + panel.height);
+                await closeMobilePane(page);
+                assert.deepEqual(
+                    await page.locator('#window').boundingBox(),
+                    frame,
+                    'closing filters preserves the terminal frame'
+                );
+            }
             if (width >= 1600) {
                 assert.ok(
                     Math.abs(frame.x + frame.width / 2 - width / 2) < 1,
                     `main frame center ${frame.x + frame.width / 2} matches viewport center ${width / 2}`
                 );
-            }
-            if (width > 600) {
-                assert.ok(Math.abs(details.x - (frame.x + frame.width)) <= 3, `details remain docked at ${width}`);
-            } else {
-                assert.ok(details.y >= frame.y + frame.height - 1, `details stack below at ${width}`);
             }
             assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         }
@@ -8518,7 +8602,7 @@ test('outdated mod notice is admin only and supports session close and seven day
     assert.equal(await releases.getAttribute('href'), options.availableUpdate.releaseUrl);
     await page.getByRole('button', { name: 'Dismiss update notice' }).click();
     assert.equal(await releases.isVisible(), false);
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await clickTab(page, 'Home');
     assert.equal(await releases.isVisible(), false);
     await page.reload();
     await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
@@ -8563,7 +8647,7 @@ test('preferred columns preserve square icon slots and valid empty rows while re
     assert.equal(await columns.inputValue(), 'auto');
     for (const count of [1, 8]) {
         await columns.selectOption(String(count));
-        await page.getByRole('link', { name: 'Home', exact: true }).click();
+        await clickTab(page, 'Home');
         await page.goto(`${base}#/grids/${gridA}/items`);
         await page.locator('#items[data-display="icons"] .item').first().waitFor();
         await page.waitForFunction((count) => {
@@ -8739,7 +8823,7 @@ test('default terminal opens without an interface selector or legacy navigation'
     await page.locator('#items .item').first().waitFor();
     assert.equal(new URL(page.url()).search, '');
     assert.equal(await page.getByRole('link', { name: /previous interface/i }).count(), 0);
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
+    await clickTab(page, 'Web settings');
     await page.reload();
     await page.getByRole('heading', { name: 'Web settings', exact: true }).waitFor();
     assert.equal(new URL(page.url()).search, '');
@@ -8748,4 +8832,199 @@ test('default terminal opens without an interface selector or legacy navigation'
     assert.equal(new URL(page.url()).pathname, '/ae2/');
     assert.equal(new URL(page.url()).search, '');
     assert.equal(new URL(page.url()).hash, '#/web-settings');
+});
+
+test('phone navigation and resource panels reuse controls with modal focus and crafting transitions', async (t) => {
+    const { page, options, base } = await fixture(
+        t,
+        '',
+        { viewport: { width: 390, height: 844 } },
+        { mockClock: false }
+    );
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const menu = page.getByRole('button', { name: 'Navigation', exact: true });
+    await menu.waitFor({ timeout: 3000 });
+    assert.equal(await page.getByRole('link', { name: 'Web settings', exact: true }).isVisible(), false);
+    await menu.click();
+    await page.getByRole('dialog', { name: 'Navigation', exact: true }).waitFor();
+    await clickTab(page, 'Web settings');
+    await page.getByRole('heading', { name: 'Web settings', exact: true }).waitFor();
+    assert.equal(await page.getByRole('dialog').count(), 0);
+    await menu.click();
+    await clickTab(page, 'Terminal');
+    const item = page.locator('#items .item').filter({ hasText: 'Iron Ingot' });
+    await item.click();
+    const details = page.getByRole('dialog', { name: 'Resource details', exact: true });
+    await details.waitFor();
+    await details.getByRole('button', { name: 'Craft', exact: true }).click();
+    const craft = page.getByRole('dialog', { name: 'Craft', exact: true });
+    await craft.waitFor();
+    assert.equal(await details.isVisible(), false);
+    assert.equal(await page.getByRole('dialog').count(), 1);
+    await page.keyboard.press('Escape');
+    await craft.waitFor({ state: 'hidden' });
+    const filters = page.getByRole('button', { name: 'Filters and sorting', exact: true });
+    await filters.click();
+    const filterPanel = page.getByRole('dialog', { name: 'Filters and sorting', exact: true });
+    await filterPanel.getByRole('button', { name: /Availability: All/ }).click();
+    await page.keyboard.press('Escape');
+    assert.equal(await filters.evaluate((node) => document.activeElement === node), true);
+    await filters.click();
+    await page.setViewportSize({ width: 1280, height: 850 });
+    await filterPanel.waitFor({ state: 'hidden' });
+    assert.equal(
+        await page
+            .locator('#terminal-tools')
+            .getByRole('button', { name: /Availability: Stored/ })
+            .isVisible(),
+        true
+    );
+    assert.equal(await page.getByRole('link', { name: 'Web settings', exact: true }).isVisible(), true);
+    assert.equal(
+        options.requests.some((request) => request.method !== 'GET'),
+        false
+    );
+});
+
+test('phone CPU plan and Home selectors open on demand and reach their last entries', async (t) => {
+    const { page, options, base } = await fixture(
+        t,
+        '',
+        { viewport: { width: 390, height: 844 } },
+        { mockClock: false }
+    );
+    options.cpus = Object.fromEntries(
+        Array.from({ length: 40 }, (_, index) => [
+            `cpu-${index}`,
+            { ...cpu, name: `Processor ${String(index).padStart(2, '0')}` }
+        ])
+    );
+    options.cpuDetails['cpu-0'] = cpuWork;
+    options.cpuDetails['cpu-39'] = cpuWork;
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-0`);
+    const cpus = page.getByRole('button', { name: 'CPUs', exact: true });
+    await cpus.click();
+    const panel = page.getByRole('dialog', { name: 'CPUs', exact: true });
+    await panel.getByRole('link', { name: /Processor 39/ }).click();
+    await page.waitForURL(/cpus\/cpu-39$/);
+    await panel.waitFor({ state: 'hidden' });
+    await page.goto(`${base}#/grids/${gridA}/plans/17`);
+    await cpus.click();
+    await panel.getByRole('radio', { name: /cpu-39/ }).check();
+    await page.getByRole('button', { name: 'Close panel', exact: true }).click();
+    assert.equal(await cpus.evaluate((node) => document.activeElement === node), true);
+    await cpus.click();
+    assert.equal(await panel.getByRole('radio', { name: /cpu-39/ }).isChecked(), true);
+    await page.keyboard.press('Escape');
+    await page.goto(base);
+    await page.getByRole('button', { name: 'Network', exact: true }).click();
+    await page
+        .getByRole('dialog', { name: 'Network', exact: true })
+        .getByRole('button', { name: 'Choose a network', exact: true })
+        .click();
+    const networks = page.getByRole('dialog', { name: 'Choose a network', exact: true });
+    await networks.waitFor();
+    assert.equal(await page.getByRole('dialog').count(), 1);
+    await networks.getByRole('link').last().click();
+    await page.waitForURL(new RegExp(`/grids/${gridB}/items$`));
+    await networks.waitFor({ state: 'hidden' });
+});
+
+test('phone icon slots use available width and account identity stays readable', async (t) => {
+    const { page, options, base } = await fixture(
+        t,
+        '',
+        { viewport: { width: 390, height: 844 } },
+        { mockClock: false }
+    );
+    await page.goto(base);
+    await atlasFixture(page, options);
+    await page.evaluate(() =>
+        localStorage.setItem('ae2web:/:theme:default', JSON.stringify({ terminalDisplay: 'icons' }))
+    );
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.reload();
+    for (const width of [390, 360]) {
+        await page.setViewportSize({ width, height: 844 });
+        const item = page.locator('#items[data-display="icons"] .item').first();
+        await item.waitFor();
+        const slot = await item.boundingBox();
+        assert.ok(slot.width >= 48 && slot.width < 64);
+        assert.ok(Math.abs(slot.width - slot.height) < 1);
+        const icon = await item.locator('.resource-icon').boundingBox();
+        assert.equal(icon.width, 32);
+        const user = page.locator('#username');
+        assert.equal(await user.innerText(), options.username);
+        assert.equal(await user.evaluate((node) => node.scrollWidth <= node.clientWidth), true);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        const window = await page.locator('#window').boundingBox();
+        assert.ok(window.width >= width - 16);
+    }
+});
+
+test('phone panels survive polling and dismiss current navigation and backdrop without background actions', async (t) => {
+    const { page, options, base } = await fixture(t, '', { viewport: { width: 390, height: 844 } });
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#items .item').first().waitFor();
+    const menu = page.getByRole('button', { name: 'Navigation', exact: true });
+    await menu.click();
+    await page.getByRole('link', { name: 'Terminal', exact: true }).click();
+    await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    const filters = page.getByRole('button', { name: 'Filters and sorting', exact: true });
+    await filters.click();
+    const panel = page.getByRole('dialog', { name: 'Filters and sorting', exact: true });
+    const sort = panel.getByRole('button', { name: 'Sort by: Name', exact: true });
+    await sort.focus();
+    await poll(page);
+    assert.equal(await panel.isVisible(), true);
+    assert.equal(await sort.evaluate((node) => document.activeElement === node), true);
+    const requests = options.requests.length;
+    const refresh = await page.locator('#refresh').boundingBox();
+    await page.mouse.click(refresh.x + refresh.width / 2, refresh.y + refresh.height / 2);
+    await panel.waitFor({ state: 'hidden' });
+    assert.equal(options.requests.length, requests, 'A backdrop tap cannot trigger background refresh');
+    assert.equal(await filters.evaluate((node) => document.activeElement === node), true);
+});
+
+test('phone sheets fit short viewports and keep the last resource action reachable', async (t) => {
+    const { page, base } = await fixture(t, '', { viewport: { width: 600, height: 360 } }, { mockClock: false });
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#items .item').filter({ hasText: 'Iron Ingot' }).click();
+    const details = page.getByRole('dialog', { name: 'Resource details', exact: true });
+    const craft = details.getByRole('button', { name: 'Craft', exact: true });
+    await craft.scrollIntoViewIfNeeded();
+    const sheet = await details.boundingBox();
+    const action = await craft.boundingBox();
+    assert.ok(sheet.y >= 0 && sheet.y + sheet.height <= 360);
+    assert.ok(action.y >= sheet.y && action.y + action.height <= sheet.y + sheet.height);
+    await craft.click();
+    const popup = page.getByRole('dialog', { name: 'Craft', exact: true });
+    await popup.getByRole('button', { name: 'Calculate plan', exact: true }).scrollIntoViewIfNeeded();
+    const bounds = await popup.boundingBox();
+    assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 360);
+    await page.keyboard.press('Escape');
+    await popup.waitFor({ state: 'hidden' });
+    assert.equal(await page.getByRole('dialog').count(), 0);
+});
+
+test('phone panel icon buttons belong to the window heading with search below', async (t) => {
+    const { page, base } = await fixture(t, '', { viewport: { width: 360, height: 800 } }, { mockClock: false });
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const filters = page.getByRole('button', { name: 'Filters and sorting', exact: true });
+    await filters.waitFor();
+    const heading = await page.getByRole('heading', { name: 'Terminal', exact: true }).boundingBox();
+    const button = await filters.boundingBox();
+    const search = await page.getByRole('searchbox', { name: 'Search resources', exact: true }).boundingBox();
+    assert.ok(Math.abs(button.y + button.height / 2 - heading.y - heading.height / 2) < 2);
+    assert.ok(button.x >= heading.x + heading.width);
+    assert.ok(search.y >= button.y + button.height);
+    assert.equal((await filters.innerText()).trim(), '', 'The opener is icon-only with an accessible name');
+    await page.locator('#items .item').first().click();
+    await page.getByRole('button', { name: 'Close panel', exact: true }).click();
+    const details = page.getByRole('button', { name: 'Resource details', exact: true });
+    assert.equal((await details.innerText()).trim(), '');
+    await details.click();
+    await page.getByRole('dialog', { name: 'Resource details', exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    assert.equal(await details.evaluate((node) => document.activeElement === node), true);
 });

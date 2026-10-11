@@ -292,6 +292,7 @@ export function createCpuView(
     selectorSearchToggle.addEventListener('click', () => setSelectorSearch(!selectorSearchOpen));
     selectorSearch.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
+            event.preventDefault();
             event.stopPropagation();
             setSelectorSearch(false);
             selectorSearchToggle.focus();

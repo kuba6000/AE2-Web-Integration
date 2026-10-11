@@ -1,3 +1,7 @@
+import { createMobilePanels, type MobilePane } from './mobile-panels.js';
+import { filterIcon } from './icons/hackernoon/filter.js';
+import { networkIcon } from './icons/hackernoon/chart-network.js';
+import { cpuChipIcon } from './icons/pixel/cpu-controls.js';
 import { registryId } from './resource-metadata.js';
 import type { ApiError } from '../../app/api.js';
 import type { createUpdateNotice } from '../../app/update-notice.js';
@@ -63,6 +67,9 @@ export function mount(
 ) {
     i18n.register({
         en: {
+            navigation: 'Navigation',
+            mobileFilters: 'Filters and sorting',
+            closePanel: 'Close panel',
             showItems: 'Items',
             showFluids: 'Fluids',
             on: 'On',
@@ -107,6 +114,9 @@ export function mount(
             dismissIcons: 'Dismiss icon suggestion'
         },
         pl: {
+            navigation: 'Nawigacja',
+            mobileFilters: 'Filtry i sortowanie',
+            closePanel: 'Zamknij panel',
             showItems: 'Przedmioty',
             showFluids: 'Płyny',
             on: 'Włączone',
@@ -167,8 +177,8 @@ export function mount(
     let effectiveDisplay: TerminalDisplay = 'names';
     let iconSuggestionDismissed = settings.get('iconSuggestionDismissed') === true;
     root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1 aria-label="AE2 Web Integration"><span class="brand-full">AE2 <span>Web Integration</span></span><span class="brand-short" aria-hidden="true">AE2<span>WI</span></span></h1></div><span id="selected-network" tabindex="0" hidden></span><div class="account-controls">
-        <span class="account-user">${userIcon}<span id="username"></span></span><button id="logout" class="account-action" data-label="logout">${powerIcon}</button><button id="refresh" class="account-action" data-label="refresh" aria-busy="false">${refreshIcon}</button><span id="activity" class="sr-only" role="status" aria-live="off" hidden><span id="activity-text"></span></span></div></header>
-        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="settings-link" data-view="settings" data-text="network" hidden></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav><p id="session-message" role="alert" hidden></p></div>
+        <span class="account-user">${userIcon}<span id="username"></span></span><span class="account-actions"><button id="logout" class="account-action" data-label="logout">${powerIcon}</button><button id="refresh" class="account-action" data-label="refresh" aria-busy="false">${refreshIcon}</button></span><span id="activity" class="sr-only" role="status" aria-live="off" hidden><span id="activity-text"></span></span></div></header>
+        <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="settings-link" data-view="settings" data-text="network" hidden></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a><span id="updated" aria-live="off"></span></nav><p id="session-message" role="alert" hidden></p></div>
         <div class="info-notices" id="info-notices" role="region" data-label="notices" tabindex="0" hidden><section class="window-frame info-notice" id="update-notice" aria-labelledby="update-notice-text" hidden>${infoCircle}<p><span id="update-notice-text"></span> <a id="update-releases" data-theme-text="viewReleases"></a></p><button type="button" id="dismiss-update">×</button><div class="update-notice-actions"><button type="button" id="snooze-update" data-theme-text="remindLater"></button><button type="button" id="skip-update" data-theme-text="skipUpdate"></button></div><p id="update-notice-error" role="alert" hidden></p></section><section class="window-frame info-notice" id="icon-notice" aria-labelledby="icon-notice-text" hidden>
         ${infoCircle}<p id="icon-notice-text" data-theme-text="iconsOffer"></p>
         <button type="button" id="enable-icons" data-theme-text="enableIcons"></button>
@@ -199,8 +209,7 @@ export function mount(
         <div id="item-scroll" role="region" data-label="resources" tabindex="0"><ul id="items"></ul></div>
         <div id="pages"><button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button></div></div></section>
         <p id="missing" data-text="invalidRoute" hidden></p></div>
-        <aside id="resource-panel" hidden><h3>${infoCircle}<span data-text="details"></span></h3><div id="details"></div><div id="order"></div></aside></div>
-        <footer><span id="updated" aria-live="off"></span></footer>`;
+        <aside id="resource-panel" hidden><h3>${infoCircle}<span data-text="details"></span></h3><div id="details"></div><div id="order"></div></aside></div>`;
     /* IDs and element types belong to the static markup created above. */
     type ViewElements = {
         '#terminal-display': HTMLSelectElement;
@@ -276,12 +285,19 @@ export function mount(
             };
         }
     > = root.querySelectorAll('.tool-button');
-    const homeView = createHomeView(find('#workspace'), application);
-    const craftingView = createCraftingView(find('#window'), application, find('#workspace'), {
-        bind: bindTooltip,
-        hide: hideTooltip,
-        metadata: (resource) => resourceMetadata(resource, 'span')
-    });
+    const mobile = createMobilePanels(root, find('#workspace'), root.querySelector('.view-tabs')!, hideTooltip);
+    const homeView = createHomeView(find('#workspace'), application, mobile.beforeDialog);
+    const craftingView = createCraftingView(
+        find('#window'),
+        application,
+        find('#workspace'),
+        {
+            bind: bindTooltip,
+            hide: hideTooltip,
+            metadata: (resource) => resourceMetadata(resource, 'span')
+        },
+        mobile.beforeDialog
+    );
     const itemIcons = application.icons.observe(find('#item-scroll'), paintResourceIcon);
     const slots = createSlotGrid(find('#items'), find('#item-scroll'), find('#terminal'));
     const cpuView = createCpuView(find('#window'), application, { workspace: find('#workspace'), settings });
@@ -623,6 +639,7 @@ export function mount(
         button.addEventListener('click', () => {
             application.select(row.item);
             hideTooltip();
+            mobile.open(find('#resource-panel'), locale.common('details'), button);
         });
         button.addEventListener('mousedown', (event) => {
             if (event.button === 1 && row.item.craftable && row.item.itemKey) event.preventDefault();
@@ -915,6 +932,50 @@ export function mount(
         settingsView.render(state, locale);
         aboutView.render(state.route, locale);
         slots.update(rows.length);
+        const panes: MobilePane[] = [];
+        let mobileHeading: HTMLElement | null = null;
+        if (state.route.view === 'items') {
+            mobileHeading = root.querySelector('#terminal > .terminal-heading');
+            panes.push({ content: find('#terminal-tools'), title: locale.t('mobileFilters'), icon: filterIcon });
+            if (state.selected)
+                panes.push({ content: find('#resource-panel'), title: locale.common('details'), icon: infoCircle });
+        } else if (state.route.view === 'plan') {
+            mobileHeading = root.querySelector('.crafting-plan > .terminal-heading');
+            panes.push({
+                content: root.querySelector('.plan-tools')!,
+                title: locale.t('mobileFilters'),
+                icon: filterIcon
+            });
+            panes.push({
+                content: root.querySelector('#plan-panel')!,
+                title: locale.common('cpus'),
+                icon: cpuChipIcon
+            });
+        } else if (state.route.view === 'cpus' && state.route.cpuKey) {
+            mobileHeading = root.querySelector('.cpu-terminal > .terminal-heading');
+            panes.push({
+                content: root.querySelector('.cpu-tools')!,
+                title: locale.t('mobileFilters'),
+                icon: filterIcon
+            });
+            panes.push({ content: root.querySelector('#cpu-panel')!, title: locale.common('cpus'), icon: cpuChipIcon });
+        } else if (state.route.view === 'home') {
+            mobileHeading = root.querySelector('#home > .terminal-heading');
+            panes.push({
+                content: root.querySelector('#home-network-panel')!,
+                title: locale.common('network'),
+                icon: networkIcon
+            });
+        }
+        mobile.render(
+            JSON.stringify(state.route),
+            panes,
+            {
+                navigation: locale.t('navigation'),
+                close: locale.t('closePanel')
+            },
+            mobileHeading
+        );
         const gridKey = state.route.gridKey || state.selectedGridKey;
         find('#cpu-link').hidden = !gridKey;
         find('#terminal-link').hidden = !gridKey;
@@ -1062,8 +1123,13 @@ export function mount(
         renderPage();
         find('#item-scroll').scrollTop = 0;
     });
-    for (const button of [find('#logout'), find('#refresh')])
-        bindTooltip(button, () => [element('span', button.getAttribute('aria-label') || '')]);
+    bindTooltip(find('#logout'), () => [element('span', locale.common('logout'))]);
+    bindTooltip(find('#refresh'), () => {
+        const lines = [element('span', locale.common('refresh'))];
+        if (state.updatedAt)
+            lines.push(element('span', locale.common('updated', { time: locale.time(state.updatedAt) })));
+        return lines;
+    });
     find('#refresh').addEventListener('click', () => {
         void application.refresh({ reloadDetail: true });
     });
@@ -1095,6 +1161,7 @@ export function mount(
         disposed = true;
         unsubscribeUpdate();
         unsubscribe();
+        mobile.dispose();
         slots.dispose();
         cpuView.dispose();
         homeView.dispose();
