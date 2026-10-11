@@ -1,3 +1,4 @@
+import type { ThemeManifest } from './theme-manifest.js';
 import type {
     Grid,
     StoredResource,
@@ -12,6 +13,7 @@ import type { ResourceResponse, IconMetadata, ApplicationContext } from './api-t
 
 export type ApiFailure = Error & { status?: string; data?: unknown };
 export type Api = {
+    themes: (signal?: AbortSignal) => Promise<{ defaultTheme: string; themes: ThemeManifest[] }>;
     context: (signal?: AbortSignal) => Promise<ApplicationContext>;
     skipUpdate: (tag: string) => Promise<null>;
     iconPack: (
@@ -131,6 +133,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
     }
     return {
         context: (signal) => request('api/context', { signal }),
+        themes: (signal) => request('api/themes', { signal }),
         skipUpdate: (tag) => request('api/updates/skip', { method: 'POST', body: { tag } }),
         iconPack: (signal) => request('api/icon-pack', { signal }),
         grids: (signal) => request('api/grids', { signal }),

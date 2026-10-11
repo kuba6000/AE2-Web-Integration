@@ -1,17 +1,13 @@
+import './style.css';
 import type { ThemeDefinition, ThemeState } from '@ae2wi/theme-api';
 
 /** A complete small theme: a network chooser and resource list, without default-theme markup. */
 const theme: ThemeDefinition = {
-    id: 'example:resource-list',
+    id: 'resource-list',
     name: 'Resource list example',
     supportedModVersion: '1.2.x',
     views: ['home', 'items'],
     mount(root, application, context) {
-        const style = document.createElement('link');
-        style.rel = 'stylesheet';
-        style.href = new URL('./style.css', import.meta.url).href;
-        context.lifetime.onCleanup(() => style.remove());
-        document.head.append(style);
         root.classList.add('list-theme');
         context.lifetime.onCleanup(() => {
             root.classList.remove('list-theme');

@@ -42,7 +42,9 @@ your theme. Refresh the browser after rebuilding changes.
 
 - `src/theme.ts`: metadata, mount lifecycle and presentation.
 - `src/style.css`: all styling owned by this theme.
-- `dist/theme.js`, `dist/style.css`: generated browser assets.
+- `dist/theme.js`, `dist/theme.css`: bundled browser assets.
+- `theme.json`: package metadata; keep its ID consistent with the exported definition.
+- `dist/theme.zip`: installable server theme package.
 - `sdk/`: generated types and development application runtime; ignored by Git.
   The shared preview is documented in [tools/theme-preview](../../tools/theme-preview/README.md).
 
@@ -54,5 +56,7 @@ For JavaScript, see the [author guide](../../docs/themes/README.md#typescript-an
 The generated `dist/theme.js` is also the full runnable JavaScript version of this example.
 Do not hand-edit `dist` while using the TypeScript build, since the next build replaces it.
 
-Server-folder installation and a production theme picker are a later implementation step. There is
-no supported theme ZIP layout yet; this example validates the author contract independently of it.
+The starter build bundles module imports into one ES module and CSS image/font references into data
+URLs for convenience. Themes can also ship separate modules, stylesheets and assets with ordinary
+relative imports and URLs. Install `dist/theme.zip` on the server, then select it in Web Settings. See the
+[package guide](../../docs/themes/packages.md) for installation and recovery.

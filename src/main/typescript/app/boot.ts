@@ -1,3 +1,5 @@
+import { createThemeManager } from './theme-manager.js';
+import { createThemeDialog } from './theme-dialog.js';
 import { createApi } from './api.js';
 import { createIconLoader } from './icons.js';
 import { createPreferences } from './preferences.js';
@@ -8,9 +10,16 @@ import { mountTheme } from './theme-host.js';
 import type { ThemeDefinition } from './theme-api.js';
 import { createUpdateNotice } from './update-notice.js';
 
-export function boot(root: HTMLElement, definition: ThemeDefinition, base = new URL('./', location.href)) {
+export function boot(
+    root: HTMLElement,
+    definition: ThemeDefinition,
+    base = new URL('./', location.href),
+    builtinAssetBase?: URL
+) {
     const preferences = createPreferences(base);
     const theme = createThemeContext(base, definition.id);
+    let themeManager: ReturnType<typeof createThemeManager> | undefined;
+    let themeDialog: ReturnType<typeof createThemeDialog> | undefined;
     const locale = theme.i18n.forLanguage(preferences.values.language);
     const controller = new AbortController();
     let application: ReturnType<typeof createTerminal> | undefined;
@@ -34,6 +43,8 @@ export function boot(root: HTMLElement, definition: ThemeDefinition, base = new 
         controller.abort();
         application?.dispose();
         unmount();
+        themeManager?.dispose();
+        themeDialog?.dispose();
         window.removeEventListener('hashchange', route);
         window.removeEventListener('pagehide', hide);
         window.removeEventListener('pageshow', restore);
@@ -84,24 +95,53 @@ export function boot(root: HTMLElement, definition: ThemeDefinition, base = new 
                     returnToLogin();
                 }
             };
-            function renderTheme() {
+            let activated = false;
+            function renderTheme(
+                active: ThemeDefinition,
+                assets: { url(path: string): string },
+                failed: (error: unknown) => void
+            ) {
                 unmount();
-                unmount = mountTheme(root, definition, application!, context, (error) => {
-                    console.error('Theme rendering failed', error);
-                    const message = document.createElement('p');
-                    message.role = 'alert';
-                    message.textContent = locale.common('themeFailed');
-                    const retry = document.createElement('button');
-                    retry.type = 'button';
-                    retry.textContent = locale.common('retry');
-                    retry.onclick = renderTheme;
-                    root.replaceChildren(message, retry);
-                });
+                unmount = mountTheme(
+                    root,
+                    active,
+                    application!,
+                    {
+                        ...context,
+                        ...createThemeContext(base, active === definition ? definition.id : themeManager!.state.active),
+                        assets,
+                        themes: { open: () => themeDialog?.open() }
+                    },
+                    (error) => {
+                        console.error('Theme rendering failed', error);
+                        const message = document.createElement('p');
+                        message.role = 'alert';
+                        message.textContent = locale.common('themeFailed');
+                        const retry = document.createElement('button');
+                        retry.type = 'button';
+                        retry.textContent = locale.common('retry');
+                        retry.onclick = () => renderTheme(active, assets, failed);
+                        root.replaceChildren(message, retry);
+                        failed(error);
+                    }
+                );
+                if (!activated) {
+                    activated = true;
+                    route();
+                    void application!.refresh();
+                }
             }
-            renderTheme();
+            themeManager = createThemeManager(
+                base,
+                definition,
+                api,
+                metadata.modVersion,
+                renderTheme,
+                builtinAssetBase
+            );
+            themeDialog = createThemeDialog(themeManager, () => preferences.values.language);
             window.addEventListener('hashchange', route);
-            route();
-            application.refresh();
+            await themeManager.start();
         } catch {
             if (disposed || leaving) return;
             application?.dispose();

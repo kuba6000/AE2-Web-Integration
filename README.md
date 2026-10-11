@@ -109,6 +109,16 @@ Icons are optional; without an icon pack, the terminal displays item names.
 - Track active and completed crafting jobs
 - Send crafting updates through a Discord webhook
 
+### Web themes
+
+Choose a theme in **Web Settings → Choose a theme**. To install one for everyone, place its
+ZIP in `config/ae2webintegration/themes/` and restart the server. Set `general.default_theme` in
+`config/ae2webintegration/config.toml` to `server:<theme id>` to make it the server default, or
+`builtin:default` for the built-in UI. Users can follow that default or keep their own browser choice.
+
+If a theme prevents normal use, open the page with `?safe=1` before its `#` fragment to
+use the built-in UI. See the [theme author guide](docs/themes/README.md) for creating themes.
+
 ## Gallery
 
 <details>

@@ -93,9 +93,22 @@ Inspect the generated `IconTarget` and `IconSprite` definitions rather than gues
 Do not persist temporary blob URLs. Explicit `dispose()` permits early release; mount cleanup also
 releases observers. Call `displayIcons(false)` if your theme never renders resource icons.
 
+## Theme selection and package assets
+
+`context.themes?.open()` opens the independent picker. Custom themes may provide their own button;
+when an external theme is active, the host also supplies a small Themes button outside theme-owned
+DOM. The picker can switch between the built-in and server-installed themes or follow the server default.
+
+`context.assets?.url('images/logo.png')` is an optional convenience for resolving a path from the
+package root, for example when setting an image's `src` from JavaScript. A bare relative DOM URL resolves
+against the page URL, not the theme module. You can also use `new URL('./images/logo.png', import.meta.url)`
+for a module-relative URL. Relative ES module imports and stylesheet `url(...)`/`@import` references
+resolve normally from their containing files; include the referenced files in the package.
+
 ## Development host
 
-The SDK's `./host` export exposes `boot(root, definition, base?)` for local author previews. It owns
+The SDK's `./host` export exposes `boot(root, definition, base?, builtinAssetBase?)` for local author previews. It owns
 API/session startup and returns a final disposer. The shared tool in `tools/theme-preview` serves those generated runtime modules
 directly as ES modules. Theme output itself consists only of the compiled theme and its assets.
-The host is not an installed-theme loader and does not define a server package format yet.
+The optional fourth argument sets the asset directory for the development host's initial theme.
+Installed packages use their own server asset directory; see [packages](packages.md).

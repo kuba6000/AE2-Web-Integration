@@ -20,6 +20,7 @@ import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
@@ -50,6 +51,7 @@ public class CoreEngine {
     private static volatile @Nullable VersionChecker versionChecker;
     private static boolean serverRunning;
     private static volatile @Nullable IconPack iconPack;
+    private static volatile ThemeCatalog themes = new ThemeCatalog();
 
     public static void init(@NotNull IServerPlatform serverPlatform) {
         serverRunning = false;
@@ -72,6 +74,10 @@ public class CoreEngine {
         }
         serverRunning = true;
         loadIconPack();
+        themes.close();
+        themes = ThemeCatalog.load(
+            Config.getConfigFile("themes")
+                .toPath());
         AE2Controller.init();
         StartupHandler.logOpenAdminAccessWarning();
         maintainVersionChecker();
@@ -191,6 +197,7 @@ public class CoreEngine {
         AE2Controller.stopHTTPServer();
         closeIconPack();
         // Authorization must not survive into the next world loaded in this JVM.
+        themes.close();
         GRID_IDENTITIES.clear();
     }
 
@@ -201,6 +208,7 @@ public class CoreEngine {
         AE2Controller.stopHTTPServer();
         closeIconPack();
         AE2Controller.clearWorldState();
+        themes.close();
         AE2JobTracker.clearActiveJobs();
         GridData.clearRuntimeState();
         CoreEngine.GRID_IDENTITIES.clear();
@@ -214,6 +222,10 @@ public class CoreEngine {
     /** Immutable metadata is safe to read on either thread; page streams lease the archive until closed. */
     public static @Nullable IconPack getIconPack() {
         return iconPack;
+    }
+
+    public static @NotNull ThemeCatalog getThemes() {
+        return themes;
     }
 
     private static void loadIconPack() {

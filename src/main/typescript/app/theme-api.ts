@@ -103,6 +103,9 @@ export type ThemeUpdates = {
     subscribe(listener: () => void): () => void;
 };
 export type ThemeContext = {
+    readonly themes?: { open(): void };
+    /** Resolve an asset relative to this theme's package root. */
+    readonly assets?: { url(path: string): string };
     readonly user: { readonly username: string; readonly isAdmin: boolean };
     readonly modVersion: string | null;
     readonly settings: ThemeSettings;

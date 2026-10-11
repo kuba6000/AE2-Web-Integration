@@ -9,6 +9,157 @@ const resources = path.resolve(__dirname, '../../src/main/resources');
 const compiledResources = path.resolve(__dirname, '../../build/generated/frontend');
 const gridA = 'AAAAAAAAAAAAAAAAAAAAAA';
 const gridB = 'BBBBBBBBBBBBBBBBBBBBBA';
+
+test('a theme that never finishes loading still offers navigation to safe mode', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.themeCatalog = {
+        defaultTheme: 'server:waiting',
+        themes: [
+            {
+                id: 'waiting',
+                name: 'Waiting layout',
+                version: '1',
+                supportedModVersion: '1.2.x',
+                views: ['home'],
+                entry: 'theme.js',
+                styles: []
+            }
+        ]
+    };
+    options.themeFiles = {
+        '/themes/waiting/theme.js': 'await new Promise(() => {}); export default {id:"waiting",mount(){}};'
+    };
+    const importing = page.waitForRequest((request) => request.url().endsWith('/themes/waiting/theme.js'));
+    await page.goto(base);
+    await importing;
+    await page.getByRole('button', { name: 'Themes', exact: true }).click();
+    await page.getByRole('link', { name: 'Open default UI in safe mode' }).click();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('safe'), '1');
+    assert.equal(options.requests.filter((r) => r.path === '/themes/waiting/theme.js').length, 1);
+});
+
+test('server theme rendering failure returns to built-in and version mismatch remains advisory', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const manifest = {
+        id: 'broken',
+        name: 'Broken layout',
+        version: '1',
+        supportedModVersion: '1.2.x',
+        views: ['home'],
+        entry: 'theme.js',
+        styles: []
+    };
+    options.themeCatalog = { defaultTheme: 'server:broken', themes: [manifest] };
+    options.themeFiles = {
+        '/themes/broken/theme.js': 'export default {id:"broken",mount(){throw new Error("Renderer unavailable");}};'
+    };
+    await page.goto(base);
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Themes', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: 'Renderer unavailable' }).waitFor();
+    options.themeFiles['/themes/broken/theme.js'] =
+        'export default {id:"broken",mount(root){root.innerHTML="<h1>Different version layout</h1>";}};';
+    await page.reload();
+    await page.getByRole('heading', { name: 'Different version layout' }).waitFor();
+    await page.getByRole('button', { name: 'Themes', exact: true }).click();
+    await page.getByRole('status').filter({ hasText: '1.2.x' }).waitFor();
+    assert.equal(await page.getByRole('heading', { name: 'Only install themes you trust' }).count(), 0);
+});
+
+test('server default theme is trusted and browser can explicitly override or follow it', async (t) => {
+    const { page, options, base } = await fixture(t, '/panel');
+    const manifest = {
+        id: 'sample',
+        name: 'Sample layout',
+        version: '1',
+        supportedModVersion: '9.8.x',
+        views: ['home'],
+        entry: 'theme.js',
+        styles: []
+    };
+    options.themeCatalog = { defaultTheme: 'server:sample', themes: [manifest] };
+    options.themeFiles = {
+        '/themes/sample/theme.js': `export default {id:'sample',mount(root,app){root.innerHTML='<h1>Server layout</h1>';app.subscribe(state=>root.dataset.networks=String(state.grids.length));}};`
+    };
+    await page.goto(base);
+    await page.getByRole('heading', { name: 'Server layout' }).waitFor();
+    assert.equal(await page.getByRole('dialog').count(), 0);
+    await page.getByRole('button', { name: 'Themes', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Choose a theme', exact: true }).selectOption('builtin:default');
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    await page.reload();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    await page.goto(`${base}#/web-settings`);
+    await page.getByRole('button', { name: 'Choose a theme', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Choose a theme', exact: true }).selectOption('');
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await page.getByRole('heading', { name: 'Server layout' }).waitFor();
+});
+
+test('server themes support relative modules and stylesheet assets, and safe mode skips their code', async (t) => {
+    const { page, options, base } = await fixture(t, '/panel');
+    const manifest = {
+        id: 'portable',
+        name: 'Server theme',
+        version: '1',
+        supportedModVersion: '9.8.x',
+        views: ['home'],
+        entry: 'js/theme.js',
+        styles: ['styles/theme.css']
+    };
+    const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="blue"/></svg>';
+    options.themeCatalog = { defaultTheme: 'server:portable', themes: [manifest] };
+    options.themeFiles = {
+        '/themes/portable/js/theme.js': `import { title } from './title.js';
+            export default {id:'portable',mount(root,app,ctx){
+                root.innerHTML='<h1 class="portable-title"></h1><img alt="Package asset"><button>Load detail</button>';
+                root.querySelector('h1').textContent=title;
+                root.querySelector('img').src=ctx.assets.url('images/pixel.svg');
+                root.querySelector('button').onclick=async()=>{root.querySelector('h1').textContent=(await import('./detail.js')).title};
+            }};`,
+        '/themes/portable/js/title.js': 'export const title="Server layout";',
+        '/themes/portable/js/detail.js': 'export const title="Detail loaded";',
+        '/themes/portable/styles/theme.css':
+            '@import "./colors.css"; .portable-title { background-image: url("../images/pixel.svg"); }',
+        '/themes/portable/styles/colors.css':
+            '.portable-title { color: rgb(15, 80, 125); } body { --installed-theme-marker: active; }',
+        '/themes/portable/images/pixel.svg': svg
+    };
+    await page.goto(base);
+    await page.getByRole('heading', { name: 'Server layout' }).waitFor();
+    await page.waitForFunction(
+        () => getComputedStyle(document.querySelector('.portable-title')).color === 'rgb(15, 80, 125)',
+        {},
+        { timeout: 3000 }
+    );
+    await page.waitForFunction(() => document.querySelector('img[alt="Package asset"]').naturalWidth === 2);
+    assert.ok(options.requests.some((r) => r.path === '/themes/portable/styles/colors.css'));
+    assert.equal(
+        await page.locator('.portable-title').evaluate((node) => getComputedStyle(node).backgroundImage),
+        `url("${base}themes/portable/images/pixel.svg")`
+    );
+    await page.getByRole('button', { name: 'Load detail' }).click();
+    await page.getByRole('heading', { name: 'Detail loaded' }).waitFor();
+    await page.getByRole('button', { name: 'Themes', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    assert.equal(await dialog.locator('input[type=file]').count(), 0);
+    await page.getByRole('combobox', { name: 'Choose a theme', exact: true }).selectOption('builtin:default');
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    assert.equal(
+        await page
+            .locator('body')
+            .evaluate((node) => getComputedStyle(node).getPropertyValue('--installed-theme-marker').trim()),
+        ''
+    );
+    const modules = options.requests.filter((r) => r.path.endsWith('/js/theme.js')).length;
+    await page.goto(`${base}?safe=1#/web-settings`);
+    await page.getByRole('button', { name: 'Choose a theme', exact: true }).waitFor();
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/js/theme.js')).length, modules);
+});
 const iron = {
     displayName: 'Iron Ingot',
     registryNamespace: 'minecraft',
@@ -349,6 +500,25 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
             headers: request.headers,
             body: body.length ? JSON.parse(Buffer.concat(body).toString()) : null
         });
+        if (resource === '/api/themes') {
+            response.writeHead(200, { 'Content-Type': 'application/json' }).end(
+                JSON.stringify({
+                    status: 'OK',
+                    data: options.themeCatalog || { defaultTheme: 'builtin:default', themes: [] }
+                })
+            );
+            return;
+        }
+        if (resource.startsWith('/themes/')) {
+            const file = options.themeFiles?.[resource];
+            response
+                .writeHead(file ? 200 : 404, {
+                    'Content-Type':
+                        { '.css': 'text/css', '.svg': 'image/svg+xml' }[path.extname(resource)] ?? 'text/javascript'
+                })
+                .end(file || '');
+            return;
+        }
         // Test-owned theme modules exercise the same bootstrap and HTTP services as production.
         if (options.themeEntry && resource === '/__theme-test.js') {
             response.writeHead(200, { 'Content-Type': 'text/javascript' }).end(options.themeEntry);
@@ -1091,6 +1261,7 @@ for (const saved of [
         }, saved);
         await page.goto(`${base}#/web-settings`);
         const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
+        await mode.waitFor();
         await page.waitForFunction(
             (expected) => document.querySelector('#terminal-display').value === expected,
             saved.expected,
@@ -1925,13 +2096,15 @@ test('global settings tabs preserve grid navigation and browser preferences', as
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     await page.getByRole('link', { name: 'Web settings', exact: true }).click({ timeout: 3000 });
     assert.match(page.url(), /#\/web-settings$/);
-    const header = page.locator('header');
+    const header = page.locator('#app header');
     await header.getByText(options.username, { exact: true }).waitFor();
     await header.getByRole('button', { name: 'Log out', exact: true }).waitFor();
     assert.equal(await header.getByRole('combobox').count(), 0);
-    const theme = page.getByRole('combobox', { name: 'Theme', exact: true });
-    assert.equal(await theme.isDisabled(), true);
-    assert.deepEqual(await theme.getByRole('option').allTextContents(), ['Default']);
+    await page.getByRole('button', { name: 'Choose a theme' }).click();
+    const theme = page.getByRole('combobox', { name: 'Choose a theme', exact: true });
+    assert.equal(await theme.isEnabled(), true);
+    assert.equal(await theme.inputValue(), '');
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
     const appearance = page.getByRole('combobox', { name: 'Appearance', exact: true });
     await appearance.selectOption('dark');
     await clickTab(page, 'Server settings');
@@ -2062,9 +2235,12 @@ test('Home retains the selected network and owns switching while Web settings ow
     );
     assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Refresh', exact: true }).count(), 1);
-    assert.equal(await page.locator('header').getByRole('button', { name: 'Refresh', exact: true }).isVisible(), true);
+    assert.equal(
+        await page.locator('#app header').getByRole('button', { name: 'Refresh', exact: true }).isVisible(),
+        true
+    );
     assert.equal(await page.getByRole('checkbox', { name: 'Refresh automatically' }).count(), 0);
-    assert.equal(await page.locator('header').getByRole('combobox').count(), 0);
+    assert.equal(await page.locator('#app header').getByRole('combobox').count(), 0);
     assert.equal(await page.locator('#selected-network').isVisible(), false);
     await page.locator('#home-network-panel').getByRole('heading', { name: gridA, exact: true }).waitFor();
     const scopedReads = options.requests.filter(
@@ -3555,7 +3731,7 @@ test('header icon controls refresh the current history entry and retain dirty se
     await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/history/1`);
     await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
-    const header = page.locator('header');
+    const header = page.locator('#app header');
     const refresh = header.getByRole('button', { name: 'Refresh', exact: true });
     await refresh.waitFor({ timeout: 2000 });
     assert.equal(await header.getByRole('button', { name: 'Log out', exact: true }).innerText(), '');
@@ -3598,7 +3774,7 @@ test('header refresh stays active through a history detail read queued behind au
     );
     await poll(page);
     const grids = await gridsRequest;
-    const refresh = page.locator('header').getByRole('button', { name: 'Refresh', exact: true });
+    const refresh = page.locator('#app header').getByRole('button', { name: 'Refresh', exact: true });
     await refresh.click();
     await grids.continue();
     const detail = await detailRequest;
@@ -3619,7 +3795,7 @@ test('CPU background refresh signals activity without disabling or dimming exist
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     const pause = page.getByRole('button', { name: 'Pause current work', exact: true });
     await pause.waitFor();
-    const refresh = page.locator('header').getByRole('button', { name: 'Refresh', exact: true });
+    const refresh = page.locator('#app header').getByRole('button', { name: 'Refresh', exact: true });
     const controls = [
         pause,
         page.getByRole('button', { name: 'Cancel current work', exact: true }),
@@ -3666,7 +3842,7 @@ for (const width of [390, 1280])
         await seedAutomaticRefresh(page, base, false);
         await page.goto(`${base}#/grids/${gridA}/items`);
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-        const header = page.locator('header');
+        const header = page.locator('#app header');
         const refresh = header.getByRole('button', { name: 'Refresh', exact: true });
         const logout = header.getByRole('button', { name: 'Log out', exact: true });
         const geometry = async () => [
@@ -7831,12 +8007,12 @@ test('current network preserves desktop alignment and shares the second phone ro
             options.settings[gridA].name = name;
             await page.goto(`${base}#/grids/${gridA}/settings`);
             await page.reload();
-            const network = page.locator('header').getByText(name, { exact: true });
+            const network = page.locator('#app header').getByText(name, { exact: true });
             await network.waitFor();
             const brand = await page.getByRole('heading', { name: 'AE2 Web Integration' }).boundingBox();
             const account = await page.getByRole('button', { name: 'Log out', exact: true }).boundingBox();
             const label = await network.boundingBox();
-            const header = await page.locator('header').boundingBox();
+            const header = await page.locator('#app header').boundingBox();
             if (width === 1280)
                 assert.ok(
                     await page
@@ -7885,7 +8061,7 @@ test('network identity uses its name or full identifier, with scoped header and 
     options.settings[gridB].name = 'Remote factory';
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-    const header = page.locator('header');
+    const header = page.locator('#app header');
     const current = header.getByText(gridA, { exact: true });
     await current.waitFor({ timeout: 2000 });
     assert.doesNotMatch(await header.innerText(), /Alpha/);
@@ -8218,7 +8394,7 @@ test('Network details scroll long access lists under a fixed heading and keep mo
         await page.goto(`${base}#/grids/${gridA}/settings`);
         const heading = page.getByRole('heading', { name: 'Network details', exact: true });
         await heading.waitFor();
-        const current = page.locator('header').getByText(options.settings[gridA].name, { exact: true });
+        const current = page.locator('#app header').getByText(options.settings[gridA].name, { exact: true });
         await page.getByRole('textbox', { name: 'Network name', exact: true }).waitFor();
         await page.evaluate(
             () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -8227,12 +8403,15 @@ test('Network details scroll long access lists under a fixed heading and keep mo
         const tooltip = page.getByRole('tooltip');
         await tooltip.waitFor();
         assert.ok((await tooltip.innerText()).includes(options.settings[gridA].name));
-        for (const target of [current, page.locator('header').getByRole('button', { name: 'Log out', exact: true })]) {
+        for (const target of [
+            current,
+            page.locator('#app header').getByRole('button', { name: 'Log out', exact: true })
+        ]) {
             const box = await target.boundingBox();
             assert.ok(box.width > 0 && box.x >= 0 && box.x + box.width <= 390);
         }
         await page.keyboard.press('Tab');
-        const logout = page.locator('header').getByRole('button', { name: 'Log out', exact: true });
+        const logout = page.locator('#app header').getByRole('button', { name: 'Log out', exact: true });
         assert.ok(await logout.evaluate((node) => node === document.activeElement));
         await tooltip.getByText(await logout.getAttribute('aria-label'), { exact: true }).waitFor();
         assert.equal((await tooltip.innerText()).includes(options.settings[gridA].name), false);

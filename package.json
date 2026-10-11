@@ -20,7 +20,9 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "esbuild": "0.28.2",
     "eslint": "10.11.0",
+    "fflate": "0.8.3",
     "globals": "17.12.0",
     "prettier": "3.9.9",
     "stylelint": "17.15.0",

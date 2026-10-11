@@ -7,6 +7,8 @@
   },
   "devDependencies": {
     "@ae2wi/theme-api": "file:./sdk",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "esbuild": "0.28.2",
+    "fflate": "0.8.3"
   }
 }

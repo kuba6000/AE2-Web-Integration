@@ -5,9 +5,9 @@ routing, refreshes and actions. It does not insert default-theme views into a cu
 The included [starter](../../examples/theme-starter/README.md) uses a plain resource list instead of
 the default terminal grid.
 
-This stage provides the author contract, optional helpers, generated declarations and a runnable
-local example. Installing themes from a server directory and selecting them in Web Settings are
-not implemented yet. The production page still mounts the built-in theme.
+Build a ZIP for server installation. Select an installed theme through **Web Settings → Choose a theme**.
+The [package and installation guide](packages.md) describes the manifest, server default, browser
+selection and recovery.
 
 ## Try the complete example
 
@@ -74,10 +74,9 @@ an explicit unavailable message when a user follows an unsupported route. Missin
 silently inherit the default terminal or its styles. A theme need not use grids at all.
 
 `supportedModVersion: '1.2.x'` declares support for a major/minor mod version line, with any patch.
-Patch releases must preserve the public theme contract. A different line is intended to produce an
-advisory in the future theme picker, not prohibit loading. This metadata is not a separate API version
-or a guarantee that every view is implemented. The current starter displays its declaration and the
-server version; there is no installed-theme compatibility checker yet.
+Patch releases must preserve the public theme contract. A different known version line produces an
+advisory in the theme picker without blocking loading. This metadata is not a separate API version
+or a guarantee that every view is implemented.
 
 ## Ownership
 
@@ -92,6 +91,6 @@ server version; there is no installed-theme compatibility checker yet.
 - Treat theme code as trusted JavaScript running in the page. Readonly types are author guidance,
   not a sandbox or runtime deep freeze.
 
-The host catches synchronous mount and subscribed rendering failures, releases that mount and offers
-Retry using the same application state. Theme event handlers and arbitrary asynchronous work still
+The host catches synchronous mount and subscribed rendering failures and releases that mount.
+External theme failures return to the built-in UI using the same application state. Theme event handlers and arbitrary asynchronous work still
 need their own error handling and cancellation. Do not retry crafting mutations automatically.

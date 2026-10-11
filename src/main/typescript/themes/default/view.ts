@@ -49,7 +49,7 @@ function iconButton(group: 'filter' | 'sort' | 'sortOrder' | 'showItems' | 'show
 export function mount(
     root: HTMLElement,
     application: Terminal,
-    { user, modVersion, updateNotice, logout, settings, i18n, lifetime }: ThemeContext
+    { user, modVersion, updateNotice, logout, settings, i18n, lifetime, themes }: ThemeContext
 ) {
     lifetime.onCleanup(() => {
         delete document.documentElement.dataset.appearance;
@@ -89,6 +89,7 @@ export function mount(
             light: 'Light',
             dark: 'Dark',
             system: 'System',
+            manageThemes: 'Choose a theme',
             defaultTheme: 'Default',
             generalOptions: 'General',
             terminalDisplay: 'Terminal display',
@@ -135,6 +136,7 @@ export function mount(
             light: 'Jasny',
             dark: 'Ciemny',
             system: 'Systemowy',
+            manageThemes: 'Wybierz lub importuj motyw',
             defaultTheme: 'Domyślny',
             generalOptions: 'Ogólne',
             terminalDisplay: 'Wyświetlanie terminala',
@@ -185,7 +187,7 @@ export function mount(
         <label><span data-text="language"></span><select id="language"><option value="en">English</option><option value="pl">Polski</option></select></label>
         <label class="web-preference-toggle"><span data-text="autoRefresh"></span><input type="checkbox" id="auto-refresh"></label></section>
         <section class="web-preferences-section" aria-labelledby="appearance-options-title"><h3 id="appearance-options-title" data-theme-text="appearance"></h3>
-        <label><span data-text="theme"></span><select disabled><option value="default" data-theme-text="defaultTheme"></option></select></label>
+        <div id="theme-settings"><button type="button" id="manage-themes" data-theme-text="manageThemes"></button></div>
         <label><span data-theme-text="resourceColumns"></span><select id="resource-columns"><option value="auto" data-theme-text="automaticColumns"></option>${Array.from({ length: 8 }, (_, index) => `<option value="${index + 1}">${index + 1}</option>`).join('')}</select></label>
         <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label></section>
         <section class="web-preferences-section" aria-labelledby="terminal-options-title"><h3 id="terminal-options-title" data-text="terminal"></h3>
@@ -982,6 +984,9 @@ export function mount(
     search.addEventListener('blur', hideTooltip);
     const languageSelect = find('#language');
     languageSelect.addEventListener('change', () => application.preference('language', languageSelect.value));
+    const manageThemes = root.querySelector<HTMLButtonElement>('#manage-themes')!;
+    root.querySelector<HTMLElement>('#theme-settings')!.hidden = !themes;
+    manageThemes.addEventListener('click', () => themes?.open());
     const appearanceSelect = find('#appearance');
     find('#resource-columns').addEventListener('change', () => {
         const value = find('#resource-columns').value;
@@ -1050,6 +1055,7 @@ export function mount(
         positionTooltip(box.right, box.top);
     }
     toolButtons.forEach((button) => {
+        let pointerInside = false;
         const show = () => showToolTooltip(button);
         button.addEventListener('click', () => {
             if (button.dataset.preference === 'filter') {
@@ -1073,9 +1079,15 @@ export function mount(
             show();
         });
         button.addEventListener('pointerenter', (event) => {
-            if (event.pointerType !== 'touch') show();
+            if (event.pointerType === 'touch' || pointerInside) return;
+            // Updating the icon can emit another enter without the pointer leaving the button.
+            pointerInside = true;
+            show();
         });
-        button.addEventListener('pointerleave', hideTooltip);
+        button.addEventListener('pointerleave', () => {
+            pointerInside = false;
+            hideTooltip();
+        });
         button.addEventListener('focus', show);
         button.addEventListener('blur', hideTooltip);
     });
