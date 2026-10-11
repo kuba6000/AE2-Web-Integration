@@ -9,4 +9,8 @@
     <item index="1" class="java.lang.String" itemvalue="net.neoforged.fml.common.EventBusSubscriber" />
     <item index="2" class="java.lang.String" itemvalue="net.neoforged.bus.api.SubscribeEvent" />
   </list>
+  <writeAnnotations>
+    <writeAnnotation name="pl.kuba6000.ae2webintegration.core.http.contract.Body" />
+    <writeAnnotation name="pl.kuba6000.ae2webintegration.core.http.contract.PathParam" />
+  </writeAnnotations>
 </component>
