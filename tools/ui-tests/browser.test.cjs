@@ -306,6 +306,13 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
         loggedOut: false,
         username: 'ExamplePlayer',
         isAdmin: false,
+        availableUpdate: {
+            version: '10.0.0',
+            tag: '1.7.10-10.0.0',
+            releaseUrl: 'https://github.com/kuba6000/AE2-Web-Integration/releases/tag/1.7.10-10.0.0',
+            skipped: false
+        },
+        skipUpdateStatus: 'OK',
         modVersion: '9.8.7-browser-fixture',
         publicMode: true,
         capabilities: { craftingLightMode: false },
@@ -393,6 +400,10 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                                       capabilities: options.loggedOut ? {} : options.capabilities,
                                       modVersion: options.modVersion,
                                       isOutdated: options.isOutdated || false,
+                                      availableUpdate:
+                                          !options.loggedOut && options.isAdmin && options.isOutdated
+                                              ? options.availableUpdate
+                                              : null,
                                       user: options.loggedOut
                                           ? null
                                           : { username: options.username, isAdmin: options.isAdmin }
@@ -400,6 +411,16 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                                 : null
                     })
                 );
+            } else if (resource === '/api/updates/skip') {
+                const input = body.length ? JSON.parse(Buffer.concat(body).toString()) : {};
+                let status = options.skipUpdateStatus;
+                if (!options.isAdmin) status = 'FORBIDDEN';
+                else if (!options.availableUpdate || input.tag !== options.availableUpdate.tag)
+                    status = 'UPDATE_CHANGED';
+                if (status === 'OK') options.availableUpdate.skipped = true;
+                response.statusCode =
+                    status === 'OK' ? 200 : status === 'FORBIDDEN' ? 403 : status === 'UPDATE_CHANGED' ? 409 : 500;
+                response.end(JSON.stringify({ status, data: null }));
             } else if (resource === '/api/icon-pack') {
                 if (options.packError) {
                     response.writeHead(503).end(JSON.stringify({ status: 'INTERNAL_ERROR', data: null }));
@@ -2427,7 +2448,7 @@ test('terminal availability cycles through all stored and craftable with current
     await page.getByRole('button', { name: /Certus Quartz Crystal/ }).waitFor();
     assert.match(await availability.getAttribute('aria-label'), /All/);
     await page.keyboard.press('Escape');
-    assert.equal(await tooltip.isVisible(), false);
+    await tooltip.waitFor({ state: 'hidden' });
     assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, 1);
 });
 
@@ -8435,4 +8456,279 @@ test('history preserves subsecond timeline scale and distinguishes very slow pro
     await page.reload();
     await row.locator('summary').click();
     await row.getByText('0/s', { exact: true }).waitFor();
+});
+
+// Public settings/UI seam: saved preferred columns constrain resource grids without forcing mobile overflow.
+test('preferred resource columns persist and adapt across terminal CPU and plan grids', async (t) => {
+    const { page, base } = await fixture(t, '/ae2', { viewport: { width: 1600, height: 1000 } }, { mockClock: false });
+    await page.goto(`${base}#/web-settings`);
+    const columns = page.getByRole('combobox', { name: /Resource columns/ });
+    await columns.waitFor({ timeout: 3000 });
+    assert.equal(await columns.inputValue(), 'auto');
+    await columns.selectOption('3');
+    await page.reload();
+    assert.equal(await columns.inputValue(), '3');
+    for (const [route, selector] of [
+        [`items`, '#items'],
+        [`cpus/cpu-a`, '.cpu-terminal .cpu-items'],
+        [`plans/17`, '.crafting-plan .cpu-items']
+    ]) {
+        await page.goto(`${base}#/grids/${gridA}/${route}`);
+        const grid = page.locator(selector);
+        await grid.waitFor({ timeout: 3000 });
+        await page.waitForFunction(
+            (selector) =>
+                getComputedStyle(document.querySelector(selector)).gridTemplateColumns.split(' ').length === 3,
+            selector
+        );
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.waitForFunction(
+            (selector) => getComputedStyle(document.querySelector(selector)).gridTemplateColumns.split(' ').length < 3,
+            selector
+        );
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        await page.setViewportSize({ width: 1600, height: 1000 });
+        await page.waitForFunction(
+            (selector) =>
+                getComputedStyle(document.querySelector(selector)).gridTemplateColumns.split(' ').length === 3,
+            selector
+        );
+    }
+    await page.goto(`${base}#/web-settings`);
+    assert.equal(await columns.inputValue(), '3');
+    await columns.selectOption('auto');
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.waitForFunction(
+        () => getComputedStyle(document.querySelector('#items')).gridTemplateColumns.split(' ').length > 3
+    );
+});
+
+test('outdated mod notice is admin only and supports session close and seven day snooze', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    await seedAutomaticRefresh(page, base, false);
+    options.isOutdated = true;
+    await page.goto(`${base}#/web-settings`);
+    await page.getByRole('heading', { name: 'Web settings', exact: true }).waitFor();
+    assert.equal(await page.getByRole('link', { name: 'View releases' }).count(), 0);
+    options.isAdmin = true;
+    await page.reload();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    const releases = page.getByRole('link', { name: 'View releases' });
+    await releases.waitFor({ timeout: 3000 });
+    assert.equal(await releases.getAttribute('href'), options.availableUpdate.releaseUrl);
+    await page.getByRole('button', { name: 'Dismiss update notice' }).click();
+    assert.equal(await releases.isVisible(), false);
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    assert.equal(await releases.isVisible(), false);
+    await page.reload();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    await releases.waitFor();
+    await page.getByRole('button', { name: 'Remind me later' }).click();
+    await page.reload();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    assert.equal(await releases.isVisible(), false);
+    const now = await page.evaluate(() => Date.now());
+    await page.clock.setSystemTime(now + 6 * 24 * 60 * 60 * 1000);
+    await page.reload();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    assert.equal(await releases.isVisible(), false);
+    await page.clock.setSystemTime(now + 7 * 24 * 60 * 60 * 1000 + 1000);
+    await page.reload();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    await releases.waitFor();
+    options.isOutdated = false;
+    await page.reload();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    assert.equal(await releases.isVisible(), false);
+});
+
+test('preferred columns preserve square icon slots and valid empty rows while rejecting invalid saved choices', async (t) => {
+    const { page, options, base } = await fixture(
+        t,
+        '/ae2',
+        { viewport: { width: 1600, height: 1000 } },
+        { mockClock: false }
+    );
+    await page.goto(base);
+    await atlasFixture(page, options);
+    await page.evaluate(() =>
+        localStorage.setItem(
+            'ae2web:/ae2/:theme:default',
+            JSON.stringify({ resourceColumns: 100, terminalDisplay: 'icons' })
+        )
+    );
+    await page.reload();
+    await page.goto(`${base}#/web-settings`);
+    const columns = page.getByRole('combobox', { name: /Resource columns/ });
+    assert.equal(await columns.inputValue(), 'auto');
+    for (const count of [1, 8]) {
+        await columns.selectOption(String(count));
+        await page.getByRole('link', { name: 'Home', exact: true }).click();
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.locator('#items[data-display="icons"] .item').first().waitFor();
+        await page.waitForFunction((count) => {
+            const grid = document.querySelector('#items');
+            const tracks = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
+            return (
+                tracks === count &&
+                grid.children.length % tracks === 0 &&
+                (count === 1 || grid.querySelector('.empty-slot'))
+            );
+        }, count);
+        const cells = await page.locator('#items > li').evaluateAll((nodes) =>
+            nodes.map((node) => {
+                const bounds = node.getBoundingClientRect();
+                return { width: bounds.width, height: bounds.height };
+            })
+        );
+        for (const cell of cells)
+            assert.ok(Math.abs(cell.width - cell.height) < 1, 'Occupied and empty icon slots remain square');
+        await page.goto(`${base}#/web-settings`);
+    }
+});
+
+test('update notice keeps close top right and adjacent actions bottom right across screen sizes', async (t) => {
+    const { page, options, base } = await fixture(
+        t,
+        '',
+        { viewport: { width: 500, height: 850 } },
+        { mockClock: false }
+    );
+    options.isOutdated = true;
+    options.isAdmin = true;
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/web-settings`);
+    const close = page.getByRole('button', { name: 'Dismiss update notice' });
+    await close.waitFor();
+    for (const [width, height] of [
+        [1280, 720],
+        [500, 850],
+        [390, 850]
+    ]) {
+        await page.setViewportSize({ width, height });
+        const notice = page.getByRole('region', { name: 'Information', exact: true });
+        const bounds = await notice.boundingBox();
+        const closeBounds = await close.boundingBox();
+        const text = await page.locator('#update-notice > p').first().boundingBox();
+        const snooze = await page.getByRole('button', { name: 'Remind me later' }).boundingBox();
+        assert.ok(
+            closeBounds.y >= bounds.y && closeBounds.y + closeBounds.height <= bounds.y + bounds.height,
+            'Close stays visible without scrolling the notice region'
+        );
+        const skip = await page.getByRole('button', { name: 'Skip this version', exact: true }).boundingBox();
+        assert.ok(snooze.y >= text.y + text.height - 1, 'Actions stay below the message');
+        assert.ok(Math.abs(snooze.y - skip.y) < 1, 'Both actions remain on the same row');
+        assert.ok(skip.x > snooze.x, 'Skip follows snooze');
+        assert.ok(
+            skip.y + skip.height <= bounds.y + bounds.height,
+            'Both actions are visible without scrolling the notice'
+        );
+        assert.ok(
+            Math.abs(skip.x + skip.width - closeBounds.x - closeBounds.width) < 1,
+            'Actions align to the right edge with X'
+        );
+        assert.ok(closeBounds.x >= text.x + text.width - 1, 'Close stays at the right of the message');
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    }
+    await close.click();
+    assert.equal(await close.isVisible(), false);
+});
+
+test('administrator skips the displayed update only after confirmed response and server state survives browser reset', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    options.isOutdated = true;
+    options.isAdmin = true;
+    await seedAutomaticRefresh(page, base, false);
+    let release;
+    const held = new Promise((resolve) => {
+        release = resolve;
+    });
+    await page.route('**/api/updates/skip', async (route) => {
+        await held;
+        await route.continue();
+    });
+    await page.goto(`${base}#/web-settings`);
+    const skip = page.getByRole('button', { name: 'Skip this version', exact: true });
+    const snooze = page.getByRole('button', { name: 'Remind me later', exact: true });
+    await skip.waitFor({ timeout: 3000 });
+    const notice = page.locator('#update-notice');
+    const before = await notice.boundingBox();
+    const request = page.waitForRequest((request) => request.url().endsWith('/api/updates/skip'));
+    await skip.click();
+    await request;
+    assert.equal(await skip.isDisabled(), true);
+    assert.equal(await snooze.isDisabled(), true);
+    assert.equal(await notice.isVisible(), true);
+    assert.equal(await page.locator('#refresh').getAttribute('aria-busy'), 'true');
+    assert.deepEqual(await notice.boundingBox(), before, 'Pending mutation does not insert a loading row');
+    release();
+    await notice.waitFor({ state: 'hidden' });
+    const sent = options.requests.filter((request) => request.path === '/api/updates/skip');
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].method, 'POST');
+    assert.equal(sent[0].headers['x-ae2-request'], 'true');
+    assert.deepEqual(sent[0].body, { tag: options.availableUpdate.tag });
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    assert.equal(await notice.isVisible(), false);
+    options.availableUpdate = { ...options.availableUpdate, tag: '1.7.10-10.0.1', version: '10.0.1', skipped: false };
+    await page.reload();
+    await skip.waitFor();
+    assert.match(await notice.innerText(), /10\.0\.1/);
+});
+
+test('failed and stale update skip keep notice usable and never retry the mutation automatically', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.isOutdated = true;
+    options.isAdmin = true;
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/web-settings`);
+    const notice = page.locator('#update-notice');
+    const skip = page.getByRole('button', { name: 'Skip this version', exact: true });
+    for (const status of ['INTERNAL_ERROR', 'UPDATE_CHANGED']) {
+        options.skipUpdateStatus = status;
+        await skip.click();
+        await notice.getByRole('alert').waitFor();
+        assert.equal(await skip.isEnabled(), true);
+        assert.equal(await page.getByRole('button', { name: 'Remind me later' }).isEnabled(), true);
+        assert.equal(await notice.isVisible(), true);
+        const count = options.requests.filter((request) => request.path === '/api/updates/skip').length;
+        await page.clock.fastForward(6000);
+        assert.equal(options.requests.filter((request) => request.path === '/api/updates/skip').length, count);
+        assert.equal(options.availableUpdate.skipped, false);
+    }
+    await page.getByRole('button', { name: 'Dismiss update notice' }).click();
+    assert.equal(await notice.isVisible(), false);
+});
+
+test('update notice needs release metadata and an unconfirmed skip is reconciled by reloading server state', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.isOutdated = true;
+    options.isAdmin = true;
+    const update = options.availableUpdate;
+    options.availableUpdate = null;
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/web-settings`);
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    const notice = page.locator('#update-notice');
+    assert.equal(await notice.isVisible(), false);
+    options.availableUpdate = update;
+    await page.reload();
+    const skip = page.getByRole('button', { name: 'Skip this version', exact: true });
+    await skip.waitFor();
+    await page.route('**/api/updates/skip', async (route) => {
+        await route.fetch();
+        await route.fulfill({ status: 200, contentType: 'text/html', body: 'Broken proxy response' });
+    });
+    await skip.click();
+    await notice.getByRole('alert').waitFor();
+    assert.match(await notice.getByRole('alert').innerText(), /confirm/);
+    assert.equal(await notice.isVisible(), true);
+    assert.equal(options.availableUpdate.skipped, true);
+    await page.clock.fastForward(6000);
+    assert.equal(options.requests.filter((request) => request.path === '/api/updates/skip').length, 1);
+    await page.reload();
+    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
+    assert.equal(await notice.isVisible(), false);
 });

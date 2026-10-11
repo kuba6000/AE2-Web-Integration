@@ -121,6 +121,17 @@ public class CoreEngine {
         return checker == null ? null : checker.getAvailableUpdate();
     }
 
+    public static boolean isUpdateSkipped(@NotNull ReleaseManifest.Release release) {
+        VersionChecker checker = versionChecker;
+        return checker != null && checker.isSkipped(release);
+    }
+
+    public static @NotNull ApiStatus skipUpdate(@NotNull String tag, long lifecycleGeneration) throws IOException {
+        if (!AE2Controller.isCurrentHTTPLifecycle(lifecycleGeneration)) return ApiStatus.SERVER_STOPPING;
+        VersionChecker checker = versionChecker;
+        return checker == null ? ApiStatus.UPDATE_CHANGED : checker.skip(tag, lifecycleGeneration);
+    }
+
     /** Called from the platform's player-login event, which already runs on the server thread. */
     public static void onPlayerSeen(PlayerIdentity player) {
         CoreData.observePlayer(player);

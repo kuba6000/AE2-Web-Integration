@@ -50,6 +50,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPack;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTrackingHistory;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.updates.SkipUpdate;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 
@@ -213,6 +214,7 @@ public class AE2Controller {
                 api.register(GetTrackingHistory.class);
                 api.register(GetTracking.class);
                 api.register(GetContext.class);
+                api.register(SkipUpdate.class);
                 api.register(Login.class);
                 api.register(Register.class);
                 api.register(Logout.class);

@@ -5,6 +5,7 @@ import { createTerminal } from './terminal.js';
 import { readRoute } from './router.js';
 import { createThemeContext } from './theme-context.js';
 import { mount } from '../themes/default/view.js';
+import { createUpdateNotice } from './update-notice.js';
 
 const root = document.getElementById('app') as HTMLElement;
 const base = new URL('./', location.href);
@@ -69,6 +70,11 @@ async function start() {
             base,
             user: metadata.user,
             modVersion: metadata.modVersion,
+            updateNotice: createUpdateNotice(
+                base,
+                api,
+                metadata.user.isAdmin && metadata.isOutdated ? metadata.availableUpdate : null
+            ),
             async logout() {
                 await api.logout();
                 returnToLogin();

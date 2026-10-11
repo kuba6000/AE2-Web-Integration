@@ -21,6 +21,7 @@ import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 
 /**
  * Returns public application metadata and the current authenticated display identity.
@@ -36,7 +37,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
  * @response 500 {@link ErrorResponse} Unexpected failure.
  * @response 503 {@link ErrorResponse} Server stopping.
  * @responseExample 200
- *                  {"status":"OK","data":{"publicMode":true,"modVersion":"1.2.0","isOutdated":false,"user":null,"capabilities":{}}}
+ *                  {"status":"OK","data":{"publicMode":true,"modVersion":"1.2.0","isOutdated":false,"availableUpdate":null,"user":null,"capabilities":{}}}
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 405 {"status":"METHOD_NOT_ALLOWED","data":null}
  * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
@@ -57,20 +58,33 @@ public final class GetContext extends IAsyncRequest {
     public record User(@NotNull String username, boolean isAdmin) {}
 
     /**
+     * Recommended release, visible only to administrators.
+     *
+     * @param version    recommended mod version
+     * @param tag        exact release identifier to pass when skipping this recommendation
+     * @param releaseUrl HTTPS release page
+     * @param skipped    whether the administrator suppressed this release or a newer one for this platform
+     */
+    @Desugar
+    public record AvailableUpdate(@NotNull String version, @NotNull String tag, @NotNull String releaseUrl,
+        boolean skipped) {}
+
+    /**
      * Application metadata used to initialize the browser interface.
      *
-     * @param publicMode   whether individual player web accounts are enabled
-     * @param modVersion   native mod version, or null before the platform initializes the core
-     * @param isOutdated   whether update checking is enabled and a newer mod release is currently known
-     * @param user         authenticated display identity, or null without valid session or trusted localhost access
-     * @param capabilities native feature support for authenticated users; empty for anonymous requests. Keys include
-     *                     craftingLightMode, craftingIgnoreMissing (wait for future ingredients),
-     *                     and craftingPlanSteps (per-resource crafting step counts).
+     * @param publicMode      whether individual player web accounts are enabled
+     * @param modVersion      native mod version, or null before the platform initializes the core
+     * @param isOutdated      whether update checking is enabled and a newer mod release is currently known
+     * @param availableUpdate recommendation for authenticated administrators, or null when unavailable or disabled
+     * @param user            authenticated display identity, or null without valid session or trusted localhost access
+     * @param capabilities    native feature support for authenticated users; empty for anonymous requests. Keys include
+     *                        craftingLightMode, craftingIgnoreMissing (wait for future ingredients),
+     *                        and craftingPlanSteps (per-resource crafting step counts).
      * @keyExample capabilities craftingLightMode
      */
     @Desugar
-    public record Metadata(boolean publicMode, @Nullable String modVersion, boolean isOutdated, @Nullable User user,
-        @NotNull Map<String, Boolean> capabilities) {}
+    public record Metadata(boolean publicMode, @Nullable String modVersion, boolean isOutdated,
+        @Nullable AvailableUpdate availableUpdate, @Nullable User user, @NotNull Map<String, Boolean> capabilities) {}
 
     /**
      * Application context result.
@@ -101,6 +115,11 @@ public final class GetContext extends IAsyncRequest {
                     capability.getValue());
             }
         }
+        ReleaseManifest.Release release = Config.INSTANCE.general.checkForUpdates ? CoreEngine.getAvailableUpdate()
+            : null;
+        AvailableUpdate update = release != null && principal.isAdmin()
+            ? new AvailableUpdate(release.version, release.tag, release.releaseUrl, CoreEngine.isUpdateSkipped(release))
+            : null;
         respond(
             HttpURLConnection.HTTP_OK,
             new Response(
@@ -108,7 +127,8 @@ public final class GetContext extends IAsyncRequest {
                 new Metadata(
                     Config.INSTANCE.general.publicMode,
                     CoreEngine.getModVersion(),
-                    Config.INSTANCE.general.checkForUpdates && CoreEngine.getAvailableUpdate() != null,
+                    release != null,
+                    update,
                     user,
                     capabilities)));
     }

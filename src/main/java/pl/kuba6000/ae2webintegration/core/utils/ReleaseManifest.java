@@ -32,6 +32,17 @@ public final class ReleaseManifest {
         public final @NotNull String downloadUrl;
         private final @NotNull Version comparable;
 
+        /** Uses the same release ordering as update recommendations, including prerelease promotion. */
+        public boolean isAtMost(@NotNull String version, @NotNull Channel channel, @NotNull String tag) {
+            if (this.tag.equals(tag)) return true;
+            Version previous = Version.parse(version);
+            if (previous == null) throw new IllegalArgumentException("Invalid skipped release version");
+            int base = comparable.compareBase(previous);
+            if (base != 0) return base < 0;
+            if (this.channel != channel) return this.channel == Channel.PRERELEASE;
+            return this.channel == Channel.STABLE || comparable.comparePrerelease(previous) <= 0;
+        }
+
         private Release(JsonObject json, @NotNull Channel channel) {
             version = string(json, "newest");
             Version parsed = Version.parse(version);
@@ -107,6 +118,13 @@ public final class ReleaseManifest {
         if (release.channel == Channel.STABLE) return true;
         // Old descriptive/unnumbered preview tags carry no reliable within-release ordering.
         return release.comparable.comparePrerelease(installed) > 0;
+    }
+
+    /** Validates the version/channel pair read from persisted update preferences. */
+    public static boolean isValidVersion(@Nullable String version, @Nullable Channel channel) {
+        if (version == null || channel == null) return false;
+        Version parsed = Version.parse(version);
+        return parsed != null && (channel != Channel.STABLE || parsed.suffix == null);
     }
 
     private static @Nullable Release readRelease(JsonObject releases, String name, @NotNull Channel channel) {

@@ -13,6 +13,7 @@ import type { ResourceResponse, IconMetadata, ApplicationContext } from './api-t
 export type ApiFailure = Error & { status?: string; data?: unknown };
 export type Api = {
     context: (signal?: AbortSignal) => Promise<ApplicationContext>;
+    skipUpdate: (tag: string) => Promise<null>;
     iconPack: (
         signal?: AbortSignal
     ) => Promise<{ available: boolean; packId: string | null; width: number; height: number }>;
@@ -88,7 +89,8 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
                   }
                 | { cpuKey?: string }
                 | Partial<GridSettings>
-                | { paused: boolean };
+                | { paused: boolean }
+                | { tag: string };
         } = {}
     ): Promise<ResourceResponse<T>> {
         let response;
@@ -129,6 +131,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
     }
     return {
         context: (signal) => request('api/context', { signal }),
+        skipUpdate: (tag) => request('api/updates/skip', { method: 'POST', body: { tag } }),
         iconPack: (signal) => request('api/icon-pack', { signal }),
         grids: (signal) => request('api/grids', { signal }),
         items: (gridKey, signal, icons = false) =>

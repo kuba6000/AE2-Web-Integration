@@ -1,5 +1,6 @@
 import { registryId } from './resource-metadata.js';
 import type { ApiError } from '../../app/api.js';
+import type { createUpdateNotice } from '../../app/update-notice.js';
 import type { createThemeContext } from '../../app/theme-context.js';
 import type { TerminalState, createTerminal } from '../../app/terminal.js';
 import type { Translator as Locale } from '../../app/i18n.js';
@@ -50,6 +51,7 @@ export function mount(
         base,
         user,
         modVersion,
+        updateNotice,
         logout,
         settings,
         i18n
@@ -57,6 +59,7 @@ export function mount(
         base: URL;
         user: { username: string; isAdmin: boolean };
         modVersion: string | null;
+        updateNotice: ReturnType<typeof createUpdateNotice>;
         logout: () => Promise<void>;
     }
 ) {
@@ -75,6 +78,20 @@ export function mount(
             availability: 'Availability',
             nextState: 'Next: {state}',
             appearance: 'Appearance',
+            resourceColumns: 'Resource columns',
+            automaticColumns: 'Auto',
+            updateAvailable: 'AE2 Web Integration {version} is available.',
+            skipUpdate: 'Skip this version',
+            skipUpdateHelp:
+                'Hide this release for all administrators of this server. Newer releases will still be shown.',
+            updateChanged: 'The available update changed. Reload this page before choosing a release to skip.',
+            updateSkipFailed: 'Could not save the skipped version. Try again or close this notice.',
+            updateSkipUnconfirmed:
+                'Could not confirm whether the version was skipped. Reload this page to check before trying again.',
+            viewReleases: 'View releases',
+            remindLater: 'Remind me later',
+            remindLaterHelp: 'Hide this notice for 7 days in this browser.',
+            dismissUpdate: 'Dismiss update notice',
             light: 'Light',
             dark: 'Dark',
             system: 'System',
@@ -105,6 +122,19 @@ export function mount(
             availability: 'Dostępność',
             nextState: 'Następnie: {state}',
             appearance: 'Wygląd',
+            resourceColumns: 'Kolumny zasobów',
+            automaticColumns: 'Automatycznie',
+            updateAvailable: 'Dostępna jest wersja {version} AE2 Web Integration.',
+            skipUpdate: 'Pomiń tę wersję',
+            skipUpdateHelp:
+                'Ukryj to wydanie dla wszystkich administratorów serwera. Nowsze wydania nadal będą pokazywane.',
+            updateChanged: 'Dostępna aktualizacja zmieniła się. Odśwież stronę przed wybraniem wersji do pominięcia.',
+            updateSkipFailed: 'Nie udało się zapisać pominiętej wersji. Spróbuj ponownie lub zamknij powiadomienie.',
+            updateSkipUnconfirmed: 'Nie udało się potwierdzić pominięcia wersji. Odśwież stronę przed ponowną próbą.',
+            viewReleases: 'Zobacz wydania',
+            remindLater: 'Przypomnij później',
+            remindLaterHelp: 'Ukryj powiadomienie na 7 dni w tej przeglądarce.',
+            dismissUpdate: 'Zamknij powiadomienie o aktualizacji',
             light: 'Jasny',
             dark: 'Ciemny',
             system: 'Systemowy',
@@ -126,6 +156,11 @@ export function mount(
     const savedAppearance = settings.get('appearance');
     let appearance =
         typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
+    const savedColumns = settings.get('resourceColumns');
+    let resourceColumns =
+        typeof savedColumns === 'number' && Number.isInteger(savedColumns) && savedColumns >= 1 && savedColumns <= 8
+            ? savedColumns
+            : 0;
     type TerminalDisplay = 'names' | 'both' | 'icons';
     const savedDisplay = settings.get('terminalDisplay');
     let terminalDisplay: TerminalDisplay =
@@ -136,7 +171,7 @@ export function mount(
     root.innerHTML = `<div class="window-frame control-panel"><header class="site-header"><div class="brand"><span class="brand-mark">${craftingHammer}</span><h1 aria-label="AE2 Web Integration"><span class="brand-full">AE2 <span>Web Integration</span></span><span class="brand-short" aria-hidden="true">AE2<span>WI</span></span></h1></div><span id="selected-network" tabindex="0" hidden></span><div class="account-controls">
         <span class="account-user">${userIcon}<span id="username"></span></span><button id="logout" class="account-action" data-label="logout">${powerIcon}</button><button id="refresh" class="account-action" data-label="refresh" aria-busy="false">${refreshIcon}</button><span id="activity" class="sr-only" role="status" aria-live="off" hidden><span id="activity-text"></span></span></div></header>
         <nav class="view-tabs"><a href="#/" data-view="home" data-text="home"></a><a id="settings-link" data-view="settings" data-text="network" hidden></a><a id="terminal-link" data-view="items" data-text="terminal" hidden></a><a id="cpu-link" data-view="cpus" data-text="cpus" hidden></a><a id="history-link" data-view="history" data-text="history" hidden></a><a href="#/server-settings" data-view="server-settings" data-text="serverSettings"></a><a href="#/web-settings" data-view="web-settings" data-text="webSettings"></a><a href="#/about" data-view="about" data-text="about"></a></nav><p id="session-message" role="alert" hidden></p></div>
-        <div class="info-notices" id="info-notices" role="region" data-label="notices" tabindex="0" hidden><section class="window-frame info-notice" id="icon-notice" aria-labelledby="icon-notice-text" hidden>
+        <div class="info-notices" id="info-notices" role="region" data-label="notices" tabindex="0" hidden><section class="window-frame info-notice" id="update-notice" aria-labelledby="update-notice-text" hidden>${infoCircle}<p><span id="update-notice-text"></span> <a id="update-releases" data-theme-text="viewReleases"></a></p><button type="button" id="dismiss-update">×</button><div class="update-notice-actions"><button type="button" id="snooze-update" data-theme-text="remindLater"></button><button type="button" id="skip-update" data-theme-text="skipUpdate"></button></div><p id="update-notice-error" role="alert" hidden></p></section><section class="window-frame info-notice" id="icon-notice" aria-labelledby="icon-notice-text" hidden>
         ${infoCircle}<p id="icon-notice-text" data-theme-text="iconsOffer"></p>
         <button type="button" id="enable-icons" data-theme-text="enableIcons"></button>
         <button type="button" id="dismiss-icons">×</button></section><section class="window-frame info-notice" id="tracking-notice" aria-labelledby="tracking-notice-text" hidden>${infoCircle}<p><span id="tracking-notice-text"></span> <a id="tracking-settings-link"></a></p></section></div>
@@ -154,6 +189,7 @@ export function mount(
         <label class="web-preference-toggle"><span data-text="autoRefresh"></span><input type="checkbox" id="auto-refresh"></label></section>
         <section class="web-preferences-section" aria-labelledby="appearance-options-title"><h3 id="appearance-options-title" data-theme-text="appearance"></h3>
         <label><span data-text="theme"></span><select disabled><option value="default" data-theme-text="defaultTheme"></option></select></label>
+        <label><span data-theme-text="resourceColumns"></span><select id="resource-columns"><option value="auto" data-theme-text="automaticColumns"></option>${Array.from({ length: 8 }, (_, index) => `<option value="${index + 1}">${index + 1}</option>`).join('')}</select></label>
         <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label></section>
         <section class="web-preferences-section" aria-labelledby="terminal-options-title"><h3 id="terminal-options-title" data-text="terminal"></h3>
         <div class="web-preference-field"><label><span data-theme-text="terminalDisplay"></span><select id="terminal-display" aria-describedby="icon-availability"><option value="names" data-theme-text="namesOnly"></option><option value="both" data-theme-text="detailedItems"></option><option value="icons" data-theme-text="compactItems"></option></select></label>
@@ -172,6 +208,13 @@ export function mount(
         '#terminal-display': HTMLSelectElement;
         '#icon-availability': HTMLParagraphElement;
         '#icon-notice': HTMLElement;
+        '#update-notice': HTMLElement;
+        '#update-releases': HTMLAnchorElement;
+        '#snooze-update': HTMLButtonElement;
+        '#dismiss-update': HTMLButtonElement;
+        '#skip-update': HTMLButtonElement;
+        '#update-notice-text': HTMLSpanElement;
+        '#update-notice-error': HTMLParagraphElement;
         '#info-notices': HTMLElement;
         '#tracking-notice': HTMLElement;
         '#tracking-notice-text': HTMLElement;
@@ -180,6 +223,7 @@ export function mount(
         '#dismiss-icons': HTMLButtonElement;
         '#language': HTMLElementTagNameMap['select'];
         '#appearance': HTMLElementTagNameMap['select'];
+        '#resource-columns': HTMLSelectElement;
         '#logout': HTMLElementTagNameMap['button'];
         '#session-message': HTMLElementTagNameMap['p'];
         '#username': HTMLElementTagNameMap['span'];
@@ -218,6 +262,14 @@ export function mount(
     const find = <Selector extends keyof ViewElements>(selector: Selector): ViewElements[Selector] =>
         root.querySelector(selector) as ViewElements[Selector];
     find('#username').textContent = user.username;
+    if (updateNotice.update) find('#update-releases').href = updateNotice.update.releaseUrl;
+    function renderColumns() {
+        find('#resource-columns').value = resourceColumns ? String(resourceColumns) : 'auto';
+        if (resourceColumns)
+            find('#workspace').style.setProperty('--resource-column-width', `calc(100% / ${resourceColumns})`);
+        else find('#workspace').style.removeProperty('--resource-column-width');
+    }
+    renderColumns();
 
     const toolButtons: NodeListOf<
         HTMLButtonElement & {
@@ -405,6 +457,8 @@ export function mount(
             node.setAttribute('aria-label', locale.t(node.dataset.themeLabel!))
         );
         find('#dismiss-icons').setAttribute('aria-label', locale.t('dismissIcons'));
+        find('#dismiss-update').setAttribute('aria-label', locale.t('dismissUpdate'));
+        find('#snooze-update').setAttribute('aria-description', locale.t('remindLaterHelp'));
         find('#search').placeholder = locale.common('searchHint');
         find('#search').setAttribute('aria-description', locale.common('searchHelp'));
         find('#previous-page').setAttribute('aria-label', locale.common('previousPage'));
@@ -725,7 +779,16 @@ export function mount(
         find('#tracking-settings-link').href = routeGrid
             ? `#/grids/${encodeURIComponent(routeGrid.key)}/settings`
             : '#/';
-        find('#info-notices').hidden = find('#icon-notice').hidden && find('#tracking-notice').hidden;
+        find('#update-notice').hidden = !updateNotice.visible;
+        find('#update-notice-text').textContent = locale.t('updateAvailable', {
+            version: updateNotice.update?.version || ''
+        });
+        find('#skip-update').disabled = updateNotice.pending;
+        find('#snooze-update').disabled = updateNotice.pending;
+        find('#update-notice-error').hidden = !updateNotice.error;
+        find('#update-notice-error').textContent = updateNotice.error ? locale.t(updateNotice.error) : '';
+        find('#info-notices').hidden =
+            find('#icon-notice').hidden && find('#tracking-notice').hidden && find('#update-notice').hidden;
         if (changed) {
             renderPage();
             hideTooltip();
@@ -831,6 +894,7 @@ export function mount(
             state.route.view === 'cpus' ? Object.values(state.cpus.outcomes).filter((outcome) => outcome.mutation) : [];
         const craftingVisible = state.route.view === 'items' || state.route.view === 'plan';
         const actionPending =
+            updateNotice.pending ||
             cpuMutations.length > 0 ||
             (craftingVisible && !!state.crafting.mutation) ||
             (state.route.view === 'settings' && state.settings.saving);
@@ -894,6 +958,14 @@ export function mount(
     const languageSelect = find('#language');
     languageSelect.addEventListener('change', () => application.preference('language', languageSelect.value));
     const appearanceSelect = find('#appearance');
+    find('#resource-columns').addEventListener('change', () => {
+        const value = find('#resource-columns').value;
+        const count = value === 'auto' ? 0 : Number(value);
+        if (!Number.isInteger(count) || count < 0 || count > 8) return;
+        resourceColumns = count;
+        settings.set('resourceColumns', resourceColumns);
+        renderColumns();
+    });
     const displaySelect = find('#terminal-display');
     function acknowledgeIconSuggestion() {
         iconSuggestionDismissed = true;
@@ -915,6 +987,21 @@ export function mount(
         selectDisplay('both');
         find('#search').focus();
     });
+    bindTooltip(find('#snooze-update'), () => [element('span', locale.t('remindLaterHelp'))]);
+    bindTooltip(find('#skip-update'), () => [element('span', locale.t('skipUpdateHelp'))]);
+    find('#skip-update').addEventListener('click', async () => {
+        hideTooltip();
+        await updateNotice.skip();
+        if (!updateNotice.visible && !disposed) find('#refresh').focus();
+    });
+    function dismissUpdate(snooze: boolean) {
+        updateNotice.dismiss(snooze);
+        hideTooltip();
+        renderDisplay();
+        find('#refresh').focus();
+    }
+    find('#dismiss-update').addEventListener('click', () => dismissUpdate(false));
+    find('#snooze-update').addEventListener('click', () => dismissUpdate(true));
     find('#dismiss-icons').addEventListener('click', () => {
         acknowledgeIconSuggestion();
         renderDisplay();
@@ -1005,8 +1092,12 @@ export function mount(
     window.addEventListener('scroll', hideTooltip, true);
     window.addEventListener('resize', hideTooltip);
     window.addEventListener('keydown', keydown);
+    let disposed = false;
     const unsubscribe = application.subscribe(render);
+    const unsubscribeUpdate = updateNotice.subscribe(() => render(state));
     return () => {
+        disposed = true;
+        unsubscribeUpdate();
         unsubscribe();
         slots.dispose();
         cpuView.dispose();

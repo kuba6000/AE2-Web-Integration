@@ -19,6 +19,11 @@ import org.jetbrains.annotations.Nullable;
 
 import com.google.common.io.ByteStreams;
 
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+
 /** One server lifecycle's background checks and last completed recommendation. */
 public final class VersionChecker implements AutoCloseable {
 
@@ -74,6 +79,26 @@ public final class VersionChecker implements AutoCloseable {
     /** Read-only snapshot; this never performs network I/O. Null means no completed recommendation. */
     public @Nullable ReleaseManifest.Release getAvailableUpdate() {
         return availableUpdate;
+    }
+
+    public boolean isSkipped(@NotNull ReleaseManifest.Release release) {
+        return CoreData.isUpdateSkipped(minecraftVersion, loader, release);
+    }
+
+    /** Holds the recommendation stable while validating and saving the displayed tag. */
+    public @NotNull ApiStatus skip(@NotNull String tag, long lifecycleGeneration) throws IOException {
+        // Wait for the persistence writer before admitting a mutation from this HTTP lifecycle.
+        synchronized (CoreData.class) {
+            synchronized (this) {
+                if (closed || !AE2Controller.isCurrentHTTPLifecycle(lifecycleGeneration))
+                    return ApiStatus.SERVER_STOPPING;
+                ReleaseManifest.Release release = availableUpdate;
+                if (!Config.INSTANCE.general.checkForUpdates || release == null || !release.tag.equals(tag))
+                    return ApiStatus.UPDATE_CHANGED;
+                CoreData.skipUpdate(minecraftVersion, loader, release);
+                return ApiStatus.OK;
+            }
+        }
     }
 
     private void refresh(CompletableFuture<ReleaseManifest.Release> result) {

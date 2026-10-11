@@ -12,7 +12,14 @@ export type ApplicationContext = {
     publicMode: boolean;
     modVersion: string | null;
     isOutdated: boolean;
+    availableUpdate: AvailableUpdate | null;
     user: { username: string; isAdmin: boolean } | null;
+};
+export type AvailableUpdate = {
+    version: string;
+    tag: string;
+    releaseUrl: string;
+    skipped: boolean;
 };
 export type ResourceDescription = {
     resourceType: 'ITEM' | 'FLUID' | 'OTHER';

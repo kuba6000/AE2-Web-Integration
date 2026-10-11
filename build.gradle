@@ -167,6 +167,7 @@ test {
             includeTestsMatching '*CraftingPlanRequestLifecycleTest'
             includeTestsMatching '*CraftingOptionsHttpTest'
             includeTestsMatching '*CpuPauseHttpTest'
+            includeTestsMatching '*UpdateSkipHttpTest'
         }
         shouldRunAfter tasks.named('test')
     }

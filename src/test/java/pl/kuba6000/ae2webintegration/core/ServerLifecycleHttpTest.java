@@ -409,7 +409,7 @@ class ServerLifecycleHttpTest {
                 .getAsString());
         JsonObject data = envelope.getAsJsonObject("data");
         assertEquals(
-            5,
+            6,
             data.entrySet()
                 .size());
         assertEquals(new JsonObject(), data.getAsJsonObject("capabilities"));
