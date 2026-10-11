@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.http.dto;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -10,6 +11,12 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 @SuppressWarnings("unused") // Gson reads the fields reflectively.
 public class ResourceDescription {
 
+    /**
+     * Native resource category for item and fluid filtering.
+     *
+     * @example ITEM
+     */
+    public final @NotNull ResourceType resourceType;
     /**
      * Native registry path without namespace or damage; null when unavailable.
      *
@@ -45,13 +52,14 @@ public class ResourceDescription {
     public final @Nullable IconMappings.Reference icon;
 
     protected ResourceDescription(@Nullable String registryNamespace, @Nullable String registryPath,
-        @NotNull String displayName, int componentCount, int damage, @Nullable StableKey itemKey,
-        @Nullable IconMappings.Reference icon) {
+        @NotNull String displayName, int componentCount, int damage, @NotNull ResourceType resourceType,
+        @Nullable StableKey itemKey, @Nullable IconMappings.Reference icon) {
         this.registryNamespace = registryNamespace;
         this.registryPath = registryPath;
         this.displayName = displayName;
         this.componentCount = componentCount;
         this.damage = damage;
+        this.resourceType = resourceType;
         this.itemKey = itemKey;
         this.icon = icon;
     }

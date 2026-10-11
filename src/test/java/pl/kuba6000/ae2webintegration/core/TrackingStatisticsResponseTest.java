@@ -18,6 +18,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
@@ -54,13 +55,15 @@ class TrackingStatisticsResponseTest extends GridTestScope {
     }
 
     @ParameterizedTest
-    @CsvSource({ "0,0,0,0,0", "0,0,10,0,0", "1000,0,10,0,0", "1000,500,10,0.5,20" })
+    @CsvSource({ "0,0,0,0,0,ITEM", "0,0,10,0,0,FLUID", "1000,0,10,0,0,OTHER", "1000,500,10,0.5,20,ITEM" })
     void historySerializesFiniteStatisticsEvenWhenNoTimeWasMeasured(long elapsed, long spent, long crafted,
-        double expectedShare, double expectedRate) {
+        double expectedShare, double expectedRate, ResourceType resourceType) {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(GRID);
         OutputSnapshotTest.Resource key = new OutputSnapshotTest.Resource();
+        key.resourceType = resourceType;
         ResourceSnapshot output = ResourceSnapshot.capture(grid, new OutputSnapshotTest.Stack(key, 10), null);
         assertNotNull(output);
+        assertNotNull(output.itemKey());
         AE2JobTracker.JobTrackingInfo info = new AE2JobTracker.JobTrackingInfo(output);
         // Completed measurement records, including legitimate sub-millisecond intervals rounded to zero.
         info.timeStarted = 1000;
@@ -72,6 +75,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
         info.itemShare.put(key, new ArrayList<>(Collections.singletonList(Pair.of(1000L, 1000L + spent))));
         StableKey actualKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
         GridData.getOrCreate(actualKey).trackingInfo.trackingInfos.put(1, info);
+        key.unavailable = true;
 
         GetTracking request = new GetTracking();
         request.handle(TestGridFixtures.context(-1, "grid=" + actualKey + "&id=1"));
@@ -85,6 +89,17 @@ class TrackingStatisticsResponseTest extends GridTestScope {
             .getAsJsonArray("items")
             .get(0)
             .getAsJsonObject();
+        assertEquals(
+            resourceType.name(),
+            item.get("resourceType")
+                .getAsString());
+        JsonObject finalOutput = response.getAsJsonObject("data")
+            .getAsJsonObject("finalOutput");
+        assertEquals(
+            resourceType.name(),
+            finalOutput.get("resourceType")
+                .getAsString());
+        assertFalse(finalOutput.has("craftable"));
         assertEquals(
             "resource",
             item.get("registryPath")
@@ -230,6 +245,10 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 .getAsJsonArray("items")
                 .get(0)
                 .getAsJsonObject();
+            assertEquals(
+                "ITEM",
+                item.get("resourceType")
+                    .getAsString());
             assertEquals(
                 "resource",
                 item.get("registryPath")

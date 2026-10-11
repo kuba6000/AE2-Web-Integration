@@ -840,16 +840,21 @@ export function createCpuView(
                 const bMode = b.selectionMode ? selectionModes[b.selectionMode].order : null;
                 if (criterion.value === 'automation' && (aMode === null) !== (bMode === null))
                     return aMode === null ? 1 : -1;
-                const primary =
-                    criterion.value === 'capacity'
-                        ? a.availableStorage - b.availableStorage
-                        : criterion.value === 'coprocessors'
-                          ? a.coProcessors - b.coProcessors
-                          : criterion.value === 'state'
-                            ? Number(a.isBusy) - Number(b.isBusy)
-                            : criterion.value === 'automation'
-                              ? (aMode ?? 0) - (bMode ?? 0)
-                              : name;
+                let primary = name;
+                switch (criterion.value) {
+                    case 'capacity':
+                        primary = a.availableStorage - b.availableStorage;
+                        break;
+                    case 'coprocessors':
+                        primary = a.coProcessors - b.coProcessors;
+                        break;
+                    case 'state':
+                        primary = Number(a.isBusy) - Number(b.isBusy);
+                        break;
+                    case 'automation':
+                        primary = (aMode ?? 0) - (bMode ?? 0);
+                        break;
+                }
                 return (
                     (selectorDescending ? -primary : primary) || name || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
                 );

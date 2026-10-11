@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.crafting;
 
 import java.net.HttpURLConnection;
-import java.util.concurrent.Future;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -9,12 +8,12 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 
 /**
@@ -74,8 +73,8 @@ public final class DeleteCraftingPlan extends ISyncedRequest {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        Future<IAECraftingJob> job = gridData.getJob(jobId);
-        if (job == null) {
+        CraftingPlanRegistry.Entry entry = gridData.getJob(jobId);
+        if (entry == null) {
             deny(ApiStatus.INVALID_ID);
             return;
         }

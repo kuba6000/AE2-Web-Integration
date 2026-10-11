@@ -11,10 +11,12 @@ import java.net.InetSocketAddress;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.io.IOUtils;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,6 +52,7 @@ class CraftingOptionsHttpTest extends GridTestScope {
     private String itemKey;
     private TestGrid grid;
     private boolean supportsLightMode;
+    private boolean supportsIgnoreMissing;
 
     @BeforeEach
     void start() throws Exception {
@@ -61,8 +64,11 @@ class CraftingOptionsHttpTest extends GridTestScope {
         AE2Controller.AE2Interface = new TestGridFixtures.TestAE(grid) {
 
             @Override
-            public Map<ServerCapability, Boolean> web$getCapabilities() {
-                return Collections.singletonMap(ServerCapability.CRAFTING_LIGHT_MODE, supportsLightMode);
+            public @NotNull Map<ServerCapability, Boolean> web$getCapabilities() {
+                Map<ServerCapability, Boolean> capabilities = new EnumMap<>(ServerCapability.class);
+                capabilities.put(ServerCapability.CRAFTING_LIGHT_MODE, supportsLightMode);
+                capabilities.put(ServerCapability.CRAFTING_IGNORE_MISSING, supportsIgnoreMissing);
+                return capabilities;
             }
         };
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
@@ -81,6 +87,89 @@ class CraftingOptionsHttpTest extends GridTestScope {
         router.register(SubmitCraftingPlan.class);
         server.createContext("/api", router);
         server.start();
+    }
+
+    @Test
+    void pendingPlanRetainsOriginalRequestAfterIdentityListingExpires() throws Exception {
+        supportsLightMode = true;
+        supportsIgnoreMissing = true;
+        grid.pending = new CompletableFuture<>();
+        JsonObject created = request(
+            "POST",
+            base,
+            "{\"itemKey\":\"" + itemKey + "\",\"quantity\":37,\"lightMode\":true,\"ignoreMissing\":true}",
+            202,
+            "OK");
+        String path = base + "/"
+            + created.getAsJsonObject("data")
+                .get("jobId")
+                .getAsInt();
+        AE2Controller.itemIdentities.clear();
+        JsonObject pending = request("GET", path, null, 200, "OK").getAsJsonObject("data");
+        assertFalse(
+            pending.get("isDone")
+                .getAsBoolean());
+        JsonObject output = pending.getAsJsonObject("finalOutput");
+        assertNotNull(output, "a pending plan must include the original requested resource");
+        assertEquals(
+            itemKey,
+            output.get("itemKey")
+                .getAsString());
+        assertEquals(
+            37,
+            output.get("quantity")
+                .getAsLong());
+        assertEquals(
+            "output",
+            output.get("registryPath")
+                .getAsString());
+        assertTrue(
+            pending.getAsJsonObject("options")
+                .get("lightMode")
+                .getAsBoolean());
+        assertTrue(
+            pending.getAsJsonObject("options")
+                .get("ignoreMissing")
+                .getAsBoolean());
+        assertFalse(
+            pending.get("autoStart")
+                .getAsBoolean());
+        grid.pending.complete(new TestJob(99, new CraftingOptions(false, false), true));
+        JsonObject completed = request("GET", path, null, 200, "OK").getAsJsonObject("data");
+        assertTrue(
+            completed.get("isSimulating")
+                .getAsBoolean());
+        assertEquals(output, completed.get("finalOutput"));
+        assertEquals(pending.get("options"), completed.get("options"));
+    }
+
+    @Test
+    void recordedAutoStartIsBooleanMetadataAndNeverSubmitsOnCreateOrRead() throws Exception {
+        JsonObject plan = createAndPoll(",\"autoStart\":true");
+        assertTrue(
+            plan.get("autoStart")
+                .getAsBoolean());
+        assertFalse(
+            plan.getAsJsonObject("options")
+                .get("lightMode")
+                .getAsBoolean());
+        assertFalse(
+            plan.getAsJsonObject("options")
+                .get("ignoreMissing")
+                .getAsBoolean());
+        assertEquals(0, grid.submissions);
+        assertFalse(
+            createAndPoll(",\"autoStart\":false").get("autoStart")
+                .getAsBoolean());
+        for (String invalid : new String[] { "null", "1", "\"true\"", "{}" }) {
+            request(
+                "POST",
+                base,
+                "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"autoStart\":" + invalid + "}",
+                400,
+                "BAD_PARAM");
+        }
+        assertEquals(0, grid.submissions);
     }
 
     @Test
@@ -111,6 +200,110 @@ class CraftingOptionsHttpTest extends GridTestScope {
         assertFalse(
             createAndPoll(",\"lightMode\":false").get("isSimulating")
                 .getAsBoolean());
+    }
+
+    @Test
+    void unsupportedIgnoreMissingIsRejectedWhileExplicitlyOffRemainsUsable() throws Exception {
+        request(
+            "POST",
+            base,
+            "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"ignoreMissing\":true}",
+            400,
+            "BAD_PARAM");
+        assertFalse(
+            createAndPoll(",\"ignoreMissing\":false").get("isSimulating")
+                .getAsBoolean());
+    }
+
+    @Test
+    void ignoreMissingAllowsANativePlanToWaitForIngredientsWithoutDisablingLightMode() throws Exception {
+        supportsLightMode = true;
+        supportsIgnoreMissing = true;
+        JsonObject ordinary = createAndPoll(",\"lightMode\":true");
+        assertTrue(
+            ordinary.get("isSimulating")
+                .getAsBoolean());
+        JsonObject waiting = createAndPoll(",\"lightMode\":true,\"ignoreMissing\":true");
+        assertFalse(
+            waiting.get("isSimulating")
+                .getAsBoolean());
+        assertEquals(ordinary.get("bytesTotal"), waiting.get("bytesTotal"));
+        assertEquals(
+            0,
+            waiting.getAsJsonArray("plan")
+                .get(0)
+                .getAsJsonObject()
+                .get("missing")
+                .getAsLong());
+        assertEquals(
+            64,
+            waiting.getAsJsonArray("plan")
+                .get(0)
+                .getAsJsonObject()
+                .get("requested")
+                .getAsLong());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void ignoreMissingWorksWithEitherCalculatorAndDefaultsToNormalMissingHandling(boolean lightMode) throws Exception {
+        supportsLightMode = true;
+        supportsIgnoreMissing = true;
+        grid.ingredientsMissing = true;
+        String calculator = ",\"lightMode\":" + lightMode;
+        assertTrue(
+            createAndPoll(calculator).get("isSimulating")
+                .getAsBoolean());
+        assertTrue(
+            createAndPoll(calculator + ",\"ignoreMissing\":false").get("isSimulating")
+                .getAsBoolean());
+        JsonObject waiting = createAndPoll(calculator + ",\"ignoreMissing\":true");
+        assertFalse(
+            waiting.get("isSimulating")
+                .getAsBoolean());
+        assertEquals(
+            lightMode ? 256 : 128,
+            waiting.get("bytesTotal")
+                .getAsLong());
+    }
+
+    @Test
+    void ignoreMissingDoesNotEnableAnUnsupportedLightCalculatorAndRequiresBooleanInput() throws Exception {
+        supportsIgnoreMissing = true;
+        assertFalse(
+            createAndPoll(",\"ignoreMissing\":true").get("isSimulating")
+                .getAsBoolean());
+        request(
+            "POST",
+            base,
+            "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"lightMode\":true,\"ignoreMissing\":true}",
+            400,
+            "BAD_PARAM");
+        for (String invalid : new String[] { "null", "1", "\"true\"", "{}" }) {
+            request(
+                "POST",
+                base,
+                "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"ignoreMissing\":" + invalid + "}",
+                400,
+                "BAD_PARAM");
+        }
+    }
+
+    @Test
+    void ignoreMissingDoesNotBypassNativeSubmissionRejection() throws Exception {
+        supportsIgnoreMissing = true;
+        JsonObject created = request(
+            "POST",
+            base,
+            "{\"itemKey\":\"" + itemKey + "\",\"quantity\":64,\"ignoreMissing\":true}",
+            202,
+            "OK");
+        String planPath = base + "/"
+            + created.getAsJsonObject("data")
+                .get("jobId")
+                .getAsInt();
+        request("POST", planPath + "/submit", "{}", 409, "FAIL");
+        request("GET", planPath, null, 200, "OK");
     }
 
     @Test
@@ -218,7 +411,10 @@ class CraftingOptionsHttpTest extends GridTestScope {
 
     private static final class TestGrid extends TestGridFixtures.TestGrid {
 
+        private CompletableFuture<IAECraftingJob> pending;
+        private int submissions;
         private boolean hasBusyCpu;
+        private boolean ingredientsMissing;
 
         TestGrid() {
             super(222, false, AEControllerState.CONTROLLER_ONLINE);
@@ -236,9 +432,11 @@ class CraftingOptionsHttpTest extends GridTestScope {
                         case "web$getCPUs":
                             return hasBusyCpu ? Collections.singleton(busyCpu()) : Collections.emptySet();
                         case "web$beginCraftingJob":
-                            return CompletableFuture
-                                .completedFuture(new TestJob((Long) args[2], ((CraftingOptions) args[3]).lightMode()));
+                            if (pending != null) return pending;
+                            return CompletableFuture.completedFuture(
+                                new TestJob((Long) args[2], (CraftingOptions) args[3], ingredientsMissing));
                         case "web$submitJob":
+                            submissions++;
                             return "No CPU available";
                         default:
                             throw new AssertionError("Unexpected crafting operation: " + method.getName());
@@ -282,18 +480,22 @@ class CraftingOptionsHttpTest extends GridTestScope {
 
         private final long quantity;
         private final boolean lightMode;
+        private final boolean ignoreMissing;
+        private final boolean ingredientsMissing;
 
-        TestJob(long quantity, boolean lightMode) {
+        TestJob(long quantity, CraftingOptions options, boolean ingredientsMissing) {
             this.quantity = quantity;
-            this.lightMode = lightMode;
+            this.lightMode = options.lightMode();
+            this.ignoreMissing = options.ignoreMissing();
+            this.ingredientsMissing = ingredientsMissing;
         }
 
         public boolean web$isSimulation() {
-            return lightMode;
+            return (lightMode || ingredientsMissing) && !ignoreMissing;
         }
 
         public long web$getByteTotal() {
-            return 128;
+            return lightMode ? 256 : 128;
         }
 
         public ICraftingPlanSummary web$generateSummary(IAEGrid grid) {
@@ -311,7 +513,7 @@ class CraftingOptionsHttpTest extends GridTestScope {
                         case "web$getStoredAmount":
                             return 0L;
                         case "web$getMissingAmount":
-                            return lightMode ? quantity : 0L;
+                            return web$isSimulation() ? quantity : 0L;
                         default:
                             throw new AssertionError("Unexpected plan operation: " + method.getName());
                     }

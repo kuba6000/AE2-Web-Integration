@@ -130,7 +130,6 @@ public final class GetCPU extends ISyncedRequest {
     }
 
     @PathParam("cpuKey")
-    @SuppressWarnings("NotNullFieldNotInitialized") // Bound before the request is submitted.
     private @NotNull StableKey cpuId;
 
     @Override

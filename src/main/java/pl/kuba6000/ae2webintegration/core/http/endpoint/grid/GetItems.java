@@ -118,7 +118,6 @@ public final class GetItems extends ISyncedRequest {
         long quantity = stack.web$amount();
         boolean craftable = key.web$isCraftable(grid);
         StableKey itemKey = null;
-        String identityStatus = null;
         IconMappings.Reference icon = null;
 
         try {
@@ -126,12 +125,8 @@ public final class GetItems extends ISyncedRequest {
             itemKey = identity;
             if (mappings != null) icon = mappings.resolve(identity, AE2Controller.itemIdentities);
 
-        } catch (ItemIdentityRegistry.Ambiguous e) {
-            identityStatus = "AMBIGUOUS";
-        } catch (UnsupportedOperationException e) {
-            identityStatus = "UNSUPPORTED";
-        } catch (RuntimeException e) {
-            identityStatus = "UNAVAILABLE";
+        } catch (RuntimeException unavailable) {
+            // Optional identity or icon failures must not hide available resources or a successfully captured key.
         }
 
         items.add(
@@ -145,7 +140,6 @@ public final class GetItems extends ISyncedRequest {
                 quantity,
                 craftable,
                 itemKey,
-                identityStatus,
                 icon));
     }
 

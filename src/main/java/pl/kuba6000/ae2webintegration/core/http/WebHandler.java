@@ -84,9 +84,18 @@ public final class WebHandler implements HttpHandler {
             sendText(exchange, HttpURLConnection.HTTP_BAD_METHOD, "Method not allowed");
             return;
         }
-        String contentType = path.endsWith(".mjs") || path.endsWith(".js") ? "text/javascript; charset=UTF-8"
-            : path.endsWith(".css") ? "text/css; charset=UTF-8"
-                : path.endsWith(".woff2") ? "font/woff2" : path.endsWith(".svg") ? "image/svg+xml" : null;
+        String contentType;
+        if (path.endsWith(".mjs") || path.endsWith(".js")) {
+            contentType = "text/javascript; charset=UTF-8";
+        } else if (path.endsWith(".css")) {
+            contentType = "text/css; charset=UTF-8";
+        } else if (path.endsWith(".woff2")) {
+            contentType = "font/woff2";
+        } else if (path.endsWith(".svg")) {
+            contentType = "image/svg+xml";
+        } else {
+            contentType = null;
+        }
         if (contentType == null || !path.matches("/assets/web/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+")) {
             sendText(exchange, HttpURLConnection.HTTP_NOT_FOUND, "Not found");
             return;

@@ -41,7 +41,7 @@ test(page + ': only craftable rows with a usable identity offer ordering', () =>
         context.settings.showItemIcon = icons;
         context.globalItemList = [
             { componentCount: 0, damage: 0, resourceType: 'ITEM', registryNamespace: 'minecraft', registryPath: 'stone', displayName: 'Stone', quantity: 4, craftable: true, itemKey: key },
-            { componentCount: 0, damage: 0, resourceType: 'ITEM', registryNamespace: 'minecraft', registryPath: 'dirt', displayName: 'Dirt', quantity: 2, craftable: true, identityStatus: 'UNAVAILABLE' },
+            { componentCount: 0, damage: 0, resourceType: 'ITEM', registryNamespace: 'minecraft', registryPath: 'dirt', displayName: 'Dirt', quantity: 2, craftable: true },
             { componentCount: 0, damage: 0, resourceType: 'ITEM', registryNamespace: 'minecraft', registryPath: 'sand', displayName: 'Sand', quantity: 8, craftable: false, itemKey: key }
         ];
         context.displayItemList();

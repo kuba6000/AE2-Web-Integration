@@ -9,6 +9,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import com.github.bsideup.jabel.Desugar;
@@ -17,6 +18,7 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.DeleteCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
@@ -39,7 +41,11 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         TestCraftingGrid crafting = new TestCraftingGrid(null);
         TestGrid grid = new TestGrid(GRID_KEY, crafting);
         GridData gridData = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid));
-        int id = gridData.addJob(CompletableFuture.completedFuture(new TestCraftingJob()));
+        int id = gridData.addJob(
+            CompletableFuture.completedFuture(new TestCraftingJob()),
+            TestGridFixtures.planOutput(),
+            new CraftingOptions(false, false),
+            false);
 
         assertStatus("OK", submit(grid, id));
         assertStatus("INVALID_ID", submit(grid, id));
@@ -50,7 +56,11 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         TestCraftingGrid crafting = new TestCraftingGrid("Submission failed");
         TestGrid grid = new TestGrid(GRID_KEY, crafting);
         int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(CompletableFuture.completedFuture(new TestCraftingJob()));
+            .addJob(
+                CompletableFuture.completedFuture(new TestCraftingJob()),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
 
         assertStatus("FAIL", submit(grid, id));
         assertStatus("FAIL", submit(grid, id));
@@ -61,7 +71,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         TestGrid grid = new TestGrid(GRID_KEY, new TestCraftingGrid(null));
         CompletableFuture<IAECraftingJob> pending = new CompletableFuture<>();
         int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(pending);
+            .addJob(pending, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         DeleteCraftingPlan request = new DeleteCraftingPlan();
         assertTrue(
             request
@@ -88,7 +98,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
     void pollingPendingCalculationSucceedsButSubmissionConflicts() {
         TestGrid grid = new TestGrid(GRID_KEY, new TestCraftingGrid(null));
         int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(new CompletableFuture<>());
+            .addJob(new CompletableFuture<>(), TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         GetCraftingPlan poll = new GetCraftingPlan();
         assertTrue(
             poll.init(TestGridFixtures.context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id)));
@@ -124,6 +134,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
             "Resource",
             2,
             7,
+            ResourceType.ITEM,
             8,
             12,
             3,
@@ -230,7 +241,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
 
         @Override
         public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey key, long amount,
-            CraftingOptions options) {
+            @NotNull CraftingOptions options) {
             throw new UnsupportedOperationException();
         }
 

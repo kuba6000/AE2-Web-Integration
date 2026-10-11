@@ -15,6 +15,9 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -22,6 +25,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.http.dto.ResourceDescription;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
@@ -35,7 +39,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 /**
- * Reads the calculation state and contents of a crafting plan.
+ * Reads a crafting plan with its original requested output, quantity and calculation choices, including while
+ * calculation is pending. The recorded autoStart flag is client intent only; reading a plan never submits it.
  *
  * @pathParam gridKey Persistent grid identifier.
  * @pathParam planId Runtime crafting-plan identifier.
@@ -75,6 +80,19 @@ public final class GetCraftingPlan extends ISyncedRequest {
 
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
     public static class PlanData {
+
+        /** Original requested resource and quantity, also available while calculation is pending. */
+        public final @NotNull ResourceStack finalOutput;
+        /** Original native calculation choices. */
+        public final @NotNull CraftingOptions options;
+        /** Recorded client intent; reading or reopening a plan never submits it. */
+        public final boolean autoStart;
+
+        private PlanData(CraftingPlanRegistry.Entry entry, @Nullable IconMappings mappings) {
+            finalOutput = new ResourceStack(entry.finalOutput, mappings);
+            options = entry.options;
+            autoStart = entry.autoStart;
+        }
 
         /**
          * Whether calculation has finished.
@@ -134,9 +152,18 @@ public final class GetCraftingPlan extends ISyncedRequest {
             public final double usedPercent;
 
             public JobItem(@Nullable String registryNamespace, @Nullable String registryPath,
-                @NotNull String displayName, int componentCount, int damage, long stored, long requested, long missing,
-                long steps, double usedPercent, @Nullable StableKey itemKey, @Nullable IconMappings.Reference icon) {
-                super(registryNamespace, registryPath, displayName, componentCount, damage, itemKey, icon);
+                @NotNull String displayName, int componentCount, int damage, @NotNull ResourceType resourceType,
+                long stored, long requested, long missing, long steps, double usedPercent, @Nullable StableKey itemKey,
+                @Nullable IconMappings.Reference icon) {
+                super(
+                    registryNamespace,
+                    registryPath,
+                    displayName,
+                    componentCount,
+                    damage,
+                    resourceType,
+                    itemKey,
+                    icon);
                 this.stored = stored;
                 this.requested = requested;
                 this.missing = missing;
@@ -151,7 +178,7 @@ public final class GetCraftingPlan extends ISyncedRequest {
      * Successful operation result.
      * 
      * @param status {@code OK} for a successful request
-     * @param data   calculation state and, once complete, the required storage and resource plan
+     * @param data   original request, calculation state and, once complete, required storage and resource plan
      * @param icons  atlas metadata; null when not requested or no pack is available
      * @example status OK
      */
@@ -167,14 +194,15 @@ public final class GetCraftingPlan extends ISyncedRequest {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        Future<IAECraftingJob> job = gridData.getJob(jobId);
-        if (job == null) {
+        CraftingPlanRegistry.Entry entry = gridData.getJob(jobId);
+        if (entry == null) {
             deny(ApiStatus.INVALID_ID);
             return;
         }
-        PlanData jobData = new PlanData();
         IconPack pack = icons ? CoreEngine.getIconPack() : null;
         IconMappings mappings = pack == null ? null : new IconMappings(pack);
+        PlanData jobData = new PlanData(entry, mappings);
+        Future<IAECraftingJob> job = entry.plan;
         jobData.isDone = job.isDone();
         if (jobData.isDone) {
             try {
@@ -186,14 +214,14 @@ public final class GetCraftingPlan extends ISyncedRequest {
                 ICraftingPlanSummary summary = craftingJob.web$generateSummary(grid);
                 jobData.plan = new ArrayList<>();
                 ItemIdentityRegistry.Listing identities = AE2Controller.itemIdentities.beginListing(craftingJob);
-                for (ICraftingPlanSummaryEntry entry : summary.web$getEntries()) {
-                    IAEKey key = entry.web$getWhat();
+                for (ICraftingPlanSummaryEntry summaryEntry : summary.web$getEntries()) {
+                    IAEKey key = summaryEntry.web$getWhat();
                     String registryPath = key.web$getRegistryPath();
                     String displayName = key.web$getDisplayName();
-                    long requested = entry.web$getCraftAmount();
-                    long steps = entry.web$getCraftSteps();
-                    long stored = entry.web$getStoredAmount();
-                    long missing = entry.web$getMissingAmount();
+                    long requested = summaryEntry.web$getCraftAmount();
+                    long steps = summaryEntry.web$getCraftSteps();
+                    long stored = summaryEntry.web$getStoredAmount();
+                    long missing = summaryEntry.web$getMissingAmount();
                     double usedPercent = 0d;
                     StableKey itemKey = null;
                     IconMappings.Reference icon = null;
@@ -216,6 +244,7 @@ public final class GetCraftingPlan extends ISyncedRequest {
                             displayName,
                             key.web$getComponentCount(),
                             key.web$getDamage(),
+                            key.web$getResourceType(),
                             stored,
                             requested,
                             missing,

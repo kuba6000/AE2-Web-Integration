@@ -181,6 +181,21 @@ header {
     flex-shrink: 0;
     margin: 12px var(--grid-inset, 22px) 0;
 }
+.plan-start-controls {
+    display: flex;
+}
+.plan-start-controls > button + button {
+    margin-left: -2px;
+    padding-inline: 10px;
+}
+.plan-recalculate-menu {
+    margin: 0;
+    inset: auto;
+    max-width: calc(100vw - 16px);
+}
+#workspace > .plan-recalculate-menu:not(:popover-open) {
+    display: none;
+}
 .crafting-dialog input[type='text'] {
     min-width: 0;
     width: 100%;
@@ -363,13 +378,15 @@ header {
     --slot-height: 100px;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr));
 }
-.resource-grid.cpu-items-tracked {
+.resource-grid.cpu-items-tracked,
+.resource-grid.plan-four-metrics {
     --slot-height: 120px;
 }
 #workspace[data-resource-display='icons'] .resource-grid.cpu-items {
     --slot-height: 80px;
 }
-#workspace[data-resource-display='icons'] .resource-grid.cpu-items-tracked {
+#workspace[data-resource-display='icons'] .resource-grid.cpu-items-tracked,
+#workspace[data-resource-display='icons'] .resource-grid.plan-four-metrics {
     --slot-height: 100px;
 }
 #workspace[data-resource-display='icons'] .cpu-item > strong {
@@ -393,6 +410,18 @@ header {
     font-size: 10px;
     line-height: 16px;
     color: var(--surface-text);
+}
+.storage-use-low {
+    color: light-dark(#1c4ca6, #8db5ff);
+}
+.storage-use-medium {
+    color: light-dark(#1a751e, #8fd695);
+}
+.storage-use-high {
+    color: light-dark(#e3940b, #ffc869);
+}
+.storage-use-critical {
+    color: light-dark(#660f0f, #ff9393);
 }
 .item.cpu-item {
     --crafting-tint: transparent;

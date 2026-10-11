@@ -22,8 +22,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.google.common.collect.MapMaker;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
@@ -38,18 +36,6 @@ import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 /** Persisted identities and weak live-grid bindings for one save; native reads run on the server thread. */
 public final class GridIdentityRegistry {
-
-    // Saved grid identities retain their established coordinate spelling independently of HTTP JSON.
-    private static final Gson STORAGE_GSON = new GsonBuilder()
-        .registerTypeAdapter(
-            StableKey.class,
-            GSONUtils.GSON_BUILDER.create()
-                .getAdapter(StableKey.class))
-        .serializeNulls()
-        .setFieldNamingStrategy(
-            field -> field.getDeclaringClass() == DimensionalCoords.class && field.getName()
-                .equals("dimensionId") ? "dimid" : field.getName())
-        .create();
 
     private @Nullable File file;
     private boolean dirty;
@@ -179,14 +165,21 @@ public final class GridIdentityRegistry {
         File file = storageFile();
         if (Files.notExists(file.toPath())) return;
         try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
-            Map<StableKey, GridPersistentData> stored = STORAGE_GSON
+            Map<StableKey, GridPersistentData> stored = GSONUtils.GSON_BUILDER.create()
                 .fromJson(reader, new TypeToken<Map<StableKey, GridPersistentData>>() {}.getType());
             if (stored == null) throw new IOException("Empty grid identity file: " + file);
             for (Map.Entry<StableKey, GridPersistentData> entry : stored.entrySet()) {
                 GridPersistentData record = entry.getValue();
                 if (record == null) throw new IOException("Incomplete grid identity record: " + entry.getKey());
                 bindSettings(entry.getKey(), record);
-                for (DimensionalCoords position : record.getControllers()) knownPositions.put(position, entry.getKey());
+                for (DimensionalCoords position : record.getControllers()) {
+                    // Persisted coordinates must contain the current dimension field before entering the index.
+                    if (position == null || position.dimensionId() == null
+                        || position.dimensionId()
+                            .isEmpty())
+                        throw new IOException("Incomplete controller coordinates: " + entry.getKey());
+                    knownPositions.put(position, entry.getKey());
+                }
             }
             records = stored;
         } catch (RuntimeException e) {
@@ -265,7 +258,10 @@ public final class GridIdentityRegistry {
     private void writeRecords(Map<StableKey, GridPersistentData> data) throws IOException {
         Map<StableKey, GridPersistentData> ordered = new TreeMap<>(Comparator.comparing(StableKey::toString));
         ordered.putAll(data);
-        AtomicFileWriter.write(storageFile(), writer -> STORAGE_GSON.toJson(ordered, writer));
+        AtomicFileWriter.write(
+            storageFile(),
+            writer -> GSONUtils.GSON_BUILDER.create()
+                .toJson(ordered, writer));
         dirty = false;
     }
 }

@@ -13,6 +13,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
@@ -93,20 +94,16 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
     @Desugar
     public record FailureResponse(@NotNull ApiStatus status, @Nullable String data) {}
 
-    /** Optional CPU selection for submission. */
-    public static final class Input {
-
-        /**
-         * Stable CPU key; omission lets the crafting service choose a CPU.
-         *
-         * @example AQEBAQEBAQEBAQEBAQEBAQ
-         */
-        @OptionalInput
-        public @Nullable StableKey cpuKey;
-    }
+    /**
+     * Optional CPU selection for submission.
+     *
+     * @param cpuKey stable CPU key; omission lets the crafting service choose a CPU
+     * @example cpuKey AQEBAQEBAQEBAQEBAQEBAQ
+     */
+    @Desugar
+    public record Input(@OptionalInput @Nullable StableKey cpuKey) {}
 
     @Body
-    @SuppressWarnings("NotNullFieldNotInitialized") // Bound before the request is handled.
     private @NotNull Input input;
 
     @PathParam("planId")
@@ -118,19 +115,20 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        Future<IAECraftingJob> job = gridData.getJob(jobId);
-        if (job == null) {
+        CraftingPlanRegistry.Entry entry = gridData.getJob(jobId);
+        if (entry == null) {
             deny(ApiStatus.INVALID_ID);
             return;
         }
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
+        Future<IAECraftingJob> job = entry.plan;
         if (job.isDone()) {
             try {
                 IAECraftingJob craftingJob = job.get();
                 ICraftingCPUCluster target = null;
-                if (input.cpuKey != null) {
+                if (input.cpuKey() != null) {
                     Map<StableKey, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
-                    target = cpus.get(input.cpuKey);
+                    target = cpus.get(input.cpuKey());
                     if (target == null) {
                         deny(ApiStatus.CPU_NOT_FOUND);
                         return;

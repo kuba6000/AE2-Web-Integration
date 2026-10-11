@@ -72,23 +72,19 @@ public final class PauseCPU extends ISyncedRequest {
     @Desugar
     public record Response(@NotNull ApiStatus status, @Nullable Void data) {}
 
-    /** Desired scheduling state for the current job. */
-    public static final class Input {
-
-        /**
-         * True to suspend scheduling, false to resume it.
-         * 
-         * @example true
-         */
-        public boolean paused;
-    }
+    /**
+     * Desired scheduling state for the current job.
+     *
+     * @param paused true to suspend scheduling, false to resume it
+     * @example paused true
+     */
+    @Desugar
+    public record Input(boolean paused) {}
 
     @Body
-    @SuppressWarnings("NotNullFieldNotInitialized") // Bound before the request is submitted.
     private @NotNull Input input;
 
     @PathParam("cpuKey")
-    @SuppressWarnings("NotNullFieldNotInitialized") // Bound before the request is submitted.
     private @NotNull StableKey cpuId;
 
     @Override
@@ -111,7 +107,7 @@ public final class PauseCPU extends ISyncedRequest {
             deny(ApiStatus.CPU_PAUSE_UNSUPPORTED);
             return;
         }
-        pausable.web$setPaused(input.paused);
+        pausable.web$setPaused(input.paused());
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
     }
 }

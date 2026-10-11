@@ -57,11 +57,9 @@ public final class GetIconPage {
     private static final int STREAM_BUFFER_BYTES = 8 * 1024;
 
     @PathParam("packId")
-    @SuppressWarnings("NotNullFieldNotInitialized") // Bound by RequestInputs before serving.
     private @NotNull String packId;
 
     @PathParam("pageDigest")
-    @SuppressWarnings("NotNullFieldNotInitialized") // Bound by RequestInputs before serving.
     private @NotNull String pageDigest;
 
     private GetIconPage() {}

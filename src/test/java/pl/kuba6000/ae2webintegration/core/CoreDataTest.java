@@ -119,53 +119,30 @@ class CoreDataTest {
     }
 
     @Test
-    void aFileWrittenBeforeVersioningIsCompletedWhenThePlayerIdentityIsObserved() throws Exception {
-        // Same shape as the old format: no schemaVersion field at all.
-        writeDataFile(
-            "{\"UUIDToId\":{\"" + REGISTERED_UUID
-                + "\":42},\"IdToUUID\":{\"42\":\""
-                + REGISTERED_UUID
-                + "\"},\"passwords\":{\""
-                + REGISTERED_UUID
-                + "\":\"legacyhash\"}}");
+    void loadingAccountsDoesNotRewriteTheStoredDocument() throws Exception {
+        String document = "{\"passwords\":{\"" + REGISTERED_UUID
+            + "\":\"storedhash\"},\"usernames\":{\""
+            + REGISTERED_UUID
+            + "\":\"Player\"}}";
+        writeDataFile(document);
 
-        CoreData.loadData();
-        CoreEngine.onPlayerSeen(REGISTERED_PLAYER);
-
-        CoreDataTestFixture.reset();
         CoreData.loadData();
 
         assertAccount("Player", REGISTERED_PLAYER);
+        assertEquals(document, readDataFile());
     }
 
     @Test
-    void aSchemaTwoAccountWithAStoredNameRemainsUsableWithoutAnotherJoin() throws Exception {
-        writeDataFile(
-            "{\"schemaVersion\":2,\"UUIDToId\":{\"" + REGISTERED_UUID
-                + "\":42},\"IdToUUID\":{\"42\":\""
-                + REGISTERED_UUID
-                + "\"},\"passwords\":{\""
-                + REGISTERED_UUID
-                + "\":\"legacyhash\"},\"usernames\":{\""
-                + REGISTERED_UUID
-                + "\":\"Player\"}}");
+    void observingAPlayerRenameUpdatesThePersistedLoginName() {
+        CoreData.setPassword(REGISTERED_PLAYER, "storedhash");
+        PlayerIdentity renamed = new PlayerIdentity(REGISTERED_UUID, "RenamedPlayer");
 
-        CoreData.loadData();
-        assertAccount("Player", REGISTERED_PLAYER);
-
+        CoreEngine.onPlayerSeen(renamed);
         CoreDataTestFixture.reset();
         CoreData.loadData();
-        assertAccount("Player", REGISTERED_PLAYER);
-    }
 
-    @Test
-    void aLegacyPasswordAccountWithoutPersistedAeIdsIsCompletedWhenThePlayerIdentityIsObserved() throws Exception {
-        writeDataFile("{\"passwords\":{\"" + REGISTERED_UUID + "\":\"legacyhash\"}}");
-
-        CoreData.loadData();
-        CoreEngine.onPlayerSeen(REGISTERED_PLAYER);
-
-        assertNotNull(CoreData.getAccount("Player"));
+        assertNull(CoreData.getAccount("Player"));
+        assertAccount("renamedplayer", renamed);
     }
 
     @Test

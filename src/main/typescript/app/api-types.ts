@@ -3,13 +3,19 @@
  * These declarations describe the wire format; they do not validate responses at runtime.
  */
 export type ApplicationContext = {
-    capabilities: { craftingLightMode?: boolean; craftingPlanSteps?: boolean; cpuSelectionMode?: boolean };
+    capabilities: {
+        craftingLightMode?: boolean;
+        craftingIgnoreMissing?: boolean;
+        craftingPlanSteps?: boolean;
+        cpuSelectionMode?: boolean;
+    };
     publicMode: boolean;
     modVersion: string | null;
     isOutdated: boolean;
     user: { username: string; isAdmin: boolean } | null;
 };
 export type ResourceDescription = {
+    resourceType: 'ITEM' | 'FLUID' | 'OTHER';
     itemKey: string | null;
     icon: IconReference | null;
     displayName: string;
@@ -30,9 +36,7 @@ export type IconMetadata = {
 };
 export type ResourceResponse<T> = { data: T; icons: IconMetadata | null };
 export type StoredResource = ResourceStack & {
-    resourceType: 'ITEM' | 'FLUID' | 'OTHER';
     craftable: boolean;
-    identityStatus: string | null;
 };
 export type Position = { dimensionId: string; x: number; y: number; z: number };
 export type AccessSource = {
@@ -97,7 +101,15 @@ export type PlanItem = ResourceDescription & {
     steps: number;
     usedPercent: number;
 };
-export type Plan = { isDone: boolean; isSimulating: boolean; bytesTotal: number; plan: PlanItem[] | null };
+export type Plan = {
+    finalOutput: ResourceStack;
+    options: { lightMode: boolean; ignoreMissing: boolean };
+    autoStart: boolean;
+    isDone: boolean;
+    isSimulating: boolean;
+    bytesTotal: number;
+    plan: PlanItem[] | null;
+};
 export type HistoryEntry = {
     timeStarted: number;
     timeDone: number;

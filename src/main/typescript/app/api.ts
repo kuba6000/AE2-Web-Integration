@@ -20,7 +20,7 @@ export type Api = {
     items: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<StoredResource[]>>;
     createPlan: (
         gridKey: string,
-        body: { itemKey: string; quantity: number; lightMode?: boolean }
+        body: { itemKey: string; quantity: number; lightMode?: boolean; ignoreMissing?: boolean; autoStart?: boolean }
     ) => Promise<{ jobId: number }>;
     plan: (
         gridKey: string,
@@ -79,7 +79,13 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             method?: string;
             signal?: AbortSignal;
             body?:
-                | { itemKey: string; quantity: number; lightMode?: boolean }
+                | {
+                      itemKey: string;
+                      quantity: number;
+                      lightMode?: boolean;
+                      ignoreMissing?: boolean;
+                      autoStart?: boolean;
+                  }
                 | { cpuKey?: string }
                 | Partial<GridSettings>
                 | { paused: boolean };

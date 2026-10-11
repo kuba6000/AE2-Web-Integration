@@ -283,7 +283,7 @@ class GridIdentityRegistryTest {
     @Test
     void malformedFilesIncludingDuplicateKeysFailWithoutOverwritingTheirSource() throws Exception {
         String record = "\"" + StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA")
-            + "\":{\"controllers\":[{\"dimid\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{\"isTracked\":true}}";
+            + "\":{\"controllers\":[{\"dimensionId\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{\"isTracked\":true}}";
         for (String invalid : Arrays.asList("", "null", "{", "{" + record + "," + record + "}")) {
             Path file = directory.resolve("invalid.json");
             byte[] original = invalid.getBytes(StandardCharsets.UTF_8);
@@ -312,7 +312,7 @@ class GridIdentityRegistryTest {
         Path file = directory.resolve("default-settings.json");
         StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         String json = "{\"" + key
-            + "\":{\"controllers\":[{\"dimid\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{}}}";
+            + "\":{\"controllers\":[{\"dimensionId\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{}}}";
         Files.write(file, json.getBytes(StandardCharsets.UTF_8));
         GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
         assertEquals(key, registry.findIdentity(controller(1)));
@@ -327,13 +327,13 @@ class GridIdentityRegistryTest {
 
     @Test
     @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
-    void historicalDimensionEncodingSurvivesSaveWhileHttpUsesCamelCase() throws Exception {
-        Path file = directory.resolve("legacy-coordinates.json");
+    void currentDimensionEncodingSurvivesSaveAndMatchesHttp() throws Exception {
+        Path file = directory.resolve("coordinates.json");
         StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         String saved = "{\"" + key
             + "\":{\"controllers\":["
-            + "{\"dimid\":\"-1\",\"x\":-32,\"y\":64,\"z\":120},"
-            + "{\"dimid\":\"minecraft:overworld\",\"x\":-32,\"y\":64,\"z\":120}],\"settings\":{}}}";
+            + "{\"dimensionId\":\"-1\",\"x\":-32,\"y\":64,\"z\":120},"
+            + "{\"dimensionId\":\"minecraft:overworld\",\"x\":-32,\"y\":64,\"z\":120}],\"settings\":{}}}";
         Files.write(file, saved.getBytes(StandardCharsets.UTF_8));
         DimensionalCoords legacy = new DimensionalCoords(-1, -32, 64, 120);
         DimensionalCoords modern = new DimensionalCoords("minecraft:overworld", -32, 64, 120);
@@ -347,10 +347,10 @@ class GridIdentityRegistryTest {
         for (com.google.gson.JsonElement value : stored.getAsJsonArray("controllers")) {
             assertTrue(
                 value.getAsJsonObject()
-                    .has("dimid"));
+                    .has("dimensionId"));
             assertFalse(
                 value.getAsJsonObject()
-                    .has("dimensionId"));
+                    .has("dimid"));
         }
         GridIdentityRegistry restarted = new GridIdentityRegistry(file.toFile());
         assertEquals(key, restarted.findIdentity(legacy));
@@ -365,6 +365,17 @@ class GridIdentityRegistryTest {
             http.get("dimensionId")
                 .getAsString());
         assertFalse(http.has("dimid"));
+    }
+
+    @Test
+    @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
+    void coordinatesWithoutADimensionAreRejectedWithoutOverwritingTheFile() throws Exception {
+        Path file = directory.resolve("incomplete-coordinates.json");
+        String document = "{\"AAAAAAAAAAAAAAAAAAAAAA\":{\"controllers\":[{\"x\":1,\"y\":0,\"z\":0}],\"settings\":{}}}";
+        Files.write(file, document.getBytes(StandardCharsets.UTF_8));
+
+        assertThrows(IOException.class, () -> new GridIdentityRegistry(file.toFile()));
+        assertEquals(document, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
     }
 
     private static StableKey resolve(GridIdentityRegistry registry, DimensionalCoords... positions) {

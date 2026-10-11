@@ -13,6 +13,13 @@ import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { parseCraftingQuantity } from '../../app/crafting-quantity.js';
 
+function storageUseLevel(fraction: number) {
+    if (fraction <= 0.25) return 'low';
+    if (fraction <= 0.5) return 'medium';
+    if (fraction <= 0.75) return 'high';
+    return 'critical';
+}
+
 function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text = ''): HTMLElementTagNameMap[Tag] {
     const node = document.createElement(tag);
     node.textContent = text;
@@ -102,7 +109,13 @@ export function createCraftingView(
     const lightLabel = element('label');
     lightLabel.className = 'checkbox';
     lightLabel.append(lightMode, lightText);
-    order.append(quantityLabel, adjustments, automaticLabel, lightLabel, calculate, orderMessage);
+    const ignoreMissing = element('input');
+    ignoreMissing.type = 'checkbox';
+    const missingText = element('span');
+    const missingLabel = element('label');
+    missingLabel.className = 'checkbox';
+    missingLabel.append(ignoreMissing, missingText);
+    order.append(quantityLabel, adjustments, automaticLabel, lightLabel, missingLabel, calculate, orderMessage);
     const terminalMessage = element('p');
     terminalMessage.role = 'status';
     const orderControls = element('div');
@@ -122,6 +135,7 @@ export function createCraftingView(
         quantity.removeAttribute('aria-invalid');
         automatic.checked = false;
         lightMode.checked = false;
+        ignoreMissing.checked = false;
         submitted = false;
         product.replaceChildren(createResourceIcon(), renderMinecraftText(selected.displayName));
         if (!dialog.open) dialog.showModal();
@@ -156,7 +170,8 @@ export function createCraftingView(
             item,
             amount,
             automatic.checked,
-            application.state.capabilities.craftingLightMode === true && lightMode.checked
+            application.state.capabilities.craftingLightMode === true && lightMode.checked,
+            application.state.capabilities.craftingIgnoreMissing === true && ignoreMissing.checked
         );
     });
 
@@ -233,7 +248,6 @@ export function createCraftingView(
     status.role = 'status';
     const reason = element('p');
     const bytes = element('p');
-    const mergeHint = element('p');
     const cpuHint = element('p');
     const cpuHeading = element('div');
     cpuHeading.className = 'plan-cpu-heading';
@@ -242,17 +256,81 @@ export function createCraftingView(
     cpuList.className = 'cpu-selector-list cpu-selector-scroll inset-frame';
     cpuList.role = 'radiogroup';
     cpuList.addEventListener('scroll', () => tooltip.hide());
-    panel.append(output, status, reason, cpuHeading, mergeHint, cpuHint, cpuList);
+    panel.append(output, status, reason, cpuHeading, cpuHint, cpuList);
     workspace.append(panel);
     const start = element('button');
     start.type = 'button';
     start.addEventListener('click', () => application.crafting.submit());
+    const more = element('button', '▾');
+    more.type = 'button';
+    more.setAttribute('aria-haspopup', 'menu');
+    more.setAttribute('aria-expanded', 'false');
+    const menu = element('div');
+    menu.className = 'window-frame resource-menu plan-recalculate-menu';
+    menu.role = 'menu';
+    menu.popover = 'auto';
+    menu.id = 'plan-recalculate-menu';
+    more.setAttribute('aria-controls', menu.id);
+    const variants = [
+        { automatic: false, ignoreMissing: false, label: 'recalculate' },
+        { automatic: true, ignoreMissing: false, label: 'recalculateAuto' },
+        { automatic: false, ignoreMissing: true, label: 'recalculateMissing' },
+        { automatic: true, ignoreMissing: true, label: 'recalculateMissingAuto' }
+    ]
+        .filter((variant) => !variant.ignoreMissing || application.state.capabilities.craftingIgnoreMissing === true)
+        .map((variant) => {
+            const button = element('button');
+            button.type = 'button';
+            button.role = 'menuitem';
+            button.addEventListener('click', () => {
+                menu.hidePopover();
+                more.focus();
+                void application.crafting.recalculate(variant.automatic, variant.ignoreMissing);
+            });
+            menu.append(button);
+            return { ...variant, button };
+        });
+    menu.addEventListener('toggle', () => {
+        more.setAttribute('aria-expanded', String(menu.matches(':popover-open')));
+    });
+    more.addEventListener('click', () => {
+        menu.togglePopover();
+        if (!menu.matches(':popover-open')) return;
+        tooltip.hide();
+        const bounds = more.getBoundingClientRect();
+        menu.style.left = `${Math.max(8, Math.min(bounds.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 8))}px`;
+        menu.style.top = `${Math.max(8, bounds.top - menu.offsetHeight - 4)}px`;
+        menu.querySelector('button')?.focus();
+    });
+    menu.addEventListener('keydown', (event) => {
+        const buttons = [...menu.querySelectorAll('button')];
+        const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        let next = index;
+        if (event.key === 'ArrowDown') next = (index + 1) % buttons.length;
+        else if (event.key === 'ArrowUp') next = (index + buttons.length - 1) % buttons.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = buttons.length - 1;
+        else if (event.key === 'Escape') {
+            menu.hidePopover();
+            more.focus();
+            return;
+        } else if (event.key === 'Tab') {
+            menu.hidePopover();
+            return;
+        } else return;
+        event.preventDefault();
+        buttons[next]?.focus();
+    });
+    const startControls = element('div');
+    startControls.className = 'plan-start-controls';
+    startControls.append(start, more);
+    workspace.append(menu);
     const remove = element('button');
     remove.type = 'button';
     remove.addEventListener('click', () => application.crafting.remove());
     const actions = element('div');
     actions.className = 'plan-actions';
-    actions.append(start, remove);
+    actions.append(startControls, remove);
     planView.append(header, planBody, actions);
     root.append(planView);
     const cpuRows = new Map<
@@ -283,20 +361,21 @@ export function createCraftingView(
             automaticText.textContent = locale.common('autostart');
             lightText.textContent = locale.common('craftingLightMode');
             lightLabel.hidden = application.state.capabilities.craftingLightMode !== true;
+            missingText.textContent = locale.common('ignoreMissing');
+            missingLabel.hidden = application.state.capabilities.craftingIgnoreMissing !== true;
             calculate.textContent = locale.common('calculatePlan');
             calculate.disabled = !!state.mutation || !!state.uncertain || state.status === 'calculating';
-            orderMessage.textContent = state.uncertain
-                ? locale.common('uncertainCreate')
-                : state.error
-                  ? locale.common(state.error)
-                  : '';
-            terminalMessage.textContent = state.uncertain
-                ? locale.common('uncertainCreate')
-                : state.error
-                  ? locale.common(state.error)
-                  : state.mutation || ['calculating', 'submitted'].includes(state.status)
-                    ? locale.common(state.mutation ? 'calculating' : state.status)
-                    : '';
+            orderMessage.textContent = '';
+            terminalMessage.textContent = '';
+            if (state.uncertain) {
+                orderMessage.textContent = locale.common('uncertainCreate');
+                terminalMessage.textContent = orderMessage.textContent;
+            } else if (state.error) {
+                orderMessage.textContent = locale.common(state.error);
+                terminalMessage.textContent = orderMessage.textContent;
+            } else if (state.mutation || ['calculating', 'submitted'].includes(state.status)) {
+                terminalMessage.textContent = locale.common(state.mutation ? 'calculating' : state.status);
+            }
             terminalMessage.hidden = dialog.open || !terminalMessage.textContent;
             return orderControls;
         },
@@ -304,7 +383,10 @@ export function createCraftingView(
         render(terminal: TerminalState, locale: Locale, enabled: boolean) {
             const { route, crafting: state } = terminal;
             const nextRoute = route.view === 'plan' ? `${route.gridKey}/${route.planId}` : '';
-            if (planRoute && planRoute !== nextRoute) tooltip.hide();
+            if (planRoute && planRoute !== nextRoute) {
+                tooltip.hide();
+                menu.hidePopover();
+            }
             planRoute = nextRoute;
             if (dialog.open && submitted && ['calculating', 'submitted'].includes(state.status)) dialog.close();
             if (route.view !== 'items' || route.gridKey !== gridKey || terminal.itemStatus === 'error') {
@@ -337,13 +419,17 @@ export function createCraftingView(
             output.tabIndex = state.metadata ? 0 : -1;
             if (state.metadata)
                 output.append(renderMinecraftText(state.metadata.displayName), ` × ${number(state.metadata.quantity)}`);
-            status.textContent = state.uncertain
-                ? t(state.uncertain === 'delete' ? 'uncertainDelete' : 'uncertainSubmit')
-                : state.error
-                  ? t(state.error)
-                  : state.plan?.isDone && (state.plan.isSimulating || state.plan.plan?.some((row) => row.missing > 0))
-                    ? t('simulation')
-                    : t(state.status);
+            status.textContent = t(state.status);
+            if (state.uncertain) {
+                const uncertainLabels = {
+                    create: 'uncertainCreate',
+                    delete: 'uncertainDelete',
+                    submit: 'uncertainSubmit'
+                };
+                status.textContent = t(uncertainLabels[state.uncertain]);
+            } else if (state.error) status.textContent = t(state.error);
+            else if (state.plan?.isDone && (state.plan.isSimulating || state.plan.plan?.some((row) => row.missing > 0)))
+                status.textContent = t('simulation');
             reason.textContent = state.errorDetail || '';
             bytes.textContent = state.plan?.isDone
                 ? t('planBytes', { bytes: locale.bytes(state.plan.bytesTotal) })
@@ -409,6 +495,7 @@ export function createCraftingView(
                     });
                 // Let the shared grid own its decorative cells across updates.
                 for (const row of [...grid.children]) if (!row.classList.contains('empty-slot')) row.remove();
+                let metricRows = 0;
                 const targets = rows.map((row) => {
                     const li = element('li');
                     const button = element('button');
@@ -419,22 +506,33 @@ export function createCraftingView(
                     name.append(renderMinecraftText(row.displayName));
                     const amounts = element('span');
                     amounts.className = 'cpu-item-amounts';
-                    const values = [
-                        ['consumed', row.stored],
+                    const counts: [string, number][] = [
+                        ['missingAmount', row.missing],
                         ['requested', row.requested],
-                        ['missingAmount', row.missing]
-                    ] as const;
+                        ['planSteps', terminal.capabilities.craftingPlanSteps === true ? row.steps : 0],
+                        ['stored', row.stored]
+                    ];
+                    const values = counts.filter(([, value]) => value > 0);
+                    metricRows = Math.max(metricRows, values.length);
+                    const storagePercent = row.usedPercent > 0 ? ` (${Math.round(row.usedPercent * 100)}%)` : '';
                     for (const [key, value] of values) {
                         const amount = element('span');
                         amount.className = 'cpu-amount';
                         const quantity = element('span', slotQuantity(value, locale));
                         quantity.className = 'quantity';
+                        if (key === 'stored' && storagePercent) {
+                            const percent = element('span', storagePercent);
+                            percent.className = `storage-use storage-use-${storageUseLevel(row.usedPercent)}`;
+                            quantity.append(percent);
+                        }
                         amount.append(element('span', t(key)), quantity);
                         amounts.append(amount);
                     }
                     const description = [
                         plainMinecraftText(row.displayName),
-                        ...values.map(([key, value]) => `${t(key)}: ${number(value)}`)
+                        ...values.map(
+                            ([key, value]) => `${t(key)}: ${number(value)}${key === 'stored' ? storagePercent : ''}`
+                        )
                     ];
                     button.setAttribute('aria-label', description.join(' · '));
                     tooltip.bind(button, () => {
@@ -443,11 +541,12 @@ export function createCraftingView(
                         return [
                             name,
                             ...tooltip.metadata(row),
-                            ...values.map(([key, value]) => element('span', `${t(key)}: ${number(value)}`)),
-                            ...(terminal.capabilities.craftingPlanSteps === true
-                                ? [element('span', `${t('steps')}: ${number(row.steps)}`)]
-                                : []),
-                            element('span', `${t('storageUse')}: ${number(row.usedPercent * 100)}%`)
+                            ...values.map(([key, value]) =>
+                                element(
+                                    'span',
+                                    `${t(key === 'planSteps' ? 'steps' : key)}: ${number(value)}${key === 'stored' ? storagePercent : ''}`
+                                )
+                            )
                         ];
                     });
                     button.append(createResourceIcon(), name, amounts);
@@ -455,16 +554,13 @@ export function createCraftingView(
                     grid.insertBefore(li, grid.querySelector('.empty-slot'));
                     return { element: button, icon: row.icon };
                 });
+                grid.classList.toggle('plan-four-metrics', metricRows > 3);
                 slots.update(rows.length);
                 icons.update(targets, state.icons);
             }
             cpuTitle.textContent = t('craftingCpu');
             cpuList.setAttribute('aria-label', t('craftingCpu'));
             cpuList.hidden = state.status !== 'ready';
-            mergeHint.textContent =
-                state.plan?.isDone && state.cpus.some((cpu) => cpu.isBusy && cpu.acceptsPlayerJobs) && !state.metadata
-                    ? t('idleOnly')
-                    : '';
             cpuHint.textContent =
                 state.status === 'ready' && !state.cpus.some((cpu) => cpu.eligible) ? t('noEligibleCpu') : '';
             const remaining = new Set(cpuRows.keys());
@@ -535,8 +631,26 @@ export function createCraftingView(
                 cpuRows.delete(key);
             }
             start.textContent = t('startCrafting');
-            start.hidden = state.status !== 'ready';
-            start.disabled = !!state.mutation || !!state.uncertain || !state.selectedCpu;
+            start.disabled = state.status !== 'ready' || !!state.mutation || !!state.uncertain || !state.selectedCpu;
+            more.setAttribute('aria-label', t('recalculateOptions'));
+            menu.setAttribute('aria-label', t('recalculateOptions'));
+            more.disabled =
+                !state.metadata?.itemKey ||
+                !!state.mutation ||
+                !!state.uncertain ||
+                !['ready', 'error'].includes(state.status);
+            if (more.disabled) menu.hidePopover();
+            const ordered = [...variants].sort((a, b) => {
+                const current = state.metadata;
+                const aMatches = a.automatic === current?.automatic && a.ignoreMissing === current?.ignoreMissing;
+                const bMatches = b.automatic === current?.automatic && b.ignoreMissing === current?.ignoreMissing;
+                return Number(bMatches) - Number(aMatches);
+            });
+            for (const [index, variant] of ordered.entries()) {
+                variant.button.textContent = t(variant.label);
+                if (menu.children[index] !== variant.button)
+                    menu.insertBefore(variant.button, menu.children[index] || null);
+            }
             remove.textContent = t('cancelPlan');
             remove.hidden = ['submitted', 'deleted', 'unavailable', 'error'].includes(state.status);
             remove.disabled = !!state.mutation || !!state.uncertain;
@@ -551,6 +665,7 @@ export function createCraftingView(
             tools.remove();
             panel.remove();
             planView.remove();
+            menu.remove();
         }
     };
 }

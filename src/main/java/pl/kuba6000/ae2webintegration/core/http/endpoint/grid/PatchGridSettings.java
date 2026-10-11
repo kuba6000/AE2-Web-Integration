@@ -70,38 +70,28 @@ public final class PatchGridSettings extends IAsyncRequest {
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull GridSettingsData data) {}
 
-    /** Settings to update; omitted members remain unchanged. */
-    public static final class Input {
-
-        /**
-         * Whether the grid should collect crafting history.
-         *
-         * @example true
-         */
-        @OptionalInput
-        public @Nullable Boolean isTracked;
-
-        /**
-         * Custom network name; empty clears it. Outer Unicode spaces and U+FEFF are trimmed,
-         * matching JavaScript String.trim after control characters are rejected.
-         * At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
-         * U+007F–009F) are rejected even at the edges. Null is invalid; omission preserves the name.
-         *
-         * @example Factory
-         */
-        @OptionalInput
-        public @Nullable String name;
-    }
+    /**
+     * Settings to update; omitted members remain unchanged.
+     *
+     * @param isTracked whether the grid should collect crafting history
+     * @param name      custom network name; empty clears it. Outer Unicode spaces and U+FEFF are trimmed,
+     *                  matching JavaScript String.trim after control characters are rejected.
+     *                  At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
+     *                  U+007F–009F) are rejected even at the edges. Null is invalid; omission preserves the name.
+     * @example isTracked true
+     * @example name Factory
+     */
+    @Desugar
+    public record Input(@OptionalInput @Nullable Boolean isTracked, @OptionalInput @Nullable String name) {}
 
     @Body
-    @SuppressWarnings("NotNullFieldNotInitialized") // Bound before the request is handled.
     private @NotNull Input input;
 
     @Override
     public void handle() {
         String name;
         try {
-            name = input.name == null ? null : normalizeName(input.name);
+            name = input.name() == null ? null : normalizeName(input.name());
         } catch (IllegalArgumentException e) {
             deny(ApiStatus.BAD_PARAM);
             return;
@@ -120,10 +110,10 @@ public final class PatchGridSettings extends IAsyncRequest {
             GridSettingsData settings = data.getSettings();
             try {
                 if (name != null) settings.setName(name);
-                if (input.isTracked != null) {
-                    settings.setTracked(input.isTracked);
+                if (input.isTracked() != null) {
+                    settings.setTracked(input.isTracked());
                 }
-                if (input.name != null || input.isTracked != null) registry.saveIfDirty();
+                if (input.name() != null || input.isTracked() != null) registry.saveIfDirty();
                 // Completion serializes under the same monitor used by settings mutations and file writes.
                 respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, settings));
             } catch (IOException e) {

@@ -15,6 +15,8 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -105,6 +107,7 @@ class OutputSnapshotTest extends GridTestScope {
         Resource key = new Resource();
         ResourceSnapshot snapshot = ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 5), null);
         assertNotNull(snapshot);
+        assertNotNull(snapshot.itemKey());
         StableKey otherKey = TestGridFixtures.key(8831);
         IconPack.Metadata metadata = new IconPack.Metadata(
             "1.7.10",
@@ -175,6 +178,7 @@ class OutputSnapshotTest extends GridTestScope {
         key.brokenIdentity = true;
         ResourceSnapshot snapshot = assertDoesNotThrow(
             () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 9), null));
+        assertNotNull(snapshot);
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("output", new ResourceStack(snapshot, null));
         response.put("unrelated", null);
@@ -201,11 +205,25 @@ class OutputSnapshotTest extends GridTestScope {
     }
 
     @Test
+    void knownRequestIdentityIsPreservedWithoutReadingTheNativeCodecAgain() {
+        Resource key = new Resource();
+        StableKey requestedKey = key.web$getKey();
+        key.brokenIdentity = true;
+        ResourceSnapshot snapshot = ResourceSnapshot.capture(key, 37, requestedKey, null);
+        key.unavailable = true;
+        ResourceStack output = new ResourceStack(snapshot, null);
+        assertEquals(requestedKey, output.itemKey);
+        assertEquals(37, output.quantity);
+        assertEquals("Resource", output.displayName);
+    }
+
+    @Test
     void unsupportedNativeIdentityCannotEscapeSnapshotCapture() {
         Resource key = new Resource();
         key.unsupportedIdentity = true;
         ResourceSnapshot snapshot = assertDoesNotThrow(
             () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 4), null));
+        assertNotNull(snapshot);
         JsonObject json = new JsonParser().parse(
             GSONUtils.GSON_BUILDER.create()
                 .toJson(new ResourceStack(snapshot, null)))
@@ -228,9 +246,12 @@ class OutputSnapshotTest extends GridTestScope {
             () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 6), null));
     }
 
-    @Test
-    void cpuEndpointsIncludeCapturedResourceIdentity() {
-        Stack output = new Stack(new Resource(), 12);
+    @ParameterizedTest
+    @EnumSource(ResourceType.class)
+    void cpuEndpointsIncludeCapturedResourceIdentity(ResourceType resourceType) {
+        Resource resource = new Resource();
+        resource.resourceType = resourceType;
+        Stack output = new Stack(resource, 12);
         ICraftingCPUCluster cpu = (ICraftingCPUCluster) Proxy.newProxyInstance(
             getClass().getClassLoader(),
             new Class<?>[] { ICraftingCPUCluster.class },
@@ -297,6 +318,11 @@ class OutputSnapshotTest extends GridTestScope {
                 if (data.has("AAAAAAAAAAAAAAAAAAAAAA")) data = data.getAsJsonObject("AAAAAAAAAAAAAAAAAAAAAA");
                 JsonObject snapshot = data.getAsJsonObject("finalOutput");
                 assertEquals(
+                    resourceType.name(),
+                    snapshot.get("resourceType")
+                        .getAsString());
+                assertFalse(snapshot.has("craftable"));
+                assertEquals(
                     12,
                     snapshot.get("quantity")
                         .getAsLong());
@@ -352,6 +378,7 @@ class OutputSnapshotTest extends GridTestScope {
 
     static final class Resource implements IAEKey {
 
+        ResourceType resourceType = ResourceType.ITEM;
         boolean unavailable;
         boolean brokenIdentity;
         boolean unsupportedIdentity;
@@ -363,7 +390,7 @@ class OutputSnapshotTest extends GridTestScope {
 
         public @NotNull ResourceType web$getResourceType() {
             available();
-            return ResourceType.ITEM;
+            return resourceType;
         }
 
         public @NotNull String web$getRegistryNamespace() {
@@ -406,6 +433,7 @@ class OutputSnapshotTest extends GridTestScope {
         public @NotNull IAEKey web$copyIdentity() {
             available();
             Resource copy = new Resource();
+            copy.resourceType = resourceType;
             copy.brokenIdentity = brokenIdentity;
             copy.unsupportedIdentity = unsupportedIdentity;
             copy.brokenName = brokenName;

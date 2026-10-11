@@ -23,8 +23,6 @@ public class CoreData {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
-    private static final int CURRENT_SCHEMA_VERSION = 3;
-
     /**
      * Only ever assigned by {@link #loadData()} at mod init, before any HTTP thread exists, so today it is
      * already safely published. Marked volatile so that stays true if data reloading is ever added to
@@ -40,9 +38,6 @@ public class CoreData {
     private static File dataFile() {
         return Config.getConfigFile("webdata.json");
     }
-
-    /** 0 means a file written before versioning existed. */
-    private int schemaVersion;
 
     // Written from the server thread by setPassword (the in-game /ae2webintegration auth command) and read
     // from HTTP worker threads during login, so plain HashMaps would offer no visibility guarantee at all.
@@ -103,8 +98,7 @@ public class CoreData {
     }
 
     /**
-     * Records the canonical name supplied by an online player identity. Legacy accounts did not persist
-     * names, and existing accounts need the same update when their owner renames. The UUID remains the
+     * Records the canonical name supplied by an online player identity when the owner renames. The UUID remains the
      * account identity; the name is only a case-insensitive login index.
      */
     @SuppressWarnings("ConstantValue") // Keep validation of externally supplied identity data.
@@ -137,7 +131,6 @@ public class CoreData {
 
     private static void saveChanges() {
         CoreData data = instance;
-        data.schemaVersion = CURRENT_SCHEMA_VERSION;
         try {
             GSONUtils.writeAtomically(dataFile(), data);
         } catch (Exception e) {
@@ -164,21 +157,8 @@ public class CoreData {
                 LOG.error("Web data file is empty or malformed, keeping the accounts already in memory");
                 return;
             }
-            if (loaded.schemaVersion > CURRENT_SCHEMA_VERSION) {
-                LOG.warn(
-                    "Web data file was written by a newer version (schema {}), reading it as schema {}",
-                    loaded.schemaVersion,
-                    CURRENT_SCHEMA_VERSION);
-            }
-            boolean needsMigration = loaded.schemaVersion < CURRENT_SCHEMA_VERSION;
             loaded.rebuildUsernameIndex();
             instance = loaded;
-            if (needsMigration) {
-                // The reader is already closed here, so an atomic replacement also works on Windows.
-                // Rewriting through the current schema removes the obsolete, world-scoped AE2 id maps
-                // while preserving passwords and any canonical usernames already present.
-                saveChanges();
-            }
         } catch (Exception e) {
             // Deliberately no clear-and-save here: a failed read must not persist the loss of every
             // account. Leave the file alone so it can be inspected or restored.

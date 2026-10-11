@@ -14,8 +14,10 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -213,14 +215,14 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertNotNull(key);
         CompletableFuture<IAECraftingJob> plan = new CompletableFuture<>();
         int id = GridData.getOrCreate(key)
-            .addJob(plan);
+            .addJob(plan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
 
         GridAccess.list(TestGridFixtures.ae());
         GridAccess.list(TestGridFixtures.ae(grid));
-        assertSame(
-            plan,
-            GridData.getOrCreate(key)
-                .getJob(id));
+        CraftingPlanRegistry.Entry entry = GridData.getOrCreate(key)
+            .getJob(id);
+        assertNotNull(entry);
+        assertSame(plan, entry.plan);
         assertFalse(plan.isCancelled());
         assertTrue(new File(gridSave, "ae2webintegration/grid-identities.json").exists());
 

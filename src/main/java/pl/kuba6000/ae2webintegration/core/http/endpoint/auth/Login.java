@@ -54,7 +54,6 @@ public final class Login extends IAsyncRequest {
     /** Account credentials and the requested session lifetime. */
     @Body
     @NotNull
-    @SuppressWarnings("NotNullFieldNotInitialized") // Bound before handle().
     private Input input;
 
     /**

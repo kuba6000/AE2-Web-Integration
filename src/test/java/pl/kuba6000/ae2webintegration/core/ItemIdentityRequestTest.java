@@ -130,10 +130,10 @@ class ItemIdentityRequestTest extends GridTestScope {
             "OTHER",
             otherRow.get("resourceType")
                 .getAsString());
-        assertEquals(
-            "UNSUPPORTED",
-            otherRow.get("identityStatus")
-                .getAsString());
+        assertFalse(otherRow.has("identityStatus"));
+        assertTrue(
+            otherRow.get("itemKey")
+                .isJsonNull());
         assertEquals(
             "addon:chemical",
             otherRow.get("displayName")
@@ -339,9 +339,7 @@ class ItemIdentityRequestTest extends GridTestScope {
                 .getAsString());
         assertFalse(normal.has("itemid"));
         assertFalse(normal.has("itemname"));
-        assertTrue(
-            normal.get("identityStatus")
-                .isJsonNull());
+        assertFalse(normal.has("identityStatus"));
         assertFalse(normal.has("hashcode"));
         assertFalse(
             normal.get("craftable")
@@ -352,10 +350,7 @@ class ItemIdentityRequestTest extends GridTestScope {
             unsupported.get("itemKey")
                 .isJsonNull());
         assertFalse(unsupported.has("hashcode"));
-        assertEquals(
-            "UNSUPPORTED",
-            unsupported.get("identityStatus")
-                .getAsString());
+        assertFalse(unsupported.has("identityStatus"));
         assertEquals(
             3,
             unsupported.get("quantity")

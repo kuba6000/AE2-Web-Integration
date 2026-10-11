@@ -33,6 +33,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
@@ -52,6 +53,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /** Public HTTP and server lifecycle contract; generated packs use the public archive writer. */
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -381,6 +383,11 @@ class IconDeliveryHttpTest {
             new ItemIdentityRequestTest.Resource("unavailable", 12, false) {
 
                 @Override
+                public @NotNull ResourceType web$getResourceType() {
+                    return ResourceType.OTHER;
+                }
+
+                @Override
                 public @NotNull IAEKey web$copyIdentity() {
                     return this;
                 }
@@ -422,7 +429,11 @@ class IconDeliveryHttpTest {
         String gridPath = "/api/grids/" + TestGridFixtures.resolvedKey(grid);
         CompletableFuture<IAECraftingJob> future = new CompletableFuture<>();
         int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(future);
+            .addJob(
+                future,
+                ResourceSnapshot.capture(grid, resources[0], 37, CoreEngine.getIconPack()),
+                new CraftingOptions(false, false),
+                false);
         String path = gridPath + "/crafting-plans/" + id;
         JsonObject pending = syncedJson(path + "?icons=true");
         assertFalse(
@@ -433,6 +444,22 @@ class IconDeliveryHttpTest {
             pending.getAsJsonObject("data")
                 .get("plan")
                 .isJsonNull());
+        JsonObject pendingOutput = pending.getAsJsonObject("data")
+            .getAsJsonObject("finalOutput");
+        assertEquals(
+            exact.toString(),
+            pendingOutput.get("itemKey")
+                .getAsString());
+        assertEquals(
+            37,
+            pendingOutput.get("quantity")
+                .getAsLong());
+        assertNotNull(pendingOutput.getAsJsonObject("icon"));
+        assertEquals(
+            0,
+            pendingOutput.getAsJsonObject("icon")
+                .get("page")
+                .getAsInt());
         ICraftingPlanSummary summary = () -> Arrays.stream(resources)
             .map(
                 resource -> (ICraftingPlanSummaryEntry) Proxy.newProxyInstance(
@@ -460,6 +487,11 @@ class IconDeliveryHttpTest {
         assertTrue(
             plain.has("icons") && plain.get("icons")
                 .isJsonNull());
+        assertTrue(
+            plain.getAsJsonObject("data")
+                .getAsJsonObject("finalOutput")
+                .get("icon")
+                .isJsonNull());
         assertEquals(0, normalizations.get());
         for (int poll = 0; poll < 2; poll++) {
             JsonObject response = syncedJson(path + "?icons=true");
@@ -468,9 +500,25 @@ class IconDeliveryHttpTest {
                 response.getAsJsonObject("icons")
                     .get("packId")
                     .getAsString());
+            assertEquals(
+                pendingOutput,
+                response.getAsJsonObject("data")
+                    .get("finalOutput"));
             com.google.gson.JsonArray rows = response.getAsJsonObject("data")
                 .getAsJsonArray("plan");
             assertEquals(3, rows.size());
+            assertEquals(
+                "ITEM",
+                rows.get(0)
+                    .getAsJsonObject()
+                    .get("resourceType")
+                    .getAsString());
+            assertEquals(
+                "OTHER",
+                rows.get(2)
+                    .getAsJsonObject()
+                    .get("resourceType")
+                    .getAsString());
             assertEquals(
                 exact.toString(),
                 rows.get(0)

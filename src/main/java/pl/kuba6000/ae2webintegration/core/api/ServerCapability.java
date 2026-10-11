@@ -4,6 +4,7 @@ package pl.kuba6000.ae2webintegration.core.api;
 public enum ServerCapability {
 
     CRAFTING_LIGHT_MODE("craftingLightMode"),
+    CRAFTING_IGNORE_MISSING("craftingIgnoreMissing"),
     CRAFTING_PLAN_STEPS("craftingPlanSteps"),
     CPU_SELECTION_MODE("cpuSelectionMode");
 

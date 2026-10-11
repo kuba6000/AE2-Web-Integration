@@ -30,6 +30,7 @@ import com.google.gson.JsonParser;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.CancelCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
@@ -325,7 +326,11 @@ class CpuAddressingRequestTest extends GridTestScope {
                 throw new AssertionError("Unexpected plan operation");
             });
         return GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(CompletableFuture.completedFuture(plan));
+            .addJob(
+                CompletableFuture.completedFuture(plan),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
     }
 
     private static JsonObject submit(TestGrid grid, String selection) {

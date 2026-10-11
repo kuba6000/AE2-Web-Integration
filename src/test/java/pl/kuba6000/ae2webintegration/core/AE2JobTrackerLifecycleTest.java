@@ -30,6 +30,7 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
@@ -217,10 +218,10 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, losingKey, false);
         CompletableFuture<IAECraftingJob> losingPlan = new CompletableFuture<>();
         int losingId = GridData.getOrCreate(losingKey)
-            .addJob(losingPlan);
+            .addJob(losingPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         CompletableFuture<IAECraftingJob> winningPlan = new CompletableFuture<>();
         int winningId = GridData.getOrCreate(gridKey)
-            .addJob(winningPlan);
+            .addJob(winningPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         TestGridFixtures.TestGrid merged = new TestGridFixtures.TestGrid(
             gridKey,
             false,
@@ -241,7 +242,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         assertSame(
             winningPlan,
             GridData.getOrCreate(gridKey)
-                .getJob(winningId));
+                .getJob(winningId).plan);
 
         TestGridFixtures.TestAE split = TestGridFixtures.ae(grid, other);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
@@ -270,7 +271,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         AE2JobTracker.completeCrafting(grid, cpu);
         CompletableFuture<IAECraftingJob> plan = new CompletableFuture<>();
         int planId = GridData.getOrCreate(gridKey)
-            .addJob(plan);
+            .addJob(plan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
 
         CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
         TestGridFixtures.TestGrid replacement = TestGridFixtures.grid(900_101L, 42);

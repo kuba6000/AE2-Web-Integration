@@ -11,6 +11,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
@@ -26,6 +27,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /**
  * Starts calculating a crafting plan.
@@ -85,40 +87,33 @@ public final class CreateCraftingPlan extends ISyncedRequest {
     @Desugar
     public record PlanCreated(int jobId) {}
 
-    /** Parameters for a new crafting plan. */
-    public static final class Input {
-
-        /**
-         * Stable resource identity returned by the item listing.
-         *
-         * @example AAAAAAAAAAAAAAAAAAAAAA
-         */
-        @SuppressWarnings("NotNullFieldNotInitialized") // Validated and assigned by JSON input binding.
-        public @NotNull StableKey itemKey;
-        /**
-         * Positive number of resource units to craft.
-         *
-         * @example 64
-         */
-        public long quantity;
-        /**
-         * Use the native light calculator, which disables some pattern features for faster calculation.
-         * Omitted values default to false. Requires the server's craftingLightMode capability when true.
-         *
-         * @example false
-         */
-        @OptionalInput
-        public boolean lightMode;
-    }
+    /**
+     * Parameters for a new crafting plan.
+     *
+     * @param itemKey       stable resource identity returned by the item listing
+     * @param quantity      positive number of resource units to craft
+     * @param lightMode     use the native light calculator, disabling some pattern features for faster calculation;
+     *                      omitted means false and true requires the craftingLightMode capability
+     * @param ignoreMissing allow the native job to wait for ingredients arriving later; omitted means false
+     *                      and true requires the craftingIgnoreMissing capability
+     * @param autoStart     recorded client intent only; omitted means false and never starts server execution
+     * @example autoStart false
+     * @example itemKey AAAAAAAAAAAAAAAAAAAAAA
+     * @example quantity 64
+     * @example lightMode false
+     * @example ignoreMissing false
+     */
+    @Desugar
+    public record Input(@NotNull StableKey itemKey, long quantity, @OptionalInput boolean lightMode,
+        @OptionalInput boolean ignoreMissing, @OptionalInput boolean autoStart) {}
 
     @Body
-    @SuppressWarnings("NotNullFieldNotInitialized") // Bound before the request is handled.
     private @NotNull Input input;
 
     @Override
     public boolean init(RequestContext context) {
         if (!super.init(context)) return false;
-        if (input.quantity <= 0) {
+        if (input.quantity() <= 0) {
             deny(ApiStatus.INVALID_QUANTITY);
             return false;
         }
@@ -133,7 +128,7 @@ public final class CreateCraftingPlan extends ISyncedRequest {
         }
         IAEKey itemKey;
         try {
-            itemKey = itemIdentities.resolve(input.itemKey);
+            itemKey = itemIdentities.resolve(input.itemKey());
         } catch (ItemIdentityRegistry.Ambiguous e) {
             deny(ApiStatus.AMBIGUOUS_ITEM_KEY);
             return;
@@ -143,9 +138,15 @@ public final class CreateCraftingPlan extends ISyncedRequest {
             return;
         }
         IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
-        if (input.lightMode && !Boolean.TRUE.equals(
+        if (input.lightMode() && !Boolean.TRUE.equals(
             AE2Controller.AE2Interface.web$getCapabilities()
                 .get(ServerCapability.CRAFTING_LIGHT_MODE))) {
+            deny(ApiStatus.BAD_PARAM);
+            return;
+        }
+        if (input.ignoreMissing() && !Boolean.TRUE.equals(
+            AE2Controller.AE2Interface.web$getCapabilities()
+                .get(ServerCapability.CRAFTING_IGNORE_MISSING))) {
             deny(ApiStatus.BAD_PARAM);
             return;
         }
@@ -153,9 +154,11 @@ public final class CreateCraftingPlan extends ISyncedRequest {
             deny(ApiStatus.ITEM_NOT_FOUND);
             return;
         }
-        Future<IAECraftingJob> job = craftingGrid
-            .web$beginCraftingJob(grid, itemKey, input.quantity, new CraftingOptions(input.lightMode));
-        int jobId = gridData.addJob(job);
+        CraftingOptions options = new CraftingOptions(input.lightMode(), input.ignoreMissing());
+        ResourceSnapshot finalOutput = ResourceSnapshot
+            .capture(itemKey, input.quantity(), input.itemKey(), CoreEngine.getIconPack());
+        Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, itemKey, input.quantity(), options);
+        int jobId = gridData.addJob(job, finalOutput, options, input.autoStart());
         respond(HttpURLConnection.HTTP_ACCEPTED, new Response(ApiStatus.OK, new PlanCreated(jobId)));
     }
 

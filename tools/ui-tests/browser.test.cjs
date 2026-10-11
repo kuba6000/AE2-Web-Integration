@@ -34,6 +34,9 @@ const quartz = {
     icon: null
 };
 const readyPlan = {
+    finalOutput: { ...iron, quantity: 12 },
+    options: { lightMode: false, ignoreMissing: false },
+    autoStart: false,
     isDone: true,
     isSimulating: false,
     bytesTotal: 2048,
@@ -322,6 +325,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
         settings: { [gridA]: { isTracked: false, name: '' }, [gridB]: { isTracked: false, name: '' } },
         accessSources: {}
     };
+    const planRequests = new Map();
     const server = http.createServer(async (request, response) => {
         const url = new URL(request.url, 'http://localhost');
         if (!url.pathname.startsWith(mount + '/')) {
@@ -436,8 +440,15 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                     })
                 );
             } else if (resource.endsWith('/crafting-plans')) {
+                const input = options.requests.at(-1).body;
+                const item = options.itemsA.find((item) => item.itemKey === input.itemKey) || iron;
+                planRequests.set(`${resource}/${options.nextPlanId ?? 7}`, {
+                    finalOutput: { ...item, itemKey: input.itemKey, quantity: input.quantity },
+                    options: { lightMode: input.lightMode === true, ignoreMissing: input.ignoreMissing === true },
+                    autoStart: input.autoStart === true
+                });
                 response.statusCode = 202;
-                response.end(JSON.stringify({ status: 'OK', data: { jobId: 7 } }));
+                response.end(JSON.stringify({ status: 'OK', data: { jobId: options.nextPlanId ?? 7 } }));
             } else if (resource.endsWith('/submit')) {
                 response.statusCode = options.submitStatus === 'OK' ? 200 : 409;
                 response.end(JSON.stringify({ status: options.submitStatus, data: options.submitReason || null }));
@@ -451,8 +462,15 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                             request.method === 'DELETE'
                                 ? null
                                 : options.pendingReads-- > 0
-                                  ? { isDone: false, isSimulating: false, bytesTotal: 0, plan: null }
-                                  : options.plan
+                                  ? {
+                                        ...options.plan,
+                                        ...planRequests.get(resource),
+                                        isDone: false,
+                                        isSimulating: false,
+                                        bytesTotal: 0,
+                                        plan: null
+                                    }
+                                  : { ...options.plan, ...planRequests.get(resource) }
                     })
                 );
             } else if (resource.endsWith('/cpus')) {
@@ -729,7 +747,7 @@ test('autostart calculates once with native CPU choice and preserves the resourc
     );
     assert.deepEqual(
         options.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/crafting-plans')).map((r) => r.body),
-        [{ itemKey: 'iron', quantity: 23 }]
+        [{ itemKey: 'iron', quantity: 23, autoStart: true }]
     );
     await page.clock.fastForward(6000);
     assert.equal(options.requests.filter((r) => r.path.endsWith('/submit')).length, 1);
@@ -1008,30 +1026,39 @@ test('superseded slow discovery cannot overwrite recovered availability after a 
     assert.equal(await page.getByText(/server.*not.*icon pack/i).isVisible(), false);
 });
 
-test('legacy compact icon choice migrates once and survives reload', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await atlasFixture(page, options);
-    await page.addInitScript(() => {
-        const key = 'ae2web:/:theme:default';
-        if (!localStorage.getItem(key))
-            localStorage.setItem(key, JSON.stringify({ resourceIcons: true, terminalDisplay: 'compact' }));
+for (const saved of [
+    { resourceIcons: true, terminalDisplay: 'compact', expected: 'both' },
+    { resourceIcons: false, expected: 'both' },
+    { resourceIcons: false, terminalDisplay: 'icons', expected: 'icons' }
+]) {
+    test(`terminal display ignores obsolete icon preferences and preserves current ${saved.terminalDisplay ?? 'missing'} choice`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        await atlasFixture(page, options);
+        await page.addInitScript(({ resourceIcons, terminalDisplay }) => {
+            const key = 'ae2web:/:theme:default';
+            if (!localStorage.getItem(key))
+                localStorage.setItem(key, JSON.stringify({ resourceIcons, terminalDisplay }));
+        }, saved);
+        await page.goto(`${base}#/web-settings`);
+        const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
+        await page.waitForFunction(
+            (expected) => document.querySelector('#terminal-display').value === expected,
+            saved.expected,
+            { timeout: 3000 }
+        );
+        await mode.selectOption('names');
+        await page.reload();
+        await mode.waitFor();
+        assert.equal(await mode.inputValue(), 'names');
     });
-    await page.goto(`${base}#/web-settings`);
-    const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
-    await page.waitForFunction(() => document.querySelector('#terminal-display').value === 'icons');
-    await mode.selectOption('names');
-    await page.reload();
-    await mode.waitFor();
-    assert.equal(await mode.inputValue(), 'names');
-});
+}
 
-test('legacy names choice receives a dismissible icon notice outside the terminal', async (t) => {
+test('saved names choice receives a dismissible icon notice outside the terminal', async (t) => {
     const { page, options, base } = await fixture(t);
     await atlasFixture(page, options);
     await page.addInitScript(() => {
         const key = 'ae2web:/:theme:default';
-        if (!localStorage.getItem(key))
-            localStorage.setItem(key, JSON.stringify({ resourceIcons: false, terminalDisplay: 'compact' }));
+        if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ terminalDisplay: 'names' }));
     });
     await page.goto(`${base}#/grids/${gridA}/items`);
     const enable = page.getByRole('button', { name: 'Enable icons', exact: true });
@@ -1055,7 +1082,7 @@ test('enabling suggested icons persists and a later names choice does not nag', 
     await atlasFixture(page, options);
     await page.addInitScript(() => {
         const key = 'ae2web:/:theme:default';
-        if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ resourceIcons: false }));
+        if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ terminalDisplay: 'names' }));
     });
     await page.goto(`${base}#/grids/${gridA}/items`);
     const enable = page.getByRole('button', { name: 'Enable icons', exact: true });
@@ -2646,29 +2673,42 @@ test('terminal item and fluid switches intersect filters and preserve other reso
     assert.equal(await fluids.getAttribute('aria-pressed'), 'false');
 });
 
-// Saved browser preferences are a supported public format; missing direction adopts the old criterion order.
+// Missing or invalid saved directions use the current default, independent of the criterion.
 for (const saved of [
-    { sort: 'quantity', filter: 'craftable', expected: ['Iron Ingot', 'Certus Quartz Crystal'] },
+    { sort: 'quantity', filter: 'craftable', expected: ['Certus Quartz Crystal', 'Iron Ingot'] },
+    { sort: 'quantity', filter: 'craftable', sortOrder: 'sideways', expected: ['Certus Quartz Crystal', 'Iron Ingot'] },
+    {
+        sort: 'quantity',
+        filter: 'craftable',
+        sortOrder: 'descending',
+        expected: ['Iron Ingot', 'Certus Quartz Crystal']
+    },
     { sort: 'name', filter: 'stored', expected: ['Certus Quartz Crystal', 'Iron Ingot'] },
     { sort: 'id', filter: 'all', expected: ['Certus Quartz Crystal', 'Iron Ingot'] }
 ]) {
-    test(`terminal restores legacy ${saved.sort} preferences without coupling later order changes`, async (t) => {
+    test(`terminal restores current ${saved.sort} preferences with ${saved.sortOrder ?? 'missing'} direction`, async (t) => {
         const { page, options, base } = await fixture(t, '/ae2');
         options.itemsA = [iron, { ...quartz, craftable: true }];
-        await page.addInitScript(({ sort, filter }) => {
+        await page.addInitScript(({ sort, filter, sortOrder }) => {
             const key = 'ae2web:/ae2/:ui';
             if (!localStorage.getItem(key))
-                localStorage.setItem(key, JSON.stringify({ sort, filter, autoRefresh: false }));
+                localStorage.setItem(key, JSON.stringify({ sort, filter, sortOrder, autoRefresh: false }));
         }, saved);
         await page.goto(`${base}#/grids/${gridA}/items`);
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         assert.deepEqual(await page.locator('#items strong').allTextContents(), saved.expected);
         const order = page.getByRole('button', { name: /^Sort order:/ });
-        assert.match(await order.getAttribute('aria-label'), saved.sort === 'quantity' ? /Descending/ : /Ascending/);
+        assert.match(
+            await order.getAttribute('aria-label'),
+            saved.sortOrder === 'descending' ? /Descending/ : /Ascending/
+        );
         await page.getByRole('button', { name: /^Sort by:/ }).click();
         await page.reload();
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-        assert.match(await order.getAttribute('aria-label'), saved.sort === 'quantity' ? /Descending/ : /Ascending/);
+        assert.match(
+            await order.getAttribute('aria-label'),
+            saved.sortOrder === 'descending' ? /Descending/ : /Ascending/
+        );
     });
 }
 
@@ -3746,8 +3786,9 @@ test('busy CPU eligibility uses known output identity and missing selections req
     options.cpus['cpu-b'] = { ...cpu, isBusy: true, finalOutput: { ...iron, itemKey: 'iron' } };
     await page.reload();
     await cpus.waitFor();
-    assert.equal(await cpus.getByRole('radio', { name: /cpu-b/ }).evaluate((option) => option.disabled), true);
-    await page.getByText(/Only idle CPUs/).waitFor();
+    assert.equal(await cpus.getByRole('radio', { name: /cpu-b/ }).evaluate((option) => option.disabled), false);
+    assert.equal(await cpus.getByRole('radio', { name: /other-output/ }).isDisabled(), true);
+    assert.equal(await cpus.getByRole('radio', { name: /unknown-storage/ }).isDisabled(), true);
     assert.equal(options.requests.filter((request) => request.method === 'POST').length, 1);
 });
 
@@ -5295,7 +5336,7 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
         .filter({ hasText: /plan.*unavailable/i })
         .waitFor({ timeout: 3000 });
     assert.equal(await page.getByRole('button', { name: 'Cancel', exact: true }).count(), 0);
-    assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
     options.planStatus = 'OK';
     options.plan = { ...readyPlan, isSimulating: true };
     await page.reload();
@@ -5327,7 +5368,7 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
             .count(),
         0
     );
-    assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
     options.cpuError = null;
     await poll(page);
     await page
@@ -5829,6 +5870,230 @@ test('crafting plan persists independent name total quantity and steps sorting w
     assert.ok(await page.getByRole('button', { name: 'Sort order: Descending', exact: true }).isVisible());
 });
 
+test('direct pending plan and reload restore the original order and options without replaying autostart', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.capabilities = { craftingLightMode: true, craftingIgnoreMissing: true };
+    options.plan = {
+        ...readyPlan,
+        finalOutput: { ...quartz, itemKey: 'requested-quartz', quantity: 37 },
+        options: { lightMode: true, ignoreMissing: true },
+        autoStart: true,
+        isSimulating: true
+    };
+    options.pendingReads = 1;
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    const output = page.getByText(/Certus Quartz Crystal × 37/);
+    await output.waitFor({ timeout: 3000 });
+    const more = page.getByRole('button', { name: 'Recalculate options', exact: true });
+    assert.ok(await more.isDisabled());
+    await poll(page);
+    await more.click();
+    const menu = page.getByRole('menu', { name: 'Recalculate options', exact: true });
+    assert.equal(
+        await menu
+            .getByRole('menuitem', { name: 'Recalculate ignoring missing + autostart', exact: true })
+            .evaluate((node) => node === node.parentElement.firstElementChild),
+        true
+    );
+    await page.reload();
+    await output.waitFor();
+    await more.click();
+    assert.equal(
+        await menu
+            .getByRole('menuitem', { name: 'Recalculate ignoring missing + autostart', exact: true })
+            .evaluate((node) => node === node.parentElement.firstElementChild),
+        true
+    );
+    assert.equal(options.requests.filter((entry) => entry.method !== 'GET').length, 0);
+    options.nextPlanId = 8;
+    await menu.getByRole('menuitem', { name: 'Recalculate ignoring missing', exact: true }).click();
+    await page.waitForURL(/\/plans\/8$/);
+    assert.deepEqual(
+        options.requests.filter((entry) => entry.method !== 'GET').map((entry) => entry.method),
+        ['DELETE', 'POST']
+    );
+    assert.deepEqual(options.requests.find((entry) => entry.path.endsWith('/crafting-plans')).body, {
+        itemKey: 'requested-quartz',
+        quantity: 37,
+        lightMode: true,
+        ignoreMissing: true
+    });
+});
+
+test('delayed plan metadata cannot restore another grid order or automatic intent', async (t) => {
+    const { page, options, base } = await fixture(t);
+    let complete;
+    const requested = new Promise((resolve) => {
+        complete = resolve;
+    });
+    await page.route(`**/api/grids/${gridA}/crafting-plans/7`, (route) => complete(route));
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    const pending = await requested;
+    options.plan = {
+        ...readyPlan,
+        finalOutput: { ...quartz, quantity: 19 },
+        autoStart: true
+    };
+    await page.goto(`${base}#/grids/${gridB}/plans/7`);
+    await page.getByText(/Certus Quartz Crystal × 19/).waitFor();
+    await pending.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'OK', data: readyPlan })
+    });
+    await poll(page);
+    assert.ok(await page.getByText(/Certus Quartz Crystal × 19/).isVisible());
+    assert.equal(await page.getByText(/Iron Ingot × 12/).count(), 0);
+    assert.equal(options.requests.filter((entry) => entry.method !== 'GET').length, 0);
+});
+
+test('plan recalculation preserves the order and light mode, supports autostart and locks uncertain replacement', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.capabilities.craftingLightMode = true;
+    options.plan = { ...readyPlan, isSimulating: true };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).click();
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Craft quantity' }).fill('32');
+    await page.getByRole('checkbox', { name: 'Light mode', exact: true }).check();
+    await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    const start = page.getByRole('button', { name: 'Start crafting', exact: true });
+    await start.waitFor();
+    assert.ok(await start.isDisabled());
+    const more = page.getByRole('button', { name: 'Recalculate options', exact: true });
+    await more.click();
+    const menu = page.getByRole('menu', { name: 'Recalculate options', exact: true });
+    assert.equal(await menu.getByRole('menuitem').count(), 2, 'unsupported ignore-missing variants are absent');
+    options.nextPlanId = 8;
+    await menu.getByRole('menuitem', { name: 'Recalculate', exact: true }).click();
+    await page.waitForURL(/\/plans\/8$/);
+    assert.deepEqual(
+        options.requests.filter((entry) => entry.method !== 'GET').map((entry) => entry.method),
+        ['POST', 'DELETE', 'POST']
+    );
+    assert.deepEqual(options.requests.filter((entry) => entry.path.endsWith('/crafting-plans')).at(-1).body, {
+        itemKey: 'iron',
+        quantity: 32,
+        lightMode: true
+    });
+    await more.click();
+    options.plan = readyPlan;
+    options.nextPlanId = 9;
+    await menu.getByRole('menuitem', { name: 'Recalculate with autostart', exact: true }).click();
+    await page.waitForURL(/\/items$/);
+    assert.ok(options.requests.some((entry) => entry.path.endsWith('/crafting-plans/9/submit')));
+    await page.getByRole('button', { name: /Iron Ingot/ }).click();
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
+    options.nextPlanId = 10;
+    await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    await page.waitForURL(/\/plans\/10$/);
+    await more.click();
+    options.fault = { operation: 'delete', status: 'TIMEOUT' };
+    await menu.getByRole('menuitem', { name: 'Recalculate', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /outcome.*unknown/i })
+        .waitFor();
+    assert.ok(await more.isDisabled());
+    assert.ok(await start.isDisabled());
+    const count = options.requests.filter((entry) => entry.method !== 'GET').length;
+    await poll(page);
+    assert.equal(options.requests.filter((entry) => entry.method !== 'GET').length, count);
+});
+
+test('ignore-missing recalculation keeps original options first and never retries uncertain creation', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.capabilities.craftingLightMode = true;
+    options.capabilities.craftingIgnoreMissing = true;
+    options.submitStatus = 'FAIL';
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: /Iron Ingot/ }).click();
+    await page.getByRole('button', { name: 'Craft', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Start automatically', exact: true }).check();
+    await page.getByRole('checkbox', { name: 'Light mode', exact: true }).check();
+    await page.getByRole('checkbox', { name: 'Ignore missing ingredients', exact: true }).check();
+    await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    await page.waitForURL(/\/plans\/7$/);
+    assert.deepEqual(options.requests.find((entry) => entry.path.endsWith('/crafting-plans')).body, {
+        itemKey: 'iron',
+        quantity: 1,
+        lightMode: true,
+        ignoreMissing: true,
+        autoStart: true
+    });
+    await page.reload();
+    await page.getByText(/Iron Ingot × 1/).waitFor();
+    await poll(page);
+    assert.equal(options.requests.filter((entry) => entry.path.endsWith('/submit')).length, 1);
+    const more = page.getByRole('button', { name: 'Recalculate options', exact: true });
+    await more.click();
+    const menu = page.getByRole('menu', { name: 'Recalculate options', exact: true });
+    assert.equal(await menu.getByRole('menuitem').count(), 4);
+    assert.equal(await menu.getByRole('menuitem').first().innerText(), 'Recalculate ignoring missing + autostart');
+    await menu.getByRole('menuitem', { name: 'Recalculate ignoring missing', exact: true }).focus();
+    await poll(page);
+    assert.equal(
+        await menu
+            .getByRole('menuitem', { name: 'Recalculate ignoring missing', exact: true })
+            .evaluate((node) => node === document.activeElement),
+        true
+    );
+    options.nextPlanId = 8;
+    await page.keyboard.press('Enter');
+    await page.waitForURL(/\/plans\/8$/);
+    assert.deepEqual(options.requests.filter((entry) => entry.path.endsWith('/crafting-plans')).at(-1).body, {
+        itemKey: 'iron',
+        quantity: 1,
+        lightMode: true,
+        ignoreMissing: true
+    });
+    await more.click();
+    assert.equal(await menu.getByRole('menuitem').first().innerText(), 'Recalculate ignoring missing');
+    options.fault = { operation: 'create', status: 'TIMEOUT' };
+    await menu.getByRole('menuitem', { name: 'Recalculate', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /calculation.*unknown/i })
+        .waitFor();
+    assert.ok(await more.isDisabled());
+    const count = options.requests.filter((entry) => entry.method !== 'GET').length;
+    await poll(page);
+    assert.equal(options.requests.filter((entry) => entry.method !== 'GET').length, count);
+});
+
+test('plan tiles omit zero metrics and show ordered counts with whole storage percentages', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.capabilities.craftingPlanSteps = true;
+    options.plan = {
+        ...readyPlan,
+        plan: [
+            { ...readyPlan.plan[0], displayName: 'Combined resource', missing: 2, requested: 12, steps: 3, stored: 4 },
+            {
+                ...readyPlan.plan[0],
+                displayName: 'Stored resource',
+                missing: 0,
+                requested: 0,
+                steps: 0,
+                stored: 15,
+                usedPercent: 0.376
+            }
+        ]
+    };
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    const resources = page.getByRole('region', { name: 'Plan resources', exact: true });
+    const combined = resources.getByRole('button', { name: /^Combined resource/ });
+    await combined.waitFor();
+    assert.match(await combined.innerText(), /Missing\s+2\s+Requested\s+12\s+Steps\s+3\s+Stored\s+4/);
+    const stored = resources.getByRole('button', { name: /^Stored resource/ });
+    assert.match(await stored.innerText(), /Stored\s+15\s+\(38%\)/);
+    assert.doesNotMatch(await stored.innerText(), /Missing|Requested|Steps/);
+    await stored.focus();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.getByText('Stored resource', { exact: true }).waitFor();
+    assert.match(await tooltip.innerText(), /Stored: 15 \(38%\)/);
+    assert.doesNotMatch(await tooltip.innerText(), /Missing|Requested|Crafting steps/);
+});
+
 test('unsupported plan steps fall back without overwriting the saved choice and omit unavailable metrics', async (t) => {
     const { page, options, base } = await fixture(t);
     options.capabilities.craftingPlanSteps = true;
@@ -5964,7 +6229,7 @@ test('deletion rejection makes unavailable or denied plans non-actionable', asyn
             .getByRole('list', { name: 'Plan resources', exact: true })
             .getByRole('button', { name: /Iron Ingot/ })
             .waitFor({ state: 'hidden', timeout: 3000 });
-        assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).count(), 0);
+        assert.equal(await page.getByRole('button', { name: 'Start crafting', exact: true }).isDisabled(), true);
     }
 });
 
@@ -6295,7 +6560,7 @@ test('appearance, language and terminal preferences survive reload and direct li
     );
 });
 
-test('the default theme adopts saved appearance once and preserves subsequent choices and reset', async (t) => {
+test('the default theme ignores obsolete shared appearance and preserves current choices and reset', async (t) => {
     const { page, base, open } = await themeFixture(
         t,
         `
@@ -6304,7 +6569,7 @@ test('the default theme adopts saved appearance once and preserves subsequent ch
     `,
         '<button>Reset default appearance</button>'
     );
-    // This is the published browser data format from before themes owned appearance.
+    // Appearance is owned by the theme; old shared values must not affect current defaults.
     await page.addInitScript(() => {
         const key = 'ae2web:/ae2/:ui';
         if (localStorage.getItem(key) === null) {
@@ -6314,7 +6579,7 @@ test('the default theme adopts saved appearance once and preserves subsequent ch
     await page.goto(`${base}#/web-settings`);
     const appearance = page.getByRole('combobox', { name: 'Appearance' });
     await appearance.waitFor();
-    assert.equal(await appearance.inputValue(), 'dark');
+    assert.equal(await appearance.inputValue(), 'system');
     await appearance.selectOption('light');
     await page.reload();
     await appearance.waitFor();
@@ -6323,30 +6588,29 @@ test('the default theme adopts saved appearance once and preserves subsequent ch
     await page.getByRole('button', { name: 'Reset default appearance' }).click();
     await page.goto(`${base}#/web-settings`);
     await appearance.waitFor();
-    assert.equal(await appearance.inputValue(), 'system', 'Reset must not resurrect the previously adopted appearance');
+    assert.equal(await appearance.inputValue(), 'system', 'Reset must not adopt the obsolete shared appearance');
 });
 
-test('saved appearance remains recoverable when its first theme storage write fails', async (t) => {
+test('current theme appearance survives a storage write failure without adopting shared appearance', async (t) => {
     const { page, base } = await fixture(t, '/ae2');
     await page.addInitScript(() => {
-        if (sessionStorage.getItem('adoptionAttempted')) return;
-        sessionStorage.setItem('adoptionAttempted', 'true');
-        const legacyKey = 'ae2web:/ae2/:ui';
-        localStorage.setItem(legacyKey, JSON.stringify({ appearance: 'dark', language: 'en' }));
-        const setItem = Storage.prototype.setItem;
-        Storage.prototype.setItem = function (key, value) {
-            // Existing legacy data can be updated, but writing a new storage entry exceeds quota.
-            if (key === legacyKey) return setItem.call(this, key, value);
+        if (sessionStorage.getItem('storageFailureSeeded')) return;
+        sessionStorage.setItem('storageFailureSeeded', 'true');
+        localStorage.setItem('ae2web:/ae2/:ui', JSON.stringify({ appearance: 'dark', language: 'en' }));
+        localStorage.setItem('ae2web:/ae2/:theme:default', JSON.stringify({ appearance: 'light' }));
+        Storage.prototype.setItem = function () {
             throw new DOMException('Full', 'QuotaExceededError');
         };
     });
     await page.goto(`${base}#/web-settings`);
     const appearance = page.getByRole('combobox', { name: 'Appearance' });
     await appearance.waitFor();
-    assert.equal(await appearance.inputValue(), 'dark');
+    assert.equal(await appearance.inputValue(), 'light');
+    await appearance.selectOption('system');
+    assert.equal(await appearance.inputValue(), 'system');
     await page.reload();
     await appearance.waitFor();
-    assert.equal(await appearance.inputValue(), 'dark', 'Failed adoption must preserve the recoverable saved choice');
+    assert.equal(await appearance.inputValue(), 'light', 'Failed writes must preserve the current persisted choice');
 });
 
 test('lost access clears resource data and subsequent polling recovers', async (t) => {
@@ -7912,7 +8176,7 @@ for (const height of [844, 600]) {
         const { page, options, base } = await fixture(t, '', { viewport: { width: 390, height } });
         await atlasFixture(page, options);
         await page.addInitScript(() =>
-            localStorage.setItem('ae2web:/:theme:default', JSON.stringify({ resourceIcons: false }))
+            localStorage.setItem('ae2web:/:theme:default', JSON.stringify({ terminalDisplay: 'names' }))
         );
         await page.goto(`${base}#/grids/${gridA}/items`);
         const icons = page.getByRole('button', { name: 'Enable icons', exact: true });

@@ -56,10 +56,6 @@ export function createPreferences(base: URL) {
         if (isValid(name, value)) values[name] = value;
     }
     for (const name of Object.keys(defaults) as (keyof Preferences)[]) restore(name);
-    if (!isValid('sortOrder', settings.get('sortOrder'))) {
-        values.sortOrder = values.sort === 'quantity' ? 'descending' : 'ascending';
-        settings.set('sortOrder', values.sortOrder);
-    }
     return {
         values,
         set<K extends keyof Preferences>(name: K, value: Preferences[K]) {

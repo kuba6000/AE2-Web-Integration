@@ -171,19 +171,13 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             const dirty =
                 state.current &&
                 (state.draft.isTracked !== state.current.isTracked || state.draft.name.trim() !== state.current.name);
-            status.textContent = state.saving
-                ? t('settingsSaving')
-                : state.uncertain
-                  ? t('settingsUnconfirmed')
-                  : state.error
-                    ? t(state.error)
-                    : state.notice
-                      ? t(state.notice)
-                      : state.status === 'loading'
-                        ? t('loading')
-                        : dirty
-                          ? t('settingsDraft')
-                          : '';
+            status.textContent = '';
+            if (state.saving) status.textContent = t('settingsSaving');
+            else if (state.uncertain) status.textContent = t('settingsUnconfirmed');
+            else if (state.error) status.textContent = t(state.error);
+            else if (state.notice) status.textContent = t(state.notice);
+            else if (state.status === 'loading') status.textContent = t('loading');
+            else if (dirty) status.textContent = t('settingsDraft');
             if (state.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
             status.hidden = !status.textContent;
             information.hidden = state.status !== 'ready' || !grid;

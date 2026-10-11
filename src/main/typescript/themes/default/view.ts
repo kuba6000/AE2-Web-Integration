@@ -5,7 +5,6 @@ import type { TerminalState, createTerminal } from '../../app/terminal.js';
 import type { Translator as Locale } from '../../app/i18n.js';
 type Terminal = ReturnType<typeof createTerminal>;
 
-import { createSettings } from '../../app/storage.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { cpuHref, historyHref } from '../../app/router.js';
@@ -124,32 +123,13 @@ export function mount(
         }
     });
     const appearances = ['light', 'dark', 'system'];
-    const previousSettings = createSettings(base, 'ui');
-    let savedAppearance = settings.get('appearance');
-    if (savedAppearance === null) {
-        // Adopt the previously shared preference; its meaning belongs only to this theme.
-        savedAppearance = previousSettings.get('appearance');
-        if (typeof savedAppearance === 'string' && appearances.includes(savedAppearance)) {
-            if (settings.set('appearance', savedAppearance)) previousSettings.remove('appearance');
-        }
-    } else {
-        previousSettings.remove('appearance');
-    }
+    const savedAppearance = settings.get('appearance');
     let appearance =
         typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
     type TerminalDisplay = 'names' | 'both' | 'icons';
     const savedDisplay = settings.get('terminalDisplay');
     let terminalDisplay: TerminalDisplay =
-        savedDisplay === 'names' || savedDisplay === 'both' || savedDisplay === 'icons'
-            ? savedDisplay
-            : settings.get('resourceIcons', true) === false
-              ? 'names'
-              : savedDisplay === 'compact'
-                ? 'icons'
-                : 'both';
-    if (savedDisplay !== terminalDisplay || settings.get('resourceIcons') !== null) {
-        if (settings.set('terminalDisplay', terminalDisplay)) settings.remove('resourceIcons');
-    }
+        savedDisplay === 'names' || savedDisplay === 'both' || savedDisplay === 'icons' ? savedDisplay : 'both';
     application.displayIcons(terminalDisplay !== 'names');
     let effectiveDisplay: TerminalDisplay = 'names';
     let iconSuggestionDismissed = settings.get('iconSuggestionDismissed') === true;
@@ -445,14 +425,11 @@ export function mount(
         const label = grid ? networkLabel(grid) : gridKey || '';
         if (selectedNetwork.textContent !== label) selectedNetwork.textContent = label;
         selectedNetwork.setAttribute('aria-label', `${locale.common('currentNetwork')}: ${label}`);
-        const networkMessage =
-            state.gridStatus === 'loading'
-                ? locale.common('loading')
-                : state.gridError
-                  ? locale.common(state.gridError)
-                  : !state.grids.length
-                    ? `${locale.common('noNetworks')}. ${locale.common('noNetworksHelp')}`
-                    : '';
+        let networkMessage = '';
+        if (state.gridStatus === 'loading') networkMessage = locale.common('loading');
+        else if (state.gridError) networkMessage = locale.common(state.gridError);
+        else if (!state.grids.length)
+            networkMessage = `${locale.common('noNetworks')}. ${locale.common('noNetworksHelp')}`;
         find('#network-message').textContent = networkMessage;
     }
     function renderItems() {
@@ -525,14 +502,9 @@ export function mount(
         }
         let message = '';
         if (state.gridStatus === 'ready') {
-            message =
-                state.itemStatus === 'loading'
-                    ? locale.common('loading')
-                    : state.itemError
-                      ? locale.common(state.itemError)
-                      : state.itemStatus === 'ready' && !state.items.length
-                        ? locale.common('empty')
-                        : '';
+            if (state.itemStatus === 'loading') message = locale.common('loading');
+            else if (state.itemError) message = locale.common(state.itemError);
+            else if (state.itemStatus === 'ready' && !state.items.length) message = locale.common('empty');
         }
         find('#item-message').textContent = message;
     }
@@ -874,17 +846,11 @@ export function mount(
         find('#activity').hidden = !active;
         find('#activity').setAttribute('aria-label', locale.common('activity'));
         find('#activity').setAttribute('aria-live', actionPending ? 'polite' : 'off');
-        find('#activity-text').textContent = active
-            ? locale.common(
-                  cpuMutations.some((outcome) => outcome.mutation === 'cancel')
-                      ? 'cpuCancelling'
-                      : cpuMutations.length
-                        ? 'cpuUpdating'
-                        : state.route.view === 'cpus'
-                          ? 'cpuRefreshing'
-                          : 'loading'
-              )
-            : '';
+        let activityLabel = 'loading';
+        if (cpuMutations.some((outcome) => outcome.mutation === 'cancel')) activityLabel = 'cpuCancelling';
+        else if (cpuMutations.length) activityLabel = 'cpuUpdating';
+        else if (state.route.view === 'cpus') activityLabel = 'cpuRefreshing';
+        find('#activity-text').textContent = active ? locale.common(activityLabel) : '';
         historyView.render(state, locale);
         settingsView.render(state, locale);
         aboutView.render(state.route, locale);

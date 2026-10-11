@@ -69,7 +69,6 @@ public final class CancelCPU extends ISyncedRequest {
     public record Response(@NotNull ApiStatus status, @Nullable Void data) {}
 
     @PathParam("cpuKey")
-    @SuppressWarnings("NotNullFieldNotInitialized") // Bound before the request is submitted.
     private @NotNull StableKey cpuId;
 
     @Override

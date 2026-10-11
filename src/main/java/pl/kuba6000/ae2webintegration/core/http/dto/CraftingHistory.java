@@ -14,6 +14,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -92,11 +93,11 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
         public final @NotNull List<String> providers;
 
         public ResourceTiming(@Nullable String registryNamespace, @Nullable String registryPath,
-            @NotNull String displayName, int componentCount, int damage, long timeSpentOn, long craftedTotal,
-            double shareInCraftingTime, double shareInCraftingTimeCombined, double craftsPerSec,
-            @NotNull ArrayList<Timing> timings, @Nullable IconMappings.Reference icon, @Nullable StableKey itemKey,
-            @NotNull List<String> providers) {
-            super(registryNamespace, registryPath, displayName, componentCount, damage, itemKey, icon);
+            @NotNull String displayName, int componentCount, int damage, @NotNull ResourceType resourceType,
+            long timeSpentOn, long craftedTotal, double shareInCraftingTime, double shareInCraftingTimeCombined,
+            double craftsPerSec, @NotNull ArrayList<Timing> timings, @Nullable IconMappings.Reference icon,
+            @Nullable StableKey itemKey, @NotNull List<String> providers) {
+            super(registryNamespace, registryPath, displayName, componentCount, damage, resourceType, itemKey, icon);
             this.timeSpentOn = timeSpentOn;
             this.craftedTotal = craftedTotal;
             this.shareInCraftingTime = shareInCraftingTime;
@@ -148,6 +149,7 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
                     resource.displayName(),
                     resource.componentCount(),
                     resource.damage(),
+                    resource.resourceType(),
                     spent,
                     craftedTotal,
                     share,

@@ -131,13 +131,11 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
                 !state.home.networks.some((network) => network.error);
             dialogTitle.textContent = locale.common('chooseNetwork');
             dialogHelp.textContent = locale.common('homeHelp');
-            dialogStatus.textContent = state.gridError
-                ? locale.common(state.gridError)
-                : state.gridStatus === 'loading'
-                  ? locale.common('loading')
-                  : !state.grids.length
-                    ? `${locale.common('noNetworks')}. ${locale.common('noNetworksHelp')}`
-                    : '';
+            dialogStatus.textContent = '';
+            if (state.gridError) dialogStatus.textContent = locale.common(state.gridError);
+            else if (state.gridStatus === 'loading') dialogStatus.textContent = locale.common('loading');
+            else if (!state.grids.length)
+                dialogStatus.textContent = `${locale.common('noNetworks')}. ${locale.common('noNetworksHelp')}`;
             dialogStatus.hidden = !dialogStatus.textContent;
             dialogRetry.hidden = state.gridStatus !== 'error' && !!state.grids.length;
             dialogRetry.textContent = locale.common('retry');
@@ -151,17 +149,13 @@ export function createHomeView(root: HTMLElement, application: ReturnType<typeof
             const failed =
                 state.gridStatus === 'error' || state.home.networks.some((network) => network.status === 'error');
             workCount.textContent = busy ? locale.number(busy) : '';
-            status.textContent = state.gridError
-                ? locale.common(state.gridError)
-                : loading
-                  ? locale.common('loading')
-                  : !state.grids.length
-                    ? `${locale.common('noNetworks')}. ${locale.common('noNetworksHelp')}`
-                    : failed
-                      ? locale.common('homePartial')
-                      : !busy
-                        ? locale.common('homeIdle')
-                        : '';
+            status.textContent = '';
+            if (state.gridError) status.textContent = locale.common(state.gridError);
+            else if (loading) status.textContent = locale.common('loading');
+            else if (!state.grids.length)
+                status.textContent = `${locale.common('noNetworks')}. ${locale.common('noNetworksHelp')}`;
+            else if (failed) status.textContent = locale.common('homePartial');
+            else if (!busy) status.textContent = locale.common('homeIdle');
             status.hidden = !status.textContent;
             const focused = options.contains(document.activeElement) ? (document.activeElement as HTMLElement) : null;
             for (const [key, choice] of choices)

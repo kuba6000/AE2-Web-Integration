@@ -4,7 +4,14 @@ import type { Route } from './router.js';
 import type { Preferences, createPreferences } from './preferences.js';
 import { navigateToPlan, navigateToGrid } from './router.js';
 
-export type PlanMetadata = { itemKey: string; displayName: string; quantity: number };
+export type PlanMetadata = {
+    itemKey: string | null;
+    displayName: string;
+    quantity: number;
+    automatic: boolean;
+    lightMode: boolean;
+    ignoreMissing: boolean;
+};
 export type Mutation = 'create' | 'submit' | 'delete';
 export type PlanSort = Preferences['planSort'];
 export type CraftingState = {
@@ -46,7 +53,6 @@ export function createCrafting(
         errorDetail: null,
         metadata: null
     };
-    const metadata = new Map<string, PlanMetadata>();
     const outcomes = new Map<string, CraftingOutcome>();
     let route: Route | { view?: undefined; gridKey?: undefined } = {};
     let generation = 0;
@@ -55,6 +61,7 @@ export function createCrafting(
     let selectedOnce = false;
     let readFailed = false;
     let activePlan: { gridKey: string; planId: string | number } | null = null;
+    // Only an explicit calculation grants runtime intent; recorded plan.autoStart never does.
     let autoStart = false;
     let planIcons: boolean | null = null;
     let iconRevision = 0;
@@ -63,7 +70,7 @@ export function createCrafting(
         `${route.gridKey}/${activePlan?.planId ?? (route.view === 'plan' ? route.planId : 'create')}`;
     function showPlan() {
         autoStart = false;
-        if (route.view !== 'items' || !activePlan) return;
+        if (!activePlan || (route.view === 'plan' && String(route.planId) === String(activePlan.planId))) return;
         handoff = { key: identity(), state: { ...state } };
         navigateToPlan(activePlan.gridKey, activePlan.planId);
     }
@@ -108,6 +115,14 @@ export function createCrafting(
                 if (version !== generation) return;
                 const plan = response.data;
                 state.plan = plan;
+                state.metadata = {
+                    itemKey: plan.finalOutput.itemKey,
+                    displayName: plan.finalOutput.displayName,
+                    quantity: plan.finalOutput.quantity,
+                    automatic: plan.autoStart,
+                    lightMode: plan.options.lightMode,
+                    ignoreMissing: plan.options.ignoreMissing
+                };
                 state.icons = requestedRevision === iconRevision ? response.icons : null;
                 planIcons = requestedRevision === iconRevision ? requestedIcons : null;
                 state.status = plan.isDone ? 'ready' : 'calculating';
@@ -146,6 +161,57 @@ export function createCrafting(
                 reading = false;
                 changed();
                 if (!readFailed && planIcons === null) void refresh();
+            }
+        }
+    }
+    async function calculate(gridKey: string, input: PlanMetadata & { itemKey: string }) {
+        const version = ++generation;
+        request?.abort();
+        reading = false;
+
+        activePlan = null;
+        const key = identity();
+        autoStart = input.automatic;
+        outcomes.set(key, { mutation: 'create' });
+        state.mutation = 'create';
+        state.status = 'idle';
+        state.plan = null;
+        state.icons = null;
+        state.metadata = input;
+        state.cpus = [];
+        state.selectedCpu = '';
+        state.error = null;
+        state.errorDetail = null;
+        changed();
+        try {
+            const { jobId } = await api.createPlan(gridKey, {
+                itemKey: input.itemKey,
+                quantity: input.quantity,
+                ...(input.lightMode ? { lightMode: true } : {}),
+                ...(input.ignoreMissing ? { ignoreMissing: true } : {}),
+                ...(input.automatic ? { autoStart: true } : {})
+            });
+            finishMutation(key, null);
+            if (version !== generation) return;
+            if (input.automatic) {
+                activePlan = { gridKey, planId: jobId };
+                state.plan = null;
+                state.icons = null;
+                state.status = 'calculating';
+                state.mutation = null;
+                await refresh();
+            } else navigateToPlan(gridKey, jobId);
+        } catch (caught) {
+            const error = caught as ApiFailure;
+            finishMutation(key, isUncertain(error) ? { uncertain: 'create' } : null);
+            if (version === generation) {
+                state.error = error.status;
+                state.status = 'error';
+            }
+        } finally {
+            if (version === generation) {
+                state.mutation = null;
+                changed();
             }
         }
     }
@@ -196,7 +262,7 @@ export function createCrafting(
                 uncertain: null,
                 error: null,
                 errorDetail: null,
-                metadata: metadata.get(identity()) || null
+                metadata: null
             });
             Object.assign(state, outcomes.get(identity()));
             if (handoff?.key === identity()) Object.assign(state, handoff.state);
@@ -226,7 +292,13 @@ export function createCrafting(
             state.selectedCpu = state.cpus.find((cpu) => cpu.key === key && cpu.eligible)?.key || '';
             changed();
         },
-        async create(item: StoredResource | null, quantity: number, automatic = false, lightMode = false) {
+        async create(
+            item: StoredResource | null,
+            quantity: number,
+            automatic = false,
+            lightMode = false,
+            ignoreMissing = false
+        ) {
             if (
                 route.view !== 'items' ||
                 state.mutation ||
@@ -238,50 +310,51 @@ export function createCrafting(
                 quantity <= 0
             )
                 return;
-            const version = generation;
+            await calculate(route.gridKey, {
+                itemKey: item.itemKey,
+                displayName: item.displayName,
+                quantity,
+                automatic,
+                lightMode,
+                ignoreMissing
+            });
+        },
+        async recalculate(automatic: boolean, ignoreMissing: boolean) {
+            if (
+                route.view !== 'plan' ||
+                !state.metadata?.itemKey ||
+                state.mutation ||
+                state.uncertain ||
+                !['ready', 'error'].includes(state.status)
+            )
+                return;
+            const input = { ...state.metadata, itemKey: state.metadata.itemKey, automatic, ignoreMissing };
             const gridKey = route.gridKey;
-            activePlan = null;
             const key = identity();
-            autoStart = automatic;
-            outcomes.set(key, { mutation: 'create' });
-            state.mutation = 'create';
-            state.status = 'idle';
-            state.plan = null;
-            state.icons = null;
-            state.metadata = null;
-            state.cpus = [];
-            state.selectedCpu = '';
-            state.error = null;
-            state.errorDetail = null;
-            changed();
-            try {
-                const { jobId } = await api.createPlan(gridKey, {
-                    itemKey: item.itemKey,
-                    quantity,
-                    ...(lightMode ? { lightMode: true } : {})
-                });
-                metadata.set(`${gridKey}/${jobId}`, { itemKey: item.itemKey, displayName: item.displayName, quantity });
-                finishMutation(key, null);
-                if (version !== generation) return;
-                if (automatic) {
-                    activePlan = { gridKey, planId: jobId };
-                    state.metadata = metadata.get(identity())!;
-                    state.plan = null;
-                    state.icons = null;
-                    state.status = 'calculating';
-                    state.mutation = null;
-                    await refresh();
-                } else navigateToPlan(gridKey, jobId);
-            } catch (caught) {
-                const error = caught as ApiFailure;
-                finishMutation(key, isUncertain(error) ? { uncertain: 'create' } : null);
-                if (version === generation) state.error = error.status;
-            } finally {
-                if (version === generation) {
-                    state.mutation = null;
-                    changed();
+            const version = ++generation;
+            request?.abort();
+            reading = false;
+            if (activePlan) {
+                outcomes.set(key, { mutation: 'delete' });
+                state.mutation = 'delete';
+                state.error = null;
+                changed();
+                try {
+                    await api.deletePlan(gridKey, activePlan.planId);
+                    finishMutation(key, { status: 'deleted' });
+                    if (version !== generation) return;
+                    activePlan = null;
+                } catch (caught) {
+                    const error = caught as ApiFailure;
+                    finishMutation(key, isUncertain(error) ? { uncertain: 'delete' } : null);
+                    if (version === generation) {
+                        state.error = error.status;
+                        changed();
+                    }
+                    return;
                 }
             }
+            await calculate(gridKey, input);
         },
         async submit(automatic = false) {
             if (
@@ -308,7 +381,7 @@ export function createCrafting(
                 finishMutation(key, { status: 'submitted' });
                 if (version === generation) {
                     state.status = 'submitted';
-                    if (!automatic) navigateToGrid(current.gridKey);
+                    if (!automatic || route.view === 'plan') navigateToGrid(current.gridKey);
                 }
             } catch (caught) {
                 const error = caught as ApiFailure;
@@ -400,7 +473,6 @@ export function createCrafting(
         dispose() {
             generation++;
             request?.abort();
-            metadata.clear();
             outcomes.clear();
         }
     };

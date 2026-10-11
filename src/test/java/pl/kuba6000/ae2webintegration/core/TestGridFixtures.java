@@ -30,6 +30,7 @@ import com.sun.net.httpserver.HttpPrincipal;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -43,6 +44,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
 /**
@@ -51,6 +53,10 @@ import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
  */
 @SuppressWarnings({ "PMD.AvoidMagicNumbers", "UnstableApiUsage" })
 final class TestGridFixtures {
+
+    static ResourceSnapshot planOutput() {
+        return new ResourceSnapshot("test", "output", 0, 0, "Output", ResourceType.ITEM, 1, key(9001), null);
+    }
 
     private TestGridFixtures() {}
 
@@ -278,6 +284,7 @@ final class TestGridFixtures {
         public Map<ServerCapability, Boolean> web$getCapabilities() {
             Map<ServerCapability, Boolean> capabilities = new EnumMap<>(ServerCapability.class);
             capabilities.put(ServerCapability.CRAFTING_LIGHT_MODE, false);
+            capabilities.put(ServerCapability.CRAFTING_IGNORE_MISSING, false);
             capabilities.put(ServerCapability.CRAFTING_PLAN_STEPS, false);
             capabilities.put(ServerCapability.CPU_SELECTION_MODE, false);
             return capabilities;

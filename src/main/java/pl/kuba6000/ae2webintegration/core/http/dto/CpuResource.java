@@ -71,6 +71,7 @@ public class CpuResource extends ResourceDescription {
             key.web$getDisplayName(),
             key.web$getComponentCount(),
             key.web$getDamage(),
+            key.web$getResourceType(),
             itemKey,
             icon);
     }
