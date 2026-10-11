@@ -1,7 +1,7 @@
 # Local theme preview
 
 A small development server for theme authors. It serves a compiled theme, the shared application
-runtime and a minimal simulated API: one network, three resources, an empty CPU list, icon availability
+runtime and a simulated API with resources, a network, an empty CPU list, icon availability
 and logout/reset. Other API operations are unsupported. It does not connect to Minecraft.
 
 From the core checkout:
@@ -23,5 +23,4 @@ Paths are relative to the current working directory or absolute. The theme direc
 by `npm run build:theme-sdk`. Rebuild changed TypeScript and refresh the browser to see changes.
 
 The server binds to `127.0.0.1` only. Stop it with Ctrl+C. Logout affects this single local preview;
-**Restart preview** resets it. This is a theme development tool, not a multiplayer server or a public
-website demo. It and its artificial data stay outside the mod JAR and the example theme project.
+**Restart preview** resets it.

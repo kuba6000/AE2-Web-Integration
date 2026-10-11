@@ -1,8 +1,7 @@
 # Resource list theme starter
 
-This is a working small theme, not a copy of the default UI. It supports Home (network selection)
-and Resources, presents resources as a list, and explicitly reports unsupported routes. It demonstrates
-the shared application contract, optional helpers, browser-local settings and mount cleanup.
+A minimal theme with network selection and a searchable resource list. Use it as a starting point
+for your own theme.
 
 ## In the core checkout
 
@@ -32,11 +31,8 @@ npm run preview:theme -- --theme "/path/to/your-theme/dist"
 ```
 
 The directory must contain `theme.js` (default-exported theme definition) and its assets.
-The preview tool stays in the core checkout; do not copy a mock server into each theme project.
 
-The SDK is a local file dependency. TypeScript uses the same version as core. You do not need to
-publish an npm package, install Java dependencies or bundle a second copy of the application into
-your theme. Refresh the browser after rebuilding changes.
+The SDK is a local file dependency. Refresh the browser after rebuilding changes.
 
 ## Files
 
@@ -46,17 +42,16 @@ your theme. Refresh the browser after rebuilding changes.
 - `theme.json`: package metadata; keep its ID consistent with the exported definition.
 - `dist/theme.zip`: installable server theme package.
 - `sdk/`: generated types and development application runtime; ignored by Git.
-  The shared preview is documented in [tools/theme-preview](../../tools/theme-preview/README.md).
+
+## Supported features
 
 Turn off **Use standard search and ordering** to see unchanged server order. The example limits its
-DOM to the first 100 matching resources and reports that limit; implement pagination or virtualization
-for a full terminal. It deliberately does not provide crafting, CPU/history screens or resource icons.
+list to the first 100 matching resources. Add pagination or virtualization to display larger lists.
+Crafting, CPU/history screens and resource icons are not included.
 
 For JavaScript, see the [author guide](../../docs/themes/README.md#typescript-and-javascript).
-The generated `dist/theme.js` is also the full runnable JavaScript version of this example.
 Do not hand-edit `dist` while using the TypeScript build, since the next build replaces it.
 
 The starter build bundles module imports into one ES module and CSS image/font references into data
-URLs for convenience. Themes can also ship separate modules, stylesheets and assets with ordinary
-relative imports and URLs. Install `dist/theme.zip` on the server, then select it in Web Settings. See the
+URLs. Install `dist/theme.zip` on the server, then select it in Web Settings. See the
 [package guide](../../docs/themes/packages.md) for installation and recovery.

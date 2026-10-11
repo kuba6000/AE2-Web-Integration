@@ -17,8 +17,7 @@ wrapper directory. `theme.json` contains:
 ```
 
 `entry` is an ES module with a default-exported theme definition. Its ID must match the manifest.
-Relative imports and additional code chunks are supported; include those files in the ZIP. The starter
-uses esbuild to bundle its source for convenience, but bundling is not required.
+Relative imports and additional code chunks are supported; include those files in the ZIP.
 
 The loader attaches the listed stylesheets as stylesheet links and removes them when the theme ends.
 CSS `url(...)` and `@import` paths resolve relative to the stylesheet, so include referenced images,
@@ -53,17 +52,14 @@ shows an advisory without preventing the theme from loading.
 
 ## Recovery
 
-Themes provide their own settings or menu entry calling `context.themes.open()`. The host does not
-add a persistent floating control. Loading or rendering errors return to the built-in UI and open
-the picker with an error; closing it leaves the built-in UI usable. The saved selection is retained
-until you choose another theme. After one second of theme loading, a temporary loading message offers
-a safe-mode link, even if the selected module never finishes loading.
+Loading or rendering errors return to the built-in UI and open the theme picker with an error.
+The saved selection is retained until you choose another theme. A loading message offers a safe-mode
+link if the theme takes too long to load.
 
 For recovery after navigation, add `?safe=1` before the URL's `#` fragment. The initial UI is then
 built-in and selected/server-default custom code and styles are skipped. Safe mode does not sign you
 out or erase preferences. Choose the built-in theme explicitly to replace a broken saved selection;
-use **Exit safe mode** to resume normal selection. Arbitrary synchronous JavaScript can still hang a
-page: trusted themes are not sandboxed, and recovery then requires navigating/reloading with the safe URL.
+use **Exit safe mode** to resume normal selection. If the page is unresponsive, open the safe URL directly.
 
 ## Limits and paths
 

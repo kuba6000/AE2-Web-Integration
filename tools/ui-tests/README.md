@@ -14,27 +14,17 @@ npx playwright install chromium
 npm test
 ```
 
-`npm test` compiles the frontend, generates the theme SDK and builds the standalone theme example
-before starting the tests. It also checks optional public resource helpers and runs the example
-against its local simulated HTTP API. Theme lifecycle tests cover partial mount cleanup, presentation
-failure during an in-flight mutation, retry without replay, and persisted-page restoration events.
-
-Tests cover discovery, item browsing, navigation, preferences, delayed responses,
-access failures and login destination preservation. Crafting coverage uses visible
-controls and HTTP requests to verify quantity validation, calculation polling and
-deletion, stable CPU choice, direct plan entry, submission, unavailable plans,
-lost access, and uncertain mutations without replay. Delayed HTTP responses exercise
-navigation and mutation lifetimes. CPU monitoring coverage checks stable selection,
-current resource and optional tracking data, explicit cancellation, missing CPUs,
-access loss and uncertain/pending cancellation across navigation. Tests do not inspect private application state
-or production source, and do not require Minecraft.
-
-History and settings tests cover entry identity, measured intervals and provider positions,
-read-only restoration, explicit tracking saves, draft preservation, unconfirmed persistence,
-grouped access information, and delayed reads or saves across navigation and access changes.
+`npm test` builds the frontend, theme SDK and example before running the suite.
+Tests use a simulated HTTP API; Minecraft is not required.
 
 Set `BROWSER_CHANNEL=msedge` to use an installed Microsoft Edge instead of downloaded
-Chromium. Playwright is a development dependency and is not included in mod JARs.
+Chromium.
+
+Run the standalone login-page checks from the core repository root:
+
+```sh
+node --test src/test/js/login-status.test.cjs
+```
 
 ## Frontend checks
 
@@ -59,6 +49,4 @@ Node.js and npm must be available on PATH when building; the Minecraft server ne
 Prettier formats TypeScript, static assets, browser tests and tooling configuration.
 ESLint checks TypeScript and JavaScript; Stylelint checks CSS. `npm run typecheck`
 checks strict types without writing output. CI runs formatting, lint and type checks.
-The standalone login page is outside this formatter scope. These dependencies stay outside `resources`
-and are not packaged in mod JARs. In IntelliJ IDEA, select the root
-`node_modules/prettier` package to use the same formatter and configuration on save.
+The standalone login page is outside this formatter scope.

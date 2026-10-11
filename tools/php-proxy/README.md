@@ -1,7 +1,6 @@
 # PHP reverse proxy
 
-Serve the mod's website and API through a PHP hosting account. The mod supplies all
-HTML, scripts, styles and authentication; this directory contains no separate UI.
+Serve the mod's website and API through a PHP hosting account.
 
 1. Use PHP 7.4+ with cURL and Apache with `mod_rewrite` and `.htaccess` enabled.
 2. Upload `index.php` and `.htaccess` to the website root or a directory such as `/ae2/`.

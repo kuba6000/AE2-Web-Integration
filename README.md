@@ -45,8 +45,6 @@ If you only want to use the mod, download a version-specific JAR from
 For development, install Node.js 22.13+ on the 22.x line or Node.js 24+ with npm on PATH, then run
 core checks with `./gradlew test spotlessCheck`. Gradle compiles the TypeScript frontend and packages
 its JavaScript output; Node.js is not required to run the mod. See [frontend development](tools/ui-tests/README.md).
-The standalone login page also has dependency-free status checks:
-`node --test src/test/js/login-status.test.cjs`.
 
 ## Showcase on YouTube
 
@@ -288,9 +286,6 @@ Bundled third-party assets retain their own licenses:
 | Component | Author / source | License |
 | --- | --- | --- |
 | Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](LICENSE) |
-| User and information icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
+| Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
 | Montserrat font | [The Montserrat Project Authors](https://github.com/JulietaUla/Montserrat) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/montserrat/LICENSE) |
 | Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
-
-Asset source details and modification notices are included alongside each resource.
-The LGPL license for the code does not replace the licenses of these assets.

@@ -1,15 +1,13 @@
 # Writing a web theme
 
-A theme owns its HTML, CSS, layout and interactions. The application provides authenticated data,
-routing, refreshes and actions. It does not insert default-theme views into a custom theme.
-The included [starter](../../examples/theme-starter/README.md) uses a plain resource list instead of
-the default terminal grid.
+A theme defines its HTML, CSS, layout and interactions. The application provides authenticated data,
+routing, refreshes and actions. Start with the [example project](../../examples/theme-starter/README.md).
 
 Build a ZIP for server installation. Select an installed theme through **Web Settings → Choose a theme**.
 The [package and installation guide](packages.md) describes the manifest, server default, browser
 selection and recovery.
 
-## Try the complete example
+## Run the example
 
 From the core repository, with its npm dependencies installed:
 
@@ -18,19 +16,16 @@ npm run build:theme-example
 npm run preview:theme
 ```
 
-Open `http://127.0.0.1:8770/`. The preview uses the real application services against a small simulated
-HTTP API provided by the shared [preview tool](../../tools/theme-preview/README.md). The example contains a network chooser, searchable and sortable resources, selection, refresh,
-logout, a persisted theme preference and an explicit unsupported-view screen.
+Open `http://127.0.0.1:8770/`. The [preview tool](../../tools/theme-preview/README.md) provides simulated
+data without a Minecraft server.
 
 The build generates `build/theme-sdk` and copies it to the example's ignored `sdk` directory.
-Declarations come from the application's TypeScript sources; there is no second handwritten API.
-The source entry is `src/main/typescript/app/theme-api.ts`. See the [API guide](api.md).
+See the [API guide](api.md) for the theme contract and available services.
 
 ## TypeScript and JavaScript
 
-The public contract is written in TypeScript. Runtime theme files are JavaScript and CSS. TypeScript,
-declaration files and the development preview are development tools, not runtime dependencies added
-to the mod JAR.
+Themes can be written in TypeScript or JavaScript. Packages contain JavaScript, CSS and assets.
+The generated SDK provides types for both languages.
 
 In TypeScript, import only the type:
 
@@ -38,8 +33,7 @@ In TypeScript, import only the type:
 import type { ThemeDefinition } from '@ae2wi/theme-api';
 ```
 
-JavaScript authors can use exactly the same services. Optional editor checking uses the same generated
-declarations:
+For type checking in JavaScript, use JSDoc:
 
 ```js
 // @ts-check
@@ -65,32 +59,27 @@ export default theme;
 
 Install the generated SDK locally (`file:./sdk`) to resolve those types. Do not import
 `@ae2wi/theme-api` as a runtime value: it is a type entry. The host supplies services to `mount`.
-The starter's compiled `dist/theme.js` also demonstrates the complete JavaScript output.
 
 ## Views and compatibility
 
 `views` declares what the theme implements. Build navigation from those supported views, and show
-an explicit unavailable message when a user follows an unsupported route. Missing views do not
-silently inherit the default terminal or its styles. A theme need not use grids at all.
+an unavailable message when a user follows an unsupported route. Unsupported views have no default-theme fallback.
 
 `supportedModVersion: '1.2.x'` declares support for a major/minor mod version line, with any patch.
 Patch releases must preserve the public theme contract. A different known version line produces an
-advisory in the theme picker without blocking loading. This metadata is not a separate API version
-or a guarantee that every view is implemented.
+advisory in the theme picker without blocking loading. Supported views are declared separately in `views`.
 
-## Ownership
+## State and lifecycle
 
 - Read state and call actions; never mutate shared arrays or their resource objects.
-- Choose your own presentation. Search, filtering and sorting helpers are optional and return new
-  arrays. They do not choose HTML, columns, scrolling or CSS.
+- Search, filtering and sorting helpers are optional and return new arrays.
 - Use capabilities from authenticated application state before exposing optional game operations.
 - Register resource cleanup immediately through `context.lifetime.onCleanup`. Use its abort signal
   for DOM listeners. Subscriptions and icon observers obtained through the host are cleaned up by it.
 - Keep secrets out of theme settings. Settings are browser-local, scoped by application path and theme
   ID, and suitable for appearance preferences. They are not server-persisted player data.
-- Treat theme code as trusted JavaScript running in the page. Readonly types are author guidance,
-  not a sandbox or runtime deep freeze.
+- Theme code runs with the signed-in user's permissions and is not sandboxed.
 
 The host catches synchronous mount and subscribed rendering failures and releases that mount.
-External theme failures return to the built-in UI using the same application state. Theme event handlers and arbitrary asynchronous work still
-need their own error handling and cancellation. Do not retry crafting mutations automatically.
+External theme failures return to the built-in UI using the same application state. Handle errors and
+cancellation in event handlers and asynchronous work. Do not retry crafting mutations automatically.

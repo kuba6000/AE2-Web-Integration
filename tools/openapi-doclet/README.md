@@ -73,9 +73,6 @@ Use `@responseExample` when a response needs a specific complete example, such a
 Binary responses use an ordinary `@response` without a linked type, plus
 `@responseMedia 200 image/png`. A `304` response has no body and can declare cache headers.
 
-In IntelliJ IDEA, add `response`, `responseExample`, `responseMedia`, `responseHeader`, `pathParam`, `example` and `keyExample`
-to the additional Javadoc tags in the **Declaration has Javadoc problems** inspection.
-
 ## Supported schemas
 
 The generator supports scalar types, UUID, StableKey, enums, concrete DTOs and records,
