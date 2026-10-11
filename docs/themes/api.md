@@ -95,9 +95,10 @@ releases observers. Call `displayIcons(false)` if your theme never renders resou
 
 ## Theme selection and package assets
 
-`context.themes?.open()` opens the independent picker. Custom themes may provide their own button;
-when an external theme is active, the host also supplies a small Themes button outside theme-owned
-DOM. The picker can switch between the built-in and server-installed themes or follow the server default.
+`context.themes?.open()` opens the independent picker. Themes must provide an entry in their own
+settings or navigation; the host does not add a persistent floating button. The starter demonstrates
+this in its header. The picker can switch between built-in and server-installed themes or follow the
+server default. Safe-mode navigation remains available if an author omits the entry.
 
 `context.assets?.url('images/logo.png')` is an optional convenience for resolving a path from the
 package root, for example when setting an image's `src` from JavaScript. A bare relative DOM URL resolves

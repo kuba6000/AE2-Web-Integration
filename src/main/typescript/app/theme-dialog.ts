@@ -13,6 +13,7 @@ const messages = {
         failure: 'Could not complete this operation.',
         active: 'Active theme',
         loading: 'Working…',
+        loadingTheme: 'Loading theme…',
         recover: 'Open default UI in safe mode',
         exitSafe: 'Exit safe mode'
     },
@@ -28,6 +29,7 @@ const messages = {
         failure: 'Nie udało się wykonać operacji.',
         active: 'Aktywny motyw',
         loading: 'Przetwarzanie…',
+        loadingTheme: 'Ładowanie motywu…',
         recover: 'Otwórz domyślny UI w trybie awaryjnym',
         exitSafe: 'Wyjdź z trybu awaryjnego'
     }
@@ -42,7 +44,8 @@ button { border: 1px solid #8a9098; border-radius: 4px; background: #f3f4f6; pad
 button:hover:not(:disabled) { background: #e4e7eb; }
 button:disabled { opacity: .55; cursor: default; }
 :focus-visible { outline: 2px solid #4d647d; outline-offset: 2px; }
-.launcher { position: fixed; right: 12px; bottom: 12px; z-index: 2147483647; font: 14px/1.25 system-ui, sans-serif; color: #20252a; box-shadow: 0 2px 8px #0004; }
+.recovery-notice { max-width: 720px; margin: 12px auto; padding: 12px; border: 1px solid #7c858f; border-radius: 4px; background: #fff; color: #20252a; font: 14px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; }
+.recovery-notice .actions { margin-top: 8px; align-items: center; }
 dialog { margin: auto; width: min(520px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 20px; border: 1px solid #7c858f; border-radius: 8px; background: #fff; color: #20252a; font: 14px/1.5 system-ui, sans-serif; }
 dialog::backdrop { background: #0008; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -59,11 +62,14 @@ select { width: 100%; min-width: 0; padding: 8px; border: 1px solid #8a9098; bor
 `;
 
 /** Kept outside theme-owned DOM and styles so a broken presentation cannot strand its selection. */
-export function createThemeDialog(manager: ThemeManager, language: () => string) {
+export function createThemeDialog(manager: ThemeManager, language: () => string, root: HTMLElement) {
     const host = document.createElement('div');
     const shadow = host.attachShadow({ mode: 'open' });
     shadow.innerHTML = `<style>${styles}</style>
-        <button type="button" class="launcher" hidden></button>
+        <aside class="recovery-notice" hidden>
+            <p id="recovery-message"></p>
+            <div class="actions"><a id="notice-recovery"></a></div>
+        </aside>
         <dialog aria-labelledby="theme-title">
             <header><h2 id="theme-title"></h2><button type="button" class="close">×</button></header>
             <p class="notice secondary" id="safe" hidden></p>
@@ -76,12 +82,12 @@ export function createThemeDialog(manager: ThemeManager, language: () => string)
             </section>
             <p class="notice secondary" id="progress" role="status" hidden></p><p class="notice"><a id="recovery"></a></p>
         </dialog>`;
-    document.body.append(host);
+    root.before(host);
     const controller = new AbortController();
     const eventOptions = { signal: controller.signal };
     const find = <T extends HTMLElement>(selector: string) => shadow.querySelector<T>(selector)!;
     const dialog = find<HTMLDialogElement>('dialog');
-    const launcher = find<HTMLButtonElement>('.launcher');
+    const notice = find<HTMLElement>('.recovery-notice');
     const close = find<HTMLButtonElement>('.close');
     const selection = find<HTMLSelectElement>('#selection');
     const apply = find<HTMLButtonElement>('#apply');
@@ -89,6 +95,9 @@ export function createThemeDialog(manager: ThemeManager, language: () => string)
     let localError: string | null = null;
     let operation = false;
     let disposed = false;
+    let loadingTimer: ReturnType<typeof setTimeout> | undefined;
+    let loadingVisible = false;
+    let shownError: string | null = null;
     let selected = manager.state.selected;
     let draft = selected ?? '';
 
@@ -101,14 +110,32 @@ export function createThemeDialog(manager: ThemeManager, language: () => string)
         const words = text();
         const state = manager.state;
         const busy = operation || state.busy;
-        launcher.textContent = words.title;
-        launcher.hidden = state.active === 'builtin:default' && !state.error && !state.safe && !state.busy;
+        if (state.busy) {
+            if (loadingTimer === undefined && !loadingVisible) {
+                loadingTimer = setTimeout(() => {
+                    loadingTimer = undefined;
+                    loadingVisible = true;
+                    render();
+                }, 1000);
+            }
+        } else {
+            clearTimeout(loadingTimer);
+            loadingTimer = undefined;
+            loadingVisible = false;
+        }
+        notice.hidden = !loadingVisible || dialog.open;
+        const noticeMessage = find('#recovery-message');
+        noticeMessage.textContent = words.loadingTheme;
+        noticeMessage.setAttribute('role', 'status');
         const recovery = find<HTMLAnchorElement>('#recovery');
         const target = new URL(location.href);
         if (state.safe) target.searchParams.delete('safe');
         else target.searchParams.set('safe', '1');
         recovery.href = target.href;
         recovery.textContent = state.safe ? words.exitSafe : words.recover;
+        const noticeRecovery = find<HTMLAnchorElement>('#notice-recovery');
+        noticeRecovery.href = target.href;
+        noticeRecovery.textContent = recovery.textContent;
         host.lang = language();
         find('#theme-title').textContent = words.title;
         close.setAttribute('aria-label', words.close);
@@ -137,6 +164,9 @@ export function createThemeDialog(manager: ThemeManager, language: () => string)
         find('#safe').hidden = !state.safe;
         find('#progress').textContent = words.loading;
         find('#progress').hidden = !busy;
+        const newError = state.error && state.error !== shownError;
+        shownError = state.error;
+        if (newError && !dialog.open) open();
     }
 
     async function run(action: () => Promise<void>) {
@@ -161,14 +191,15 @@ export function createThemeDialog(manager: ThemeManager, language: () => string)
         localError = null;
         render();
         dialog.showModal();
+        render();
         selection.focus();
     }
 
-    launcher.addEventListener('click', open, eventOptions);
     close.addEventListener('click', () => dialog.close(), eventOptions);
     dialog.addEventListener(
         'close',
         () => {
+            render();
             if (returnFocus?.isConnected) returnFocus.focus();
         },
         eventOptions
@@ -189,6 +220,7 @@ export function createThemeDialog(manager: ThemeManager, language: () => string)
         dispose() {
             if (disposed) return;
             disposed = true;
+            clearTimeout(loadingTimer);
             unsubscribe();
             controller.abort();
             dialog.close();

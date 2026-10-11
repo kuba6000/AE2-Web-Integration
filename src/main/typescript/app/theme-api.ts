@@ -103,6 +103,7 @@ export type ThemeUpdates = {
     subscribe(listener: () => void): () => void;
 };
 export type ThemeContext = {
+    /** Expose this picker from the theme navigation or settings; no floating host button is added. */
     readonly themes?: { open(): void };
     /** Resolve an asset relative to this theme's package root. */
     readonly assets?: { url(path: string): string };

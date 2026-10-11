@@ -53,10 +53,11 @@ shows an advisory without preventing the theme from loading.
 
 ## Recovery
 
-Loading or rendering errors return to the built-in UI with an error in the picker. The saved selection
-is retained until you choose another theme. An independent Themes button remains accessible with an
-external theme, during loading or after a failure. Its safe-mode link is available even while another
-theme is waiting to load.
+Themes provide their own settings or menu entry calling `context.themes.open()`. The host does not
+add a persistent floating control. Loading or rendering errors return to the built-in UI and open
+the picker with an error; closing it leaves the built-in UI usable. The saved selection is retained
+until you choose another theme. After one second of theme loading, a temporary loading message offers
+a safe-mode link, even if the selected module never finishes loading.
 
 For recovery after navigation, add `?safe=1` before the URL's `#` fragment. The initial UI is then
 built-in and selected/server-default custom code and styles are skipped. Safe mode does not sign you

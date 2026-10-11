@@ -54,6 +54,7 @@ export function createAboutView(root: HTMLElement, modVersion: string | null) {
     head.append(headings);
     const body = element('tbody');
     for (const resource of [
+        { name: 'Montserrat', url: 'https://github.com/JulietaUla/Montserrat', license: 'SIL Open Font License 1.1' },
         { name: 'Monocraft', url: 'https://github.com/IdreesInc/Monocraft', license: 'SIL Open Font License 1.1' },
         {
             name: 'HackerNoon Pixel Icon Library',

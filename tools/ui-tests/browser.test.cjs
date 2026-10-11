@@ -32,7 +32,8 @@ test('a theme that never finishes loading still offers navigation to safe mode',
     const importing = page.waitForRequest((request) => request.url().endsWith('/themes/waiting/theme.js'));
     await page.goto(base);
     await importing;
-    await page.getByRole('button', { name: 'Themes', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'Themes', exact: true }).count(), 0);
+    await page.clock.fastForward(1500);
     await page.getByRole('link', { name: 'Open default UI in safe mode' }).click();
     await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
     assert.equal(new URL(page.url()).searchParams.get('safe'), '1');
@@ -55,48 +56,102 @@ test('server theme rendering failure returns to built-in and version mismatch re
         '/themes/broken/theme.js': 'export default {id:"broken",mount(){throw new Error("Renderer unavailable");}};'
     };
     await page.goto(base);
+    await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'Renderer unavailable' }).waitFor();
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Themes', exact: true }).click();
-    await page.getByRole('alert').filter({ hasText: 'Renderer unavailable' }).waitFor();
     options.themeFiles['/themes/broken/theme.js'] =
-        'export default {id:"broken",mount(root){root.innerHTML="<h1>Different version layout</h1>";}};';
+        'export default {id:"broken",mount(root,app,ctx){root.innerHTML="<h1>Different version layout</h1><button>Theme settings</button>";root.querySelector("button").onclick=()=>ctx.themes.open();}};';
     await page.reload();
     await page.getByRole('heading', { name: 'Different version layout' }).waitFor();
-    await page.getByRole('button', { name: 'Themes', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'Themes', exact: true }).count(), 0);
+    await page.getByRole('button', { name: 'Theme settings', exact: true }).click();
     await page.getByRole('status').filter({ hasText: '1.2.x' }).waitFor();
     assert.equal(await page.getByRole('heading', { name: 'Only install themes you trust' }).count(), 0);
 });
 
-test('server default theme is trusted and browser can explicitly override or follow it', async (t) => {
-    const { page, options, base } = await fixture(t, '/panel');
-    const manifest = {
-        id: 'sample',
-        name: 'Sample layout',
-        version: '1',
-        supportedModVersion: '9.8.x',
-        views: ['home'],
-        entry: 'theme.js',
-        styles: []
-    };
-    options.themeCatalog = { defaultTheme: 'server:sample', themes: [manifest] };
-    options.themeFiles = {
-        '/themes/sample/theme.js': `export default {id:'sample',mount(root,app){root.innerHTML='<h1>Server layout</h1>';app.subscribe(state=>root.dataset.networks=String(state.grids.length));}};`
-    };
-    await page.goto(base);
-    await page.getByRole('heading', { name: 'Server layout' }).waitFor();
-    assert.equal(await page.getByRole('dialog').count(), 0);
-    await page.getByRole('button', { name: 'Themes', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Choose a theme', exact: true }).selectOption('builtin:default');
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
-    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
-    await page.reload();
-    await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
-    await page.goto(`${base}#/web-settings`);
-    await page.getByRole('button', { name: 'Choose a theme', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Choose a theme', exact: true }).selectOption('');
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
-    await page.getByRole('heading', { name: 'Server layout' }).waitFor();
-});
+for (const width of [390, 1280]) {
+    test(`server default theme is trusted and browser can explicitly override or follow it at ${width}px`, async (t) => {
+        const { page, options, base } = await fixture(t, '/panel', { viewport: { width, height: 844 } });
+        const manifest = {
+            id: 'sample',
+            name: 'Sample layout',
+            version: '1',
+            supportedModVersion: '9.8.x',
+            views: ['home'],
+            entry: 'theme.js',
+            styles: []
+        };
+        options.themeCatalog = { defaultTheme: 'server:sample', themes: [manifest] };
+        options.themeFiles = {
+            '/themes/sample/theme.js': `export default {id:'sample',mount(root,app,ctx){root.innerHTML='<h1>Server layout</h1><button>Theme settings</button>';root.querySelector('button').onclick=()=>ctx.themes.open();app.subscribe(state=>root.dataset.networks=String(state.grids.length));}};`
+        };
+        await page.goto(base);
+        await page.getByRole('heading', { name: 'Server layout' }).waitFor();
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.equal(await page.getByRole('button', { name: 'Themes', exact: true }).count(), 0);
+        await page.getByRole('button', { name: 'Theme settings', exact: true }).click();
+        await page.getByRole('combobox', { name: 'Choose a theme', exact: true }).selectOption('builtin:default');
+        await page.getByRole('button', { name: 'Apply', exact: true }).click();
+        await page.getByRole('heading', { name: 'Home', exact: true }).waitFor();
+        await page.reload();
+        await page.getByRole('heading', { name: 'Home', exact: true }).waitFor();
+        await page.goto(`${base}#/web-settings`);
+        await page.getByRole('button', { name: 'Choose a theme', exact: true }).click();
+        await page.getByRole('combobox', { name: 'Choose a theme', exact: true }).selectOption('');
+        await page.getByRole('button', { name: 'Apply', exact: true }).click();
+        await page.getByRole('heading', { name: 'Server layout' }).waitFor();
+    });
+}
+
+for (const width of [390, 1280]) {
+    test(`default theme font choice persists and keeps resources usable at ${width}px`, async (t) => {
+        const { page, base } = await fixture(t, '', { viewport: { width, height: 844 } });
+        await seedAutomaticRefresh(page, base, false);
+        await page.goto(`${base}#/web-settings`);
+        const font = page.getByRole('combobox', { name: 'Font', exact: true });
+        await font.waitFor({ timeout: 1500 });
+        assert.equal(await font.inputValue(), 'monocraft');
+        assert.deepEqual(await font.locator('option').allTextContents(), ['Monocraft', 'Montserrat']);
+        const fontResponse = page.waitForResponse((r) =>
+            r.url().endsWith('/fonts/montserrat/Montserrat-Regular.woff2')
+        );
+        await font.selectOption('montserrat');
+        assert.equal((await fontResponse).status(), 200);
+        await page.evaluate(() => document.fonts.ready);
+        assert.ok(
+            await page.evaluate(() =>
+                Array.from(document.fonts).some((face) => face.family === 'Montserrat' && face.status === 'loaded')
+            )
+        );
+        assert.match(
+            await page
+                .getByRole('heading', { name: 'Web settings', exact: true })
+                .evaluate((n) => getComputedStyle(n).fontFamily),
+            /Montserrat/
+        );
+        await page.reload();
+        await font.waitFor();
+        assert.equal(await font.inputValue(), 'montserrat');
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        const resource = page.getByRole('button', { name: /Iron Ingot/ });
+        await resource.waitFor();
+        assert.match(await resource.evaluate((n) => getComputedStyle(n).fontFamily), /Montserrat/);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        await resource.click();
+        await page.getByRole('heading', { name: 'Resource details', exact: true }).waitFor();
+        await page.goto(`${base}#/web-settings`);
+        await font.selectOption('monocraft');
+        await page.reload();
+        await font.waitFor();
+        assert.equal(await font.inputValue(), 'monocraft');
+        assert.match(
+            await page
+                .getByRole('heading', { name: 'Web settings', exact: true })
+                .evaluate((n) => getComputedStyle(n).fontFamily),
+            /Monocraft/
+        );
+    });
+}
 
 test('server themes support relative modules and stylesheet assets, and safe mode skips their code', async (t) => {
     const { page, options, base } = await fixture(t, '/panel');
@@ -115,9 +170,10 @@ test('server themes support relative modules and stylesheet assets, and safe mod
     options.themeFiles = {
         '/themes/portable/js/theme.js': `import { title } from './title.js';
             export default {id:'portable',mount(root,app,ctx){
-                root.innerHTML='<h1 class="portable-title"></h1><img alt="Package asset"><button>Load detail</button>';
+                root.innerHTML='<h1 class="portable-title"></h1><img alt="Package asset"><button>Load detail</button><button class="theme-settings">Theme settings</button>';
                 root.querySelector('h1').textContent=title;
                 root.querySelector('img').src=ctx.assets.url('images/pixel.svg');
+                root.querySelector('.theme-settings').onclick=()=>ctx.themes.open();
                 root.querySelector('button').onclick=async()=>{root.querySelector('h1').textContent=(await import('./detail.js')).title};
             }};`,
         '/themes/portable/js/title.js': 'export const title="Server layout";',
@@ -143,7 +199,8 @@ test('server themes support relative modules and stylesheet assets, and safe mod
     );
     await page.getByRole('button', { name: 'Load detail' }).click();
     await page.getByRole('heading', { name: 'Detail loaded' }).waitFor();
-    await page.getByRole('button', { name: 'Themes', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'Themes', exact: true }).count(), 0);
+    await page.getByRole('button', { name: 'Theme settings', exact: true }).click();
     const dialog = page.getByRole('dialog');
     assert.equal(await dialog.locator('input[type=file]').count(), 0);
     await page.getByRole('combobox', { name: 'Choose a theme', exact: true }).selectOption('builtin:default');
@@ -2167,7 +2224,13 @@ test('About shows runtime metadata and resource links while retaining the select
     assert.equal(await about.getByText('LGPL-3.0-or-later').count(), 2);
     await about.getByText('Default', { exact: true }).waitFor();
     await about.getByText('Monocraft', { exact: true }).waitFor();
-    await about.getByText(/SIL Open Font License\s*1\.1/).waitFor();
+    for (const family of ['Monocraft', 'Montserrat']) {
+        await about
+            .getByRole('row')
+            .filter({ has: page.getByRole('link', { name: family, exact: true }) })
+            .getByText(/SIL Open Font License\s*1\.1/)
+            .waitFor();
+    }
     await about
         .getByRole('row')
         .filter({ hasText: 'HackerNoon Pixel Icon Library' })
@@ -2177,6 +2240,7 @@ test('About shows runtime metadata and resource links while retaining the select
         'https://github.com/kuba6000/AE2-Web-Integration',
         'https://github.com/kuba6000/AE2-Web-Integration/issues',
         'https://github.com/IdreesInc/Monocraft',
+        'https://github.com/JulietaUla/Montserrat',
         'https://github.com/hackernoon/pixel-icon-library'
     ])
         assert.ok(await about.locator(`a[href="${href}"]`).count(), `About must link to ${href}`);
@@ -9248,7 +9312,9 @@ test('theme partial mount failure releases external nodes and aborts event handl
             }
         });`;
     await page.goto(base);
-    await page.getByRole('alert').waitFor();
+    await page.getByRole('dialog').getByRole('alert').waitFor();
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.locator('#app').getByRole('alert').waitFor();
     assert.equal(await page.locator('[data-external]').count(), 0);
     await page.evaluate(() => window.dispatchEvent(new Event('theme-probe')));
     assert.equal(await page.title(), 'Theme fixture');
@@ -9303,7 +9369,9 @@ test('theme render failure preserves loaded resources and pending crafting witho
     );
     await page.getByRole('button', { name: 'Calculate', exact: true }).click();
     await request;
-    await page.getByRole('alert').waitFor();
+    await page.getByRole('dialog').getByRole('alert').waitFor();
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.locator('#app').getByRole('alert').waitFor();
     const reads = options.requests.filter(
         (request) => request.path.startsWith('/api/') && request.method === 'GET'
     ).length;

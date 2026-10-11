@@ -13,6 +13,22 @@
     font-display: swap;
 }
 
+@font-face {
+    font-family: Montserrat;
+    src: url('./fonts/montserrat/Montserrat-Regular.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: Montserrat;
+    src: url('./fonts/montserrat/Montserrat-Bold.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+}
+
 /* First terminal design: a bevelled light enclosure on a quiet, textured background. */
 :root {
     color-scheme: light;
@@ -44,6 +60,10 @@
     --frame-image: url('./window-frame.svg');
     font-family: Monocraft, monospace;
     font-variant-ligatures: none;
+}
+:root[data-font='montserrat'] {
+    font-family: Montserrat, Arial, sans-serif;
+    font-variant-numeric: tabular-nums;
 }
 :root[data-appearance='dark'] {
     color-scheme: dark;

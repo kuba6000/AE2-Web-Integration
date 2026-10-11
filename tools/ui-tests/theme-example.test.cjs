@@ -18,7 +18,7 @@ test('standalone theme uses shared data, optional helpers, persistent settings a
         ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {})
     });
     t.after(() => browser.close());
-    const page = await browser.newPage();
+    const page = await browser.newPage({ locale: 'en-US' });
     const errors = [];
     page.on('pageerror', (error) => errors.push(String(error)));
     const base = `http://127.0.0.1:${server.address().port}/`;
@@ -41,6 +41,9 @@ test('standalone theme uses shared data, optional helpers, persistent settings a
     await page.goto(`${base}#/web-settings`);
     await page.getByRole('heading', { name: 'View unavailable in this theme' }).waitFor();
     assert.deepEqual(await page.locator('nav a').allTextContents(), ['Networks']);
+    await page.getByRole('button', { name: 'Themes', exact: true }).click();
+    await page.getByRole('dialog').getByRole('combobox').waitFor();
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByRole('button', { name: 'Log out' }).click();
     await page.getByRole('link', { name: 'Restart preview' }).waitFor();
     assert.deepEqual(errors, []);

@@ -139,7 +139,7 @@ export function boot(
                 renderTheme,
                 builtinAssetBase
             );
-            themeDialog = createThemeDialog(themeManager, () => preferences.values.language);
+            themeDialog = createThemeDialog(themeManager, () => preferences.values.language, root);
             window.addEventListener('hashchange', route);
             await themeManager.start();
         } catch {

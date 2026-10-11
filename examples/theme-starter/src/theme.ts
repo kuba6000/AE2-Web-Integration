@@ -14,7 +14,7 @@ const theme: ThemeDefinition = {
             root.replaceChildren();
         });
         root.innerHTML = `<header><h1>Resource list</h1><p class="account"></p>
-            <button type="button" class="refresh">Refresh</button><button type="button" class="logout">Log out</button></header>
+            <button type="button" class="themes">Themes</button><button type="button" class="refresh">Refresh</button><button type="button" class="logout">Log out</button></header>
             <nav aria-label="Views"><a href="#/">Networks</a></nav>
             <p class="version"></p><p class="status" role="status"></p>
             <section class="networks"><h2>Networks</h2><ul></ul></section>
@@ -37,6 +37,9 @@ const theme: ThemeDefinition = {
         const selection = root.querySelector<HTMLElement>('.selection')!;
         const refresh = root.querySelector<HTMLButtonElement>('.refresh')!;
         const logout = root.querySelector<HTMLButtonElement>('.logout')!;
+        const themes = root.querySelector<HTMLButtonElement>('.themes')!;
+        themes.hidden = !context.themes;
+        themes.addEventListener('click', () => context.themes?.open(), { signal: context.lifetime.signal });
         const signal = context.lifetime.signal;
         root.querySelector('.account')!.textContent = context.user.username;
         root.querySelector('.version')!.textContent =

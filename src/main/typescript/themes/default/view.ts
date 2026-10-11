@@ -53,6 +53,7 @@ export function mount(
 ) {
     lifetime.onCleanup(() => {
         delete document.documentElement.dataset.appearance;
+        delete document.documentElement.dataset.font;
     });
     i18n.register({
         en: {
@@ -72,6 +73,7 @@ export function mount(
             availability: 'Availability',
             nextState: 'Next: {state}',
             appearance: 'Appearance',
+            font: 'Font',
             resourceColumns: 'Resource columns',
             automaticColumns: 'Auto',
             updateAvailable: 'AE2 Web Integration {version} is available.',
@@ -120,6 +122,7 @@ export function mount(
             availability: 'Dostępność',
             nextState: 'Następnie: {state}',
             appearance: 'Wygląd',
+            font: 'Czcionka',
             resourceColumns: 'Kolumny zasobów',
             automaticColumns: 'Automatycznie',
             updateAvailable: 'Dostępna jest wersja {version} AE2 Web Integration.',
@@ -136,7 +139,7 @@ export function mount(
             light: 'Jasny',
             dark: 'Ciemny',
             system: 'Systemowy',
-            manageThemes: 'Wybierz lub importuj motyw',
+            manageThemes: 'Wybierz motyw',
             defaultTheme: 'Domyślny',
             generalOptions: 'Ogólne',
             terminalDisplay: 'Wyświetlanie terminala',
@@ -155,6 +158,7 @@ export function mount(
     const savedAppearance = settings.get('appearance');
     let appearance =
         typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
+    let font = settings.get('font') === 'montserrat' ? 'montserrat' : 'monocraft';
     const savedColumns = settings.get('resourceColumns');
     let resourceColumns =
         typeof savedColumns === 'number' && Number.isInteger(savedColumns) && savedColumns >= 1 && savedColumns <= 8
@@ -188,6 +192,7 @@ export function mount(
         <label class="web-preference-toggle"><span data-text="autoRefresh"></span><input type="checkbox" id="auto-refresh"></label></section>
         <section class="web-preferences-section" aria-labelledby="appearance-options-title"><h3 id="appearance-options-title" data-theme-text="appearance"></h3>
         <div id="theme-settings"><button type="button" id="manage-themes" data-theme-text="manageThemes"></button></div>
+        <label><span data-theme-text="font"></span><select id="font"><option value="monocraft">Monocraft</option><option value="montserrat">Montserrat</option></select></label>
         <label><span data-theme-text="resourceColumns"></span><select id="resource-columns"><option value="auto" data-theme-text="automaticColumns"></option>${Array.from({ length: 8 }, (_, index) => `<option value="${index + 1}">${index + 1}</option>`).join('')}</select></label>
         <label><span data-theme-text="appearance"></span><select id="appearance"><option value="system" data-theme-text="system"></option><option value="light" data-theme-text="light"></option><option value="dark" data-theme-text="dark"></option></select></label></section>
         <section class="web-preferences-section" aria-labelledby="terminal-options-title"><h3 id="terminal-options-title" data-text="terminal"></h3>
@@ -221,6 +226,7 @@ export function mount(
         '#dismiss-icons': HTMLButtonElement;
         '#language': HTMLElementTagNameMap['select'];
         '#appearance': HTMLElementTagNameMap['select'];
+        '#font': HTMLSelectElement;
         '#resource-columns': HTMLSelectElement;
         '#logout': HTMLElementTagNameMap['button'];
         '#session-message': HTMLElementTagNameMap['p'];
@@ -794,6 +800,8 @@ export function mount(
         }
         languageSelect.value = language;
         find('#appearance').value = appearance;
+        find('#font').value = font;
+        document.documentElement.dataset.font = font;
         toolButtons.forEach((button) => {
             if (button.dataset.preference === 'filter') {
                 const current = state.preferences.filter;
@@ -988,6 +996,7 @@ export function mount(
     root.querySelector<HTMLElement>('#theme-settings')!.hidden = !themes;
     manageThemes.addEventListener('click', () => themes?.open());
     const appearanceSelect = find('#appearance');
+    const fontSelect = find('#font');
     find('#resource-columns').addEventListener('change', () => {
         const value = find('#resource-columns').value;
         const count = value === 'auto' ? 0 : Number(value);
@@ -1036,6 +1045,12 @@ export function mount(
         acknowledgeIconSuggestion();
         renderDisplay();
         find('#search').focus();
+    });
+    fontSelect.addEventListener('change', () => {
+        if (fontSelect.value !== 'monocraft' && fontSelect.value !== 'montserrat') return;
+        font = fontSelect.value;
+        settings.set('font', font);
+        document.documentElement.dataset.font = font;
     });
     appearanceSelect.addEventListener('change', () => {
         if (!appearances.includes(appearanceSelect.value)) return;

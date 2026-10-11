@@ -289,6 +289,7 @@ Bundled third-party assets retain their own licenses:
 | --- | --- | --- |
 | Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](LICENSE) |
 | User and information icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
+| Montserrat font | [The Montserrat Project Authors](https://github.com/JulietaUla/Montserrat) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/montserrat/LICENSE) |
 | Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
 
 Asset source details and modification notices are included alongside each resource.

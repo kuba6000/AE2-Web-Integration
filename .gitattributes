@@ -34,6 +34,8 @@
 *.[pP][sS][dD]          binary
 *.[tT][tT][fF]          binary
 *.[oO][tT][fF]          binary
+*.[wW][oO][fF][fF]      binary
+*.[wW][oO][fF][fF]2     binary
 
 *.[pP][aA][tT][cC][hH]  -text
 
