@@ -1091,7 +1091,7 @@ test('autostart shows calculation before returning to the terminal after one nat
     assert.equal(await notifications.isVisible(), false);
 });
 
-for (const width of [390, 1280]) {
+for (const width of [390, 1280, 1920]) {
     test(`CPU action notifications survive navigation without shifting the view at ${width}px`, async (t) => {
         const { page, options, base } = await fixture(t);
         await seedAutomaticRefresh(page, base, false);
@@ -1109,6 +1109,11 @@ for (const width of [390, 1280]) {
         assert.deepEqual(await grid.boundingBox(), before);
         const box = await notifications.boundingBox();
         assert.ok(box.x >= 0 && box.x + box.width <= width);
+        if (width >= 1280) {
+            const header = await page.locator('.control-panel').boundingBox();
+            assert.ok(box.x >= header.x + header.width + 8, 'Notifications belong beside the main window');
+            assert.ok(Math.abs(box.y - header.y) <= 1, 'Notifications align with the top of the main window');
+        }
         const close = notifications.getByRole('button', { name: 'Dismiss notification' });
         await close.focus();
         await page.mouse.move(0, 0);
@@ -1117,6 +1122,21 @@ for (const width of [390, 1280]) {
         if (process.env.UI_SCREENSHOT_DIR) {
             await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
             await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, `notification-cpu-${width}.png`) });
+        }
+        if (width === 1920) {
+            await page.setViewportSize({ width: 390, height: 844 });
+            await page.waitForFunction(() => {
+                const bounds = document.querySelector('[aria-label="Notifications"]').getBoundingClientRect();
+                return bounds.x >= 0 && bounds.right <= innerWidth;
+            });
+            const narrow = await notifications.boundingBox();
+            assert.ok(narrow.x >= 0 && narrow.x + narrow.width <= 390);
+            await page.setViewportSize({ width, height: 844 });
+            await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+            const restored = await notifications.boundingBox();
+            const header = await page.locator('.control-panel').boundingBox();
+            assert.ok(restored.x >= header.x + header.width + 8);
+            assert.ok(Math.abs(restored.y - header.y) <= 1);
         }
         await page.evaluate(() => {
             location.hash = '#/web-settings';

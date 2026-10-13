@@ -47,7 +47,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     let locale: Translator;
     let state: ThemeState;
     const header = createHeader(application, context, tooltips);
-    const notifications = createNotifications(application, lifetime, header.element);
+    const notifications = createNotifications(application, lifetime, header.element, workspace);
     root.append(notifications.element);
     root.prepend(header.element);
     const notices = createNotices(
@@ -138,7 +138,6 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
             updateLabels();
         }
         header.render(state, locale);
-        notifications.render(locale);
         windowFrame.hidden = state.route.view === 'home';
         workspace.classList.toggle('with-home', state.route.view === 'home');
         serverSettingsRoot.hidden = state.route.view !== 'server-settings';
@@ -202,6 +201,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
             },
             mobileHeading
         );
+        notifications.render(locale);
     }
     application.subscribe(render);
     updateNotice.subscribe(() => render(state));

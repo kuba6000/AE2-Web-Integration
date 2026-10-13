@@ -2,16 +2,44 @@ import type { Notification, ReadonlyData, ThemeApplication, ThemeLifetime, Trans
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { element } from './dom.js';
 
-export function createNotifications(application: ThemeApplication, lifetime: ThemeLifetime, header: HTMLElement) {
+export function createNotifications(
+    application: ThemeApplication,
+    lifetime: ThemeLifetime,
+    header: HTMLElement,
+    workspace: HTMLElement
+) {
     const root = element('div', '', 'notifications');
     root.setAttribute('role', 'region');
     root.hidden = true;
     let locale: Translator | undefined;
     let items: readonly ReadonlyData<Notification>[] = [];
     const rows = new Map<number, { row: HTMLButtonElement; title: HTMLElement; detail: HTMLElement }>();
-    const position = () =>
-        root.style.setProperty('--notification-top', `${Math.round(header.getBoundingClientRect().bottom + 8)}px`);
+    function position() {
+        if (root.hidden) return;
+        const bounds = header.getBoundingClientRect();
+        const availableWidth = window.innerWidth - bounds.right - 24;
+        const beside = window.innerWidth > 600 && availableWidth >= 220;
+        const top = Math.round(beside ? bounds.top : bounds.bottom + 8);
+        let height = window.innerHeight - top - 12;
+        root.style.top = `${top}px`;
+        root.style.left = beside ? `${Math.ceil(bounds.right + 12)}px` : '';
+        root.style.right = beside ? 'auto' : '';
+        root.style.width = beside ? `${Math.floor(Math.min(360, availableWidth))}px` : '';
+        // The empty area beside the header can end at the selected view's attachment.
+        if (beside) {
+            for (const panel of workspace.querySelectorAll<HTMLElement>(':scope > aside')) {
+                const box = panel.getBoundingClientRect();
+                if (box.width && box.right > bounds.right + 12 && box.top > top)
+                    height = Math.min(height, box.top - top - 12);
+            }
+        }
+        root.style.maxHeight = `${Math.max(0, height)}px`;
+    }
     window.addEventListener('resize', position, { signal: lifetime.signal });
+    const observer = new ResizeObserver(position);
+    observer.observe(header);
+    observer.observe(workspace);
+    lifetime.onCleanup(() => observer.disconnect());
     function render() {
         if (!locale) return;
         root.setAttribute('aria-label', locale.common('notifications'));
