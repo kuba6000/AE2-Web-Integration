@@ -29,9 +29,6 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Test login status handling
-        run: node --test src/test/js/*.test.cjs
-
       - name: Check frontend formatting, lint and types
         run: |
           npm ci

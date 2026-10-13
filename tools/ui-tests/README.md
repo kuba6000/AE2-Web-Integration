@@ -20,10 +20,10 @@ Tests use a simulated HTTP API; Minecraft is not required.
 Set `BROWSER_CHANNEL=msedge` to use an installed Microsoft Edge instead of downloaded
 Chromium.
 
-Run the standalone login-page checks from the core repository root:
+Run only login-page browser checks from the core repository root after building the frontend:
 
 ```sh
-node --test src/test/js/login-status.test.cjs
+node --test --test-name-pattern='login|registration' tools/ui-tests/browser.test.cjs
 ```
 
 ## Frontend checks
@@ -49,4 +49,3 @@ Node.js and npm must be available on PATH when building; the Minecraft server ne
 Prettier formats TypeScript, static assets, browser tests and tooling configuration.
 ESLint checks TypeScript and JavaScript; Stylelint checks CSS. `npm run typecheck`
 checks strict types without writing output. CI runs formatting, lint and type checks.
-The standalone login page is outside this formatter scope.

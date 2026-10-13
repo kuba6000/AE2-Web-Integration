@@ -6373,6 +6373,7 @@ test('ignore-missing recalculation keeps original options first and never retrie
     options.capabilities.craftingLightMode = true;
     options.capabilities.craftingIgnoreMissing = true;
     options.submitStatus = 'FAIL';
+    options.submitReason = 'Ingredients changed before starting';
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
@@ -6388,6 +6389,7 @@ test('ignore-missing recalculation keeps original options first and never retrie
         ignoreMissing: true,
         autoStart: true
     });
+    await page.getByText(options.submitReason, { exact: true }).waitFor();
     await page.reload();
     await page.getByText(/Iron Ingot × 1/).waitFor();
     await poll(page);
@@ -6653,6 +6655,88 @@ test('pending submission resolves after route reentry and older CPU reads cannot
     assert.match(page.url(), new RegExp(`/grids/${gridA}/items$`));
 });
 
+test('mobile login shows one usable form at a time and submits the existing registration fields', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    options.loggedOut = true;
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(base);
+    await page.getByLabel('Username', { exact: true }).waitFor();
+    assert.equal(await page.getByLabel('Username (in-game)', { exact: true }).isVisible(), false);
+    assert.equal(await page.getByRole('dialog').count(), 0);
+    if (process.env.UI_SCREENSHOT_DIR) {
+        await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'login-mobile.png'), fullPage: true });
+        await page.setViewportSize({ width: 1280, height: 800 });
+        await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'login-desktop.png'), fullPage: true });
+        await page.setViewportSize({ width: 320, height: 640 });
+    }
+    await page.getByRole('button', { name: 'Register', exact: true }).click();
+    await page.getByLabel('Username (in-game)', { exact: true }).fill('TestPlayer');
+    const password = page.getByLabel('Password', { exact: true }).filter({ visible: true });
+    await password.fill('test-password');
+    await page.getByRole('button', { name: 'Show password', exact: true }).filter({ visible: true }).click();
+    assert.equal(await password.getAttribute('type'), 'text');
+    await page.setViewportSize({ width: 320, height: 360 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.route(base, async (route) => {
+        if (route.request().method() !== 'POST') return route.continue();
+        const body = new URLSearchParams(route.request().postData());
+        assert.equal(body.get('register'), 'TestPlayer');
+        assert.equal(body.get('password'), 'test-password');
+        await route.fulfill({ status: 200, body: 'Registered' });
+    });
+    const submitted = page.waitForRequest((request) => request.method() === 'POST');
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await submitted;
+});
+
+for (const error of ['INVALID_USER', 'INVALID_PASSWORD', 'NOT_ONLINE']) {
+    test(`login displays ${error} without losing the destination`, async (t) => {
+        const { page, options, base } = await fixture(t, '/ae2');
+        options.loggedOut = true;
+        await page.goto(`${base}?${error}#/grids/${gridA}/items`);
+        await page.getByRole('alert').waitFor();
+        assert.ok((await page.getByRole('alert').innerText()).length > 0);
+        assert.equal(new URL(page.url()).search, '');
+        assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/items`);
+    });
+}
+
+test('registration confirmation keeps the command readable and supports manual copy without clipboard access', async (t) => {
+    const { page, options, base } = await fixture(t, '/ae2');
+    options.loggedOut = true;
+    await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', { value: undefined }));
+    await page.setViewportSize({ width: 390, height: 700 });
+    const token = 'sample-token-<img src=x onerror=alert(1)>';
+    await page.goto(`${base}?confirmregistration&token=${encodeURIComponent(token)}#/grids/${gridA}/items`);
+    const command = page.getByRole('textbox', { name: 'Registration command' });
+    await command.waitFor();
+    assert.equal(await command.inputValue(), `/ae2webintegration auth ${token}`);
+    assert.equal(await page.getByLabel('Username', { exact: true }).isVisible(), false);
+    assert.equal(new URL(page.url()).search, '');
+    assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/items`);
+    await page.getByRole('button', { name: 'Copy command' }).click();
+    assert.equal(
+        await command.evaluate((node) => node.selectionEnd - node.selectionStart),
+        (await command.inputValue()).length
+    );
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    if (process.env.UI_SCREENSHOT_DIR) {
+        await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+        await page.screenshot({
+            path: path.join(process.env.UI_SCREENSHOT_DIR, 'login-confirmation.png'),
+            fullPage: true
+        });
+    }
+    await page.getByRole('button', { name: 'Back to login' }).click();
+    await page.getByLabel('Username', { exact: true }).waitFor();
+    assert.equal(await command.isVisible(), false);
+    assert.equal(
+        (await page.context().cookies()).some((cookie) => cookie.name === 'cookiesAccepted'),
+        false
+    );
+});
+
 test('login errors clear transient parameters and preserve destination without loading a theme', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     await page.goto(`${base}?INVALID_PASSWORD#/grids/${gridA}/items`);
@@ -6660,7 +6744,7 @@ test('login errors clear transient parameters and preserve destination without l
     assert.equal(new URL(page.url()).search, '');
     assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/items`);
     assert.equal(
-        options.requests.some((request) => request.path.includes('/assets/web/themes/')),
+        options.requests.some((request) => /\/themes\/.*\.(js|css)$/.test(request.path)),
         false
     );
 });
@@ -7315,7 +7399,6 @@ test('login waits for bootstrap and offers private mode only after retry succeed
     assert.equal(await page.getByLabel('Username', { exact: true }).isVisible(), false);
     assert.equal(await page.getByPlaceholder('Enter password', { exact: true }).first().isVisible(), false);
     options.bootstrapStatus = 200;
-    await page.getByRole('button', { name: 'Accept Cookies', exact: true }).click();
     await page.getByRole('button', { name: 'Retry', exact: true }).click();
     await page.getByPlaceholder('Enter password', { exact: true }).first().waitFor({ timeout: 3000 });
     assert.equal(await page.getByLabel('Username', { exact: true }).inputValue(), 'Admin');
@@ -7341,6 +7424,8 @@ test('login bootstrap keeps public forms hidden until the server mode arrives', 
     release();
     await page.getByLabel('Username', { exact: true }).waitFor({ timeout: 3000 });
     assert.equal(await page.getByLabel('Username', { exact: true }).getAttribute('readonly'), null);
+    assert.equal(await page.getByRole('button', { name: 'Continue', exact: true }).isVisible(), false);
+    await page.getByRole('button', { name: 'Register', exact: true }).click();
     await page.getByRole('button', { name: 'Continue', exact: true }).waitFor({ timeout: 3000 });
 });
 
@@ -8108,7 +8193,7 @@ test('Home keeps failed logout visible and allows an explicit retry', async (t) 
     assert.equal(options.requests.filter((request) => request.path === '/api/auth/logout').length, 1);
     options.logoutError = null;
     await page.getByRole('button', { name: 'Log out', exact: true }).click();
-    await page.getByRole('button', { name: 'Continue', exact: true }).waitFor();
+    await page.getByLabel('Username', { exact: true }).waitFor();
     assert.equal(options.requests.filter((request) => request.path === '/api/auth/logout').length, 2);
 });
 
