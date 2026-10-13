@@ -361,9 +361,7 @@ class ServerLifecycleHttpTest {
         assertTrue(
             confirmation.body()
                 .contains("type=\"password\""));
-        assertFalse(
-            confirmation.body()
-                .contains("type=\"module\""));
+        assertEquals(pageResource("/assets/login.html"), confirmation.body());
     }
 
     @Test
@@ -376,9 +374,7 @@ class ServerLifecycleHttpTest {
             assertTrue(
                 loginPage.body()
                     .contains("type=\"password\""));
-            assertFalse(
-                loginPage.body()
-                    .contains("type=\"module\""));
+            assertEquals(pageResource("/assets/login.html"), loginPage.body());
             Response page = get(path, token);
             assertEquals(HttpURLConnection.HTTP_OK, page.status());
             assertTrue(
