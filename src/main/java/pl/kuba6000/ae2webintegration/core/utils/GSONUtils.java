@@ -14,39 +14,44 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 public class GSONUtils {
 
-    public static final GsonBuilder GSON_BUILDER = new GsonBuilder()
-        // Old Gson otherwise reflects into java.lang.Void, which modern JVM modules forbid.
-        .registerTypeAdapter(Void.class, new TypeAdapter<Void>() {
+    public static final GsonBuilder GSON_BUILDER = createBuilder();
 
-            @Override
-            public void write(JsonWriter output, Void value) throws IOException {
-                output.nullValue();
-            }
+    /** Creates an independent builder with the shared API adapters. */
+    public static GsonBuilder createBuilder() {
+        return new GsonBuilder()
+            // Old Gson otherwise reflects into java.lang.Void, which modern JVM modules forbid.
+            .registerTypeAdapter(Void.class, new TypeAdapter<Void>() {
 
-            @Override
-            public Void read(JsonReader input) throws IOException {
-                input.nextNull();
-                return null;
-            }
-        }.nullSafe())
-        .registerTypeAdapter(StableKey.class, new TypeAdapter<StableKey>() {
-
-            @Override
-            public void write(JsonWriter output, StableKey key) throws IOException {
-                output.value(key.toString());
-            }
-
-            @Override
-            public StableKey read(JsonReader input) throws IOException {
-                if (input.peek() != JsonToken.STRING) throw new JsonParseException("Stable key must be a string");
-                try {
-                    return StableKey.parse(input.nextString());
-                } catch (IllegalArgumentException e) {
-                    throw new JsonParseException("Invalid stable key", e);
+                @Override
+                public void write(JsonWriter output, Void value) throws IOException {
+                    output.nullValue();
                 }
-            }
-        }.nullSafe())
-        .serializeNulls();
+
+                @Override
+                public Void read(JsonReader input) throws IOException {
+                    input.nextNull();
+                    return null;
+                }
+            }.nullSafe())
+            .registerTypeAdapter(StableKey.class, new TypeAdapter<StableKey>() {
+
+                @Override
+                public void write(JsonWriter output, StableKey key) throws IOException {
+                    output.value(key.toString());
+                }
+
+                @Override
+                public StableKey read(JsonReader input) throws IOException {
+                    if (input.peek() != JsonToken.STRING) throw new JsonParseException("Stable key must be a string");
+                    try {
+                        return StableKey.parse(input.nextString());
+                    } catch (IllegalArgumentException e) {
+                        throw new JsonParseException("Invalid stable key", e);
+                    }
+                }
+            }.nullSafe())
+            .serializeNulls();
+    }
 
     /**
      * Serializes to a sibling temporary file, forces it to disk, then renames it over the target.

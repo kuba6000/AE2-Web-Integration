@@ -11,17 +11,24 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /**
  * Lists the crafting CPUs on a grid.
@@ -55,16 +62,22 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/cpus")
 public final class GetCPUList extends ISyncedRequest {
 
+    /** Include product icon references and atlas metadata; omitted means false. */
+    @QueryParam("icons")
+    private boolean icons;
+
     /**
      * Successful operation result.
      * 
      * @param status {@code OK} for a successful request
      * @param data   CPU summaries keyed by stable CPU identifier; empty when the grid has no crafting CPUs
+     * @param icons  atlas metadata for product references; null when not requested or no pack is available
      * @example status OK
      * @keyExample data AQEBAQEBAQEBAQEBAQEBAQ
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull Map<StableKey, CpuInfo> data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull Map<StableKey, CpuInfo> data,
+        @Nullable IconMappings icons) {}
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
@@ -83,8 +96,19 @@ public final class GetCPUList extends ISyncedRequest {
          * @example true
          */
         public boolean isBusy;
+        /**
+         * Whether this CPU currently admits player requests before output and storage checks. Busy CPUs may
+         * admit compatible merges on supported platforms; submission rechecks live native state.
+         */
+        public boolean acceptsPlayerJobs;
+        /** Native automatic-selection policy; null when unsupported or unknown. Not a submission permission. */
+        public @Nullable CpuSelectionMode selectionMode;
+        /** Whether this CPU supports pausing the scheduling of its current job. */
+        public boolean supportsPause;
+        /** Whether the active job is paused; false for idle or unsupported CPUs. */
+        public boolean isPaused;
         /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
-        public @Nullable JSON_Stack finalOutput;
+        public @Nullable ResourceStack finalOutput;
         /**
          * Total CPU crafting storage in bytes.
          *
@@ -142,6 +166,8 @@ public final class GetCPUList extends ISyncedRequest {
             return;
         }
         Map<StableKey, ICraftingCPUCluster> clusters = getCPUList(grid.web$getCraftingGrid());
+        IconPack pack = icons ? CoreEngine.getIconPack() : null;
+        IconMappings mappings = pack == null ? null : new IconMappings(pack);
         LinkedHashMap<StableKey, CpuInfo> cpuList = new LinkedHashMap<>(clusters.size());
         for (Map.Entry<StableKey, ICraftingCPUCluster> entry : clusters.entrySet()) {
             CpuInfo cpuInfo = new CpuInfo();
@@ -151,8 +177,14 @@ public final class GetCPUList extends ISyncedRequest {
             cpuInfo.usedStorage = cluster.web$getUsedStorage();
             cpuInfo.coProcessors = cluster.web$getCoProcessors();
             cpuInfo.isBusy = cluster.web$isBusy();
+            cpuInfo.acceptsPlayerJobs = cluster.web$acceptsPlayerJobs();
+            cpuInfo.selectionMode = cluster.web$getSelectionMode();
+            cpuInfo.supportsPause = cluster instanceof IPausableCraftingCPU;
+            cpuInfo.isPaused = cpuInfo.isBusy && cluster instanceof IPausableCraftingCPU pausable
+                && pausable.web$isPaused();
             if (cpuInfo.isBusy) {
-                cpuInfo.finalOutput = JSON_Stack.capture(grid, cluster.web$getFinalOutput());
+                ResourceSnapshot output = ResourceSnapshot.capture(grid, cluster.web$getFinalOutput(), pack);
+                cpuInfo.finalOutput = output == null ? null : new ResourceStack(output, mappings);
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cluster);
                 if (trackingInfo != null) {
                     cpuInfo.hasTrackingInfo = true;
@@ -161,7 +193,7 @@ public final class GetCPUList extends ISyncedRequest {
             }
             cpuList.put(entry.getKey(), cpuInfo);
         }
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, cpuList));
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, cpuList, mappings));
     }
 
 }

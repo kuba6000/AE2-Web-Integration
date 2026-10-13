@@ -14,5 +14,5 @@ public @interface Endpoint {
 
     String path();
 
-    boolean authenticated() default true;
+    Authentication authentication() default Authentication.REQUIRED;
 }

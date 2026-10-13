@@ -15,9 +15,12 @@ import java.util.concurrent.CompletableFuture;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
@@ -63,7 +66,8 @@ class CoreEngineLifecycleTest extends GridTestScope {
         assertNotNull(gridKey);
         GridData gridData = GridData.getOrCreate(gridKey);
         CompletableFuture<IAECraftingJob> pendingPlan = new CompletableFuture<>();
-        int planId = gridData.addJob(pendingPlan);
+        int planId = gridData
+            .addJob(pendingPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         ICraftingCPUCluster cpu = new TestCpu();
         AE2JobTracker.addJob(cpu, grid, false);
         gridData.trackingInfo.trackingInfos.put(1, AE2JobTracker.findActiveJob(cpu));
@@ -78,6 +82,26 @@ class CoreEngineLifecycleTest extends GridTestScope {
             IAE processInterface = TestGridFixtures.ae(grid);
             AE2Controller.AE2Interface = processInterface;
             IServerPlatform processPlatform = new IServerPlatform() {
+
+                @Override
+                public @NotNull String getModVersion() {
+                    return "test-version";
+                }
+
+                @Override
+                public @NotNull String getLoader() {
+                    return "forge";
+                }
+
+                @Override
+                public @NotNull String getMinecraftVersion() {
+                    return "1.20.1";
+                }
+
+                @Override
+                public @NotNull String getIconPackCompatibilityVersion() {
+                    return "test-compatibility";
+                }
 
                 @Override
                 public UUID getOnlinePlayerUUID(String username) {
@@ -122,7 +146,14 @@ class CoreEngineLifecycleTest extends GridTestScope {
             assertTrue(gridData.trackingInfo.trackingInfos.isEmpty());
             assertNull(gridData.getJob(planId));
             assertTrue(pendingPlan.isCancelled());
-            assertEquals(1, gridData.addJob(new CompletableFuture<>()), "the next world gets fresh plan ids");
+            assertEquals(
+                1,
+                gridData.addJob(
+                    new CompletableFuture<>(),
+                    TestGridFixtures.planOutput(),
+                    new CraftingOptions(false, false),
+                    false),
+                "the next world gets fresh plan ids");
         }
     }
 
@@ -139,7 +170,24 @@ class CoreEngineLifecycleTest extends GridTestScope {
         }
 
         @Override
-        public @NotNull String web$getItemID() {
+        public @NotNull ResourceType web$getResourceType() {
+            return ResourceType.ITEM;
+        }
+
+        @Override
+        public @NotNull String web$getRegistryNamespace() {
+            return "example";
+        }
+
+        public int web$getComponentCount() {
+            return 2;
+        }
+
+        public int web$getDamage() {
+            return 7;
+        }
+
+        public @NotNull String web$getRegistryPath() {
             return "test:output";
         }
 
@@ -191,6 +239,15 @@ class CoreEngineLifecycleTest extends GridTestScope {
         @Override
         public long web$getCoProcessors() {
             return 0;
+        }
+
+        @Override
+        public CpuSelectionMode web$getSelectionMode() {
+            return null;
+        }
+
+        public boolean web$acceptsPlayerJobs() {
+            return !web$isBusy();
         }
 
         @Override

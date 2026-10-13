@@ -1,0 +1,306 @@
+@font-face {
+    font-family: Lato;
+    src: url('./themes/default/fonts/lato/Lato-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: Lato;
+    src: url('./themes/default/fonts/lato/Lato-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-display: swap;
+}
+
+* {
+    box-sizing: border-box;
+}
+:root {
+    color-scheme: light;
+    --panel: #c6c6c6;
+    --surface: #8b8b8b;
+    --surface-hover: #a3a3a3;
+    --surface-text: #1a1a1a;
+    --edge-light: #fff;
+    --edge-dark: #373737;
+    --text: #34333b;
+    --muted: #63616d;
+}
+[hidden] {
+    display: none !important;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 24px 12px;
+    display: flex;
+    font:
+        16px/1.5 Lato,
+        Arial,
+        sans-serif;
+    background:
+        radial-gradient(ellipse at 50% 0, #41414d80, transparent 70%),
+        repeating-linear-gradient(0deg, #ffffff02 0 1px, transparent 1px 8px),
+        repeating-linear-gradient(90deg, #0000000a 0 1px, transparent 1px 8px);
+    color: var(--text);
+}
+
+.login-card {
+    width: 100%;
+    max-width: 420px;
+    margin: auto;
+    padding: 16px;
+    background: var(--panel);
+    background-clip: padding-box;
+    border: 12px solid transparent;
+    border-image: url('./themes/default/window-frame.svg') 6 / 12px stretch;
+    box-shadow: 0 5px 8px #08070d2e;
+}
+
+header {
+    margin-bottom: 24px;
+}
+p {
+    margin: 0 0 16px;
+}
+h1 {
+    margin: 16px 0 4px;
+    font-size: 22px;
+    line-height: 1.25;
+}
+h2 {
+    margin: 0 0 12px;
+    font-size: 20px;
+}
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+}
+.brand p {
+    margin: 0;
+}
+.login-icon {
+    display: block;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    fill: currentcolor;
+    shape-rendering: crispedges;
+}
+.brand-mark {
+    flex-basis: 32px;
+    width: 32px;
+    height: 32px;
+}
+.brand span {
+    color: var(--muted);
+    font-weight: 400;
+}
+.intro,
+.form-help,
+footer {
+    color: var(--muted);
+}
+.form-help {
+    font-size: 14px;
+}
+.form-switch {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+.form-switch button {
+    flex: 1;
+}
+.form-switch [aria-pressed='true'] {
+    background: var(--panel);
+    border-color: var(--edge-dark) var(--edge-light) var(--edge-light) var(--edge-dark);
+}
+label {
+    display: block;
+    margin-bottom: 6px;
+}
+input,
+textarea,
+button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font: inherit;
+    color: inherit;
+    border-radius: 0;
+}
+input,
+textarea {
+    background: var(--surface);
+    color: var(--surface-text);
+    border: 2px solid;
+    border-color: var(--edge-dark) var(--edge-light) var(--edge-light) var(--edge-dark);
+}
+input:not([type='checkbox']),
+textarea {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    margin: 0 0 18px;
+    padding: 10px 12px;
+}
+input:read-only {
+    color: var(--surface-text);
+}
+input::placeholder {
+    color: #242424;
+    opacity: 1;
+}
+textarea {
+    resize: vertical;
+    overflow-wrap: anywhere;
+}
+button {
+    min-height: 44px;
+    padding: 8px 14px;
+    background: var(--surface);
+    color: var(--surface-text);
+    border: 2px solid;
+    border-color: var(--edge-light) var(--edge-dark) var(--edge-dark) var(--edge-light);
+    cursor: pointer;
+}
+button:hover {
+    background: var(--surface-hover);
+}
+button:active {
+    border-color: var(--edge-dark) var(--edge-light) var(--edge-light) var(--edge-dark);
+}
+:focus-visible {
+    outline: 1px solid #626262;
+    outline-offset: 1px;
+}
+.primary {
+    width: 100%;
+    margin-top: 8px;
+    font-weight: 700;
+}
+.password-field {
+    display: flex;
+    margin-bottom: 18px;
+}
+.password-field input {
+    margin: 0;
+}
+.password-field button {
+    position: relative;
+    flex-shrink: 0;
+    width: 48px;
+    min-width: 48px;
+    padding: 8px;
+    margin-left: -2px;
+}
+.eye-slash {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    fill: currentcolor;
+    shape-rendering: crispedges;
+    display: none;
+}
+[data-password][aria-pressed='true'] .eye-slash {
+    display: block;
+}
+.cookie-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.cookie-notice .login-icon {
+    flex-basis: 16px;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+}
+.check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 16px;
+    min-height: 32px;
+    font-size: 14px;
+    cursor: pointer;
+}
+.check input {
+    appearance: none;
+    display: grid;
+    place-content: center;
+    flex: 0 0 24px;
+    margin: 0;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+}
+.check input::before {
+    content: '';
+    width: 16px;
+    height: 16px;
+    background: currentcolor;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 6H4V8H6V6H8V4H10V2H14V6H12V8H10V10H8V12H4V10H2Z'/%3E%3C/svg%3E")
+        center / 16px 16px no-repeat;
+    visibility: hidden;
+}
+.check input:checked::before {
+    visibility: visible;
+}
+@media (forced-colors: active) {
+    .check input {
+        appearance: auto;
+    }
+    .check input::before {
+        display: none;
+    }
+}
+.notice {
+    padding: 12px;
+    border-left: 3px solid #9a3333;
+    background: #e6c5c2;
+}
+.error {
+    color: #742525;
+}
+#copyStatus {
+    margin-top: 8px;
+}
+footer {
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid #9a99a3;
+    font-size: 12px;
+}
+footer p {
+    margin-bottom: 10px;
+}
+.credits {
+    margin: 16px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid #9a99a3;
+    color: var(--muted);
+    text-align: center;
+}
+a {
+    color: var(--text);
+    text-underline-offset: 3px;
+}
+
+@media (width <= 360px) {
+    body {
+        padding: 12px 8px;
+    }
+    .login-card {
+        padding: 12px;
+    }
+}

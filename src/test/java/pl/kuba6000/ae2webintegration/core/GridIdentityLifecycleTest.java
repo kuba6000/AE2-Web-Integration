@@ -3,7 +3,6 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -14,8 +13,10 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -25,7 +26,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 class GridIdentityLifecycleTest extends GridTestScope {
 
     @Test
-    void failedSaveLoadLeavesRegistryUnavailableUntilSuccessfulInitialization() throws Exception {
+    void corruptSaveStartsANewRegistryWithoutRetainingPreviousWorldBindings() throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(81);
         TestGridFixtures.track(grid);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
@@ -36,15 +37,21 @@ class GridIdentityLifecycleTest extends GridTestScope {
         byte[] invalid = "{".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         java.nio.file.Files.write(invalidFile, invalid);
 
-        assertThrows(IOException.class, () -> CoreEngine.GRID_IDENTITIES.initialize(invalidSave));
-        assertFalse(CoreEngine.GRID_IDENTITIES.isInitialized());
+        CoreEngine.GRID_IDENTITIES.initialize(invalidSave);
+        assertTrue(CoreEngine.GRID_IDENTITIES.isInitialized());
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
+        StableKey replacement = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(replacement);
+        assertNotEquals(key, replacement);
+        assertEquals(
+            replacement,
+            GridAccess.list(TestGridFixtures.ae(grid))
+                .get(0)
+                .key());
+        assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, replacement));
         assertNull(CoreEngine.GRID_IDENTITIES.getPersistentData(key));
-        assertThrows(IllegalStateException.class, CoreEngine.GRID_IDENTITIES::saveIfDirty);
-        assertArrayEquals(invalid, java.nio.file.Files.readAllBytes(invalidFile));
 
         CoreEngine.GRID_IDENTITIES.initialize(gridSave);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
@@ -213,14 +220,14 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertNotNull(key);
         CompletableFuture<IAECraftingJob> plan = new CompletableFuture<>();
         int id = GridData.getOrCreate(key)
-            .addJob(plan);
+            .addJob(plan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
 
         GridAccess.list(TestGridFixtures.ae());
         GridAccess.list(TestGridFixtures.ae(grid));
-        assertSame(
-            plan,
-            GridData.getOrCreate(key)
-                .getJob(id));
+        CraftingPlanRegistry.Entry entry = GridData.getOrCreate(key)
+            .getJob(id);
+        assertNotNull(entry);
+        assertSame(plan, entry.plan);
         assertFalse(plan.isCancelled());
         assertTrue(new File(gridSave, "ae2webintegration/grid-identities.json").exists());
 

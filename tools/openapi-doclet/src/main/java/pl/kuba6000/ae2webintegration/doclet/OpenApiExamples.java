@@ -104,6 +104,7 @@ final class OpenApiExamples {
         JsonObject content = message.getAsJsonObject("content");
         if (content == null) return;
         JsonObject media = content.getAsJsonObject("application/json");
+        if (media == null) return;
         JsonObject schema = media.getAsJsonObject("schema");
         JsonElement example = media.has("example") ? media.get("example")
             : generate(schema, definitions, new HashSet<>());

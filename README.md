@@ -15,37 +15,6 @@ through a Discord webhook.
 
 **THIS MOD SHOULD ONLY BE INSTALLED ON THE SERVER. IT ADDS NO ITEMS OR BLOCKS!**
 
-## Repository architecture
-
-The [`core`](https://github.com/kuba6000/AE2-Web-Integration/tree/core) branch is the brain of the mod. It
-contains almost all version-independent logic: the HTTP server, web API, authentication, configuration
-definitions, crafting and tracking logic, Discord integration, and the web assets.
-
-The Minecraft-version branches are thin adapters around that shared core. They contain only the code that has
-to know about a specific Minecraft version, mod loader, or AE2 API: lifecycle hooks, config and command wiring,
-Mixins, and conversions between AE2 objects and the interfaces understood by core.
-
-| Branch | Purpose |
-| --- | --- |
-| [`core`](https://github.com/kuba6000/AE2-Web-Integration/tree/core) | Shared, version-independent logic and this documentation. **It is not a standalone Minecraft mod.** |
-| [`1.21.1`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.21.1) | NeoForge 1.21.1 adapter |
-| [`1.20.1`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.20.1) | Forge 1.20.1 adapter |
-| [`1.12.2`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.12.2) | Forge 1.12.2 adapter for AE2 UEL |
-| [`1.7.10`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.7.10) | Forge 1.7.10 adapter for GTNH |
-
-Each version branch includes `core` as a Git submodule pinned to a tested commit and packages it into the final
-mod JAR. Shared behavior should normally be changed on `core`; a version branch should only contain the adapter
-needed to make that behavior work on its Minecraft and AE2 version.
-
-If you only want to use the mod, download a version-specific JAR from
-[Releases](https://github.com/kuba6000/AE2-Web-Integration/releases),
-[CurseForge](https://www.curseforge.com/minecraft/mc-mods/ae2-web-integration), or
-[Modrinth](https://modrinth.com/mod/ae2-web-integration). Do not try to install the `core` branch by itself.
-
-For development, run core checks with `./gradlew test spotlessCheck`. The two shipped web interfaces
-also have dependency-free behavioral checks: `node --test src/test/js/item-identity.test.cjs`
-(Node.js 18 or newer).
-
 ## Showcase on YouTube
 
 ### Main mod
@@ -79,6 +48,28 @@ password accordingly!
 
 ## Current features
 
+### Optional item icons
+
+To show item icons in the web panel, generate an icon pack from your Minecraft client:
+
+1. Install the `ae2webintegration-icon-generator-*.jar` for your Minecraft version and mod loader
+   in your client's `mods` folder. Use the same modpack as the server.
+2. Start the game with the resource packs you want to use for the icons, then enter a world.
+3. Run `/ae2webicons export` in chat and wait for the progress window to finish.
+4. Find the generated `.ae2wi-icons` file in the `ae2webicons` folder inside your game directory.
+5. Stop the server and copy that file into `config/ae2webintegration/`. Keep its `.ae2wi-icons` extension;
+   the filename can stay unchanged.
+6. Start the server. In the web panel settings, choose **Icons and names** or **Icons only**
+   under **Terminal display**.
+
+The icons use the appearance of your loaded resource packs. You can cancel generation from the
+progress window. To replace or remove the server's icon pack, stop the server first and restart it afterward.
+Keep only one `.ae2wi-icons` file in that folder. If several are present, the server logs their names
+and disables icons until the conflict is resolved and the server is restarted.
+Icons are optional; without an icon pack, the terminal displays item names.
+
+### Terminal
+
 - Browse, sort, and filter the contents of AE2 networks
 - Monitor as many networks as you want
 - Public mode for servers with multiple independent players
@@ -87,6 +78,16 @@ password accordingly!
 - Cancel crafting jobs
 - Track active and completed crafting jobs
 - Send crafting updates through a Discord webhook
+
+### Web themes
+
+Choose a theme in **Web Settings → Choose a theme**. To install one for everyone, place its
+ZIP in `config/ae2webintegration/themes/` and restart the server. Set `general.default_theme` in
+`config/ae2webintegration/config.toml` to `server:<theme id>` to make it the server default, or
+`builtin:default` for the built-in UI. Users can follow that default or keep their own browser choice.
+
+If a theme prevents normal use, open the page with `?safe=1` before its `#` fragment to
+use the built-in UI.
 
 ## Gallery
 
@@ -167,6 +168,11 @@ location / {
 }
 ```
 
+### Hosting through another web server
+
+The [`tools/php-proxy`](tools/php-proxy) directory contains a PHP reverse proxy that serves
+the mod's website, assets and API through an existing web server.
+
 ## Requirements
 
 - A compatible AE2 installation for one of the supported Minecraft versions
@@ -219,21 +225,6 @@ Leave `ntfy.user` and `ntfy.password` empty when the topic is public. A private 
 
 `notifications.full_domain` is optional. When it is set, opening the notification goes to that address.
 
-## Custom website and Automation
-
-If you already have a web server and want to host the panel there, you can! The
-[`example_website`](./example_website) directory contains a ready-to-use simple PHP
-proxy. It forwards API calls from your web server to the AE2 Web Integration endpoint.
-
-If you want to use this mod as an API endpoint,
-website exposes the entire API at /api/ endpoint,
-documentation can be found here: https://ae2web.kuba6000.pl/docs/
-*NOTE: All requests should be sent to YOUR server, NOT ae2web.kuba6000.pl*
-
-You can also generate the entire documentation yourself,
-see the [OpenAPI generator guide](tools/openapi-doclet/README.md) for generating the API
-specification from endpoint annotations and Javadocs.
-
 ## Compatibility
 
 The mod currently supports Minecraft 1.21.1 (NeoForge), 1.20.1 (Forge), 1.12.2 (Forge), and 1.7.10 (Forge/GTNH).
@@ -248,3 +239,67 @@ A few additional compatibility notes:
   [AE2FC for 1.12.2](https://github.com/AE2-UEL/AE2FluidCraft-Rework/).
 - The 1.20.1 and 1.21.1 builds include optional
   [AdvancedAE](https://www.curseforge.com/minecraft/mc-mods/advancedae) integration.
+
+## Development
+
+### Repository architecture
+
+The [`core`](https://github.com/kuba6000/AE2-Web-Integration/tree/core) branch contains the shared,
+version-independent logic: the HTTP server, web API, authentication, configuration
+definitions, crafting and tracking logic, Discord integration, and the web assets.
+
+The Minecraft-version branches are thin adapters around that shared core. They contain only the code that has
+to know about a specific Minecraft version, mod loader, or AE2 API: lifecycle hooks, config and command wiring,
+Mixins, and conversions between AE2 objects and the interfaces understood by core.
+
+| Branch | Purpose |
+| --- | --- |
+| [`core`](https://github.com/kuba6000/AE2-Web-Integration/tree/core) | Shared, version-independent logic and this documentation. **It is not a standalone Minecraft mod.** |
+| [`1.21.1`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.21.1) | NeoForge 1.21.1 adapter |
+| [`1.20.1`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.20.1) | Forge 1.20.1 adapter |
+| [`1.12.2`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.12.2) | Forge 1.12.2 adapter for AE2 UEL |
+| [`1.7.10`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.7.10) | Forge 1.7.10 adapter for GTNH |
+
+Each version branch includes `core` as a Git submodule pinned to a tested commit and packages it into the final
+mod JAR. Shared behavior should normally be changed on `core`; a version branch should only contain the adapter
+needed to make that behavior work on its Minecraft and AE2 version.
+
+### Building and checking
+
+Use a Minecraft-version branch to build an installable mod JAR. Initialize its submodules before
+building:
+
+```shell
+git submodule update --init --recursive
+./gradlew build
+```
+
+The shared core can be checked independently with `./gradlew test spotlessCheck`.
+
+Building requires Node.js 22.13+ on the 22.x line or Node.js 24+, with npm on `PATH`, alongside
+the JDK required by the branch. Gradle installs the locked frontend dependencies, compiles TypeScript,
+and packages the JavaScript output. Node.js and npm are not required to run the finished mod.
+
+See [frontend development](tools/ui-tests/README.md) for frontend commands and browser tests.
+
+### API and custom themes
+
+The web API is available under `/api/` on your Minecraft server. See the
+[API documentation](https://ae2web.kuba6000.pl/docs/); send requests to your own server, not the
+documentation host.
+
+- [OpenAPI generator](tools/openapi-doclet/README.md) — generate the API specification from endpoint
+  annotations and Javadocs.
+- [Theme author guide](docs/themes/README.md) — theme contracts, development tools and the example project.
+
+## License
+
+Project code and original interface icons are licensed under **LGPL-3.0-or-later**.
+Bundled third-party assets retain their own licenses:
+
+| Component | Author / source | License |
+| --- | --- | --- |
+| Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](LICENSE) |
+| Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
+| Lato font | [Łukasz Dziedzic (tyPoland)](https://github.com/google/fonts/tree/main/ofl/lato) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/lato/LICENSE) |
+| Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |

@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.config;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -10,20 +11,22 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
 import com.google.common.io.Files;
 import com.google.gson.Gson;
 
 import pl.kuba6000.ae2webintegration.core.PasswordHelper;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
+import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 
 @SuppressWarnings("UnstableApiUsage")
 public class CoreData {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
-
-    private static final int CURRENT_SCHEMA_VERSION = 3;
 
     /**
      * Only ever assigned by {@link #loadData()} at mod init, before any HTTP thread exists, so today it is
@@ -41,9 +44,6 @@ public class CoreData {
         return Config.getConfigFile("webdata.json");
     }
 
-    /** 0 means a file written before versioning existed. */
-    private int schemaVersion;
-
     // Written from the server thread by setPassword (the in-game /ae2webintegration auth command) and read
     // from HTTP worker threads during login, so plain HashMaps would offer no visibility guarantee at all.
     private final ConcurrentHashMap<UUID, String> passwords = new ConcurrentHashMap<>();
@@ -51,6 +51,39 @@ public class CoreData {
 
     // Derived from usernames after load. Persisting both directions would create two sources of truth.
     private transient ConcurrentHashMap<String, UUID> usernameToUUID = new ConcurrentHashMap<>();
+
+    // All mutations, saves and suppression reads share the class lock, including account changes.
+    private @Nullable SkippedUpdate skippedUpdate;
+
+    @Desugar
+    private record SkippedUpdate(@NotNull String minecraftVersion, @NotNull String loader, @NotNull String version,
+        @NotNull ReleaseManifest.Channel channel, @NotNull String tag) {}
+
+    /** Reads only committed suppression; a concurrent failed save must never hide a notice. */
+    public static synchronized boolean isUpdateSkipped(@NotNull String minecraftVersion, @NotNull String loader,
+        @NotNull ReleaseManifest.Release release) {
+        SkippedUpdate skipped = instance.skippedUpdate;
+        return skipped != null && skipped.minecraftVersion()
+            .equals(minecraftVersion)
+            && skipped.loader()
+                .equals(loader)
+            && release.isAtMost(skipped.version(), skipped.channel(), skipped.tag());
+    }
+
+    /** Persists the administrator's choice together with accounts, publishing it only after a successful save. */
+    public static synchronized void skipUpdate(@NotNull String minecraftVersion, @NotNull String loader,
+        @NotNull ReleaseManifest.Release release) throws IOException {
+        if (isUpdateSkipped(minecraftVersion, loader, release)) return;
+        CoreData data = instance;
+        SkippedUpdate previous = data.skippedUpdate;
+        data.skippedUpdate = new SkippedUpdate(minecraftVersion, loader, release.version, release.channel, release.tag);
+        try {
+            GSONUtils.writeAtomically(dataFile(), data);
+        } catch (IOException | RuntimeException failure) {
+            data.skippedUpdate = previous;
+            throw failure;
+        }
+    }
 
     public static final class Account {
 
@@ -103,12 +136,11 @@ public class CoreData {
     }
 
     /**
-     * Records the canonical name supplied by an online player identity. Legacy accounts did not persist
-     * names, and existing accounts need the same update when their owner renames. The UUID remains the
+     * Records the canonical name supplied by an online player identity when the owner renames. The UUID remains the
      * account identity; the name is only a case-insensitive login index.
      */
     @SuppressWarnings("ConstantValue") // Keep validation of externally supplied identity data.
-    public static void observePlayer(PlayerIdentity player) {
+    public static synchronized void observePlayer(PlayerIdentity player) {
         if (player == null || player.uuid == null || player.name == null || player.name.isEmpty()) {
             return;
         }
@@ -121,7 +153,7 @@ public class CoreData {
         }
     }
 
-    public static boolean setPassword(PlayerIdentity player, String passwordHash) {
+    public static synchronized boolean setPassword(PlayerIdentity player, String passwordHash) {
         UUID playerUuid = player.uuid;
         if (passwordHash == null || passwordHash.isEmpty()) {
             instance.passwords.remove(playerUuid);
@@ -135,9 +167,8 @@ public class CoreData {
         return true;
     }
 
-    private static void saveChanges() {
+    private static synchronized void saveChanges() {
         CoreData data = instance;
-        data.schemaVersion = CURRENT_SCHEMA_VERSION;
         try {
             GSONUtils.writeAtomically(dataFile(), data);
         } catch (Exception e) {
@@ -145,7 +176,7 @@ public class CoreData {
         }
     }
 
-    public static void loadData() {
+    public static synchronized void loadData() {
         Gson gson = GSONUtils.GSON_BUILDER.create();
         File file = dataFile();
         if (!file.exists()) {
@@ -164,25 +195,30 @@ public class CoreData {
                 LOG.error("Web data file is empty or malformed, keeping the accounts already in memory");
                 return;
             }
-            if (loaded.schemaVersion > CURRENT_SCHEMA_VERSION) {
-                LOG.warn(
-                    "Web data file was written by a newer version (schema {}), reading it as schema {}",
-                    loaded.schemaVersion,
-                    CURRENT_SCHEMA_VERSION);
-            }
-            boolean needsMigration = loaded.schemaVersion < CURRENT_SCHEMA_VERSION;
+            loaded.validateSkippedUpdate();
             loaded.rebuildUsernameIndex();
             instance = loaded;
-            if (needsMigration) {
-                // The reader is already closed here, so an atomic replacement also works on Windows.
-                // Rewriting through the current schema removes the obsolete, world-scoped AE2 id maps
-                // while preserving passwords and any canonical usernames already present.
-                saveChanges();
-            }
         } catch (Exception e) {
             // Deliberately no clear-and-save here: a failed read must not persist the loss of every
             // account. Leave the file alone so it can be inspected or restored.
             LOG.error("Failed to load web data from file: {}", file.getAbsolutePath(), e);
+        }
+    }
+
+    @SuppressWarnings("ConstantValue") // Gson populates fields from untrusted persisted JSON without constructors.
+    private void validateSkippedUpdate() {
+        SkippedUpdate skipped = skippedUpdate;
+        if (skipped == null) return;
+        if (skipped.minecraftVersion() == null || skipped.minecraftVersion()
+            .isEmpty()
+            || skipped.loader() == null
+            || skipped.loader()
+                .isEmpty()
+            || skipped.tag() == null
+            || skipped.tag()
+                .isEmpty()
+            || !ReleaseManifest.isValidVersion(skipped.version(), skipped.channel())) {
+            throw new IllegalArgumentException("Invalid skipped update preference");
         }
     }
 

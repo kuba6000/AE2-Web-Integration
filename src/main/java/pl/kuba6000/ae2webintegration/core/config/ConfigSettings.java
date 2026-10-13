@@ -42,6 +42,11 @@ public final class ConfigSettings {
         @Comment("Check for mod updates.")
         public boolean checkForUpdates = true;
 
+        @Path("default_theme")
+        @Comment({ "Default web theme: builtin:default or server:<theme id>.",
+            "Server theme ZIPs are read from the themes directory at server startup." })
+        public String defaultTheme = "builtin:default";
+
     }
 
     public static final class Notifications {

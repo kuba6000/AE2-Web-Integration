@@ -2,7 +2,12 @@ webdata.json
 griddata.json
 .gradle
 .settings
-/.idea/
+# Share inspection policy; keep SDKs, modules and personal IDE state local.
+/.idea/*
+!/.idea/inspectionProfiles/
+/.idea/inspectionProfiles/*
+!/.idea/inspectionProfiles/AE2_Web_Integration.xml
+!/.idea/inspectionProfiles/profiles_settings.xml
 /.vscode/
 /run/
 /build/
@@ -38,3 +43,6 @@ addon.local.gradle.kts
 addon.late.local.gradle
 addon.late.local.gradle.kts
 layout.json
+/node_modules/
+__pycache__/
+*.pyc

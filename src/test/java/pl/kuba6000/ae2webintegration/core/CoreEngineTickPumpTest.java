@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 
 /**
@@ -168,7 +169,11 @@ class CoreEngineTickPumpTest {
         CoreEngine.onServerStopped();
         for (int i = 0; i <= CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK; i++) {
             GridData.getOrCreate(TestGridFixtures.key(910_000L + i))
-                .addJob(new CompletableFuture<>());
+                .addJob(
+                    new CompletableFuture<>(),
+                    TestGridFixtures.planOutput(),
+                    new CraftingOptions(false, false),
+                    false);
         }
         queue("request", null);
 

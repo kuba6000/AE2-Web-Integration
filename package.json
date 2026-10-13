@@ -1,0 +1,33 @@
+{
+  "name": "ae2-web-integration-frontend",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^22.13.0 || >=24"
+  },
+  "scripts": {
+    "build": "node tools/build-frontend.mjs",
+    "watch": "tsc --project tsconfig.json --watch --preserveWatchOutput",
+    "format": "prettier --write src/main/typescript src/main/resources/assets/web src/main/resources/assets/login.html tools/ui-tests tools/build-frontend.mjs tools/build-theme-sdk.mjs tools/build-theme-example.mjs examples/theme-starter/src tools/theme-preview examples/theme-starter/build.mjs package.json package-lock.json tsconfig.json eslint.config.mjs stylelint.config.mjs .prettierrc.json .github/workflows/build-and-test.yml",
+    "format:check": "prettier --check src/main/typescript src/main/resources/assets/web src/main/resources/assets/login.html tools/ui-tests tools/build-frontend.mjs tools/build-theme-sdk.mjs tools/build-theme-example.mjs examples/theme-starter/src tools/theme-preview examples/theme-starter/build.mjs package.json package-lock.json tsconfig.json eslint.config.mjs stylelint.config.mjs .prettierrc.json .github/workflows/build-and-test.yml",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "npm run lint:js && npm run lint:css",
+    "lint:js": "eslint src/main/typescript tools/ui-tests tools/build-frontend.mjs tools/build-theme-sdk.mjs tools/build-theme-example.mjs examples/theme-starter/src tools/theme-preview examples/theme-starter/build.mjs eslint.config.mjs stylelint.config.mjs --max-warnings 0",
+    "lint:css": "stylelint \"src/main/resources/assets/web/**/*.css\" --max-warnings 0 && stylelint \"examples/theme-starter/src/*.css\" --max-warnings 0",
+    "build:theme-sdk": "node tools/build-theme-sdk.mjs",
+    "build:theme-example": "npm run build:theme-sdk && node tools/build-theme-example.mjs",
+    "preview:theme": "node tools/theme-preview/server.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "esbuild": "0.28.2",
+    "eslint": "10.11.0",
+    "fflate": "0.8.3",
+    "globals": "17.12.0",
+    "prettier": "3.9.9",
+    "stylelint": "17.15.0",
+    "stylelint-config-recommended": "18.0.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0"
+  }
+}

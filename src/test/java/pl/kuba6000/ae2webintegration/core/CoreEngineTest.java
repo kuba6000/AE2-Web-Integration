@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.io.File;
 import java.util.UUID;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,7 +22,7 @@ class CoreEngineTest {
 
     @Test
     void initInitializesCoreConfigDirectoryFromPlatform() {
-        CoreEngine.init(new TestPlatform(configRoot, false), "test-version", "-forge-1.20.1");
+        CoreEngine.init(new TestPlatform(configRoot, false));
 
         assertEquals(new File(configRoot, "ae2webintegration"), Config.getConfigDirectory());
         assertEquals(
@@ -35,7 +36,7 @@ class CoreEngineTest {
         Config.init(configRoot);
         String password = Config.INSTANCE.general.password;
 
-        CoreEngine.init(new TestPlatform(configRoot, true), "test-version", "-forge-1.20.1");
+        CoreEngine.init(new TestPlatform(configRoot, true));
 
         assertEquals(password, Config.INSTANCE.general.password);
         assertEquals(new File(configRoot, "ae2webintegration"), Config.getConfigDirectory());
@@ -43,6 +44,26 @@ class CoreEngineTest {
 
     @Desugar
     private record TestPlatform(File configDirectory, boolean unreadableLegacyConfig) implements IServerPlatform {
+
+        @Override
+        public @NotNull String getModVersion() {
+            return "test-version";
+        }
+
+        @Override
+        public @NotNull String getLoader() {
+            return "forge";
+        }
+
+        @Override
+        public @NotNull String getMinecraftVersion() {
+            return "1.20.1";
+        }
+
+        @Override
+        public @NotNull String getIconPackCompatibilityVersion() {
+            return "test-compatibility";
+        }
 
         @Override
         public UUID getOnlinePlayerUUID(String username) {

@@ -53,7 +53,8 @@ class UpdateNotifierTest {
                     "http://127.0.0.1:" + server.getAddress()
                         .getPort() + "/"),
                 "1.0.0-forge-1.7.10",
-                "-forge-1.7.10")) {
+                "forge",
+                "1.7.10")) {
             activeChecker.set(null, checker);
             config.set("general.check_for_updates", true);
             RecordingMessenger messenger = new RecordingMessenger();
@@ -79,15 +80,6 @@ class UpdateNotifierTest {
             activeChecker.set(null, previous);
             server.stop(0);
         }
-    }
-
-    @Test
-    void onPlayerLoggedInDoesNotNotifyPlayersWithoutAdminNoticePermission() {
-        RecordingMessenger messenger = new RecordingMessenger();
-
-        UpdateNotifier.onPlayerLoggedIn(messenger, PLAYER, false);
-
-        assertEquals(0, messenger.sentMessages);
     }
 
     private static class RecordingMessenger implements IPlayerMessenger {

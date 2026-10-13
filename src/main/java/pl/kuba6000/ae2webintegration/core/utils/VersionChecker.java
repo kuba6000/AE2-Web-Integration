@@ -11,8 +11,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,6 +18,11 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.google.common.io.ByteStreams;
+
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 
 /** One server lifecycle's background checks and last completed recommendation. */
 public final class VersionChecker implements AutoCloseable {
@@ -31,7 +34,7 @@ public final class VersionChecker implements AutoCloseable {
     private static final int HTTP_TIMEOUT_MILLIS = (int) TimeUnit.SECONDS.toMillis(5);
     private static final int MAX_RESPONSE_BYTES = 64 * 1024;
     private final @NotNull String currentVersion;
-    private final @NotNull String versionIdentifier;
+    private final @NotNull String loader;
     private final @NotNull String minecraftVersion;
     private final @NotNull URL feedUrl;
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(task -> {
@@ -44,14 +47,11 @@ public final class VersionChecker implements AutoCloseable {
     private @Nullable ScheduledFuture<?> scheduled;
     private boolean closed;
 
-    public VersionChecker(@NotNull URL feedBaseUrl, @NotNull String currentVersion, @NotNull String versionIdentifier) {
+    public VersionChecker(@NotNull URL feedBaseUrl, @NotNull String currentVersion, @NotNull String loader,
+        @NotNull String minecraftVersion) {
         this.currentVersion = currentVersion;
-        this.versionIdentifier = versionIdentifier;
-        Matcher target = Pattern.compile("-(?:neo)?forge-(\\d+\\.\\d+\\.\\d+)")
-            .matcher(versionIdentifier);
-        if (!target.matches())
-            throw new IllegalArgumentException("Unsupported version identifier: " + versionIdentifier);
-        minecraftVersion = target.group(1);
+        this.loader = loader;
+        this.minecraftVersion = minecraftVersion;
         try {
             feedUrl = new URL(feedBaseUrl, minecraftVersion + ".json");
         } catch (MalformedURLException e) {
@@ -81,9 +81,29 @@ public final class VersionChecker implements AutoCloseable {
         return availableUpdate;
     }
 
+    public boolean isSkipped(@NotNull ReleaseManifest.Release release) {
+        return CoreData.isUpdateSkipped(minecraftVersion, loader, release);
+    }
+
+    /** Holds the recommendation stable while validating and saving the displayed tag. */
+    public @NotNull ApiStatus skip(@NotNull String tag, long lifecycleGeneration) throws IOException {
+        // Wait for the persistence writer before admitting a mutation from this HTTP lifecycle.
+        synchronized (CoreData.class) {
+            synchronized (this) {
+                if (closed || !AE2Controller.isCurrentHTTPLifecycle(lifecycleGeneration))
+                    return ApiStatus.SERVER_STOPPING;
+                ReleaseManifest.Release release = availableUpdate;
+                if (!Config.INSTANCE.general.checkForUpdates || release == null || !release.tag.equals(tag))
+                    return ApiStatus.UPDATE_CHANGED;
+                CoreData.skipUpdate(minecraftVersion, loader, release);
+                return ApiStatus.OK;
+            }
+        }
+    }
+
     private void refresh(CompletableFuture<ReleaseManifest.Release> result) {
         try {
-            ReleaseManifest.Release release = fetch().findUpdate(currentVersion, versionIdentifier);
+            ReleaseManifest.Release release = fetch().findUpdate(currentVersion, loader);
             synchronized (this) {
                 if (closed) return;
                 ReleaseManifest.Release previous = availableUpdate;

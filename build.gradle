@@ -1,3 +1,14 @@
+import javax.inject.Inject
+import org.gradle.api.file.FileSystemOperations
+
+buildscript {
+    // Native builds already own their IDEA sync integration; this dependency is standalone core only.
+    if (project == rootProject) {
+        repositories { gradlePluginPortal() }
+        dependencies { classpath 'gradle.plugin.org.jetbrains.gradle.plugin.idea-ext:gradle-idea-ext:1.3' }
+    }
+}
+
 plugins {
     id 'java-library'
     // Deliberately no version: when this module is included as a submodule of an integration branch that
@@ -13,6 +24,8 @@ plugins {
 // pin different engine versions (modern eclipse 4.31, legacy 4.19 via Blowdryer), so letting a parent
 // build format this submodule would rewrite it back and forth depending on which worktree it sits in.
 if (project == rootProject) {
+    apply plugin: 'org.jetbrains.gradle.plugin.idea-ext'
+    apply from: 'gradle/idea-settings.gradle'
     apply plugin: 'com.diffplug.spotless'
 
     spotless {
@@ -35,6 +48,44 @@ if (project == rootProject) {
 
 group = 'pl.kuba6000.ae2webintegration'
 version = '1.0-SNAPSHOT'
+
+def npmCommand = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows') ? 'npm.cmd' : 'npm'
+def installFrontendDependencies = tasks.register('installFrontendDependencies', Exec) {
+    group = 'build'
+    description = 'Installs the locked build-time frontend tools.'
+    workingDir = projectDir
+    commandLine npmCommand, 'ci', '--include=dev', '--no-audit', '--no-fund'
+    inputs.files('package.json', 'package-lock.json')
+    outputs.dir('node_modules')
+}
+def compiledFrontendResources = layout.buildDirectory.dir('generated/frontend')
+def compileFrontend = tasks.register('compileFrontend', Exec) {
+    group = 'build'
+    description = 'Compiles the TypeScript frontend into packaged JavaScript resources.'
+    dependsOn installFrontendDependencies
+    workingDir = projectDir
+    commandLine npmCommand, 'run', 'build', '--', layout.buildDirectory.get().asFile.absolutePath
+    inputs.dir('src/main/typescript')
+    inputs.files('package.json', 'package-lock.json', 'tsconfig.json', 'tools/build-frontend.mjs')
+    outputs.dir(compiledFrontendResources)
+}
+sourceSets.main.resources.srcDir(compileFrontend)
+
+abstract class FrontendResourceFiles {
+    @Inject
+    abstract FileSystemOperations getOperations()
+}
+def frontendResourceFiles = objects.newInstance(FrontendResourceFiles)
+tasks.named('processResources') {
+    // Copy's stale-output tracking can be lost when switching the core checkout or build directory.
+    // Recreate this resource subtree whenever processing runs, including all static web assets.
+    doFirst { task ->
+        def assetResources = new File(task.destinationDir, 'assets')
+        frontendResourceFiles.operations.delete {
+            delete(assetResources)
+        }
+    }
+}
 
 repositories {
     mavenCentral()
@@ -104,7 +155,19 @@ test {
         filter {
             includeTestsMatching '*ApiRoutingHttpTest'
             includeTestsMatching '*ServerLifecycleHttpTest'
+            includeTestsMatching '*IconDeliveryHttpTest'
             includeTestsMatching '*RequestCompletionTest'
+            includeTestsMatching '*IconPackTest'
+            includeTestsMatching '*OutputSnapshotTest'
+            includeTestsMatching '*TrackingStatisticsResponseTest'
+            includeTestsMatching '*ItemIdentityRequestTest'
+            includeTestsMatching '*GridIdentityRegistryTest'
+            includeTestsMatching '*DimensionalCoordsTest'
+            includeTestsMatching '*GridAccessSourceTest'
+            includeTestsMatching '*CraftingPlanRequestLifecycleTest'
+            includeTestsMatching '*CraftingOptionsHttpTest'
+            includeTestsMatching '*CpuPauseHttpTest'
+            includeTestsMatching '*UpdateSkipHttpTest'
         }
         shouldRunAfter tasks.named('test')
     }
@@ -128,6 +191,7 @@ tasks.register('testNightConfig383', Test) {
         includeTestsMatching '*ConfigDirectoryTest'
         includeTestsMatching '*CommandProcessorTest'
         includeTestsMatching '*ServerLifecycleHttpTest'
+        includeTestsMatching '*IconDeliveryHttpTest'
     }
     shouldRunAfter tasks.named('test')
 }
@@ -149,6 +213,24 @@ tasks.withType(JavaCompile).configureEach {
     sourceCompatibility = JavaVersion.VERSION_17
     // Jabel enables newer syntax; --release keeps both JDK API usage and bytecode at Java 8.
     options.release = 8
+}
+
+// Client tools share the canonical key implementation without bundling the server or web assets.
+def iconPackJar = tasks.register('iconPackJar', Jar) {
+    archiveClassifier = 'icon-pack'
+    from(sourceSets.main.output) {
+        include 'pl/kuba6000/ae2webintegration/core/identity/StableKey*.class'
+        // Only portable format types: server response mappings depend on the live identity registry.
+        include 'pl/kuba6000/ae2webintegration/core/icons/IconPack*.class'
+        include 'pl/kuba6000/ae2webintegration/core/icons/PackFormat*.class'
+        include 'pl/kuba6000/ae2webintegration/core/icons/export/**'
+        include 'pl/kuba6000/ae2webintegration/core/utils/TempDirectories.class'
+    }
+}
+configurations.create('iconPackElements') {
+    canBeResolved = false
+    canBeConsumed = true
+    outgoing.artifact(iconPackJar)
 }
 
 // This submodule is pure Java (no Minecraft/Forge references).

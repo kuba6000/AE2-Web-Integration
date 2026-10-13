@@ -9,12 +9,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import com.github.bsideup.jabel.Desugar;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.DeleteCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
@@ -26,6 +30,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummary;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 class CraftingPlanRequestLifecycleTest extends GridTestScope {
 
@@ -36,7 +41,11 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         TestCraftingGrid crafting = new TestCraftingGrid(null);
         TestGrid grid = new TestGrid(GRID_KEY, crafting);
         GridData gridData = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid));
-        int id = gridData.addJob(CompletableFuture.completedFuture(new TestCraftingJob()));
+        int id = gridData.addJob(
+            CompletableFuture.completedFuture(new TestCraftingJob()),
+            TestGridFixtures.planOutput(),
+            new CraftingOptions(false, false),
+            false);
 
         assertStatus("OK", submit(grid, id));
         assertStatus("INVALID_ID", submit(grid, id));
@@ -47,7 +56,11 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         TestCraftingGrid crafting = new TestCraftingGrid("Submission failed");
         TestGrid grid = new TestGrid(GRID_KEY, crafting);
         int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(CompletableFuture.completedFuture(new TestCraftingJob()));
+            .addJob(
+                CompletableFuture.completedFuture(new TestCraftingJob()),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
 
         assertStatus("FAIL", submit(grid, id));
         assertStatus("FAIL", submit(grid, id));
@@ -58,7 +71,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         TestGrid grid = new TestGrid(GRID_KEY, new TestCraftingGrid(null));
         CompletableFuture<IAECraftingJob> pending = new CompletableFuture<>();
         int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(pending);
+            .addJob(pending, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         DeleteCraftingPlan request = new DeleteCraftingPlan();
         assertTrue(
             request
@@ -85,7 +98,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
     void pollingPendingCalculationSucceedsButSubmissionConflicts() {
         TestGrid grid = new TestGrid(GRID_KEY, new TestCraftingGrid(null));
         int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(new CompletableFuture<>());
+            .addJob(new CompletableFuture<>(), TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         GetCraftingPlan poll = new GetCraftingPlan();
         assertTrue(
             poll.init(TestGridFixtures.context(-1, "grid=" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "&id=" + id)));
@@ -95,7 +108,7 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
             poll.getResponse()
                 .httpStatus());
         assertFalse(
-            JsonParser.parseString(poll.getJSON())
+            new JsonParser().parse(poll.getJSON())
                 .getAsJsonObject()
                 .getAsJsonObject("data")
                 .get("isDone")
@@ -111,6 +124,72 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
             HttpURLConnection.HTTP_CONFLICT,
             submit.getResponse()
                 .httpStatus());
+    }
+
+    @Test
+    void calculatedResourceSerializesCamelCaseIdentityAndMeasurements() {
+        GetCraftingPlan.PlanData.JobItem row = new GetCraftingPlan.PlanData.JobItem(
+            "example",
+            "resource",
+            "Resource",
+            2,
+            7,
+            ResourceType.ITEM,
+            8,
+            12,
+            3,
+            4,
+            0.5,
+            null,
+            null);
+        JsonObject json = new JsonParser().parse(
+            GSONUtils.GSON_BUILDER.create()
+                .toJson(row))
+            .getAsJsonObject();
+        assertEquals(
+            "resource",
+            json.get("registryPath")
+                .getAsString());
+        assertEquals(
+            "Resource",
+            json.get("displayName")
+                .getAsString());
+        assertEquals(
+            8,
+            json.get("stored")
+                .getAsLong());
+        assertEquals(
+            12,
+            json.get("requested")
+                .getAsLong());
+        assertEquals(
+            3,
+            json.get("missing")
+                .getAsLong());
+        assertEquals(
+            4,
+            json.get("steps")
+                .getAsLong());
+        assertEquals(
+            0.5,
+            json.get("usedPercent")
+                .getAsDouble());
+        assertEquals(
+            "example",
+            json.get("registryNamespace")
+                .getAsString());
+        assertEquals(
+            2,
+            json.get("componentCount")
+                .getAsInt());
+        assertEquals(
+            7,
+            json.get("damage")
+                .getAsInt());
+        assertFalse(json.has("itemId"));
+        assertFalse(json.has("itemName"));
+        assertFalse(json.has("itemid"));
+        assertFalse(json.has("itemname"));
     }
 
     private static String submit(TestGrid grid, int id) {
@@ -161,7 +240,8 @@ class CraftingPlanRequestLifecycleTest extends GridTestScope {
         }
 
         @Override
-        public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey key, long amount) {
+        public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey key, long amount,
+            @NotNull CraftingOptions options) {
             throw new UnsupportedOperationException();
         }
 

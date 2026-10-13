@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" shape-rendering="crispEdges">
+    <style>
+        .frame {
+            --outline: #161616;
+            --highlight: #fafafd;
+            --shadow: #777680;
+            --fill: #c6c6c6;
+        }
+        #info:target + .frame {
+            --outline: #1b2430;
+            --highlight: #fff;
+            --shadow: #8798ac;
+            --fill: #e8eef5;
+        }
+        @media (prefers-color-scheme: dark) {
+            .frame {
+                --highlight: #766e83;
+                --shadow: #26232e;
+                --fill: #45434e;
+            }
+            #info:target + .frame {
+                --outline: #141b25;
+                --highlight: #6e829c;
+                --shadow: #263141;
+                --fill: #3d4654;
+            }
+        }
+    </style>
+    <g id="info" />
+    <g class="frame">
+        <path fill="var(--outline)" d="M4 0H20V1H22V2H23V4H24V20H23V22H22V23H20V24H4V23H2V22H1V20H0V4H1V2H2V1H4Z" />
+        <path fill="var(--highlight)" d="M4 1H20V2H22V4H23V20H22V22H20V23H4V22H2V20H1V4H2V2H4Z" />
+        <path fill="var(--shadow)" d="M20 2H22V4H23V20H22V22H20V23H4V22H2V20H4V21H20V20H21V4H20Z" />
+        <path fill="var(--fill)" d="M5 3H19V4H20V5H21V19H20V20H19V21H5V20H4V19H3V5H4V4H5Z" />
+    </g>
+</svg>

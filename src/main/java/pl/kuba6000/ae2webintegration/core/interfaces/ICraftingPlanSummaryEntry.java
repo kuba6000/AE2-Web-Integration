@@ -10,7 +10,7 @@ public interface ICraftingPlanSummaryEntry {
 
     long web$getCraftAmount();
 
-    /** Crafting steps; GTNH-only metric — default 0 on modern AE2. */
+    /** Per-resource crafting steps; default 0 when the platform does not support this metric. */
     default long web$getCraftSteps() {
         return 0L;
     }

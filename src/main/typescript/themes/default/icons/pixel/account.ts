@@ -1,0 +1,2 @@
+// Original interface artwork. SPDX-License-Identifier: LGPL-3.0-or-later.
+export const powerIcon = `<svg fill="currentColor" class="theme-icon" shape-rendering="crispEdges" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 1h2v11h-2zM7 4h2v2H7v1H5v2H4v2H3v6h1v2h2v1h2v1h8v-1h2v-1h2v-2h1v-6h-1V9h-1V7h-2V6h-2V4h2v1h2v2h2v2h1v2h1v6h-1v2h-2v2h-2v1h-2v1H8v-1H6v-1H4v-2H2v-2H1v-6h1V9h1V7h2V5h2z"/></svg>`;

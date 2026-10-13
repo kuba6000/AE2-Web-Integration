@@ -148,6 +148,12 @@ class UpdateReleaseFeedTest(unittest.TestCase):
         result = self.update([release("1.2.0+build.2-forge-1.7.10")])
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("1.2.0+build.2", self.feed()["releases"]["stable"]["newest"])
+        before = self.git("rev-parse", "HEAD")
+        result = self.update([release("1.2.0+build.10-forge-1.7.10",
+                                      published_at="2026-09-08T12:00:00Z")])
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(before, self.git("rev-parse", "HEAD"))
+        self.assertEqual("1.2.0+build.2", self.feed()["releases"]["stable"]["newest"])
 
     def test_invalid_semver_suffix_is_not_published(self):
         for version in ("1.2.0-beta..2", "1.2.0-beta.02", "1.2.0+build..2"):

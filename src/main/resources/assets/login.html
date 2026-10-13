@@ -1,257 +1,161 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&family=Roboto:wght@300;400&display=swap');
-        *,html,body{
-            margin: 0;
-            padding: 0;
-            font-family: "Montserrat", sans-serif;
-            font-optical-sizing: auto;
-            font-style: normal;
-            color: #e0e0e0;
-            font-weight: 400;
-            list-style-position: inside;
-        }
-        b{
-            font-weight: 500;
-        }
-        body{
-            background-color: #101219;
-            color: #e0e0e0;
-        }
-        html,body{
-            height: 100%;
-            width: 100%;
-        }
-        body>h1{
-            text-align: center;
-            letter-spacing: 10px;
-            font-weight: 800;
-            color: #fff;
-            font-size: 2.5em;
-        }
-        footer {
-            position: fixed;
-            Width: 100%;
-            bottom: 0;
-            background-color: #9292926b;
-            padding: 10px;
-            transition: 0.2s;
-        }
-
-        footer:hover{
-            background-color: #929292;
-        }
-
-        a{
-            color: #80cbc4;
-            transition: 0.2s;
-        }
-
-        a:hover{
-            color: #a7ffeb;
-            text-decoration: underline;
-        }
-
-        #maincontent{
-            width: 90%;
-            height: 90%;
-            margin: 0 auto;
-            display: flex;
-        }
-
-        #main{
-            padding: 20px;
-            margin: auto;
-            background-color: #222736;
-            border: black solid 1px;
-            border-radius: 5px;
-
-        }
-
-        #mainrow
-        {
-            display: flex;
-            flex-direction: row;
-        }
-
-        #maininfo{
-            text-align: center;
-        }
-
-        input, select {
-            background-color: #2b3555;
-            accent-color: #9b59b6;
-            border: 0;
-            padding: 5px;
-            border-radius: 5px;
-            margin-bottom: 10px;
-            margin-top: 3px;
-        }
-
-        input[type='submit'], button{
-            background-color: #292f47;
-            border: 0;
-            border-radius: 5px;
-            padding: 5px;
-            transition: 0.2s;
-        }
-
-        input[type='submit']:hover, button:hover{
-            background-color: #363e5e;
-            cursor: pointer;
-        }
-
-        input[type='checkbox']{
-            transform: translateY(1px);
-        }
-
-        form {
-            width: 25vw;
-            text-align: center;
-            padding: 20px;
-            border-right: rgb(216, 216, 216) dashed 1px;
-            border-left: rgb(216, 216, 216) dashed 1px;
-            border-collapse: collapse;
-        }
-
-        #cookiemonster{
-            z-index: 1000;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            display: flex;
-            backdrop-filter: blur(5px);
-        }
-        #cookiemonster > section{
-            margin: auto auto;
-            display: flex;
-            flex-direction: column;
-            text-align: center;
-            background-color: #222736;
-            border: black solid 1px;
-            border-radius: 5px;
-            padding: 20px;
-        }
-        #cookiemonster > section > *{
-            margin: 3px;
-        }
-
-        h2{
-            font-weight: bold;
-        }
-    </style>
-    <link rel="icon" type="image/x-icon" href="favicon.ico" />
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <title>AE2</title>
-</head>
-<body>
-<h1>UNIVERSAL WEB TERMINAL</h1>
-<section id="cookiemonster" style="display: none;">
-    <section>
-        <h2>Cookie Notice 🍪</h2>
-        <p>Before you continue, please note that this website uses cookies to:</p>
-        <ul>
-            <li>Save your terminal preferences</li>
-            <li>Enable login functionality</li>
-            <li>Improve your overall experience</li>
-        </ul>
-        <p>By clicking "Accept", you consent to our use of cookies.</p>
-        <button onclick="acceptCookies();">Accept Cookies</button>
-    </section>
-</section>
-<section id="maincontent">
-    <section id="main">
-        <section id="maininfo">
-
-        </section>
-        <section id="mainrow">
-            <form action="" method="POST" id="formlogin">
-                <b>This service requires authentication</b><br><br>
-                <label for="username">Username</label><br>
-                <input type="text" id="username" name="username" placeholder="Enter username" required><br>
-                <label for="password">Password</label><br>
-                <input type="password" id="password" name="password" placeholder="Enter password" required><br>
-                <input type="checkbox" id="remember" name="remember"> <label for="remember">Remember me for 7 days</label><br><br><br>
-                <input type="submit" value="Enter">
-            </form>
-            <form action="" method="POST" id="formregister">
-                <b>Or register</b><br><br>
-                <label for="rusername">Username (in-game)</label><br>
-                <input type="text" id="rusername" name="register" placeholder="Enter username" required autocomplete="off"><br>
-                <label for="rpassword">Password</label><br>
-                <input type="password" id="rpassword" name="password" placeholder="Enter password" required autocomplete="off"><br>
-                <input type="checkbox" id="remainder" name="remainder" required autocomplete="off"> <label for="remainder">I understand that the password entered above<br> will be visible to the server owner once continued!</label><br><br>
-                <input type="submit" value="Continue">
-            </form>
-        </section>
-    </section>
-</section>
-
-<script>
-
-    const IS_PUBLIC_MODE = _REPLACE_ME_IS_PUBLIC_MODE; // Replace with your actual public mode variable
-
-    if (!IS_PUBLIC_MODE){
-        document.getElementById("formregister").style.display = "none"; // Hide the registration form in public mode
-        document.getElementById("username").value = "Admin";
-        document.getElementById("username").readOnly = true;
-    }
-
-    var url = new URL(window.location.href);
-    if (url.searchParams.get("NOT_ONLINE") !== null){
-        document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>You have to be on the server (online) to perform this action!</b><br><br>";
-        window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
-    } else if (url.searchParams.get("INVALID_PASSWORD") !== null) {
-        document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>Invalid password!</b><br><br>";
-        window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
-    } else if (url.searchParams.get("INVALID_USER") !== null) {
-        document.getElementById("maininfo").innerHTML = "<b style='color: #db4848;'>Invalid username!</b><br><br>";
-        window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
-    } else if (url.searchParams.get("confirmregistration") !== null) {
-        document.getElementById("maininfo").innerHTML = "<b style='color: #78b83d;'>Please enter this command in the game to finish registration:<br>/ae2webintegration auth " + url.searchParams.get("token") + "</b><br><br>";
-        window.history.replaceState(null, document.title, window.location.pathname); // Clear the URL parameter
-    }
-
-    function acceptCookies(){
-        document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7; // Set cookie for 7 days
-        document.getElementById("cookiemonster").style.display = "none"; // Hide the cookie monster section
-    }
-
-    function getCookie(cname) {
-        let name = cname + "=";
-        let ca = document.cookie.split(';');
-        for(let i = 0; i < ca.length; i++) {
-            let c = ca[i];
-            while (c.charAt(0) == ' ') {
-                c = c.substring(1);
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="color-scheme" content="light" />
+        <style>
+            html {
+                background: #262830;
+                color: #eeeaf4;
             }
-            if (c.indexOf(name) == 0) {
-                return c.substring(name.length, c.length);
-            }
-        }
-        return "";
-    }
-
-    if (getCookie("cookiesAccepted") !== "true"){
-        document.getElementById("cookiemonster").style.display = "flex"; // Show the cookie monster section
-    }
-    else {
-        document.cookie = "cookiesAccepted=true; max-age=" + 60 * 60 * 24 * 7;
-    }
-
-</script>
-
-<br><br>
-<footer>
-    This service is hosted using <a href="https://github.com/kuba6000/AE2-Web-Integration">AE2 Web Integration</a> Made by <a href="https://github.com/kuba6000">@kuba6000</a>
-</footer>
-</body>
+        </style>
+        <link rel="stylesheet" href="./assets/web/login.css" />
+        <link rel="icon" href="./favicon.ico" />
+        <script type="module" src="./assets/web/login.js"></script>
+        <title>Sign in · AE2 Web Integration</title>
+    </head>
+    <body>
+        <main class="login-card">
+            <header>
+                <div class="brand">
+                    <svg class="login-icon brand-mark" aria-hidden="true" focusable="false">
+                        <use href="./assets/web/login-icons.svg#brand" />
+                    </svg>
+                    <p>AE2 <span>Web Integration</span></p>
+                </div>
+                <h1>Welcome to your terminal</h1>
+                <p class="intro">Sign in to access your networks.</p>
+            </header>
+            <p id="maininfo" class="notice error" role="alert" hidden></p>
+            <p id="bootstrapStatus" role="status">Loading server settings…</p>
+            <button id="bootstrapRetry" type="button" hidden>Retry</button>
+            <noscript><p>Enable JavaScript to sign in to the terminal.</p></noscript>
+            <section id="mainrow" hidden>
+                <div id="formSwitch" class="form-switch" role="group" aria-label="Account access" hidden>
+                    <button id="loginSwitch" type="button" aria-pressed="true">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#login" /></svg
+                        ><span>Log in</span>
+                    </button>
+                    <button id="registerSwitch" type="button" aria-pressed="false">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#register" /></svg
+                        ><span>Register</span>
+                    </button>
+                </div>
+                <form action="" method="POST" id="formlogin" aria-label="Log in">
+                    <label for="username">Username</label>
+                    <input
+                        id="username"
+                        name="username"
+                        autocomplete="username"
+                        placeholder="Enter username"
+                        required
+                    />
+                    <label for="password">Password</label>
+                    <div class="password-field">
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            autocomplete="current-password"
+                            placeholder="Enter password"
+                            required
+                        />
+                        <button type="button" data-password="password" aria-label="Show password" aria-pressed="false">
+                            <svg class="login-icon" aria-hidden="true" focusable="false">
+                                <use href="./assets/web/login-icons.svg#eye" /></svg
+                            ><svg class="eye-slash" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path
+                                    d="M3 1h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h-2v-2h-2v-2h-2v-2h-2v-2h-2v-2H9v-2H7V7H5V5H3z"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                    <label class="check"
+                        ><input type="checkbox" id="remember" name="remember" /> Remember me for 7 days</label
+                    >
+                    <button class="primary" type="submit">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#login" /></svg
+                        ><span>Log in</span>
+                    </button>
+                </form>
+                <form action="" method="POST" id="formregister" aria-label="Register" hidden>
+                    <p class="form-help">
+                        Join the Minecraft server first. You’ll confirm your account with an in-game command.
+                    </p>
+                    <label for="rusername">Username (in-game)</label>
+                    <input
+                        id="rusername"
+                        name="register"
+                        autocomplete="username"
+                        placeholder="Enter username"
+                        required
+                    />
+                    <label for="rpassword">Password</label>
+                    <div class="password-field">
+                        <input
+                            type="password"
+                            id="rpassword"
+                            name="password"
+                            autocomplete="new-password"
+                            placeholder="Create a password"
+                            aria-describedby="passwordHelp"
+                            required
+                        />
+                        <button type="button" data-password="rpassword" aria-label="Show password" aria-pressed="false">
+                            <svg class="login-icon" aria-hidden="true" focusable="false">
+                                <use href="./assets/web/login-icons.svg#eye" /></svg
+                            ><svg class="eye-slash" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path
+                                    d="M3 1h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h-2v-2h-2v-2h-2v-2h-2v-2h-2v-2H9v-2H7V7H5V5H3z"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                    <p id="passwordHelp" class="form-help">
+                        Use a password unique to this server. Its administrator controls this service.
+                    </p>
+                    <button class="primary" type="submit">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#register" /></svg
+                        ><span>Continue</span>
+                    </button>
+                </form>
+                <section id="confirmation" hidden aria-labelledby="confirmationTitle">
+                    <h2 id="confirmationTitle">Confirm in Minecraft</h2>
+                    <p>Run this command in the game to finish registration, then return here to log in.</p>
+                    <label for="registrationCommand">Registration command</label>
+                    <textarea id="registrationCommand" readonly rows="3" spellcheck="false"></textarea>
+                    <button id="copyCommand" type="button">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#copy" /></svg
+                        ><span>Copy command</span>
+                    </button>
+                    <p id="copyStatus" class="form-help" role="status"></p>
+                    <button id="confirmationDone" class="primary" type="button">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#login" /></svg
+                        ><span>Back to login</span>
+                    </button>
+                </section>
+            </section>
+            <footer>
+                <p class="cookie-notice">
+                    <svg class="login-icon" aria-hidden="true" focusable="false">
+                        <use href="./assets/web/login-icons.svg#cookie" /></svg
+                    ><span>
+                        This service uses cookies to keep you signed in and browser storage to save your interface
+                        preferences.</span
+                    >
+                </p>
+                <p class="credits">
+                    Powered by <a href="https://github.com/kuba6000/AE2-Web-Integration">AE2 Web Integration</a><br />
+                    Created by <a href="https://github.com/kuba6000">kuba6000</a>
+                </p>
+            </footer>
+        </main>
+    </body>
 </html>

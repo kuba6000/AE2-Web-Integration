@@ -4,9 +4,14 @@ import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 public class GridData {
 
@@ -18,11 +23,12 @@ public class GridData {
 
     private final CraftingPlanRegistry craftingPlans = new CraftingPlanRegistry(System::nanoTime);
 
-    public int addJob(Future<IAECraftingJob> job) {
-        return craftingPlans.add(job);
+    public int addJob(@NotNull Future<IAECraftingJob> job, @NotNull ResourceSnapshot finalOutput,
+        @NotNull CraftingOptions options, boolean autoStart) {
+        return craftingPlans.add(job, finalOutput, options, autoStart);
     }
 
-    public Future<IAECraftingJob> getJob(int jobId) {
+    public @Nullable CraftingPlanRegistry.Entry getJob(int jobId) {
         return craftingPlans.find(jobId);
     }
 

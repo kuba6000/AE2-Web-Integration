@@ -15,12 +15,18 @@ import java.util.Set;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class GridIdentityRegistryTest {
@@ -94,6 +100,37 @@ class GridIdentityRegistryTest {
         GridIdentityRegistry restarted = new GridIdentityRegistry(file);
         assertEquals(tracked, restarted.findIdentity(controller(1)));
         assertTrue(TestGridFixtures.isTracked(restarted, tracked));
+    }
+
+    @Test
+    void mergePrefersNamedUntrackedIdentityAndPreservesNameAfterRestart() throws Exception {
+        File file = directory.resolve("named-merge.json")
+            .toFile();
+        GridIdentityRegistry registry = new GridIdentityRegistry(file);
+        StableKey first = resolve(registry, controller(1));
+        StableKey second = resolve(registry, controller(2));
+        StableKey named = first.toString()
+            .compareTo(second.toString()) > 0 ? first : second;
+        GridPersistentData data = registry.getPersistentData(named);
+        assertNotNull(data);
+        data.getSettings()
+            .setName("Factory");
+        registry.saveIfDirty();
+        assertEquals(named, resolve(registry, controller(1), controller(2)));
+        GridPersistentData loaded = new GridIdentityRegistry(file).getPersistentData(named);
+        assertNotNull(loaded);
+        assertEquals(
+            "Factory",
+            loaded.getSettings()
+                .getName());
+        assertFalse(
+            loaded.getSettings()
+                .isTracked());
+        loaded.getSettings()
+            .setName("");
+        assertTrue(
+            loaded.getSettings()
+                .isDefault());
     }
 
     @Test
@@ -246,16 +283,38 @@ class GridIdentityRegistryTest {
     }
 
     @Test
-    void malformedFilesIncludingDuplicateKeysFailWithoutOverwritingTheirSource() throws Exception {
+    void malformedFilesIncludingDuplicateKeysAreBackedUpAndReplacedWithAnEmptyRegistry() throws Exception {
         String record = "\"" + StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA")
-            + "\":{\"controllers\":[{\"dimid\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{\"isTracked\":true}}";
-        for (String invalid : Arrays.asList("", "null", "{", "{" + record + "," + record + "}")) {
-            Path file = directory.resolve("invalid.json");
+            + "\":{\"controllers\":[{\"dimensionId\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{\"isTracked\":true}}";
+        String incompleteRecord = "\"AQEBAQEBAQEBAQEBAQEBAQ\":{\"controllers\":[{}],\"settings\":{}}";
+        for (String invalid : Arrays
+            .asList("", "null", "{", "{" + record + "," + record + "}", "{" + record + "," + incompleteRecord + "}")) {
+            Path file = Files.createTempDirectory(directory, "invalid-")
+                .resolve("grid-identities.json");
             byte[] original = invalid.getBytes(StandardCharsets.UTF_8);
             Files.write(file, original);
-            assertThrows(IOException.class, () -> new GridIdentityRegistry(file.toFile()));
-            assertArrayEquals(original, Files.readAllBytes(file));
+            GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+            assertTrue(registry.isInitialized());
+            assertNull(registry.findIdentity(controller(1)));
+            assertEquals("{}", new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+            assertBackupContains(file, original);
+            StableKey key = resolve(registry, controller(1));
+            assertNotNull(key);
+            assertEquals(key, new GridIdentityRegistry(file.toFile()).findIdentity(controller(1)));
+            assertBackupContains(file, original);
         }
+    }
+
+    @Test
+    void failedReplacementLeavesTheInvalidSourceAndItsBackupIntact() throws Exception {
+        Path file = directory.resolve("grid-identities.json");
+        byte[] original = "{".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, original);
+        Files.createDirectory(directory.resolve("grid-identities.json.tmp"));
+
+        assertThrows(IOException.class, () -> new GridIdentityRegistry(file.toFile()));
+        assertArrayEquals(original, Files.readAllBytes(file));
+        assertBackupContains(file, original);
     }
 
     @Test
@@ -277,7 +336,7 @@ class GridIdentityRegistryTest {
         Path file = directory.resolve("default-settings.json");
         StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         String json = "{\"" + key
-            + "\":{\"controllers\":[{\"dimid\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{}}}";
+            + "\":{\"controllers\":[{\"dimensionId\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{}}}";
         Files.write(file, json.getBytes(StandardCharsets.UTF_8));
         GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
         assertEquals(key, registry.findIdentity(controller(1)));
@@ -288,6 +347,110 @@ class GridIdentityRegistryTest {
                 .isDefault());
         TestGridFixtures.setTracked(registry, key, true);
         assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
+    }
+
+    @Test
+    @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
+    void currentDimensionEncodingSurvivesSaveAndMatchesHttp() throws Exception {
+        Path file = directory.resolve("coordinates.json");
+        StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        String saved = "{\"" + key
+            + "\":{\"controllers\":["
+            + "{\"dimensionId\":\"-1\",\"x\":-32,\"y\":64,\"z\":120},"
+            + "{\"dimensionId\":\"minecraft:overworld\",\"x\":-32,\"y\":64,\"z\":120}],\"settings\":{}}}";
+        Files.write(file, saved.getBytes(StandardCharsets.UTF_8));
+        DimensionalCoords legacy = new DimensionalCoords(-1, -32, 64, 120);
+        DimensionalCoords modern = new DimensionalCoords("minecraft:overworld", -32, 64, 120);
+        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+        assertEquals(key, registry.findIdentity(legacy));
+        assertEquals(key, registry.findIdentity(modern));
+        TestGridFixtures.setTracked(registry, key, true);
+        JsonObject stored = new JsonParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8))
+            .getAsJsonObject()
+            .getAsJsonObject(key.toString());
+        for (com.google.gson.JsonElement value : stored.getAsJsonArray("controllers")) {
+            assertTrue(
+                value.getAsJsonObject()
+                    .has("dimensionId"));
+            assertFalse(
+                value.getAsJsonObject()
+                    .has("dimid"));
+        }
+        GridIdentityRegistry restarted = new GridIdentityRegistry(file.toFile());
+        assertEquals(key, restarted.findIdentity(legacy));
+        assertEquals(key, restarted.findIdentity(modern));
+        assertTrue(TestGridFixtures.isTracked(restarted, key));
+        JsonObject http = new JsonParser().parse(
+            GSONUtils.GSON_BUILDER.create()
+                .toJson(modern))
+            .getAsJsonObject();
+        assertEquals(
+            "minecraft:overworld",
+            http.get("dimensionId")
+                .getAsString());
+        assertFalse(http.has("dimid"));
+    }
+
+    @Test
+    @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
+    void coordinatesWithoutADimensionAreBackedUpBeforeStartingANewRegistry() throws Exception {
+        Path file = directory.resolve("incomplete-coordinates.json");
+        String document = "{\"AAAAAAAAAAAAAAAAAAAAAA\":{\"controllers\":[{\"x\":1,\"y\":0,\"z\":0}],\"settings\":{}}}";
+        Files.write(file, document.getBytes(StandardCharsets.UTF_8));
+
+        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+        assertTrue(registry.isInitialized());
+        assertNull(registry.findIdentity(controller(1)));
+        assertBackupContains(file, document.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "0", "minecraft:overworld" })
+    @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
+    void releasedDimensionFieldPreservesIdentityAndSettingsAndIsRewrittenOnSave(String dimension) throws Exception {
+        Path file = directory.resolve("released-identities.json");
+        StableKey key = StableKey.parse("DtK3pQIgqQ-xyPjLOqQW9A");
+        String document = "{\"" + key
+            + "\":{\"controllers\":[{\"dimid\":\""
+            + dimension
+            + "\",\"x\":-643,\"y\":4,\"z\":-907}],\"settings\":{\"isTracked\":true}}}";
+        Files.write(file, document.getBytes(StandardCharsets.UTF_8));
+
+        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+        DimensionalCoords controller = new DimensionalCoords(dimension, -643, 4, -907);
+        assertEquals(key, registry.findIdentity(controller));
+        assertTrue(TestGridFixtures.isTracked(registry, key));
+        assertEquals(document, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+
+        registry.saveIfDirty();
+        JsonObject saved = new JsonParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8))
+            .getAsJsonObject()
+            .getAsJsonObject(key.toString())
+            .getAsJsonArray("controllers")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            dimension,
+            saved.get("dimensionId")
+                .getAsString());
+        assertFalse(saved.has("dimid"));
+        GridIdentityRegistry restarted = new GridIdentityRegistry(file.toFile());
+        assertEquals(key, restarted.findIdentity(controller));
+        assertTrue(TestGridFixtures.isTracked(restarted, key));
+
+        DimensionalCoords apiCoordinates = GSONUtils.GSON_BUILDER.create()
+            .fromJson("{\"dimid\":\"" + dimension + "\",\"x\":-643,\"y\":4,\"z\":-907}", DimensionalCoords.class);
+        assertNull(apiCoordinates.dimensionId(), "The storage alias must not affect API deserialization");
+    }
+
+    private static void assertBackupContains(Path file, byte[] original) throws IOException {
+        try (java.nio.file.DirectoryStream<Path> backups = Files
+            .newDirectoryStream(file.getParent(), file.getFileName() + ".corrupt-*.bak")) {
+            java.util.Iterator<Path> iterator = backups.iterator();
+            assertTrue(iterator.hasNext());
+            assertArrayEquals(original, Files.readAllBytes(iterator.next()));
+            assertFalse(iterator.hasNext(), "A successful restart must not create another backup");
+        }
     }
 
     private static StableKey resolve(GridIdentityRegistry registry, DimensionalCoords... positions) {

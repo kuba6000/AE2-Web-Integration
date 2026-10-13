@@ -1,12 +1,15 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
 
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.io.TempDir;
+
+import pl.kuba6000.ae2webintegration.core.utils.TempDirectories;
 
 /**
  * Deletes this test's {@link TempDir} before JUnit's own cleanup.
@@ -43,7 +46,7 @@ public class WindowsTempDirectoryCleanup implements AfterEachCallback {
         }
     }
 
-    private static void delete(Object value) {
+    private static void delete(Object value) throws IOException {
         if (value instanceof Path) {
             TempDirectories.deleteRecursively((Path) value);
         } else if (value instanceof File) {

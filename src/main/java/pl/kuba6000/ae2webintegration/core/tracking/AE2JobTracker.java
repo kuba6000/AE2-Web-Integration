@@ -15,7 +15,6 @@ import com.google.common.collect.MapMaker;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.api.JSON_Stack;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -55,14 +54,18 @@ public class AE2JobTracker {
 
     public static class JobTrackingInfo {
 
-        public volatile @NotNull JSON_Stack finalOutput;
+        public volatile @NotNull ResourceSnapshot finalOutput;
         public long timeStarted;
         public long timeDone;
         public HashMap<IAEKey, Long> timeSpentOn = new HashMap<>();
+        /** Detached metadata captured before completed measurements are published to HTTP readers. */
+        public final HashMap<IAEKey, ResourceSnapshot> resourceSnapshots = new HashMap<>();
         public HashMap<IAEKey, Long> startedWaitingFor = new HashMap<>();
         public HashMap<IAEKey, Long> craftedTotal = new HashMap<>();
         public HashMap<IAEKey, Long> waitingFor = new HashMap<>();
         public HashMap<IAEKey, ArrayList<Pair<Long, Long>>> itemShare = new HashMap<>();
+        /** Provider groups used for each output, retained after the active waiting intervals are removed. */
+        public final HashMap<IAEKey, HashSet<String>> resourceProviders = new HashMap<>();
         public HashMap<AEInterface, ArrayList<Pair<Long, Long>>> interfaceShare = new HashMap<>();
         public HashMap<AEInterface, Long> interfaceStarted = new HashMap<>();
         public HashMap<String, AEInterface> interfaceLookup = new HashMap<>();
@@ -71,7 +74,7 @@ public class AE2JobTracker {
         public boolean isDone = false;
         public boolean wasCancelled = false;
 
-        public JobTrackingInfo(@NotNull JSON_Stack finalOutput) {
+        public JobTrackingInfo(@NotNull ResourceSnapshot finalOutput) {
             this.finalOutput = finalOutput;
             this.timeStarted = System.currentTimeMillis();
         }
@@ -130,7 +133,8 @@ public class AE2JobTracker {
             if (data == null || !data.getSettings()
                 .isTracked()) return;
         }
-        JSON_Stack finalOutput = JSON_Stack.capture(grid, cpuCluster.web$getFinalOutput());
+        ResourceSnapshot finalOutput = ResourceSnapshot
+            .capture(grid, cpuCluster.web$getFinalOutput(), CoreEngine.getIconPack());
         if (finalOutput == null) {
             trackingInfoMap.remove(cpuCluster);
             return;
@@ -204,6 +208,8 @@ public class AE2JobTracker {
             IAEGenericStack[] condensedOutputs = details.web$getCondensedOutputs();
             for (IAEGenericStack out : condensedOutputs) {
                 IAEKey outKey = out.web$what();
+                info.resourceProviders.computeIfAbsent(outKey, k -> new HashSet<>())
+                    .add(aeInterface.name);
                 info.interfaceWaitingForLookup.computeIfAbsent(outKey, k -> new HashMap<>())
                     .putIfAbsent(aeInterface, itemList);
                 itemList.add(outKey);
@@ -239,10 +245,15 @@ public class AE2JobTracker {
         info.startedWaitingFor.clear();
         info.isDone = true;
         info.timeDone = now;
+        for (IAEKey resource : info.timeSpentOn.keySet()) {
+            info.resourceSnapshots.put(
+                resource,
+                ResourceSnapshot.capture(grid, resource, info.craftedTotal.get(resource), CoreEngine.getIconPack()));
+        }
         GridData gridData = GridData.getOrCreate(key);
         gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
         long durationMillis = info.timeDone - info.timeStarted;
-        long craftedAmount = info.finalOutput.quantity;
+        long craftedAmount = info.finalOutput.quantity();
         if (!Config.INSTANCE.general.publicMode
             && NotificationManager.shouldPostCraftingNotification(durationMillis, craftedAmount)) {
             // Native enumeration assigns the fallback CPU display ordinals used by the notification name.
@@ -252,7 +263,7 @@ public class AE2JobTracker {
                 new CraftingMessage(
                     key,
                     cpu.web$getName(),
-                    info.finalOutput.itemname,
+                    info.finalOutput.displayName(),
                     craftedAmount,
                     NotificationManager.formatDuration(durationMillis),
                     info.wasCancelled));

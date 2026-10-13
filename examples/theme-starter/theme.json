@@ -1,0 +1,9 @@
+{
+  "id": "resource-list",
+  "name": "Resource list example",
+  "version": "1.0.0",
+  "supportedModVersion": "1.2.x",
+  "views": ["home", "items"],
+  "entry": "theme.js",
+  "styles": ["theme.css"]
+}

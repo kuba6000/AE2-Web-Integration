@@ -8,7 +8,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /** Owns the runtime lifecycle of web-created crafting plans for one grid. */
 public final class CraftingPlanRegistry {
@@ -17,13 +22,21 @@ public final class CraftingPlanRegistry {
     private static final long RETENTION_NANOS = TimeUnit.MINUTES.toNanos(15);
     private static final long NOT_COMPLETED_OBSERVED = Long.MIN_VALUE;
 
-    private static final class Entry {
+    /** A calculation and its detached original request, retained and removed together. */
+    public static final class Entry {
 
-        private final Future<IAECraftingJob> plan;
+        public final @NotNull Future<IAECraftingJob> plan;
+        public final @NotNull ResourceSnapshot finalOutput;
+        public final @NotNull CraftingOptions options;
+        public final boolean autoStart;
         private final AtomicLong lastCompletedAccessNanos = new AtomicLong(NOT_COMPLETED_OBSERVED);
 
-        private Entry(Future<IAECraftingJob> plan) {
+        private Entry(@NotNull Future<IAECraftingJob> plan, @NotNull ResourceSnapshot finalOutput,
+            @NotNull CraftingOptions options, boolean autoStart) {
             this.plan = plan;
+            this.finalOutput = finalOutput;
+            this.options = options;
+            this.autoStart = autoStart;
         }
 
     }
@@ -36,14 +49,15 @@ public final class CraftingPlanRegistry {
         this.nanoClock = nanoClock;
     }
 
-    public int add(Future<IAECraftingJob> plan) {
+    public int add(@NotNull Future<IAECraftingJob> plan, @NotNull ResourceSnapshot finalOutput,
+        @NotNull CraftingOptions options, boolean autoStart) {
         int id = nextId.getAndIncrement();
-        plans.put(id, new Entry(plan));
+        plans.put(id, new Entry(plan, finalOutput, options, autoStart));
         plans.remove(id - MAX_PLANS);
         return id;
     }
 
-    public Future<IAECraftingJob> find(int id) {
+    public @Nullable Entry find(int id) {
         Entry entry = plans.get(id);
         if (entry == null) {
             return null;
@@ -51,7 +65,7 @@ public final class CraftingPlanRegistry {
         if (entry.plan.isDone()) {
             entry.lastCompletedAccessNanos.set(nanoClock.getAsLong());
         }
-        return entry.plan;
+        return entry;
     }
 
     public boolean cancel(int id) {

@@ -8,6 +8,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import org.jetbrains.annotations.NotNull;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -35,6 +37,26 @@ final class RegistrationTestFixture implements AutoCloseable {
     String begin(PlayerIdentity player, String password) throws Exception {
         IServerPlatform previousPlatform = AE2Controller.serverPlatform;
         AE2Controller.serverPlatform = new IServerPlatform() {
+
+            @Override
+            public @NotNull String getModVersion() {
+                return "test-version";
+            }
+
+            @Override
+            public @NotNull String getLoader() {
+                return "forge";
+            }
+
+            @Override
+            public @NotNull String getMinecraftVersion() {
+                return "1.20.1";
+            }
+
+            @Override
+            public @NotNull String getIconPackCompatibilityVersion() {
+                return "test-compatibility";
+            }
 
             @Override
             public UUID getOnlinePlayerUUID(String username) {

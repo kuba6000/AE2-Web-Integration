@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -11,6 +12,8 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
@@ -25,8 +28,10 @@ class CoreEngineMaintenanceTest {
         CoreEngine.onServerStopped();
         GridData gridData = GridData.getOrCreate(GRID_KEY);
         CompletableFuture<IAECraftingJob> plan = CompletableFuture.completedFuture(null);
-        int id = gridData.addJob(plan);
-        assertSame(plan, gridData.getJob(id));
+        int id = gridData.addJob(plan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
+        CraftingPlanRegistry.Entry entry = gridData.getJob(id);
+        assertNotNull(entry);
+        assertSame(plan, entry.plan);
 
         long afterRetention = System.nanoTime() + TimeUnit.MINUTES.toNanos(16);
         for (int i = 0; i < 100; i++) {
@@ -41,14 +46,16 @@ class CoreEngineMaintenanceTest {
         CoreEngine.onServerStopped();
         GridData gridData = GridData.getOrCreate(TestGridFixtures.key(900_302L));
         CompletableFuture<IAECraftingJob> pending = new CompletableFuture<>();
-        int id = gridData.addJob(pending);
+        int id = gridData.addJob(pending, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
 
         long muchLater = System.nanoTime() + TimeUnit.DAYS.toNanos(1);
         for (int i = 0; i < 100; i++) {
             CoreEngine.runPlanMaintenance(muchLater);
         }
 
-        assertSame(pending, gridData.getJob(id));
+        CraftingPlanRegistry.Entry entry = gridData.getJob(id);
+        assertNotNull(entry);
+        assertSame(pending, entry.plan);
     }
 
     @Test
@@ -59,7 +66,11 @@ class CoreEngineMaintenanceTest {
         int planCount = CoreEngine.PLAN_SWEEP_GRIDS_PER_TICK + 1;
         for (int i = 0; i < planCount; i++) {
             GridData gridData = GridData.getOrCreate(TestGridFixtures.key(900_401L + i));
-            int id = gridData.addJob(CompletableFuture.completedFuture(null));
+            int id = gridData.addJob(
+                CompletableFuture.completedFuture(null),
+                TestGridFixtures.planOutput(),
+                new CraftingOptions(false, false),
+                false);
             gridData.getJob(id);
             grids.add(gridData);
             planIds.add(id);

@@ -28,7 +28,7 @@ class DimensionalCoordsTest {
 
         String json = new Gson().toJson(coords);
 
-        assertTrue(json.contains("\"dimid\":\"minecraft:overworld\""), json);
+        assertTrue(json.contains("\"dimensionId\":\"minecraft:overworld\""), json);
         assertFalse(json.contains(String.valueOf("minecraft:overworld".hashCode())), json);
     }
 
@@ -38,7 +38,7 @@ class DimensionalCoordsTest {
 
         String json = new Gson().toJson(coords);
 
-        assertTrue(json.contains("\"dimid\":\"0\""), json);
+        assertTrue(json.contains("\"dimensionId\":\"0\""), json);
     }
 
     @Test

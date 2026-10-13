@@ -1,10 +1,19 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
@@ -85,20 +94,39 @@ class RateLimiterTest {
 
     @Test
     void concurrentCallsAtTheWindowBoundaryResetOnlyOnce() throws Exception {
-        RateLimiter limiter = limiter(1000);
-        limiter.isAllowed(A);
-        now.addAndGet(WINDOW_MS + 1);
-
         int threads = 8;
-        Thread[] workers = new Thread[threads];
-        for (int i = 0; i < threads; i++) {
-            workers[i] = new Thread(() -> limiter.isAllowed(A));
+        int rounds = 1000;
+        RateLimiter limiter = limiter(threads + 1);
+        limiter.isAllowed(A);
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CyclicBarrier start = new CyclicBarrier(threads + 1);
+        CyclicBarrier done = new CyclicBarrier(threads + 1);
+        AtomicInteger accepted = new AtomicInteger();
+        List<Future<?>> results = new ArrayList<>();
+        try {
+            for (int i = 0; i < threads; i++) {
+                results.add(executor.submit(() -> {
+                    for (int round = 0; round < rounds; round++) {
+                        start.await(5, TimeUnit.SECONDS);
+                        if (limiter.isAllowed(A)) accepted.incrementAndGet();
+                        done.await(5, TimeUnit.SECONDS);
+                    }
+                    return null;
+                }));
+            }
+            for (int round = 0; round < rounds; round++) {
+                accepted.set(0);
+                now.addAndGet(WINDOW_MS + 1);
+                start.await(5, TimeUnit.SECONDS);
+                done.await(5, TimeUnit.SECONDS);
+                assertEquals(threads, accepted.get(), "requests in the fresh window must be admitted");
+                assertTrue(limiter.isAllowed(A), "one request remains in the new window");
+                assertFalse(limiter.isAllowed(A), "concurrent requests must all consume the same window's budget");
+            }
+            for (Future<?> result : results) result.get(5, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+            assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
         }
-        for (Thread worker : workers) worker.start();
-        for (Thread worker : workers) worker.join();
-
-        // Exactly one reset may happen, so all eight calls land in the same fresh window and are counted.
-        // A racy reset would drop counts and let the address exceed its budget later.
-        assertTrue(limiter.isAllowed(A));
     }
 }

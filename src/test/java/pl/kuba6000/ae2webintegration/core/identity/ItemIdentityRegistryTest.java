@@ -10,11 +10,102 @@ import java.util.concurrent.TimeUnit;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class ItemIdentityRegistryTest {
+
+    @Test
+    void cpuAndInventorySnapshotsRetainIndependentResourcesAndShareBaseMemo() {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IIdentityHolder grid = grid();
+        IIdentityHolder cpu = (ICraftingCPUCluster) Proxy.newProxyInstance(
+            ICraftingCPUCluster.class.getClassLoader(),
+            new Class<?>[] { ICraftingCPUCluster.class },
+            (proxy, method, args) -> null);
+        java.util.concurrent.atomic.AtomicInteger normalizations = new java.util.concurrent.atomic.AtomicInteger();
+        StableKey base = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
+        Resource resource = new Resource("worn", false) {
+
+            @Override
+            public @NotNull IAEKey web$copyIdentity() {
+                return this;
+            }
+
+            @Override
+            public StableKey web$getIconBaseKey() {
+                normalizations.incrementAndGet();
+                return base;
+            }
+        };
+        StableKey key = registry.remember(grid, resource);
+        assertEquals(0, normalizations.get());
+        ItemIdentityRegistry.Listing cpuListing = registry.beginListing(cpu);
+        assertEquals(key, cpuListing.remember(resource));
+        cpuListing.commit();
+        assertEquals(base, registry.resolveIconBase(key));
+        registry.beginListing(grid)
+            .commit();
+        System.gc();
+        assertSame(resource, registry.resolve(key));
+        assertEquals(base, registry.resolveIconBase(key));
+        assertEquals(1, normalizations.get());
+    }
+
+    @Test
+    void unsupportedBaseIsMemoizedUntilWorldCleanup() {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid grid = grid();
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        Resource resource = new Resource("unsupported", false) {
+
+            @Override
+            public @NotNull IAEKey web$copyIdentity() {
+                return this;
+            }
+
+            @Override
+            public StableKey web$getIconBaseKey() {
+                attempts.incrementAndGet();
+                return null;
+            }
+        };
+        StableKey key = registry.remember(grid, resource);
+        assertNull(registry.resolveIconBase(key));
+        assertNull(registry.resolveIconBase(key));
+        assertEquals(1, attempts.get());
+        registry.clear();
+        registry.remember(grid, resource);
+        assertNull(registry.resolveIconBase(key));
+        assertEquals(2, attempts.get());
+    }
+
+    @Test
+    void nativeNormalizationFailureIsOptionalAndMemoized() {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid grid = grid();
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        Resource resource = new Resource("broken-normalizer", false) {
+
+            public @NotNull IAEKey web$copyIdentity() {
+                return this;
+            }
+
+            public StableKey web$getIconBaseKey() {
+                attempts.incrementAndGet();
+                throw new IllegalStateException("Native capability cannot normalize");
+            }
+        };
+        StableKey key = registry.remember(grid, resource);
+        assertNull(registry.resolveIconBase(key));
+        assertNull(registry.resolveIconBase(key));
+        assertSame(resource, registry.resolve(key));
+        assertEquals(1, attempts.get());
+    }
 
     @Test
     void immutableNativeIdentityIsHashedOnlyOnceOnAdmission() {
@@ -203,7 +294,24 @@ class ItemIdentityRegistryTest {
         }
 
         @Override
-        public @NotNull String web$getItemID() {
+        public @NotNull ResourceType web$getResourceType() {
+            return ResourceType.ITEM;
+        }
+
+        @Override
+        public @NotNull String web$getRegistryNamespace() {
+            return "example";
+        }
+
+        public int web$getComponentCount() {
+            return 2;
+        }
+
+        public int web$getDamage() {
+            return 7;
+        }
+
+        public @NotNull String web$getRegistryPath() {
             return name;
         }
 

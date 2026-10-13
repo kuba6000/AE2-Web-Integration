@@ -34,7 +34,8 @@ class VersionCheckerTest {
             VersionChecker checker = new VersionChecker(
                 new URL("http://127.0.0.1:" + server.getLocalPort() + "/"),
                 "1.0.0-forge-1.7.10",
-                "-forge-1.7.10")) {
+                "forge",
+                "1.7.10")) {
             server.setSoTimeout(5000);
             CompletableFuture<ReleaseManifest.Release> first = checker.checkForUpdates();
             try (Socket stalled = server.accept()) {
@@ -87,7 +88,8 @@ class VersionCheckerTest {
                 "http://127.0.0.1:" + server.getAddress()
                     .getPort() + "/"),
             "1.0.0-forge-1.7.10",
-            "-forge-1.7.10")) {
+            "forge",
+            "1.7.10")) {
             assertEquals(
                 "1.1.0",
                 checker.checkForUpdates()
@@ -99,7 +101,9 @@ class VersionCheckerTest {
                 () -> checker.checkForUpdates()
                     .get(5, TimeUnit.SECONDS));
             assertInstanceOf(IOException.class, failure.getCause());
-            assertEquals("1.1.0", checker.getAvailableUpdate().version);
+            ReleaseManifest.Release retained = checker.getAvailableUpdate();
+            assertNotNull(retained);
+            assertEquals("1.1.0", retained.version);
         } finally {
             server.stop(0);
         }
@@ -124,7 +128,8 @@ class VersionCheckerTest {
                 "http://127.0.0.1:" + server.getAddress()
                     .getPort() + "/"),
             "1.0.0-forge-1.7.10",
-            "-forge-1.7.10")) {
+            "forge",
+            "1.7.10")) {
             assertEquals(
                 "1.1.0",
                 checker.checkForUpdates()
@@ -134,7 +139,9 @@ class VersionCheckerTest {
                 ExecutionException.class,
                 () -> checker.checkForUpdates()
                     .get(5, TimeUnit.SECONDS));
-            assertEquals("1.1.0", checker.getAvailableUpdate().version);
+            ReleaseManifest.Release retained = checker.getAvailableUpdate();
+            assertNotNull(retained);
+            assertEquals("1.1.0", retained.version);
             status.set(200);
             body.set("not json");
             assertThrows(
@@ -174,6 +181,8 @@ class VersionCheckerTest {
                 .flush();
             entered.countDown();
             try {
+                // A bounded fallback releases the fake server even if caller assertions fail before signaling.
+                // noinspection ResultOfMethodCallIgnored
                 respond.await(5, TimeUnit.SECONDS);
                 byte[] bytes = ReleaseManifestTest.feed("1.1.0", null)
                     .getBytes(StandardCharsets.UTF_8);
@@ -192,7 +201,8 @@ class VersionCheckerTest {
                 "http://127.0.0.1:" + server.getAddress()
                     .getPort() + "/"),
             "1.0.0-forge-1.7.10",
-            "-forge-1.7.10");
+            "forge",
+            "1.7.10");
         try {
             CompletableFuture<ReleaseManifest.Release> result = checker.checkForUpdates();
             assertTrue(entered.await(5, TimeUnit.SECONDS));
@@ -248,7 +258,8 @@ class VersionCheckerTest {
                 "http://127.0.0.1:" + server.getAddress()
                     .getPort() + "/"),
             "1.0.0-forge-1.7.10",
-            "-forge-1.7.10")) {
+            "forge",
+            "1.7.10")) {
             CompletableFuture<ReleaseManifest.Release> result = checker.checkForUpdates();
             assertTrue(entered.await(5, TimeUnit.SECONDS));
             assertFalse(result.isDone());

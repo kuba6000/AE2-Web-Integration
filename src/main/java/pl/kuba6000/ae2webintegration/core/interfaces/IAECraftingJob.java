@@ -1,6 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.interfaces;
 
-public interface IAECraftingJob {
+public interface IAECraftingJob extends IIdentityHolder {
 
     boolean web$isSimulation();
 

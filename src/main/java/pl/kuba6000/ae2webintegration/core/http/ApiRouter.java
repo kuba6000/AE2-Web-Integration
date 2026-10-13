@@ -34,7 +34,9 @@ import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPage;
 
 /** Complete method/path dispatch with bounded JSON input and explicit request execution threads. */
 public final class ApiRouter implements HttpHandler {
@@ -84,6 +86,17 @@ public final class ApiRouter implements HttpHandler {
         } catch (NoSuchMethodException exception) {
             throw new IllegalArgumentException("Endpoint requires public constructor", exception);
         }
+    }
+
+    /** Icon bytes use the same routing and authentication boundary, without JSON request completion. */
+    public void registerIconPages() {
+        Endpoint endpoint = GetIconPage.class.getAnnotation(Endpoint.class);
+        routes.add(
+            new Route(
+                endpoint,
+                null,
+                endpoint.path()
+                    .split("/", -1)));
     }
 
     @Override
@@ -137,16 +150,16 @@ public final class ApiRouter implements HttpHandler {
                 .send(exchange);
             return;
         }
-        RequestContext credentials = authenticate.apply(exchange);
-        if (credentials == null && selected.endpoint()
-            .authenticated()) {
+        Authentication authentication = selected.endpoint()
+            .authentication();
+        RequestContext credentials = authentication == Authentication.NONE ? null : authenticate.apply(exchange);
+        if (credentials == null && authentication == Authentication.REQUIRED) {
             ApiResponse.error(ApiStatus.UNAUTHORIZED)
                 .send(exchange);
             return;
         }
         boolean unsafe = !method.equals("GET") && !method.equals("HEAD");
-        if (unsafe && selected.endpoint()
-            .authenticated()
+        if (unsafe && credentials != null
             && !exchange.getRequestHeaders()
                 .containsKey("Authorization")
             && !"true".equals(
@@ -176,6 +189,10 @@ public final class ApiRouter implements HttpHandler {
                 credentials == null ? WebPrincipal.anonymous() : credentials.getPrincipal(),
                 parameters,
                 body);
+            if (selected.factory() == null) {
+                GetIconPage.handle(context);
+                return;
+            }
             IRequest request = selected.factory()
                 .newInstance();
             if (request.init(context)) {

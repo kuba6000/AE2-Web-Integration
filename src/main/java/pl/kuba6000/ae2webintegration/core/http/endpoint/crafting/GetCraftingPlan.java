@@ -12,12 +12,24 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
+import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
+import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceDescription;
+import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -27,7 +39,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingPlanSummaryEntry;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 /**
- * Reads the calculation state and contents of a crafting plan.
+ * Reads a crafting plan with its original requested output, quantity and calculation choices, including while
+ * calculation is pending. The recorded autoStart flag is client intent only; reading a plan never submits it.
  *
  * @pathParam gridKey Persistent grid identifier.
  * @pathParam planId Runtime crafting-plan identifier.
@@ -61,8 +74,25 @@ public final class GetCraftingPlan extends ISyncedRequest {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
+    /** Include resource icon references and atlas metadata; omitted means false. */
+    @QueryParam("icons")
+    private boolean icons;
+
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
     public static class PlanData {
+
+        /** Original requested resource and quantity, also available while calculation is pending. */
+        public final @NotNull ResourceStack finalOutput;
+        /** Original native calculation choices. */
+        public final @NotNull CraftingOptions options;
+        /** Recorded client intent; reading or reopening a plan never submits it. */
+        public final boolean autoStart;
+
+        private PlanData(CraftingPlanRegistry.Entry entry, @Nullable IconMappings mappings) {
+            finalOutput = new ResourceStack(entry.finalOutput, mappings);
+            options = entry.options;
+            autoStart = entry.autoStart;
+        }
 
         /**
          * Whether calculation has finished.
@@ -85,66 +115,78 @@ public final class GetCraftingPlan extends ISyncedRequest {
         /** Calculated resource rows; null while calculation is pending. */
         public @Nullable ArrayList<JobItem> plan;
 
-        public static class JobItem {
+        /** One resource required by the calculated crafting plan. */
+        @SuppressWarnings("unused") // Gson reads the fields reflectively.
+        public static final class JobItem extends ResourceDescription {
 
-            /**
-             * Registry resource identifier.
-             *
-             * @example minecraft:iron_ingot
-             */
-            public String itemid;
-            /**
-             * Resource display name.
-             *
-             * @example Iron Ingot
-             */
-            public String itemname;
             /**
              * Resource units taken from network storage.
              *
              * @example 0
              */
-            public long stored;
+            public final long stored;
             /**
              * Resource units to be crafted.
              *
              * @example 64
              */
-            public long requested;
+            public final long requested;
             /**
              * Resource units missing from a simulation.
              *
              * @example 0
              */
-            public long missing;
+            public final long missing;
             /**
              * Number of crafting steps; zero when the platform cannot report it.
              *
              * @example 64
              */
-            public long steps;
+            public final long steps;
             /**
              * Fraction of currently available stored units consumed by a storage-only row; zero when the row requests
              * crafting, has missing units or has no available storage.
              *
              * @example 0.0
              */
-            public double usedPercent;
+            public final double usedPercent;
+
+            public JobItem(@Nullable String registryNamespace, @Nullable String registryPath,
+                @NotNull String displayName, int componentCount, int damage, @NotNull ResourceType resourceType,
+                long stored, long requested, long missing, long steps, double usedPercent, @Nullable StableKey itemKey,
+                @Nullable IconMappings.Reference icon) {
+                super(
+                    registryNamespace,
+                    registryPath,
+                    displayName,
+                    componentCount,
+                    damage,
+                    resourceType,
+                    itemKey,
+                    icon);
+                this.stored = stored;
+                this.requested = requested;
+                this.missing = missing;
+                this.steps = steps;
+                this.usedPercent = usedPercent;
+            }
         }
+
     }
 
     /**
      * Successful operation result.
      * 
      * @param status {@code OK} for a successful request
-     * @param data   calculation state and, once complete, the required storage and resource plan
+     * @param data   original request, calculation state and, once complete, required storage and resource plan
+     * @param icons  atlas metadata; null when not requested or no pack is available
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull PlanData data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull PlanData data, @Nullable IconMappings icons) {}
 
     @PathParam("planId")
-    private int jobID;
+    private int jobId;
 
     @Override
     protected void handle(IAEGrid grid) {
@@ -152,12 +194,15 @@ public final class GetCraftingPlan extends ISyncedRequest {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        Future<IAECraftingJob> job = gridData.getJob(jobID);
-        if (job == null) {
+        CraftingPlanRegistry.Entry entry = gridData.getJob(jobId);
+        if (entry == null) {
             deny(ApiStatus.INVALID_ID);
             return;
         }
-        PlanData jobData = new PlanData();
+        IconPack pack = icons ? CoreEngine.getIconPack() : null;
+        IconMappings mappings = pack == null ? null : new IconMappings(pack);
+        PlanData jobData = new PlanData(entry, mappings);
+        Future<IAECraftingJob> job = entry.plan;
         jobData.isDone = job.isDone();
         if (jobData.isDone) {
             try {
@@ -168,23 +213,47 @@ public final class GetCraftingPlan extends ISyncedRequest {
                 jobData.bytesTotal = craftingJob.web$getByteTotal();
                 ICraftingPlanSummary summary = craftingJob.web$generateSummary(grid);
                 jobData.plan = new ArrayList<>();
-                for (ICraftingPlanSummaryEntry entry : summary.web$getEntries()) {
-                    IAEKey key = entry.web$getWhat();
-                    PlanData.JobItem jobItem = new PlanData.JobItem();
-                    jobItem.itemid = key.web$getItemID();
-                    jobItem.itemname = key.web$getDisplayName();
-                    jobItem.requested = entry.web$getCraftAmount();
-                    jobItem.steps = entry.web$getCraftSteps();
-                    jobItem.stored = entry.web$getStoredAmount();
-                    jobItem.missing = entry.web$getMissingAmount();
-                    if (jobItem.missing == 0 && jobItem.requested == 0 && jobItem.stored > 0) {
+                ItemIdentityRegistry.Listing identities = AE2Controller.itemIdentities.beginListing(craftingJob);
+                for (ICraftingPlanSummaryEntry summaryEntry : summary.web$getEntries()) {
+                    IAEKey key = summaryEntry.web$getWhat();
+                    String registryPath = key.web$getRegistryPath();
+                    String displayName = key.web$getDisplayName();
+                    long requested = summaryEntry.web$getCraftAmount();
+                    long steps = summaryEntry.web$getCraftSteps();
+                    long stored = summaryEntry.web$getStoredAmount();
+                    long missing = summaryEntry.web$getMissingAmount();
+                    double usedPercent = 0d;
+                    StableKey itemKey = null;
+                    IconMappings.Reference icon = null;
+                    try {
+                        itemKey = identities.remember(key);
+                        if (mappings != null) icon = mappings.resolve(itemKey, AE2Controller.itemIdentities);
+                    } catch (RuntimeException unavailable) {
+                        // Optional identity or icon failures must not hide the calculated resource counts.
+                    }
+                    if (missing == 0 && requested == 0 && stored > 0) {
                         long available = inventory.web$getAvailable(key, grid);
                         if (available > 0L) {
-                            jobItem.usedPercent = (double) jobItem.stored / (double) available;
+                            usedPercent = (double) stored / (double) available;
                         }
                     }
-                    jobData.plan.add(jobItem);
+                    jobData.plan.add(
+                        new PlanData.JobItem(
+                            key.web$getRegistryNamespace(),
+                            registryPath,
+                            displayName,
+                            key.web$getComponentCount(),
+                            key.web$getDamage(),
+                            key.web$getResourceType(),
+                            stored,
+                            requested,
+                            missing,
+                            steps,
+                            usedPercent,
+                            itemKey,
+                            icon));
                 }
+                identities.commit();
                 jobData.plan.sort((i1, i2) -> {
                     if (i1.missing > 0 && i2.missing > 0) return Long.compare(i2.missing, i1.missing);
                     else if (i1.missing > 0 && i2.missing == 0) return -1;
@@ -200,6 +269,6 @@ public final class GetCraftingPlan extends ISyncedRequest {
                 return;
             }
         }
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, jobData));
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, jobData, mappings));
     }
 }

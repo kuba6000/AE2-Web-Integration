@@ -1,13 +1,16 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
@@ -16,7 +19,9 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
@@ -44,17 +49,17 @@ public class CoreEngine {
 
     // Populated by the interface layer from the buildscript-generated mod version.
     private static volatile String modVersion;
-    private static String versionIdentifier;
     private static volatile @Nullable VersionChecker versionChecker;
     private static boolean serverRunning;
+    private static volatile @Nullable IconPack iconPack;
+    private static volatile ThemeCatalog themes = new ThemeCatalog();
 
-    public static void init(IServerPlatform serverPlatform, String modVersion, String versionIdentifier) {
+    public static void init(@NotNull IServerPlatform serverPlatform) {
         serverRunning = false;
         stopVersionChecker();
-        CoreEngine.versionIdentifier = versionIdentifier;
         AE2Controller.serverPlatform = serverPlatform;
         Config.init(serverPlatform.getConfigDirectory(), serverPlatform::getLegacyConfig);
-        CoreEngine.modVersion = modVersion;
+        CoreEngine.modVersion = serverPlatform.getModVersion();
         loadData();
     }
 
@@ -69,6 +74,11 @@ public class CoreEngine {
             LOG.error("Failed to load grid identities; grid requests remain unavailable", e);
         }
         serverRunning = true;
+        loadIconPack();
+        themes.close();
+        themes = ThemeCatalog.load(
+            Config.getConfigFile("themes")
+                .toPath());
         AE2Controller.init();
         StartupHandler.logOpenAdminAccessWarning();
         maintainVersionChecker();
@@ -95,7 +105,8 @@ public class CoreEngine {
                 VersionChecker checker = new VersionChecker(
                     new URL("https://raw.githubusercontent.com/kuba6000/AE2-Web-Integration/version/"),
                     modVersion,
-                    versionIdentifier);
+                    AE2Controller.serverPlatform.getLoader(),
+                    AE2Controller.serverPlatform.getMinecraftVersion());
                 versionChecker = checker;
                 checker.checkForUpdates();
             } catch (MalformedURLException e) {
@@ -115,6 +126,17 @@ public class CoreEngine {
     public static @Nullable ReleaseManifest.Release getAvailableUpdate() {
         VersionChecker checker = versionChecker;
         return checker == null ? null : checker.getAvailableUpdate();
+    }
+
+    public static boolean isUpdateSkipped(@NotNull ReleaseManifest.Release release) {
+        VersionChecker checker = versionChecker;
+        return checker != null && checker.isSkipped(release);
+    }
+
+    public static @NotNull ApiStatus skipUpdate(@NotNull String tag, long lifecycleGeneration) throws IOException {
+        if (!AE2Controller.isCurrentHTTPLifecycle(lifecycleGeneration)) return ApiStatus.SERVER_STOPPING;
+        VersionChecker checker = versionChecker;
+        return checker == null ? ApiStatus.UPDATE_CHANGED : checker.skip(tag, lifecycleGeneration);
     }
 
     /** Called from the platform's player-login event, which already runs on the server thread. */
@@ -174,7 +196,9 @@ public class CoreEngine {
         serverRunning = false;
         stopVersionChecker();
         AE2Controller.stopHTTPServer();
+        closeIconPack();
         // Authorization must not survive into the next world loaded in this JVM.
+        themes.close();
         GRID_IDENTITIES.clear();
     }
 
@@ -183,14 +207,72 @@ public class CoreEngine {
         stopVersionChecker();
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.
         AE2Controller.stopHTTPServer();
+        closeIconPack();
         AE2Controller.clearWorldState();
+        themes.close();
         AE2JobTracker.clearActiveJobs();
         GridData.clearRuntimeState();
         CoreEngine.GRID_IDENTITIES.clear();
         resetPlanMaintenance();
     }
 
-    public static String getModVersion() {
+    public static @Nullable String getModVersion() {
         return modVersion;
+    }
+
+    /** Immutable metadata is safe to read on either thread; page streams lease the archive until closed. */
+    public static @Nullable IconPack getIconPack() {
+        return iconPack;
+    }
+
+    public static @NotNull ThemeCatalog getThemes() {
+        return themes;
+    }
+
+    private static void loadIconPack() {
+        closeIconPack();
+        IServerPlatform platform = AE2Controller.serverPlatform;
+        File directory = Config.getConfigFile("");
+        File[] packs = directory.listFiles(
+            file -> file.isFile() && file.getName()
+                .endsWith(".ae2wi-icons"));
+        if (packs == null) {
+            LOG.error("Cannot list icon packs in {}. Terminal remains available without icons.", directory);
+            return;
+        }
+        if (packs.length == 0) return;
+        if (packs.length > 1) {
+            Arrays.sort(packs);
+            LOG.error(
+                "Multiple icon packs found: {}. Keep only one .ae2wi-icons file and restart the server. "
+                    + "Terminal remains available without icons.",
+                Arrays.toString(packs));
+            return;
+        }
+        File file = packs[0];
+        try {
+            iconPack = IconPack.open(
+                file.toPath(),
+                platform.getMinecraftVersion(),
+                platform.getLoader(),
+                platform.getIconPackCompatibilityVersion());
+        } catch (IOException e) {
+            LOG.error(
+                "Cannot load icon pack {}. Terminal remains available without icons; replace the pack while stopped.",
+                file,
+                e);
+        }
+    }
+
+    private static void closeIconPack() {
+        IconPack previous = iconPack;
+        iconPack = null;
+        if (previous != null) {
+            try {
+                previous.close();
+            } catch (IOException e) {
+                LOG.error("Cannot close icon pack", e);
+            }
+        }
     }
 }
