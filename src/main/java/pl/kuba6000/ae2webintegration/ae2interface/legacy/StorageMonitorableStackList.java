@@ -1,8 +1,12 @@
 package pl.kuba6000.ae2webintegration.ae2interface.legacy;
 
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.NoSuchElementException;
+
+import org.jetbrains.annotations.Nullable;
 
 import appeng.api.AEApi;
 import appeng.api.storage.IMEMonitor;
@@ -14,13 +18,30 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
-/** Live view of every storage channel whose stacks implement the web integration contracts. */
+/** Observation-owned listing of every supported storage channel. */
 public final class StorageMonitorableStackList implements IStackList {
 
     private final IStorageMonitorable storage;
+    private final Map<IStorageChannel<?>, IItemList<?>> snapshot = new IdentityHashMap<>();
 
     public StorageMonitorableStackList(IStorageMonitorable storage) {
         this.storage = storage;
+        for (IStorageChannel<?> channel : AEApi.instance()
+            .storage()
+            .storageChannels()) {
+            IMEMonitor<?> monitor = monitor(channel);
+            if (monitor != null) snapshot.put(channel, enumerate(monitor, channel));
+        }
+    }
+
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private static IItemList<?> enumerate(IMEMonitor monitor, IStorageChannel channel) {
+        // Accepted-amount cache deltas do not prove actual holdings for void storage.
+        return monitor.getAvailableItems(channel.createList());
+    }
+
+    private @Nullable IItemList<?> list(IMEMonitor<?> monitor) {
+        return snapshot.get(monitor.getChannel());
     }
 
     @Override
@@ -29,7 +50,8 @@ public final class StorageMonitorableStackList implements IStackList {
         if (monitor == null) {
             return 0L;
         }
-        return amountIn(monitor.getStorageList(), key);
+        IItemList<?> stacks = list(monitor);
+        return stacks == null ? 0L : amountIn(stacks, key);
     }
 
     @Override
@@ -60,9 +82,8 @@ public final class StorageMonitorableStackList implements IStackList {
                         return false;
                     }
                     IMEMonitor<?> monitor = monitor(channels.next());
-                    stacks = monitor == null ? Collections.emptyIterator()
-                        : monitor.getStorageList()
-                            .iterator();
+                    IItemList<?> available = monitor == null ? null : list(monitor);
+                    stacks = available == null ? Collections.emptyIterator() : available.iterator();
                 }
             }
 
