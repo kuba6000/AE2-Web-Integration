@@ -744,14 +744,16 @@ class IconPackTest {
 
     @Test
     void duplicateZipNamesCannotHideConflictingEntries() throws Exception {
+        Path valid;
+        try (IconPackWriter writer = new IconPackWriter(directory, metadata("today"), 64)) {
+            valid = writer.finish();
+        }
         Path archive = directory.resolve("duplicate.zip");
-        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(archive))) {
-            zip.putNextEntry(new ZipEntry("manifest.json"));
-            zip.write("{}".getBytes(StandardCharsets.UTF_8));
-            zip.closeEntry();
-            zip.putNextEntry(new ZipEntry("manifest.jsox"));
-            zip.write("{}".getBytes(StandardCharsets.UTF_8));
-            zip.closeEntry();
+        try (ZipFile source = new ZipFile(valid.toFile());
+            ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(archive))) {
+            byte[] manifest = entryBytes(source, "manifest.json");
+            writeEntry(zip, "manifest.json", manifest, false);
+            writeEntry(zip, "manifest.jsox", manifest, false);
         }
         byte[] archiveBytes = Files.readAllBytes(archive);
         byte[] alternate = "manifest.jsox".getBytes(StandardCharsets.US_ASCII);

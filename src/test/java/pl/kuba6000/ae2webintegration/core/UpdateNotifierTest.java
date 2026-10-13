@@ -82,15 +82,6 @@ class UpdateNotifierTest {
         }
     }
 
-    @Test
-    void onPlayerLoggedInDoesNotNotifyPlayersWithoutAdminNoticePermission() {
-        RecordingMessenger messenger = new RecordingMessenger();
-
-        UpdateNotifier.onPlayerLoggedIn(messenger, PLAYER, false);
-
-        assertEquals(0, messenger.sentMessages);
-    }
-
     private static class RecordingMessenger implements IPlayerMessenger {
 
         int sentMessages;

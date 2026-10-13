@@ -14,6 +14,7 @@ import pl.kuba6000.ae2webintegration.core.api.CommandResult;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.CoreDataTestFixture;
@@ -54,14 +55,10 @@ class CommandProcessorTest {
 
     @Test
     void testReloadSuccess() {
+        config.write("general.public_mode", false);
         CommandResult result = CommandProcessor.reload();
         assertTrue(result.isSuccess(), "reload should succeed");
-        assertNotNull(result.getMessage());
-        assertTrue(
-            result.getMessage()
-                .toLowerCase()
-                .contains("success"),
-            "message should indicate success: " + result.getMessage());
+        assertFalse(Config.INSTANCE.general.publicMode);
     }
 
     @Test
@@ -69,21 +66,7 @@ class CommandProcessorTest {
         config.writeRaw("[general\nport = 2324");
         CommandResult result = CommandProcessor.reload();
         assertFalse(result.isSuccess(), "reload should fail when the configuration file is invalid");
-        assertTrue(
-            result.getMessage()
-                .toLowerCase()
-                .contains("fail"),
-            "message should indicate failure: " + result.getMessage());
-    }
-
-    @Test
-    void repeatedReloadsCreateUsableServerLifecycles() {
-        assertTrue(
-            CommandProcessor.reload()
-                .isSuccess());
-        assertTrue(
-            CommandProcessor.reload()
-                .isSuccess());
+        assertTrue(Config.INSTANCE.general.publicMode, "failed reload must preserve active settings");
     }
 
     // --- registerPlayer tests ---

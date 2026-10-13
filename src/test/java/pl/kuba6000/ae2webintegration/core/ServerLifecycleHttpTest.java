@@ -358,9 +358,6 @@ class ServerLifecycleHttpTest {
         assertFalse(location.contains("&ui="));
         Response confirmation = get("/" + location, null);
         assertEquals(HttpURLConnection.HTTP_OK, confirmation.status());
-        assertTrue(
-            confirmation.body()
-                .contains("type=\"password\""));
         assertEquals(pageResource("/assets/login.html"), confirmation.body());
     }
 
@@ -371,18 +368,10 @@ class ServerLifecycleHttpTest {
         for (String path : new String[] { "/", "/index.html", "/index.php", "/?ui=next", "/?ui=previous" }) {
             Response loginPage = get(path, null);
             assertEquals(HttpURLConnection.HTTP_OK, loginPage.status());
-            assertTrue(
-                loginPage.body()
-                    .contains("type=\"password\""));
             assertEquals(pageResource("/assets/login.html"), loginPage.body());
             Response page = get(path, token);
             assertEquals(HttpURLConnection.HTTP_OK, page.status());
-            assertTrue(
-                page.body()
-                    .contains("type=\"module\""));
-            assertFalse(
-                page.body()
-                    .contains("type=\"password\""));
+            assertEquals(pageResource("/assets/web/index.html"), page.body());
         }
     }
 

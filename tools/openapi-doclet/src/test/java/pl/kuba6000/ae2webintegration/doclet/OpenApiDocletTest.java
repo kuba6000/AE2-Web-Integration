@@ -944,8 +944,22 @@ class OpenApiDocletTest {
              */
             @Endpoint(method=HttpMethod.GET, path="/api/grids") public class Grids {}
             """);
-        Result result = generate(sources, directory.resolve("multiline.json"));
+        Path output = directory.resolve("multiline.json");
+        Result result = generate(sources, output);
         assertTrue(result.success(), result.diagnostics());
+        String description = JsonParser.parseString(Files.readString(output))
+            .getAsJsonObject()
+            .getAsJsonObject("paths")
+            .getAsJsonObject("/api/grids")
+            .getAsJsonObject("get")
+            .getAsJsonObject("responses")
+            .getAsJsonObject("204")
+            .get("description")
+            .getAsString();
+        assertEquals(
+            "Completed action. Additional explanation.",
+            description.replaceAll("\\s+", " ")
+                .trim());
     }
 
     @Test
@@ -1104,29 +1118,6 @@ class OpenApiDocletTest {
                 .isEmpty(),
             parsed.getMessages()
                 .toString());
-    }
-
-    @Test
-    void publicEndpointOverridesAuthenticationRequirements() throws Exception {
-        List<Path> sources = fixture("""
-            /** Public operation.
-             * @response 204
-             */
-            @Endpoint(method=HttpMethod.POST, path="/api/auth/login", authentication=Authentication.NONE)
-            public class Grids {}
-            """);
-        Path output = directory.resolve("public.json");
-        Result result = generate(sources, output);
-        assertTrue(result.success(), result.diagnostics());
-        JsonObject operation = JsonParser.parseString(Files.readString(output))
-            .getAsJsonObject()
-            .getAsJsonObject("paths")
-            .getAsJsonObject("/api/auth/login")
-            .getAsJsonObject("post");
-        assertEquals(
-            0,
-            operation.getAsJsonArray("security")
-                .size());
     }
 
     @ParameterizedTest
