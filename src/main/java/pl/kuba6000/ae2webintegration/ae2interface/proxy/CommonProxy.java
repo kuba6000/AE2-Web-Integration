@@ -10,7 +10,6 @@ import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import cpw.mods.fml.common.event.FMLServerStoppedEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
-import pl.kuba6000.ae2webintegration.Tags;
 import pl.kuba6000.ae2webintegration.ae2interface.AE2WebIntegration;
 import pl.kuba6000.ae2webintegration.ae2interface.FMLEventHandler;
 import pl.kuba6000.ae2webintegration.ae2interface.commands.BaseCommandHandler;
@@ -25,7 +24,7 @@ public class CommonProxy {
     // preInit "Run before anything else. Read your config, create blocks, items, etc., and register them with the
     // GameRegistry." (Remove if not needed)
     public void preInit(FMLPreInitializationEvent event) {
-        CoreEngine.init(new Platform(event.getModConfigurationDirectory()), Tags.VERSION, "-forge-1.7.10");
+        CoreEngine.init(new Platform(event.getModConfigurationDirectory()));
 
         AE2WebIntegration.LOG.info("AE2WebIntegration loading at version {}", CoreEngine.getModVersion());
 

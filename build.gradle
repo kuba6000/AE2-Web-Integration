@@ -2,3 +2,7 @@
 plugins {
     id 'com.gtnewhorizons.gtnhconvention'
 }
+
+apply from: 'icon-generator.gradle'
+
+apply from: 'gradle/idea-settings.gradle'

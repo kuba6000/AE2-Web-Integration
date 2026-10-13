@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
+import appeng.api.config.CraftingAllow;
 import appeng.api.networking.crafting.CraftingItemList;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.storage.data.IItemList;
@@ -16,15 +17,16 @@ import appeng.api.util.WorldCoord;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import appeng.util.item.IAEStackList;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
 @Mixin(value = CraftingCPUCluster.class, remap = false)
 @SuppressWarnings("UnstableApiUsage")
-public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICraftingCPUNameIndex {
+public abstract class AECraftingCPUClusterMixin implements IPausableCraftingCPU, ICraftingCPUNameIndex {
 
     @Shadow
     @Final
@@ -102,8 +104,34 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, 
     }
 
     @Override
+    public @NotNull CpuSelectionMode web$getSelectionMode() {
+        return switch (((CraftingCPUCluster) (Object) this).getCraftingAllowMode()) {
+            case ONLY_PLAYER -> CpuSelectionMode.PLAYER_ONLY;
+            case ONLY_NONPLAYER -> CpuSelectionMode.AUTOMATION_ONLY;
+            case ALLOW_ALL -> CpuSelectionMode.ALL;
+        };
+    }
+
+    @Override
+    public boolean web$acceptsPlayerJobs() {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return cpu.isActive() && cpu.getCraftingAllowMode() != CraftingAllow.ONLY_NONPLAYER
+            && (!cpu.isBusy() || cpu.isCraftingLinkStandalone());
+    }
+
+    @Override
     public boolean web$isBusy() {
         return ((CraftingCPUCluster) (Object) this).isBusy();
+    }
+
+    @Override
+    public boolean web$isPaused() {
+        return ((CraftingCPUCluster) (Object) this).isSuspended();
+    }
+
+    @Override
+    public void web$setPaused(boolean paused) {
+        ((CraftingCPUCluster) (Object) this).setSuspended(paused);
     }
 
     @Override

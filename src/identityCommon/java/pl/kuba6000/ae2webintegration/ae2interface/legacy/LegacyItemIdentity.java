@@ -6,6 +6,9 @@ import java.io.UncheckedIOException;
 import java.util.Arrays;
 import java.util.Set;
 
+import net.minecraft.init.Items;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTBase;
 import net.minecraft.nbt.NBTBase.NBTPrimitive;
 import net.minecraft.nbt.NBTTagByteArray;
@@ -16,6 +19,7 @@ import net.minecraft.nbt.NBTTagIntArray;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.nbt.NBTTagString;
 import net.minecraftforge.common.util.Constants.NBT;
+import net.minecraftforge.fluids.FluidStack;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -28,7 +32,6 @@ import appeng.util.item.AEFluidStack;
 import appeng.util.item.AEItemStack;
 import cpw.mods.fml.common.registry.GameData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 
 /** Canonical native identity only; amounts, crafting flags and display data never enter these bytes. */
 @SuppressWarnings("UnstableApiUsage")
@@ -38,6 +41,48 @@ public final class LegacyItemIdentity {
     private static final int MAX_NODES = 65536;
 
     private LegacyItemIdentity() {}
+
+    public static @NotNull StableKey encode(@NotNull ItemStack stack) {
+        Item item = stack.getItem();
+        int metadata = Items.blaze_rod.getDamage(stack);
+        NBTTagCompound tag = prepareItemTag(stack);
+        return encode(item, metadata, tag);
+    }
+
+    /** Encodes captured item fields; tag must already follow prepareItemTag's root normalization. */
+    public static @NotNull StableKey encode(@NotNull Item item, int metadata, @Nullable NBTTagCompound tag) {
+        return encode(
+            "item",
+            GameData.getItemRegistry()
+                .getNameForObject(item),
+            metadata,
+            tag);
+    }
+
+    /**
+     * Call after capturing the item and raw metadata: native accessors may change the stack.
+     * The returned tag is borrowed and must remain read-only while used for identity.
+     */
+    public static @Nullable NBTTagCompound prepareItemTag(@NotNull ItemStack stack) {
+        stack.getItemDamageForDisplay();
+        stack.getMaxDamage();
+        NBTTagCompound tag = stack.getTagCompound();
+        // AESharedNBT treats an empty root compound as absent, while preserving empty child tags.
+        if (tag == null || tag.hasNoTags()) return null;
+        // Mirror AESharedNBT's pre-interning accessors; keep its original, already-normalized tag reference.
+        if (stack.isItemStackDamageable() && stack.getHasSubtypes()) stack.getItemDamage();
+        return tag;
+    }
+
+    public static @NotNull StableKey encode(@NotNull FluidStack stack) {
+        // The supported AEFluidStack factory discards FluidStack.tag; preserve its existing identity.
+        return encode(
+            "fluid",
+            stack.getFluid()
+                .getName(),
+            0,
+            null);
+    }
 
     public static @NotNull StableKey encode(@NotNull IAEStack<?> stack) {
         if (stack instanceof AEItemStack item) {
@@ -59,14 +104,14 @@ public final class LegacyItemIdentity {
         throw new UnsupportedOperationException("Unsupported legacy resource identity");
     }
 
-    public static @NotNull IAEKey copy(@NotNull IAEStack<?> stack) {
+    public static @NotNull IAEStack<?> copy(@NotNull IAEStack<?> stack) {
         if (!(stack instanceof AEItemStack) && !(stack instanceof AEFluidStack)) {
             throw new UnsupportedOperationException("Unsupported legacy resource identity");
         }
         // Follow AE2's native identity-sharing contract; only amount/crafting state is reset.
         IAEStack<?> result = stack.copy();
         result.reset();
-        return (IAEKey) result;
+        return result;
     }
 
     private static StableKey encode(String kind, @Nullable String registry, int metadata,
