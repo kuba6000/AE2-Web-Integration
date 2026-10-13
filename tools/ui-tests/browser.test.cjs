@@ -10,6 +10,53 @@ const compiledResources = path.resolve(__dirname, '../../build/generated/fronten
 const gridA = 'AAAAAAAAAAAAAAAAAAAAAA';
 const gridB = 'BBBBBBBBBBBBBBBBBBBBBA';
 
+test('initial document has a dark canvas before scripts load and a custom theme can override it', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.themeCatalog = {
+        defaultTheme: 'server:bright',
+        themes: [
+            {
+                id: 'bright',
+                name: 'Bright',
+                version: '1',
+                supportedModVersion: '1.2.x',
+                views: ['home'],
+                entry: 'theme.js',
+                styles: ['style.css']
+            }
+        ]
+    };
+    options.themeFiles = {
+        '/themes/bright/theme.js':
+            'export default {id:"bright",mount(root){root.innerHTML="<h1>Custom theme ready</h1>";}};',
+        '/themes/bright/style.css': 'html { background-color: rgb(230, 240, 250); color: black; }'
+    };
+    let release;
+    const scripts = new Promise((resolve) => {
+        release = resolve;
+    });
+    t.after(() => release());
+    await page.route('**/assets/web/**/*.js', async (route) => {
+        await scripts;
+        await route.continue();
+    });
+    await page.goto(base, { waitUntil: 'commit' });
+    await page.getByRole('status').waitFor();
+    const initial = await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
+    const channels = initial.match(/[\d.]+/g).map(Number);
+    assert.ok(
+        channels.slice(0, 3).every((channel) => channel < 90),
+        initial
+    );
+    assert.ok(channels.length === 3 || channels[3] === 1, 'The initial canvas must be opaque');
+    release();
+    await page.getByRole('heading', { name: 'Custom theme ready' }).waitFor();
+    assert.equal(
+        await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor),
+        'rgb(230, 240, 250)'
+    );
+});
+
 test('a theme that never finishes loading still offers navigation to safe mode', async (t) => {
     const { page, options, base } = await fixture(t);
     options.themeCatalog = {
