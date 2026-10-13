@@ -6,6 +6,7 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 
+import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,6 +27,7 @@ import appeng.me.service.helpers.NetworkCraftingProviders;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
+import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -83,7 +85,8 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingM
     }
 
     @Override
-    public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount) {
+    public Future<IAECraftingJob> web$beginCraftingJob(IAEGrid grid, IAEKey stack, long amount,
+        @NotNull CraftingOptions options) {
         PlayerSource actionSrc = ((IGridPlayerSource) grid).web$getPlayerSource();
         final Future<ICraftingPlan> job = ((CraftingService) (Object) this).beginCraftingCalculation(
             actionSrc.player()

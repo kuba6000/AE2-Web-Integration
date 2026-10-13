@@ -20,6 +20,7 @@ import appeng.api.stacks.KeyCounter;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -91,6 +92,21 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNam
     @Override
     public long web$getCoProcessors() {
         return ((ICraftingCPU) this).getCoProcessors();
+    }
+
+    @Override
+    public @NotNull CpuSelectionMode web$getSelectionMode() {
+        return switch (((ICraftingCPU) this).getSelectionMode()) {
+            case PLAYER_ONLY -> CpuSelectionMode.PLAYER_ONLY;
+            case MACHINE_ONLY -> CpuSelectionMode.AUTOMATION_ONLY;
+            case ANY -> CpuSelectionMode.ALL;
+        };
+    }
+
+    @Override
+    public boolean web$acceptsPlayerJobs() {
+        AdvCraftingCPU cpu = (AdvCraftingCPU) (Object) this;
+        return cpu.isActive() && !cpu.isBusy();
     }
 
     @Override

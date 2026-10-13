@@ -111,6 +111,7 @@ apply from: "$rootDir/dependencies.gradle"
 apply from: "$rootDir/gradle/scripts/resources.gradle"
 apply from: "$rootDir/gradle/scripts/publishing.gradle"
 apply from: "$rootDir/gradle/scripts/spotless.gradle"
+apply from: "$rootDir/icon-generator.gradle"
 
 
 tasks.withType(JavaCompile).configureEach {
@@ -122,3 +123,5 @@ tasks.withType(JavaCompile).configureEach {
 lombok {
     version = "1.18.38"
 }
+
+apply from: 'gradle/idea-settings.gradle'
