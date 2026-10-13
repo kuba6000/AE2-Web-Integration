@@ -3,10 +3,13 @@ package pl.kuba6000.ae2webintegration.ae2interface.implementations;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 import net.minecraft.nbt.*;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.common.hash.PrimitiveSink;
 
@@ -24,6 +27,52 @@ final class CanonicalNbt {
 
     static void write(@NotNull Tag tag, @NotNull PrimitiveSink sink) {
         new CanonicalNbt().writeTag(tag, sink, 0);
+    }
+
+    /** Streams the AE generic codec's sorted envelope without constructing a compound/map for it. */
+    static void writeResource(@NotNull String type, @NotNull String id, @Nullable Tag components,
+        @Nullable CompoundTag original, @NotNull PrimitiveSink sink) {
+        CanonicalNbt writer = new CanonicalNbt();
+        writer.nodes = 1; // The envelope itself is the root compound.
+        sink.putByte((byte) Tag.TAG_COMPOUND);
+        if (original == null || original.isEmpty()) {
+            writeInt(sink, components == null ? 2 : 3);
+            writer.writeStringField("#t", type, sink);
+            if (components != null) {
+                StableKey.writeText(sink, "components");
+                writer.writeTag(components, sink, 1);
+            }
+            writer.writeStringField("id", id, sink);
+            return;
+        }
+        // AE's missing-content codec overlays preserved original fields, including unknown ones.
+        Set<String> names = new TreeSet<>(original.getAllKeys());
+        names.add("#t");
+        names.add("id");
+        if (components != null) names.add("components");
+        writer.checkChildren(names.size());
+        writeInt(sink, names.size());
+        for (String name : names) {
+            Tag override = original.get(name);
+            if (override != null) {
+                StableKey.writeText(sink, name);
+                // Native AE conversion normalizes numeric lists to arrays; RegistryOps delegates this to NbtOps.
+                writer.writeTag(NbtOps.INSTANCE.convertTo(NbtOps.INSTANCE, override), sink, 1);
+            } else if (components != null && name.equals("components")) {
+                StableKey.writeText(sink, name);
+                writer.writeTag(components, sink, 1);
+            } else {
+                writer.writeStringField(name, name.equals("#t") ? type : id, sink);
+            }
+        }
+    }
+
+    private void writeStringField(@NotNull String name, @NotNull String value, @NotNull PrimitiveSink sink) {
+        checkChildren(1);
+        nodes++;
+        StableKey.writeText(sink, name);
+        sink.putByte((byte) Tag.TAG_STRING);
+        StableKey.writeText(sink, value);
     }
 
     private void writeTag(@NotNull Tag tag, @NotNull PrimitiveSink sink, int depth) {

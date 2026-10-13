@@ -55,6 +55,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.implementations.AEGridMixin",
                 "AE2.implementations.AEItemListMixin",
                 "AE2.implementations.AEItemMixin",
+                "AE2.implementations.AEFluidKeyMetadataMixin",
                 "AE2.implementations.AEMeInventoryItemMixin",
                 "AE2.implementations.CraftingPlanSummaryEntryMixin",
                 "AE2.implementations.CraftingPlanSummaryMixin",

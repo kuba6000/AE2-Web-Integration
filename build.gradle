@@ -93,3 +93,7 @@ tasks.withType(JavaCompile).configureEach {
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
 }
+
+apply from: 'icon-generator.gradle'
+
+apply from: 'gradle/idea-settings.gradle'

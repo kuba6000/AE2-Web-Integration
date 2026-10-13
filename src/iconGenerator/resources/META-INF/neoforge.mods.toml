@@ -1,0 +1,31 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "LGPL-3.0"
+
+[[mods]]
+modId = "ae2webintegration_icon_generator"
+version = "${version}"
+displayName = "AE2 Web Integration Icon Generator"
+authors = "kuba6000"
+description = "Exports client-rendered item and fluid icons for AE2 Web Integration."
+
+[[dependencies.ae2webintegration_icon_generator]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1.203,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.ae2webintegration_icon_generator]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,1.21.2)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.ae2webintegration_icon_generator]]
+modId = "ae2"
+type = "required"
+versionRange = "[19.2.4,)"
+ordering = "AFTER"
+side = "CLIENT"
