@@ -98,19 +98,7 @@ public final class PackExportWriter {
         submit(() -> {
             long started = System.nanoTime();
             try {
-                if (failure != null || publication.get() == Publication.CANCELED) return null;
-                assemblyBatches++;
-                // Borrowed for this batch; finish/cancel closes the single assembly owner.
-                // noinspection resource
-                IconPackWriter output = output();
-                for (Failure omitted : failures) {
-                    if (publication.get() == Publication.CANCELED) return null;
-                    output.failure(omitted.context, omitted.reason);
-                }
-                for (Capture capture : captures) {
-                    if (publication.get() == Publication.CANCELED) return null;
-                    output.add(capture.key, capture.pixels);
-                }
+                writeBatch(captures, failures);
             } finally {
                 assemblyWorkNanos += System.nanoTime() - started;
                 // Release transferred images before making capacity available to the client.
@@ -120,6 +108,22 @@ public final class PackExportWriter {
             }
             return null;
         });
+    }
+
+    private void writeBatch(@NotNull List<Capture> captures, @NotNull List<Failure> failures) throws IOException {
+        if (failure != null || publication.get() == Publication.CANCELED) return;
+        assemblyBatches++;
+        // Borrowed for this batch; finish/cancel closes the single assembly owner.
+        // noinspection resource
+        IconPackWriter output = output();
+        for (Failure omitted : failures) {
+            if (publication.get() == Publication.CANCELED) return;
+            output.failure(omitted.context, omitted.reason);
+        }
+        for (Capture capture : captures) {
+            if (publication.get() == Publication.CANCELED) return;
+            output.add(capture.key, capture.pixels);
+        }
     }
 
     /** Closes input and transfers a mutable statistics map and a read-only source list. */
@@ -185,19 +189,27 @@ public final class PackExportWriter {
             try {
                 task.call();
             } catch (Throwable exception) {
-                if (exception instanceof CancellationException && exception.getSuppressed().length == 0
-                    && publication.get() == Publication.CANCELED) return null;
-                Throwable previous = failure;
-                if (previous == null) failure = exception;
-                else if (previous != exception) {
-                    if (exception instanceof VirtualMachineError || exception instanceof ThreadDeath) {
-                        exception.addSuppressed(previous);
-                        failure = exception;
-                    } else previous.addSuppressed(exception);
-                }
+                recordFailure(exception);
             }
             return null;
         });
+    }
+
+    private void recordFailure(@NotNull Throwable exception) {
+        if (exception instanceof CancellationException && exception.getSuppressed().length == 0
+            && publication.get() == Publication.CANCELED) return;
+        Throwable previous = failure;
+        if (previous == null) {
+            failure = exception;
+            return;
+        }
+        if (previous == exception) return;
+        if (exception instanceof VirtualMachineError || exception instanceof ThreadDeath) {
+            exception.addSuppressed(previous);
+            failure = exception;
+        } else {
+            previous.addSuppressed(exception);
+        }
     }
 
     private void checkFailure() throws ExecutionException {

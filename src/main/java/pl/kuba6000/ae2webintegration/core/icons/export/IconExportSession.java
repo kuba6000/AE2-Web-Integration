@@ -28,33 +28,18 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     private static final int MAX_STEPS_PER_FRAME = 4096;
     // Bound retained native candidates to the format-1 mapping ceiling, including candidates that later fail rendering.
     private static final int MAX_QUEUED_ICONS = 250_000;
-    private static final int ETA_MIN_SAMPLES = 20;
-    private static final int PERCENT_SCALE = 100;
-    private static final long ETA_MIN_ELAPSED = TimeUnit.SECONDS.toNanos(2);
     // Yield a frame regularly for window events and the exclusive progress dialog.
     private static final long FRAME_BUDGET = TimeUnit.MILLISECONDS.toNanos(800);
     private final IIconCapture<C> renderer;
     private final PackExportWriter writer;
+    private final IconExportProgress progress = new IconExportProgress();
     private final Map<StableKey, C> identities = new HashMap<>();
     private final Deque<QueuedIcon> pendingIcons = new ArrayDeque<>();
     private List<Failure> failures = new ArrayList<>();
     private @Nullable IIconSource<C> catalogue;
     private String sourceNote = "";
     private @Nullable C baseline;
-    private int captured;
-    private int processed;
-    private int total;
-    private int renderFailures;
     private boolean discoveryComplete;
-    private long renderStarted;
-    private int omitted;
-    private int duplicates;
-    private int exactCandidates;
-    private int baseCandidates;
-    private long longestStep;
-    private long captureWorkNanos;
-    private long captureBackpressureNanos;
-    private long backpressureStarted;
     private boolean finishing;
     private boolean canceling;
     private String status = "Preparing full icon export";
@@ -88,26 +73,14 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
                 if (!writer.finished()) return false;
                 writer.close();
                 if (canceling) return true;
-                status = "Icon export complete: " + processed
-                    + "/"
-                    + total
-                    + " icons processed, "
-                    + captured
-                    + " captured, "
-                    + omitted
-                    + " failures; "
-                    + writer.completedPath()
-                    + sourceNote;
+                status = progress.complete(writer.completedPath(), sourceNote);
                 return true;
             }
             if (!writer.ready()) {
-                if (discoveryComplete && backpressureStarted == 0) backpressureStarted = System.nanoTime();
+                if (discoveryComplete) progress.waitingForWriter();
                 return false;
             }
-            if (backpressureStarted != 0) {
-                captureBackpressureNanos += System.nanoTime() - backpressureStarted;
-                backpressureStarted = 0;
-            }
+            progress.writerReady();
             IIconSource<C> source = catalogue;
             assert source != null : "Active export requires a catalogue";
             String waiting = source.prepare(this::omit);
@@ -138,25 +111,18 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         for (int step = 0; step < MAX_STEPS_PER_FRAME; step++) {
             long before = System.nanoTime();
             if (!discoverNext(source)) break;
-            longestStep = Math.max(longestStep, System.nanoTime() - before);
+            progress.longestStep = Math.max(progress.longestStep, System.nanoTime() - before);
             if (System.nanoTime() - started >= FRAME_BUDGET) break;
         }
         if (!failures.isEmpty()) {
             writer.write(Collections.emptyList(), failures);
             failures = new ArrayList<>();
         }
-        status = "Discovering icons: " + pendingIcons.size()
-            + " unique icons found, "
-            + exactCandidates
-            + " resources inspected, "
-            + omitted
-            + " discovery failures; total not known yet"
-            + sourceNote;
+        status = progress.discovering(pendingIcons.size(), sourceNote);
         if (source.done() && baseline == null) {
-            total = pendingIcons.size();
             identities.clear();
             discoveryComplete = true;
-            renderStarted = System.nanoTime();
+            progress.startRendering(pendingIcons.size());
         }
     }
 
@@ -164,14 +130,14 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         if (baseline != null) {
             C candidate = baseline;
             baseline = null;
-            baseCandidates++;
+            progress.baseCandidates++;
             enqueue(candidate);
             return true;
         }
         if (source.done()) return false;
         C candidate = discover(source);
         if (candidate == null) return true;
-        exactCandidates++;
+        progress.exactCandidates++;
         try {
             baseline = candidate.baseline();
         } catch (Throwable failure) {
@@ -187,12 +153,12 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         for (int count = 0; count < PackExportWriter.MAX_CAPTURES_PER_BATCH && !pendingIcons.isEmpty(); count++) {
             long before = System.nanoTime();
             capture(pendingIcons.removeFirst(), captures);
-            processed++;
-            longestStep = Math.max(longestStep, System.nanoTime() - before);
+            progress.processed++;
+            progress.longestStep = Math.max(progress.longestStep, System.nanoTime() - before);
             if (System.nanoTime() - started >= FRAME_BUDGET) break;
         }
         renderer.drain(captures);
-        captureWorkNanos += System.nanoTime() - started;
+        progress.captureWorkNanos += System.nanoTime() - started;
         if (!captures.isEmpty() || !failures.isEmpty()) {
             writer.write(captures, failures);
             failures = new ArrayList<>();
@@ -204,29 +170,12 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         source.verify();
         renderer.close();
         Map<String, Long> counts = source.counts();
-        counts.put("exactCandidates", (long) exactCandidates);
-        counts.put("baseCandidates", (long) baseCandidates);
-        counts.put("uniqueIdentities", (long) total);
-        counts.put("processed", (long) processed);
-        counts.put("renderFailures", (long) renderFailures);
-        counts.put("discoveryFailures", (long) (omitted - renderFailures));
-        counts.put("captured", (long) captured);
-        counts.put("failures", (long) omitted);
-        counts.put("duplicates", (long) duplicates);
-        counts.put("longestNativeStepNanos", longestStep);
-        counts.put("captureWorkNanos", captureWorkNanos);
-        counts.put("captureBackpressureNanos", captureBackpressureNanos);
+        progress.addStatistics(counts);
         renderer.statistics(counts);
         writer.finish(counts, source.sources());
         catalogue = null;
         finishing = true;
-        status = "Saving icon pack: " + processed
-            + "/"
-            + total
-            + " icons processed, 0 remaining, "
-            + omitted
-            + " failures"
-            + sourceNote;
+        status = progress.saving(sourceNote);
     }
 
     private @Nullable C discover(@NotNull IIconSource<C> source) {
@@ -250,7 +199,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         if (previous != null) {
             if (!previous.sameIdentity(candidate))
                 throw new IllegalStateException("Conflicting native identities for key " + key);
-            duplicates++;
+            progress.duplicates++;
             return;
         }
         if (pendingIcons.size() >= MAX_QUEUED_ICONS) {
@@ -264,9 +213,9 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     private void capture(@NotNull QueuedIcon queued, @NotNull List<Capture> captures) {
         try {
             renderer.capture(queued.candidate, queued.key, captures);
-            captured++;
+            progress.captured++;
         } catch (IIconCapture.RenderFailure failure) {
-            renderFailures++;
+            progress.renderFailures++;
             omit(queued.candidate.context() + "/" + queued.key, failure.getCause());
         }
     }
@@ -296,41 +245,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     @NotNull
     public String status() {
         if (!discoveryComplete || finishing || canceling) return status;
-        if (processed == total) {
-            return "Saving icon pack: " + processed
-                + "/"
-                + total
-                + " icons processed, 0 remaining; waiting for image writes"
-                + sourceNote;
-        }
-        int remaining = total - processed;
-        int percent = (int) ((long) processed * PERCENT_SCALE / total);
-        return "Rendering icons: " + processed
-            + "/"
-            + total
-            + " ("
-            + percent
-            + "%), "
-            + remaining
-            + " remaining, render ETA "
-            + remainingTime(remaining)
-            + "; "
-            + renderFailures
-            + " render failures, "
-            + (omitted - renderFailures)
-            + " discovery failures"
-            + sourceNote;
-    }
-
-    private @NotNull String remainingTime(int remaining) {
-        long elapsed = System.nanoTime() - renderStarted;
-        if (processed < ETA_MIN_SAMPLES || elapsed < ETA_MIN_ELAPSED) return "estimating";
-        long seconds = (long) Math.ceil((double) elapsed / processed * remaining / TimeUnit.SECONDS.toNanos(1));
-        long hours = TimeUnit.SECONDS.toHours(seconds);
-        long minutes = TimeUnit.SECONDS.toMinutes(seconds);
-        if (hours > 0) return "~" + hours + "h " + minutes % TimeUnit.HOURS.toMinutes(1) + "m";
-        if (minutes > 0) return "~" + minutes + "m " + seconds % TimeUnit.MINUTES.toSeconds(1) + "s";
-        return "~" + seconds + "s";
+        return progress.rendering(sourceNote);
     }
 
     private final class QueuedIcon {
@@ -357,7 +272,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
                 .replace('\r', ' ')
                 .replace('\n', ' ');
         failures.add(new Failure(context, reason));
-        omitted++;
+        progress.omitted++;
         LOG.warn("Icon candidate omitted ({}): {}", context, reason);
     }
 
