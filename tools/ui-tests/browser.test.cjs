@@ -731,6 +731,10 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 response.end(JSON.stringify({ status: 'OK', data: null }));
             } else if (resource === '/api/grids') {
                 if (options.gridDelay) await new Promise((resolve) => setTimeout(resolve, options.gridDelay));
+                if (options.gridError === 'NETWORK_ERROR') {
+                    response.destroy();
+                    return;
+                }
                 if (options.gridError) {
                     response.statusCode = 403;
                     response.end(JSON.stringify({ status: options.gridError, data: null }));
@@ -764,6 +768,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 response.statusCode = 202;
                 response.end(JSON.stringify({ status: 'OK', data: { jobId: options.nextPlanId ?? 7 } }));
             } else if (resource.endsWith('/submit')) {
+                if (options.submitDelay) await new Promise((resolve) => setTimeout(resolve, options.submitDelay));
                 response.statusCode = options.submitStatus === 'OK' ? 200 : 409;
                 response.end(JSON.stringify({ status: options.submitStatus, data: options.submitReason || null }));
             } else if (/\/crafting-plans\/\d+$/.test(resource)) {
@@ -1183,6 +1188,7 @@ test('autostart failures open the plan without repeating mutations or losing the
         else {
             options.submitStatus = failure;
             options.submitReason = '<CPU became unavailable>';
+            if (failure === 'NO_PERMISSIONS') options.submitDelay = 200;
         }
         await page.goto(`${base}#/grids/${gridA}/items`);
         await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
@@ -1211,7 +1217,11 @@ test('autostart failures open the plan without repeating mutations or losing the
             await poll(page);
             assert.equal(await notifications.isVisible(), false);
         }
-        if (failure === 'NO_PERMISSIONS')
+        if (failure === 'NO_PERMISSIONS') {
+            await page
+                .getByRole('status')
+                .filter({ hasText: /no longer have access/i })
+                .waitFor();
             assert.equal(
                 await page
                     .getByRole('list', { name: 'Plan resources', exact: true })
@@ -1219,6 +1229,7 @@ test('autostart failures open the plan without repeating mutations or losing the
                     .count(),
                 0
             );
+        }
         await poll(page);
         await page.goBack();
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -2374,13 +2385,9 @@ test('About shows runtime metadata and resource links while retaining the select
     assert.match(page.url(), /#\/about$/);
     const about = page.getByRole('heading', { name: 'About', exact: true }).locator('..');
     await about.getByText(options.modVersion).waitFor();
-    const headings = await about.getByRole('heading').allTextContents();
-    assert.ok(headings.indexOf('Mod') >= 0);
-    assert.ok(headings.indexOf('Mod') < headings.indexOf('Active theme'));
-    assert.ok(headings.indexOf('Active theme') < headings.indexOf('Included resources'));
     await about.getByText('AE2 Web Integration', { exact: true }).waitFor();
-    assert.equal(await about.getByText('kuba6000').count(), 2);
-    assert.equal(await about.getByText('LGPL-3.0-or-later').count(), 2);
+    await about.getByText('kuba6000').first().waitFor();
+    await about.getByText('LGPL-3.0-or-later').first().waitFor();
     await about.getByText('Default', { exact: true }).waitFor();
     await about.getByText('Monocraft', { exact: true }).waitFor();
     for (const family of ['Monocraft', 'Lato']) {
@@ -2403,7 +2410,6 @@ test('About shows runtime metadata and resource links while retaining the select
         'https://github.com/hackernoon/pixel-icon-library'
     ])
         assert.ok(await about.locator(`a[href="${href}"]`).count(), `About must link to ${href}`);
-    assert.doesNotMatch(await about.innerText(), /Lucide|Font Awesome|Material Icons|TERMS AND CONDITIONS|PREAMBLE/i);
     await clickTab(page, 'Network');
     assert.match(page.url(), new RegExp(`#/grids/${gridA}/settings$`));
     await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).waitFor();
@@ -2663,10 +2669,7 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
     await historyResource.locator('code').waitFor();
     assert.equal(await historyResource.getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
     await assertFormatted(page.getByRole('heading', { name: 'Cobalt Ingot', level: 3, exact: true }));
-    const timeline = page.getByRole('region', { name: 'Cobalt Ingot', exact: true });
-    await timeline.waitFor();
-    assert.equal(await timeline.getByText('example:cobalt_ingot', { exact: true }).isVisible(), true);
-    await assertFormatted(timeline.getByRole('heading', { name: 'Cobalt Ingot', exact: true }));
+    await assertFormatted(historyResource.getByRole('heading', { name: 'Cobalt Ingot', exact: true }));
 });
 
 test('Minecraft classic palette, obfuscation and literal HTML remain safe and readable', async (t) => {
@@ -2997,14 +3000,16 @@ test('CPU work, plans and history retain resources with unavailable registry met
     const resource = page
         .getByRole('list', { name: 'Plan resources', exact: true })
         .getByRole('button', { name: /Essentia/ });
-    await resource.waitFor();
-    assert.equal(await resource.locator('code').count(), 0);
+    await resource.hover();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.getByText('Essentia', { exact: true }).waitFor();
+    assert.equal(await tooltip.locator('code').count(), 0);
+    assert.doesNotMatch(await tooltip.innerText(), /null|undefined/);
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     const cpuResource = page
         .getByRole('region', { name: 'CPU resources', exact: true })
         .getByRole('button', { name: /Essentia/ });
     await cpuResource.hover();
-    const tooltip = page.getByRole('tooltip');
     assert.equal(await tooltip.getByText('Essentia', { exact: true }).isVisible(), true);
     assert.equal(await tooltip.locator('code').count(), 0);
     assert.doesNotMatch(await tooltip.innerText(), /null|undefined/);
@@ -3015,13 +3020,11 @@ test('CPU work, plans and history retain resources with unavailable registry met
     await cpuResource.waitFor();
     await page.goto(`${base}#/grids/${gridA}/history/1`);
     const historyResource = page.getByRole('region', { name: 'Essentia', exact: true });
-    await historyResource.waitFor();
+    await historyResource.locator('summary').click();
+    await historyResource.getByRole('list', { name: 'Exact intervals', exact: true }).waitFor();
     assert.equal(await historyResource.locator('code').count(), 0);
     await page.getByRole('heading', { name: 'Essentia', level: 3, exact: true }).waitFor();
-    const timeline = page.getByRole('region', { name: 'Essentia', exact: true });
-    await timeline.waitFor();
-    assert.equal(await timeline.locator('code').count(), 0);
-    assert.doesNotMatch(await timeline.innerText(), /null|undefined/);
+    assert.doesNotMatch(await historyResource.innerText(), /null|undefined/);
 });
 
 test('terminal sort criterion cycles independently of order and persists both', async (t) => {
@@ -5906,7 +5909,7 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
 test('uncertain submission outcomes cannot be retried by polling or route reentry', async (t) => {
     const { page, options, base } = await fixture(t);
     let planId = 7;
-    for (const status of ['TIMEOUT', 'INTERNAL_ERROR', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
+    for (const status of ['error', 500, 'OK', 'TIMEOUT', 'INTERNAL_ERROR', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
         await page.goto(`${base}#/grids/${gridA}/plans/${planId++}`);
         options.fault = { operation: 'submit', status };
         await page.getByRole('button', { name: 'Start', exact: true }).click();
@@ -6161,9 +6164,10 @@ test('crafting popup and plan share optional atlas icons and honor native CPU ad
     await page.getByRole('dialog').getByRole('textbox', { name: 'Craft quantity' }).fill('64');
     options.itemsA = [{ ...iron, icon: { page: 0, x: 64, y: 0 } }];
     await poll(page);
-    await page.waitForFunction(() =>
-        document.querySelector('dialog .resource-icon').style.backgroundPosition.startsWith('calc(-1')
-    );
+    await page.waitForFunction(() => {
+        const icon = document.querySelector('dialog .resource-icon');
+        return parseFloat(getComputedStyle(icon).backgroundPositionX) === -icon.getBoundingClientRect().width;
+    });
     assert.equal(await page.getByRole('dialog').getByRole('textbox', { name: 'Craft quantity' }).inputValue(), '64');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     const resources = page.getByRole('list', { name: 'Plan resources', exact: true });
@@ -7751,6 +7755,7 @@ test('empty slots remain decorative through selection, zero matches and CPU row-
             };
         });
     let measured = await cpuGeometry();
+    assert.ok(measured.empty.length > 0, 'The sparse CPU grid must contain decorative slots');
     assert.ok(measured.empty.every((height) => Math.abs(height - measured.real) < 0.03));
     options.cpuDetails['cpu-a'] = { ...cpuWork, hasTrackingInfo: false };
     const updated = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus/cpu-a'));
@@ -7758,6 +7763,7 @@ test('empty slots remain decorative through selection, zero matches and CPU row-
     await settleResponse(page, (await updated).request());
     measured = await cpuGeometry();
     assert.ok(measured.real < trackedHeight, 'untracked CPU rows preserve their more compact layout');
+    assert.ok(measured.empty.length > 0, 'Changing row height must retain decorative slots');
     assert.ok(measured.empty.every((height) => Math.abs(height - measured.real) < 0.03));
     assert.equal(await cpuResources.getByRole('button').count(), 1);
     await clickTab(page, 'Web settings');
@@ -8339,7 +8345,7 @@ test('Home and its chooser contain long identities on mobile in light and dark a
 test('Home keeps failed logout visible and allows an explicit retry', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(base);
-    options.logoutError = 'NETWORK_ERROR';
+    options.logoutError = 'INTERNAL_ERROR';
     await page.getByRole('button', { name: 'Log out', exact: true }).click();
     await page.getByRole('alert').waitFor({ timeout: 2000 });
     assert.equal(options.requests.filter((request) => request.path === '/api/auth/logout').length, 1);

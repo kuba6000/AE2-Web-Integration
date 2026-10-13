@@ -11,6 +11,40 @@ import type {
 } from './api-types.js';
 import type { ResourceResponse, IconMetadata, ApplicationContext } from './api-types.js';
 
+/** Wire codes declared by core ApiStatus; unrecognized replies leave mutations unconfirmed. */
+const responseStatuses = new Set([
+    'OK',
+    'INVALID_USER',
+    'INVALID_PASSWORD',
+    'NOT_ONLINE',
+    'UNAUTHORIZED',
+    'BAD_PARAM',
+    'INVALID_QUANTITY',
+    'NO_PERMISSIONS',
+    'CSRF_REJECTED',
+    'GRID_NOT_FOUND',
+    'CPU_NOT_FOUND',
+    'ITEM_NOT_FOUND',
+    'ITEM_IDENTITY_UNKNOWN',
+    'TRACKING_NOT_FOUND',
+    'INVALID_ID',
+    'CPU_PAUSE_UNSUPPORTED',
+    'CPU_NOT_BUSY',
+    'AMBIGUOUS_ITEM_KEY',
+    'JOB_NOT_DONE',
+    'FAIL',
+    'UPDATE_CHANGED',
+    'REQUEST_TOO_LARGE',
+    'UNSUPPORTED_MEDIA_TYPE',
+    'NOT_FOUND',
+    'METHOD_NOT_ALLOWED',
+    'TOO_MANY_REQUESTS',
+    'INTERNAL_ERROR',
+    'SERVER_BUSY',
+    'SERVER_STOPPING',
+    'TIMEOUT'
+]);
+
 export type ApiFailure = Error & { status?: string; data?: unknown };
 export type Api = {
     themes: (signal?: AbortSignal) => Promise<{ defaultTheme: string; themes: ThemeManifest[] }>;
@@ -117,14 +151,26 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             onUnauthorized();
             throw new ApiError('UNAUTHORIZED', 401);
         }
-        let envelope: { status: string; data: T; icons?: IconMetadata | null };
+        let parsed: unknown;
         try {
-            envelope = await response.json();
+            parsed = await response.json();
         } catch {
             throw new ApiError('INVALID_RESPONSE', response.status);
         }
+        // A malformed reply cannot confirm success or prove that a mutation was rejected.
+        if (
+            parsed === null ||
+            typeof parsed !== 'object' ||
+            Array.isArray(parsed) ||
+            !('status' in parsed) ||
+            typeof parsed.status !== 'string' ||
+            !responseStatuses.has(parsed.status) ||
+            (parsed.status === 'OK' && (!response.ok || !Object.hasOwn(parsed, 'data')))
+        )
+            throw new ApiError('INVALID_RESPONSE', response.status);
+        const envelope = parsed as { status: string; data: T; icons?: IconMetadata | null };
         if (!response.ok || envelope.status !== 'OK') {
-            throw new ApiError(envelope.status || 'INVALID_RESPONSE', response.status, envelope.data);
+            throw new ApiError(envelope.status, response.status, envelope.data);
         }
         return { data: envelope.data, icons: envelope.icons ?? null };
     }
