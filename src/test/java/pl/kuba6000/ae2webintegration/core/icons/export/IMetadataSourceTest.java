@@ -36,17 +36,17 @@ class IMetadataSourceTest {
         Files.write(low, "abc".getBytes(StandardCharsets.UTF_8));
         Files.write(high, "abcd".getBytes(StandardCharsets.UTF_8));
         IconPack.Metadata metadata = source.create(() -> false);
-        assertEquals("game", metadata.minecraftVersion);
-        assertEquals("loader", metadata.loader);
-        assertEquals("identity", metadata.compatibilityVersion);
-        assertEquals("generator", metadata.generatorVersion);
-        assertEquals(Collections.singletonMap("mod", "version"), metadata.mods);
+        assertEquals("game", metadata.minecraftVersion());
+        assertEquals("loader", metadata.loader());
+        assertEquals("identity", metadata.compatibilityVersion());
+        assertEquals("generator", metadata.generatorVersion());
+        assertEquals(Collections.singletonMap("mod", "version"), metadata.mods());
         assertEquals(
             Arrays.asList(
                 "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
                 "88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589"),
-            metadata.resourcePacks);
-        Instant captured = Instant.parse(metadata.generatedAt);
+            metadata.resourcePacks());
+        Instant captured = Instant.parse(metadata.generatedAt());
         assertFalse(captured.isBefore(before));
         assertFalse(captured.isAfter(after));
     }

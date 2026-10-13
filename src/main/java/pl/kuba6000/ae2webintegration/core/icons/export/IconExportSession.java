@@ -16,6 +16,8 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
+
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Failure;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -34,7 +36,7 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
     private final PackExportWriter writer;
     private final IconExportProgress progress = new IconExportProgress();
     private final Map<StableKey, C> identities = new HashMap<>();
-    private final Deque<QueuedIcon> pendingIcons = new ArrayDeque<>();
+    private final Deque<QueuedIcon<C>> pendingIcons = new ArrayDeque<>();
     private List<Failure> failures = new ArrayList<>();
     private @Nullable IIconSource<C> catalogue;
     private String sourceNote = "";
@@ -207,16 +209,20 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         }
         // Discovery finishes before rendering: these owned stacks cannot be changed by a renderer yet.
         identities.put(key, candidate);
-        pendingIcons.addLast(new QueuedIcon(key, candidate));
+        pendingIcons.addLast(new QueuedIcon<>(key, candidate));
     }
 
-    private void capture(@NotNull QueuedIcon queued, @NotNull List<Capture> captures) {
+    private void capture(@NotNull QueuedIcon<C> queued, @NotNull List<Capture> captures) {
         try {
-            renderer.capture(queued.candidate, queued.key, captures);
+            renderer.capture(queued.candidate(), queued.key(), captures);
             progress.captured++;
         } catch (IIconCapture.RenderFailure failure) {
             progress.renderFailures++;
-            omit(queued.candidate.context() + "/" + queued.key, failure.getCause());
+            omit(
+                queued.candidate()
+                    .context() + "/"
+                    + queued.key(),
+                failure.getCause());
         }
     }
 
@@ -248,16 +254,8 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
         return progress.rendering(sourceNote);
     }
 
-    private final class QueuedIcon {
-
-        final StableKey key;
-        final C candidate;
-
-        QueuedIcon(@NotNull StableKey key, @NotNull C candidate) {
-            this.key = key;
-            this.candidate = candidate;
-        }
-    }
+    @Desugar
+    private record QueuedIcon<C extends IIconCandidate<C>>(@NotNull StableKey key, @NotNull C candidate) {}
 
     private void omit(@NotNull String context, @NotNull Throwable failure) {
         assert catalogue != null : "Only active discovery/capture can omit candidates";

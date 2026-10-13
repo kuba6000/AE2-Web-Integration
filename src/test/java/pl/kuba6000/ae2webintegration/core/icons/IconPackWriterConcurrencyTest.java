@@ -341,11 +341,13 @@ class IconPackWriterConcurrencyTest {
                 for (int i = 1; i <= 2; i++) {
                     IconPack.Location location = actual.find(key(i));
                     assertNotNull(location);
-                    try (InputStream input = actual.openPage(location.page.digest)) {
+                    try (InputStream input = actual.openPage(
+                        location.page()
+                            .digest())) {
                         assertEquals(
                             0xff000000 | i,
                             ImageIO.read(input)
-                                .getRGB(location.x, location.y));
+                                .getRGB(location.x(), location.y()));
                     }
                 }
             }

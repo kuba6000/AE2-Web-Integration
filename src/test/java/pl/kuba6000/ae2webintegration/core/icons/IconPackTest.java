@@ -95,16 +95,19 @@ class IconPackTest {
                 "1.7.10",
                 "forge",
                 version,
-                provenance.generatorVersion,
-                provenance.generatedAt,
-                provenance.mods,
-                provenance.resourcePacks);
+                provenance.generatorVersion(),
+                provenance.generatedAt(),
+                provenance.mods(),
+                provenance.resourcePacks());
             Path output;
             try (IconPackWriter writer = new IconPackWriter(directory, metadata, 64)) {
                 output = writer.finish();
             }
             try (IconPack pack = IconPack.open(output, "1.7.10", "forge", version)) {
-                assertEquals(version, pack.metadata().compatibilityVersion);
+                assertEquals(
+                    version,
+                    pack.metadata()
+                        .compatibilityVersion());
             }
             for (String other : new String[] { "1", "01", "release-candidate", "RELEASE-CANDIDATE" }) {
                 if (!version.equals(other)) assertRejectedPack(output, "1.7.10", "forge", other);
@@ -155,7 +158,10 @@ class IconPackTest {
             output = writer.finish();
         }
         try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
-            assertEquals("today", pack.metadata().generatedAt);
+            assertEquals(
+                "today",
+                pack.metadata()
+                    .generatedAt());
             assertEquals(1, pack.failureCount());
             assertEquals(
                 1,
@@ -163,10 +169,12 @@ class IconPackTest {
                     .size());
             Location location = pack.find(key);
             assertNotNull(location);
-            try (InputStream stream = pack.openPage(location.page.digest)) {
+            try (InputStream stream = pack.openPage(
+                location.page()
+                    .digest())) {
                 BufferedImage image = ImageIO.read(stream);
-                assertEquals(0x804080ff, image.getRGB(location.x, location.y));
-                assertEquals(0x804080ff, image.getRGB(location.x - 1, location.y - 1));
+                assertEquals(0x804080ff, image.getRGB(location.x(), location.y()));
+                assertEquals(0x804080ff, image.getRGB(location.x() - 1, location.y() - 1));
             }
             assertNull(pack.find(StableKey.parse("AQEBAQEBAQEBAQEBAQEBAQ")));
         }
@@ -181,7 +189,8 @@ class IconPackTest {
         }
         IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1");
         String digest = pack.pages()
-            .get(0).digest;
+            .get(0)
+            .digest();
         try (InputStream first = pack.openPage(digest); InputStream second = pack.openPage(digest)) {
             pack.close();
             assertThrows(IOException.class, () -> pack.openPage(digest));
@@ -218,9 +227,13 @@ class IconPackTest {
             Location baseLocation = pack.find(base);
             assertNotNull(exactLocation);
             assertNotNull(baseLocation);
-            assertEquals(exactLocation.page.digest, baseLocation.page.digest);
-            assertEquals(exactLocation.x, baseLocation.x);
-            assertEquals(exactLocation.y, baseLocation.y);
+            assertEquals(
+                exactLocation.page()
+                    .digest(),
+                baseLocation.page()
+                    .digest());
+            assertEquals(exactLocation.x(), baseLocation.x());
+            assertEquals(exactLocation.y(), baseLocation.y());
         }
     }
 
@@ -255,22 +268,30 @@ class IconPackTest {
             assertNotNull(firstLocation);
             assertNotNull(secondLocation);
             assertNotNull(duplicateLocation);
-            assertEquals(firstLocation.page.digest, duplicateLocation.page.digest);
-            assertEquals(firstLocation.x, duplicateLocation.x);
-            assertEquals(firstLocation.y, duplicateLocation.y);
-            try (InputStream stream = pack.openPage(firstLocation.page.digest)) {
+            assertEquals(
+                firstLocation.page()
+                    .digest(),
+                duplicateLocation.page()
+                    .digest());
+            assertEquals(firstLocation.x(), duplicateLocation.x());
+            assertEquals(firstLocation.y(), duplicateLocation.y());
+            try (InputStream stream = pack.openPage(
+                firstLocation.page()
+                    .digest())) {
                 assertArrayEquals(
                     original,
                     ImageIO.read(stream)
-                        .getRGB(firstLocation.x, firstLocation.y, 64, 64, null, 0, 64));
+                        .getRGB(firstLocation.x(), firstLocation.y(), 64, 64, null, 0, 64));
             }
             int[] solid = new int[4096];
             Arrays.fill(solid, 0xff123456);
-            try (InputStream stream = pack.openPage(secondLocation.page.digest)) {
+            try (InputStream stream = pack.openPage(
+                secondLocation.page()
+                    .digest())) {
                 assertArrayEquals(
                     solid,
                     ImageIO.read(stream)
-                        .getRGB(secondLocation.x, secondLocation.y, 64, 64, null, 0, 64));
+                        .getRGB(secondLocation.x(), secondLocation.y(), 64, 64, null, 0, 64));
             }
         }
     }
@@ -300,7 +321,10 @@ class IconPackTest {
             output = writer.finish();
         }
         try (IconPack pack = IconPack.open(output, "1.7.10", "forge", "legacy-v1")) {
-            assertEquals(text, pack.metadata().generatedAt);
+            assertEquals(
+                text,
+                pack.metadata()
+                    .generatedAt());
         }
     }
 
@@ -420,11 +444,13 @@ class IconPackTest {
                 final int identity = i;
                 Location location = pack.find(StableKey.create(sink -> sink.putInt(identity)));
                 assertNotNull(location);
-                try (InputStream stream = pack.openPage(location.page.digest)) {
+                try (InputStream stream = pack.openPage(
+                    location.page()
+                        .digest())) {
                     assertEquals(
                         0xff000000 | i,
                         ImageIO.read(stream)
-                            .getRGB(location.x + 63, location.y + 63));
+                            .getRGB(location.x() + 63, location.y() + 63));
                 }
             }
         }
@@ -460,26 +486,34 @@ class IconPackTest {
                     .size());
             for (IconPack.Page page : pack.pages()) {
                 BufferedImage atlas;
-                try (InputStream stream = pack.openPage(page.digest)) {
+                try (InputStream stream = pack.openPage(page.digest())) {
                     atlas = ImageIO.read(stream);
                 }
                 for (int i = 0; i < count; i++) {
                     final int identity = i;
                     Location location = pack.find(StableKey.create(sink -> sink.putInt(identity)));
                     assertNotNull(location);
-                    if (!page.digest.equals(location.page.digest)) continue;
-                    assertArrayEquals(expected[i], atlas.getRGB(location.x, location.y, 64, 64, null, 0, 64));
+                    if (!page.digest()
+                        .equals(
+                            location.page()
+                                .digest()))
+                        continue;
+                    assertArrayEquals(expected[i], atlas.getRGB(location.x(), location.y(), 64, 64, null, 0, 64));
                     if (pageSize == 64) continue;
                     for (int offset = 0; offset < 64; offset++) {
-                        assertEquals(expected[i][offset], atlas.getRGB(location.x + offset, location.y - 1));
-                        assertEquals(expected[i][4032 + offset], atlas.getRGB(location.x + offset, location.y + 64));
-                        assertEquals(expected[i][offset * 64], atlas.getRGB(location.x - 1, location.y + offset));
-                        assertEquals(expected[i][offset * 64 + 63], atlas.getRGB(location.x + 64, location.y + offset));
+                        assertEquals(expected[i][offset], atlas.getRGB(location.x() + offset, location.y() - 1));
+                        assertEquals(
+                            expected[i][4032 + offset],
+                            atlas.getRGB(location.x() + offset, location.y() + 64));
+                        assertEquals(expected[i][offset * 64], atlas.getRGB(location.x() - 1, location.y() + offset));
+                        assertEquals(
+                            expected[i][offset * 64 + 63],
+                            atlas.getRGB(location.x() + 64, location.y() + offset));
                     }
-                    assertEquals(0x00123456, atlas.getRGB(location.x - 1, location.y - 1));
-                    assertEquals(0x017f23a1, atlas.getRGB(location.x + 64, location.y - 1));
-                    assertEquals(0x807f23a1, atlas.getRGB(location.x - 1, location.y + 64));
-                    assertEquals(0xff7f23a1, atlas.getRGB(location.x + 64, location.y + 64));
+                    assertEquals(0x00123456, atlas.getRGB(location.x() - 1, location.y() - 1));
+                    assertEquals(0x017f23a1, atlas.getRGB(location.x() + 64, location.y() - 1));
+                    assertEquals(0x807f23a1, atlas.getRGB(location.x() - 1, location.y() + 64));
+                    assertEquals(0xff7f23a1, atlas.getRGB(location.x() + 64, location.y() + 64));
                 }
             }
         }

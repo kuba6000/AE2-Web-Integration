@@ -34,9 +34,9 @@ public interface IMetadataSource {
                 ResourcePackFingerprint.hash(pack, canceled)
                     .toString());
             return new IconPack.Metadata(
-                target.minecraftVersion,
-                target.loader,
-                target.compatibilityVersion,
+                target.minecraftVersion(),
+                target.loader(),
+                target.compatibilityVersion(),
                 generatorVersion,
                 generatedAt,
                 mods,

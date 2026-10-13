@@ -24,6 +24,7 @@ import java.util.zip.ZipFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -89,8 +90,8 @@ public final class IconPack implements Closeable {
             || PackFormat.integer(root.get("contentHeight")) != PackFormat.ICON_SIZE)
             throw new IOException("Unsupported icon format");
         Metadata metadata = metadata(root);
-        if (!minecraftVersion.equals(metadata.minecraftVersion) || !loader.equals(metadata.loader)
-            || !compatibilityVersion.equals(metadata.compatibilityVersion))
+        if (!minecraftVersion.equals(metadata.minecraftVersion()) || !loader.equals(metadata.loader())
+            || !compatibilityVersion.equals(metadata.compatibilityVersion()))
             throw new IOException("Icon pack compatibility mismatch");
         String packId = PackFormat.text(root, "packId");
         PackFormat.digest(packId);
@@ -159,7 +160,7 @@ public final class IconPack implements Closeable {
             int y = PackFormat.integer(coordinate.get(2));
             if (pageIndex >= pages.size()) throw new IOException("Unknown page index");
             Page page = pages.get(pageIndex);
-            if (x > page.width - PackFormat.ICON_SIZE || y > page.height - PackFormat.ICON_SIZE)
+            if (x > page.width() - PackFormat.ICON_SIZE || y > page.height() - PackFormat.ICON_SIZE)
                 throw new IOException("Icon outside atlas");
             entries.put(key, new Location(page, x, y));
         }
@@ -287,28 +288,29 @@ public final class IconPack implements Closeable {
 
     public synchronized @NotNull InputStream openPage(@NotNull String digest) throws IOException {
         if (closing) throw new IOException("Icon pack is closed");
-        for (Page page : pages) if (page.digest.equals(digest)) {
-            InputStream input = zip.getInputStream(zip.getEntry(page.path));
-            readers++;
-            return new FilterInputStream(input) {
+        for (Page page : pages) if (page.digest()
+            .equals(digest)) {
+                InputStream input = zip.getInputStream(zip.getEntry(page.path()));
+                readers++;
+                return new FilterInputStream(input) {
 
-                private boolean released;
+                    private boolean released;
 
-                @Override
-                public void close() throws IOException {
-                    synchronized (IconPack.this) {
-                        if (released) return;
-                        released = true;
-                        try {
-                            super.close();
-                        } finally {
-                            readers--;
-                            if (closing && readers == 0) zip.close();
+                    @Override
+                    public void close() throws IOException {
+                        synchronized (IconPack.this) {
+                            if (released) return;
+                            released = true;
+                            try {
+                                super.close();
+                            } finally {
+                                readers--;
+                                if (closing && readers == 0) zip.close();
+                            }
                         }
                     }
-                }
-            };
-        }
+                };
+            }
         throw new FileNotFoundException("Unknown atlas page");
     }
 
@@ -320,60 +322,24 @@ public final class IconPack implements Closeable {
     }
 
     /** Native platform compatibility requirements, independent of a generated pack's provenance. */
-    public static final class Target {
+    @Desugar
+    public record Target(@NotNull String minecraftVersion, @NotNull String loader,
+        @NotNull String compatibilityVersion) {}
 
-        public final @NotNull String minecraftVersion, loader, compatibilityVersion;
+    @Desugar
+    public record Metadata(@NotNull String minecraftVersion, @NotNull String loader,
+        @NotNull String compatibilityVersion, @NotNull String generatorVersion, @NotNull String generatedAt,
+        @NotNull Map<String, String> mods, @NotNull List<String> resourcePacks) {
 
-        public Target(@NotNull String minecraftVersion, @NotNull String loader, @NotNull String compatibilityVersion) {
-            this.minecraftVersion = minecraftVersion;
-            this.loader = loader;
-            this.compatibilityVersion = compatibilityVersion;
+        public Metadata {
+            mods = Collections.unmodifiableMap(new TreeMap<>(mods));
+            resourcePacks = Collections.unmodifiableList(new ArrayList<>(resourcePacks));
         }
     }
 
-    public static final class Metadata {
+    @Desugar
+    public record Page(@NotNull String digest, @NotNull String path, int width, int height, long bytes) {}
 
-        public final @NotNull String minecraftVersion, loader, compatibilityVersion, generatorVersion, generatedAt;
-        public final @NotNull Map<String, String> mods;
-        public final @NotNull List<String> resourcePacks;
-
-        public Metadata(@NotNull String minecraftVersion, @NotNull String loader, @NotNull String compatibilityVersion,
-            @NotNull String generatorVersion, @NotNull String generatedAt, @NotNull Map<String, String> mods,
-            @NotNull List<String> resourcePacks) {
-            this.minecraftVersion = minecraftVersion;
-            this.loader = loader;
-            this.compatibilityVersion = compatibilityVersion;
-            this.generatorVersion = generatorVersion;
-            this.generatedAt = generatedAt;
-            this.mods = Collections.unmodifiableMap(new TreeMap<>(mods));
-            this.resourcePacks = Collections.unmodifiableList(new ArrayList<>(resourcePacks));
-        }
-    }
-
-    public static final class Page {
-
-        public final @NotNull String digest, path;
-        public final int width, height;
-        public final transient long bytes;
-
-        Page(@NotNull String digest, @NotNull String path, int width, int height, long bytes) {
-            this.digest = digest;
-            this.path = path;
-            this.width = width;
-            this.height = height;
-            this.bytes = bytes;
-        }
-    }
-
-    public static final class Location {
-
-        public final @NotNull Page page;
-        public final int x, y;
-
-        Location(@NotNull Page page, int x, int y) {
-            this.page = page;
-            this.x = x;
-            this.y = y;
-        }
-    }
+    @Desugar
+    public record Location(@NotNull Page page, int x, int y) {}
 }

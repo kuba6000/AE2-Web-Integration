@@ -35,6 +35,8 @@ import javax.imageio.stream.MemoryCacheImageOutputStream;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
+
 import pl.kuba6000.ae2webintegration.core.icons.IconPack.Metadata;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack.Page;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -85,8 +87,8 @@ public final class IconPackWriter implements Closeable {
         if (pageSize != PackFormat.ICON_SIZE && pageSize != PackFormat.SMALL_PAGE_DIMENSION
             && pageSize != PackFormat.DEFAULT_PAGE_DIMENSION
             && pageSize != PackFormat.MAX_PAGE_DIMENSION) throw new IllegalArgumentException("Unsupported page size");
-        if (!metadata.minecraftVersion.matches("[A-Za-z0-9._-]+"))
-            throw new IllegalArgumentException("Unsafe target filename");
+        if (!metadata.minecraftVersion()
+            .matches("[A-Za-z0-9._-]+")) throw new IllegalArgumentException("Unsafe target filename");
         this.outputDirectory = outputDirectory;
         this.metadata = metadata;
         this.pageSize = pageSize;
@@ -126,7 +128,7 @@ public final class IconPackWriter implements Closeable {
         String pixelDigest = PackFormat.hash(serializedPixels);
         List<PixelRecord> matches = pixelIndex.computeIfAbsent(pixelDigest, ignored -> new ArrayList<>());
         for (PixelRecord match : matches) if (samePixels(match)) {
-            entries.put(key.toString(), match.position);
+            entries.put(key.toString(), match.position());
             keyPixels.put(key.toString(), match);
             return;
         }
@@ -173,21 +175,13 @@ public final class IconPackWriter implements Closeable {
     }
 
     private boolean samePixels(@NotNull PixelRecord record) throws IOException {
-        pixelSpool.seek(record.offset);
+        pixelSpool.seek(record.offset());
         pixelSpool.readFully(comparedPixels);
         return Arrays.equals(comparedPixels, serializedPixels);
     }
 
-    private static final class PixelRecord {
-
-        final long offset;
-        final int @NotNull [] position;
-
-        PixelRecord(long offset, int @NotNull [] position) {
-            this.offset = offset;
-            this.position = position;
-        }
-    }
+    @Desugar
+    private record PixelRecord(long offset, int @NotNull [] position) {}
 
     public void failure(@NotNull String context, @NotNull String reason) throws IOException {
         checkOpen();
@@ -259,9 +253,9 @@ public final class IconPackWriter implements Closeable {
                 try {
                     EncodedPage result = pending.get(50, TimeUnit.MILLISECONDS);
                     pendingPages.removeFirst();
-                    pages.add(result.page);
-                    pngWorkNanosSum += result.workNanos;
-                    pngQueueWaitNanosSum += result.queueNanos;
+                    pages.add(result.page());
+                    pngWorkNanosSum += result.workNanos();
+                    pngQueueWaitNanosSum += result.queueNanos();
                     return;
                 } catch (TimeoutException waiting) {
                     // Cancellation is checked while a codec owns the page.
@@ -278,18 +272,8 @@ public final class IconPackWriter implements Closeable {
         }
     }
 
-    private static final class EncodedPage {
-
-        final @NotNull Page page;
-        final long workNanos;
-        final long queueNanos;
-
-        EncodedPage(@NotNull Page page, long workNanos, long queueNanos) {
-            this.page = page;
-            this.workNanos = workNanos;
-            this.queueNanos = queueNanos;
-        }
-    }
+    @Desugar
+    private record EncodedPage(@NotNull Page page, long workNanos, long queueNanos) {}
 
     public @NotNull Path finish() throws IOException {
         return finish(() -> false);
@@ -321,7 +305,7 @@ public final class IconPackWriter implements Closeable {
         flushPage();
         while (!pendingPages.isEmpty()) collectPage(canceled);
         List<Page> sorted = new ArrayList<>(pages);
-        sorted.sort(Comparator.comparing(page -> page.digest));
+        sorted.sort(Comparator.comparing(Page::digest));
         Map<String, Object> root = manifest(sorted);
         String packId = PackFormat.packId(
             PackFormat.GSON.toJsonTree(root)
@@ -336,16 +320,16 @@ public final class IconPackWriter implements Closeable {
                 for (Page page : sorted) {
                     checkCanceled(canceled);
                     PackFormat
-                        .zipEntry(zip, page.path, Files.readAllBytes(scratch.resolve(page.digest + ".png")), true);
+                        .zipEntry(zip, page.path(), Files.readAllBytes(scratch.resolve(page.digest() + ".png")), true);
                 }
             }
             checkCanceled(canceled);
             try (IconPack verified = IconPack
-                .open(temporary, metadata.minecraftVersion, metadata.loader, metadata.compatibilityVersion)) {
+                .open(temporary, metadata.minecraftVersion(), metadata.loader(), metadata.compatibilityVersion())) {
                 if (!packId.equals(verified.packId())) throw new IOException("Finished pack identity mismatch");
             }
             Path output = outputDirectory
-                .resolve("AE2WebIntegration-icons-" + metadata.minecraftVersion + "-" + packId + ".ae2wi-icons");
+                .resolve("AE2WebIntegration-icons-" + metadata.minecraftVersion() + "-" + packId + ".ae2wi-icons");
             // Cleanup must succeed before publication: a visible final archive always means success.
             close();
             checkCanceled(canceled);
@@ -371,35 +355,41 @@ public final class IconPackWriter implements Closeable {
         statistics.put("counts", statisticCounts);
         statistics.putIfAbsent("sources", new ArrayList<String>());
         Map<String, Integer> indices = new HashMap<>();
-        for (int i = 0; i < sorted.size(); i++) indices.put(sorted.get(i).digest, i);
+        for (int i = 0; i < sorted.size(); i++) indices.put(
+            sorted.get(i)
+                .digest(),
+            i);
         Map<String, int[]> mapping = new TreeMap<>();
         for (Map.Entry<String, int[]> entry : entries.entrySet()) {
             int[] position = entry.getValue();
             mapping.put(
                 entry.getKey(),
-                new int[] { indices.get(pages.get(position[0]).digest), position[1], position[2] });
+                new int[] { indices.get(
+                    pages.get(position[0])
+                        .digest()),
+                    position[1], position[2] });
         }
         Map<String, Object> root = new TreeMap<>();
         root.put("formatVersion", PackFormat.VERSION);
-        root.put("minecraftVersion", metadata.minecraftVersion);
-        root.put("loader", metadata.loader);
-        root.put("compatibilityVersion", metadata.compatibilityVersion);
-        root.put("generatorVersion", metadata.generatorVersion);
-        root.put("generatedAt", metadata.generatedAt);
+        root.put("minecraftVersion", metadata.minecraftVersion());
+        root.put("loader", metadata.loader());
+        root.put("compatibilityVersion", metadata.compatibilityVersion());
+        root.put("generatorVersion", metadata.generatorVersion());
+        root.put("generatedAt", metadata.generatedAt());
         root.put("contentWidth", PackFormat.ICON_SIZE);
         root.put("contentHeight", PackFormat.ICON_SIZE);
         Map<String, Object> environment = new TreeMap<>();
-        environment.put("mods", metadata.mods);
-        environment.put("resourcePacks", metadata.resourcePacks);
+        environment.put("mods", metadata.mods());
+        environment.put("resourcePacks", metadata.resourcePacks());
         root.put("environment", environment);
         root.put("entries", mapping);
         List<Map<String, Object>> pageRecords = new ArrayList<>();
         for (Page page : sorted) {
             Map<String, Object> record = new TreeMap<>();
-            record.put("digest", page.digest);
-            record.put("path", page.path);
-            record.put("width", page.width);
-            record.put("height", page.height);
+            record.put("digest", page.digest());
+            record.put("path", page.path());
+            record.put("width", page.width());
+            record.put("height", page.height());
             pageRecords.add(record);
         }
         root.put("pages", pageRecords);

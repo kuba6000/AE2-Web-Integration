@@ -94,10 +94,11 @@ public final class GetIconPage {
         IconPack.Page page = null;
         if (pack != null && pack.packId()
             .equals(packId)) {
-            for (IconPack.Page candidate : pack.pages()) if (candidate.digest.equals(digest)) {
-                page = candidate;
-                break;
-            }
+            for (IconPack.Page candidate : pack.pages()) if (candidate.digest()
+                .equals(digest)) {
+                    page = candidate;
+                    break;
+                }
         }
         if (page == null) {
             ApiResponse.error(ApiStatus.NOT_FOUND)
@@ -136,17 +137,17 @@ public final class GetIconPage {
             exchange.getResponseHeaders()
                 .set("Content-Type", "image/png");
             exchange.getResponseHeaders()
-                .set("Content-Length", Long.toString(page.bytes));
+                .set("Content-Length", Long.toString(page.bytes()));
             if (exchange.getRequestMethod()
                 .equals("HEAD")) {
                 exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, -1);
                 exchange.close();
                 return;
             }
-            exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, page.bytes);
+            exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, page.bytes());
             try (OutputStream output = exchange.getResponseBody()) {
                 byte[] buffer = new byte[STREAM_BUFFER_BYTES];
-                long remaining = page.bytes;
+                long remaining = page.bytes();
                 while (remaining > 0) {
                     int count = input.read(buffer, 0, (int) Math.min(buffer.length, remaining));
                     if (count < 0) throw new IOException("Truncated atlas page");

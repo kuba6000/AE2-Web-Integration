@@ -16,6 +16,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
+
 import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -118,11 +120,11 @@ public final class PackExportWriter {
         IconPackWriter output = output();
         for (Failure omitted : failures) {
             if (publication.get() == Publication.CANCELED) return;
-            output.failure(omitted.context, omitted.reason);
+            output.failure(omitted.context(), omitted.reason());
         }
         for (Capture capture : captures) {
             if (publication.get() == Publication.CANCELED) return;
-            output.add(capture.key, capture.pixels);
+            output.add(capture.key(), capture.pixels());
         }
     }
 
@@ -222,25 +224,9 @@ public final class PackExportWriter {
         return writer;
     }
 
-    public static final class Capture {
+    @Desugar
+    public record Capture(@NotNull StableKey key, int @NotNull [] pixels) {}
 
-        final StableKey key;
-        final int[] pixels;
-
-        public Capture(@NotNull StableKey key, int @NotNull [] pixels) {
-            this.key = key;
-            this.pixels = pixels;
-        }
-    }
-
-    public static final class Failure {
-
-        final String context;
-        final String reason;
-
-        public Failure(@NotNull String context, @NotNull String reason) {
-            this.context = context;
-            this.reason = reason;
-        }
-    }
+    @Desugar
+    public record Failure(@NotNull String context, @NotNull String reason) {}
 }

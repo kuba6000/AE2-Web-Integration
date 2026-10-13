@@ -266,7 +266,10 @@ class PackExportWriterTest {
         Path completed = writer.completedPath();
         assertNotNull(completed, "Finished export must publish a pack");
         try (IconPack pack = IconPack.open(completed, "test", "loader", "identity")) {
-            assertEquals(expected, pack.metadata().resourcePacks);
+            assertEquals(
+                expected,
+                pack.metadata()
+                    .resourcePacks());
         }
     }
 

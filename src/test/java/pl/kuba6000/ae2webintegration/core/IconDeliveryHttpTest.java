@@ -1173,7 +1173,8 @@ class IconDeliveryHttpTest {
         try (IconPack pack = IconPack.open(generated, "1.7.10", "forge", "test-identity")) {
             packId = pack.packId();
             digest = pack.pages()
-                .get(0).digest;
+                .get(0)
+                .digest();
             try (InputStream input = pack.openPage(digest)) {
                 png = IOUtils.toByteArray(input);
             }

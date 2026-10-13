@@ -53,13 +53,13 @@ public final class IconMappings {
 
     private @Nullable Reference reference(@Nullable IconPack.Location location) {
         if (location == null) return null;
-        IconPack.Page page = location.page;
-        Integer index = pageIndexes.get(page.digest);
+        IconPack.Page page = location.page();
+        Integer index = pageIndexes.get(page.digest());
         if (index == null) {
             index = pages.size();
-            pages.add(new Page(page.digest, page.width, page.height));
-            pageIndexes.put(page.digest, index);
+            pages.add(new Page(page.digest(), page.width(), page.height()));
+            pageIndexes.put(page.digest(), index);
         }
-        return new Reference(index, location.x, location.y);
+        return new Reference(index, location.x(), location.y());
     }
 }
