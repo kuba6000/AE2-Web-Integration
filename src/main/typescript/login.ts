@@ -96,7 +96,6 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-passwor
     button.addEventListener('click', () => {
         const reveal = input.type === 'password';
         input.type = reveal ? 'text' : 'password';
-        button.textContent = reveal ? 'Hide' : 'Show';
         button.setAttribute('aria-label', reveal ? 'Hide password' : 'Show password');
         button.setAttribute('aria-pressed', String(reveal));
     });

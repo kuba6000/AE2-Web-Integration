@@ -18,7 +18,12 @@
     <body>
         <main class="login-card">
             <header>
-                <p class="brand">AE2 <span>Web Integration</span></p>
+                <div class="brand">
+                    <svg class="login-icon brand-mark" aria-hidden="true" focusable="false">
+                        <use href="./assets/web/login-icons.svg#brand" />
+                    </svg>
+                    <p>AE2 <span>Web Integration</span></p>
+                </div>
                 <h1>Welcome to your terminal</h1>
                 <p class="intro">Sign in to access your networks.</p>
             </header>
@@ -28,8 +33,16 @@
             <noscript><p>Enable JavaScript to sign in to the terminal.</p></noscript>
             <section id="mainrow" hidden>
                 <div id="formSwitch" class="form-switch" role="group" aria-label="Account access" hidden>
-                    <button id="loginSwitch" type="button" aria-pressed="true">Log in</button>
-                    <button id="registerSwitch" type="button" aria-pressed="false">Register</button>
+                    <button id="loginSwitch" type="button" aria-pressed="true">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#login" /></svg
+                        ><span>Log in</span>
+                    </button>
+                    <button id="registerSwitch" type="button" aria-pressed="false">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#register" /></svg
+                        ><span>Register</span>
+                    </button>
                 </div>
                 <form action="" method="POST" id="formlogin" aria-label="Log in">
                     <label for="username">Username</label>
@@ -51,13 +64,23 @@
                             required
                         />
                         <button type="button" data-password="password" aria-label="Show password" aria-pressed="false">
-                            Show
+                            <svg class="login-icon" aria-hidden="true" focusable="false">
+                                <use href="./assets/web/login-icons.svg#eye" /></svg
+                            ><svg class="eye-slash" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path
+                                    d="M3 1h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h-2v-2h-2v-2h-2v-2h-2v-2h-2v-2H9v-2H7V7H5V5H3z"
+                                />
+                            </svg>
                         </button>
                     </div>
                     <label class="check"
                         ><input type="checkbox" id="remember" name="remember" /> Remember me for 7 days</label
                     >
-                    <button class="primary" type="submit">Log in</button>
+                    <button class="primary" type="submit">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#login" /></svg
+                        ><span>Log in</span>
+                    </button>
                 </form>
                 <form action="" method="POST" id="formregister" aria-label="Register" hidden>
                     <p class="form-help">
@@ -83,28 +106,50 @@
                             required
                         />
                         <button type="button" data-password="rpassword" aria-label="Show password" aria-pressed="false">
-                            Show
+                            <svg class="login-icon" aria-hidden="true" focusable="false">
+                                <use href="./assets/web/login-icons.svg#eye" /></svg
+                            ><svg class="eye-slash" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path
+                                    d="M3 1h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h2v2h-2v-2h-2v-2h-2v-2h-2v-2h-2v-2H9v-2H7V7H5V5H3z"
+                                />
+                            </svg>
                         </button>
                     </div>
                     <p id="passwordHelp" class="form-help">
                         Use a password unique to this server. Its administrator controls this service.
                     </p>
-                    <button class="primary" type="submit">Continue</button>
+                    <button class="primary" type="submit">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#register" /></svg
+                        ><span>Continue</span>
+                    </button>
                 </form>
                 <section id="confirmation" hidden aria-labelledby="confirmationTitle">
                     <h2 id="confirmationTitle">Confirm in Minecraft</h2>
                     <p>Run this command in the game to finish registration, then return here to log in.</p>
                     <label for="registrationCommand">Registration command</label>
                     <textarea id="registrationCommand" readonly rows="3" spellcheck="false"></textarea>
-                    <button id="copyCommand" type="button">Copy command</button>
+                    <button id="copyCommand" type="button">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#copy" /></svg
+                        ><span>Copy command</span>
+                    </button>
                     <p id="copyStatus" class="form-help" role="status"></p>
-                    <button id="confirmationDone" class="primary" type="button">Back to login</button>
+                    <button id="confirmationDone" class="primary" type="button">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#login" /></svg
+                        ><span>Back to login</span>
+                    </button>
                 </section>
             </section>
             <footer>
-                <p>
-                    This service uses cookies to keep you signed in and browser storage to save your interface
-                    preferences.
+                <p class="cookie-notice">
+                    <svg class="login-icon" aria-hidden="true" focusable="false">
+                        <use href="./assets/web/login-icons.svg#info" /></svg
+                    ><span>
+                        This service uses cookies to keep you signed in and browser storage to save your interface
+                        preferences.</span
+                    >
                 </p>
                 <a href="https://github.com/kuba6000/AE2-Web-Integration">AE2 Web Integration</a>
             </footer>

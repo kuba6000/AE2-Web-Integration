@@ -75,9 +75,28 @@ h2 {
     font-size: 20px;
 }
 .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     margin: 0;
     font-size: 18px;
     font-weight: 700;
+}
+.brand p {
+    margin: 0;
+}
+.login-icon {
+    display: block;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    fill: currentcolor;
+    shape-rendering: crispedges;
+}
+.brand-mark {
+    flex-basis: 32px;
+    width: 32px;
+    height: 32px;
 }
 .brand span {
     color: var(--muted);
@@ -110,6 +129,10 @@ label {
 input,
 textarea,
 button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     font: inherit;
     color: inherit;
     border-radius: 0;
@@ -172,9 +195,34 @@ button:active {
     margin: 0;
 }
 .password-field button {
+    position: relative;
     flex-shrink: 0;
-    min-width: 64px;
+    width: 48px;
+    min-width: 48px;
+    padding: 8px;
     margin-left: -2px;
+}
+.eye-slash {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    fill: currentcolor;
+    shape-rendering: crispedges;
+    display: none;
+}
+[data-password][aria-pressed='true'] .eye-slash {
+    display: block;
+}
+.cookie-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.cookie-notice .login-icon {
+    flex-basis: 16px;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
 }
 .check {
     display: flex;
