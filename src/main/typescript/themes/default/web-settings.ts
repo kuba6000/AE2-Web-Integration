@@ -33,7 +33,7 @@ export function createWebSettings(
                     <span data-theme-text="font"></span>
                     <select id="font">
                         <option value="monocraft">Monocraft</option>
-                        <option value="montserrat">Montserrat</option>
+                        <option value="lato">Lato</option>
                     </select>
                 </label>
                 <label>
@@ -82,7 +82,8 @@ export function createWebSettings(
     const savedAppearance = settings.get('appearance');
     let appearance =
         typeof savedAppearance === 'string' && appearances.includes(savedAppearance) ? savedAppearance : 'system';
-    let font = settings.get('font') === 'montserrat' ? 'montserrat' : 'monocraft';
+    const savedFont = settings.get('font');
+    let font = savedFont === 'lato' || savedFont === 'montserrat' ? 'lato' : 'monocraft';
     const savedColumns = settings.get('resourceColumns');
     let resourceColumns =
         typeof savedColumns === 'number' && Number.isInteger(savedColumns) && savedColumns >= 1 && savedColumns <= 8
@@ -132,7 +133,7 @@ export function createWebSettings(
         selectDisplay(displaySelect.value as TerminalDisplay);
     });
     fontSelect.addEventListener('change', () => {
-        if (fontSelect.value !== 'monocraft' && fontSelect.value !== 'montserrat') return;
+        if (fontSelect.value !== 'monocraft' && fontSelect.value !== 'lato') return;
         font = fontSelect.value;
         settings.set('font', font);
         document.documentElement.dataset.font = font;

@@ -158,35 +158,41 @@ for (const width of [390, 1280]) {
         const font = page.getByRole('combobox', { name: 'Font', exact: true });
         await font.waitFor({ timeout: 1500 });
         assert.equal(await font.inputValue(), 'monocraft');
-        assert.deepEqual(await font.locator('option').allTextContents(), ['Monocraft', 'Montserrat']);
-        const fontResponse = page.waitForResponse((r) =>
-            r.url().endsWith('/fonts/montserrat/Montserrat-Regular.woff2')
-        );
-        await font.selectOption('montserrat');
+        assert.deepEqual(await font.locator('option').allTextContents(), ['Monocraft', 'Lato']);
+        const fontResponse = page.waitForResponse((r) => r.url().endsWith('/fonts/lato/Lato-Regular.woff2'));
+        await font.selectOption('lato');
         assert.equal((await fontResponse).status(), 200);
         await page.evaluate(() => document.fonts.ready);
         assert.ok(
             await page.evaluate(() =>
-                Array.from(document.fonts).some((face) => face.family === 'Montserrat' && face.status === 'loaded')
+                Array.from(document.fonts).some((face) => face.family === 'Lato' && face.status === 'loaded')
             )
         );
         assert.match(
             await page
                 .getByRole('heading', { name: 'Web settings', exact: true })
                 .evaluate((n) => getComputedStyle(n).fontFamily),
-            /Montserrat/
+            /Lato/
         );
         await page.reload();
         await font.waitFor();
-        assert.equal(await font.inputValue(), 'montserrat');
+        assert.equal(await font.inputValue(), 'lato');
         await page.goto(`${base}#/grids/${gridA}/items`);
         const resource = page.getByRole('button', { name: /Iron Ingot/ });
         await resource.waitFor();
-        assert.match(await resource.evaluate((n) => getComputedStyle(n).fontFamily), /Montserrat/);
+        assert.match(await resource.evaluate((n) => getComputedStyle(n).fontFamily), /Lato/);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         await resource.click();
         await page.getByRole('heading', { name: 'Resource details', exact: true }).waitFor();
         await page.goto(`${base}#/web-settings`);
+        await page.evaluate(() => {
+            const key = 'ae2web:/:theme:default';
+            const settings = JSON.parse(localStorage.getItem(key));
+            localStorage.setItem(key, JSON.stringify({ ...settings, font: 'montserrat' }));
+        });
+        await page.reload();
+        await font.waitFor();
+        assert.equal(await font.inputValue(), 'lato');
         await font.selectOption('monocraft');
         await page.reload();
         await font.waitFor();
@@ -2270,7 +2276,7 @@ test('About shows runtime metadata and resource links while retaining the select
     assert.equal(await about.getByText('LGPL-3.0-or-later').count(), 2);
     await about.getByText('Default', { exact: true }).waitFor();
     await about.getByText('Monocraft', { exact: true }).waitFor();
-    for (const family of ['Monocraft', 'Montserrat']) {
+    for (const family of ['Monocraft', 'Lato']) {
         await about
             .getByRole('row')
             .filter({ has: page.getByRole('link', { name: family, exact: true }) })
@@ -2286,7 +2292,7 @@ test('About shows runtime metadata and resource links while retaining the select
         'https://github.com/kuba6000/AE2-Web-Integration',
         'https://github.com/kuba6000/AE2-Web-Integration/issues',
         'https://github.com/IdreesInc/Monocraft',
-        'https://github.com/JulietaUla/Montserrat',
+        'https://github.com/google/fonts/tree/main/ofl/lato',
         'https://github.com/hackernoon/pixel-icon-library'
     ])
         assert.ok(await about.locator(`a[href="${href}"]`).count(), `About must link to ${href}`);
