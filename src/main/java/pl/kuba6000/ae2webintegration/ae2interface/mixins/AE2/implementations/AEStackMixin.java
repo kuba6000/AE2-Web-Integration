@@ -40,6 +40,12 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
     }
 
     @Override
+    default boolean web$supportsStableIdentity() {
+        IAEStack<?> stack = this;
+        return stack instanceof AEItemStack || stack instanceof AEFluidStack;
+    }
+
+    @Override
     default @NotNull StableKey web$getKey() {
         return LegacyItemIdentity.encode(this);
     }
