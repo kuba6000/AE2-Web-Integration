@@ -177,6 +177,48 @@ class IconDeliveryHttpTest {
     }
 
     @Test
+    void packIsDiscoveredByExtensionWithoutRenamingTheExport() throws Exception {
+        installPack();
+        Path folder = directory.resolve("ae2webintegration");
+        Files.move(folder.resolve("icons.ae2wi-icons"), folder.resolve("AE2WebIntegration-icons-export.ae2wi-icons"));
+        Files.write(folder.resolve("old.ae2wi-icons.bak"), new byte[] { 1 });
+        Files.createDirectory(folder.resolve("folder.ae2wi-icons"));
+        CoreEngine.onServerStarted();
+
+        JsonObject data = json(connection("/api/icon-pack")).getAsJsonObject("data");
+        assertTrue(
+            data.get("available")
+                .getAsBoolean());
+        assertEquals(
+            packId,
+            data.get("packId")
+                .getAsString());
+        assertEquals(200, connection(pagePath()).getResponseCode());
+    }
+
+    @Test
+    void multiplePacksDisableIconsUntilTheConflictIsRemoved() throws Exception {
+        installPack();
+        Path folder = directory.resolve("ae2webintegration");
+        Path extra = folder.resolve("another-export.ae2wi-icons");
+        Files.copy(folder.resolve("icons.ae2wi-icons"), extra);
+        CoreEngine.onServerStarted();
+
+        JsonObject data = json(connection("/api/icon-pack")).getAsJsonObject("data");
+        assertFalse(
+            data.get("available")
+                .getAsBoolean());
+        assertEquals(200, connection("/assets/web/app/main.js").getResponseCode());
+        CoreEngine.onServerStopped();
+        Files.delete(extra);
+        CoreEngine.onServerStarted();
+        assertTrue(
+            json(connection("/api/icon-pack")).getAsJsonObject("data")
+                .get("available")
+                .getAsBoolean());
+    }
+
+    @Test
     void absentInvalidAndMismatchedPacksLeaveNormalServerAvailableAcrossRestarts() throws Exception {
         CoreEngine.onServerStarted();
         assertFalse(

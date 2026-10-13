@@ -88,12 +88,15 @@ To show item icons in the web panel, generate an icon pack from your Minecraft c
 2. Start the game with the resource packs you want to use for the icons, then enter a world.
 3. Run `/ae2webicons export` in chat and wait for the progress window to finish.
 4. Find the generated `.ae2wi-icons` file in the `ae2webicons` folder inside your game directory.
-5. Stop the server, copy that file into `config/ae2webintegration/`, and rename it to `icons.ae2wi-icons`.
+5. Stop the server and copy that file into `config/ae2webintegration/`. Keep its `.ae2wi-icons` extension;
+   the filename can stay unchanged.
 6. Start the server. In the web panel settings, choose **Icons and names** or **Icons only**
    under **Terminal display**.
 
 The icons use the appearance of your loaded resource packs. You can cancel generation from the
 progress window. To replace or remove the server's icon pack, stop the server first and restart it afterward.
+Keep only one `.ae2wi-icons` file in that folder. If several are present, the server logs their names
+and disables icons until the conflict is resolved and the server is restarted.
 Icons are optional; without an icon pack, the terminal displays item names.
 
 ### Terminal

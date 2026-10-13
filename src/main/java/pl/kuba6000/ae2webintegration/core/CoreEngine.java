@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
@@ -231,8 +232,24 @@ public class CoreEngine {
     private static void loadIconPack() {
         closeIconPack();
         IServerPlatform platform = AE2Controller.serverPlatform;
-        File file = Config.getConfigFile("icons.ae2wi-icons");
-        if (!file.isFile()) return;
+        File directory = Config.getConfigFile("");
+        File[] packs = directory.listFiles(
+            file -> file.isFile() && file.getName()
+                .endsWith(".ae2wi-icons"));
+        if (packs == null) {
+            LOG.error("Cannot list icon packs in {}. Terminal remains available without icons.", directory);
+            return;
+        }
+        if (packs.length == 0) return;
+        if (packs.length > 1) {
+            Arrays.sort(packs);
+            LOG.error(
+                "Multiple icon packs found: {}. Keep only one .ae2wi-icons file and restart the server. "
+                    + "Terminal remains available without icons.",
+                Arrays.toString(packs));
+            return;
+        }
+        File file = packs[0];
         try {
             iconPack = IconPack.open(
                 file.toPath(),
