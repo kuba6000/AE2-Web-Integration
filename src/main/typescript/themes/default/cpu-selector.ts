@@ -5,7 +5,7 @@ import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { cpuHref } from '../../app/router.js';
-import { selectionModes, renderCpuState } from './cpu-presentation.js';
+import { selectionModes, renderCpuState, renderCpuSelectionMode } from './cpu-presentation.js';
 import { terminalIcons, craftingHammer } from './icons/pixel/terminal.js';
 import { cpuChipIcon, cpuSearchIcon } from './icons/pixel/cpu-controls.js';
 import type { CpuTooltips } from './cpu-tooltips.js';
@@ -109,14 +109,15 @@ export function createCpuSelector(application: ThemeApplication, settings: Theme
         const name = element('span', '', 'cpu-selector-name');
         const badge = element('span', '', 'cpu-card-state');
         const icon = createResourceIcon();
-        link.append(icon, name, badge);
+        const mode = element('span');
+        link.append(icon, name, badge, mode);
         tips.bindCpu(
             link,
             () => key,
             () => updatingRows
         );
         li.append(link);
-        return { li, link, name, badge, icon };
+        return { li, link, name, badge, icon, mode };
     }
 
     function renderControls() {
@@ -210,6 +211,7 @@ export function createCpuSelector(application: ThemeApplication, settings: Theme
             if (cpu.key === selectedCpu) row.link.setAttribute('aria-current', 'page');
             else row.link.removeAttribute('aria-current');
             row.name.replaceChildren(renderMinecraftText(displayName));
+            renderCpuSelectionMode(row.mode, hasSelectionMode ? cpu.selectionMode : null, locale);
             row.icon.hidden = !cpu.isBusy || !cpu.finalOutput;
             renderCpuState(row.badge, cpu.isBusy, cpu.isPaused, locale);
             row.badge.append(element('span', `· ${locale.bytes(cpu.availableStorage)}`));

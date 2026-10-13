@@ -4,6 +4,7 @@ import { element } from './dom.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import type { TooltipBindings } from './tooltip-bindings.js';
+import { renderCpuSelectionMode, selectionModes } from './cpu-presentation.js';
 
 export function createPlanPanel(application: ThemeApplication, tooltip: TooltipBindings) {
     const panel = element('aside');
@@ -40,14 +41,17 @@ export function createPlanPanel(application: ThemeApplication, tooltip: TooltipB
         const name = element('strong');
         name.className = 'cpu-selector-name';
         const details = element('span');
-        label.append(input, name, details);
-        const entry = { label, input, name, details, tooltipContent: (): Node[] => [] };
+        const mode = element('span');
+        label.append(input, name, details, mode);
+        const entry = { label, input, name, details, mode, tooltipContent: (): Node[] => [] };
         tooltip.bind(label, () => entry.tooltipContent(), input);
         return entry;
     }
 
     function renderCpuRow(row: CpuRow, cpu: Cpu, state: ThemeState['crafting'], locale: Translator) {
         const { common: t, number } = locale;
+        const selectionMode = application.state.capabilities.cpuSelectionMode ? cpu.selectionMode : null;
+        renderCpuSelectionMode(row.mode, selectionMode, locale);
         row.tooltipContent = () => {
             const name = element('strong');
             name.append(renderMinecraftText(cpu.name || t('cpuUnnamed')));
@@ -63,6 +67,12 @@ export function createPlanPanel(application: ThemeApplication, tooltip: TooltipB
                 ),
                 element('span', t('coprocessors', { count: cpu.coProcessors }))
             ];
+            if (selectionMode) {
+                lines.push(
+                    element('span', `${t('cpuAutomaticSelection')}: ${t(selectionModes[selectionMode].label)}`),
+                    element('span', t('cpuSelectionModeHelp'))
+                );
+            }
             if (cpu.isBusy) {
                 const output = element('span');
                 if (cpu.finalOutput)

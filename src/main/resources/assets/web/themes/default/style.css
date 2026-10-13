@@ -555,6 +555,40 @@ header {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.cpu-selection-mode {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 28px;
+    width: 28px;
+    height: 24px;
+    color: var(--surface-text);
+}
+.cpu-selection-mode > svg {
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+}
+.cpu-selection-mode > svg:not(:only-child) {
+    flex-basis: 16px;
+    width: 16px;
+    height: 16px;
+}
+.cpu-selection-mode > svg + svg {
+    margin-left: -4px;
+    margin-top: 8px;
+}
+:is(.cpu-selector-link, .plan-cpu):has(.cpu-selection-mode:not([hidden])) {
+    position: relative;
+}
+:is(.cpu-selector-link, .plan-cpu):has(.cpu-selection-mode:not([hidden])) .cpu-selector-name {
+    padding-right: 32px;
+}
+:is(.cpu-selector-link, .plan-cpu) > .cpu-selection-mode {
+    position: absolute;
+    top: 3px;
+    right: 6px;
+}
 .cpu-selector-link .cpu-card-state > span:first-of-type {
     min-width: 0;
     overflow: hidden;

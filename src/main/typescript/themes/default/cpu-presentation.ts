@@ -4,12 +4,32 @@ import { element } from './dom.js';
 import type { CpuOutcome } from '../../app/cpus.js';
 import type { CpuSelectionMode } from '../../app/api-types.js';
 import { cancelIcon, pauseIcon, playIcon } from './icons/hackernoon/playback.js';
+import { userIcon } from './icons/hackernoon/user.js';
+import { cpuChipIcon } from './icons/pixel/cpu-controls.js';
 
 export const selectionModes: Record<CpuSelectionMode, { order: number; label: string }> = {
     PLAYER_ONLY: { order: 0, label: 'cpuPlayerOnly' },
     ALL: { order: 1, label: 'cpuAllSources' },
     AUTOMATION_ONLY: { order: 2, label: 'cpuAutomationOnly' }
 };
+
+export function renderCpuSelectionMode(target: HTMLElement, mode: CpuSelectionMode | null, locale: Translator) {
+    target.className = 'cpu-selection-mode';
+    target.hidden = !mode;
+    target.replaceChildren();
+    target.removeAttribute('aria-label');
+    target.removeAttribute('aria-description');
+    if (!mode) return;
+    target.role = 'img';
+    target.setAttribute(
+        'aria-label',
+        `${locale.common('cpuAutomaticSelection')}: ${locale.common(selectionModes[mode].label)}`
+    );
+    target.setAttribute('aria-description', locale.common('cpuSelectionModeHelp'));
+    if (mode === 'PLAYER_ONLY') target.innerHTML = userIcon;
+    else if (mode === 'AUTOMATION_ONLY') target.innerHTML = cpuChipIcon;
+    else target.innerHTML = userIcon + cpuChipIcon;
+}
 
 export function cpuOutcomeText(
     outcome: CpuOutcome | undefined,

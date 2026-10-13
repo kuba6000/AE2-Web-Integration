@@ -5,9 +5,10 @@ import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { cpuHref } from '../../app/router.js';
-import { renderCpuActions, renderCpuState, cpuOutcomeText } from './cpu-presentation.js';
+import { renderCpuActions, renderCpuState, cpuOutcomeText, renderCpuSelectionMode } from './cpu-presentation.js';
+import type { CpuTooltips } from './cpu-tooltips.js';
 
-export function createCpuOverview(application: ThemeApplication) {
+export function createCpuOverview(application: ThemeApplication, tips: CpuTooltips) {
     const overview = element('div', '', 'cpu-overview');
     const overviewHeader = element('div', '', 'terminal-heading');
     const title = element('h2');
@@ -40,7 +41,9 @@ export function createCpuOverview(application: ThemeApplication) {
         const heading = element('h3');
         const link = element('a', '', 'cpu-card-link');
         const badge = element('span', '', 'cpu-card-state');
-        header.append(heading, badge);
+        const mode = element('span');
+        tips.bindTool(mode);
+        header.append(heading, mode, badge);
         const work = element('div', '', 'cpu-card-output');
         const outputLabel = element('p', '', 'cpu-card-label');
         const output = element('p', '', 'cpu-card-output-value');
@@ -64,7 +67,21 @@ export function createCpuOverview(application: ThemeApplication) {
         notice.role = 'status';
         link.append(header, work, metrics);
         li.append(link, identity, actions, notice);
-        return { li, link, heading, badge, outputLabel, output, icon, fields, identityLabel, key, actions, notice };
+        return {
+            li,
+            link,
+            heading,
+            badge,
+            mode,
+            outputLabel,
+            output,
+            icon,
+            fields,
+            identityLabel,
+            key,
+            actions,
+            notice
+        };
     }
 
     function renderOverviewRow(entry: CpuRow, cpu: ThemeState['cpus']['cpus'][number], gridKey: string) {
@@ -77,6 +94,12 @@ export function createCpuOverview(application: ThemeApplication) {
         entry.link.title = cpu.key;
         entry.li.dataset.state = cpu.isBusy ? (cpu.isPaused ? 'paused' : 'busy') : 'idle';
         renderCpuState(entry.badge, cpu.isBusy, cpu.isPaused, locale);
+        renderCpuSelectionMode(
+            entry.mode,
+            application.state.capabilities.cpuSelectionMode ? cpu.selectionMode : null,
+            locale
+        );
+        tips.refreshTool(entry.mode);
         entry.outputLabel.textContent = t('cpuOutput');
         entry.output.replaceChildren();
         if (cpu.isBusy && cpu.finalOutput) {

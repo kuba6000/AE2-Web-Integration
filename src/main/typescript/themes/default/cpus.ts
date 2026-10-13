@@ -28,7 +28,7 @@ export function createCpuView(
         lifetime.signal
     );
     themeLifetime.onCleanup(tips.dispose);
-    const overview = createCpuOverview(application);
+    const overview = createCpuOverview(application, tips);
     themeLifetime.onCleanup(overview.dispose);
     const resources = createCpuResources(application, tips, themeLifetime);
     themeLifetime.onCleanup(resources.dispose);

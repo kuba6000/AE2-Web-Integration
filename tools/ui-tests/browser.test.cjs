@@ -4299,6 +4299,51 @@ test('CPU memory uses binary units through exabytes in overview and current work
         .waitFor();
 });
 
+for (const width of [390, 1280]) {
+    test(`CPU lists show native selection modes and hide indicators when unsupported at ${width}px`, async (t) => {
+        const { page, options, base } = await fixture(t, '', { viewport: { width, height: 844 } });
+        options.capabilities.cpuSelectionMode = true;
+        options.cpus = {
+            'cpu-player': { ...cpu, selectionMode: 'PLAYER_ONLY' },
+            'cpu-machine': { ...cpu, selectionMode: 'AUTOMATION_ONLY' },
+            'cpu-both': { ...cpu, selectionMode: 'ALL' },
+            'cpu-unknown': { ...cpu, selectionMode: null }
+        };
+        options.cpuDetails['cpu-player'] = { ...cpuWork, selectionMode: 'PLAYER_ONLY' };
+        for (const route of ['cpus', 'cpus/cpu-player', 'plans/7']) {
+            await page.goto(`${base}#/grids/${gridA}/${route}`);
+            if (width === 390 && route !== 'cpus')
+                await page.getByRole('button', { name: 'CPUs', exact: true }).click();
+            for (const name of ['Players only', 'Automation only', 'Players and automation']) {
+                await page
+                    .getByRole('img', { name: `Automatic selection: ${name}`, exact: true })
+                    .waitFor({ timeout: 2000 });
+            }
+            assert.equal(await page.getByRole('img', { name: /Automatic selection:/ }).count(), 3);
+            if (process.env.UI_SCREENSHOT_DIR) {
+                await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+                await page.screenshot({
+                    path: path.join(
+                        process.env.UI_SCREENSHOT_DIR,
+                        `cpu-modes-${width}-${route.replaceAll('/', '-')}.png`
+                    )
+                });
+            }
+        }
+        options.cpus['cpu-player'].selectionMode = null;
+        await poll(page);
+        await page
+            .getByRole('img', { name: 'Automatic selection: Players only', exact: true })
+            .waitFor({ state: 'hidden' });
+        assert.equal(await page.getByRole('img', { name: /Automatic selection:/ }).count(), 2);
+        options.capabilities.cpuSelectionMode = false;
+        await page.reload();
+        if (width === 390) await page.getByRole('button', { name: 'CPUs', exact: true }).click();
+        await page.getByRole('radio', { name: /cpu-player/ }).waitFor();
+        assert.equal(await page.getByRole('img', { name: /Automatic selection:/ }).count(), 0);
+    });
+}
+
 // Public browser/HTTP seam: navigation keeps a bounded selector and never mutates CPU work.
 test('CPU automation sorting uses native modes, keeps unknown last, and preserves saved intent without capability', async (t) => {
     const { page, options, base } = await fixture(t);
