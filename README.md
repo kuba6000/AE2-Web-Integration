@@ -15,37 +15,6 @@ through a Discord webhook.
 
 **THIS MOD SHOULD ONLY BE INSTALLED ON THE SERVER. IT ADDS NO ITEMS OR BLOCKS!**
 
-## Repository architecture
-
-The [`core`](https://github.com/kuba6000/AE2-Web-Integration/tree/core) branch is the brain of the mod. It
-contains almost all version-independent logic: the HTTP server, web API, authentication, configuration
-definitions, crafting and tracking logic, Discord integration, and the web assets.
-
-The Minecraft-version branches are thin adapters around that shared core. They contain only the code that has
-to know about a specific Minecraft version, mod loader, or AE2 API: lifecycle hooks, config and command wiring,
-Mixins, and conversions between AE2 objects and the interfaces understood by core.
-
-| Branch | Purpose |
-| --- | --- |
-| [`core`](https://github.com/kuba6000/AE2-Web-Integration/tree/core) | Shared, version-independent logic and this documentation. **It is not a standalone Minecraft mod.** |
-| [`1.21.1`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.21.1) | NeoForge 1.21.1 adapter |
-| [`1.20.1`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.20.1) | Forge 1.20.1 adapter |
-| [`1.12.2`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.12.2) | Forge 1.12.2 adapter for AE2 UEL |
-| [`1.7.10`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.7.10) | Forge 1.7.10 adapter for GTNH |
-
-Each version branch includes `core` as a Git submodule pinned to a tested commit and packages it into the final
-mod JAR. Shared behavior should normally be changed on `core`; a version branch should only contain the adapter
-needed to make that behavior work on its Minecraft and AE2 version.
-
-If you only want to use the mod, download a version-specific JAR from
-[Releases](https://github.com/kuba6000/AE2-Web-Integration/releases),
-[CurseForge](https://www.curseforge.com/minecraft/mc-mods/ae2-web-integration), or
-[Modrinth](https://modrinth.com/mod/ae2-web-integration). Do not try to install the `core` branch by itself.
-
-For development, install Node.js 22.13+ on the 22.x line or Node.js 24+ with npm on PATH, then run
-core checks with `./gradlew test spotlessCheck`. Gradle compiles the TypeScript frontend and packages
-its JavaScript output; Node.js is not required to run the mod. See [frontend development](tools/ui-tests/README.md).
-
 ## Showcase on YouTube
 
 ### Main mod
@@ -118,7 +87,7 @@ ZIP in `config/ae2webintegration/themes/` and restart the server. Set `general.d
 `builtin:default` for the built-in UI. Users can follow that default or keep their own browser choice.
 
 If a theme prevents normal use, open the page with `?safe=1` before its `#` fragment to
-use the built-in UI. See the [theme author guide](docs/themes/README.md) for creating themes.
+use the built-in UI.
 
 ## Gallery
 
@@ -199,6 +168,11 @@ location / {
 }
 ```
 
+### Hosting through another web server
+
+The [`tools/php-proxy`](tools/php-proxy) directory contains a PHP reverse proxy that serves
+the mod's website, assets and API through an existing web server.
+
 ## Requirements
 
 - A compatible AE2 installation for one of the supported Minecraft versions
@@ -251,21 +225,6 @@ Leave `ntfy.user` and `ntfy.password` empty when the topic is public. A private 
 
 `notifications.full_domain` is optional. When it is set, opening the notification goes to that address.
 
-## Custom website and Automation
-
-If you already have a web server and want to host the panel there, you can! The
-[`tools/php-proxy`](./tools/php-proxy) directory contains a PHP reverse
-proxy. It serves the mod's website, assets and API through your web server.
-
-If you want to use this mod as an API endpoint,
-website exposes the entire API at /api/ endpoint,
-documentation can be found here: https://ae2web.kuba6000.pl/docs/
-*NOTE: All requests should be sent to YOUR server, NOT ae2web.kuba6000.pl*
-
-You can also generate the entire documentation yourself,
-see the [OpenAPI generator guide](tools/openapi-doclet/README.md) for generating the API
-specification from endpoint annotations and Javadocs.
-
 ## Compatibility
 
 The mod currently supports Minecraft 1.21.1 (NeoForge), 1.20.1 (Forge), 1.12.2 (Forge), and 1.7.10 (Forge/GTNH).
@@ -280,6 +239,58 @@ A few additional compatibility notes:
   [AE2FC for 1.12.2](https://github.com/AE2-UEL/AE2FluidCraft-Rework/).
 - The 1.20.1 and 1.21.1 builds include optional
   [AdvancedAE](https://www.curseforge.com/minecraft/mc-mods/advancedae) integration.
+
+## Development
+
+### Repository architecture
+
+The [`core`](https://github.com/kuba6000/AE2-Web-Integration/tree/core) branch contains the shared,
+version-independent logic: the HTTP server, web API, authentication, configuration
+definitions, crafting and tracking logic, Discord integration, and the web assets.
+
+The Minecraft-version branches are thin adapters around that shared core. They contain only the code that has
+to know about a specific Minecraft version, mod loader, or AE2 API: lifecycle hooks, config and command wiring,
+Mixins, and conversions between AE2 objects and the interfaces understood by core.
+
+| Branch | Purpose |
+| --- | --- |
+| [`core`](https://github.com/kuba6000/AE2-Web-Integration/tree/core) | Shared, version-independent logic and this documentation. **It is not a standalone Minecraft mod.** |
+| [`1.21.1`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.21.1) | NeoForge 1.21.1 adapter |
+| [`1.20.1`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.20.1) | Forge 1.20.1 adapter |
+| [`1.12.2`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.12.2) | Forge 1.12.2 adapter for AE2 UEL |
+| [`1.7.10`](https://github.com/kuba6000/AE2-Web-Integration/tree/1.7.10) | Forge 1.7.10 adapter for GTNH |
+
+Each version branch includes `core` as a Git submodule pinned to a tested commit and packages it into the final
+mod JAR. Shared behavior should normally be changed on `core`; a version branch should only contain the adapter
+needed to make that behavior work on its Minecraft and AE2 version.
+
+### Building and checking
+
+Use a Minecraft-version branch to build an installable mod JAR. Initialize its submodules before
+building:
+
+```shell
+git submodule update --init --recursive
+./gradlew build
+```
+
+The shared core can be checked independently with `./gradlew test spotlessCheck`.
+
+Building requires Node.js 22.13+ on the 22.x line or Node.js 24+, with npm on `PATH`, alongside
+the JDK required by the branch. Gradle installs the locked frontend dependencies, compiles TypeScript,
+and packages the JavaScript output. Node.js and npm are not required to run the finished mod.
+
+See [frontend development](tools/ui-tests/README.md) for frontend commands and browser tests.
+
+### API and custom themes
+
+The web API is available under `/api/` on your Minecraft server. See the
+[API documentation](https://ae2web.kuba6000.pl/docs/); send requests to your own server, not the
+documentation host.
+
+- [OpenAPI generator](tools/openapi-doclet/README.md) — generate the API specification from endpoint
+  annotations and Javadocs.
+- [Theme author guide](docs/themes/README.md) — theme contracts, development tools and the example project.
 
 ## License
 
