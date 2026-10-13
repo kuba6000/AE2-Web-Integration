@@ -284,6 +284,13 @@ footer {
 footer p {
     margin-bottom: 10px;
 }
+.credits {
+    margin: 16px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid #9a99a3;
+    color: var(--muted);
+    text-align: center;
+}
 a {
     color: var(--text);
     text-underline-offset: 3px;
