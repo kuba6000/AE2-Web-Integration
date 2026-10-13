@@ -9,6 +9,11 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 /** Native resource key: equals/hashCode identify the exact variant independently of quantity or crafting state. */
 public interface IAEKey {
 
+    /** Cheap native capability check; unsupported resources remain displayable but cannot enter keyed history. */
+    default boolean web$supportsStableIdentity() {
+        return true;
+    }
+
     /** Server-thread-only category from the native resource, without constructing a display stack. */
     @NotNull
     ResourceType web$getResourceType();

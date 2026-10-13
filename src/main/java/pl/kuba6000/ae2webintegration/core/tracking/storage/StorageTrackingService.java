@@ -139,6 +139,7 @@ public final class StorageTrackingService implements AutoCloseable {
         boolean startHistory = persist && !state.persisting;
         Map<StableKey, StorageObservation.Row> next = observation.full() ? new HashMap<>() : new HashMap<>(state.rows);
         List<StorageHistoryPoint> points = new ArrayList<>();
+        List<StorageObservation.Row> unkeyed = new ArrayList<>();
         Set<StableKey> reported = new HashSet<>();
         if (gap || !observation.flowComplete() || state.snapshot.revision() == 0 || startHistory) {
             points.add(point(state, observation, StorageHistoryPoint.Kind.GAP, null, false, 0, 0, false));
@@ -146,11 +147,14 @@ public final class StorageTrackingService implements AutoCloseable {
         for (StorageObservation.Row row : observation.rows()) {
             StableKey key = row.resource()
                 .itemKey();
-            if (key == null) throw new IllegalArgumentException("Tracked resource requires a stable identity");
-            reported.add(key);
-            StorageObservation.Row old = state.rows.get(key);
             boolean present = row.resource()
                 .quantity() != 0 || row.craftable();
+            if (key == null) {
+                if (present) unkeyed.add(row);
+                continue;
+            }
+            reported.add(key);
+            StorageObservation.Row old = state.rows.get(key);
             if (present) next.put(key, row);
             else next.remove(key);
             if (!startHistory && !row.equals(old) && (present || old != null)) {
@@ -198,6 +202,8 @@ public final class StorageTrackingService implements AutoCloseable {
             }
         }
         for (StorageObservation.Flow flow : observation.flows()) {
+            if (flow.resource()
+                .itemKey() == null) continue;
             points.add(
                 point(
                     state,
@@ -230,6 +236,8 @@ public final class StorageTrackingService implements AutoCloseable {
             }
         }
         state.rows = next;
+        List<StorageObservation.Row> visible = new ArrayList<>(next.values());
+        visible.addAll(unkeyed);
         state.snapshot = new StorageSnapshot(
             state.generation,
             state.snapshot.revision() + 1,
@@ -237,7 +245,7 @@ public final class StorageTrackingService implements AutoCloseable {
             observation.full() || state.snapshot.stockComplete() && !gap,
             state.snapshot.flowComplete() && observation.flowComplete() && !gap,
             persistence,
-            new ArrayList<>(next.values()));
+            visible);
         state.handledLossEpoch = lossEpoch;
     }
 

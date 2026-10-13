@@ -87,7 +87,14 @@ public final class GetItems extends ISyncedRequest {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        StorageSnapshot shared = CoreEngine.observeStorage(grid);
+        StorageSnapshot shared;
+        try {
+            shared = CoreEngine.observeStorage(grid);
+        } catch (RuntimeException failedObservation) {
+            // The coordinator logs the failed attempt and owns retry timing; do not enumerate again here.
+            deny(ApiStatus.INTERNAL_ERROR);
+            return;
+        }
         if (shared != null) {
             IconPack pack = icons ? CoreEngine.getIconPack() : null;
             IconMappings mappings = pack == null ? null : new IconMappings(pack);

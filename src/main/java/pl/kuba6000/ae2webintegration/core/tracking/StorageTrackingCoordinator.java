@@ -33,6 +33,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private static final long DISCOVERY_MILLIS = TimeUnit.SECONDS.toMillis(1);
     private static final long VIEWER_LEASE_MILLIS = TimeUnit.SECONDS.toMillis(10);
+    private static final long FAILURE_RETRY_MILLIS = TimeUnit.SECONDS.toMillis(30);
     private final StorageTrackingService service;
     private final GridIdentityRegistry identities;
     private final ConfigSettings.ResourceTracking settings;
@@ -62,7 +63,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             if (grid != null && GridFilter.isUsable(grid)
                 && binding.key.equals(identities.getKey(grid))
                 && (nowMillis >= binding.nextObservation
-                    || !binding.lastFailure && binding.capture.requiresReconciliation()
+                    || binding.lastFailure == null && binding.capture.requiresReconciliation()
                         && nowMillis - binding.lastObservation >= settings.activeIntervalMillis)) {
                 observe(binding, grid, nowMillis);
                 break;
@@ -77,9 +78,11 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         Binding binding = binding(key, grid, enabled(key));
         boolean wasActive = binding.activeUntil > nowMillis;
         binding.activeUntil = nowMillis + VIEWER_LEASE_MILLIS;
-        if (!wasActive) binding.nextObservation = Math.min(binding.nextObservation, nowMillis);
+        if (!wasActive && binding.lastFailure == null)
+            binding.nextObservation = Math.min(binding.nextObservation, nowMillis);
         StorageObservation observation = nowMillis >= binding.nextObservation ? observe(binding, grid, nowMillis)
             : null;
+        if (binding.lastFailure != null) throw binding.lastFailure;
         StorageSnapshot snapshot = service.snapshot(key);
         if (snapshot != null && snapshot.revision() != 0 && snapshot.stockComplete()) return snapshot;
         // The first request can use its detached baseline without waiting for the background writer.
@@ -104,7 +107,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             if (key == null) continue;
             Binding existing = bindings.get(key);
             boolean persist = enabled(key);
-            if (!persist && (existing == null || existing.activeUntil <= nowMillis)) continue;
+            if (!persist && (existing == null || existing.activeUntil <= nowMillis
+                && (existing.lastFailure == null || nowMillis >= existing.nextObservation))) continue;
             binding(key, grid, persist);
             present.add(key);
         }
@@ -148,9 +152,11 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     }
 
     private @Nullable StorageObservation observe(Binding binding, IAEGrid grid, long nowMillis) {
+        long started = System.nanoTime();
         binding.lastObservation = nowMillis;
-        binding.nextObservation = nowMillis + (binding.activeUntil > nowMillis ? settings.activeIntervalMillis
-            : TimeUnit.SECONDS.toMillis(settings.idleIntervalSeconds));
+        long interval = binding.activeUntil > nowMillis ? settings.activeIntervalMillis
+            : TimeUnit.SECONDS.toMillis(settings.idleIntervalSeconds);
+        binding.nextObservation = nowMillis + interval;
         try {
             StorageObservation observation = binding.capture
                 .observe(grid, null, nowMillis, nowMillis >= binding.nextFull);
@@ -159,17 +165,26 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             }
             if (!service.submit(binding.key, binding.generation, observation, binding.persist)) {
                 binding.capture.markGap();
-                binding.lastFailure = true;
+                binding.lastFailure = new IllegalStateException("Storage observation queue has no capacity");
+                binding.nextObservation = retryAt(nowMillis, started, interval);
                 return null;
             }
-            binding.lastFailure = false;
+            binding.lastFailure = null;
             return observation;
         } catch (RuntimeException failure) {
             binding.capture.markGap();
-            if (!binding.lastFailure) LOG.warn("Storage observation failed for network {}", binding.key, failure);
-            binding.lastFailure = true;
+            if (binding.lastFailure == null)
+                LOG.warn("Storage observation failed for network {}", binding.key, failure);
+            binding.lastFailure = failure;
+            binding.nextObservation = retryAt(nowMillis, started, interval);
             return null;
         }
+    }
+
+    private static long retryAt(long nowMillis, long startedNanos, long interval) {
+        // A slow failed read must not consume its own retry delay while it blocks the game thread.
+        long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
+        return nowMillis + elapsed + Math.max(interval, FAILURE_RETRY_MILLIS);
     }
 
     private void detach(Binding binding) {
@@ -196,7 +211,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private final WeakReference<IAEGrid> grid;
         private final StorageCapture capture;
         private boolean persist;
-        private boolean lastFailure;
+        private @Nullable RuntimeException lastFailure;
         private long activeUntil;
         private long nextObservation;
         private long lastObservation;

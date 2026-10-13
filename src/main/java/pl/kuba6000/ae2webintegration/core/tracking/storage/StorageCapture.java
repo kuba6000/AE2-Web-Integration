@@ -24,6 +24,8 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 /** Producer-owned native identities and primitive counters. No native object leaves observe(). */
 public final class StorageCapture implements IIdentityHolder {
 
+    private static final int UNSUPPORTED = -2;
+
     private final Thread producer = Thread.currentThread();
     private final int maxResources;
     private final Map<IAEKey, Entry> resources = new HashMap<>();
@@ -34,6 +36,7 @@ public final class StorageCapture implements IIdentityHolder {
     private long sequence;
     private int absoluteDepth;
     private boolean absoluteFailed;
+    private boolean hasUnkeyedResources;
     private final List<Entry> staged = new ArrayList<>();
 
     public StorageCapture(int maxResources) {
@@ -52,34 +55,53 @@ public final class StorageCapture implements IIdentityHolder {
             return -1;
         }
         try {
-            Entry existing = resources.get(resource);
-            if (existing != null) return existing.token;
-            if (entries.size() == maxResources) {
-                markGap();
-                return -1;
-            }
-            IAEKey retained = resource.web$copyTrackingIdentity();
-            Entry entry = new Entry(entries.size(), retained);
-            resources.put(retained, entry);
-            entries.add(entry);
-            return entry.token;
+            return admit(resource);
+        } catch (UnsupportedOperationException unsupported) {
+            hasUnkeyedResources = true;
+            return UNSUPPORTED;
         } catch (RuntimeException unsupported) {
             markGap();
             return -1;
         }
     }
 
+    private int admit(IAEKey resource) {
+        if (!resource.web$supportsStableIdentity()) {
+            hasUnkeyedResources = true;
+            return UNSUPPORTED;
+        }
+        Entry existing = resources.get(resource);
+        if (existing != null) return existing.unsupported ? UNSUPPORTED : existing.token;
+        if (entries.size() >= maxResources) {
+            markGap();
+            return -1;
+        }
+        IAEKey retained = resource.web$copyTrackingIdentity();
+        Entry entry = new Entry(entries.size(), retained);
+        resources.put(retained, entry);
+        entries.add(entry);
+        return entry.token;
+    }
+
     /** Called only for a completed real operation; rejected and simulated operations add nothing. */
     public void recordFlow(int token, long input, long output) {
         if (input < 0 || output < 0) throw new IllegalArgumentException("Flow must be nonnegative");
         if (input == 0 && output == 0) return;
-        if (!isProducerThread() || token < 0 || token >= entries.size()) {
+        if (!isProducerThread()) {
+            markGap();
+            return;
+        }
+        if (token == UNSUPPORTED) {
+            hasUnkeyedResources = true;
+            return;
+        }
+        if (token < 0 || token >= entries.size()) {
             markGap();
             return;
         }
         Entry entry = entries.get(token);
-        entry.input = add(entry.input, input);
-        entry.output = add(entry.output, output);
+        entry.input = add(entry, entry.input, input);
+        entry.output = add(entry, entry.output, output);
         dirty(entry);
         entry.hasAbsolute = false;
     }
@@ -158,6 +180,8 @@ public final class StorageCapture implements IIdentityHolder {
         boolean complete = full || requested;
         List<StorageObservation.Row> rows = new ArrayList<>();
         List<StorageObservation.Flow> flows = new ArrayList<>();
+        boolean scanUnkeyed = hasUnkeyedResources;
+        hasUnkeyedResources = false;
         try {
             IStackList list = complete ? grid.web$getStorageGrid()
                 .web$getStorageSnapshot()
@@ -176,11 +200,26 @@ public final class StorageCapture implements IIdentityHolder {
                     if (included.add(craftable)) rows.add(row(grid, craftable, 0, pack));
                 }
             } else {
+                Set<IAEKey> included = new HashSet<>();
                 for (int index = 0; index < pending.size(); index++) {
                     Entry entry = pending.get(index);
                     if (entry.dirty != 0 && entry.dirty <= through) {
                         long amount = entry.hasAbsolute ? entry.absolute : list.web$getAmount(entry.identity);
                         rows.add(row(grid, entry.identity, amount, pack));
+                        included.add(entry.identity);
+                    }
+                }
+                if (scanUnkeyed || hasUnkeyedResources) {
+                    for (IAEGenericStack stack : list.web$stacks()) {
+                        IAEKey key = stack.web$what();
+                        if (needsUnkeyedRead(key) && included.add(key)) {
+                            rows.add(row(grid, key, stack.web$amount(), pack));
+                        }
+                    }
+                    for (IAEKey craftable : grid.web$getCraftingGrid()
+                        .web$getCraftables(null)) {
+                        if (needsUnkeyedRead(craftable) && included.add(craftable))
+                            rows.add(row(grid, craftable, 0, pack));
                     }
                 }
             }
@@ -190,7 +229,8 @@ public final class StorageCapture implements IIdentityHolder {
                 if (entry.input != 0 || entry.output != 0) description(entry, pack);
             }
             for (Entry entry : pending) {
-                if (entry.input != 0 || entry.output != 0) {
+                if (!entry.unsupported && (entry.input != 0 || entry.output != 0)) {
+                    if (entry.overflow) markGap();
                     flows.add(new StorageObservation.Flow(description(entry, pack), entry.input, entry.output));
                 }
             }
@@ -204,6 +244,7 @@ public final class StorageCapture implements IIdentityHolder {
                 Entry entry = pending.get(index);
                 entry.input = 0;
                 entry.output = 0;
+                entry.overflow = false;
                 if (entry.dirty <= through) {
                     entry.dirty = 0;
                     entry.hasAbsolute = false;
@@ -215,15 +256,25 @@ public final class StorageCapture implements IIdentityHolder {
             }
             return result;
         } catch (RuntimeException failure) {
+            hasUnkeyedResources |= scanUnkeyed;
             invalidate();
             throw failure;
         }
     }
 
     private StorageObservation.Row row(IAEGrid grid, IAEKey key, long amount, @Nullable IconPack pack) {
-        int token = prepareResource(key);
-        if (token < 0) throw new IllegalStateException("Storage resource limit exceeded");
+        // Scheduled reads report the original native admission failure; gameplay hooks must instead remain nonthrowing.
+        int token;
+        try {
+            token = admit(key);
+        } catch (UnsupportedOperationException unsupported) {
+            return unkeyedRow(grid, key, amount);
+        }
+        if (token == UNSUPPORTED) return unkeyedRow(grid, key, amount);
+        if (token < 0) throw new IllegalStateException(
+            "Storage resource capacity reached: retained=" + entries.size() + ", limit=" + maxResources);
         ResourceSnapshot base = description(entries.get(token), pack);
+        if (base.itemKey() == null) return unkeyedRow(grid, key, amount);
         ResourceSnapshot resource = new ResourceSnapshot(
             base.registryNamespace(),
             base.registryPath(),
@@ -242,15 +293,37 @@ public final class StorageCapture implements IIdentityHolder {
 
     private ResourceSnapshot description(Entry entry, @Nullable IconPack pack) {
         if (entry.description == null) {
-            StableKey key = AE2Controller.itemIdentities.remember(this, entry.identity);
+            StableKey key;
+            try {
+                key = AE2Controller.itemIdentities.remember(this, entry.identity);
+            } catch (RuntimeException unavailable) {
+                // Identity is optional for display. Never persist a row or flow without an exact safe key.
+                key = null;
+                entry.unsupported = true;
+                entry.input = 0;
+                entry.output = 0;
+                entry.overflow = false;
+                hasUnkeyedResources = true;
+            }
             entry.description = ResourceSnapshot.capture(entry.identity, 0, key, pack);
         }
         return entry.description;
     }
 
-    private long add(long current, long amount) {
+    private boolean needsUnkeyedRead(IAEKey key) {
+        if (!key.web$supportsStableIdentity()) return true;
+        Entry entry = resources.get(key);
+        return entry == null || entry.unsupported;
+    }
+
+    private StorageObservation.Row unkeyedRow(IAEGrid grid, IAEKey key, long amount) {
+        hasUnkeyedResources = true;
+        return new StorageObservation.Row(ResourceSnapshot.capture(key, amount, null, null), key.web$isCraftable(grid));
+    }
+
+    private long add(Entry entry, long current, long amount) {
         if (Long.MAX_VALUE - current < amount) {
-            markGap();
+            entry.overflow = true;
             return Long.MAX_VALUE;
         }
         return current + amount;
@@ -270,6 +343,7 @@ public final class StorageCapture implements IIdentityHolder {
         private final IAEKey identity;
         private long input;
         private long output;
+        private boolean overflow;
         private long dirty;
         private boolean pending;
         private boolean hasAbsolute;
@@ -277,6 +351,7 @@ public final class StorageCapture implements IIdentityHolder {
         private boolean staged;
         private long stagedAmount;
         private @Nullable ResourceSnapshot description;
+        private boolean unsupported;
 
         private Entry(int token, IAEKey identity) {
             this.token = token;

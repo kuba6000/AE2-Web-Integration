@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
@@ -19,6 +20,219 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 class StorageCaptureTest {
+
+    @Test
+    void observationPreservesIdentityFailureWhileTransferAdmissionDoesNotThrow() {
+        IllegalStateException cause = new IllegalStateException("Broken resource identity");
+        IAEKey key = (IAEKey) Proxy
+            .newProxyInstance(IAEKey.class.getClassLoader(), new Class<?>[] { IAEKey.class }, (proxy, method, args) -> {
+                if (method.getName()
+                    .equals("hashCode")) return System.identityHashCode(proxy);
+                if (method.getName()
+                    .equals("equals")) return proxy == args[0];
+                if (method.getName()
+                    .equals("web$supportsStableIdentity")) return true;
+                if (method.getName()
+                    .equals("web$copyTrackingIdentity")) throw cause;
+                throw new AssertionError("Unexpected native operation " + method.getName());
+            });
+        StorageCapture capture = new StorageCapture(10);
+        assertEquals(-1, capture.prepareResource(key));
+        IllegalStateException observed = assertThrows(
+            IllegalStateException.class,
+            () -> capture.observe(grid(Collections.singletonList(key)), null, 1000, true));
+        assertSame(cause, observed);
+        assertTrue(capture.requiresReconciliation());
+    }
+
+    @Test
+    void unsupportedResourcesRemainVisibleWithoutKeysCopiesFlowOrCoverageLoss() {
+        IAEKey unsupported = unsupported(false);
+        java.util.concurrent.atomic.AtomicLong amount = new java.util.concurrent.atomic.AtomicLong(42);
+        List<IAEGenericStack> stacks = new java.util.ArrayList<>();
+        stacks.add(new IAEGenericStack() {
+
+            public @NotNull IAEKey web$what() {
+                return unsupported;
+            }
+
+            public long web$amount() {
+                return amount.get();
+            }
+        });
+        IAEGrid grid = grid(Collections.emptyList(), stacks);
+        StorageCapture capture = new StorageCapture(1);
+        capture.prepareResource(resource(new AtomicInteger()));
+        int token = capture.prepareResource(unsupported);
+        capture.recordFlow(token, 10, 3);
+        StorageObservation baseline = capture.observe(grid, null, 1000, true);
+        assertTrue(baseline.flowComplete());
+        assertTrue(
+            baseline.flows()
+                .isEmpty());
+        assertNull(
+            baseline.rows()
+                .get(0)
+                .resource()
+                .itemKey());
+        assertEquals(
+            42,
+            baseline.rows()
+                .get(0)
+                .resource()
+                .quantity());
+        amount.set(7);
+        StorageObservation update = capture.observe(grid, null, 2000, false);
+        assertFalse(update.full());
+        assertEquals(
+            7,
+            update.rows()
+                .get(0)
+                .resource()
+                .quantity());
+        stacks.clear();
+        assertTrue(
+            capture.observe(grid, null, 3000, false)
+                .rows()
+                .isEmpty());
+    }
+
+    @Test
+    void unsupportedNativeCopyIsAnUnkeyedDisplayResourceNotACapacityFailure() {
+        IAEKey unsupported = unsupported(true);
+        StorageCapture capture = new StorageCapture(10);
+        capture.recordFlow(capture.prepareResource(unsupported), 10, 0);
+        StorageObservation result = capture.observe(grid(Collections.singletonList(unsupported)), null, 1000, true);
+        assertTrue(result.flowComplete());
+        assertTrue(
+            result.flows()
+                .isEmpty());
+        assertNull(
+            result.rows()
+                .get(0)
+                .resource()
+                .itemKey());
+    }
+
+    @Test
+    void anUnavailableEncoderKeepsDisplayButDropsUnidentifiableFlow() {
+        IAEKey metadata = resource(new AtomicInteger());
+        IAEKey unencodable = (IAEKey) Proxy
+            .newProxyInstance(IAEKey.class.getClassLoader(), new Class<?>[] { IAEKey.class }, (proxy, method, args) -> {
+                if (method.getName()
+                    .equals("web$getKey")) throw new IllegalArgumentException("Native NBT cannot be encoded");
+                if (method.getName()
+                    .equals("web$copyTrackingIdentity")
+                    || method.getName()
+                        .equals("web$copyIdentity"))
+                    return proxy;
+                return method.invoke(metadata, args);
+            });
+        IAEGenericStack stack = new IAEGenericStack() {
+
+            public @NotNull IAEKey web$what() {
+                return unencodable;
+            }
+
+            public long web$amount() {
+                return 21;
+            }
+        };
+        IAEGrid grid = grid(Collections.emptyList(), Collections.singletonList(stack));
+        StorageCapture capture = new StorageCapture(10);
+        assertTrue(metadata.web$supportsStableIdentity());
+        capture.recordFlow(capture.prepareResource(unencodable), Long.MAX_VALUE, 3);
+        capture.recordFlow(capture.prepareResource(unencodable), 1, 0);
+        StorageObservation observed = capture.observe(grid, null, 1000, true);
+        assertTrue(observed.flowComplete());
+        assertTrue(
+            observed.flows()
+                .isEmpty());
+        assertNull(
+            observed.rows()
+                .get(0)
+                .resource()
+                .itemKey());
+        assertEquals(
+            21,
+            observed.rows()
+                .get(0)
+                .resource()
+                .quantity());
+        capture.recordFlow(capture.prepareResource(unencodable), 2, 0);
+        StorageObservation update = capture.observe(grid, null, 2000, false);
+        assertEquals(
+            1,
+            update.rows()
+                .size());
+        assertTrue(
+            update.flows()
+                .isEmpty());
+        assertTrue(update.flowComplete());
+    }
+
+    @Test
+    void supportedFlowOverflowStillMarksIncompleteCoverage() {
+        StorageCapture capture = new StorageCapture(10);
+        int token = capture.prepareResource(resource(new AtomicInteger()));
+        capture.recordFlow(token, Long.MAX_VALUE, 0);
+        capture.recordFlow(token, 1, 0);
+        StorageObservation result = capture.observe(grid(), null, 1000, true);
+        assertFalse(result.flowComplete());
+        assertEquals(
+            Long.MAX_VALUE,
+            result.flows()
+                .get(0)
+                .input());
+    }
+
+    static IAEKey unsupported(boolean claimsSupport) {
+        return (IAEKey) Proxy
+            .newProxyInstance(IAEKey.class.getClassLoader(), new Class<?>[] { IAEKey.class }, (proxy, method, args) -> {
+                switch (method.getName()) {
+                    case "hashCode":
+                        return System.identityHashCode(proxy);
+                    case "equals":
+                        return proxy == args[0];
+                    case "web$supportsStableIdentity":
+                        return claimsSupport;
+                    case "web$copyTrackingIdentity":
+                        if (claimsSupport) throw new UnsupportedOperationException("No native copy");
+                        throw new AssertionError("Unsupported resource must not be copied");
+                    case "web$getKey":
+                        throw new AssertionError("Unsupported resource must not be hashed");
+                    case "web$getRegistryNamespace":
+                        return "test";
+                    case "web$getRegistryPath":
+                        return "essentia";
+                    case "web$getDisplayName":
+                        return "Essentia";
+                    case "web$getResourceType":
+                        return ResourceType.OTHER;
+                    case "web$getComponentCount":
+                    case "web$getDamage":
+                        return 0;
+                    case "web$isCraftable":
+                        return true;
+                    default:
+                        throw new AssertionError("Unexpected operation " + method.getName());
+                }
+            });
+    }
+
+    @Test
+    void reachingCapacityDoesNotAttemptAnotherNativeCopy() {
+        AtomicInteger firstCopies = new AtomicInteger();
+        AtomicInteger otherCopies = new AtomicInteger();
+        StorageCapture capture = new StorageCapture(1);
+        capture.prepareResource(resource(firstCopies));
+        IAEKey other = resource(otherCopies);
+        assertThrows(
+            IllegalStateException.class,
+            () -> capture.observe(grid(Collections.singletonList(other)), null, 1000, true));
+        assertEquals(1, firstCopies.get());
+        assertEquals(0, otherCopies.get());
+    }
 
     @Test
     void absoluteNativeBatchesPublishOnlyAfterSuccessfulCompletion() {
@@ -150,6 +364,10 @@ class StorageCaptureTest {
     }
 
     static IAEGrid grid(List<IAEKey> craftables) {
+        return grid(craftables, Collections.emptyList());
+    }
+
+    static IAEGrid grid(List<IAEKey> craftables, List<IAEGenericStack> stacks) {
         IStackList list = new IStackList() {
 
             public long web$getAmount(IAEKey key) {
@@ -157,7 +375,7 @@ class StorageCaptureTest {
             }
 
             public Iterable<pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack> web$stacks() {
-                return Collections.emptyList();
+                return stacks;
             }
         };
         IAEStorageGrid storage = new IAEStorageGrid() {
@@ -206,15 +424,15 @@ class StorageCaptureTest {
         StableKey itemKey = StableKey.random();
         return new IAEKey() {
 
-            public ResourceType web$getResourceType() {
+            public @NotNull ResourceType web$getResourceType() {
                 return ResourceType.ITEM;
             }
 
-            public StableKey web$getKey() {
+            public @NotNull StableKey web$getKey() {
                 return itemKey;
             }
 
-            public IAEKey web$copyIdentity() {
+            public @NotNull IAEKey web$copyIdentity() {
                 copies.incrementAndGet();
                 return this;
             }
@@ -235,7 +453,7 @@ class StorageCaptureTest {
                 return 0;
             }
 
-            public String web$getDisplayName() {
+            public @NotNull String web$getDisplayName() {
                 return "Item";
             }
 
