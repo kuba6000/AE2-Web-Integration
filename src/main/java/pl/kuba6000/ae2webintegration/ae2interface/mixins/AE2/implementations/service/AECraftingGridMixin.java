@@ -10,9 +10,14 @@ import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.google.common.collect.ImmutableSet;
 
+import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.CalculationStrategy;
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingPlan;
@@ -26,6 +31,7 @@ import appeng.me.service.CraftingService;
 import appeng.me.service.helpers.NetworkCraftingProviders;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingRevision;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IGridPlayerSource;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
@@ -34,6 +40,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 
 @Mixin(value = CraftingService.class, remap = false)
 public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingMediumTracker {
@@ -41,6 +49,22 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingM
     @Shadow
     @Final
     private NetworkCraftingProviders craftingProviders;
+
+    @Shadow
+    @Final
+    private IGrid grid;
+
+    @Unique
+    private long web$lastObservedCraftingRevision = Long.MIN_VALUE;
+
+    @Inject(method = "onServerEndTick", at = @At("HEAD"))
+    private void web$craftingChanged(CallbackInfo ci) {
+        long modified = ((ICraftingRevision) craftingProviders).web$getCraftingRevision();
+        if (modified == web$lastObservedCraftingRevision) return;
+        web$lastObservedCraftingRevision = modified;
+        StorageCapture capture = ((IAEStorageGrid) grid.getStorageService()).web$getStorageCapture();
+        if (capture != null) capture.invalidate();
+    }
 
     @Override
     public boolean web$isCurrentlyCraftable(IAEKey key) {
