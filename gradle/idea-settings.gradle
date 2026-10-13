@@ -1,0 +1,52 @@
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
+
+// IDEA stores entry points alongside local SDK settings, so only replace this component.
+abstract class UpdateIdeaEntryPoints extends DefaultTask {
+    @InputFile abstract RegularFileProperty getRulesFile()
+    @OutputFile abstract RegularFileProperty getSettingsFile()
+
+    @TaskAction
+    void updateSettings() {
+        def factory = DocumentBuilderFactory.newInstance()
+        factory.setFeature('http://apache.org/xml/features/disallow-doctype-decl', true)
+        def parser = factory.newDocumentBuilder()
+        def rules = parser.parse(rulesFile.get().asFile).documentElement
+        if (rules.tagName != 'component' || rules.getAttribute('name') != 'EntryPointsManager') {
+            throw new GradleException('Expected an EntryPointsManager component in ' + rulesFile.get().asFile)
+        }
+        def target = settingsFile.get().asFile
+        def document = target.exists() ? parser.parse(target) : parser.newDocument()
+        def root = document.documentElement
+        if (root == null) {
+            root = document.createElement('project')
+            root.setAttribute('version', '4')
+            document.appendChild(root)
+        }
+        if (root.tagName != 'project') {
+            throw new GradleException('Expected an IDEA project in ' + target)
+        }
+        def component = root.firstChild
+        while (component != null) {
+            def next = component.nextSibling
+            if (component.nodeName == 'component' && component.getAttribute('name') == 'EntryPointsManager') {
+                root.removeChild(component)
+            }
+            component = next
+        }
+        root.appendChild(document.importNode(rules, true))
+        target.parentFile.mkdirs()
+        TransformerFactory.newInstance().newTransformer().transform(new DOMSource(document), new StreamResult(target))
+    }
+}
+
+def updateIdeaEntryPoints = tasks.register('updateIdeaEntryPoints', UpdateIdeaEntryPoints) {
+    group = 'ide'
+    description = 'Apply shared framework entry points without replacing local IDEA SDK settings.'
+    rulesFile = layout.projectDirectory.file('gradle/idea-entry-points.xml')
+    settingsFile = layout.projectDirectory.file('.idea/misc.xml')
+}
+
+idea.project.settings.taskTriggers.afterSync updateIdeaEntryPoints

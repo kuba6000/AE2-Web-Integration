@@ -1,0 +1,8 @@
+[{
+  "modid": "ae2webintegration_icon_generator",
+  "name": "AE2 Web Integration Icon Generator",
+  "description": "Exports client-rendered item and fluid icons for AE2 Web Integration.",
+  "version": "${version}",
+  "mcversion": "1.12.2",
+  "authorList": ["kuba6000"]
+}]
