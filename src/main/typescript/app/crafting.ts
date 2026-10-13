@@ -65,13 +65,13 @@ export function createCrafting(
     let autoStart = false;
     let planIcons: boolean | null = null;
     let iconRevision = 0;
-    let handoff: { key: string; state: CraftingState } | null = null;
+    let handoff: { key: string; state: CraftingState; autoStart: boolean } | null = null;
     const identity = () =>
         `${route.gridKey}/${activePlan?.planId ?? (route.view === 'plan' ? route.planId : 'create')}`;
-    function showPlan() {
-        autoStart = false;
+    function showPlan(startAutomatically = false) {
+        autoStart = startAutomatically;
         if (!activePlan || (route.view === 'plan' && String(route.planId) === String(activePlan.planId))) return;
-        handoff = { key: identity(), state: { ...state } };
+        handoff = { key: identity(), state: { ...state }, autoStart };
         navigateToPlan(activePlan.gridKey, activePlan.planId);
     }
     function finishMutation(key: string, outcome: CraftingOutcome | null) {
@@ -199,7 +199,7 @@ export function createCrafting(
                 state.icons = null;
                 state.status = 'calculating';
                 state.mutation = null;
-                await refresh();
+                showPlan(true);
             } else navigateToPlan(gridKey, jobId);
         } catch (caught) {
             const error = caught as ApiFailure;
@@ -265,7 +265,10 @@ export function createCrafting(
                 metadata: null
             });
             Object.assign(state, outcomes.get(identity()));
-            if (handoff?.key === identity()) Object.assign(state, handoff.state);
+            if (handoff?.key === identity()) {
+                Object.assign(state, handoff.state);
+                autoStart = handoff.autoStart;
+            }
             handoff = null;
             if (['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.error ?? '')) activePlan = null;
         },

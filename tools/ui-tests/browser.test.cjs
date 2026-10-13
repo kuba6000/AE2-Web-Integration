@@ -999,7 +999,7 @@ test('resource crafting opens one accessible dialog from details, middle click a
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
 });
 
-test('autostart calculates once with native CPU choice and preserves the resource terminal', async (t) => {
+test('autostart shows calculation before returning to the terminal after one native submission', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
     await seedAutomaticRefresh(page, base, false);
     options.pendingReads = 1;
@@ -1010,14 +1010,14 @@ test('autostart calculates once with native CPU choice and preserves the resourc
     await dialog.getByRole('textbox').fill('23');
     await dialog.getByRole('checkbox', { name: 'Start automatically', exact: true }).check();
     await dialog.getByRole('button', { name: 'Calculate plan', exact: true }).click();
+    await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor({ timeout: 5000 });
+    assert.match(page.url(), /\/plans\/7$/);
+    assert.equal(options.requests.filter((r) => r.path.endsWith('/submit')).length, 0);
     await page.clock.fastForward(1200);
-    await page
-        .getByRole('status')
-        .filter({ hasText: /submitted/i })
-        .waitFor();
+    await page.waitForURL(/\/items$/);
     assert.match(page.url(), /\/items$/);
     assert.equal(await dialog.isVisible(), false);
-    assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).getAttribute('aria-pressed'), 'true');
+    await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.deepEqual(
         options.requests.filter((r) => r.path.endsWith('/submit')).map((r) => r.body),
         [{}]
@@ -1093,7 +1093,7 @@ test('autostart navigation revokes pending intent and delayed plans cannot cross
     });
     await page.clock.fastForward(6000);
     assert.match(page.url(), new RegExp(`${gridB}/items$`));
-    assert.equal(await page.getByText('Iron Ingot', { exact: true }).isVisible(), false);
+    assert.equal(await page.getByText('Iron Ingot', { exact: true }).filter({ visible: true }).count(), 0);
     assert.equal(options.requests.filter((r) => r.path.endsWith('/submit')).length, 0);
     await page.unroute('**/crafting-plans/7');
     await page.goBack();
@@ -1126,13 +1126,12 @@ test('a new calculation rejection after successful autostart preserves its dialo
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
     await page.getByRole('checkbox', { name: 'Start automatically', exact: true }).check();
+    const submission = page.waitForResponse((response) => response.url().endsWith('/submit'));
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
-    await page
-        .getByRole('status')
-        .filter({ hasText: /submitted/i })
-        .waitFor();
+    await (await submission).finished();
+    await page.waitForURL(/\/items$/);
     options.fault = { operation: 'create', status: 'BAD_PARAM' };
-    await page.getByRole('button', { name: 'Craft', exact: true }).click();
+    await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
     await page.getByRole('textbox').fill('31');
     const rejection = page.waitForResponse(
         (response) => response.request().method() === 'POST' && response.url().endsWith('/crafting-plans')
