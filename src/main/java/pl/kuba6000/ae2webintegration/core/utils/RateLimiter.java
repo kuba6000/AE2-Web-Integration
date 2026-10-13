@@ -1,8 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.utils;
 
 import java.net.InetAddress;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.LongSupplier;
 
 /**
@@ -20,8 +20,8 @@ public class RateLimiter {
     private final int resetIntervalMs;
     private final LongSupplier clock;
 
-    private final AtomicLong windowStart = new AtomicLong(0);
-    private final ConcurrentHashMap<InetAddress, Integer> requestCounter = new ConcurrentHashMap<>();
+    private long windowStart;
+    private final Map<InetAddress, Integer> requestCounter = new HashMap<>();
 
     public RateLimiter(int maxRequestsPerInterval, int resetIntervalMs) {
         this(maxRequestsPerInterval, resetIntervalMs, System::currentTimeMillis);
@@ -33,20 +33,12 @@ public class RateLimiter {
         this.clock = clock;
     }
 
-    public boolean isAllowed(InetAddress client) {
-        rollWindow();
-        return requestCounter.merge(client, 1, Integer::sum) <= maxRequestsPerInterval;
-    }
-
-    /**
-     * Only the thread that wins the compare-and-set clears the counters. Without it two threads crossing
-     * the boundary together could both clear, discarding requests counted in between.
-     */
-    private void rollWindow() {
+    public synchronized boolean isAllowed(InetAddress client) {
         long now = clock.getAsLong();
-        long start = windowStart.get();
-        if (now - start > resetIntervalMs && windowStart.compareAndSet(start, now)) {
+        if (now - windowStart > resetIntervalMs) {
             requestCounter.clear();
+            windowStart = now;
         }
+        return requestCounter.merge(client, 1, Integer::sum) <= maxRequestsPerInterval;
     }
 }
