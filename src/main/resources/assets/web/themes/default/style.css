@@ -3151,3 +3151,97 @@ code {
         margin-bottom: 6px;
     }
 }
+
+/* Action confirmations float above the view without taking layout space. */
+.notifications {
+    position: fixed;
+    z-index: 45;
+    right: 20px;
+    top: var(--notification-top, 100px);
+    max-height: calc(100dvh - var(--notification-top, 100px) - 12px);
+    overflow-y: auto;
+    width: min(360px, calc(100vw - 24px));
+    display: grid;
+    gap: 8px;
+    pointer-events: none;
+}
+.toast-success {
+    --toast-background: light-dark(rgb(218 236 252 / 92%), rgb(36 66 93 / 94%));
+    --toast-border: light-dark(#6798c0, #719bbe);
+    --toast-text: light-dark(#173d5b, #e2f0ff);
+}
+.toast-error {
+    --toast-background: light-dark(rgb(252 223 222 / 94%), rgb(93 44 45 / 94%));
+    --toast-border: light-dark(#ba7774, #bb8181);
+    --toast-text: light-dark(#732926, #ffe9e8);
+}
+.toast-warning {
+    --toast-background: light-dark(rgb(251 237 205 / 94%), rgb(88 66 29 / 94%));
+    --toast-border: light-dark(#b69850, #bda065);
+    --toast-text: light-dark(#654719, #fff0ce);
+}
+button.toast {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    width: 100%;
+    height: auto;
+    padding: 14px;
+    overflow: visible;
+    pointer-events: auto;
+    font-size: 12px;
+    text-align: left;
+    color: var(--toast-text);
+    background: var(--toast-background);
+    border: 1px solid var(--toast-border);
+    border-radius: 4px;
+    box-shadow: 0 3px 10px #0003;
+    backdrop-filter: blur(4px);
+}
+button.toast:hover {
+    filter: brightness(1.04);
+}
+.toast-content {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.toast-content strong {
+    display: block;
+    font-size: 12px;
+}
+.toast-detail {
+    display: block;
+    margin-top: 6px;
+}
+.toast-symbol {
+    flex: 0 0 20px;
+    text-align: center;
+    font-size: 20px;
+    line-height: 1;
+}
+.toast-close {
+    flex: 0 0 16px;
+    text-align: center;
+    font-size: 16px;
+    line-height: 1;
+}
+.api-error {
+    color: light-dark(#742525, #f4c7c1);
+    background: light-dark(#e6c5c2, #452e30);
+    border: 2px solid;
+    border-color: light-dark(#f8e7e5, #80575a) light-dark(#9d7471, #291d1e) light-dark(#9d7471, #291d1e)
+        light-dark(#f8e7e5, #80575a);
+    padding: 12px;
+    overflow-wrap: anywhere;
+}
+#network-message.api-error,
+#item-message.api-error {
+    color: light-dark(#742525, #f4c7c1);
+}
+@media (width <= 600px) {
+    .notifications {
+        right: 8px;
+        width: calc(100vw - 16px);
+    }
+}

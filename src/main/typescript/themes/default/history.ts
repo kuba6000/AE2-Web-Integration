@@ -139,6 +139,7 @@ export function createHistoryView(root: HTMLElement, application: Terminal, bind
             list.hidden = route.entryId !== null;
             detail.hidden = route.entryId === null;
             status.hidden = !status.textContent;
+            status.classList.toggle('api-error', !!state.error);
             const focused = document.activeElement as HTMLElement | null;
 
             const current: Map<HistoryEntry['id'], HistoryRow> = new Map();

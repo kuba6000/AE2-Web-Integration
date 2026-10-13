@@ -16,6 +16,21 @@ Register cleanup immediately after acquiring the resource.
 
 ## State and actions
 
+### Action notifications
+
+`application.notifications.subscribe(listener)` supplies the current transient notifications immediately
+and when they change. Each entry has an `id`, `kind` (`success`, `error` or `warning`), a common translation key
+in `message`, and optional `subject` and `quantity`. Treat subject text as data, never HTML.
+Use `context.i18n.forLanguage(language).common(message)` for the message.
+
+The application keeps up to three notifications across route changes and expires them automatically.
+Themes choose placement and appearance, call `dismiss(id)` for a close button, and call
+`pause(id, true/false)` while a notification is hovered or focused. Release any pause when unmounting.
+Subscription cleanup is handled by the theme host. Notifications do not replace persistent errors,
+uncertain-action guards or form validation; render those from the corresponding state fields.
+
+### Shared state
+
 `application.state` and the value delivered immediately by `application.subscribe(listener)` have the
 same `ThemeState` contract. It includes route, grids, raw resources, selection, preferences,
 capabilities, icon-pack status, refresh status, last update time, crafting, CPUs, home, history and

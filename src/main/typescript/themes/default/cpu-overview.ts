@@ -104,6 +104,11 @@ export function createCpuOverview(application: ThemeApplication) {
         renderCpuActions(entry.actions, cpu.key, cpu, state, locale, application.cpus, identity);
         entry.notice.textContent = cpuOutcomeText(state.outcomes[cpu.key], state.status, locale);
         entry.notice.hidden = !entry.notice.textContent;
+        entry.notice.classList.toggle(
+            'api-error',
+            !!state.outcomes[cpu.key]?.uncertain ||
+                (!!state.outcomes[cpu.key]?.notice && state.outcomes[cpu.key].notice !== 'cpuCancelled')
+        );
     }
 
     return {

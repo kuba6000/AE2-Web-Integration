@@ -27,7 +27,7 @@ export function createNotices(
                     <button type="button" id="snooze-update" data-theme-text="remindLater"></button>
                     <button type="button" id="skip-update" data-theme-text="skipUpdate"></button>
                 </div>
-                <p id="update-notice-error" role="alert" hidden></p>
+                <p id="update-notice-error" class="api-error" role="alert" hidden></p>
             </section>
             <section class="window-frame info-notice" id="icon-notice" aria-labelledby="icon-notice-text" hidden>
                 ${infoCircle}

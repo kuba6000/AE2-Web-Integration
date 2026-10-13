@@ -1071,6 +1071,13 @@ test('autostart shows calculation before returning to the terminal after one nat
     assert.match(page.url(), /\/items$/);
     assert.equal(await dialog.isVisible(), false);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
+    const notifications = page.getByRole('region', { name: 'Notifications', exact: true });
+    await notifications.getByText('Crafting started', { exact: true }).waitFor({ timeout: 3000 });
+    assert.match(await notifications.innerText(), /Iron Ingot/);
+    await notifications.hover();
+    await page.clock.fastForward(6000);
+    assert.equal(await notifications.isVisible(), true);
+    await page.mouse.move(0, 0);
     assert.deepEqual(
         options.requests.filter((r) => r.path.endsWith('/submit')).map((r) => r.body),
         [{}]
@@ -1081,6 +1088,71 @@ test('autostart shows calculation before returning to the terminal after one nat
     );
     await page.clock.fastForward(6000);
     assert.equal(options.requests.filter((r) => r.path.endsWith('/submit')).length, 1);
+    assert.equal(await notifications.isVisible(), false);
+});
+
+for (const width of [390, 1280]) {
+    test(`CPU action notifications survive navigation without shifting the view at ${width}px`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        await seedAutomaticRefresh(page, base, false);
+        await page.setViewportSize({ width, height: 844 });
+        options.cpus['cpu-a'] = { ...cpu, isBusy: true, supportsPause: true };
+        options.cpuDetails['cpu-a'] = { ...cpuWork, supportsPause: true };
+        await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+        const pause = page.getByRole('button', { name: /^Pause current work/ });
+        await pause.waitFor();
+        const grid = page.getByRole('region', { name: 'CPU resources', exact: true });
+        const before = await grid.boundingBox();
+        await pause.click();
+        const notifications = page.getByRole('region', { name: 'Notifications', exact: true });
+        await notifications.getByText('CPU paused', { exact: true }).waitFor();
+        assert.deepEqual(await grid.boundingBox(), before);
+        const box = await notifications.boundingBox();
+        assert.ok(box.x >= 0 && box.x + box.width <= width);
+        const close = notifications.getByRole('button', { name: 'Dismiss notification' });
+        await close.focus();
+        await page.mouse.move(0, 0);
+        await page.clock.fastForward(10000);
+        assert.equal(await notifications.isVisible(), true);
+        if (process.env.UI_SCREENSHOT_DIR) {
+            await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+            await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, `notification-cpu-${width}.png`) });
+        }
+        await page.evaluate(() => {
+            location.hash = '#/web-settings';
+        });
+        await page.getByRole('heading', { name: 'Web settings', exact: true }).waitFor();
+        assert.equal(await notifications.isVisible(), true);
+        await close.click();
+        assert.equal(await notifications.isVisible(), false);
+    });
+}
+
+test('manual starts keep a bounded notification queue and polling never recreates expired confirmations', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    for (let attempt = 0; attempt < 4; attempt++) {
+        if (attempt)
+            await page.evaluate(
+                ({ key, id }) => {
+                    location.hash = `#/grids/${key}/plans/${id}`;
+                },
+                { key: gridA, id: 7 + attempt }
+            );
+        await page.getByRole('button', { name: 'Start', exact: true }).click();
+        await page.waitForURL(/\/items$/);
+    }
+    const notifications = page.getByRole('region', { name: 'Notifications', exact: true });
+    assert.equal(await notifications.getByRole('button', { name: 'Dismiss notification' }).count(), 3);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/submit')).length, 4);
+    await page.mouse.move(0, 0);
+    await page.clock.fastForward(5000);
+    assert.equal(await notifications.isVisible(), false);
+    const refreshed = page.waitForResponse((response) => response.url().endsWith('/api/grids'));
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await refreshed;
+    assert.equal(await notifications.isVisible(), false);
 });
 
 test('autostart failures open the plan without repeating mutations or losing the native reason', async (t) => {
@@ -1104,6 +1176,21 @@ test('autostart failures open the plan without repeating mutations or losing the
                 .getByRole('status')
                 .filter({ hasText: /outcome.*unknown/i })
                 .waitFor();
+        if (failure === 'TIMEOUT' || failure === 'FAIL') {
+            const notifications = page.getByRole('region', { name: 'Notifications', exact: true });
+            await notifications.waitFor();
+            assert.equal(await notifications.getByText('Crafting started', { exact: true }).count(), 0);
+            assert.equal(await notifications.getByRole('button', { name: 'Dismiss notification' }).count(), 1);
+            if (process.env.UI_SCREENSHOT_DIR) {
+                await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+                await page.screenshot({
+                    path: path.join(process.env.UI_SCREENSHOT_DIR, `notification-${failure}.png`)
+                });
+            }
+            await notifications.getByRole('button', { name: 'Dismiss notification' }).click();
+            await poll(page);
+            assert.equal(await notifications.isVisible(), false);
+        }
         if (failure === 'NO_PERMISSIONS')
             assert.equal(
                 await page

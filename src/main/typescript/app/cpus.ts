@@ -1,6 +1,7 @@
 import type { CpuInfo, CpuDetail, IconMetadata } from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
+import type { Notify } from './notifications.js';
 
 export type CpuOutcome = { mutation?: 'cancel' | 'pause' | 'resume'; uncertain?: boolean; notice?: string };
 export type CpuState = {
@@ -14,7 +15,7 @@ export type CpuState = {
     outcomes: Record<string, CpuOutcome>;
 };
 /** Grid CPU summaries and selected current work. The application owns refresh scheduling. */
-export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: () => boolean) {
+export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: () => boolean, notify: Notify) {
     const state: CpuState = {
         status: 'idle',
         reading: false,
@@ -96,6 +97,7 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
         if (!cpu?.isBusy || previous?.mutation || previous?.uncertain) return;
         if (mutation !== 'cancel' && (!cpu.supportsPause || cpu.isPaused === (mutation === 'pause'))) return;
         const gridKey = route.gridKey;
+        const cpuName = state.cpus.find((entry) => entry.key === cpuKey)?.name || cpuKey;
         const gridOutcomes = state.outcomes;
         invalidateRead();
         gridOutcomes[cpuKey] = { mutation };
@@ -116,6 +118,13 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
         }
         if (disposed) return;
         gridOutcomes[cpuKey] = outcome;
+        const failed = outcome.uncertain || (outcome.notice && outcome.notice !== 'cpuCancelled');
+        let message = { cancel: 'cpuCancelAccepted', pause: 'cpuPausedNotice', resume: 'cpuResumedNotice' }[mutation];
+        if (failed) message = outcome.uncertain ? 'actionUnconfirmed' : 'cpuActionFailed';
+        let kind: Parameters<Notify>[0]['kind'] = 'success';
+        if (outcome.uncertain) kind = 'warning';
+        else if (failed) kind = 'error';
+        notify({ kind, message, subject: cpuName });
         if (route.view !== 'cpus' || route.gridKey !== gridKey) return;
         invalidateRead();
         // Settled mutations still need a fresh snapshot before these observations authorize another action.

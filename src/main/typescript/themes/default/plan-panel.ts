@@ -99,6 +99,7 @@ export function createPlanPanel(application: ThemeApplication, tooltip: TooltipB
             if (state.metadata)
                 output.append(renderMinecraftText(state.metadata.displayName), ` × ${number(state.metadata.quantity)}`);
             status.textContent = t(state.status);
+            status.classList.toggle('api-error', !!state.error || !!state.uncertain);
             if (state.uncertain) {
                 const uncertainLabels = {
                     create: 'uncertainCreate',

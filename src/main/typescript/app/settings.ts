@@ -1,6 +1,7 @@
 import type { AccessSources, GridSettings } from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
+import type { Notify } from './notifications.js';
 
 type Edited = { name: boolean; isTracked: boolean };
 export type SettingsState = {
@@ -33,7 +34,8 @@ export function networkNameError(name: string) {
 export function createGridSettings(
     api: Api,
     changed: () => void,
-    updated: (gridKey: string, settings: GridSettings) => void
+    updated: (gridKey: string, settings: GridSettings) => void,
+    notify: Notify
 ) {
     const empty = (): GridSettings => ({ name: '', isTracked: false });
     const unedited = (): Edited => ({ name: false, isTracked: false });
@@ -179,6 +181,15 @@ export function createGridSettings(
             }
             operation.pending = false;
             if (disposed) return;
+            let message = 'settingsSaved';
+            if (!operation.result) message = operation.uncertain ? 'actionUnconfirmed' : 'settingsSaveFailed';
+            let kind: Parameters<Notify>[0]['kind'] = 'success';
+            if (!operation.result) kind = operation.uncertain ? 'warning' : 'error';
+            notify({
+                kind,
+                message,
+                subject: operation.result?.name || key
+            });
             if (operation.result) {
                 drafts.delete(key);
                 updated(key, operation.result);

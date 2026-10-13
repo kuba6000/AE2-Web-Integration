@@ -210,6 +210,7 @@ export function createResourceTerminal(
             else if (state.itemStatus === 'ready' && !state.items.length) message = locale.common('empty');
         }
         controls.itemMessage.textContent = message;
+        controls.itemMessage.classList.toggle('api-error', !!state.itemError && !!message);
     }
 
     const resourceMenu = element('div', '', 'window-frame resource-menu');

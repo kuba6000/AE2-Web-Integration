@@ -174,11 +174,11 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             if (state.saving) status.textContent = t('settingsSaving');
             else if (state.uncertain) status.textContent = t('settingsUnconfirmed');
             else if (state.error) status.textContent = t(state.error);
-            else if (state.notice) status.textContent = t(state.notice);
             else if (state.status === 'loading') status.textContent = t('loading');
             else if (dirty) status.textContent = t('settingsDraft');
             if (state.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
             status.hidden = !status.textContent;
+            status.classList.toggle('api-error', !!state.error || state.uncertain);
             information.hidden = state.status !== 'ready' || !grid;
             networkTitle.textContent = grid ? networkLabel({ ...grid, name: state.current?.name || '' }) : '';
             ownerLabel.textContent = t('owner');

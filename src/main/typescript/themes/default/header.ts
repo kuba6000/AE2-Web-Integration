@@ -46,7 +46,7 @@ export function createHeader(
                 <a href="#/about" data-view="about" data-text="about"></a>
                 <span id="updated" aria-live="off"></span>
             </nav>
-            <p id="session-message" role="alert" hidden></p>
+            <p id="session-message" class="api-error" role="alert" hidden></p>
         </div>`;
     const panel = root.firstElementChild as HTMLElement;
     const controls = {

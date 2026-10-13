@@ -2,6 +2,7 @@ import { createResourceTerminal, resourceMetadata } from './resource-terminal.js
 import { createTooltips } from './tooltips.js';
 import { createWebSettings, type TerminalDisplay } from './web-settings.js';
 import { createNotices } from './notices.js';
+import { createNotifications } from './notifications.js';
 import { createHeader } from './header.js';
 import { translations } from './translations.js';
 import { createMobilePanels, type MobilePane } from './mobile-panels.js';
@@ -46,6 +47,8 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     let locale: Translator;
     let state: ThemeState;
     const header = createHeader(application, context, tooltips);
+    const notifications = createNotifications(application, lifetime, header.element);
+    root.append(notifications.element);
     root.prepend(header.element);
     const notices = createNotices(
         context,
@@ -117,6 +120,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         else if (!state.grids.length)
             networkMessage = `${locale.common('noNetworks')}. ${locale.common('noNetworksHelp')}`;
         networkStatus.textContent = networkMessage;
+        networkStatus.classList.toggle('api-error', !!state.gridError);
     }
     function renderDisplay() {
         effectiveDisplay = webSettings.render(state, locale);
@@ -134,6 +138,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
             updateLabels();
         }
         header.render(state, locale);
+        notifications.render(locale);
         windowFrame.hidden = state.route.view === 'home';
         workspace.classList.toggle('with-home', state.route.view === 'home');
         serverSettingsRoot.hidden = state.route.view !== 'server-settings';

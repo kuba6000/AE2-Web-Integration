@@ -76,6 +76,12 @@ export function createCpuView(
         if (selectedNotice && selectedOutcome?.notice !== state.error) status.textContent += ` ${selectedNotice}`;
         if (selectedOutcome?.uncertain && state.error) status.textContent += ` ${t(state.error)}`;
         status.hidden = !status.textContent;
+        status.classList.toggle(
+            'api-error',
+            !!state.error ||
+                !!selectedOutcome?.uncertain ||
+                (!!selectedOutcome?.notice && selectedOutcome.notice !== 'cpuCancelled')
+        );
         panelState.hidden = !detail;
         if (detail) renderCpuState(panelState, detail.isBusy, detail.isPaused, locale);
         else panelState.replaceChildren();

@@ -12,6 +12,7 @@ import { createCrafting } from './crafting.js';
 import { createCpuMonitor } from './cpus.js';
 import { createHistory } from './history.js';
 import { createGridSettings } from './settings.js';
+import { createNotifications } from './notifications.js';
 
 export type TerminalData = {
     capabilities: ApplicationContext['capabilities'];
@@ -47,6 +48,7 @@ export function createTerminal(
     icons: ReturnType<typeof createIconLoader>,
     capabilities: ApplicationContext['capabilities']
 ) {
+    const notifications = createNotifications();
     let iconsEnabled = false;
     const listeners = new Set<(state: TerminalState) => void>();
     let gridRequest: AbortController | undefined;
@@ -76,7 +78,8 @@ export function createTerminal(
             schedule();
         },
         () => iconsEnabled && state.iconPack.available === true,
-        preferences
+        preferences,
+        notifications.publish
     );
     const cpus = createCpuMonitor(
         api,
@@ -84,7 +87,8 @@ export function createTerminal(
             notify();
             schedule();
         },
-        () => iconsEnabled && state.iconPack.available === true
+        () => iconsEnabled && state.iconPack.available === true,
+        notifications.publish
     );
     const home = createHomeMonitor(api, notify, () => iconsEnabled && state.iconPack.available === true);
     const history = createHistory(
@@ -114,7 +118,8 @@ export function createTerminal(
                     network.grid.isTrackingEnabled = saved.isTracked;
                 }
             notify();
-        }
+        },
+        notifications.publish
     );
 
     const state: TerminalState = {
@@ -335,6 +340,7 @@ export function createTerminal(
     }
     return {
         state,
+        notifications,
         crafting,
         cpus,
         history,
@@ -398,6 +404,7 @@ export function createTerminal(
         },
         dispose() {
             disposed = true;
+            notifications.dispose();
             clearTimeout(timer);
             gridRequest?.abort();
             itemRequest?.abort();

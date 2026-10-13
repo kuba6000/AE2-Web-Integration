@@ -60,6 +60,11 @@ export function mountTheme(
     }
     const { crafting, cpus, settings } = application;
     const actions: ThemeApplication = {
+        notifications: {
+            subscribe: (listener) => subscribe(application.notifications.subscribe, listener),
+            dismiss: application.notifications.dismiss,
+            pause: application.notifications.pause
+        },
         get state() {
             return application.state;
         },

@@ -166,6 +166,8 @@ export function createCraftingDialog(
             missingLabel.hidden = application.state.capabilities.craftingIgnoreMissing !== true;
             calculate.textContent = locale.common('calculatePlan');
             calculate.disabled = !!state.mutation || !!state.uncertain || state.status === 'calculating';
+            orderMessage.classList.toggle('api-error', !!state.error || !!state.uncertain);
+            terminalMessage.classList.toggle('api-error', !!state.error || !!state.uncertain);
             orderMessage.textContent = '';
             terminalMessage.textContent = '';
             if (state.uncertain) {

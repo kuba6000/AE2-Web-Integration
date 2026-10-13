@@ -17,6 +17,8 @@ import type { IconSprite, IconTarget } from './icons.js';
 import type { JsonValue } from './storage.js';
 import type { Dictionaries, Translator } from './i18n.js';
 import type * as resourceHelpers from './resource-helpers.js';
+import type { Notification } from './notifications.js';
+export type { Notification } from './notifications.js';
 
 /** Shared data is borrowed. Themes derive their own arrays instead of mutating application state. */
 export type ReadonlyData<T> = T extends object ? { readonly [K in keyof T]: ReadonlyData<T[K]> } : T;
@@ -55,6 +57,11 @@ export type IconView = {
     dispose(): void;
 };
 export type ThemeApplication = {
+    readonly notifications: {
+        subscribe(listener: (items: readonly ReadonlyData<Notification>[]) => void): () => void;
+        dismiss(id: number): void;
+        pause(id: number, paused: boolean): void;
+    };
     readonly state: ThemeState;
     /** Invoked immediately, then on data changes. Renderer failures terminate this theme mount. */
     subscribe(listener: (state: ThemeState) => void): () => void;

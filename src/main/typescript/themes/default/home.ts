@@ -168,6 +168,7 @@ export function createHomeView(
             else if (failed) status.textContent = locale.common('homePartial');
             else if (!busy) status.textContent = locale.common('homeIdle');
             status.hidden = !status.textContent;
+            status.classList.toggle('api-error', !!state.gridError);
             const focused = options.contains(document.activeElement) ? (document.activeElement as HTMLElement) : null;
             for (const [key, choice] of choices)
                 if (!state.grids.some((grid) => grid.key === key)) {
@@ -200,6 +201,7 @@ export function createHomeView(
                     ? `${gridLabel(network.grid)}: ${locale.common(network.error)}`
                     : '';
                 group.message.hidden = !network.error;
+                group.message.classList.toggle('api-error', !!network.error);
                 const cpus = network.cpus.filter((cpu) => cpu.isBusy);
                 group.section.hidden = !cpus.length && network.status !== 'error';
                 for (const [key, row] of group.rows)

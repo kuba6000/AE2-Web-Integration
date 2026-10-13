@@ -3,6 +3,7 @@ import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
 import type { Preferences, createPreferences } from './preferences.js';
 import { navigateToPlan, navigateToGrid } from './router.js';
+import type { Notify } from './notifications.js';
 
 export type PlanMetadata = {
     itemKey: string | null;
@@ -36,7 +37,8 @@ export function createCrafting(
     api: Api,
     changed: () => void,
     iconsEnabled: () => boolean,
-    preferences: ReturnType<typeof createPreferences>
+    preferences: ReturnType<typeof createPreferences>,
+    notify: Notify
 ) {
     const state: CraftingState = {
         search: '',
@@ -204,6 +206,11 @@ export function createCrafting(
         } catch (caught) {
             const error = caught as ApiFailure;
             finishMutation(key, isUncertain(error) ? { uncertain: 'create' } : null);
+            notify({
+                kind: isUncertain(error) ? 'warning' : 'error',
+                message: isUncertain(error) ? 'actionUnconfirmed' : 'craftCalculationFailed',
+                subject: input.displayName
+            });
             if (version === generation) {
                 state.error = error.status;
                 state.status = 'error';
@@ -350,6 +357,10 @@ export function createCrafting(
                 } catch (caught) {
                     const error = caught as ApiFailure;
                     finishMutation(key, isUncertain(error) ? { uncertain: 'delete' } : null);
+                    notify({
+                        kind: isUncertain(error) ? 'warning' : 'error',
+                        message: isUncertain(error) ? 'actionUnconfirmed' : 'craftCancelFailed'
+                    });
                     if (version === generation) {
                         state.error = error.status;
                         changed();
@@ -373,6 +384,7 @@ export function createCrafting(
             request?.abort();
             reading = false;
             outcomes.set(key, { mutation: 'submit' });
+            const output = state.metadata;
             state.mutation = 'submit';
             state.error = null;
             state.errorDetail = null;
@@ -381,6 +393,12 @@ export function createCrafting(
                 // A ready plan and eligible CPU belong to the active plan route.
                 const current = activePlan;
                 await api.submitPlan(current.gridKey, current.planId, automatic ? undefined : state.selectedCpu);
+                notify({
+                    kind: 'success',
+                    message: 'craftStarted',
+                    subject: output?.displayName,
+                    quantity: output?.quantity
+                });
                 finishMutation(key, { status: 'submitted' });
                 if (version === generation) {
                     state.status = 'submitted';
@@ -389,6 +407,11 @@ export function createCrafting(
             } catch (caught) {
                 const error = caught as ApiFailure;
                 finishMutation(key, isUncertain(error) ? { uncertain: 'submit' } : null);
+                notify({
+                    kind: isUncertain(error) ? 'warning' : 'error',
+                    message: isUncertain(error) ? 'actionUnconfirmed' : 'craftStartFailed',
+                    subject: output?.displayName
+                });
                 if (version === generation) {
                     if (isUncertain(error)) state.uncertain = 'submit';
                     state.error = error.status;
@@ -454,6 +477,10 @@ export function createCrafting(
             } catch (caught) {
                 const error = caught as ApiFailure;
                 finishMutation(key, isUncertain(error) ? { uncertain: 'delete' } : null);
+                notify({
+                    kind: isUncertain(error) ? 'warning' : 'error',
+                    message: isUncertain(error) ? 'actionUnconfirmed' : 'craftCancelFailed'
+                });
                 if (version === generation) {
                     state.error = error.status;
                     if (['INVALID_ID', 'NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(error.status ?? '')) {
