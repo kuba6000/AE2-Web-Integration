@@ -48,6 +48,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.CraftingCPULogicMixin",
                 "AE2.ExecutingCraftingJobMixin",
                 "AE2.NetworkCraftingProvidersMixin",
+                "AE2.NetworkStorageMixin",
                 "AE2.ProviderStateMixin",
                 "AE2.implementations.AECraftingCPUClusterMixin",
                 "AE2.implementations.AECraftingJobMixin",
