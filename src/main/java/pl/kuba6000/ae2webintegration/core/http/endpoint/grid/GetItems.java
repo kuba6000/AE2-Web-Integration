@@ -30,6 +30,9 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 
 /**
  * Lists stored and craftable resources on a grid.
@@ -82,6 +85,32 @@ public final class GetItems extends ISyncedRequest {
     protected void handle(IAEGrid grid) {
         if (grid == null) {
             deny(ApiStatus.GRID_NOT_FOUND);
+            return;
+        }
+        StorageSnapshot shared = CoreEngine.observeStorage(grid);
+        if (shared != null) {
+            IconPack pack = icons ? CoreEngine.getIconPack() : null;
+            IconMappings mappings = pack == null ? null : new IconMappings(pack);
+            List<StoredResource> items = new ArrayList<>(
+                shared.rows()
+                    .size());
+            for (StorageObservation.Row row : shared.rows()) {
+                ResourceSnapshot resource = row.resource();
+                items.add(
+                    new StoredResource(
+                        resource.registryNamespace(),
+                        resource.registryPath(),
+                        resource.displayName(),
+                        resource.componentCount(),
+                        resource.damage(),
+                        resource.resourceType(),
+                        resource.quantity(),
+                        row.craftable(),
+                        resource.itemKey(),
+                        mappings == null || resource.itemKey() == null ? null
+                            : mappings.resolve(resource.itemKey(), AE2Controller.itemIdentities)));
+            }
+            respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
             return;
         }
         IAEStorageGrid storageGrid = grid.web$getStorageGrid();

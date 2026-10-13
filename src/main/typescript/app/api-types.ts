@@ -63,7 +63,7 @@ export type Grid = {
     isTrackingEnabled: boolean;
     accessSources: AccessSources;
 };
-export type GridSettings = { isTracked: boolean; name: string };
+export type GridSettings = { isTracked: boolean; isStorageTracked: boolean; name: string };
 export type CpuSelectionMode = 'PLAYER_ONLY' | 'AUTOMATION_ONLY' | 'ALL';
 export type CpuInfo = {
     acceptsPlayerJobs: boolean;
@@ -142,4 +142,22 @@ export type CraftingHistory = {
     wasCancelled: boolean;
     items: ResourceTiming[];
     interfaceShare: ProviderTiming[];
+};
+
+/** Tracking counters use decimal strings so long values are never rounded by JSON parsing. */
+export type ResourceHistoryPoint = {
+    observedAt: number;
+    generation: string;
+    kind: 'STOCK' | 'FLOW' | 'OBSERVATION' | 'GAP';
+    resource: (ResourceDescription & { quantity: string }) | null;
+    craftable: boolean;
+    input: string;
+    output: string;
+    complete: boolean;
+};
+export type ResourceHistory = {
+    points: ResourceHistoryPoint[];
+    complete: boolean;
+    truncated: boolean;
+    enabled: boolean;
 };

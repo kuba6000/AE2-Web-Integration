@@ -644,6 +644,16 @@ class ItemIdentityRequestTest extends GridTestScope {
 
     static final class Grid extends TestGridFixtures.TestGrid implements IAECraftingGrid, IAEStorageGrid {
 
+        private pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture storageCapture;
+
+        public pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture web$getStorageCapture() {
+            return storageCapture;
+        }
+
+        public void web$setStorageCapture(pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture capture) {
+            storageCapture = capture;
+        }
+
         final List<IAEGenericStack> rows;
         Set<IAEKey> recipes = Collections.emptySet();
         boolean currentCraftable = true;

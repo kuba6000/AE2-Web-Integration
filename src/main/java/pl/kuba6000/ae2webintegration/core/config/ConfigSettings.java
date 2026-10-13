@@ -12,6 +12,9 @@ public final class ConfigSettings {
     public Discord discord = new Discord();
     public Ntfy ntfy = new Ntfy();
     public Tracking tracking = new Tracking();
+    @Path("resource_tracking")
+    @Comment("Resource history limits and sampling intervals. Changes take effect after restarting the server.")
+    public ResourceTracking resourceTracking = new ResourceTracking();
 
     public static final class General {
 
@@ -100,6 +103,34 @@ public final class ConfigSettings {
 
     }
 
+    public static final class ResourceTracking {
+
+        @Path("active_interval_millis")
+        @Comment("Minimum storage observation interval while the web terminal is in use, in milliseconds.")
+        public int activeIntervalMillis = 250;
+
+        @Path("idle_interval_seconds")
+        @Comment("Storage history observation interval without web viewers, in seconds.")
+        public int idleIntervalSeconds = 300;
+
+        @Path("reconciliation_interval_seconds")
+        @Comment("Maximum interval between full storage reconciliations, in seconds.")
+        public int reconciliationIntervalSeconds = 300;
+
+        @Path("history_bytes_per_grid")
+        @Comment("Maximum history file size per network. A full file stops recording and reports incomplete history.")
+        public long historyBytesPerGrid = 67108864L;
+
+        @Path("max_resources_per_grid")
+        @Comment("Maximum distinct resource identities retained by one network's active tracker.")
+        public int maxResourcesPerGrid = 262144;
+
+        @Path("max_queued_rows")
+        @Comment("Shared background queue capacity in resource/flow rows. Overflow reports a gap.")
+        public int maxQueuedRows = 1048576;
+
+    }
+
     void validate() {
         if (general.port < 1 || general.port > 65535)
             throw new IllegalArgumentException("general.port must be between 1 and 65535");
@@ -109,6 +140,15 @@ public final class ConfigSettings {
         }
         if (notifications.minimumCraftingDurationSeconds < 0 || notifications.minimumCraftingAmount < 0) {
             throw new IllegalArgumentException("Notification minimums must not be negative");
+        }
+        if (resourceTracking.activeIntervalMillis < 50 || resourceTracking.idleIntervalSeconds < 1
+            || resourceTracking.reconciliationIntervalSeconds < 1
+            || resourceTracking.historyBytesPerGrid < 1024
+            || resourceTracking.historyBytesPerGrid > Integer.MAX_VALUE
+            || resourceTracking.maxResourcesPerGrid < 1
+            || resourceTracking.maxQueuedRows < 1) {
+            throw new IllegalArgumentException(
+                "Resource tracking limits must be positive; active interval must be at least 50 ms and history size at least 1024 bytes");
         }
     }
 }

@@ -168,6 +168,9 @@ test {
             includeTestsMatching '*CraftingOptionsHttpTest'
             includeTestsMatching '*CpuPauseHttpTest'
             includeTestsMatching '*UpdateSkipHttpTest'
+            includeTestsMatching '*FileStorageHistoryStoreTest'
+            includeTestsMatching '*StorageTrackingServiceTest'
+            includeTestsMatching '*CoreEngineTest'
         }
         shouldRunAfter tasks.named('test')
     }

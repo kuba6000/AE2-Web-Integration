@@ -1,6 +1,7 @@
 import type { CraftingState } from './crafting.js';
 import type { CpuState } from './cpus.js';
 import type { HistoryState } from './history.js';
+import type { ResourceHistoryState } from './resource-history.js';
 import type { HomeState } from './home.js';
 import type { SettingsState } from './settings.js';
 import type {
@@ -44,6 +45,7 @@ export type ThemeState = ReadonlyData<{
     cpus: CpuState;
     home: HomeState;
     history: HistoryState;
+    resourceHistory: ResourceHistoryState;
     settings: SettingsState;
 }>;
 export type ThemeView = Exclude<Route['view'], 'missing'>;

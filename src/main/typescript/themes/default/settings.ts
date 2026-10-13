@@ -81,12 +81,22 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     tracking.id = 'network-tracking';
     const labelText = element('span');
     label.append(tracking, labelText);
+    const storageLabel = element('label');
+    storageLabel.className = 'checkbox';
+    const storageTracking = element('input');
+    storageTracking.type = 'checkbox';
+    storageTracking.id = 'network-storage-tracking';
+    const storageText = element('span');
+    storageLabel.append(storageTracking, storageText);
+    storageTracking.addEventListener('change', () =>
+        application.settings.edit('isStorageTracked', storageTracking.checked)
+    );
     const save = element('button');
     save.type = 'submit';
     const actions = element('div');
     actions.className = 'settings-actions';
     actions.append(save);
-    form.append(settingsTitle, nameLabel, nameHelp, label, actions);
+    form.append(settingsTitle, nameLabel, nameHelp, label, storageLabel, actions);
     name.addEventListener('input', () => application.settings.edit('name', name.value));
     tracking.addEventListener('change', () => application.settings.edit('isTracked', tracking.checked));
     form.addEventListener('submit', (event) => {
@@ -163,13 +173,16 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             title.querySelector('span')!.textContent = t('networkDetails');
             scroll.setAttribute('aria-label', t('networkDetails'));
             labelText.textContent = t('recordHistory');
+            storageText.textContent = t('recordResourceHistory');
             nameText.textContent = t('networkName');
             nameHelp.textContent = t('networkNameHelp');
             settingsTitle.textContent = t('gridSettings');
             save.textContent = t('saveSettings');
             const dirty =
                 state.current &&
-                (state.draft.isTracked !== state.current.isTracked || state.draft.name.trim() !== state.current.name);
+                (state.draft.isTracked !== state.current.isTracked ||
+                    state.draft.isStorageTracked !== state.current.isStorageTracked ||
+                    state.draft.name.trim() !== state.current.name);
             status.textContent = '';
             if (state.saving) status.textContent = t('settingsSaving');
             else if (state.uncertain) status.textContent = t('settingsUnconfirmed');
@@ -196,6 +209,8 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             name.setCustomValidity(error ? t(error) : '');
             name.setAttribute('aria-invalid', String(!!error));
             nameHelp.textContent = t(error || 'networkNameHelp');
+            storageTracking.checked = state.draft.isStorageTracked;
+            storageTracking.disabled = state.saving || state.status !== 'ready';
             tracking.checked = state.draft.isTracked;
             tracking.disabled = state.saving || state.status !== 'ready';
             save.disabled = state.saving || state.status !== 'ready' || !!error || (!state.uncertain && !dirty);

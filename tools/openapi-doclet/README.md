@@ -50,7 +50,7 @@ public final class GetGrids {
 | `@responseMedia <status> <media-type>` | Raw response body, such as `image/png`, without a Java DTO or JSON example. |
 | `@responseHeader <status> <name> <description>` | Response header with a string value, such as ETag or Cache-Control. |
 | `@PathParam("name")` and `@pathParam name Description.` | Path field binding and its endpoint Javadoc description. |
-| `@QueryParam("name")` on a boolean field | Optional query flag, false when omitted; field Javadoc describes its meaning. |
+| `@QueryParam("name")` on a supported scalar field | Optional query parameter: `boolean`, `int`, `long`, `Integer`, `Long`, `String`, or `StableKey`. Boolean flags default to false; document other defaults in field Javadoc. |
 | `@Body` | Field whose DTO describes the required JSON request body. |
 | `@OptionalInput` | Input member that may be omitted; explicit null remains disallowed. |
 | `@Endpoint(authentication = Authentication.REQUIRED, ...)` (default) | Authentication is required; the operation inherits the global Bearer-or-cookie security alternatives. |
@@ -79,5 +79,5 @@ The generator supports scalar types, UUID, StableKey, enums, concrete DTOs and r
 arrays, lists, sets and maps with String, UUID or StableKey keys. It respects
 `@SerializedName`, omits static and transient fields, and uses `@Nullable` for response nullability.
 
-Non-boolean query bindings, custom Gson adapters, generic or polymorphic DTOs, and raw containers are
+Nonscalar query bindings, custom Gson adapters, generic or polymorphic DTOs, and raw containers are
 unsupported. Invalid declarations, unresolved response types and incompatible examples fail generation.

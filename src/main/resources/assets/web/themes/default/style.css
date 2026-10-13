@@ -3276,3 +3276,26 @@ button.toast:hover {
         width: calc(100vw - 16px);
     }
 }
+
+.resource-history {
+    margin-top: 12px;
+    font-size: 13px;
+}
+.resource-history summary {
+    cursor: pointer;
+}
+.resource-history-points {
+    max-height: 240px;
+    overflow: auto;
+    padding: 0;
+    list-style: none;
+}
+.resource-history-points li {
+    display: grid;
+    gap: 3px;
+    margin-block: 10px;
+    overflow-wrap: anywhere;
+}
+.resource-history-points time {
+    opacity: 0.8;
+}

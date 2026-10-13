@@ -5,6 +5,16 @@ export type MessageValues = { count?: number } & Record<string, string | number 
 export type Translator = ReturnType<typeof createTranslator>;
 const translations: Dictionaries = {
     en: {
+        recordResourceHistory: 'Record resource amounts and network input/output',
+        resourceHistory: 'Resource history',
+        resourceHistoryDisabled: 'Resource tracking is disabled for this network. Saved observations remain available.',
+        resourceHistoryEmpty: 'No observations have been recorded for this resource yet.',
+        resourceHistoryGap: 'Coverage is incomplete; missing data is not zero.',
+        resourceHistoryTruncated: 'Only part of the available history is shown.',
+        resourceHistoryInput: 'Input',
+        resourceHistoryOutput: 'Output',
+        resourceHistoryObservation: 'Stock observation',
+
         historyFinalProduct: 'Final product',
         historyCraftedBy: 'Crafted by',
         historyProviderPages: 'Provider pages',
@@ -297,6 +307,16 @@ const translations: Dictionaries = {
         INVALID_RESPONSE: 'The server returned an unreadable response.'
     },
     pl: {
+        recordResourceHistory: 'Zapisuj ilości zasobów oraz wejścia i wyjścia z sieci',
+        resourceHistory: 'Historia zasobu',
+        resourceHistoryDisabled: 'Śledzenie zasobów tej sieci jest wyłączone. Zapisane obserwacje pozostają dostępne.',
+        resourceHistoryEmpty: 'Nie zapisano jeszcze obserwacji tego zasobu.',
+        resourceHistoryGap: 'Dane są niepełne; brak danych nie oznacza zera.',
+        resourceHistoryTruncated: 'Wyświetlono tylko część dostępnej historii.',
+        resourceHistoryInput: 'Wejścia',
+        resourceHistoryOutput: 'Wyjścia',
+        resourceHistoryObservation: 'Obserwacja magazynu',
+
         historyFinalProduct: 'Produkt końcowy',
         historyCraftedBy: 'Wytworzone przez',
         historyProviderPages: 'Strony dostawców',

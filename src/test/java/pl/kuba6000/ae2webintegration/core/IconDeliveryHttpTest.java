@@ -54,6 +54,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 
 /** Public HTTP and server lifecycle contract; generated packs use the public archive writer. */
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -444,12 +445,18 @@ class IconDeliveryHttpTest {
             false,
             AEControllerState.CONTROLLER_ONLINE) {
 
+            private StorageCapture storageCapture;
+
             @Override
             public IAECraftingGrid web$getCraftingGrid() {
                 return (IAECraftingGrid) Proxy.newProxyInstance(
                     getClass().getClassLoader(),
                     new Class<?>[] { IAECraftingGrid.class },
-                    (proxy, method, args) -> Collections.emptySet());
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "web$getCraftables", "web$getCPUs" -> Collections.emptySet();
+                        case "web$isCurrentlyCraftable" -> false;
+                        default -> throw new AssertionError(method.getName());
+                    });
             }
 
             @Override
@@ -458,7 +465,12 @@ class IconDeliveryHttpTest {
                     getClass().getClassLoader(),
                     new Class<?>[] { IAEStorageGrid.class },
                     (proxy, method, args) -> switch (method.getName()) {
-                        case "web$getStorageList" -> stacks();
+                        case "web$getStorageList", "web$getStorageSnapshot" -> stacks();
+                        case "web$getStorageCapture" -> storageCapture;
+                        case "web$setStorageCapture" -> {
+                            storageCapture = (StorageCapture) args[0];
+                            yield null;
+                        }
                         case "web$getInventory" -> Proxy.newProxyInstance(
                             getClass().getClassLoader(),
                             new Class<?>[] { pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem.class },
@@ -651,9 +663,12 @@ class IconDeliveryHttpTest {
             (proxy, method, args) -> switch (method.getName()) {
                 case "web$getCPUs" -> Collections.singleton(cpu);
                 case "web$getCraftables" -> Collections.emptySet();
+                case "web$isCurrentlyCraftable" -> false;
                 default -> null;
             });
         TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(93, false, AEControllerState.CONTROLLER_ONLINE) {
+
+            private StorageCapture storageCapture;
 
             public IAECraftingGrid web$getCraftingGrid() {
                 return crafting;
@@ -663,7 +678,15 @@ class IconDeliveryHttpTest {
                 return (IAEStorageGrid) Proxy.newProxyInstance(
                     getClass().getClassLoader(),
                     new Class<?>[] { IAEStorageGrid.class },
-                    (proxy, method, args) -> stacks());
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "web$getStorageList", "web$getStorageSnapshot" -> stacks();
+                        case "web$getStorageCapture" -> storageCapture;
+                        case "web$setStorageCapture" -> {
+                            storageCapture = (StorageCapture) args[0];
+                            yield null;
+                        }
+                        default -> throw new AssertionError(method.getName());
+                    });
             }
         };
         AE2Controller.AE2Interface = new TestGridFixtures.TestAE(grid) {

@@ -25,6 +25,21 @@ class ConfigFileTest {
     Path root;
 
     @Test
+    void resourceTrackingLimitsArePersistedAndInvalidIntervalsAreRejected() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        String contents = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        CommentedConfig document = new TomlParser().parse(contents);
+        assertTrue(document.contains("resource_tracking.active_interval_millis"));
+        assertTrue(document.contains("resource_tracking.history_bytes_per_grid"));
+        Files.write(
+            file,
+            contents.replaceAll("active_interval_millis = [0-9]+", "active_interval_millis = 0")
+                .getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, Config::reload);
+    }
+
+    @Test
     void firstStartCreatesReadableConfigAndRetainsPasswordAcrossRestarts() throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");

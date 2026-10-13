@@ -590,7 +590,11 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
         pauseStatus: 'OK',
         history: [historyEntry],
         historyDetail,
-        settings: { [gridA]: { isTracked: false, name: '' }, [gridB]: { isTracked: false, name: '' } },
+        resourceHistory: { points: [], complete: true, truncated: false },
+        settings: {
+            [gridA]: { isTracked: false, isStorageTracked: false, name: '' },
+            [gridB]: { isTracked: false, isStorageTracked: false, name: '' }
+        },
         accessSources: {}
     };
     const planRequests = new Map();
@@ -823,6 +827,14 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                         status: options.historyError || 'OK',
                         data: options.historyDetail,
                         icons: url.searchParams.get('icons') === 'true' ? options.icons : null
+                    })
+                );
+            } else if (resource.endsWith('/resource-history')) {
+                const key = resource.includes(gridA) ? gridA : gridB;
+                response.end(
+                    JSON.stringify({
+                        status: 'OK',
+                        data: { ...options.resourceHistory, enabled: !!options.settings[key].isStorageTracked }
                     })
                 );
             } else if (resource.endsWith('/settings')) {
@@ -8789,7 +8801,7 @@ test('Network details scroll long access lists under a fixed heading and keep mo
         await page.getByRole('button', { name: 'Save settings', exact: true }).click();
         await page
             .getByRole('status')
-            .filter({ hasText: /settings saved/i })
+            .filter({ hasText: `Mobile ${appearance}` })
             .waitFor();
         const region = page.getByRole('region', { name: 'Network details', exact: true });
         assert.ok(await region.evaluate((node) => node.scrollWidth <= node.clientWidth));
@@ -9702,4 +9714,36 @@ test('a restored cached page reloads its disposed application', async (t) => {
     await reload;
     await page.getByRole('searchbox', { name: 'Search resources', exact: true }).waitFor();
     assert.equal(options.requests.filter((request) => request.path === '/api/context').length, 2);
+});
+
+test('resource tracking is independent of CPU history and renders exact flow counts', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    await page.locator('#network-storage-tracking').check();
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('#network-storage-tracking').disabled);
+    assert.equal(options.settings[gridA].isStorageTracked, true);
+    assert.equal(options.settings[gridA].isTracked, false);
+    options.resourceHistory = {
+        points: [
+            {
+                observedAt: 1700000000000,
+                generation: 'run',
+                kind: 'FLOW',
+                resource: null,
+                input: '9223372036854775807',
+                output: '0',
+                complete: false
+            }
+        ],
+        complete: false,
+        truncated: true
+    };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#items button').first().click();
+    await page.locator('.resource-history summary').click();
+    await page.locator('.resource-history-points li').waitFor();
+    const text = await page.locator('.resource-history-points').innerText();
+    assert.ok(text.replace(/[^0-9]/g, '').includes('9223372036854775807'));
+    assert.equal(await page.locator('.resource-history .hint').first().isVisible(), true);
 });

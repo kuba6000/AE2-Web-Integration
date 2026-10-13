@@ -12,6 +12,8 @@ public final class GridSettingsData {
      * @example true
      */
     private boolean isTracked;
+    /** Whether this grid records resource quantities and accepted input/output history. */
+    private boolean isStorageTracked;
     /**
      * Custom network name; empty when unnamed.
      *
@@ -43,6 +45,20 @@ public final class GridSettingsData {
         }
     }
 
+    public boolean isStorageTracked() {
+        synchronized (lock) {
+            return isStorageTracked;
+        }
+    }
+
+    public void setStorageTracked(boolean value) {
+        synchronized (lock) {
+            if (isStorageTracked == value) return;
+            isStorageTracked = value;
+            markDirty.run();
+        }
+    }
+
     public @NotNull String getName() {
         synchronized (lock) {
             return name;
@@ -59,7 +75,7 @@ public final class GridSettingsData {
 
     public boolean isDefault() {
         synchronized (lock) {
-            return !isTracked && name.isEmpty();
+            return !isTracked && !isStorageTracked && name.isEmpty();
         }
     }
 

@@ -3,7 +3,7 @@ import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
 import type { Notify } from './notifications.js';
 
-type Edited = { name: boolean; isTracked: boolean };
+type Edited = { name: boolean; isTracked: boolean; isStorageTracked: boolean };
 export type SettingsState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     current: GridSettings | null;
@@ -37,8 +37,8 @@ export function createGridSettings(
     updated: (gridKey: string, settings: GridSettings) => void,
     notify: Notify
 ) {
-    const empty = (): GridSettings => ({ name: '', isTracked: false });
-    const unedited = (): Edited => ({ name: false, isTracked: false });
+    const empty = (): GridSettings => ({ name: '', isTracked: false, isStorageTracked: false });
+    const unedited = (): Edited => ({ name: false, isTracked: false, isStorageTracked: false });
     const state: SettingsState = {
         status: 'idle',
         current: null,
@@ -84,7 +84,11 @@ export function createGridSettings(
     return {
         state,
         route(next: Route) {
-            if (route.view === 'settings' && state.current && (state.edited.name || state.edited.isTracked))
+            if (
+                route.view === 'settings' &&
+                state.current &&
+                (state.edited.name || state.edited.isTracked || state.edited.isStorageTracked)
+            )
                 drafts.set(route.gridKey, { draft: { ...state.draft }, edited: { ...state.edited } });
             generation++;
             request?.abort();
@@ -101,7 +105,8 @@ export function createGridSettings(
                     ? { ...draft.edited }
                     : {
                           name: !!previous?.uncertain && previous.desired.name !== undefined,
-                          isTracked: !!previous?.uncertain && previous.desired.isTracked !== undefined
+                          isTracked: !!previous?.uncertain && previous.desired.isTracked !== undefined,
+                          isStorageTracked: !!previous?.uncertain && previous.desired.isStorageTracked !== undefined
                       },
                 sources: {},
                 saving: !!previous?.pending,
@@ -123,6 +128,7 @@ export function createGridSettings(
                 state.current = data;
                 if (!state.edited.name) state.draft.name = data.name;
                 if (!state.edited.isTracked) state.draft.isTracked = data.isTracked;
+                if (!state.edited.isStorageTracked) state.draft.isStorageTracked = data.isStorageTracked;
                 state.sources = sourcesForRoute;
                 state.status = 'ready';
                 state.error = null;
@@ -160,6 +166,11 @@ export function createGridSettings(
                 desired.isTracked = state.draft.isTracked;
             if (state.draft.name.trim() !== state.current.name || uncertain?.name !== undefined)
                 desired.name = state.draft.name.trim();
+            if (
+                state.draft.isStorageTracked !== state.current.isStorageTracked ||
+                uncertain?.isStorageTracked !== undefined
+            )
+                desired.isStorageTracked = state.draft.isStorageTracked;
             if (!Object.keys(desired).length) return;
             const version = ++generation;
             const operation: SaveOperation = { pending: true, desired, uncertain: state.uncertain };
@@ -214,6 +225,7 @@ export function createGridSettings(
                     Object.assign(state.draft, operation.desired);
                     if (operation.desired.name !== undefined) state.edited.name = true;
                     if (operation.desired.isTracked !== undefined) state.edited.isTracked = true;
+                    if (operation.desired.isStorageTracked !== undefined) state.edited.isStorageTracked = true;
                 }
             }
             changed();

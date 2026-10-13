@@ -45,6 +45,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetResourceHistory;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
@@ -94,6 +95,7 @@ class ApiRoutingHttpTest extends GridTestScope {
         router.register(OptionalIdentity.class);
         router.register(GetGridSettings.class);
         router.register(PatchGridSettings.class);
+        router.register(GetResourceHistory.class);
         server.createContext("/api", router);
         server.start();
     }
@@ -103,6 +105,18 @@ class ApiRoutingHttpTest extends GridTestScope {
         server.stop(0);
         gameThread.shutdownNow();
         grid = null;
+    }
+
+    @Test
+    void resourceHistoryRequiresAccessAndRejectsUnboundedQueries() throws Exception {
+        grid = TestGridFixtures.grid(781012);
+        String path = "/api/grids/" + TestGridFixtures.resolvedKey(grid) + "/resource-history";
+        assertEquals(401, request("GET", path, "", "").status());
+        assertEquals(403, request("GET", path, "Authorization: Bearer stranger\r\n", "").status());
+        for (String query : new String[] { "limit=0", "limit=10001", "from=-1", "from=1.5", "itemKey=bad" }) {
+            assertEquals(400, request("GET", path + "?" + query, "Authorization: Bearer owner\r\n", "").status());
+        }
+        assertEquals(503, request("GET", path + "?limit=20&from=0", "Authorization: Bearer owner\r\n", "").status());
     }
 
     @Endpoint(method = HttpMethod.PATCH, path = "/api/echo/{name}")
@@ -453,6 +467,45 @@ class ApiRoutingHttpTest extends GridTestScope {
                 .getAsString());
         assertFalse(
             settings.get("isTracked")
+                .getAsBoolean());
+    }
+
+    @Test
+    void storageHistorySettingIsIndependentAndPersists() throws Exception {
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        String path = "/api/grids/" + key + "/settings";
+        String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+        Reply saved = request("PATCH", path, headers, "{\"isStorageTracked\":true}");
+        assertEquals(HttpURLConnection.HTTP_OK, saved.status());
+        JsonObject settings = saved.json()
+            .getAsJsonObject("data");
+        assertTrue(
+            settings.get("isStorageTracked")
+                .getAsBoolean());
+        assertFalse(
+            settings.get("isTracked")
+                .getAsBoolean());
+        Path file = gridSave.toPath()
+            .resolve("ae2webintegration/grid-identities.json");
+        JsonObject loaded = new Gson().toJsonTree(
+            new GridIdentityRegistry(file.toFile()).getPersistentData(key)
+                .getSettings())
+            .getAsJsonObject();
+        assertTrue(
+            loaded.get("isStorageTracked")
+                .getAsBoolean());
+        assertEquals(
+            HttpURLConnection.HTTP_BAD_REQUEST,
+            request("PATCH", path, headers, "{\"isStorageTracked\":null}").status());
+        assertEquals(HttpURLConnection.HTTP_OK, request("PATCH", path, headers, "{\"isTracked\":true}").status());
+        JsonObject current = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertTrue(
+            current.get("isStorageTracked")
+                .getAsBoolean());
+        assertTrue(
+            current.get("isTracked")
                 .getAsBoolean());
     }
 

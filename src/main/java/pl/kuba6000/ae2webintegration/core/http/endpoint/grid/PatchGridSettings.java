@@ -73,16 +73,19 @@ public final class PatchGridSettings extends IAsyncRequest {
     /**
      * Settings to update; omitted members remain unchanged.
      *
-     * @param isTracked whether the grid should collect crafting history
-     * @param name      custom network name; empty clears it. Outer Unicode spaces and U+FEFF are trimmed,
-     *                  matching JavaScript String.trim after control characters are rejected.
-     *                  At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
-     *                  U+007F–009F) are rejected even at the edges. Null is invalid; omission preserves the name.
+     * @param isTracked        whether the grid should collect crafting history
+     * @param isStorageTracked whether the grid should collect resource quantities and input/output history
+     * @param name             custom network name; empty clears it. Outer Unicode spaces and U+FEFF are trimmed,
+     *                         matching JavaScript String.trim after control characters are rejected.
+     *                         At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
+     *                         U+007F–009F) are rejected even at the edges. Null is invalid; omission preserves the
+     *                         name.
      * @example isTracked true
      * @example name Factory
      */
     @Desugar
-    public record Input(@OptionalInput @Nullable Boolean isTracked, @OptionalInput @Nullable String name) {}
+    public record Input(@OptionalInput @Nullable Boolean isTracked, @OptionalInput @Nullable String name,
+        @OptionalInput @Nullable Boolean isStorageTracked) {}
 
     @Body
     private @NotNull Input input;
@@ -113,7 +116,9 @@ public final class PatchGridSettings extends IAsyncRequest {
                 if (input.isTracked() != null) {
                     settings.setTracked(input.isTracked());
                 }
-                if (input.name() != null || input.isTracked() != null) registry.saveIfDirty();
+                if (input.isStorageTracked() != null) settings.setStorageTracked(input.isStorageTracked());
+                if (input.name() != null || input.isTracked() != null || input.isStorageTracked() != null)
+                    registry.saveIfDirty();
                 // Completion serializes under the same monitor used by settings mutations and file writes.
                 respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, settings));
             } catch (IOException e) {

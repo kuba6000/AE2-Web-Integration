@@ -7,7 +7,8 @@ import type {
     CpuDetail,
     HistoryEntry,
     CraftingHistory,
-    GridSettings
+    GridSettings,
+    ResourceHistory
 } from './api-types.js';
 import type { ResourceResponse, IconMetadata, ApplicationContext } from './api-types.js';
 
@@ -85,6 +86,7 @@ export type Api = {
         signal?: AbortSignal,
         icons?: boolean
     ) => Promise<ResourceResponse<CraftingHistory>>;
+    resourceHistory: (gridKey: string, itemKey: string, signal?: AbortSignal) => Promise<ResourceHistory>;
     settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettings>;
     saveSettings: (gridKey: string, body: Partial<GridSettings>) => Promise<GridSettings>;
     submitPlan: (gridKey: string, planId: string | number, cpuKey?: string) => Promise<null>;
@@ -213,6 +215,11 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             read(`api/grids/${encodeURIComponent(gridKey)}/crafting-history/${entryId}${icons ? '?icons=true' : ''}`, {
                 signal
             }),
+        resourceHistory: (gridKey, itemKey, signal) =>
+            request(
+                `api/grids/${encodeURIComponent(gridKey)}/resource-history?itemKey=${encodeURIComponent(itemKey)}&limit=200`,
+                { signal }
+            ),
         settings: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { signal }),
         saveSettings: (gridKey, body) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { method: 'PATCH', body }),

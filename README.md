@@ -200,6 +200,18 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 In public mode, a player can create an account from the login page. After choosing a password, the page displays
 an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
 
+### Resource history
+
+Enable **Resource tracking** in a network's settings to record sampled stored quantities and accepted
+input/output separately. Select a resource in the terminal and open **Resource history** in its details
+to view recent measurements. Accepted input includes resources consumed by void storage; it is not the
+same as an increase in stored quantity.
+
+History is saved in the world's `ae2webintegration/resource-history` directory. Sampling intervals and
+file limits are configured under `resource_tracking` in `config.toml` and take effect after a server
+restart. Reaching the file limit stops recording without deleting history. Gaps and incomplete history
+are indicated in the web interface; missing measurements do not mean zero activity.
+
 ## Notification services integration
 
 **Integrations only works when public mode is disabled.**

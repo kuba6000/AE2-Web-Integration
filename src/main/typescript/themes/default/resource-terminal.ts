@@ -6,6 +6,7 @@ import { renderMinecraftText } from './minecraft-text.js';
 import { element } from './dom.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 import { createSlotGrid } from './slot-grid.js';
+import { createResourceHistoryView } from './resource-history.js';
 import { slotQuantity } from './resource-quantity.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 import { terminalIcons as symbols, craftingHammer } from './icons/pixel/terminal.js';
@@ -99,6 +100,7 @@ export function createResourceTerminal(
         details: root.querySelector<HTMLDivElement>('#details')!,
         order: root.querySelector<HTMLDivElement>('#order')!
     };
+    const historyView = createResourceHistoryView(controls.resourcePanel);
     const toolButtons: NodeListOf<
         HTMLButtonElement & {
             dataset: {
@@ -370,6 +372,7 @@ export function createResourceTerminal(
     function renderDetails() {
         const details = controls.details;
         const item = state.selected;
+        historyView.render(state, locale, language);
         controls.order.hidden = !item?.craftable || !item.itemKey;
         if (!item) {
             details.replaceChildren(element('p', locale.common('selectItem')));

@@ -16,13 +16,19 @@ import org.jetbrains.annotations.Nullable;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.FileStorageHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
 import pl.kuba6000.ae2webintegration.core.utils.VersionChecker;
 
@@ -53,9 +59,12 @@ public class CoreEngine {
     private static boolean serverRunning;
     private static volatile @Nullable IconPack iconPack;
     private static volatile ThemeCatalog themes = new ThemeCatalog();
+    private static volatile @Nullable StorageTrackingService storageTracking;
+    private static @Nullable StorageTrackingCoordinator storageCoordinator;
 
     public static void init(@NotNull IServerPlatform serverPlatform) {
         serverRunning = false;
+        stopStorageTracking();
         stopVersionChecker();
         AE2Controller.serverPlatform = serverPlatform;
         Config.init(serverPlatform.getConfigDirectory(), serverPlatform::getLegacyConfig);
@@ -75,6 +84,16 @@ public class CoreEngine {
         }
         serverRunning = true;
         loadIconPack();
+        stopStorageTracking();
+        ConfigSettings.ResourceTracking trackingSettings = Config.INSTANCE.resourceTracking;
+        StorageTrackingService service = new StorageTrackingService(
+            new FileStorageHistoryStore(
+                new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/resource-history")
+                    .toPath(),
+                trackingSettings.historyBytesPerGrid),
+            trackingSettings.maxQueuedRows);
+        storageCoordinator = new StorageTrackingCoordinator(service, GRID_IDENTITIES, trackingSettings);
+        storageTracking = service;
         themes.close();
         themes = ThemeCatalog.load(
             Config.getConfigFile("themes")
@@ -93,6 +112,9 @@ public class CoreEngine {
     public static void onServerTick() {
         drainRequests(System::nanoTime);
         runPlanMaintenance(System.nanoTime());
+        if (storageCoordinator != null && AE2Controller.AE2Interface != null) {
+            storageCoordinator.tick(AE2Controller.AE2Interface, System.currentTimeMillis());
+        }
         maintainVersionChecker();
     }
 
@@ -196,6 +218,7 @@ public class CoreEngine {
         serverRunning = false;
         stopVersionChecker();
         AE2Controller.stopHTTPServer();
+        stopStorageTracking();
         closeIconPack();
         // Authorization must not survive into the next world loaded in this JVM.
         themes.close();
@@ -207,6 +230,7 @@ public class CoreEngine {
         stopVersionChecker();
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.
         AE2Controller.stopHTTPServer();
+        stopStorageTracking();
         closeIconPack();
         AE2Controller.clearWorldState();
         themes.close();
@@ -218,6 +242,27 @@ public class CoreEngine {
 
     public static @Nullable String getModVersion() {
         return modVersion;
+    }
+
+    /** Detached data and history access for HTTP workers. Null outside an active server lifecycle. */
+    public static @Nullable StorageTrackingService getStorageTracking() {
+        return storageTracking;
+    }
+
+    /** Authorized terminal reads renew the shared native observation lease on the game thread. */
+    public static @Nullable StorageSnapshot observeStorage(@NotNull IAEGrid grid) {
+        return storageCoordinator == null ? null
+            : storageCoordinator.observeForViewer(grid, System.currentTimeMillis());
+    }
+
+    private static void stopStorageTracking() {
+        if (storageCoordinator != null) {
+            storageCoordinator.close();
+            storageCoordinator = null;
+        }
+        StorageTrackingService previous = storageTracking;
+        storageTracking = null;
+        if (previous != null) previous.close();
     }
 
     /** Immutable metadata is safe to read on either thread; page streams lease the archive until closed. */

@@ -11,6 +11,7 @@ import type { Api, ApiFailure } from './api.js';
 import { createCrafting } from './crafting.js';
 import { createCpuMonitor } from './cpus.js';
 import { createHistory } from './history.js';
+import { createResourceHistory, type ResourceHistoryState } from './resource-history.js';
 import { createGridSettings } from './settings.js';
 import { createNotifications } from './notifications.js';
 
@@ -38,6 +39,7 @@ export type TerminalState = TerminalData & {
     cpus: CpuState;
     home: HomeState;
     history: HistoryState;
+    resourceHistory: ResourceHistoryState;
     settings: SettingsState;
 };
 
@@ -99,6 +101,7 @@ export function createTerminal(
         },
         () => iconsEnabled && state.iconPack.available === true
     );
+    const resourceHistory = createResourceHistory(api, notify);
     const settings = createGridSettings(
         api,
         () => {
@@ -146,6 +149,7 @@ export function createTerminal(
         cpus: cpus.state,
         home: home.state,
         history: history.state,
+        resourceHistory: resourceHistory.state,
         settings: settings.state
     };
 
@@ -157,6 +161,7 @@ export function createTerminal(
     }
 
     function invalidateItems() {
+        resourceHistory.clear();
         serial++;
         itemRequest?.abort();
         state.items = [];
@@ -196,9 +201,12 @@ export function createTerminal(
                 : null;
             state.itemStatus = 'ready';
             state.updatedAt = Date.now();
+            if (state.selected) await resourceHistory.refresh();
+            else resourceHistory.clear();
         } catch (caught) {
             const error = caught as ApiFailure;
             if (disposed || version !== serial || error.name === 'AbortError') return;
+            resourceHistory.clear();
             state.items = [];
             state.itemIcons = null;
             state.selected = null;
@@ -395,6 +403,7 @@ export function createTerminal(
         },
         select(item: StoredResource | null) {
             state.selected = item;
+            void resourceHistory.select(state.route.gridKey, item?.itemKey ?? null);
             notify();
         },
         preference<K extends keyof Preferences>(name: K, value: Preferences[K]) {
@@ -412,6 +421,7 @@ export function createTerminal(
             crafting.dispose();
             cpus.dispose();
             history.dispose();
+            resourceHistory.dispose();
             settings.dispose();
             home.dispose();
             icons.dispose();

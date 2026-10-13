@@ -8,7 +8,9 @@ import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.tools.DocumentationTool;
 import javax.tools.StandardJavaFileManager;
@@ -21,6 +23,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -242,6 +245,82 @@ class OpenApiDocletTest {
     }
 
     @Test
+    void documentsOptionalScalarQueriesWithoutInventingNumericDefaults() throws Exception {
+        List<Path> sources = fixture("""
+            /** Reads bounded resource observations.
+             * @response 200 {@link Response} Observations.
+             */
+            @Endpoint(method = HttpMethod.GET, path = "/api/history")
+            public class Grids {
+                @QueryParam("itemKey") private @org.jetbrains.annotations.Nullable StableKey itemKey;
+                @QueryParam("from") private long from;
+                @QueryParam("limit") private int limit = 200;
+                @QueryParam("icons") private boolean icons;
+                public record Response(String status) {}
+            }
+            """);
+        Path output = directory.resolve("scalar-query.json");
+        Result result = generate(sources, output);
+        assertTrue(result.success(), result.diagnostics());
+        JsonObject operation = JsonParser.parseString(Files.readString(output))
+            .getAsJsonObject()
+            .getAsJsonObject("paths")
+            .getAsJsonObject("/api/history")
+            .getAsJsonObject("get");
+        Map<String, JsonObject> queries = new HashMap<>();
+        for (JsonElement entry : operation.getAsJsonArray("parameters")) {
+            JsonObject query = entry.getAsJsonObject();
+            assertFalse(
+                query.get("required")
+                    .getAsBoolean());
+            assertEquals(
+                "query",
+                query.get("in")
+                    .getAsString());
+            queries.put(
+                query.get("name")
+                    .getAsString(),
+                query.getAsJsonObject("schema"));
+        }
+        assertEquals(
+            "integer",
+            queries.get("from")
+                .get("type")
+                .getAsString());
+        assertEquals(
+            "integer",
+            queries.get("limit")
+                .get("type")
+                .getAsString());
+        assertFalse(
+            queries.get("from")
+                .has("default"));
+        assertFalse(
+            queries.get("limit")
+                .has("default"));
+        assertEquals(
+            "boolean",
+            queries.get("icons")
+                .get("type")
+                .getAsString());
+        assertFalse(
+            queries.get("icons")
+                .get("default")
+                .getAsBoolean());
+        assertEquals(
+            "string",
+            queries.get("itemKey")
+                .get("type")
+                .getAsString());
+        assertFalse(
+            queries.get("itemKey")
+                .has("default"));
+        assertFalse(
+            queries.get("itemKey")
+                .has("anyOf"));
+    }
+
+    @Test
     void documentsBinaryPagesAndConditionalResponsesWithoutJsonSamples() throws Exception {
         List<Path> sources = fixture("""
             /** Reads an icon atlas page.
@@ -325,7 +404,7 @@ class OpenApiDocletTest {
         assertTrue(result.success(), result.diagnostics());
         JsonObject document = JsonParser.parseString(Files.readString(output))
             .getAsJsonObject();
-        List<String> names = List.of("Grids", "CPUs", "Icons", "Crafting plans", "Crafting history", "Authentication");
+        List<String> names = List.of("Grids", "CPUs", "Icons", "Crafting plans", "History", "Authentication");
         List<String> packages = List.of("grid", "cpu", "icons", "crafting", "tracking", "auth");
         assertNotNull(document.getAsJsonArray("tags"));
         assertEquals(
