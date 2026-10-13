@@ -503,7 +503,6 @@ header {
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-gutter: stable;
 }
 .cpu-selector-list {
     list-style: none;
