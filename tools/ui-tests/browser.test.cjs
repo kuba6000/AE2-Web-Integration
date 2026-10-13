@@ -8435,6 +8435,7 @@ test('Network details save and clear a name without resending tracking, and upda
     assert.deepEqual(options.requests.filter((request) => request.method === 'PATCH').at(-1).body, {
         name: 'Main factory'
     });
+    await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
     const navigation = page.locator('nav').getByRole('link');
     assert.deepEqual((await navigation.allTextContents()).slice(0, 3), ['Home', 'Network', 'Terminal']);
     await clickTab(page, 'Home');
@@ -8471,6 +8472,7 @@ test('tracking notices use the current network, update after saving, and retain 
         .getByRole('status')
         .filter({ hasText: /settings saved/i })
         .waitFor();
+    await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
     await clickTab(page, 'Terminal');
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await enable.count(), 0);
