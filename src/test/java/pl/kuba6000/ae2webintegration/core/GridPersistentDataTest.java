@@ -3,7 +3,6 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -65,7 +64,7 @@ class GridPersistentDataTest extends GridTestScope {
     }
 
     @Test
-    void oldSavedSettingsDefaultToUnnamedButNullNameIsRejected() throws Exception {
+    void oldSavedSettingsDefaultToUnnamedButNullNameResetsTheRegistry() throws Exception {
         Path file = gridSave.toPath()
             .resolve("old-settings.json");
         StableKey key = StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
@@ -81,7 +80,9 @@ class GridPersistentDataTest extends GridTestScope {
             data.getSettings()
                 .isDefault());
         Files.write(file, (prefix + ",\"name\":null}}}").getBytes(StandardCharsets.UTF_8));
-        assertThrows(IOException.class, () -> new GridIdentityRegistry(file.toFile()));
+        var reset = new GridIdentityRegistry(file.toFile());
+        assertTrue(reset.isInitialized());
+        assertNull(reset.getPersistentData(key));
     }
 
     @Test

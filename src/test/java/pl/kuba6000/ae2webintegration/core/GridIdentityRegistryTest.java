@@ -15,6 +15,8 @@ import java.util.Set;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -281,16 +283,38 @@ class GridIdentityRegistryTest {
     }
 
     @Test
-    void malformedFilesIncludingDuplicateKeysFailWithoutOverwritingTheirSource() throws Exception {
+    void malformedFilesIncludingDuplicateKeysAreBackedUpAndReplacedWithAnEmptyRegistry() throws Exception {
         String record = "\"" + StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA")
             + "\":{\"controllers\":[{\"dimensionId\":\"world\",\"x\":1,\"y\":0,\"z\":0}],\"settings\":{\"isTracked\":true}}";
-        for (String invalid : Arrays.asList("", "null", "{", "{" + record + "," + record + "}")) {
-            Path file = directory.resolve("invalid.json");
+        String incompleteRecord = "\"AQEBAQEBAQEBAQEBAQEBAQ\":{\"controllers\":[{}],\"settings\":{}}";
+        for (String invalid : Arrays
+            .asList("", "null", "{", "{" + record + "," + record + "}", "{" + record + "," + incompleteRecord + "}")) {
+            Path file = Files.createTempDirectory(directory, "invalid-")
+                .resolve("grid-identities.json");
             byte[] original = invalid.getBytes(StandardCharsets.UTF_8);
             Files.write(file, original);
-            assertThrows(IOException.class, () -> new GridIdentityRegistry(file.toFile()));
-            assertArrayEquals(original, Files.readAllBytes(file));
+            GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+            assertTrue(registry.isInitialized());
+            assertNull(registry.findIdentity(controller(1)));
+            assertEquals("{}", new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+            assertBackupContains(file, original);
+            StableKey key = resolve(registry, controller(1));
+            assertNotNull(key);
+            assertEquals(key, new GridIdentityRegistry(file.toFile()).findIdentity(controller(1)));
+            assertBackupContains(file, original);
         }
+    }
+
+    @Test
+    void failedReplacementLeavesTheInvalidSourceAndItsBackupIntact() throws Exception {
+        Path file = directory.resolve("grid-identities.json");
+        byte[] original = "{".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, original);
+        Files.createDirectory(directory.resolve("grid-identities.json.tmp"));
+
+        assertThrows(IOException.class, () -> new GridIdentityRegistry(file.toFile()));
+        assertArrayEquals(original, Files.readAllBytes(file));
+        assertBackupContains(file, original);
     }
 
     @Test
@@ -369,13 +393,64 @@ class GridIdentityRegistryTest {
 
     @Test
     @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
-    void coordinatesWithoutADimensionAreRejectedWithoutOverwritingTheFile() throws Exception {
+    void coordinatesWithoutADimensionAreBackedUpBeforeStartingANewRegistry() throws Exception {
         Path file = directory.resolve("incomplete-coordinates.json");
         String document = "{\"AAAAAAAAAAAAAAAAAAAAAA\":{\"controllers\":[{\"x\":1,\"y\":0,\"z\":0}],\"settings\":{}}}";
         Files.write(file, document.getBytes(StandardCharsets.UTF_8));
 
-        assertThrows(IOException.class, () -> new GridIdentityRegistry(file.toFile()));
+        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+        assertTrue(registry.isInitialized());
+        assertNull(registry.findIdentity(controller(1)));
+        assertBackupContains(file, document.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "0", "minecraft:overworld" })
+    @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
+    void releasedDimensionFieldPreservesIdentityAndSettingsAndIsRewrittenOnSave(String dimension) throws Exception {
+        Path file = directory.resolve("released-identities.json");
+        StableKey key = StableKey.parse("DtK3pQIgqQ-xyPjLOqQW9A");
+        String document = "{\"" + key
+            + "\":{\"controllers\":[{\"dimid\":\""
+            + dimension
+            + "\",\"x\":-643,\"y\":4,\"z\":-907}],\"settings\":{\"isTracked\":true}}}";
+        Files.write(file, document.getBytes(StandardCharsets.UTF_8));
+
+        GridIdentityRegistry registry = new GridIdentityRegistry(file.toFile());
+        DimensionalCoords controller = new DimensionalCoords(dimension, -643, 4, -907);
+        assertEquals(key, registry.findIdentity(controller));
+        assertTrue(TestGridFixtures.isTracked(registry, key));
         assertEquals(document, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+
+        registry.saveIfDirty();
+        JsonObject saved = new JsonParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8))
+            .getAsJsonObject()
+            .getAsJsonObject(key.toString())
+            .getAsJsonArray("controllers")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            dimension,
+            saved.get("dimensionId")
+                .getAsString());
+        assertFalse(saved.has("dimid"));
+        GridIdentityRegistry restarted = new GridIdentityRegistry(file.toFile());
+        assertEquals(key, restarted.findIdentity(controller));
+        assertTrue(TestGridFixtures.isTracked(restarted, key));
+
+        DimensionalCoords apiCoordinates = GSONUtils.GSON_BUILDER.create()
+            .fromJson("{\"dimid\":\"" + dimension + "\",\"x\":-643,\"y\":4,\"z\":-907}", DimensionalCoords.class);
+        assertNull(apiCoordinates.dimensionId(), "The storage alias must not affect API deserialization");
+    }
+
+    private static void assertBackupContains(Path file, byte[] original) throws IOException {
+        try (java.nio.file.DirectoryStream<Path> backups = Files
+            .newDirectoryStream(file.getParent(), file.getFileName() + ".corrupt-*.bak")) {
+            java.util.Iterator<Path> iterator = backups.iterator();
+            assertTrue(iterator.hasNext());
+            assertArrayEquals(original, Files.readAllBytes(iterator.next()));
+            assertFalse(iterator.hasNext(), "A successful restart must not create another backup");
+        }
     }
 
     private static StableKey resolve(GridIdentityRegistry registry, DimensionalCoords... positions) {

@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -14,6 +15,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.WeakHashMap;
 
 import org.apache.logging.log4j.LogManager;
@@ -22,6 +24,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.google.common.collect.MapMaker;
+import com.google.gson.Gson;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
@@ -53,7 +58,7 @@ public final class GridIdentityRegistry {
         clear();
         file = new File(saveDirectory, "ae2webintegration/grid-identities.json");
         try {
-            load();
+            loadOrReset();
         } catch (IOException e) {
             clear();
             throw e;
@@ -74,10 +79,10 @@ public final class GridIdentityRegistry {
         return file;
     }
 
-    /** A failed load aborts construction, so callers cannot overwrite the unread source through this instance. */
+    /** Invalid data is backed up before starting a new registry; filesystem failures still abort construction. */
     public GridIdentityRegistry(@NotNull File file) throws IOException {
         this.file = file;
-        load();
+        loadOrReset();
     }
 
     /** Reads the validated binding, or null when unavailable, without discovering controllers or changing maps. */
@@ -161,11 +166,44 @@ public final class GridIdentityRegistry {
         }
     }
 
+    private void loadOrReset() throws IOException {
+        try {
+            load();
+        } catch (IOException failure) {
+            Path source = storageFile().toPath();
+            if (!Files.isRegularFile(source)) throw failure;
+            Path backup = source.resolveSibling(source.getFileName() + ".corrupt-" + UUID.randomUUID() + ".bak");
+            // Never overwrite the original unless its complete backup was successfully written.
+            Files.copy(source, backup);
+            records.clear();
+            knownPositions.clear();
+            dirty = false;
+            writeRecords(records);
+            LOG.error(
+                "Failed to load grid identities. Original saved to {}; started a new registry. "
+                    + "Networks will receive new identifiers and default settings.",
+                backup,
+                failure);
+        }
+    }
+
     private void load() throws IOException {
         File file = storageFile();
         if (Files.notExists(file.toPath())) return;
         try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
-            Map<StableKey, GridPersistentData> stored = GSONUtils.GSON_BUILDER.create()
+            Gson currentFormat = GSONUtils.GSON_BUILDER.create();
+            // TODO: Remove after the transition release; published 1.2.0-pre-* saves use dimid.
+            JsonDeserializer<DimensionalCoords> coordinates = (json, type, context) -> {
+                JsonObject position = json.getAsJsonObject();
+                if (!position.has("dimensionId") && position.has("dimid")) {
+                    position.add("dimensionId", position.remove("dimid"));
+                    dirty = true;
+                }
+                return currentFormat.fromJson(position, DimensionalCoords.class);
+            };
+            Map<StableKey, GridPersistentData> stored = GSONUtils.createBuilder()
+                .registerTypeAdapter(DimensionalCoords.class, coordinates)
+                .create()
                 .fromJson(reader, new TypeToken<Map<StableKey, GridPersistentData>>() {}.getType());
             if (stored == null) throw new IOException("Empty grid identity file: " + file);
             for (Map.Entry<StableKey, GridPersistentData> entry : stored.entrySet()) {

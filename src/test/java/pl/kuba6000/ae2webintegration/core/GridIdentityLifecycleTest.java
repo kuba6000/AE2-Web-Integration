@@ -3,7 +3,6 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -27,7 +26,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 class GridIdentityLifecycleTest extends GridTestScope {
 
     @Test
-    void failedSaveLoadLeavesRegistryUnavailableUntilSuccessfulInitialization() throws Exception {
+    void corruptSaveStartsANewRegistryWithoutRetainingPreviousWorldBindings() throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(81);
         TestGridFixtures.track(grid);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
@@ -38,15 +37,21 @@ class GridIdentityLifecycleTest extends GridTestScope {
         byte[] invalid = "{".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         java.nio.file.Files.write(invalidFile, invalid);
 
-        assertThrows(IOException.class, () -> CoreEngine.GRID_IDENTITIES.initialize(invalidSave));
-        assertFalse(CoreEngine.GRID_IDENTITIES.isInitialized());
+        CoreEngine.GRID_IDENTITIES.initialize(invalidSave);
+        assertTrue(CoreEngine.GRID_IDENTITIES.isInitialized());
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
+        StableKey replacement = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(replacement);
+        assertNotEquals(key, replacement);
+        assertEquals(
+            replacement,
+            GridAccess.list(TestGridFixtures.ae(grid))
+                .get(0)
+                .key());
+        assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, replacement));
         assertNull(CoreEngine.GRID_IDENTITIES.getPersistentData(key));
-        assertThrows(IllegalStateException.class, CoreEngine.GRID_IDENTITIES::saveIfDirty);
-        assertArrayEquals(invalid, java.nio.file.Files.readAllBytes(invalidFile));
 
         CoreEngine.GRID_IDENTITIES.initialize(gridSave);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
