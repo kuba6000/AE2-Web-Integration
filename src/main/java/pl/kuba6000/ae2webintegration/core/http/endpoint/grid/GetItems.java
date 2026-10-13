@@ -106,7 +106,7 @@ public final class GetItems extends ISyncedRequest {
         }
 
         listing.commit();
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
+        respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
     }
 
     private static void addItem(ArrayList<StoredResource> items, IAEGenericStack stack, IAEGrid grid,

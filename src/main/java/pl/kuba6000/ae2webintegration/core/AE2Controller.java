@@ -116,6 +116,11 @@ public class AE2Controller {
             return lifecycleGeneration;
         }
 
+        /** Whether HTTP stop/restart has invalidated the request's originating generation. */
+        public boolean isLifecycleUnchanged() {
+            return lifecycleGeneration == httpLifecycleGeneration.get();
+        }
+
         public Map<String, String> getPathParams() {
             return pathParams;
         }

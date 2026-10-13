@@ -7,6 +7,8 @@ import java.net.HttpURLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -32,6 +34,79 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class ItemIdentityRequestTest extends GridTestScope {
+
+    @Test
+    void itemSnapshotIsDiscardedWhenItsHttpLifecycleEndsBeforeDelivery() {
+        Grid grid = new Grid(910013, new Resource("iron", Long.MAX_VALUE, true));
+        GetItems request = new GetItems();
+        IAE ae = new TestGridFixtures.TestAE(grid);
+        assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + TestGridFixtures.resolvedKey(grid))));
+        request.runOnServerThread(ae);
+        AE2Controller.stopHTTPServer();
+        assertEquals(
+            HttpURLConnection.HTTP_UNAVAILABLE,
+            request.getResponse()
+                .httpStatus());
+        assertEquals(
+            "SERVER_STOPPING",
+            new JsonParser().parse(request.getJSON())
+                .getAsJsonObject()
+                .get("status")
+                .getAsString());
+    }
+
+    @Test
+    void itemSnapshotRetainsExactCapturedValuesAfterNativeStorageChanges() throws Exception {
+        Thread owner = Thread.currentThread();
+        Resource resource = new Resource("Żelazo", Long.MAX_VALUE, true) {
+
+            @Override
+            public long web$amount() {
+                assertSame(owner, Thread.currentThread());
+                return super.web$amount();
+            }
+
+            @Override
+            public @NotNull String web$getDisplayName() {
+                assertSame(owner, Thread.currentThread());
+                return super.web$getDisplayName();
+            }
+        };
+        Grid grid = new Grid(910014, resource);
+        GetItems request = new GetItems();
+        IAE ae = new TestGridFixtures.TestAE(grid);
+        assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + TestGridFixtures.resolvedKey(grid))));
+        request.runOnServerThread(ae);
+        grid.rows.clear();
+        ExecutorService http = Executors.newSingleThreadExecutor();
+        try {
+            String json = http.submit(request::getJSON)
+                .get(1, TimeUnit.SECONDS);
+            JsonObject row = new JsonParser().parse(json)
+                .getAsJsonObject()
+                .getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject();
+            assertEquals(
+                Long.MAX_VALUE,
+                row.get("quantity")
+                    .getAsLong());
+            assertEquals(
+                "Żelazo",
+                row.get("displayName")
+                    .getAsString());
+            assertEquals(
+                resource.web$getKey()
+                    .toString(),
+                row.get("itemKey")
+                    .getAsString());
+            assertTrue(
+                row.get("craftable")
+                    .getAsBoolean());
+        } finally {
+            http.shutdownNow();
+        }
+    }
 
     @Test
     void listingExposesTheResourceTypeForTerminalFiltering() {

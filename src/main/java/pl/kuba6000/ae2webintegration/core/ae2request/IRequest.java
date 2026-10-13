@@ -5,6 +5,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 
@@ -44,14 +47,52 @@ public abstract class IRequest {
     }
 
     private static final ApiResponse PENDING_RESULT = ApiResponse.error(ApiStatus.TIMEOUT);
-    private final CompletableFuture<ApiResponse> completion = new CompletableFuture<>();
+    private final CompletableFuture<ResponseResult> completion = new CompletableFuture<>();
+
+    private static final class ResponseResult {
+
+        private final int httpStatus;
+        private final @Nullable RequestContext context;
+        private @Nullable Object body;
+        private @Nullable ApiResponse response;
+
+        private ResponseResult(@NotNull ApiResponse response) {
+            this.httpStatus = response.httpStatus();
+            this.context = null;
+            this.response = response;
+        }
+
+        private ResponseResult(int httpStatus, @NotNull Object body, @Nullable RequestContext context) {
+            this.httpStatus = httpStatus;
+            this.body = body;
+            this.context = context;
+        }
+
+        private synchronized @NotNull ApiResponse materialize() {
+            if (context != null && !context.isLifecycleUnchanged()) {
+                body = null;
+                response = ApiResponse.error(ApiStatus.SERVER_STOPPING);
+                return response;
+            }
+            if (response == null) {
+                String json = JSONBuilder.create()
+                    .toJson(body);
+                response = context != null && !context.isLifecycleUnchanged()
+                    ? ApiResponse.error(ApiStatus.SERVER_STOPPING)
+                    : new ApiResponse(httpStatus, json);
+                body = null;
+            }
+            return response;
+        }
+    }
 
     public String getJSON() {
         return getResponse().json();
     }
 
     public final ApiResponse getResponse() {
-        return completion.getNow(PENDING_RESULT);
+        ResponseResult result = completion.getNow(null);
+        return result == null ? PENDING_RESULT : result.materialize();
     }
 
     public final void awaitCompletion(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException {
@@ -89,7 +130,16 @@ public abstract class IRequest {
         if (completion.isDone()) return;
         String json = JSONBuilder.create()
             .toJson(body);
-        completion.complete(new ApiResponse(httpStatus, json));
+        completion.complete(new ResponseResult(new ApiResponse(httpStatus, json)));
+    }
+
+    /**
+     * Transfers exclusive ownership of a complete, detached response to its consumer. No native objects,
+     * live collections or later mutations are allowed; JSON is produced when the HTTP worker reads it.
+     */
+    protected final void respondDetached(int httpStatus, @NotNull Object body) {
+        if (completion.isDone()) return;
+        completion.complete(new ResponseResult(httpStatus, body, context));
     }
 
     /**

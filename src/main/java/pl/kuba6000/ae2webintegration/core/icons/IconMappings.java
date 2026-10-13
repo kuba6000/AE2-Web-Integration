@@ -13,7 +13,10 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
-/** One response's compact page table, built from one immutable pack snapshot and confined to its response thread. */
+/**
+ * One response's compact page table, built by its owner from an immutable pack snapshot. After construction,
+ * ownership may pass to a serialization thread; no further resolve calls or page mutations are allowed.
+ */
 public final class IconMappings {
 
     public final @NotNull String packId;
