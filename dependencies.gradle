@@ -38,6 +38,7 @@
  * For more details, see https://docs.gradle.org/8.4/userguide/java_library_plugin.html#sec:java_library_configurations_graph
  */
 dependencies {
+    shadowImplementation('org.hsqldb:hsqldb:2.7.4:jdk8') { transitive = false }
     api rfg.deobf("curse.maven:ae2-extended-life-570458:5411078") // AE2UEL 0.56.6
     devOnlyNonPublishable(rfg.deobf("curse.maven:ae2-fluid-crafting-rework-623955:5751930"))
 
@@ -56,10 +57,12 @@ dependencies {
 }
 
 tasks.named("shadowJar").configure {
+    relocate('org.hsqldb', 'pl.kuba6000.ae2webintegration.internal.hsqldb')
     relocate('com.electronwill.nightconfig', 'pl.kuba6000.ae2webintegration.internal.nightconfig')
     if (minimizeShadowedDependencies.toBoolean()) {
         // Object conversion discovers field annotations reflectively.
         minimize {
+            exclude(dependency('org.hsqldb:hsqldb:.*'))
             exclude(dependency('com.electronwill.night-config:core:.*'))
             exclude(dependency('com.electronwill.night-config:toml:.*'))
         }
