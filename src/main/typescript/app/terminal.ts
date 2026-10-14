@@ -3,7 +3,6 @@ import type { Grid, StoredResource, IconMetadata, GridSettings, ApplicationConte
 import type { createIconLoader } from './icons.js';
 import type { Preferences, createPreferences } from './preferences.js';
 import type { CraftingState } from './crafting.js';
-import { createHomeMonitor, type HomeState } from './home.js';
 import type { CpuState } from './cpus.js';
 import type { HistoryState } from './history.js';
 import type { SettingsState } from './settings.js';
@@ -37,7 +36,6 @@ export type TerminalState = TerminalData & {
     selectedGridKey: string | null;
     crafting: CraftingState;
     cpus: CpuState;
-    home: HomeState;
     history: HistoryState;
     resourceHistory: ResourceHistoryState;
     settings: SettingsState;
@@ -92,7 +90,6 @@ export function createTerminal(
         () => iconsEnabled && state.iconPack.available === true,
         notifications.publish
     );
-    const home = createHomeMonitor(api, notify, () => iconsEnabled && state.iconPack.available === true);
     const history = createHistory(
         api,
         () => {
@@ -114,11 +111,6 @@ export function createTerminal(
                 if (grid.key === key) {
                     grid.name = saved.name;
                     grid.isTrackingEnabled = saved.isTracked;
-                }
-            for (const network of state.home.networks)
-                if (network.grid.key === key) {
-                    network.grid.name = saved.name;
-                    network.grid.isTrackingEnabled = saved.isTracked;
                 }
             notify();
         },
@@ -147,7 +139,6 @@ export function createTerminal(
         preferences: preferences.values,
         crafting: crafting.state,
         cpus: cpus.state,
-        home: home.state,
         history: history.state,
         resourceHistory: resourceHistory.state,
         settings: settings.state
@@ -240,14 +231,12 @@ export function createTerminal(
                 cpus.invalidateIcons();
                 crafting.invalidateIcons();
                 history.invalidateIcons();
-                home.invalidateIcons();
             }
             notify();
             if (changed) {
                 void loadItems();
                 void loadCpus();
                 void loadCrafting();
-                void loadHome();
                 if (state.route.view === 'history') void loadHistory();
             }
         } catch (caught) {
@@ -267,9 +256,6 @@ export function createTerminal(
         if (!crafting.active || state.gridStatus !== 'ready') return;
         if (!state.grids.some((grid) => grid.key === state.route.gridKey)) crafting.block('GRID_NOT_FOUND');
         else return crafting.refresh();
-    }
-    function loadHome() {
-        if (state.route.view === 'home' && state.gridStatus === 'ready') return home.refresh(state.grids);
     }
     function loadCpus() {
         if (state.route.view !== 'cpus' || state.gridStatus !== 'ready') return;
@@ -316,7 +302,6 @@ export function createTerminal(
                 state.gridStatus = 'ready';
                 state.gridError = null;
                 notify();
-                await loadHome();
                 await loadItems();
                 await loadCrafting();
                 await loadCpus();
@@ -328,7 +313,6 @@ export function createTerminal(
                 state.gridStatus = 'error';
                 state.grids = [];
                 state.selectedGridKey = null;
-                home.clear();
                 state.gridError = error.status || 'NETWORK_ERROR';
                 invalidateItems();
                 crafting.block(state.gridError);
@@ -361,12 +345,10 @@ export function createTerminal(
             cpus.invalidateIcons();
             crafting.invalidateIcons();
             history.invalidateIcons();
-            home.invalidateIcons();
             icons.enabled(enabled && state.iconPack.available === true);
             void loadItems();
             void loadCpus();
             void loadCrafting();
-            void loadHome();
             if (state.route.view === 'history') void loadHistory();
             notify();
         },
@@ -387,14 +369,12 @@ export function createTerminal(
             cpus.route(route);
             history.route(route);
             settings.route(route);
-            home.route(route.view === 'home');
             notify();
             loadItems();
             loadCrafting();
             loadCpus();
             loadHistory();
             loadSettings();
-            void loadHome();
             schedule();
         },
         search(value: string) {
@@ -423,7 +403,6 @@ export function createTerminal(
             history.dispose();
             resourceHistory.dispose();
             settings.dispose();
-            home.dispose();
             icons.dispose();
             listeners.clear();
         }

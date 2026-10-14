@@ -141,8 +141,7 @@ export function createHeader(
             (state.route.view === 'cpus' && (state.cpus.reading || state.cpus.status === 'loading')) ||
             (craftingVisible && ['loading', 'calculating'].includes(state.crafting.status)) ||
             (state.route.view === 'history' && (state.history.reading || state.history.status === 'loading')) ||
-            (state.route.view === 'settings' && state.settings.status === 'loading') ||
-            (state.route.view === 'home' && state.home.networks.some((network) => network.status === 'loading'));
+            (state.route.view === 'settings' && state.settings.status === 'loading');
         const active =
             state.refreshingView || state.refreshing || state.gridStatus === 'loading' || viewLoading || actionPending;
         controls.refresh.setAttribute('aria-busy', String(active));

@@ -802,14 +802,8 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 const result = JSON.stringify({
                     status: cpuError || 'OK',
                     data: cpuError ? null : options.cpusByGrid?.[gridKey] || options.cpus,
-                    icons:
-                        url.searchParams.get('icons') === 'true'
-                            ? options.iconsByGrid?.[gridKey] || options.icons
-                            : null
+                    icons: url.searchParams.get('icons') === 'true' ? options.icons : null
                 });
-                options.activeCpus = (options.activeCpus || 0) + 1;
-                options.maxActiveCpus = Math.max(options.maxActiveCpus || 0, options.activeCpus);
-                response.once('close', () => options.activeCpus--);
                 if (options.cpuDelay) await new Promise((resolve) => setTimeout(resolve, options.cpuDelay));
                 response.statusCode = cpuError ? 403 : 200;
                 response.end(result);
@@ -8104,186 +8098,109 @@ test('selected CPU aligns its heading search and resource viewport with the main
     );
 });
 
-// Public browser/HTTP seam: Home must retain source identity across grids and expose a keyboard chooser.
-test('Home shows current work across networks and opens the exact CPU or a keyboard-selected terminal', async (t) => {
+// Home discovery must not enumerate crafting CPUs until the user opens a network's CPU view.
+test('Home initial discovery does not request CPU lists', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(base);
+    await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
+    await page.waitForLoadState('networkidle');
+    if (process.env.UI_SCREENSHOT_DIR) {
+        await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'home-network-only.png') });
+    }
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
+});
+
+// Refreshing discovery or opening the chooser must never fan out to per-network CPU reads.
+test('Home manual automatic and icon preference refreshes do not request CPU lists', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, true);
+    await atlasFixture(page, options);
+    await page.goto(base);
+    await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
+    await page.waitForLoadState('networkidle');
+    options.requests.length = 0;
+    const manual = page.waitForResponse((response) => response.url().endsWith('/api/grids'));
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await settleResponse(page, (await manual).request());
+    await poll(page);
+    await page.waitForLoadState('networkidle');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
+    await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
+    await page
+        .getByRole('dialog')
+        .getByRole('link', { name: new RegExp(gridB) })
+        .waitFor();
+    await poll(page);
+    await page.waitForLoadState('networkidle');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
+    await page.keyboard.press('Escape');
+    for (const preference of ['both', 'names']) {
+        await clickTab(page, 'Web settings');
+        const display = page.getByRole('combobox', { name: 'Terminal display', exact: true });
+        await page.waitForFunction(
+            (select) => !select.querySelector('option[value="both"]').disabled,
+            await display.elementHandle()
+        );
+        await display.selectOption(preference);
+        await clickTab(page, 'Home');
+        await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await page.waitForLoadState('networkidle');
+        assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
+    }
+});
+
+test('Home keyboard chooser selects a network and CPUs only load for the selected network', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
     options.cpusByGrid = {
-        [gridA]: { shared: { ...cpu, isBusy: true, finalOutput: iron } },
-        [gridB]: { shared: { ...cpu, isBusy: true, isPaused: true, finalOutput: quartz } }
+        [gridA]: { 'cpu-a': { ...cpu, name: 'Alpha processor' } },
+        [gridB]: { 'cpu-b': { ...cpu, name: 'Beta processor' } }
     };
     await page.goto(base);
-    const ironWork = page.getByRole('link', { name: /Iron Ingot/ });
-    const quartzWork = page.getByRole('link', { name: /Certus Quartz Crystal/ });
-    await quartzWork.waitFor();
-    assert.equal(await ironWork.getAttribute('href'), `#/grids/${gridA}/cpus/shared`);
-    assert.equal(await quartzWork.getAttribute('href'), `#/grids/${gridB}/cpus/shared`);
-    assert.equal(
-        options.requests.some((request) => /\/cpus\/[^/]+$/.test(request.path)),
-        false
-    );
     const choose = page.getByRole('button', { name: 'Choose a network', exact: true });
     await choose.focus();
     await page.keyboard.press('Enter');
     const dialog = page.getByRole('dialog');
     await dialog.waitFor();
-    assert.ok(
-        (await dialog.boundingBox()).height < page.viewportSize().height * 0.9,
-        'A short network list should keep its dialog sized to content'
-    );
+    assert.ok((await dialog.boundingBox()).height < page.viewportSize().height * 0.9);
     await page.keyboard.press('Escape');
     assert.equal(await choose.evaluate((node) => node === document.activeElement), true);
     await choose.click();
-    const beta = dialog.getByRole('link', { name: new RegExp(gridB) });
-    await beta.focus();
+    await dialog.getByRole('link', { name: new RegExp(gridB) }).focus();
     await page.keyboard.press('Enter');
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     assert.equal(await dialog.isVisible(), false);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
+    await clickTab(page, 'CPUs');
+    await page.getByRole('link', { name: /Beta processor/ }).waitFor();
+    const cpuRequests = options.requests.filter((request) => request.path.endsWith('/cpus'));
+    assert.ok(cpuRequests.length > 0);
+    assert.ok(cpuRequests.every((request) => request.path === `/api/grids/${gridB}/cpus`));
     await clickTab(page, 'Home');
-    await ironWork.waitFor();
-    await quartzWork.waitFor();
+    await choose.waitFor();
+    await page.waitForLoadState('networkidle');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, cpuRequests.length);
 });
 
-// Product rendering uses the public response atlas, and a failed source cannot masquerade as idle.
-test('Home renders summary icons and keeps unavailable networks explicit in the open chooser', async (t) => {
+test('Home keeps denied discovery explicit in the chooser and supports retry', async (t) => {
     const { page, options, base } = await fixture(t);
     await seedAutomaticRefresh(page, base, true);
-    await atlasFixture(page, options);
-    options.cpusByGrid = {
-        [gridA]: { shared: { ...cpu, isBusy: true, finalOutput: { ...iron, icon: { page: 0, x: 0, y: 0 } } } },
-        [gridB]: { shared: { ...cpu, isBusy: true, finalOutput: { ...quartz, icon: { page: 0, x: 64, y: 0 } } } }
-    };
     await page.goto(base);
-    const product = page.getByRole('link', { name: /Iron Ingot/ });
-    await product.waitFor();
-    await product.locator('.resource-icon').waitFor();
-    await page.waitForFunction(() => document.querySelector('#home .resource-icon')?.style.backgroundImage);
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
-    options.cpuErrors = { [gridA]: 'NO_PERMISSIONS' };
-    await poll(page);
-    await page
-        .getByRole('dialog')
-        .getByRole('link', { name: new RegExp(gridB) })
-        .waitFor();
-    await page.keyboard.press('Escape');
-    await page.getByText(/no longer have access/).waitFor();
-    assert.equal(await product.count(), 0);
-    await page.getByRole('link', { name: /Certus Quartz Crystal/ }).waitFor();
-    await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('link', { name: new RegExp(gridA) }).waitFor();
     options.gridError = 'NO_PERMISSIONS';
     await poll(page);
-    const dialog = page.getByRole('dialog');
     await dialog.getByRole('status').waitFor();
     assert.equal(await dialog.getByRole('link').count(), 0);
     options.gridError = null;
-    options.cpuErrors = {};
     await dialog.getByRole('button', { name: 'Try again', exact: true }).click();
     await dialog.getByRole('link', { name: new RegExp(gridA) }).waitFor();
-});
-
-// Discovery must supersede pending summaries even when an icon/route refresh started first.
-test('Home clears revoked sources during pending reads and stops reading summaries outside Home', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, true);
-    options.cpus = { running: { ...cpu, isBusy: true, finalOutput: iron } };
-    await page.goto(`${base}#/web-settings`);
-    await page.getByRole('checkbox', { name: 'Refresh automatically' }).waitFor();
-    options.cpuDelay = 800;
-    options.gridDelay = 100;
-    options.grids = [{ key: gridB, owner: 'Beta', cpuCount: 1, accessSources: {} }];
-    const oldRead = page.waitForRequest((request) => request.url().includes(`${gridA}/cpus`));
-    await clickTab(page, 'Home');
-    const pending = await oldRead;
-    await poll(page);
-    await settleResponse(page, pending);
-    await page.getByRole('link', { name: /Iron Ingot/ }).waitFor();
-    assert.equal(await page.getByRole('link', { name: /Iron Ingot/ }).count(), 1);
-    assert.equal(
-        await page.getByRole('link', { name: /Iron Ingot/ }).getAttribute('href'),
-        `#/grids/${gridB}/cpus/running`
-    );
-    await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
-    assert.equal(
-        await page
-            .getByRole('dialog')
-            .getByRole('link', { name: new RegExp(gridA) })
-            .count(),
-        0
-    );
-    await page.keyboard.press('Escape');
-    const refresh = page.waitForRequest((request) => request.url().endsWith(`${gridB}/cpus`));
-    await poll(page);
-    const late = await refresh;
-    await clickTab(page, 'Web settings');
-    await settleResponse(page, late);
-    const reads = options.requests.filter((request) => request.path.endsWith('/cpus')).length;
-    await poll(page);
-    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, reads);
-    assert.equal(await page.getByRole('link', { name: /Iron Ingot/ }).count(), 0);
-});
-
-test('Home bounds cross-network reads and keeps per-response atlas identity and name-only preferences', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
-    await atlasFixture(page, options);
-    options.cpusByGrid = {
-        [gridA]: { running: { ...cpu, isBusy: true, finalOutput: { ...iron, icon: { page: 0, x: 0, y: 0 } } } },
-        [gridB]: { running: { ...cpu, isBusy: true, finalOutput: { ...quartz, icon: { page: 0, x: 64, y: 0 } } } }
-    };
-    options.iconsByGrid = {
-        [gridA]: options.icons,
-        [gridB]: { ...options.icons, pages: [{ ...options.icons.pages[0], digest: 'c'.repeat(64) }] }
-    };
-    options.grids = [
-        { key: gridA, owner: 'Alpha', cpuCount: 1, accessSources: {} },
-        { key: gridB, owner: 'Beta', cpuCount: 1, accessSources: {} },
-        ...Array.from({ length: 6 }, (_, index) => ({
-            key: `network-${index}`,
-            owner: `Owner ${index}`,
-            cpuCount: 1,
-            accessSources: {}
-        }))
-    ];
-    options.cpuDelay = 100;
-    // Capability discovery may legitimately restart a Home read; measure one load after it settles.
-    await page.goto(`${base}#/web-settings`);
-    const display = page.getByRole('combobox', { name: 'Terminal display', exact: true });
-    await page.waitForFunction(
-        (select) => !select.querySelector('option[value="both"]').disabled,
-        await display.elementHandle()
-    );
-    options.requests.length = 0;
-    await clickTab(page, 'Home');
-    const first = page.getByRole('link', { name: /Iron Ingot/ });
-    const second = page.getByRole('link', { name: /Certus Quartz Crystal/ });
-    await second.waitFor();
-    await page.waitForFunction(() =>
-        [...document.querySelectorAll('#home .resource-icon')].every((icon) => icon.style.backgroundImage)
-    );
-    const firstImage = await first.locator('.resource-icon').evaluate((icon) => icon.style.backgroundImage);
-    const secondImage = await second.locator('.resource-icon').evaluate((icon) => icon.style.backgroundImage);
-    assert.notEqual(firstImage, secondImage, 'Each response-local page=0 must resolve its own digest');
-    assert.notEqual(
-        await first.locator('.resource-icon').evaluate((icon) => getComputedStyle(icon).backgroundPosition),
-        await second.locator('.resource-icon').evaluate((icon) => getComputedStyle(icon).backgroundPosition)
-    );
-    await page.waitForFunction(() => !document.querySelector('#home .home-status')?.textContent.includes('Loading'));
-    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, options.grids.length);
-    assert.ok(options.maxActiveCpus <= 3, 'Home must bound concurrent per-grid reads');
-    assert.equal(
-        options.requests.some((request) => /\/cpus\/[^/]+$/.test(request.path)),
-        false
-    );
-    await clickTab(page, 'Web settings');
-    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
-    options.requests.length = 0;
-    await clickTab(page, 'Home');
-    await second.waitFor();
-    assert.equal(await first.locator('.resource-icon').isVisible(), false);
-    assert.ok(
-        options.requests
-            .filter((request) => request.path.endsWith('/cpus'))
-            .every((request) => !request.query.includes('icons=true'))
-    );
+    await page.waitForLoadState('networkidle');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
 });
 
 // An empty successful discovery still needs an explicit recovery action with polling disabled.
@@ -8314,19 +8231,11 @@ test('Home and its chooser contain long identities on mobile in light and dark a
     ];
     options.settings[gridA].name = longName;
     options.settings[gridB].name = longName;
-    options.cpusByGrid = {
-        [gridA]: { running: { ...cpu, name: longName, isBusy: true, finalOutput: { ...iron, displayName: longName } } },
-        [gridB]: { running: { ...cpu, isBusy: true, isPaused: true, finalOutput: null } }
-    };
     for (const appearance of ['light', 'dark']) {
         await page.goto(`${base}#/web-settings`);
         await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption(appearance);
         await clickTab(page, 'Home');
-        await page.getByRole('link', { name: /Current output unavailable/ }).waitFor();
-        const work = page.getByRole('link', { name: new RegExp(`^${longName} ×`) });
-        await work.focus();
-        await poll(page);
-        assert.equal(await work.evaluate((node) => node === document.activeElement), true);
+        await page.getByRole('heading', { name: 'Home', exact: true }).waitFor();
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         assert.ok(await page.locator('#workspace').evaluate((node) => node.scrollWidth <= node.clientWidth));
         await openMobilePane(page, 'Network');
@@ -8347,6 +8256,12 @@ test('Home and its chooser contain long identities on mobile in light and dark a
         assert.ok(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth));
         const bounds = await dialog.boundingBox();
         assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
+        if (process.env.UI_SCREENSHOT_DIR) {
+            await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+            await page.screenshot({
+                path: path.join(process.env.UI_SCREENSHOT_DIR, `home-chooser-mobile-${appearance}.png`)
+            });
+        }
         await page.keyboard.press('Escape');
         if (page.viewportSize().width <= 600)
             await page.getByRole('button', { name: 'Network', exact: true }).waitFor();
@@ -8690,6 +8605,7 @@ test('Network pending and uncertain name saves retain source identity and notify
     await page
         .getByRole('status')
         .filter({ hasText: /settings saved/i })
+        .filter({ hasText: 'Unconfirmed' })
         .waitFor();
     assert.deepEqual(options.requests.filter((request) => request.method === 'PATCH').at(-1).body, {
         name: 'Unconfirmed'

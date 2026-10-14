@@ -3,9 +3,6 @@ import type { Translator } from '../../app/i18n.js';
 import { homeIcon } from './icons/hackernoon/home.js';
 import { networkIcon } from './icons/hackernoon/chart-network.js';
 import { networkLabel as gridLabel } from './network.js';
-import { cpuHref } from '../../app/router.js';
-import { renderMinecraftText } from './minecraft-text.js';
-import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 
 function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className = '') {
     const node = document.createElement(tag);
@@ -13,7 +10,7 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className = 
     return node;
 }
 
-/** Home presentation and chooser lifetime; discovery and CPU reads belong to the application. */
+/** Home presentation and chooser lifetime; network discovery belongs to the application. */
 export function createHomeView(
     root: HTMLElement,
     application: Terminal,
@@ -22,22 +19,18 @@ export function createHomeView(
     const view = element('section', 'window-frame home-dashboard');
     view.id = 'home';
     view.innerHTML = `<div class="terminal-heading"><h2>${homeIcon}<span></span></h2></div>
-        <div class="terminal-scroll home-scroll" tabindex="0"><section class="home-work"><div class="home-section-heading"><h3></h3><span class="home-work-count"></span></div>
-        <p class="home-scope"></p><p class="home-status" role="status"></p><div class="home-crafting"></div><button type="button" class="home-retry"></button></section></div>`;
+        <div class="terminal-scroll home-scroll" tabindex="0">
+        <p class="home-scope"></p><p class="home-status" role="status"></p><button type="button" class="home-retry"></button></div>`;
     const panel = element('aside', 'home-network-panel');
     panel.id = 'home-network-panel';
     panel.innerHTML = `<h3>${networkIcon}<span></span></h3><h4 class="home-selected-network"></h4><dl class="home-selected-identity"><dt></dt><dd><code></code></dd></dl><a class="home-network-details button-link"></a><button type="button" class="choose-network"></button>`;
     const title = view.querySelector('h2 span')!;
     const description = view.querySelector('.home-scope')!;
-    const workTitle = view.querySelector('.home-work h3')!;
-    const workCount = view.querySelector('.home-work-count')!;
     const status = view.querySelector<HTMLElement>('.home-status')!;
-    const work = view.querySelector<HTMLElement>('.home-crafting')!;
     const networkLabel = panel.querySelector('h3 span')!;
     const selectedNetwork = panel.querySelector('.home-selected-network')!;
     const selectedIdentity = panel.querySelector<HTMLElement>('.home-selected-identity')!;
     const details = panel.querySelector<HTMLAnchorElement>('.home-network-details')!;
-    const scroll = view.querySelector<HTMLElement>('.home-scroll')!;
     const choose = panel.querySelector<HTMLButtonElement>('.choose-network')!;
     const retry = view.querySelector<HTMLButtonElement>('.home-retry')!;
     const dialog = element('dialog', 'window-frame network-dialog');
@@ -63,7 +56,6 @@ export function createHomeView(
     close.addEventListener('click', () => dialog.close());
     retry.addEventListener('click', () => void application.refresh());
     const choices = new Map<string, ReturnType<typeof createChoice>>();
-    const groups = new Map<string, ReturnType<typeof createGroup>>();
 
     function createChoice() {
         const card = element('div', 'inset-frame network-choice');
@@ -78,52 +70,16 @@ export function createHomeView(
         card.append(link, disclosure);
         return { card, link, name, count, summary, identity, disclosure };
     }
-    function createGroup() {
-        const section = element('section', 'home-crafting-network');
-        const message = element('p', 'hint');
-        const list = element('ul', 'home-work-list');
-        section.append(message, list);
-        const icons = application.icons.observe(scroll, paintResourceIcon);
-        return {
-            section,
-            message,
-            list,
-            icons,
-            rows: new Map<string, ReturnType<typeof createWork>>()
-        };
-    }
-    function createWork() {
-        const li = element('li');
-        const link = element('a', 'home-work-link');
-        const product = element('span', 'home-product');
-        const icon = createResourceIcon();
-        const name = element('strong');
-        product.append(icon, name);
-        const detail = element('span', 'home-work-detail');
-        const cpu = element('span');
-        const source = element('span', 'home-work-source');
-        const status = element('span', 'home-cpu-state');
-        detail.append(source, cpu);
-        link.append(product, status, detail);
-        li.append(link);
-        return { li, link, product, name, cpu, source, status };
-    }
     return {
         render(state: TerminalState, locale: Translator) {
             view.hidden = state.route.view !== 'home';
             panel.hidden = view.hidden;
             if (view.hidden) {
                 if (dialog.open) dialog.close();
-                for (const group of groups.values()) {
-                    group.icons.dispose();
-                    group.section.remove();
-                }
-                groups.clear();
                 return;
             }
             title.textContent = locale.common('home');
-            description.textContent = locale.common('homeOverview');
-            workTitle.textContent = locale.common('cpuOutput');
+            description.textContent = locale.common('homeHelp');
             networkLabel.textContent = locale.common('network');
             const selected = state.grids.find((grid) => grid.key === state.selectedGridKey);
             selectedNetwork.textContent = selected ? gridLabel(selected) : locale.common('noNetworkSelected');
@@ -136,10 +92,7 @@ export function createHomeView(
             choose.textContent = locale.common('chooseNetwork');
             choose.disabled = state.gridStatus !== 'ready' || !state.grids.length;
             retry.textContent = locale.common('retry');
-            retry.hidden =
-                state.gridStatus !== 'error' &&
-                (state.gridStatus !== 'ready' || !!state.grids.length) &&
-                !state.home.networks.some((network) => network.error);
+            retry.hidden = state.gridStatus !== 'error' && (state.gridStatus !== 'ready' || !!state.grids.length);
             dialogTitle.textContent = locale.common('chooseNetwork');
             dialogHelp.textContent = locale.common('homeHelp');
             dialogStatus.textContent = '';
@@ -151,22 +104,11 @@ export function createHomeView(
             dialogRetry.hidden = state.gridStatus !== 'error' && !!state.grids.length;
             dialogRetry.textContent = locale.common('retry');
             close.setAttribute('aria-label', locale.common('close'));
-            const busy = state.home.networks.reduce(
-                (count, network) => count + network.cpus.filter((cpu) => cpu.isBusy).length,
-                0
-            );
-            const loading =
-                state.gridStatus === 'loading' || state.home.networks.some((network) => network.status === 'loading');
-            const failed =
-                state.gridStatus === 'error' || state.home.networks.some((network) => network.status === 'error');
-            workCount.textContent = busy ? locale.number(busy) : '';
             status.textContent = '';
             if (state.gridError) status.textContent = locale.common(state.gridError);
-            else if (loading) status.textContent = locale.common('loading');
+            else if (state.gridStatus === 'loading') status.textContent = locale.common('loading');
             else if (!state.grids.length)
                 status.textContent = `${locale.common('noNetworks')}. ${locale.common('noNetworksHelp')}`;
-            else if (failed) status.textContent = locale.common('homePartial');
-            else if (!busy) status.textContent = locale.common('homeIdle');
             status.hidden = !status.textContent;
             status.classList.toggle('api-error', !!state.gridError);
             const focused = options.contains(document.activeElement) ? (document.activeElement as HTMLElement) : null;
@@ -188,53 +130,8 @@ export function createHomeView(
                     options.insertBefore(choice.card, options.children[index] || null);
             });
             if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
-            for (const [key, group] of groups)
-                if (!state.home.networks.some((network) => network.grid.key === key)) {
-                    group.icons.dispose();
-                    group.section.remove();
-                    groups.delete(key);
-                }
-            for (const network of state.home.networks) {
-                const group = groups.get(network.grid.key) || createGroup();
-                groups.set(network.grid.key, group);
-                group.message.textContent = network.error
-                    ? `${gridLabel(network.grid)}: ${locale.common(network.error)}`
-                    : '';
-                group.message.hidden = !network.error;
-                group.message.classList.toggle('api-error', !!network.error);
-                const cpus = network.cpus.filter((cpu) => cpu.isBusy);
-                group.section.hidden = !cpus.length && network.status !== 'error';
-                for (const [key, row] of group.rows)
-                    if (!cpus.some((cpu) => cpu.key === key)) {
-                        row.li.remove();
-                        group.rows.delete(key);
-                    }
-                for (const cpu of cpus) {
-                    const row = group.rows.get(cpu.key) || createWork();
-                    group.rows.set(cpu.key, row);
-                    row.link.href = cpuHref(network.grid.key, cpu.key);
-                    row.name.replaceChildren(
-                        renderMinecraftText(cpu.finalOutput?.displayName || locale.common('cpuOutputUnknown'))
-                    );
-                    if (cpu.finalOutput) row.name.append(` × ${locale.number(cpu.finalOutput.quantity)}`);
-                    row.cpu.replaceChildren(renderMinecraftText(cpu.name || locale.common('cpuUnnamed')));
-                    row.source.textContent = gridLabel(network.grid);
-                    row.source.title = network.grid.key;
-                    row.status.textContent = locale.common(cpu.isPaused ? 'cpuPausedState' : 'cpuBusy');
-                    row.product.classList.toggle('has-resource-icon', !!network.icons && !!cpu.finalOutput);
-                    if (!row.li.parentNode) group.list.append(row.li);
-                }
-                group.icons.update(
-                    cpus
-                        .filter((cpu) => cpu.finalOutput)
-                        .map((cpu) => ({ element: group.rows.get(cpu.key)!.product, icon: cpu.finalOutput?.icon })),
-                    network.icons
-                );
-                if (!group.section.parentNode) work.append(group.section);
-            }
         },
         dispose() {
-            for (const group of groups.values()) group.icons.dispose();
             dialog.close();
             dialog.remove();
             view.remove();

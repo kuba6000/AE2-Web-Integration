@@ -1870,7 +1870,6 @@ label {
 .resource-icon {
     display: none;
 }
-.home-product.has-resource-icon .resource-icon,
 .resource-icons-enabled .resource-icon,
 .cpu-icons-enabled .cpu-item .resource-icon,
 .product-icons-enabled
@@ -1894,7 +1893,6 @@ label {
     background-repeat: no-repeat;
     outline: 1px dashed var(--border);
 }
-.home-product.has-resource-icon .resource-icon-ready,
 .resource-icons-enabled .resource-icon-ready,
 .cpu-icons-enabled .cpu-item .resource-icon-ready,
 .product-icons-enabled
@@ -2417,81 +2415,21 @@ code {
     justify-content: space-between;
     gap: 16px;
 }
-.home-work h3 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 400;
-}
-.home-work-count,
 .home-status,
 .home-scope {
     color: var(--muted);
     font-size: 11px;
-}
-.home-status,
-.home-scope {
     line-height: 1.7;
     margin: 8px 0 12px;
-}
-.home-work-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-.home-work-list li {
-    border-bottom: 1px solid var(--border);
 }
 .network-choice {
     background: color-mix(in srgb, var(--panel) 65%, var(--slot));
 }
-.home-work-link {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 4px 12px;
-    padding: 10px 6px;
-    text-decoration: none;
-    color: var(--text);
-}
-.home-work-link:hover,
 .network-choice-link:hover {
     background: color-mix(in srgb, var(--text) 6%, transparent);
 }
-.home-work-link:focus-visible,
 .network-choice-link:focus-visible {
     outline-offset: -2px;
-}
-.home-product {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 32px;
-    min-width: 0;
-    font-size: 12px;
-    overflow-wrap: anywhere;
-}
-.home-product strong {
-    font-weight: 400;
-}
-.home-product:not(.has-resource-icon) .resource-icon {
-    display: none;
-}
-.home-work-detail {
-    grid-column: 1 / -1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-    font-size: 10px;
-    color: var(--muted);
-}
-.home-work-detail > span,
-.network-choice-link {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-.home-cpu-state {
-    font-size: 10px;
-    color: var(--muted);
 }
 .home-retry {
     margin-top: 10px;
@@ -2522,6 +2460,8 @@ code {
     gap: 10px;
 }
 .network-choice-link {
+    min-width: 0;
+    overflow-wrap: anywhere;
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 10px 14px;

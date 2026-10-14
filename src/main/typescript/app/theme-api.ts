@@ -2,7 +2,6 @@ import type { CraftingState } from './crafting.js';
 import type { CpuState } from './cpus.js';
 import type { HistoryState } from './history.js';
 import type { ResourceHistoryState } from './resource-history.js';
-import type { HomeState } from './home.js';
 import type { SettingsState } from './settings.js';
 import type {
     StoredResource,
@@ -43,7 +42,6 @@ export type ThemeState = ReadonlyData<{
     preferences: Preferences;
     crafting: CraftingState;
     cpus: CpuState;
-    home: HomeState;
     history: HistoryState;
     resourceHistory: ResourceHistoryState;
     settings: SettingsState;
