@@ -202,15 +202,20 @@ an `/ae2webintegration auth <token>` command. The player must run that command i
 
 ### Resource history
 
-Enable **Resource tracking** in a network's settings to record sampled stored quantities and accepted
-input/output separately. Select a resource in the terminal and open **Resource history** in its details
-to view recent measurements. Accepted input includes resources consumed by void storage; it is not the
-same as an increase in stored quantity.
+Network settings have independent switches for input/output history and periodic storage quantities.
+Choose the storage sampling interval there. Input/output recording alone does not scan the inventory;
+accepted input includes resources consumed by void storage. Select a resource in the terminal and open
+**Resource history** in its details to view measurements.
 
-History is saved in the world's `ae2webintegration/resource-history` directory. Sampling intervals and
-file limits are configured under `resource_tracking` in `config.toml` and take effect after a server
-restart. Reaching the file limit stops recording without deleting history. Gaps and incomplete history
-are indicated in the web interface; missing measurements do not mean zero activity.
+History is stored in an embedded HSQLDB database under the world's `ae2webintegration/history` directory.
+No database installation is needed. The defaults retain up to 7 days and 250,000 records per network;
+the oldest records are removed when either limit is reached. One older stock measurement per resource
+may remain as a dated baseline, within the same record limit. Configure these limits under
+`resource_tracking` in `config.toml` and restart the server to apply them. The record limit is not a byte
+limit. Missing measurements are shown as gaps, not zero activity.
+
+With automatic refresh enabled, the terminal receives live changes over SSE. Live viewing does not
+increase the frequency of saved storage measurements.
 
 ## Notification services integration
 

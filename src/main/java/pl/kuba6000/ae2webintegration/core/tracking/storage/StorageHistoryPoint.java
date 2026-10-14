@@ -16,6 +16,7 @@ public record StorageHistoryPoint(long observedAt, long generation, @NotNull Kin
         STOCK,
         FLOW,
         OBSERVATION,
+        FLOW_OBSERVATION,
         GAP
     }
 }

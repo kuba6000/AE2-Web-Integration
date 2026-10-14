@@ -5,7 +5,12 @@ export type MessageValues = { count?: number } & Record<string, string | number 
 export type Translator = ReturnType<typeof createTranslator>;
 const translations: Dictionaries = {
     en: {
-        recordResourceHistory: 'Record resource amounts and network input/output',
+        recordResourceHistory: 'Record periodic storage quantities',
+        recordFlowHistory: 'Record network input/output',
+        resourceHistoryBaseline: 'Earlier stock measurement: {quantity} · {time}',
+        stockSampleInterval: 'Storage sampling interval (seconds)',
+        stockIntervalInvalid: 'Enter a whole number from 1 to 86400 seconds.',
+        resourceHistoryFlowObservation: 'Input/output interval recorded',
         resourceHistory: 'Resource history',
         resourceHistoryDisabled: 'Resource tracking is disabled for this network. Saved observations remain available.',
         resourceHistoryEmpty: 'No observations have been recorded for this resource yet.',
@@ -304,7 +309,12 @@ const translations: Dictionaries = {
         INVALID_RESPONSE: 'The server returned an unreadable response.'
     },
     pl: {
-        recordResourceHistory: 'Zapisuj ilości zasobów oraz wejścia i wyjścia z sieci',
+        recordResourceHistory: 'Zapisuj okresowo ilości zasobów w magazynie',
+        recordFlowHistory: 'Zapisuj wejścia i wyjścia z sieci',
+        resourceHistoryBaseline: 'Wcześniejszy pomiar ilości: {quantity} · {time}',
+        stockSampleInterval: 'Odstęp między pomiarami magazynu (sekundy)',
+        stockIntervalInvalid: 'Podaj liczbę całkowitą od 1 do 86400 sekund.',
+        resourceHistoryFlowObservation: 'Zapisano przedział wejść i wyjść',
         resourceHistory: 'Historia zasobu',
         resourceHistoryDisabled: 'Śledzenie zasobów tej sieci jest wyłączone. Zapisane obserwacje pozostają dostępne.',
         resourceHistoryEmpty: 'Nie zapisano jeszcze obserwacji tego zasobu.',

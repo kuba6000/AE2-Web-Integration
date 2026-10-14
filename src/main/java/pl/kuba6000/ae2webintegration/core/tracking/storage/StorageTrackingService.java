@@ -4,10 +4,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
@@ -16,6 +14,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,7 +25,10 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 /** One bounded detached-data worker shared by all grids; never accesses native game state. */
 public final class StorageTrackingService implements AutoCloseable {
 
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
+
     private final IStorageHistoryStore store;
+    private final StoragePublicationListener listener;
     private final Map<StableKey, State> states = new ConcurrentHashMap<>();
     private final Semaphore capacity;
     private final int maxQueuedRows;
@@ -33,6 +36,17 @@ public final class StorageTrackingService implements AutoCloseable {
     private volatile boolean closed;
 
     public StorageTrackingService(@NotNull IStorageHistoryStore store, int maxQueuedRows) {
+        this(store, maxQueuedRows, new StoragePublicationListener() {
+
+            public void published(@NotNull StableKey gridKey, @NotNull StorageSnapshot snapshot) {}
+
+            public void retired(@NotNull StableKey gridKey, long generation) {}
+        });
+    }
+
+    public StorageTrackingService(@NotNull IStorageHistoryStore store, int maxQueuedRows,
+        @NotNull StoragePublicationListener listener) {
+        this.listener = listener;
         if (maxQueuedRows < 1) throw new IllegalArgumentException("Queue limit must be positive");
         this.store = store;
         this.maxQueuedRows = maxQueuedRows;
@@ -47,18 +61,39 @@ public final class StorageTrackingService implements AutoCloseable {
                 Thread thread = new Thread(task, "AE2Web-StorageHistory");
                 thread.setDaemon(true);
                 return thread;
-            });
+            }) {
+
+            @Override
+            protected void terminated() {
+                try {
+                    store.close();
+                } catch (IOException failure) {
+                    LOG.warn("Storage history could not be closed", failure);
+                }
+            }
+        };
+        worker.prestartCoreThread();
     }
 
     public void open(@NotNull StableKey gridKey, long generation) {
         if (closed) throw new IllegalStateException("Storage tracking is closed");
-        states
-            .compute(gridKey, (key, old) -> old != null && old.generation == generation ? old : new State(generation));
+        State previous = states.get(gridKey);
+        if (previous != null && previous.generation == generation) return;
+        states.put(gridKey, new State(generation));
+        if (previous != null) listener.retired(gridKey, previous.generation);
     }
 
     /** Never waits for disk or queue capacity. False requires a new full observation and flow coverage gap. */
     public boolean submit(@NotNull StableKey gridKey, long generation, @NotNull StorageObservation observation,
         boolean persist) {
+        return submit(gridKey, generation, observation, persist, persist);
+    }
+
+    /** Live publication, durable stock sampling and flow buckets have independent schedules. */
+    public boolean submit(@NotNull StableKey gridKey, long generation, @NotNull StorageObservation observation,
+        boolean persistStock, boolean persistFlow) {
+        if (persistStock && !observation.stockObserved())
+            throw new IllegalArgumentException("A stock sample requires observed stock");
         State state = states.get(gridKey);
         if (closed || state == null || state.generation != generation) return false;
         long cost = 1L + observation.rows()
@@ -66,16 +101,24 @@ public final class StorageTrackingService implements AutoCloseable {
             + observation.flows()
                 .size();
         if (cost > maxQueuedRows || !capacity.tryAcquire((int) cost)) {
-            state.lossEpoch.incrementAndGet();
+            invalidate(gridKey, generation);
             return false;
         }
         try {
             long lossEpoch = state.lossEpoch.get();
             worker.execute(() -> {
                 try {
-                    if (!closed) apply(gridKey, state, observation, persist, lossEpoch);
+                    if (!closed) apply(gridKey, state, observation, persistStock, persistFlow, lossEpoch);
                 } catch (RuntimeException failed) {
-                    state.lossEpoch.incrementAndGet();
+                    if (!state.workerFailureLogged) {
+                        state.workerFailureLogged = true;
+                        LOG.warn(
+                            "Storage history worker failed for network {} generation {}",
+                            gridKey,
+                            generation,
+                            failed);
+                    }
+                    invalidate(gridKey, generation);
                 } finally {
                     capacity.release((int) cost);
                 }
@@ -83,7 +126,7 @@ public final class StorageTrackingService implements AutoCloseable {
             return true;
         } catch (RejectedExecutionException rejected) {
             capacity.release((int) cost);
-            state.lossEpoch.incrementAndGet();
+            invalidate(gridKey, generation);
             return false;
         }
     }
@@ -92,7 +135,8 @@ public final class StorageTrackingService implements AutoCloseable {
         State state = states.get(gridKey);
         if (state == null) return null;
         StorageSnapshot snapshot = state.snapshot;
-        if (state.lossEpoch.get() == state.handledLossEpoch) return snapshot;
+        long lossEpoch = state.lossEpoch.get();
+        if (lossEpoch == snapshot.lossEpoch()) return snapshot;
         return new StorageSnapshot(
             snapshot.generation(),
             snapshot.revision(),
@@ -100,7 +144,8 @@ public final class StorageTrackingService implements AutoCloseable {
             false,
             false,
             snapshot.persistenceComplete(),
-            snapshot.rows());
+            snapshot.rows(),
+            lossEpoch);
     }
 
     /** Blocking detached-store query: call on HTTP/background threads, never the game thread. */
@@ -109,12 +154,21 @@ public final class StorageTrackingService implements AutoCloseable {
         StorageHistory result = store.read(gridKey, itemKey, fromMillis, limit);
         State state = states.get(gridKey);
         boolean complete = result.complete() && (state == null || state.snapshot.persistenceComplete());
-        return new StorageHistory(result.points(), complete, result.truncated());
+        return new StorageHistory(result.points(), complete, result.truncated(), result.baseline());
+    }
+
+    /** Invalidates live replay immediately without discarding retained state needed for reconciliation. */
+    public void invalidate(@NotNull StableKey gridKey, long generation) {
+        State state = states.get(gridKey);
+        if (state == null || state.generation != generation) return;
+        long lossEpoch = state.lossEpoch.incrementAndGet();
+        listener.retired(gridKey, generation, lossEpoch);
     }
 
     public void retire(@NotNull StableKey gridKey, long generation) {
         State state = states.get(gridKey);
-        if (state != null && state.generation == generation) states.remove(gridKey, state);
+        if (state != null && state.generation == generation && states.remove(gridKey, state))
+            listener.retired(gridKey, generation);
     }
 
     @Override
@@ -129,124 +183,138 @@ public final class StorageTrackingService implements AutoCloseable {
                 .interrupt();
         } finally {
             closed = true;
+            for (Map.Entry<StableKey, State> entry : states.entrySet())
+                listener.retired(entry.getKey(), entry.getValue().generation);
             states.clear();
         }
     }
 
-    private void apply(StableKey gridKey, State state, StorageObservation observation, boolean persist,
-        long lossEpoch) {
+    private void apply(StableKey gridKey, State state, StorageObservation observation, boolean persistStock,
+        boolean persistFlow, long lossEpoch) {
         boolean gap = lossEpoch != state.handledLossEpoch;
-        boolean startHistory = persist && !state.persisting;
-        Map<StableKey, StorageObservation.Row> next = observation.full() ? new HashMap<>() : new HashMap<>(state.rows);
-        List<StorageHistoryPoint> points = new ArrayList<>();
-        List<StorageObservation.Row> unkeyed = new ArrayList<>();
-        Set<StableKey> reported = new HashSet<>();
-        if (gap || !observation.flowComplete() || state.snapshot.revision() == 0 || startHistory) {
-            points.add(point(state, observation, StorageHistoryPoint.Kind.GAP, null, false, 0, 0, false));
+        Map<StableKey, StorageObservation.Row> next = state.rows;
+        if (observation.stockObserved()) {
+            next = observation.full() ? new HashMap<>() : new HashMap<>(state.rows);
+            List<StorageObservation.Row> unkeyed = new ArrayList<>();
+            for (StorageObservation.Row row : observation.rows()) {
+                StableKey key = row.resource()
+                    .itemKey();
+                boolean present = row.resource()
+                    .quantity() != 0 || row.craftable();
+                if (key == null) {
+                    if (present) unkeyed.add(row);
+                } else if (present) next.put(key, row);
+                else next.remove(key);
+            }
+            state.unkeyed = unkeyed;
         }
-        for (StorageObservation.Row row : observation.rows()) {
-            StableKey key = row.resource()
-                .itemKey();
-            boolean present = row.resource()
-                .quantity() != 0 || row.craftable();
-            if (key == null) {
-                if (present) unkeyed.add(row);
-                continue;
-            }
-            reported.add(key);
-            StorageObservation.Row old = state.rows.get(key);
-            if (present) next.put(key, row);
-            else next.remove(key);
-            if (!startHistory && !row.equals(old) && (present || old != null)) {
-                points.add(
-                    point(
-                        state,
-                        observation,
-                        StorageHistoryPoint.Kind.STOCK,
-                        row.resource(),
-                        row.craftable(),
-                        0,
-                        0,
-                        true));
-            }
-        }
-        if (startHistory) {
-            for (StorageObservation.Row row : next.values()) {
-                points.add(
-                    point(
-                        state,
-                        observation,
-                        StorageHistoryPoint.Kind.STOCK,
-                        row.resource(),
-                        row.craftable(),
-                        0,
-                        0,
-                        true));
-            }
-        } else if (observation.full()) {
-            for (Map.Entry<StableKey, StorageObservation.Row> old : state.rows.entrySet()) {
-                if (!next.containsKey(old.getKey()) && !reported.contains(old.getKey())) {
-                    points.add(
+        boolean persistence = state.snapshot.persistenceComplete();
+        if (persistence && (persistStock || persistFlow)) {
+            List<StorageHistoryPoint> points = new ArrayList<>();
+            boolean initialStock = persistStock && state.sampledRows == null;
+            boolean initialFlow = persistFlow && !state.flowStarted;
+            if (gap || !observation.flowComplete() || initialStock || initialFlow)
+                points.add(point(state, observation, StorageHistoryPoint.Kind.GAP, null, false, 0, 0, false));
+            if (persistStock) {
+                for (Map.Entry<StableKey, StorageObservation.Row> entry : next.entrySet()) {
+                    StorageObservation.Row row = entry.getValue();
+                    if (state.sampledRows == null || !row.equals(state.sampledRows.get(entry.getKey()))) points.add(
                         point(
                             state,
                             observation,
                             StorageHistoryPoint.Kind.STOCK,
-                            zero(
-                                old.getValue()
-                                    .resource()),
-                            false,
+                            row.resource(),
+                            row.craftable(),
                             0,
                             0,
                             true));
                 }
+                if (state.sampledRows != null) {
+                    for (Map.Entry<StableKey, StorageObservation.Row> old : state.sampledRows.entrySet()) {
+                        if (!next.containsKey(old.getKey())) points.add(
+                            point(
+                                state,
+                                observation,
+                                StorageHistoryPoint.Kind.STOCK,
+                                zero(
+                                    old.getValue()
+                                        .resource()),
+                                false,
+                                0,
+                                0,
+                                true));
+                    }
+                }
+                points.add(
+                    point(
+                        state,
+                        observation,
+                        StorageHistoryPoint.Kind.OBSERVATION,
+                        null,
+                        false,
+                        0,
+                        0,
+                        observation.full() || state.snapshot.stockComplete() && !gap));
             }
-        }
-        for (StorageObservation.Flow flow : observation.flows()) {
-            if (flow.resource()
-                .itemKey() == null) continue;
-            points.add(
-                point(
-                    state,
-                    observation,
-                    StorageHistoryPoint.Kind.FLOW,
-                    flow.resource(),
-                    false,
-                    flow.input(),
-                    flow.output(),
-                    observation.flowComplete() && !gap));
-        }
-        points.add(
-            point(
-                state,
-                observation,
-                StorageHistoryPoint.Kind.OBSERVATION,
-                null,
-                false,
-                0,
-                0,
-                observation.flowComplete() && !gap));
-        boolean persistence = state.snapshot.persistenceComplete();
-        state.persisting = persist;
-        if (persist) {
+            if (persistFlow) {
+                for (StorageObservation.Flow flow : observation.flows()) {
+                    if (flow.resource()
+                        .itemKey() != null)
+                        points.add(
+                            point(
+                                state,
+                                observation,
+                                StorageHistoryPoint.Kind.FLOW,
+                                flow.resource(),
+                                false,
+                                flow.input(),
+                                flow.output(),
+                                observation.flowComplete() && !gap));
+                }
+                points.add(
+                    point(
+                        state,
+                        observation,
+                        StorageHistoryPoint.Kind.FLOW_OBSERVATION,
+                        null,
+                        false,
+                        0,
+                        0,
+                        observation.flowComplete() && !gap));
+            }
             try {
                 store.append(gridKey, points);
+                if (persistStock) state.sampledRows = new HashMap<>(next);
+                if (persistFlow) state.flowStarted = true;
             } catch (IOException failure) {
+                // A failed store stays failed until the owner reopens this generation. Live capture remains useful.
                 persistence = false;
-                state.persisting = false;
+                LOG.warn(
+                    "Storage history recording stopped for network {} generation {}",
+                    gridKey,
+                    state.generation,
+                    failure);
             }
         }
         state.rows = next;
-        List<StorageObservation.Row> visible = new ArrayList<>(next.values());
-        visible.addAll(unkeyed);
+        StorageSnapshot previous = state.snapshot;
+        List<StorageObservation.Row> visible = previous.rows();
+        if (observation.stockObserved()) {
+            visible = new ArrayList<>(next.values());
+            visible.addAll(state.unkeyed);
+        }
         state.snapshot = new StorageSnapshot(
             state.generation,
-            state.snapshot.revision() + 1,
-            observation.observedAt(),
-            observation.full() || state.snapshot.stockComplete() && !gap,
-            state.snapshot.flowComplete() && observation.flowComplete() && !gap,
+            previous.revision() + (observation.stockObserved() ? 1 : 0),
+            observation.stockObserved() ? observation.observedAt() : previous.observedAt(),
+            observation.full() || previous.stockComplete() && !gap,
+            previous.flowComplete() && observation.flowComplete() && !gap,
             persistence,
-            visible);
+            visible,
+            lossEpoch);
         state.handledLossEpoch = lossEpoch;
+        if (observation.stockObserved() && states.get(gridKey) == state && state.lossEpoch.get() == lossEpoch)
+            listener.published(gridKey, state.snapshot);
     }
 
     private static StorageHistoryPoint point(State state, StorageObservation observation, StorageHistoryPoint.Kind kind,
@@ -280,7 +348,10 @@ public final class StorageTrackingService implements AutoCloseable {
         private final long generation;
         private final AtomicLong lossEpoch = new AtomicLong();
         private volatile long handledLossEpoch;
-        private boolean persisting;
+        private boolean flowStarted;
+        private boolean workerFailureLogged;
+        private @Nullable Map<StableKey, StorageObservation.Row> sampledRows;
+        private List<StorageObservation.Row> unkeyed = Collections.emptyList();
         private Map<StableKey, StorageObservation.Row> rows = new HashMap<>();
         private volatile StorageSnapshot snapshot;
 

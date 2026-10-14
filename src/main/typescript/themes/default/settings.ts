@@ -1,7 +1,7 @@
 import type { ThemeState as TerminalState, ThemeApplication as Terminal } from '../../app/theme-api.js';
 import type { AccessSource } from '../../app/api-types.js';
 import type { Translator as Locale } from '../../app/i18n.js';
-import { networkNameError } from '../../app/settings.js';
+import { networkNameError, stockIntervalError } from '../../app/settings.js';
 import { networkIcon } from './icons/hackernoon/chart-network.js';
 import { networkLabel } from './network.js';
 
@@ -91,12 +91,32 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     storageTracking.addEventListener('change', () =>
         application.settings.edit('isStorageTracked', storageTracking.checked)
     );
+    const flowLabel = element('label');
+    flowLabel.className = 'checkbox';
+    const flowTracking = element('input');
+    flowTracking.type = 'checkbox';
+    flowTracking.id = 'network-flow-tracking';
+    const flowText = element('span');
+    flowLabel.append(flowTracking, flowText);
+    flowTracking.addEventListener('change', () => application.settings.edit('isFlowTracked', flowTracking.checked));
+    const intervalLabel = element('label');
+    const intervalText = element('span');
+    const interval = element('input');
+    interval.type = 'number';
+    interval.id = 'network-stock-interval';
+    interval.min = '1';
+    interval.max = '86400';
+    interval.step = '1';
+    intervalLabel.append(intervalText, interval);
+    interval.addEventListener('input', () =>
+        application.settings.edit('stockSampleIntervalSeconds', interval.valueAsNumber)
+    );
     const save = element('button');
     save.type = 'submit';
     const actions = element('div');
     actions.className = 'settings-actions';
     actions.append(save);
-    form.append(settingsTitle, nameLabel, nameHelp, label, storageLabel, actions);
+    form.append(settingsTitle, nameLabel, nameHelp, label, flowLabel, storageLabel, intervalLabel, actions);
     name.addEventListener('input', () => application.settings.edit('name', name.value));
     tracking.addEventListener('change', () => application.settings.edit('isTracked', tracking.checked));
     form.addEventListener('submit', (event) => {
@@ -174,6 +194,8 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             scroll.setAttribute('aria-label', t('networkDetails'));
             labelText.textContent = t('recordHistory');
             storageText.textContent = t('recordResourceHistory');
+            flowText.textContent = t('recordFlowHistory');
+            intervalText.textContent = t('stockSampleInterval');
             nameText.textContent = t('networkName');
             nameHelp.textContent = t('networkNameHelp');
             settingsTitle.textContent = t('gridSettings');
@@ -182,6 +204,8 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
                 state.current &&
                 (state.draft.isTracked !== state.current.isTracked ||
                     state.draft.isStorageTracked !== state.current.isStorageTracked ||
+                    state.draft.isFlowTracked !== state.current.isFlowTracked ||
+                    state.draft.stockSampleIntervalSeconds !== state.current.stockSampleIntervalSeconds ||
                     state.draft.name.trim() !== state.current.name);
             status.textContent = '';
             if (state.saving) status.textContent = t('settingsSaving');
@@ -211,9 +235,17 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             nameHelp.textContent = t(error || 'networkNameHelp');
             storageTracking.checked = state.draft.isStorageTracked;
             storageTracking.disabled = state.saving || state.status !== 'ready';
+            flowTracking.checked = state.draft.isFlowTracked;
+            flowTracking.disabled = state.saving || state.status !== 'ready';
+            if (document.activeElement !== interval) interval.value = String(state.draft.stockSampleIntervalSeconds);
+            interval.disabled = state.saving || state.status !== 'ready' || !state.draft.isStorageTracked;
+            const intervalError = stockIntervalError(state.draft.stockSampleIntervalSeconds);
+            interval.setCustomValidity(intervalError ? t(intervalError) : '');
+            interval.setAttribute('aria-invalid', String(!!intervalError));
             tracking.checked = state.draft.isTracked;
             tracking.disabled = state.saving || state.status !== 'ready';
-            save.disabled = state.saving || state.status !== 'ready' || !!error || (!state.uncertain && !dirty);
+            save.disabled =
+                state.saving || state.status !== 'ready' || !!error || !!intervalError || (!state.uncertain && !dirty);
             accessTitle.textContent = t('explicitAccess');
             accessHelp.textContent = t('explicitAccessHelp');
             access.hidden = state.status !== 'ready';

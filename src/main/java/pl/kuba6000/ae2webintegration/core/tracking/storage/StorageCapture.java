@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -28,9 +29,11 @@ public final class StorageCapture implements IIdentityHolder {
 
     private final Thread producer = Thread.currentThread();
     private final int maxResources;
+    private final boolean flowEnabled;
     private final Map<IAEKey, Entry> resources = new HashMap<>();
     private final List<Entry> entries = new ArrayList<>();
     private final List<Entry> pending = new ArrayList<>();
+    private final List<Entry> flowPending = new ArrayList<>();
     private final AtomicBoolean lost = new AtomicBoolean();
     private final AtomicBoolean reconcile = new AtomicBoolean(true);
     private long sequence;
@@ -40,6 +43,11 @@ public final class StorageCapture implements IIdentityHolder {
     private final List<Entry> staged = new ArrayList<>();
 
     public StorageCapture(int maxResources) {
+        this(maxResources, true);
+    }
+
+    public StorageCapture(int maxResources, boolean flowEnabled) {
+        this.flowEnabled = flowEnabled;
         if (maxResources < 1) throw new IllegalArgumentException("Resource limit must be positive");
         this.maxResources = maxResources;
     }
@@ -100,8 +108,14 @@ public final class StorageCapture implements IIdentityHolder {
             return;
         }
         Entry entry = entries.get(token);
-        entry.input = add(entry, entry.input, input);
-        entry.output = add(entry, entry.output, output);
+        if (flowEnabled) {
+            if (!entry.flowPending) {
+                entry.flowPending = true;
+                flowPending.add(entry);
+            }
+            entry.input = add(entry, entry.input, input);
+            entry.output = add(entry, entry.output, output);
+        }
         dirty(entry);
         entry.hasAbsolute = false;
     }
@@ -174,12 +188,17 @@ public final class StorageCapture implements IIdentityHolder {
     /** Native enumeration and metadata remain on the producer; only the returned value may be queued. */
     public @NotNull StorageObservation observe(@NotNull IAEGrid grid, @Nullable IconPack pack, long observedAt,
         boolean full) {
+        return observe(grid, pack, observedAt, full, true);
+    }
+
+    /** Stock reads may update the live view without draining the independently timed flow bucket. */
+    public @NotNull StorageObservation observe(@NotNull IAEGrid grid, @Nullable IconPack pack, long observedAt,
+        boolean full, boolean flushFlow) {
         if (!isProducerThread()) throw new IllegalStateException("Native observation requires the producer thread");
         if (absoluteDepth != 0) throw new IllegalStateException("Native stock refresh is incomplete");
         boolean requested = reconcile.getAndSet(false);
         boolean complete = full || requested;
         List<StorageObservation.Row> rows = new ArrayList<>();
-        List<StorageObservation.Flow> flows = new ArrayList<>();
         boolean scanUnkeyed = hasUnkeyedResources;
         hasUnkeyedResources = false;
         try {
@@ -223,42 +242,64 @@ public final class StorageCapture implements IIdentityHolder {
                     }
                 }
             }
-            // Metadata callbacks may themselves trigger native events. Complete them before draining counters.
-            for (int index = 0; index < pending.size(); index++) {
-                Entry entry = pending.get(index);
-                if (entry.input != 0 || entry.output != 0) description(entry, pack);
-            }
-            for (Entry entry : pending) {
-                if (!entry.unsupported && (entry.input != 0 || entry.output != 0)) {
-                    if (entry.overflow) markGap();
-                    flows.add(new StorageObservation.Flow(description(entry, pack), entry.input, entry.output));
-                }
-            }
+            List<StorageObservation.Flow> flows = flushFlow ? drainFlow(pack) : Collections.emptyList();
             StorageObservation result = new StorageObservation(
                 observedAt,
                 complete,
-                !lost.getAndSet(false),
+                flushFlow ? !lost.getAndSet(false) : !lost.get(),
                 rows,
                 flows);
-            for (int index = pending.size() - 1; index >= 0; index--) {
-                Entry entry = pending.get(index);
-                entry.input = 0;
-                entry.output = 0;
-                entry.overflow = false;
+            for (Entry entry : pending) {
                 if (entry.dirty <= through) {
                     entry.dirty = 0;
                     entry.hasAbsolute = false;
-                    entry.pending = false;
-                    int last = pending.size() - 1;
-                    pending.set(index, pending.get(last));
-                    pending.remove(last);
                 }
             }
+            prunePending();
             return result;
         } catch (RuntimeException failure) {
             hasUnkeyedResources |= scanUnkeyed;
             invalidate();
             throw failure;
+        }
+    }
+
+    /** Detaches accepted flow without touching a grid, inventory, craftables or any stock cache. */
+    public @NotNull StorageObservation flushFlow(long observedAt) {
+        if (!isProducerThread()) throw new IllegalStateException("Flow capture requires the producer thread");
+        List<StorageObservation.Flow> flows = drainFlow(null);
+        return new StorageObservation(observedAt, false, !lost.getAndSet(false), false, Collections.emptyList(), flows);
+    }
+
+    private List<StorageObservation.Flow> drainFlow(@Nullable IconPack pack) {
+        // Metadata callbacks may themselves trigger native events. Complete them before draining counters.
+        for (int index = 0; index < flowPending.size(); index++) {
+            Entry entry = flowPending.get(index);
+            if (entry.input != 0 || entry.output != 0) description(entry, pack);
+        }
+        List<StorageObservation.Flow> flows = new ArrayList<>();
+        for (Entry entry : flowPending) {
+            if (!entry.unsupported && (entry.input != 0 || entry.output != 0)) {
+                if (entry.overflow) markGap();
+                flows.add(new StorageObservation.Flow(description(entry, pack), entry.input, entry.output));
+            }
+            entry.input = 0;
+            entry.output = 0;
+            entry.overflow = false;
+            entry.flowPending = false;
+        }
+        flowPending.clear();
+        return flows;
+    }
+
+    private void prunePending() {
+        for (int index = pending.size() - 1; index >= 0; index--) {
+            Entry entry = pending.get(index);
+            if (entry.dirty != 0 || entry.input != 0 || entry.output != 0) continue;
+            entry.pending = false;
+            int last = pending.size() - 1;
+            pending.set(index, pending.get(last));
+            pending.remove(last);
         }
     }
 
@@ -306,6 +347,13 @@ public final class StorageCapture implements IIdentityHolder {
                 hasUnkeyedResources = true;
             }
             entry.description = ResourceSnapshot.capture(entry.identity, 0, key, pack);
+            entry.iconsChecked = pack != null && key != null && pack.find(key) == null;
+        }
+        if (pack != null && !entry.iconsChecked
+            && entry.description.itemKey() != null
+            && pack.find(entry.description.itemKey()) == null) {
+            entry.description = ResourceSnapshot.capture(entry.identity, 0, entry.description.itemKey(), pack);
+            entry.iconsChecked = true;
         }
         return entry.description;
     }
@@ -344,6 +392,7 @@ public final class StorageCapture implements IIdentityHolder {
         private long input;
         private long output;
         private boolean overflow;
+        private boolean flowPending;
         private long dirty;
         private boolean pending;
         private boolean hasAbsolute;
@@ -352,6 +401,7 @@ public final class StorageCapture implements IIdentityHolder {
         private long stagedAmount;
         private @Nullable ResourceSnapshot description;
         private boolean unsupported;
+        private boolean iconsChecked;
 
         private Entry(int token, IAEKey identity) {
             this.token = token;

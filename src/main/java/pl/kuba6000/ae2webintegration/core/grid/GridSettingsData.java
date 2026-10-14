@@ -6,14 +6,21 @@ import org.jetbrains.annotations.NotNull;
 @SuppressWarnings("SynchronizeOnNonFinalField") // Bound to the registry before publication; never rebound while in use.
 public final class GridSettingsData {
 
+    public static final int DEFAULT_STOCK_SAMPLE_INTERVAL_SECONDS = 300;
+    public static final int MAX_STOCK_SAMPLE_INTERVAL_SECONDS = 86400;
+
     /**
      * Whether this grid records crafting activity.
      * 
      * @example true
      */
     private boolean isTracked;
-    /** Whether this grid records resource quantities and accepted input/output history. */
+    /** Whether this grid records sampled resource quantities. */
     private boolean isStorageTracked;
+    /** Whether this grid records accepted resource input/output history. */
+    private boolean isFlowTracked;
+    /** Seconds between durable stock samples, independent of terminal refreshes. */
+    private int stockSampleIntervalSeconds = DEFAULT_STOCK_SAMPLE_INTERVAL_SECONDS;
     /**
      * Custom network name; empty when unnamed.
      *
@@ -27,6 +34,7 @@ public final class GridSettingsData {
     @SuppressWarnings("ConstantValue") // Gson can load an explicit null into a required field.
     void attach(@NotNull Object lock, @NotNull Runnable markDirty) {
         if (name == null) throw new IllegalArgumentException("Missing grid name");
+        validateStockInterval(stockSampleIntervalSeconds);
         this.lock = lock;
         this.markDirty = markDirty;
     }
@@ -59,6 +67,40 @@ public final class GridSettingsData {
         }
     }
 
+    public boolean isFlowTracked() {
+        synchronized (lock) {
+            return isFlowTracked;
+        }
+    }
+
+    public void setFlowTracked(boolean value) {
+        synchronized (lock) {
+            if (isFlowTracked == value) return;
+            isFlowTracked = value;
+            markDirty.run();
+        }
+    }
+
+    public int getStockSampleIntervalSeconds() {
+        synchronized (lock) {
+            return stockSampleIntervalSeconds;
+        }
+    }
+
+    public void setStockSampleIntervalSeconds(int value) {
+        validateStockInterval(value);
+        synchronized (lock) {
+            if (stockSampleIntervalSeconds == value) return;
+            stockSampleIntervalSeconds = value;
+            markDirty.run();
+        }
+    }
+
+    private static void validateStockInterval(int value) {
+        if (value < 1 || value > MAX_STOCK_SAMPLE_INTERVAL_SECONDS) throw new IllegalArgumentException(
+            "Stock interval must be 1.." + MAX_STOCK_SAMPLE_INTERVAL_SECONDS + " seconds");
+    }
+
     public @NotNull String getName() {
         synchronized (lock) {
             return name;
@@ -75,7 +117,10 @@ public final class GridSettingsData {
 
     public boolean isDefault() {
         synchronized (lock) {
-            return !isTracked && !isStorageTracked && name.isEmpty();
+            return !isTracked && !isStorageTracked
+                && !isFlowTracked
+                && stockSampleIntervalSeconds == DEFAULT_STOCK_SAMPLE_INTERVAL_SECONDS
+                && name.isEmpty();
         }
     }
 

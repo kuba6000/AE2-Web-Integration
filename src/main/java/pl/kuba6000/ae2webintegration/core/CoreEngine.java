@@ -13,20 +13,24 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.stream.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.FileStorageHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
@@ -61,6 +65,7 @@ public class CoreEngine {
     private static volatile ThemeCatalog themes = new ThemeCatalog();
     private static volatile @Nullable StorageTrackingService storageTracking;
     private static @Nullable StorageTrackingCoordinator storageCoordinator;
+    private static volatile @Nullable TerminalStreams terminalStreams;
 
     public static void init(@NotNull IServerPlatform serverPlatform) {
         serverRunning = false;
@@ -86,13 +91,26 @@ public class CoreEngine {
         loadIconPack();
         stopStorageTracking();
         ConfigSettings.ResourceTracking trackingSettings = Config.INSTANCE.resourceTracking;
+        TerminalStreams streams = new TerminalStreams(CoreEngine::getIconPack, context -> {
+            if (!context.isLifecycleUnchanged()) return false;
+            RequestContext authenticated = AuthService.authenticate(context.getExchange());
+            return authenticated != null && authenticated.getPrincipal()
+                .equals(context.getPrincipal());
+        });
+        terminalStreams = streams;
         StorageTrackingService service = new StorageTrackingService(
-            new FileStorageHistoryStore(
-                new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/resource-history")
+            new HsqlStorageHistoryStore(
+                new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/history/resources")
                     .toPath(),
-                trackingSettings.historyBytesPerGrid),
-            trackingSettings.maxQueuedRows);
-        storageCoordinator = new StorageTrackingCoordinator(service, GRID_IDENTITIES, trackingSettings);
+                trackingSettings.historyRetentionDays,
+                trackingSettings.historyMaxRowsPerGrid),
+            trackingSettings.maxQueuedRows,
+            streams);
+        storageCoordinator = new StorageTrackingCoordinator(
+            service,
+            GRID_IDENTITIES,
+            trackingSettings,
+            CoreEngine::getIconPack);
         storageTracking = service;
         themes.close();
         themes = ThemeCatalog.load(
@@ -112,8 +130,14 @@ public class CoreEngine {
     public static void onServerTick() {
         drainRequests(System::nanoTime);
         runPlanMaintenance(System.nanoTime());
-        if (storageCoordinator != null && AE2Controller.AE2Interface != null) {
-            storageCoordinator.tick(AE2Controller.AE2Interface, System.currentTimeMillis());
+        StorageTrackingCoordinator coordinator = storageCoordinator;
+        TerminalStreams streams = terminalStreams;
+        IAE ae = AE2Controller.AE2Interface;
+        if (coordinator != null && ae != null) {
+            long now = System.currentTimeMillis();
+            if (streams != null)
+                streams.onServerTick(ae, now, (grid, icons) -> coordinator.touchViewer(grid, now, icons));
+            coordinator.tick(ae, now);
         }
         maintainVersionChecker();
     }
@@ -217,6 +241,7 @@ public class CoreEngine {
     public static void onServerStopping() {
         serverRunning = false;
         stopVersionChecker();
+        stopTerminalStreams();
         AE2Controller.stopHTTPServer();
         stopStorageTracking();
         closeIconPack();
@@ -229,6 +254,7 @@ public class CoreEngine {
         serverRunning = false;
         stopVersionChecker();
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.
+        stopTerminalStreams();
         AE2Controller.stopHTTPServer();
         stopStorageTracking();
         closeIconPack();
@@ -251,11 +277,26 @@ public class CoreEngine {
 
     /** Authorized terminal reads renew the shared native observation lease on the game thread. */
     public static @Nullable StorageSnapshot observeStorage(@NotNull IAEGrid grid) {
+        return observeStorage(grid, false);
+    }
+
+    public static @Nullable StorageSnapshot observeStorage(@NotNull IAEGrid grid, boolean icons) {
         return storageCoordinator == null ? null
-            : storageCoordinator.observeForViewer(grid, System.currentTimeMillis());
+            : storageCoordinator.observeForViewer(grid, System.currentTimeMillis(), icons);
+    }
+
+    public static @Nullable TerminalStreams getTerminalStreams() {
+        return terminalStreams;
+    }
+
+    private static void stopTerminalStreams() {
+        TerminalStreams previousStreams = terminalStreams;
+        terminalStreams = null;
+        if (previousStreams != null) previousStreams.close();
     }
 
     private static void stopStorageTracking() {
+        stopTerminalStreams();
         if (storageCoordinator != null) {
             storageCoordinator.close();
             storageCoordinator = null;

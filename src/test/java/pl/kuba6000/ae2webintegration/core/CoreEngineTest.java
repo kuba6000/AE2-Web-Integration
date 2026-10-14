@@ -211,20 +211,25 @@ class CoreEngineTest {
             };
             ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(771001, iron);
             StableKey key = TestGridFixtures.resolvedKey(grid);
-            CoreEngine.GRID_IDENTITIES.getPersistentData(key)
-                .getSettings()
+            GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            assertNotNull(data);
+            data.getSettings()
                 .setStorageTracked(true);
             AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
             CoreEngine.onServerTick();
             StorageTrackingService service = CoreEngine.getStorageTracking();
             assertNotNull(service);
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-            while (service.snapshot(key)
-                .revision() == 0 && System.nanoTime() < deadline) Thread.sleep(5);
+            StorageSnapshot snapshot = service.snapshot(key);
+            while ((snapshot == null || snapshot.revision() == 0) && System.nanoTime() < deadline) {
+                Thread.sleep(5);
+                snapshot = service.snapshot(key);
+            }
+            assertNotNull(snapshot);
+            assertTrue(snapshot.revision() > 0);
             assertEquals(
                 Long.MAX_VALUE,
-                service.snapshot(key)
-                    .rows()
+                snapshot.rows()
                     .get(0)
                     .resource()
                     .quantity());
@@ -248,6 +253,24 @@ class CoreEngineTest {
                         .getAsLong());
             }
             assertEquals(captured, descriptions.get(), "viewers reuse captured native metadata");
+            GetResourceHistory limited = new GetResourceHistory();
+            AE2Controller.RequestContext limitedContext = TestGridFixtures
+                .context(-1, "grid=" + key + "&itemKey=" + iron.web$getKey() + "&limit=1");
+            limited
+                .handle(limitedContext.withInputs(limitedContext.getPrincipal(), limitedContext.getPathParams(), null));
+            JsonObject limitedResult = new JsonParser().parse(limited.getJSON())
+                .getAsJsonObject()
+                .getAsJsonObject("data");
+            assertEquals(
+                "9223372036854775807",
+                limitedResult.getAsJsonObject("baseline")
+                    .getAsJsonObject("resource")
+                    .get("quantity")
+                    .getAsString());
+            data.getSettings()
+                .setStorageTracked(false);
+            data.getSettings()
+                .setFlowTracked(true);
             GetResourceHistory history = new GetResourceHistory();
             history.handle(TestGridFixtures.context(-1, "grid=" + key));
             JsonObject result = new JsonParser().parse(history.getJSON())

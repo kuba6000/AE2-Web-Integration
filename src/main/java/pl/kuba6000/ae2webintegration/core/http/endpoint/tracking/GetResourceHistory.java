@@ -68,8 +68,13 @@ public final class GetResourceHistory extends IAsyncRequest {
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull History data) {}
 
+    /**
+     * Baseline is the last retained stock measurement preceding the returned window, or null when unknown.
+     * It keeps its original timestamp and is not counted against limit.
+     */
     @Desugar
-    public record History(@NotNull List<Point> points, boolean complete, boolean truncated, boolean enabled) {}
+    public record History(@NotNull List<Point> points, boolean complete, boolean truncated, boolean enabled,
+        @Nullable Point baseline) {}
 
     /** Decimal strings preserve exact 64-bit counts and generation identifiers in browser clients. */
     @Desugar
@@ -93,18 +98,7 @@ public final class GetResourceHistory extends IAsyncRequest {
             List<Point> points = new ArrayList<>(
                 history.points()
                     .size());
-            for (StorageHistoryPoint point : history.points()) {
-                points.add(
-                    new Point(
-                        point.observedAt(),
-                        Long.toString(point.generation()),
-                        point.kind(),
-                        point.resource() == null ? null : new TrackedResource(point.resource()),
-                        point.craftable(),
-                        Long.toString(point.input()),
-                        Long.toString(point.output()),
-                        point.complete()));
-            }
+            for (StorageHistoryPoint point : history.points()) points.add(toPoint(point));
             GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
             respondDetached(
                 HttpURLConnection.HTTP_OK,
@@ -114,10 +108,26 @@ public final class GetResourceHistory extends IAsyncRequest {
                         points,
                         history.complete(),
                         history.truncated(),
-                        data != null && data.getSettings()
-                            .isStorageTracked())));
+                        data != null && (data.getSettings()
+                            .isStorageTracked()
+                            || data.getSettings()
+                                .isFlowTracked()),
+                        history.baseline() == null ? null : toPoint(history.baseline()))));
         } catch (IOException failure) {
             throw new UncheckedIOException(failure);
         }
     }
+
+    private static Point toPoint(StorageHistoryPoint point) {
+        return new Point(
+            point.observedAt(),
+            Long.toString(point.generation()),
+            point.kind(),
+            point.resource() == null ? null : new TrackedResource(point.resource()),
+            point.craftable(),
+            Long.toString(point.input()),
+            Long.toString(point.output()),
+            point.complete());
+    }
+
 }

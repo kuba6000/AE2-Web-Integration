@@ -1,5 +1,13 @@
 import type { Route } from './router.js';
-import type { Grid, StoredResource, IconMetadata, GridSettings, ApplicationContext } from './api-types.js';
+import type {
+    Grid,
+    StoredResource,
+    IconMetadata,
+    GridSettings,
+    ApplicationContext,
+    TerminalView,
+    TerminalDelta
+} from './api-types.js';
 import type { createIconLoader } from './icons.js';
 import type { Preferences, createPreferences } from './preferences.js';
 import type { CraftingState } from './crafting.js';
@@ -55,6 +63,9 @@ export function createTerminal(
     let itemRequest: AbortController | undefined;
     let iconRequest: AbortController | undefined;
     let iconPackId: string | null = null;
+    let liveView: TerminalView | undefined;
+    let closeStream: (() => void) | undefined;
+    let reconnect: ReturnType<typeof setTimeout> | undefined;
     let serial = 0;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -151,7 +162,82 @@ export function createTerminal(
             preferences.set('selectedGridKey', state.selectedGridKey);
     }
 
+    function stopStream() {
+        closeStream?.();
+        closeStream = undefined;
+        clearTimeout(reconnect);
+        liveView = undefined;
+    }
+    function startStream(key: string, version: number) {
+        if (!liveView || !state.preferences.autoRefresh || disposed || version !== serial) return;
+        closeStream?.();
+        closeStream = api.itemEvents(
+            key,
+            `${liveView.generation}:${liveView.revision}`,
+            iconsEnabled && state.iconPack.available === true,
+            {
+                ready() {
+                    if (disposed || version !== serial || !liveView) return;
+                    state.itemError = null;
+                    notify();
+                },
+                delta(delta: TerminalDelta) {
+                    if (disposed || version !== serial || !liveView) return;
+                    if (delta.view.generation !== liveView.generation) {
+                        stopStream();
+                        void loadItems();
+                        return;
+                    }
+                    if (BigInt(delta.view.revision) <= BigInt(liveView.revision)) return;
+                    const previous = state.itemIcons;
+                    if (previous && delta.icons && previous.packId !== delta.icons.packId) {
+                        stopStream();
+                        void loadItems();
+                        return;
+                    }
+                    const pages = [...(previous?.pages ?? [])];
+                    const indices = (delta.icons?.pages ?? []).map((page) => {
+                        let index = pages.findIndex((existing) => existing.digest === page.digest);
+                        if (index < 0) {
+                            index = pages.length;
+                            pages.push(page);
+                        }
+                        return index;
+                    });
+                    const remap = (item: StoredResource): StoredResource => ({
+                        ...item,
+                        icon: item.icon && delta.icons ? { ...item.icon, page: indices[item.icon.page] } : null
+                    });
+                    const keyed = new Map(
+                        state.items.filter((item) => item.itemKey).map((item) => [item.itemKey!, item])
+                    );
+                    for (const removed of delta.removed) keyed.delete(removed);
+                    for (const item of delta.upserts) if (item.itemKey) keyed.set(item.itemKey, remap(item));
+                    state.items = [...keyed.values(), ...delta.unkeyed.map(remap)];
+                    if (delta.icons) state.itemIcons = { ...delta.icons, pages };
+                    state.selected = state.selected?.itemKey ? (keyed.get(state.selected.itemKey) ?? null) : null;
+                    if (!state.selected) resourceHistory.clear();
+                    state.updatedAt = Date.now();
+                    state.itemError = null;
+                    liveView = delta.view;
+                    notify();
+                },
+                reset() {
+                    if (disposed || version !== serial) return;
+                    stopStream();
+                    void loadItems();
+                },
+                error() {
+                    if (disposed || version !== serial) return;
+                    state.itemError = 'NETWORK_ERROR';
+                    notify();
+                    reconnect = setTimeout(() => startStream(key, version), 2000);
+                }
+            }
+        );
+    }
     function invalidateItems() {
+        stopStream();
         resourceHistory.clear();
         serial++;
         itemRequest?.abort();
@@ -173,6 +259,7 @@ export function createTerminal(
             notify();
             return;
         }
+        stopStream();
         itemRequest?.abort();
         const request = new AbortController();
         itemRequest = request;
@@ -182,7 +269,12 @@ export function createTerminal(
         state.itemError = null;
         notify();
         try {
-            const result = await api.items(key, request.signal, iconsEnabled && state.iconPack.available === true);
+            const result = await api.items(
+                key,
+                request.signal,
+                iconsEnabled && state.iconPack.available === true,
+                state.preferences.autoRefresh
+            );
             if (disposed || version !== serial) return;
             const items = result.data;
             state.itemIcons = result.icons;
@@ -192,6 +284,8 @@ export function createTerminal(
                 : null;
             state.itemStatus = 'ready';
             state.updatedAt = Date.now();
+            liveView = result.view;
+            startStream(key, version);
             if (state.selected) await resourceHistory.refresh();
             else resourceHistory.clear();
         } catch (caught) {
@@ -250,7 +344,7 @@ export function createTerminal(
         clearTimeout(timer);
         if (disposed) return;
         if (crafting.pending) timer = setTimeout(() => crafting.refresh(), 1000);
-        else if (state.preferences.autoRefresh) timer = setTimeout(refresh, 5000);
+        else if (state.preferences.autoRefresh) timer = setTimeout(() => refresh({ automatic: true }), 5000);
     }
     function loadCrafting() {
         if (!crafting.active || state.gridStatus !== 'ready') return;
@@ -278,7 +372,7 @@ export function createTerminal(
         if (!grid) settings.block('GRID_NOT_FOUND');
         else return settings.refresh(grid.accessSources);
     }
-    async function refresh({ reloadDetail = false } = {}) {
+    async function refresh({ reloadDetail = false, automatic = false } = {}) {
         if (disposed) return;
         if (refreshingGrids) return reloadDetail ? refreshingGrids.then(() => loadHistory(true)) : refreshingGrids;
         clearTimeout(timer);
@@ -302,7 +396,9 @@ export function createTerminal(
                 state.gridStatus = 'ready';
                 state.gridError = null;
                 notify();
-                await loadItems();
+                if (!automatic || !liveView) await loadItems();
+                else if (!state.grids.some((grid) => grid.key === state.route.gridKey)) invalidateItems();
+                else if (state.selected) await resourceHistory.refresh();
                 await loadCrafting();
                 await loadCpus();
                 await loadHistory(reloadDetail);
@@ -389,10 +485,15 @@ export function createTerminal(
         preference<K extends keyof Preferences>(name: K, value: Preferences[K]) {
             preferences.set(name, value);
             notify();
-            if (name === 'autoRefresh') schedule();
+            if (name === 'autoRefresh') {
+                if (value) void loadItems();
+                else stopStream();
+                schedule();
+            }
         },
         dispose() {
             disposed = true;
+            stopStream();
             notifications.dispose();
             clearTimeout(timer);
             gridRequest?.abort();

@@ -105,21 +105,25 @@ public final class ConfigSettings {
 
     public static final class ResourceTracking {
 
+        @Path("flow_flush_interval_seconds")
+        @Comment("Interval between saved network input/output totals, in seconds (1-86400).")
+        public int flowFlushIntervalSeconds = 5;
+
         @Path("active_interval_millis")
         @Comment("Minimum storage observation interval while the web terminal is in use, in milliseconds.")
         public int activeIntervalMillis = 250;
-
-        @Path("idle_interval_seconds")
-        @Comment("Storage history observation interval without web viewers, in seconds.")
-        public int idleIntervalSeconds = 300;
 
         @Path("reconciliation_interval_seconds")
         @Comment("Maximum interval between full storage reconciliations, in seconds.")
         public int reconciliationIntervalSeconds = 300;
 
-        @Path("history_bytes_per_grid")
-        @Comment("Maximum history file size per network. A full file stops recording and reports incomplete history.")
-        public long historyBytesPerGrid = 67108864L;
+        @Path("history_retention_days")
+        @Comment("Days of detailed resource history to retain.")
+        public int historyRetentionDays = 7;
+
+        @Path("history_max_rows_per_grid")
+        @Comment("Maximum history records per network. Oldest records are removed when this limit is reached.")
+        public int historyMaxRowsPerGrid = 250000;
 
         @Path("max_resources_per_grid")
         @Comment("Maximum distinct resource identities retained by one network's active tracker.")
@@ -141,14 +145,17 @@ public final class ConfigSettings {
         if (notifications.minimumCraftingDurationSeconds < 0 || notifications.minimumCraftingAmount < 0) {
             throw new IllegalArgumentException("Notification minimums must not be negative");
         }
-        if (resourceTracking.activeIntervalMillis < 50 || resourceTracking.idleIntervalSeconds < 1
-            || resourceTracking.reconciliationIntervalSeconds < 1
-            || resourceTracking.historyBytesPerGrid < 1024
-            || resourceTracking.historyBytesPerGrid > Integer.MAX_VALUE
+        if (resourceTracking.flowFlushIntervalSeconds < 1 || resourceTracking.flowFlushIntervalSeconds > 86400) {
+            throw new IllegalArgumentException(
+                "resource_tracking.flow_flush_interval_seconds must be between 1 and 86400");
+        }
+        if (resourceTracking.activeIntervalMillis < 50 || resourceTracking.reconciliationIntervalSeconds < 1
+            || resourceTracking.historyRetentionDays < 1
+            || resourceTracking.historyMaxRowsPerGrid < 1
             || resourceTracking.maxResourcesPerGrid < 1
             || resourceTracking.maxQueuedRows < 1) {
             throw new IllegalArgumentException(
-                "Resource tracking limits must be positive; active interval must be at least 50 ms and history size at least 1024 bytes");
+                "Resource tracking limits must be positive; active interval must be at least 50 ms");
         }
     }
 }

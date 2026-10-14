@@ -41,7 +41,15 @@ export type IconMetadata = {
     height: number;
     pages: { digest: string; width: number; height: number }[];
 };
-export type ResourceResponse<T> = { data: T; icons: IconMetadata | null };
+export type TerminalView = { generation: string; revision: string };
+export type TerminalDelta = {
+    view: TerminalView;
+    upserts: StoredResource[];
+    removed: string[];
+    unkeyed: StoredResource[];
+    icons: IconMetadata | null;
+};
+export type ResourceResponse<T> = { data: T; icons: IconMetadata | null; view?: TerminalView };
 export type StoredResource = ResourceStack & {
     craftable: boolean;
 };
@@ -63,7 +71,13 @@ export type Grid = {
     isTrackingEnabled: boolean;
     accessSources: AccessSources;
 };
-export type GridSettings = { isTracked: boolean; isStorageTracked: boolean; name: string };
+export type GridSettings = {
+    isTracked: boolean;
+    isStorageTracked: boolean;
+    isFlowTracked: boolean;
+    stockSampleIntervalSeconds: number;
+    name: string;
+};
 export type CpuSelectionMode = 'PLAYER_ONLY' | 'AUTOMATION_ONLY' | 'ALL';
 export type CpuInfo = {
     acceptsPlayerJobs: boolean;
@@ -148,7 +162,7 @@ export type CraftingHistory = {
 export type ResourceHistoryPoint = {
     observedAt: number;
     generation: string;
-    kind: 'STOCK' | 'FLOW' | 'OBSERVATION' | 'GAP';
+    kind: 'STOCK' | 'FLOW' | 'OBSERVATION' | 'FLOW_OBSERVATION' | 'GAP';
     resource: (ResourceDescription & { quantity: string }) | null;
     craftable: boolean;
     input: string;
@@ -156,6 +170,7 @@ export type ResourceHistoryPoint = {
     complete: boolean;
 };
 export type ResourceHistory = {
+    baseline: ResourceHistoryPoint | null;
     points: ResourceHistoryPoint[];
     complete: boolean;
     truncated: boolean;

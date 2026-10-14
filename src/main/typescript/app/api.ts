@@ -10,7 +10,7 @@ import type {
     GridSettings,
     ResourceHistory
 } from './api-types.js';
-import type { ResourceResponse, IconMetadata, ApplicationContext } from './api-types.js';
+import type { ResourceResponse, IconMetadata, ApplicationContext, TerminalView, TerminalDelta } from './api-types.js';
 
 /** Wire codes declared by core ApiStatus; unrecognized replies leave mutations unconfirmed. */
 const responseStatuses = new Set([
@@ -55,7 +55,23 @@ export type Api = {
         signal?: AbortSignal
     ) => Promise<{ available: boolean; packId: string | null; width: number; height: number }>;
     grids: (signal?: AbortSignal) => Promise<Grid[]>;
-    items: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<StoredResource[]>>;
+    items: (
+        gridKey: string,
+        signal?: AbortSignal,
+        icons?: boolean,
+        live?: boolean
+    ) => Promise<ResourceResponse<StoredResource[]>>;
+    itemEvents: (
+        gridKey: string,
+        cursor: string,
+        icons: boolean,
+        handlers: {
+            ready: () => void;
+            delta: (delta: TerminalDelta) => void;
+            reset: () => void;
+            error: () => void;
+        }
+    ) => () => void;
     createPlan: (
         gridKey: string,
         body: { itemKey: string; quantity: number; lightMode?: boolean; ignoreMissing?: boolean; autoStart?: boolean }
@@ -170,11 +186,11 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             (parsed.status === 'OK' && (!response.ok || !Object.hasOwn(parsed, 'data')))
         )
             throw new ApiError('INVALID_RESPONSE', response.status);
-        const envelope = parsed as { status: string; data: T; icons?: IconMetadata | null };
+        const envelope = parsed as { status: string; data: T; icons?: IconMetadata | null; view?: TerminalView };
         if (!response.ok || envelope.status !== 'OK') {
             throw new ApiError(envelope.status, response.status, envelope.data);
         }
-        return { data: envelope.data, icons: envelope.icons ?? null };
+        return { data: envelope.data, icons: envelope.icons ?? null, view: envelope.view };
     }
     function request<T>(path: string, options?: Parameters<typeof read>[1]): Promise<T> {
         return read<T>(path, options).then((result) => result.data);
@@ -185,8 +201,38 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
         skipUpdate: (tag) => request('api/updates/skip', { method: 'POST', body: { tag } }),
         iconPack: (signal) => request('api/icon-pack', { signal }),
         grids: (signal) => request('api/grids', { signal }),
-        items: (gridKey, signal, icons = false) =>
-            read(`api/grids/${encodeURIComponent(gridKey)}/items${icons ? '?icons=true' : ''}`, { signal }),
+        items: (gridKey, signal, icons = false, live = false) => {
+            const query = new URLSearchParams();
+            if (icons) query.set('icons', 'true');
+            if (live) query.set('live', 'true');
+            return read(`api/grids/${encodeURIComponent(gridKey)}/items${query.size ? `?${query}` : ''}`, { signal });
+        },
+        itemEvents(gridKey, cursor, icons, handlers) {
+            const query = new URLSearchParams({ cursor });
+            if (icons) query.set('icons', 'true');
+            const source = new EventSource(
+                new URL(`api/grids/${encodeURIComponent(gridKey)}/items/events?${query}`, base)
+            );
+            source.addEventListener('ready', handlers.ready);
+            source.addEventListener('delta', (event) => {
+                try {
+                    handlers.delta(JSON.parse(event.data) as TerminalDelta);
+                } catch {
+                    source.close();
+                    handlers.reset();
+                }
+            });
+            for (const event of ['reset', 'gap', 'invalidate', 'revoked'])
+                source.addEventListener(event, () => {
+                    source.close();
+                    handlers.reset();
+                });
+            source.onerror = () => {
+                source.close();
+                handlers.error();
+            };
+            return () => source.close();
+        },
         createPlan: (gridKey, body) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans`, { method: 'POST', body }),
         plan: (gridKey, planId, signal, icons) =>

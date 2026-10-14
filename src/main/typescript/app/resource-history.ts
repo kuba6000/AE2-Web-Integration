@@ -4,6 +4,7 @@ import type { Api, ApiFailure } from './api.js';
 export type ResourceHistoryState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     points: ResourceHistoryPoint[];
+    baseline: ResourceHistoryPoint | null;
     enabled: boolean;
     complete: boolean;
     truncated: boolean;
@@ -15,6 +16,7 @@ export function createResourceHistory(api: Pick<Api, 'resourceHistory'>, changed
     const state: ResourceHistoryState = {
         status: 'idle',
         points: [],
+        baseline: null,
         enabled: false,
         complete: true,
         truncated: false,
@@ -39,7 +41,12 @@ export function createResourceHistory(api: Pick<Api, 'resourceHistory'>, changed
         } catch (caught) {
             const error = caught as ApiFailure;
             if (version !== generation || error.name === 'AbortError') return;
-            Object.assign(state, { status: 'error', points: [], error: error.status || 'NETWORK_ERROR' });
+            Object.assign(state, {
+                status: 'error',
+                points: [],
+                baseline: null,
+                error: error.status || 'NETWORK_ERROR'
+            });
         } finally {
             if (version === generation) {
                 reading = false;
@@ -55,6 +62,7 @@ export function createResourceHistory(api: Pick<Api, 'resourceHistory'>, changed
         Object.assign(state, {
             status: 'idle',
             points: [],
+            baseline: null,
             enabled: false,
             complete: true,
             truncated: false,

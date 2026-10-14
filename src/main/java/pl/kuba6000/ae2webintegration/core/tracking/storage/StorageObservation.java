@@ -12,8 +12,13 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /** One detached, completed server-thread observation; quantities are absolute, flow is gross. */
 @Desugar
-public record StorageObservation(long observedAt, boolean full, boolean flowComplete, @NotNull List<Row> rows,
-    @NotNull List<Flow> flows) {
+public record StorageObservation(long observedAt, boolean full, boolean flowComplete, boolean stockObserved,
+    @NotNull List<Row> rows, @NotNull List<Flow> flows) {
+
+    public StorageObservation(long observedAt, boolean full, boolean flowComplete, @NotNull List<Row> rows,
+        @NotNull List<Flow> flows) {
+        this(observedAt, full, flowComplete, true, rows, flows);
+    }
 
     public StorageObservation {
         rows = Collections.unmodifiableList(new ArrayList<>(rows));

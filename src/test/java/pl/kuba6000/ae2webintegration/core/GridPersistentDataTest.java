@@ -23,6 +23,43 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 class GridPersistentDataTest extends GridTestScope {
 
     @Test
+    void independentFlowAndStockSamplingSettingsPersistAndValidate() throws Exception {
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(TestGridFixtures.grid(1));
+        assertNotNull(key);
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        GridSettingsData settings = data.getSettings();
+        assertFalse(settings.isFlowTracked());
+        assertFalse(settings.isStorageTracked());
+        assertEquals(300, settings.getStockSampleIntervalSeconds());
+        settings.setFlowTracked(true);
+        settings.setStockSampleIntervalSeconds(17);
+        CoreEngine.GRID_IDENTITIES.saveIfDirty();
+        GridPersistentData loaded = new GridIdentityRegistry(
+            new File(gridSave, "ae2webintegration/grid-identities.json")).getPersistentData(key);
+        assertNotNull(loaded);
+        assertTrue(
+            loaded.getSettings()
+                .isFlowTracked());
+        assertFalse(
+            loaded.getSettings()
+                .isStorageTracked());
+        assertEquals(
+            17,
+            loaded.getSettings()
+                .getStockSampleIntervalSeconds());
+        assertFalse(
+            loaded.getSettings()
+                .isDefault());
+        assertThrows(IllegalArgumentException.class, () -> settings.setStockSampleIntervalSeconds(0));
+        assertThrows(IllegalArgumentException.class, () -> settings.setStockSampleIntervalSeconds(86401));
+        assertEquals(17, settings.getStockSampleIntervalSeconds());
+        settings.setFlowTracked(false);
+        settings.setStockSampleIntervalSeconds(300);
+        assertTrue(settings.isDefault());
+    }
+
+    @Test
     void namePersistsWithoutTrackingAndClearingRestoresDefaults() throws Exception {
         var grid = TestGridFixtures.grid(1);
         var key = CoreEngine.GRID_IDENTITIES.getKey(grid);

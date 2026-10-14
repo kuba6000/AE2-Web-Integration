@@ -474,6 +474,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     void storageHistorySettingIsIndependentAndPersists() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
         String path = "/api/grids/" + key + "/settings";
         String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
         Reply saved = request("PATCH", path, headers, "{\"isStorageTracked\":true}");
@@ -488,9 +489,9 @@ class ApiRoutingHttpTest extends GridTestScope {
                 .getAsBoolean());
         Path file = gridSave.toPath()
             .resolve("ae2webintegration/grid-identities.json");
-        JsonObject loaded = new Gson().toJsonTree(
-            new GridIdentityRegistry(file.toFile()).getPersistentData(key)
-                .getSettings())
+        var restored = new GridIdentityRegistry(file.toFile()).getPersistentData(key);
+        assertNotNull(restored);
+        JsonObject loaded = new Gson().toJsonTree(restored.getSettings())
             .getAsJsonObject();
         assertTrue(
             loaded.get("isStorageTracked")
@@ -507,6 +508,75 @@ class ApiRoutingHttpTest extends GridTestScope {
         assertTrue(
             current.get("isTracked")
                 .getAsBoolean());
+    }
+
+    @Test
+    void flowAndStockSettingsPersistIndependentlyAndInvalidIntervalsDoNotPartiallyApply() throws Exception {
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        String path = "/api/grids/" + key + "/settings";
+        String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+        Reply saved = request("PATCH", path, headers, "{\"isFlowTracked\":true,\"stockSampleIntervalSeconds\":60}");
+        assertEquals(HttpURLConnection.HTTP_OK, saved.status());
+        JsonObject data = saved.json()
+            .getAsJsonObject("data");
+        assertTrue(
+            data.get("isFlowTracked")
+                .getAsBoolean());
+        assertFalse(
+            data.get("isStorageTracked")
+                .getAsBoolean());
+        assertFalse(
+            data.get("isTracked")
+                .getAsBoolean());
+        assertEquals(
+            60,
+            data.get("stockSampleIntervalSeconds")
+                .getAsInt());
+        assertEquals(
+            HttpURLConnection.HTTP_OK,
+            request("PATCH", path, headers, "{\"isStorageTracked\":true}").status());
+        for (String invalid : new String[] { "0", "-1", "86401", "1.5", "null" }) {
+            assertEquals(
+                HttpURLConnection.HTTP_BAD_REQUEST,
+                request(
+                    "PATCH",
+                    path,
+                    headers,
+                    "{\"isFlowTracked\":false,\"name\":\"Invalid update\",\"stockSampleIntervalSeconds\":" + invalid
+                        + "}")
+                    .status());
+        }
+        JsonObject current = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertTrue(
+            current.get("isFlowTracked")
+                .getAsBoolean());
+        assertTrue(
+            current.get("isStorageTracked")
+                .getAsBoolean());
+        assertEquals(
+            "",
+            current.get("name")
+                .getAsString());
+        assertEquals(
+            60,
+            current.get("stockSampleIntervalSeconds")
+                .getAsInt());
+        Path file = gridSave.toPath()
+            .resolve("ae2webintegration/grid-identities.json");
+        var restored = new GridIdentityRegistry(file.toFile()).getPersistentData(key);
+        assertNotNull(restored);
+        JsonObject loaded = new Gson().toJsonTree(restored.getSettings())
+            .getAsJsonObject();
+        assertTrue(
+            loaded.get("isFlowTracked")
+                .getAsBoolean());
+        assertEquals(
+            60,
+            loaded.get("stockSampleIntervalSeconds")
+                .getAsInt());
     }
 
     @Test

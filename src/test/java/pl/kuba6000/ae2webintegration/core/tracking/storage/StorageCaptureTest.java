@@ -3,9 +3,12 @@ package pl.kuba6000.ae2webintegration.core.tracking.storage;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
@@ -15,11 +18,46 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 class StorageCaptureTest {
+
+    @Test
+    void flowFlushDoesNotReadNativeStockAndViewerSamplesDoNotSplitFlowBuckets() {
+        StorageCapture capture = new StorageCapture(10);
+        IAEKey key = resource(new AtomicInteger());
+        int token = capture.prepareResource(key);
+        capture.recordFlow(token, 12, 3);
+        StorageObservation live = capture.observe(grid(), null, 1000, true, false);
+        assertTrue(live.stockObserved());
+        assertTrue(
+            live.flows()
+                .isEmpty());
+        capture.recordFlow(token, 8, 2);
+        StorageObservation flows = capture.flushFlow(5000);
+        assertFalse(flows.stockObserved());
+        assertFalse(flows.full());
+        assertTrue(
+            flows.rows()
+                .isEmpty());
+        assertEquals(
+            20,
+            flows.flows()
+                .get(0)
+                .input());
+        assertEquals(
+            5,
+            flows.flows()
+                .get(0)
+                .output());
+        assertTrue(
+            capture.flushFlow(10000)
+                .flows()
+                .isEmpty());
+    }
 
     @Test
     void observationPreservesIdentityFailureWhileTransferAdmissionDoesNotThrow() {
@@ -48,8 +86,8 @@ class StorageCaptureTest {
     @Test
     void unsupportedResourcesRemainVisibleWithoutKeysCopiesFlowOrCoverageLoss() {
         IAEKey unsupported = unsupported(false);
-        java.util.concurrent.atomic.AtomicLong amount = new java.util.concurrent.atomic.AtomicLong(42);
-        List<IAEGenericStack> stacks = new java.util.ArrayList<>();
+        AtomicLong amount = new AtomicLong(42);
+        List<IAEGenericStack> stacks = new ArrayList<>();
         stacks.add(new IAEGenericStack() {
 
             public @NotNull IAEKey web$what() {
@@ -374,7 +412,7 @@ class StorageCaptureTest {
                 return 0;
             }
 
-            public Iterable<pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack> web$stacks() {
+            public Iterable<IAEGenericStack> web$stacks() {
                 return stacks;
             }
         };
@@ -386,7 +424,7 @@ class StorageCaptureTest {
                 return list;
             }
 
-            public pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem web$getInventory() {
+            public IAEMeInventoryItem web$getInventory() {
                 return null;
             }
 
@@ -402,8 +440,7 @@ class StorageCaptureTest {
             IAECraftingGrid.class.getClassLoader(),
             new Class<?>[] { IAECraftingGrid.class },
             (proxy, method, args) -> method.getName()
-                .equals("web$isCurrentlyCraftable") ? craftables.contains(args[0])
-                    : new java.util.HashSet<>(craftables));
+                .equals("web$isCurrentlyCraftable") ? craftables.contains(args[0]) : new HashSet<>(craftables));
         return (IAEGrid) Proxy.newProxyInstance(
             IAEGrid.class.getClassLoader(),
             new Class<?>[] { IAEGrid.class },

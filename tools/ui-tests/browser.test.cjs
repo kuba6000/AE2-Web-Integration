@@ -590,10 +590,22 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
         pauseStatus: 'OK',
         history: [historyEntry],
         historyDetail,
-        resourceHistory: { points: [], complete: true, truncated: false },
+        resourceHistory: { points: [], baseline: null, complete: true, truncated: false },
         settings: {
-            [gridA]: { isTracked: false, isStorageTracked: false, name: '' },
-            [gridB]: { isTracked: false, isStorageTracked: false, name: '' }
+            [gridA]: {
+                isTracked: false,
+                isStorageTracked: false,
+                isFlowTracked: false,
+                stockSampleIntervalSeconds: 300,
+                name: ''
+            },
+            [gridB]: {
+                isTracked: false,
+                isStorageTracked: false,
+                isFlowTracked: false,
+                stockSampleIntervalSeconds: 300,
+                name: ''
+            }
         },
         accessSources: {}
     };
@@ -828,7 +840,10 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 response.end(
                     JSON.stringify({
                         status: 'OK',
-                        data: { ...options.resourceHistory, enabled: !!options.settings[key].isStorageTracked }
+                        data: {
+                            ...options.resourceHistory,
+                            enabled: !!options.settings[key].isStorageTracked || !!options.settings[key].isFlowTracked
+                        }
                     })
                 );
             } else if (resource.endsWith('/settings')) {
@@ -877,6 +892,14 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                         icons: url.searchParams.get('icons') === 'true' ? options.icons : null
                     })
                 );
+            } else if (resource.endsWith('/items/events')) {
+                response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+                response.write('event: ready\ndata: {}\n\n');
+                options.itemStreams ??= [];
+                options.itemStreams.push(response);
+                response.on('close', () => {
+                    options.itemStreams = options.itemStreams.filter((stream) => stream !== response);
+                });
             } else if (resource.endsWith('/items')) {
                 const first = resource.includes(gridA);
                 const send = () => {
@@ -886,6 +909,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                             options.status === 200
                                 ? {
                                       status: 'OK',
+                                      ...(options.liveView ? { view: options.liveView } : {}),
                                       icons: url.searchParams.get('icons') === 'true' ? options.icons : null,
                                       data: first
                                           ? options.itemsA
@@ -1374,7 +1398,10 @@ test('unavailable icons override the saved mode and recover without losing it', 
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     await item.waitFor();
-    assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
+    assert.equal(
+        new URLSearchParams(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query).has('icons'),
+        false
+    );
     assert.equal(await item.getByText(iron.displayName, { exact: true }).isVisible(), true);
     options.pack = { available: true, packId: 'a'.repeat(64), width: 64, height: 64 };
     await poll(page);
@@ -1404,7 +1431,10 @@ test('pending icon discovery leaves inventory usable and failures preserve confi
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     await item.waitFor({ timeout: 1000 });
     assert.equal(await item.getByText(iron.displayName, { exact: true }).isVisible(), true);
-    assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
+    assert.equal(
+        new URLSearchParams(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query).has('icons'),
+        false
+    );
     await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage, null, {
         timeout: 4000
     });
@@ -1517,7 +1547,10 @@ test('saved names choice receives a dismissible icon notice outside the terminal
     await page.goto(`${base}#/grids/${gridA}/items`);
     const enable = page.getByRole('button', { name: 'Enable icons', exact: true });
     await enable.waitFor({ timeout: 3000 });
-    assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
+    assert.equal(
+        new URLSearchParams(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query).has('icons'),
+        false
+    );
     const panel = await page.getByRole('navigation').boundingBox();
     const notice = await enable.boundingBox();
     const terminal = await page.getByRole('searchbox').boundingBox();
@@ -2109,7 +2142,12 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
             .evaluateAll((icons) => icons.map((icon) => getComputedStyle(icon).backgroundPosition)),
         ['-32px 0px', '0px 0px']
     );
-    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query, '?icons=true');
+    assert.equal(
+        new URLSearchParams(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query).get(
+            'icons'
+        ),
+        'true'
+    );
     options.itemsA = options.itemsA.map((item) => ({ ...item, quantity: item.quantity + 1 }));
     await poll(page);
     await page.getByRole('button', { name: /Certus Quartz/ }).waitFor();
@@ -2155,7 +2193,12 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(pages().length, before);
-    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query, '');
+    assert.equal(
+        new URLSearchParams(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query).has(
+            'icons'
+        ),
+        false
+    );
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     await page
         .getByRole('region', { name: 'Current job', exact: true })
@@ -3649,11 +3692,23 @@ test('history exposes resource and provider intervals with their correct locatio
 test('uncertain settings saves preserve the draft and remain unconfirmed until explicit retry succeeds', async (t) => {
     const { page, options, base } = await fixture(t);
     for (const status of ['INTERNAL_ERROR', 'TIMEOUT', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
-        options.settings[gridA] = { isTracked: false, name: '' };
+        options.settings[gridA] = {
+            isTracked: false,
+            name: '',
+            isStorageTracked: false,
+            isFlowTracked: false,
+            stockSampleIntervalSeconds: 300
+        };
         await page.goto(`${base}?case=${status}#/grids/${gridA}/settings`);
         const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
         await tracking.check();
-        options.settings[gridA] = { isTracked: true, name: '' };
+        options.settings[gridA] = {
+            isTracked: true,
+            name: '',
+            isStorageTracked: false,
+            isFlowTracked: false,
+            stockSampleIntervalSeconds: 300
+        };
         options.fault = { operation: 'settings', status };
         await page.getByRole('button', { name: 'Save settings', exact: true }).click();
         await page
@@ -3713,11 +3768,26 @@ test('settings drafts survive transient discovery failures and pending saves rec
     options.gridError = 'NO_PERMISSIONS';
     await poll(page);
     await tracking.waitFor({ state: 'hidden' });
-    options.settings[gridA] = { isTracked: true, name: '' };
+    options.settings[gridA] = {
+        isTracked: true,
+        name: '',
+        isStorageTracked: false,
+        isFlowTracked: false,
+        stockSampleIntervalSeconds: 300
+    };
     await save.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'OK', data: { isTracked: true, name: '' } })
+        body: JSON.stringify({
+            status: 'OK',
+            data: {
+                isTracked: true,
+                name: '',
+                isStorageTracked: false,
+                isFlowTracked: false,
+                stockSampleIntervalSeconds: 300
+            }
+        })
     });
     assert.equal(await tracking.count(), 0);
     options.gridError = null;
@@ -3792,7 +3862,16 @@ test('settings save remains single-flight across grids and uses the returned val
     await pending.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'OK', data: { isTracked: false, name: '' } })
+        body: JSON.stringify({
+            status: 'OK',
+            data: {
+                isTracked: false,
+                name: '',
+                isStorageTracked: false,
+                isFlowTracked: false,
+                stockSampleIntervalSeconds: 300
+            }
+        })
     });
     await page
         .getByRole('status')
@@ -3828,7 +3907,16 @@ test('old settings reads cannot replace saved data and denied saves clear access
     await delayed.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'OK', data: { isTracked: false, name: '' } })
+        body: JSON.stringify({
+            status: 'OK',
+            data: {
+                isTracked: false,
+                name: '',
+                isStorageTracked: false,
+                isFlowTracked: false,
+                stockSampleIntervalSeconds: 300
+            }
+        })
     });
     await settleResponse(page, delayed.request());
     assert.equal(await tracking.isChecked(), true);
@@ -8570,7 +8658,7 @@ test('Network pending and uncertain name saves retain source identity and notify
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     const pending = await captured;
     await clickTab(page, 'Home');
-    options.settings[gridA] = { name: 'Canonical', isTracked: true };
+    options.settings[gridA] = { ...options.settings[gridA], name: 'Canonical', isTracked: true };
     await pending.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -8789,7 +8877,7 @@ test('Network refetch publishes remote name and tracking changes with polling di
     await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('link', { name: 'Enable tracking', exact: true }).waitFor();
-    options.settings[gridA] = { name: 'Remote factory', isTracked: true };
+    options.settings[gridA] = { ...options.settings[gridA], name: 'Remote factory', isTracked: true };
     await clickTab(page, 'Network');
     await page.getByRole('textbox', { name: 'Network name', exact: true }).waitFor();
     assert.equal(await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).isChecked(), true);
@@ -9635,12 +9723,39 @@ test('a restored cached page reloads its disposed application', async (t) => {
 test('resource tracking is independent of CPU history and renders exact flow counts', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/settings`);
+    await page.locator('#network-flow-tracking').check();
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('#network-flow-tracking').disabled);
+    assert.equal(options.settings[gridA].isFlowTracked, true);
+    assert.equal(options.settings[gridA].isStorageTracked, false);
     await page.locator('#network-storage-tracking').check();
+    await page.locator('#network-stock-interval').fill('60');
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     await page.waitForFunction(() => !document.querySelector('#network-storage-tracking').disabled);
     assert.equal(options.settings[gridA].isStorageTracked, true);
     assert.equal(options.settings[gridA].isTracked, false);
+    assert.equal(options.settings[gridA].stockSampleIntervalSeconds, 60);
+    await page.locator('#network-stock-interval').fill('0');
+    assert.equal(await page.getByRole('button', { name: 'Save settings', exact: true }).isDisabled(), true);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    await page.waitForFunction(() => !document.querySelector('#network-flow-tracking').disabled);
+    assert.equal(await page.locator('#network-flow-tracking').isChecked(), true);
+    assert.equal(await page.locator('#network-stock-interval').inputValue(), '0');
+    await page.reload();
+    await page.waitForFunction(() => !document.querySelector('#network-flow-tracking').disabled);
+    assert.equal(await page.locator('#network-stock-interval').inputValue(), '60');
     options.resourceHistory = {
+        baseline: {
+            observedAt: 1690000000000,
+            generation: '1',
+            kind: 'STOCK',
+            resource: { ...iron, quantity: '1234567890123456789' },
+            craftable: false,
+            input: '0',
+            output: '0',
+            complete: true
+        },
         points: [
             {
                 observedAt: 1700000000000,
@@ -9661,5 +9776,66 @@ test('resource tracking is independent of CPU history and renders exact flow cou
     await page.locator('.resource-history-points li').waitFor();
     const text = await page.locator('.resource-history-points').innerText();
     assert.ok(text.replace(/[^0-9]/g, '').includes('9223372036854775807'));
+    assert.ok(
+        (await page.locator('.resource-history-baseline').innerText())
+            .replace(/[^0-9]/g, '')
+            .includes('1234567890123456789')
+    );
     assert.equal(await page.locator('.resource-history .hint').first().isVisible(), true);
+    options.resourceHistory.points = [];
+    options.resourceHistory.complete = true;
+    options.resourceHistory.truncated = false;
+    await poll(page);
+    await page.waitForFunction(() => document.querySelectorAll('.resource-history-points li').length === 0);
+    assert.equal(await page.locator('.resource-history-baseline').isVisible(), true);
+    assert.equal(await page.locator('.resource-history .hint').first().isVisible(), false);
+});
+
+test('terminal applies live deltas, resumes its cursor and stops streams outside the terminal', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.liveView = { generation: '9223372036854775000', revision: '1' };
+    const opened = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await opened;
+    await page.locator('#items button').first().waitFor();
+    const initialReads = options.requests.filter((request) => request.path.endsWith('/items')).length;
+    options.itemStreams[0].write(
+        `event: delta\nid: 9223372036854775000:2\ndata: ${JSON.stringify({
+            view: { generation: '9223372036854775000', revision: '2' },
+            upserts: [{ ...iron, displayName: 'Live updated iron', quantity: 17 }],
+            removed: [],
+            unkeyed: [{ ...iron, itemKey: null, displayName: 'Live essentia', quantity: 3 }],
+            icons: null
+        })}\n\n`
+    );
+    await page.getByText('Live updated iron', { exact: true }).waitFor();
+    await page.getByText('Live essentia', { exact: true }).waitFor();
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, initialReads);
+    options.itemStreams[0].write(
+        `event: delta\nid: 9223372036854775000:3\ndata: ${JSON.stringify({
+            view: { generation: '9223372036854775000', revision: '3' },
+            upserts: [],
+            removed: [iron.itemKey],
+            unkeyed: [],
+            icons: null
+        })}\n\n`
+    );
+    await page.getByText('Live updated iron', { exact: true }).waitFor({ state: 'hidden' });
+    await page.getByText('Live essentia', { exact: true }).waitFor({ state: 'hidden' });
+    options.itemStreams[0].end();
+    const reconnected = page.waitForResponse((response) => response.url().includes('cursor=9223372036854775000%3A3'));
+    await reconnected;
+    await page.waitForFunction(() => !document.querySelector('#item-message').classList.contains('api-error'), null, {
+        timeout: 1000
+    });
+    options.liveView = { generation: '9223372036854775000', revision: '4' };
+    options.itemsA = [{ ...iron, displayName: 'Fresh snapshot iron' }];
+    options.itemStreams[0].write('event: reset\ndata: {}\n\n');
+    await page.getByText('Fresh snapshot iron', { exact: true }).waitFor();
+    await page.goto(`${base}#/web-settings`);
+    await page.locator('#auto-refresh').uncheck();
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByText('Fresh snapshot iron', { exact: true }).waitFor();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(options.itemStreams.length, 0);
 });
