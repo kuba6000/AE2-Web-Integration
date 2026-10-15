@@ -4,9 +4,6 @@ import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -57,9 +54,10 @@ public class AEStorageGridMixin implements IAEStorageGrid {
         ((IStorageCaptureOwner) ((StorageService) (Object) this).getInventory()).web$setStorageCapture(capture);
     }
 
-    @Inject(method = "postWatcherUpdate", at = @At("HEAD"))
-    private void web$absoluteChanged(AEKey key, long amount, CallbackInfo ci) {
+    @WrapMethod(method = "postWatcherUpdate")
+    private void web$absoluteChanged(AEKey key, long amount, Operation<Void> original) {
         if (web$storageCapture != null) web$storageCapture.absoluteChanged((IAEKey) key, amount);
+        original.call(key, amount);
     }
 
     @WrapMethod(method = "updateCachedStacks")

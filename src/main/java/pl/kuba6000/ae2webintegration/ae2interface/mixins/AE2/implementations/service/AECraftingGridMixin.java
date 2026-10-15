@@ -11,11 +11,10 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.google.common.collect.ImmutableSet;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.CalculationStrategy;
@@ -57,13 +56,15 @@ public abstract class AECraftingGridMixin implements IAECraftingGrid, ICraftingM
     @Unique
     private long web$lastObservedCraftingRevision = Long.MIN_VALUE;
 
-    @Inject(method = "onServerEndTick", at = @At("HEAD"))
-    private void web$craftingChanged(CallbackInfo ci) {
+    @WrapMethod(method = "onServerEndTick")
+    private void web$craftingChanged(Operation<Void> original) {
         long modified = ((ICraftingRevision) craftingProviders).web$getCraftingRevision();
-        if (modified == web$lastObservedCraftingRevision) return;
-        web$lastObservedCraftingRevision = modified;
-        StorageCapture capture = ((IAEStorageGrid) grid.getStorageService()).web$getStorageCapture();
-        if (capture != null) capture.invalidate();
+        if (modified != web$lastObservedCraftingRevision) {
+            web$lastObservedCraftingRevision = modified;
+            StorageCapture capture = ((IAEStorageGrid) grid.getStorageService()).web$getStorageCapture();
+            if (capture != null) capture.invalidate();
+        }
+        original.call();
     }
 
     @Override
