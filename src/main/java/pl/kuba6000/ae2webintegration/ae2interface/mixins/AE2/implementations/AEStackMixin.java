@@ -69,18 +69,6 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
     }
 
     @Override
-    default @NotNull IAEKey web$copyTrackingIdentity() {
-        IAEStack<?> stack = this;
-        if (stack instanceof AEItemStack item) {
-            // AEItemStack.copy shares a mutable AEItemDef. A retained tracking key owns its definition.
-            AEItemStack owned = AEItemStack.create(item.getItemStack());
-            owned.reset();
-            return (IAEKey) (Object) owned;
-        }
-        return web$copyIdentity();
-    }
-
-    @Override
     default @Nullable String web$getRegistryNamespace() {
         if (this instanceof IAEItemStack item && web$getResourceType() == ResourceType.ITEM) {
             String name = GameData.getItemRegistry()
