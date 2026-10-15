@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 
 import appeng.api.config.Actionable;
 import appeng.api.networking.security.BaseActionSource;
@@ -18,7 +19,6 @@ import appeng.api.storage.data.IAEStack;
 import appeng.me.cache.GridStorageCache;
 import appeng.me.cache.NetworkMonitor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IStorageCacheRefresh;
-import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
@@ -60,12 +60,14 @@ public abstract class NetworkMonitorTrackingMixin<T extends IAEStack<T>> impleme
         }
         if (web$transferDepth != 0) return original.call(input, mode, source);
         long requested = input.getStackSize();
-        StableKey resource = input instanceof IAEKey ? capture.getItemKey((IAEKey) input) : null;
         web$transferDepth++;
         try {
             T remainder = original.call(input, mode, source);
             long accepted = requested - (remainder == null ? 0 : remainder.getStackSize());
-            if (accepted > 0) capture.recordFlow(resource, accepted, 0);
+            if (accepted > 0) {
+                if (input instanceof IAEKey) capture.recordFlow((IAEKey) input, accepted, 0);
+                else capture.markGap();
+            }
             return remainder;
         } catch (RuntimeException | Error failure) {
             // A provider can throw after changing storage; the missing result cannot prove accepted traffic.
@@ -87,12 +89,12 @@ public abstract class NetworkMonitorTrackingMixin<T extends IAEStack<T>> impleme
             return original.call(request, mode, source);
         }
         if (web$transferDepth != 0) return original.call(request, mode, source);
-        StableKey resource = request instanceof IAEKey ? capture.getItemKey((IAEKey) request) : null;
         web$transferDepth++;
         try {
             T extracted = original.call(request, mode, source);
             if (extracted != null && extracted.getStackSize() > 0) {
-                capture.recordFlow(resource, 0, extracted.getStackSize());
+                if (extracted instanceof IAEKey) capture.recordFlow((IAEKey) extracted, 0, extracted.getStackSize());
+                else capture.markGap();
             }
             return extracted;
         } catch (RuntimeException | Error failure) {
@@ -104,18 +106,21 @@ public abstract class NetworkMonitorTrackingMixin<T extends IAEStack<T>> impleme
         }
     }
 
-    @Inject(
+    @WrapOperation(
         method = "postChange",
         at = @At(
             value = "INVOKE",
             target = "Lappeng/me/cache/NetworkMonitor;notifyListenersOfChange(Ljava/lang/Iterable;Lappeng/api/networking/security/BaseActionSource;)V"))
-    private void web$changed(boolean added, Iterable<T> changes, BaseActionSource source, CallbackInfo callback) {
+    private void web$changed(NetworkMonitor<T> monitor, Iterable<T> changes, BaseActionSource source,
+        Operation<Void> original) {
         StorageCapture capture = ((IAEStorageGrid) myGridCache).web$getStorageCapture();
-        if (capture == null) return;
-        for (T changed : changes) {
-            if (changed instanceof IAEKey) capture.markChanged((IAEKey) changed);
-            else if (changed != null) capture.markGap();
+        if (capture != null) {
+            for (T changed : changes) {
+                if (changed instanceof IAEKey) capture.markChanged((IAEKey) changed);
+                else if (changed != null) capture.markGap();
+            }
         }
+        original.call(monitor, changes, source);
     }
 
     @Inject(method = "forceUpdate", at = @At("RETURN"))
