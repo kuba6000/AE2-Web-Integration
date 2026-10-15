@@ -16,7 +16,6 @@ import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEKey;
 import appeng.me.storage.NetworkStorage;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IStorageCaptureOwner;
-import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 
@@ -39,10 +38,9 @@ public class NetworkStorageMixin implements IStorageCaptureOwner {
         Operation<Long> original) {
         StorageCapture capture = web$storageCapture;
         if (capture == null || mode != Actionable.MODULATE) return original.call(key, requested, mode, source);
-        StableKey resource = capture.getItemKey((IAEKey) key);
         try {
             long accepted = original.call(key, requested, mode, source);
-            if (accepted > 0) capture.recordFlow(resource, accepted, 0);
+            if (accepted > 0) capture.recordFlow((IAEKey) key, accepted, 0);
             return accepted;
         } catch (RuntimeException | Error failure) {
             // A provider can mutate storage before throwing without reporting the accepted quantity.
@@ -56,10 +54,9 @@ public class NetworkStorageMixin implements IStorageCaptureOwner {
         Operation<Long> original) {
         StorageCapture capture = web$storageCapture;
         if (capture == null || mode != Actionable.MODULATE) return original.call(key, requested, mode, source);
-        StableKey resource = capture.getItemKey((IAEKey) key);
         try {
             long extracted = original.call(key, requested, mode, source);
-            if (extracted > 0) capture.recordFlow(resource, 0, extracted);
+            if (extracted > 0) capture.recordFlow((IAEKey) key, 0, extracted);
             return extracted;
         } catch (RuntimeException | Error failure) {
             capture.markGap();
