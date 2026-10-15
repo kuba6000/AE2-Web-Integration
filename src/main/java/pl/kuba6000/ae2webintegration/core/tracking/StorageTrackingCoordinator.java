@@ -16,6 +16,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridFilter;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -175,7 +176,11 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 detach(binding);
                 scheduled.remove(binding);
             }
-            binding = new Binding(key, ++generation, grid, new StorageCapture(settings.maxResourcesPerGrid, flow));
+            binding = new Binding(
+                key,
+                ++generation,
+                grid,
+                new StorageCapture(grid, settings.maxResourcesPerGrid, flow));
             binding.activeUntil = activeUntil;
             binding.iconsUntil = iconsUntil;
             binding.stock = stock;
@@ -275,6 +280,9 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             .web$getStorageCapture() == binding.capture) {
             grid.web$getStorageGrid()
                 .web$setStorageCapture(null);
+            // Tracking identities expire with this capture, even when the native grid remains live.
+            AE2Controller.itemIdentities.beginListing(grid)
+                .commit();
         }
         service.retire(binding.key, binding.generation);
     }

@@ -26,11 +26,6 @@ public interface IAEKey {
     @NotNull
     IAEKey web$copyIdentity();
 
-    /** Retains a stable native identity for tracking lookups; adapters may need stronger detachment than copies. */
-    default @NotNull IAEKey web$copyTrackingIdentity() {
-        return web$copyIdentity();
-    }
-
     /** Server-thread-only normalized native identity for icon fallback; null when unsupported. */
     default @Nullable StableKey web$getIconBaseKey() {
         return null;

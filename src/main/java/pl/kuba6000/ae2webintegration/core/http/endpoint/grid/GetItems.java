@@ -36,6 +36,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
@@ -201,6 +202,8 @@ public final class GetItems extends ISyncedRequest {
             addItem(items, AE2Controller.AE2Interface.web$stackOf(craftable, 0), grid, listing, mappings);
         }
 
+        StorageCapture capture = storageGrid.web$getStorageCapture();
+        if (capture != null) capture.retainIdentities(listing);
         listing.commit();
         respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
     }

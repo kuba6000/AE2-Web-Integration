@@ -13,7 +13,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -26,17 +28,108 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 class StorageCaptureTest {
 
     @Test
+    void ambiguousResourcesDoNotPreventHealthyFlowOrUnkeyedStockDisplay() {
+        assertAmbiguousResourceIsDiscarded(false);
+    }
+
+    @Test
+    void inventoryRetentionDiscardsAmbiguousResourcesWithoutFailingTheListing() {
+        assertAmbiguousResourceIsDiscarded(true);
+    }
+
+    private void assertAmbiguousResourceIsDiscarded(boolean retainFirst) {
+        for (boolean describeFirst : new boolean[] { false, true }) {
+            StableKey ambiguousKey = StableKey.random();
+            IAEKey original = resource(new AtomicInteger(), ambiguousKey);
+            IAEKey conflicting = resource(new AtomicInteger(), ambiguousKey);
+            IAEKey healthy = resource(new AtomicInteger());
+            List<IAEKey> craftables = new ArrayList<>();
+            IAEGrid grid = grid(craftables);
+            StorageCapture capture = new StorageCapture(grid, 3);
+            if (describeFirst) {
+                capture.recordFlow(capture.getItemKey(original), 1, 0);
+                assertEquals(
+                    1,
+                    capture.flushFlow(0)
+                        .flows()
+                        .size());
+            }
+            capture.recordFlow(capture.getItemKey(original), 7, 0);
+            capture.recordFlow(capture.getItemKey(healthy), 2, 3);
+            assertNull(capture.getItemKey(conflicting));
+            if (retainFirst) {
+                ItemIdentityRegistry.Listing listing = AE2Controller.itemIdentities.beginListing(grid);
+                assertDoesNotThrow(() -> capture.retainIdentities(listing));
+                listing.commit();
+            }
+            StorageObservation flow = capture.flushFlow(1000);
+            assertFalse(flow.flowComplete());
+            assertEquals(
+                1,
+                flow.flows()
+                    .size());
+            assertEquals(
+                healthy.web$getKey(),
+                flow.flows()
+                    .get(0)
+                    .resource()
+                    .itemKey());
+            assertEquals(
+                2,
+                flow.flows()
+                    .get(0)
+                    .input());
+            assertEquals(
+                3,
+                flow.flows()
+                    .get(0)
+                    .output());
+            capture.recordFlow(capture.getItemKey(healthy), 4, 0);
+            assertEquals(
+                4,
+                capture.flushFlow(2000)
+                    .flows()
+                    .get(0)
+                    .input());
+            craftables.add(original);
+            craftables.add(healthy);
+            StorageObservation stock = capture.observe(grid, null, 3000, true);
+            assertEquals(
+                2,
+                stock.rows()
+                    .size());
+            assertEquals(
+                1,
+                stock.rows()
+                    .stream()
+                    .filter(
+                        row -> row.resource()
+                            .itemKey() == null)
+                    .count());
+            assertTrue(
+                stock.rows()
+                    .stream()
+                    .anyMatch(
+                        row -> healthy.web$getKey()
+                            .equals(
+                                row.resource()
+                                    .itemKey())));
+        }
+    }
+
+    @Test
     void flowFlushDoesNotReadNativeStockAndViewerSamplesDoNotSplitFlowBuckets() {
-        StorageCapture capture = new StorageCapture(10);
+        IAEGrid owner = grid();
+        StorageCapture capture = new StorageCapture(owner, 10);
         IAEKey key = resource(new AtomicInteger());
-        int token = capture.prepareResource(key);
-        capture.recordFlow(token, 12, 3);
-        StorageObservation live = capture.observe(grid(), null, 1000, true, false);
+        StableKey itemKey = capture.getItemKey(key);
+        capture.recordFlow(itemKey, 12, 3);
+        StorageObservation live = capture.observe(owner, null, 1000, true, false);
         assertTrue(live.stockObserved());
         assertTrue(
             live.flows()
                 .isEmpty());
-        capture.recordFlow(token, 8, 2);
+        capture.recordFlow(itemKey, 8, 2);
         StorageObservation flows = capture.flushFlow(5000);
         assertFalse(flows.stockObserved());
         assertFalse(flows.full());
@@ -57,6 +150,34 @@ class StorageCaptureTest {
             capture.flushFlow(10000)
                 .flows()
                 .isEmpty());
+        capture.recordFlow(capture.getItemKey(key), 4, 1);
+        StorageObservation next = capture.flushFlow(15000);
+        assertEquals(
+            itemKey,
+            next.flows()
+                .get(0)
+                .resource()
+                .itemKey());
+        assertEquals(
+            4,
+            next.flows()
+                .get(0)
+                .input());
+        assertEquals(
+            1,
+            next.flows()
+                .get(0)
+                .output());
+        assertEquals(
+            20,
+            flows.flows()
+                .get(0)
+                .input());
+        assertEquals(
+            5,
+            flows.flows()
+                .get(0)
+                .output());
     }
 
     @Test
@@ -71,11 +192,12 @@ class StorageCaptureTest {
                 if (method.getName()
                     .equals("web$supportsStableIdentity")) return true;
                 if (method.getName()
-                    .equals("web$copyTrackingIdentity")) throw cause;
+                    .equals("web$copyIdentity")) throw cause;
                 throw new AssertionError("Unexpected native operation " + method.getName());
             });
-        StorageCapture capture = new StorageCapture(10);
-        assertEquals(-1, capture.prepareResource(key));
+        IAEGrid grid = grid();
+        StorageCapture capture = new StorageCapture(grid, 10);
+        assertNull(capture.getItemKey(key));
         IllegalStateException observed = assertThrows(
             IllegalStateException.class,
             () -> capture.observe(grid(Collections.singletonList(key)), null, 1000, true));
@@ -99,10 +221,10 @@ class StorageCaptureTest {
             }
         });
         IAEGrid grid = grid(Collections.emptyList(), stacks);
-        StorageCapture capture = new StorageCapture(1);
-        capture.prepareResource(resource(new AtomicInteger()));
-        int token = capture.prepareResource(unsupported);
-        capture.recordFlow(token, 10, 3);
+        StorageCapture capture = new StorageCapture(grid, 1);
+        capture.getItemKey(resource(new AtomicInteger()));
+        StableKey itemKey = capture.getItemKey(unsupported);
+        capture.recordFlow(itemKey, 10, 3);
         StorageObservation baseline = capture.observe(grid, null, 1000, true);
         assertTrue(baseline.flowComplete());
         assertTrue(
@@ -138,8 +260,9 @@ class StorageCaptureTest {
     @Test
     void unsupportedNativeCopyIsAnUnkeyedDisplayResourceNotACapacityFailure() {
         IAEKey unsupported = unsupported(true);
-        StorageCapture capture = new StorageCapture(10);
-        capture.recordFlow(capture.prepareResource(unsupported), 10, 0);
+        IAEGrid grid = grid();
+        StorageCapture capture = new StorageCapture(grid, 10);
+        capture.recordFlow(capture.getItemKey(unsupported), 10, 0);
         StorageObservation result = capture.observe(grid(Collections.singletonList(unsupported)), null, 1000, true);
         assertTrue(result.flowComplete());
         assertTrue(
@@ -160,10 +283,7 @@ class StorageCaptureTest {
                 if (method.getName()
                     .equals("web$getKey")) throw new IllegalArgumentException("Native NBT cannot be encoded");
                 if (method.getName()
-                    .equals("web$copyTrackingIdentity")
-                    || method.getName()
-                        .equals("web$copyIdentity"))
-                    return proxy;
+                    .equals("web$copyIdentity")) return proxy;
                 return method.invoke(metadata, args);
             });
         IAEGenericStack stack = new IAEGenericStack() {
@@ -177,12 +297,12 @@ class StorageCaptureTest {
             }
         };
         IAEGrid grid = grid(Collections.emptyList(), Collections.singletonList(stack));
-        StorageCapture capture = new StorageCapture(10);
+        StorageCapture capture = new StorageCapture(grid, 10);
         assertTrue(metadata.web$supportsStableIdentity());
-        capture.recordFlow(capture.prepareResource(unencodable), Long.MAX_VALUE, 3);
-        capture.recordFlow(capture.prepareResource(unencodable), 1, 0);
+        capture.recordFlow(capture.getItemKey(unencodable), Long.MAX_VALUE, 3);
+        capture.recordFlow(capture.getItemKey(unencodable), 1, 0);
         StorageObservation observed = capture.observe(grid, null, 1000, true);
-        assertTrue(observed.flowComplete());
+        assertFalse(observed.flowComplete());
         assertTrue(
             observed.flows()
                 .isEmpty());
@@ -197,7 +317,7 @@ class StorageCaptureTest {
                 .get(0)
                 .resource()
                 .quantity());
-        capture.recordFlow(capture.prepareResource(unencodable), 2, 0);
+        capture.recordFlow(capture.getItemKey(unencodable), 2, 0);
         StorageObservation update = capture.observe(grid, null, 2000, false);
         assertEquals(
             1,
@@ -206,16 +326,17 @@ class StorageCaptureTest {
         assertTrue(
             update.flows()
                 .isEmpty());
-        assertTrue(update.flowComplete());
+        assertFalse(update.flowComplete());
     }
 
     @Test
     void supportedFlowOverflowStillMarksIncompleteCoverage() {
-        StorageCapture capture = new StorageCapture(10);
-        int token = capture.prepareResource(resource(new AtomicInteger()));
-        capture.recordFlow(token, Long.MAX_VALUE, 0);
-        capture.recordFlow(token, 1, 0);
-        StorageObservation result = capture.observe(grid(), null, 1000, true);
+        IAEGrid grid = grid();
+        StorageCapture capture = new StorageCapture(grid, 10);
+        StableKey itemKey = capture.getItemKey(resource(new AtomicInteger()));
+        capture.recordFlow(itemKey, Long.MAX_VALUE, 0);
+        capture.recordFlow(itemKey, 1, 0);
+        StorageObservation result = capture.observe(grid, null, 1000, true);
         assertFalse(result.flowComplete());
         assertEquals(
             Long.MAX_VALUE,
@@ -234,7 +355,7 @@ class StorageCaptureTest {
                         return proxy == args[0];
                     case "web$supportsStableIdentity":
                         return claimsSupport;
-                    case "web$copyTrackingIdentity":
+                    case "web$copyIdentity":
                         if (claimsSupport) throw new UnsupportedOperationException("No native copy");
                         throw new AssertionError("Unsupported resource must not be copied");
                     case "web$getKey":
@@ -262,8 +383,9 @@ class StorageCaptureTest {
     void reachingCapacityDoesNotAttemptAnotherNativeCopy() {
         AtomicInteger firstCopies = new AtomicInteger();
         AtomicInteger otherCopies = new AtomicInteger();
-        StorageCapture capture = new StorageCapture(1);
-        capture.prepareResource(resource(firstCopies));
+        IAEGrid grid = grid();
+        StorageCapture capture = new StorageCapture(grid, 1);
+        capture.getItemKey(resource(firstCopies));
         IAEKey other = resource(otherCopies);
         assertThrows(
             IllegalStateException.class,
@@ -275,8 +397,8 @@ class StorageCaptureTest {
     @Test
     void absoluteNativeBatchesPublishOnlyAfterSuccessfulCompletion() {
         IAEKey key = resource(new AtomicInteger());
-        StorageCapture capture = new StorageCapture(10);
         IAEGrid grid = grid();
+        StorageCapture capture = new StorageCapture(grid, 10);
         capture.observe(grid, null, 0, true);
         assertFalse(capture.requiresReconciliation());
         capture.beginAbsoluteChanges();
@@ -305,12 +427,13 @@ class StorageCaptureTest {
     @Test
     void capacityAndArithmeticOverflowExposeGapsWithoutWrappingCounts() {
         IAEKey first = resource(new AtomicInteger());
-        StorageCapture capture = new StorageCapture(1);
-        int token = capture.prepareResource(first);
-        assertEquals(-1, capture.prepareResource(resource(new AtomicInteger())));
-        capture.recordFlow(token, Long.MAX_VALUE, 0);
-        capture.recordFlow(token, 1, 0);
-        StorageObservation result = capture.observe(grid(), null, 100, true);
+        IAEGrid grid = grid();
+        StorageCapture capture = new StorageCapture(grid, 1);
+        StableKey itemKey = capture.getItemKey(first);
+        assertNull(capture.getItemKey(resource(new AtomicInteger())));
+        capture.recordFlow(itemKey, Long.MAX_VALUE, 0);
+        capture.recordFlow(itemKey, 1, 0);
+        StorageObservation result = capture.observe(grid, null, 100, true);
         assertFalse(result.flowComplete());
         assertEquals(
             Long.MAX_VALUE,
@@ -323,10 +446,11 @@ class StorageCaptureTest {
     void unexpectedProducerCannotReadNativeIdentityAndMarksIncompleteCoverage() throws Exception {
         AtomicInteger copies = new AtomicInteger();
         IAEKey key = resource(copies);
-        StorageCapture capture = new StorageCapture(10);
+        IAEGrid grid = grid();
+        StorageCapture capture = new StorageCapture(grid, 10);
         Thread other = new Thread(() -> {
             assertFalse(capture.isProducerThread());
-            capture.prepareResource(key);
+            capture.getItemKey(key);
             capture.markChanged(key);
             capture.beginAbsoluteChanges();
             capture.endAbsoluteChanges(false);
@@ -335,15 +459,15 @@ class StorageCaptureTest {
         other.join();
         assertEquals(0, copies.get());
         assertFalse(
-            capture.observe(grid(), null, 100, true)
+            capture.observe(grid, null, 100, true)
                 .flowComplete());
     }
 
     @Test
     void fullSnapshotsIncludeCraftableOnlyResourcesAndIncrementalUpdatesPreserveCraftability() {
         IAEKey key = resource(new AtomicInteger());
-        StorageCapture capture = new StorageCapture(10);
         IAEGrid grid = grid(Collections.singletonList(key));
+        StorageCapture capture = new StorageCapture(grid, 10);
         StorageObservation first = capture.observe(grid, null, 0, true);
         assertEquals(
             0,
@@ -367,12 +491,13 @@ class StorageCaptureTest {
     void acceptedInputAndOutputRemainSeparateFromObservedHoldings() {
         AtomicInteger copies = new AtomicInteger();
         IAEKey resource = resource(copies);
-        StorageCapture capture = new StorageCapture(10);
-        int token = capture.prepareResource(resource);
-        capture.recordFlow(token, 100, 0);
-        capture.recordFlow(capture.prepareResource(resource), 0, 40);
+        IAEGrid grid = grid();
+        StorageCapture capture = new StorageCapture(grid, 10);
+        StableKey itemKey = capture.getItemKey(resource);
+        capture.recordFlow(itemKey, 100, 0);
+        capture.recordFlow(capture.getItemKey(resource), 0, 40);
         assertEquals(1, copies.get());
-        StorageObservation observation = capture.observe(grid(), null, 1000, true);
+        StorageObservation observation = capture.observe(grid, null, 1000, true);
         assertEquals(
             1,
             observation.flows()
@@ -392,7 +517,7 @@ class StorageCaptureTest {
                 .isEmpty());
         assertTrue(observation.flowComplete());
         assertTrue(
-            capture.observe(grid(), null, 2000, false)
+            capture.observe(grid, null, 2000, false)
                 .flows()
                 .isEmpty());
     }
@@ -458,7 +583,10 @@ class StorageCaptureTest {
     }
 
     static IAEKey resource(AtomicInteger copies) {
-        StableKey itemKey = StableKey.random();
+        return resource(copies, StableKey.random());
+    }
+
+    static IAEKey resource(AtomicInteger copies, StableKey itemKey) {
         return new IAEKey() {
 
             public @NotNull ResourceType web$getResourceType() {

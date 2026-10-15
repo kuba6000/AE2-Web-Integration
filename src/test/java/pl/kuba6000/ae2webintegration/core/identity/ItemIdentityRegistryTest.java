@@ -20,6 +20,24 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
 class ItemIdentityRegistryTest {
 
     @Test
+    void aListingCanKeepAnAbsentResourceNeededByPendingFlow() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid grid = grid();
+        StableKey key = registry.remember(grid, new Resource("removed", false));
+        WeakReference<IAEKey> identity = new WeakReference<>(registry.resolve(key));
+        ItemIdentityRegistry.Listing listing = registry.beginListing(grid);
+        listing.retain(key);
+        listing.commit();
+        System.gc();
+        assertNotNull(registry.resolve(key), "A removed item is still needed to describe its pending flow");
+
+        registry.beginListing(grid)
+            .commit();
+        awaitCollected(identity, registry::cleanUp);
+        assertNull(registry.resolve(key));
+    }
+
+    @Test
     void cpuAndInventorySnapshotsRetainIndependentResourcesAndShareBaseMemo() {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IIdentityHolder grid = grid();
@@ -166,7 +184,7 @@ class ItemIdentityRegistryTest {
                 .toString());
         assertEquals(0, nextPoll.encodings);
         listing.commit();
-        awaitCollected(removed, () -> registry.resolve(gold));
+        awaitCollected(removed, registry::cleanUp);
         assertNull(registry.resolve(gold));
         assertNotNull(registry.resolve(iron));
         assertEquals(iron, registry.remember(grid, nextPoll));
@@ -190,8 +208,8 @@ class ItemIdentityRegistryTest {
         StableKey key = StableKey.create(sink -> sink.putBytes("iron".getBytes(StandardCharsets.UTF_8)));
         WeakReference<IAEGrid> owner = rememberTemporaryGrid(registry);
         WeakReference<IAEKey> identity = new WeakReference<>(registry.resolve(key));
-        awaitCollected(owner, () -> registry.resolve(key));
-        awaitCollected(identity, () -> registry.resolve(key));
+        awaitCollected(owner, registry::cleanUp);
+        awaitCollected(identity, registry::cleanUp);
         assertNull(registry.resolve(key));
     }
 
@@ -234,6 +252,7 @@ class ItemIdentityRegistryTest {
         listing.commit();
         assertThrows(IllegalStateException.class, listing::commit);
         assertThrows(IllegalStateException.class, () -> listing.remember(new Resource("gold", true)));
+        assertThrows(IllegalStateException.class, () -> listing.retain(new Resource("gold", true).web$getKey()));
     }
 
     private static WeakReference<IAEGrid> rememberTemporaryGrid(ItemIdentityRegistry registry) {

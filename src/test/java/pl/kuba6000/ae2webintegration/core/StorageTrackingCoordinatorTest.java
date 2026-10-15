@@ -3,6 +3,8 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
+import java.net.HttpURLConnection;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
@@ -19,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -38,6 +41,83 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 class StorageTrackingCoordinatorTest extends GridTestScope {
+
+    @Test
+    void disablingFlowReleasesRetiredIdentitiesWhileTheGridRemainsLive() throws Exception {
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710010);
+        StableKey gridKey = TestGridFixtures.resolvedKey(grid);
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
+        assertNotNull(data);
+        data.getSettings()
+            .setFlowTracked(true);
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            StorageCapture capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            StableKey itemKey = capture.getItemKey(new ItemIdentityRequestTest.Resource("transient-flow", 1, false));
+            assertNotNull(itemKey);
+            capture.recordFlow(itemKey, 1, 1);
+            WeakReference<IAEKey> identity = new WeakReference<>(AE2Controller.itemIdentities.resolve(itemKey));
+            assertNotNull(identity.get());
+            data.getSettings()
+                .setFlowTracked(false);
+            coordinator.tick(TestGridFixtures.ae(grid), 2000);
+            assertNull(grid.web$getStorageCapture());
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+            while (identity.get() != null && System.nanoTime() < deadline) {
+                System.gc();
+                AE2Controller.itemIdentities.cleanUp();
+                Thread.sleep(10);
+            }
+            assertNull(
+                identity.get(),
+                "Retired flow must not retain native identities for the grid's remaining lifetime");
+            assertNull(grid.web$getStorageCapture());
+        }
+    }
+
+    @Test
+    void inventoryListingRetainsRemovedResourcesUntilTheirFlowIsFlushed() throws Exception {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("removed-iron", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710010, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        data.getSettings()
+            .setFlowTracked(true);
+        InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
+        try (StorageTrackingService service = new StorageTrackingService(store, 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            StorageCapture capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            capture.recordFlow(capture.getItemKey(iron), 0, 20);
+            grid.rows.clear();
+            GetItems request = new GetItems();
+            assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + key)));
+            request.runOnServerThread(TestGridFixtures.ae(grid));
+            assertEquals(
+                HttpURLConnection.HTTP_OK,
+                request.getResponse()
+                    .httpStatus());
+            System.gc();
+            AE2Controller.itemIdentities.cleanUp();
+            coordinator.tick(TestGridFixtures.ae(grid), 6000);
+            service.close();
+            assertTrue(
+                store.read(key, iron.web$getKey(), 0, 100)
+                    .points()
+                    .stream()
+                    .anyMatch(point -> point.input() == 0 && point.output() == 20));
+        }
+    }
 
     @Test
     void asynchronousFailureReconcilesAtNextViewerRead() throws Exception {
@@ -162,12 +242,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         StableKey base = StableKey.random();
         ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("icon-iron", 20, false) {
 
-            public @NotNull IAEKey web$copyTrackingIdentity() {
-                copies.incrementAndGet();
-                return this;
-            }
-
             public @NotNull IAEKey web$copyIdentity() {
+                copies.incrementAndGet();
                 return this;
             }
 
@@ -253,7 +329,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             awaitRevision(service, key, 1);
             StorageCapture capture = grid.web$getStorageCapture();
             assertNotNull(capture);
-            capture.recordFlow(capture.prepareResource(iron), 7, 0);
+            capture.recordFlow(capture.getItemKey(iron), 7, 0);
             grid.rows.clear();
             grid.rows.add(new ItemIdentityRequestTest.Resource("iron", 27, false));
             coordinator.observeForViewer(grid, 2000);
@@ -336,7 +412,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             coordinator.tick(TestGridFixtures.ae(grid), 1000);
             assertNotNull(capture[0]);
             ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("iron", 20, false);
-            capture[0].recordFlow(capture[0].prepareResource(iron), 7, 3);
+            capture[0].recordFlow(capture[0].getItemKey(iron), 7, 3);
             coordinator.tick(TestGridFixtures.ae(grid), 6000);
             service.close();
             assertTrue(
@@ -355,10 +431,10 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         ItemIdentityRequestTest.Resource broken = new ItemIdentityRequestTest.Resource("broken", 1, false) {
 
             @Override
-            public @NotNull IAEKey web$copyTrackingIdentity() {
+            public @NotNull IAEKey web$copyIdentity() {
                 attempts.incrementAndGet();
                 if (failing.get()) throw cause;
-                return super.web$copyTrackingIdentity();
+                return super.web$copyIdentity();
             }
         };
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710003, broken);
@@ -395,7 +471,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         ItemIdentityRequestTest.Resource unsupported = new ItemIdentityRequestTest.Resource("unsupported", 1, false) {
 
             @Override
-            public @NotNull IAEKey web$copyTrackingIdentity() {
+            public @NotNull IAEKey web$copyIdentity() {
                 attempts.incrementAndGet();
                 throw new IllegalStateException("Broken native capture");
             }
@@ -455,7 +531,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             grid.web$getStorageCapture()
                 .recordFlow(
                     grid.web$getStorageCapture()
-                        .prepareResource(iron),
+                        .getItemKey(iron),
                     7,
                     3);
             coordinator.tick(TestGridFixtures.ae(grid), 2000);

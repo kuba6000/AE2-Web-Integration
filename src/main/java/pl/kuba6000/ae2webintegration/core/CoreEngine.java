@@ -130,6 +130,7 @@ public class CoreEngine {
     public static void onServerTick() {
         drainRequests(System::nanoTime);
         runPlanMaintenance(System.nanoTime());
+        AE2Controller.itemIdentities.cleanUp();
         StorageTrackingCoordinator coordinator = storageCoordinator;
         TerminalStreams streams = terminalStreams;
         IAE ae = AE2Controller.AE2Interface;

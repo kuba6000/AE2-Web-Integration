@@ -30,7 +30,6 @@ public final class ItemIdentityRegistry {
 
     /** Retain an output identity until its owner next publishes a complete resource snapshot. */
     public @NotNull StableKey remember(@NotNull IIdentityHolder owner, @NotNull IAEKey resource) {
-        cleanUp();
         Entry entry = findOrCreate(resource);
         owners.asMap()
             .computeIfAbsent(owner, ignored -> new HashSet<>())
@@ -40,13 +39,11 @@ public final class ItemIdentityRegistry {
 
     /** Start a replacement list; the previous list stays owned until commit succeeds. */
     public @NotNull Listing beginListing(@NotNull IIdentityHolder owner) {
-        cleanUp();
         return new Listing(owner);
     }
 
     /** Resolve only after an exact icon miss; absence is memoized for the retained identity too. */
     public @Nullable StableKey resolveIconBase(@NotNull StableKey key) {
-        cleanUp();
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry entry = entries.getIfPresent(key);
         if (entry == null) return null;
@@ -63,7 +60,6 @@ public final class ItemIdentityRegistry {
     }
 
     public @Nullable IAEKey resolve(@NotNull StableKey key) {
-        cleanUp();
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry entry = entries.getIfPresent(key);
         return entry == null ? null : entry.identity;
@@ -101,7 +97,8 @@ public final class ItemIdentityRegistry {
         return entry;
     }
 
-    private void cleanUp() {
+    /** Periodic server-thread maintenance, independent of resource lookups and transfers. */
+    public void cleanUp() {
         // Weak owner keys use instance identity. Remove collected owners before cleaning global
         // weak-value indexes; neither operation scans the live item catalogues.
         owners.cleanUp();
@@ -124,6 +121,15 @@ public final class ItemIdentityRegistry {
             Entry entry = findOrCreate(resource);
             collected.add(entry);
             return entry.key;
+        }
+
+        /** Keep a known resource needed by tracking even when it is absent from the new inventory. */
+        public void retain(@NotNull StableKey key) {
+            requireOpen();
+            if (ambiguous.contains(key)) throw new Ambiguous();
+            Entry entry = entries.getIfPresent(key);
+            if (entry == null) throw new IllegalStateException("Resource identity is no longer retained: " + key);
+            collected.add(entry);
         }
 
         public void commit() {

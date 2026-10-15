@@ -158,7 +158,7 @@ class CoreEngineTest {
             ItemIdentityRequestTest.Resource broken = new ItemIdentityRequestTest.Resource("broken", 1, false) {
 
                 @Override
-                public @NotNull IAEKey web$copyTrackingIdentity() {
+                public @NotNull IAEKey web$copyIdentity() {
                     copies.incrementAndGet();
                     throw new IllegalStateException("Native copy failed");
                 }
