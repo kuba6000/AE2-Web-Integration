@@ -16,6 +16,7 @@ import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.data.IAEStack;
 import appeng.me.cache.GridStorageCache;
 import appeng.me.cache.NetworkMonitor;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
@@ -42,7 +43,7 @@ public abstract class NetworkMonitorTrackingMixin<T extends IAEStack<T>> {
         }
         if (web$transferDepth != 0) return original.call(input, mode, source);
         long requested = input.getStackSize();
-        int resource = input instanceof IAEKey ? capture.prepareResource((IAEKey) input) : -1;
+        StableKey resource = input instanceof IAEKey ? capture.getItemKey((IAEKey) input) : null;
         web$transferDepth++;
         try {
             T remainder = original.call(input, mode, source);
@@ -69,7 +70,7 @@ public abstract class NetworkMonitorTrackingMixin<T extends IAEStack<T>> {
             return original.call(request, mode, source);
         }
         if (web$transferDepth != 0) return original.call(request, mode, source);
-        int resource = request instanceof IAEKey ? capture.prepareResource((IAEKey) request) : -1;
+        StableKey resource = request instanceof IAEKey ? capture.getItemKey((IAEKey) request) : null;
         web$transferDepth++;
         try {
             T extracted = original.call(request, mode, source);
