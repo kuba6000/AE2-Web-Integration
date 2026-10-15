@@ -58,9 +58,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             coordinator.tick(TestGridFixtures.ae(grid), 1000);
             StorageCapture capture = grid.web$getStorageCapture();
             assertNotNull(capture);
-            StableKey itemKey = capture.getItemKey(new ItemIdentityRequestTest.Resource("transient-flow", 1, false));
-            assertNotNull(itemKey);
-            capture.recordFlow(itemKey, 1, 1);
+            IAEKey resource = new ItemIdentityRequestTest.Resource("transient-flow", 1, false);
+            StableKey itemKey = resource.web$getKey();
+            capture.recordFlow(resource, 1, 1);
             WeakReference<IAEKey> identity = new WeakReference<>(AE2Controller.itemIdentities.resolve(itemKey));
             assertNotNull(identity.get());
             data.getSettings()
@@ -98,7 +98,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             coordinator.tick(TestGridFixtures.ae(grid), 1000);
             StorageCapture capture = grid.web$getStorageCapture();
             assertNotNull(capture);
-            capture.recordFlow(capture.getItemKey(iron), 0, 20);
+            capture.recordFlow(iron, 0, 20);
             grid.rows.clear();
             GetItems request = new GetItems();
             assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + key)));
@@ -329,7 +329,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             awaitRevision(service, key, 1);
             StorageCapture capture = grid.web$getStorageCapture();
             assertNotNull(capture);
-            capture.recordFlow(capture.getItemKey(iron), 7, 0);
+            capture.recordFlow(iron, 7, 0);
             grid.rows.clear();
             grid.rows.add(new ItemIdentityRequestTest.Resource("iron", 27, false));
             coordinator.observeForViewer(grid, 2000);
@@ -412,7 +412,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             coordinator.tick(TestGridFixtures.ae(grid), 1000);
             assertNotNull(capture[0]);
             ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("iron", 20, false);
-            capture[0].recordFlow(capture[0].getItemKey(iron), 7, 3);
+            capture[0].recordFlow(iron, 7, 3);
             coordinator.tick(TestGridFixtures.ae(grid), 6000);
             service.close();
             assertTrue(
@@ -529,11 +529,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     .resource()
                     .quantity());
             grid.web$getStorageCapture()
-                .recordFlow(
-                    grid.web$getStorageCapture()
-                        .getItemKey(iron),
-                    7,
-                    3);
+                .recordFlow(iron, 7, 3);
             coordinator.tick(TestGridFixtures.ae(grid), 2000);
             StorageSnapshot idle = service.snapshot(key);
             assertNotNull(idle);

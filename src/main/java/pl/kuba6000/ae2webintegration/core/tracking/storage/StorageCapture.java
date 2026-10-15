@@ -57,15 +57,14 @@ public final class StorageCapture {
         return Thread.currentThread() == producer;
     }
 
-    /** Resolves identity before native transfer; capture failures must never interrupt gameplay. */
-    public @Nullable StableKey getItemKey(@NotNull IAEKey resource) {
+    /** Native event callbacks must not propagate capture failures into gameplay. */
+    private @Nullable Entry tryAdmit(IAEKey resource) {
         if (!isProducerThread()) {
             markGap();
             return null;
         }
         try {
-            Entry entry = admit(resource);
-            return entry == null ? null : entry.key;
+            return admit(resource);
         } catch (UnsupportedOperationException unsupported) {
             hasUnkeyedResources = true;
             return null;
@@ -94,19 +93,11 @@ public final class StorageCapture {
     }
 
     /** Called only for a completed real operation; rejected and simulated operations add nothing. */
-    public void recordFlow(@Nullable StableKey key, long input, long output) {
+    public void recordFlow(@NotNull IAEKey resource, long input, long output) {
         if (input < 0 || output < 0) throw new IllegalArgumentException("Flow must be nonnegative");
         if (input == 0 && output == 0) return;
-        if (!isProducerThread()) {
-            markGap();
-            return;
-        }
-        if (key == null) return;
-        Entry entry = resources.get(key);
-        if (entry == null) {
-            markGap();
-            return;
-        }
+        Entry entry = tryAdmit(resource);
+        if (entry == null) return;
         if (flowEnabled) {
             if (!entry.flowPending) {
                 entry.flowPending = true;
@@ -120,9 +111,8 @@ public final class StorageCapture {
     }
 
     public void markChanged(@NotNull IAEKey resource) {
-        StableKey key = getItemKey(resource);
-        if (key == null) return;
-        Entry entry = resources.get(key);
+        Entry entry = tryAdmit(resource);
+        if (entry == null) return;
         dirty(entry);
         entry.hasAbsolute = false;
     }
@@ -165,13 +155,12 @@ public final class StorageCapture {
     }
 
     public void absoluteChanged(@NotNull IAEKey resource, long amount) {
-        StableKey key = getItemKey(resource);
-        if (key == null) return;
+        Entry entry = tryAdmit(resource);
+        if (entry == null) return;
         if (absoluteDepth == 0 || amount < 0) {
             markGap();
             return;
         }
-        Entry entry = resources.get(key);
         if (!entry.staged) {
             staged.add(entry);
             entry.staged = true;
@@ -400,7 +389,7 @@ public final class StorageCapture {
     }
 
     private boolean needsUnkeyedRead(IAEKey key) {
-        return getItemKey(key) == null;
+        return tryAdmit(key) == null;
     }
 
     private StorageObservation.Row unkeyedRow(IAEGrid grid, IAEKey key, long amount) {
