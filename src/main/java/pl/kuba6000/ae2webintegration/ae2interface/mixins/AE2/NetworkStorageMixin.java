@@ -67,6 +67,6 @@ public class NetworkStorageMixin implements IStorageCaptureOwner {
     @Inject(method = { "mount", "unmount" }, at = @At("RETURN"))
     private void web$mountsChanged(CallbackInfo ci) {
         // Queued operations are reported when the native operation flushes and actually applies them.
-        if (!mountsInUse && web$storageCapture != null) web$storageCapture.invalidate();
+        if (!mountsInUse && web$storageCapture != null) web$storageCapture.invalidateTerminal();
     }
 }
