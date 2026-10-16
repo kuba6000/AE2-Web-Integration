@@ -10,8 +10,8 @@ import org.spongepowered.asm.mixin.Shadow;
 
 import appeng.api.storage.data.IAEItemStack;
 import appeng.util.item.AEItemStack;
-import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyIconBaseline;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyResourceBaseline;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -32,14 +32,15 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
     }
 
     @Override
-    default @Nullable StableKey web$getIconBaseKey() {
+    default @Nullable StableKey web$getBaseKey() {
         IAEItemStack stack = this;
         if (!(stack instanceof AEItemStack nativeStack)) return null;
         Item item = nativeStack.getItem();
         int sourceMaxDamage = !item.getHasSubtypes() && item.isDamageable()
             ? item.getMaxDamage(nativeStack.asItemStackRepresentation())
             : 0;
-        return LegacyItemIdentity.encode(LegacyIconBaseline.item(item, nativeStack.getItemDamage(), sourceMaxDamage));
+        return LegacyItemIdentity
+            .encode(LegacyResourceBaseline.item(item, nativeStack.getItemDamage(), sourceMaxDamage));
     }
 
     @Override

@@ -12,8 +12,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import appeng.util.Platform;
-import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyIconBaseline;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyResourceBaseline;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCandidate;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -88,7 +88,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         public @NotNull IconCandidate baseline() {
             return new ItemCandidate(
                 context() + "/base",
-                LegacyIconBaseline.item(stack.getItem(), metadata, sourceMaxDamage));
+                LegacyResourceBaseline.item(stack.getItem(), metadata, sourceMaxDamage));
         }
 
         @Override
