@@ -16,8 +16,8 @@ import appeng.util.item.AEItemStack;
 import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.registry.GameData;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.FluidCraftResources;
-import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyIconBaseline;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyResourceBaseline;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -51,14 +51,14 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
     }
 
     @Override
-    default @Nullable StableKey web$getIconBaseKey() {
+    default @Nullable StableKey web$getBaseKey() {
         IAEStack<?> stack = this;
         if (stack instanceof AEItemStack item) {
             // Native durability hooks must only see an owned representation, never shared AE NBT.
-            return LegacyItemIdentity.encode(LegacyIconBaseline.item(item.getItemStack()));
+            return LegacyItemIdentity.encode(LegacyResourceBaseline.item(item.getItemStack()));
         }
         if (stack instanceof AEFluidStack fluid) {
-            return LegacyItemIdentity.encode(LegacyIconBaseline.fluid(fluid.getFluidStack()));
+            return LegacyItemIdentity.encode(LegacyResourceBaseline.fluid(fluid.getFluidStack()));
         }
         return null;
     }
