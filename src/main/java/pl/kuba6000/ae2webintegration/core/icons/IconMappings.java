@@ -41,7 +41,7 @@ public final class IconMappings {
     public @Nullable Reference resolve(@NotNull StableKey key, @NotNull ItemIdentityRegistry registry) {
         IconPack.Location location = pack.find(key);
         if (location == null) {
-            StableKey base = registry.resolveIconBase(key);
+            StableKey base = registry.resolveBaseKey(key);
             if (base != null) location = pack.find(base);
         }
         return reference(location);

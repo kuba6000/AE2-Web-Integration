@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -22,7 +21,6 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridFilter;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
-import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
@@ -42,7 +40,6 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     private static final long FAILURE_RETRY_MILLIS = TimeUnit.SECONDS.toMillis(30);
     private final StorageTrackingService service;
     private final TerminalState terminals;
-    private final Supplier<@Nullable IconPack> iconPack;
     private final GridIdentityRegistry identities;
     private final ConfigSettings.ResourceTracking settings;
     private final Map<StableKey, Binding> bindings = new HashMap<>();
@@ -53,19 +50,12 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
 
     public StorageTrackingCoordinator(@NotNull StorageTrackingService service, @NotNull GridIdentityRegistry identities,
         @NotNull ConfigSettings.ResourceTracking settings) {
-        this(service, identities, settings, () -> null);
+        this(service, identities, settings, new TerminalState());
     }
 
     public StorageTrackingCoordinator(@NotNull StorageTrackingService service, @NotNull GridIdentityRegistry identities,
-        @NotNull ConfigSettings.ResourceTracking settings, @NotNull Supplier<@Nullable IconPack> iconPack) {
-        this(service, identities, settings, iconPack, new TerminalState());
-    }
-
-    public StorageTrackingCoordinator(@NotNull StorageTrackingService service, @NotNull GridIdentityRegistry identities,
-        @NotNull ConfigSettings.ResourceTracking settings, @NotNull Supplier<@Nullable IconPack> iconPack,
-        @NotNull TerminalState terminals) {
+        @NotNull ConfigSettings.ResourceTracking settings, @NotNull TerminalState terminals) {
         this.terminals = terminals;
-        this.iconPack = iconPack;
         this.service = service;
         this.identities = identities;
         this.settings = settings;
@@ -91,41 +81,34 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     }
 
     /** Renews an authorized viewer lease without reading inventory or resource metadata. */
-    public void touchViewer(@NotNull IAEGrid grid, long nowMillis, boolean icons) {
+    public void touchViewer(@NotNull IAEGrid grid, long nowMillis) {
         StableKey key = identities.getKey(grid);
         if (key == null || !GridFilter.isUsable(grid)) return;
         Binding binding = binding(key, grid, gridSettings(key), nowMillis);
-        activate(binding, nowMillis, icons);
+        activate(binding, nowMillis);
     }
 
-    private void activate(Binding binding, long nowMillis, boolean icons) {
+    private void activate(Binding binding, long nowMillis) {
         boolean wasActive = binding.activeUntil > nowMillis;
         if (terminals.activate(binding.key, binding.generation, nowMillis)) binding.capture.invalidate();
         binding.activeUntil = nowMillis + VIEWER_LEASE_MILLIS;
-        boolean needsIcons = icons && binding.iconsUntil <= nowMillis;
-        if (icons) binding.iconsUntil = nowMillis + VIEWER_LEASE_MILLIS;
-        if (needsIcons) binding.capture.invalidate();
-        if ((!wasActive || needsIcons) && binding.lastFailure == null)
+        if (!wasActive && binding.lastFailure == null)
             binding.nextViewerRead = Math.min(binding.nextViewerRead, nowMillis);
     }
 
     /** Called by an authorized terminal read on the game thread; the lease does not enable history. */
     public @Nullable StorageSnapshot observeForViewer(@NotNull IAEGrid grid, long nowMillis) {
-        return observeForViewer(grid, nowMillis, false);
-    }
-
-    public @Nullable StorageSnapshot observeForViewer(@NotNull IAEGrid grid, long nowMillis, boolean icons) {
-        prepareForViewer(grid, nowMillis, icons);
+        prepareForViewer(grid, nowMillis);
         StableKey key = identities.getKey(grid);
         return key == null ? null : terminals.snapshot(key);
     }
 
     /** Updates shared state without materializing a full response; the HTTP bootstrap reserves its own rows. */
-    public void prepareForViewer(@NotNull IAEGrid grid, long nowMillis, boolean icons) {
+    public void prepareForViewer(@NotNull IAEGrid grid, long nowMillis) {
         StableKey key = identities.getKey(grid);
         if (key == null || !GridFilter.isUsable(grid)) return;
         Binding binding = binding(key, grid, gridSettings(key), nowMillis);
-        activate(binding, nowMillis, icons);
+        activate(binding, nowMillis);
         if (due(binding, nowMillis)) observe(binding, grid, nowMillis);
         if (binding.lastFailure != null) throw binding.lastFailure;
     }
@@ -171,7 +154,6 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         Binding binding = bindings.get(key);
         if (binding == null || binding.grid.get() != grid || binding.stock != stock || binding.flow != flow) {
             long activeUntil = binding == null ? 0 : binding.activeUntil;
-            long iconsUntil = binding == null ? 0 : binding.iconsUntil;
             if (binding != null) {
                 detach(binding);
                 scheduled.remove(binding);
@@ -182,7 +164,6 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 grid,
                 new StorageCapture(grid, settings.maxResourcesPerGrid, flow));
             binding.activeUntil = activeUntil;
-            binding.iconsUntil = iconsUntil;
             binding.stock = stock;
             binding.flow = flow;
             binding.nextFlowFlush = nowMillis + TimeUnit.SECONDS.toMillis(settings.flowFlushIntervalSeconds);
@@ -219,12 +200,9 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 terminals.invalidate(binding.key, binding.generation);
                 binding.terminalEpoch = terminalEpoch;
             }
-            StorageObservation observation = stockSample || liveRead ? binding.capture.observe(
-                grid,
-                binding.iconsUntil > nowMillis ? iconPack.get() : null,
-                nowMillis,
-                stockSample || nowMillis >= binding.nextFull,
-                flowFlush) : binding.capture.flushFlow(nowMillis);
+            StorageObservation observation = stockSample || liveRead
+                ? binding.capture.observe(grid, nowMillis, stockSample || nowMillis >= binding.nextFull, flowFlush)
+                : binding.capture.flushFlow(nowMillis);
             if (observation.full())
                 binding.nextFull = nowMillis + TimeUnit.SECONDS.toMillis(settings.reconciliationIntervalSeconds);
             // Native reads may themselves deliver a full-list invalidation.
@@ -315,7 +293,6 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private long terminalEpoch;
         private @Nullable RuntimeException lastFailure;
         private long activeUntil;
-        private long iconsUntil;
         private long nextFull;
 
         private Binding(StableKey key, long generation, IAEGrid grid, StorageCapture capture) {

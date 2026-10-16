@@ -116,7 +116,7 @@ class OpenApiDocletTest {
                      * @example 64
                      */
                     public long quantity;
-                    public transient Object iconBaseKey;
+                    public transient Object baseKey;
                 }
             }
             """);
@@ -192,7 +192,7 @@ class OpenApiDocletTest {
                 .getAsJsonArray("examples")
                 .get(0)
                 .getAsString());
-        assertFalse(properties.has("iconBaseKey"));
+        assertFalse(properties.has("baseKey"));
         assertFalse(schema.has("allOf"));
     }
 

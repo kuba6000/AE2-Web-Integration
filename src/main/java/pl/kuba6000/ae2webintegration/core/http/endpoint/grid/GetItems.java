@@ -87,7 +87,7 @@ public final class GetItems extends ISyncedRequest {
         }
     }
 
-    /** Include atlas references. Absent or false skips all native icon normalization. */
+    /** Include icon atlas references and page metadata in the response. */
     @QueryParam("icons")
     private boolean icons;
 
@@ -127,9 +127,9 @@ public final class GetItems extends ISyncedRequest {
         StorageSnapshot shared;
         try {
             if (live) {
-                CoreEngine.prepareTerminal(grid, icons);
+                CoreEngine.prepareTerminal(grid);
                 shared = null;
-            } else shared = CoreEngine.observeStorage(grid, icons);
+            } else shared = CoreEngine.observeStorage(grid);
         } catch (RuntimeException failedObservation) {
             // The coordinator logs the failed attempt and owns retry timing; do not enumerate again here.
             deny(ApiStatus.INTERNAL_ERROR);

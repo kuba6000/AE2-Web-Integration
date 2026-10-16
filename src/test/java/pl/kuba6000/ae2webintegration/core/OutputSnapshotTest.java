@@ -56,8 +56,8 @@ class OutputSnapshotTest extends GridTestScope {
         Resource resource = new Resource();
         IAEGrid firstGrid = TestGridFixtures.grid(990125);
         IAEGrid secondGrid = TestGridFixtures.grid(990126);
-        ResourceSnapshot first = ResourceSnapshot.capture(firstGrid, resource, 5, null);
-        ResourceSnapshot second = ResourceSnapshot.capture(secondGrid, resource, 17, null);
+        ResourceSnapshot first = ResourceSnapshot.capture(firstGrid, resource, 5);
+        ResourceSnapshot second = ResourceSnapshot.capture(secondGrid, resource, 17);
         assertSame(first.description(), second.description());
         assertEquals(5, first.quantity());
         assertEquals(17, second.quantity());
@@ -73,7 +73,7 @@ class OutputSnapshotTest extends GridTestScope {
         Resource key = new Resource();
         Stack stack = new Stack(key, 5);
         IAEGrid grid = TestGridFixtures.grid(990125);
-        ResourceSnapshot snapshot = ResourceSnapshot.capture(grid, stack, null);
+        ResourceSnapshot snapshot = ResourceSnapshot.capture(grid, stack);
         key.unavailable = true;
         stack.unavailable = true;
         JsonObject json = new JsonParser().parse(
@@ -109,7 +109,7 @@ class OutputSnapshotTest extends GridTestScope {
         assertFalse(json.has("hashcode"));
         assertFalse(json.has("itemid"));
         assertFalse(json.has("itemname"));
-        assertFalse(json.has("iconBaseKey"));
+        assertFalse(json.has("baseKey"));
         assertNotNull(
             AE2Controller.itemIdentities.resolve(
                 StableKey.parse(
@@ -122,7 +122,7 @@ class OutputSnapshotTest extends GridTestScope {
     @Test
     void outputIconsBelongToIndependentResponsePageTables(@TempDir Path directory) throws Exception {
         Resource key = new Resource();
-        ResourceSnapshot snapshot = ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 5), null);
+        ResourceSnapshot snapshot = ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 5));
         assertNotNull(snapshot);
         assertNotNull(
             snapshot.description()
@@ -187,7 +187,7 @@ class OutputSnapshotTest extends GridTestScope {
                     .getAsJsonObject()
                     .get("icon")
                     .isJsonNull());
-            assertFalse(firstJson.has("iconBaseKey"));
+            assertFalse(firstJson.has("baseKey"));
             assertEquals(
                 5,
                 firstJson.get("quantity")
@@ -200,7 +200,7 @@ class OutputSnapshotTest extends GridTestScope {
         Resource key = new Resource();
         key.brokenIdentity = true;
         ResourceSnapshot snapshot = assertDoesNotThrow(
-            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 9), null));
+            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 9)));
         assertNotNull(snapshot);
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("output", new ResourceStack(snapshot, null));
@@ -232,7 +232,7 @@ class OutputSnapshotTest extends GridTestScope {
         Resource key = new Resource();
         StableKey requestedKey = key.web$getKey();
         key.brokenIdentity = true;
-        ResourceSnapshot snapshot = ResourceSnapshot.capture(key, 37, requestedKey, null);
+        ResourceSnapshot snapshot = ResourceSnapshot.capture(key, 37, requestedKey);
         key.unavailable = true;
         ResourceStack output = new ResourceStack(snapshot, null);
         assertEquals(requestedKey, output.itemKey);
@@ -245,7 +245,7 @@ class OutputSnapshotTest extends GridTestScope {
         Resource key = new Resource();
         key.unsupportedIdentity = true;
         ResourceSnapshot snapshot = assertDoesNotThrow(
-            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 4), null));
+            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 4)));
         assertNotNull(snapshot);
         JsonObject json = new JsonParser().parse(
             GSONUtils.GSON_BUILDER.create()
@@ -266,7 +266,7 @@ class OutputSnapshotTest extends GridTestScope {
         key.brokenName = true;
         assertThrows(
             IllegalStateException.class,
-            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 6), null));
+            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 6)));
     }
 
     @ParameterizedTest

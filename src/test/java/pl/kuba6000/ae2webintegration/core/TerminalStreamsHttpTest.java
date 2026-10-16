@@ -472,12 +472,11 @@ class TerminalStreamsHttpTest extends GridTestScope {
             assertEquals("ready", readEvent(first.input).name());
             assertEquals("ready", readEvent(second.input).name());
             long now = System.currentTimeMillis();
-            fixture.streams
-                .onServerTick(TestGridFixtures.ae(nativeGrid), now, (grid, icons) -> renewals.incrementAndGet());
+            fixture.streams.onServerTick(TestGridFixtures.ae(nativeGrid), now, grid -> renewals.incrementAndGet());
             assertEquals(1, renewals.get());
             nativeGrid.withoutSources();
             fixture.streams
-                .onServerTick(TestGridFixtures.ae(nativeGrid), now + 1001, (grid, icons) -> renewals.incrementAndGet());
+                .onServerTick(TestGridFixtures.ae(nativeGrid), now + 1001, grid -> renewals.incrementAndGet());
             assertEquals(1, renewals.get());
             assertEquals("revoked", readEvent(first.input).name());
             assertEquals("revoked", readEvent(second.input).name());

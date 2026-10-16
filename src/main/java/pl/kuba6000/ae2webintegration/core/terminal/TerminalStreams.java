@@ -5,9 +5,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
@@ -15,7 +17,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -116,7 +118,7 @@ public final class TerminalStreams implements AutoCloseable {
     }
 
     /** Includes unopened reservations so the snapshot-to-stream interval retains native observation. */
-    public void onServerTick(@NotNull IAE ae, long now, @NotNull BiConsumer<IAEGrid, Boolean> renewViewer) {
+    public void onServerTick(@NotNull IAE ae, long now, @NotNull Consumer<IAEGrid> renewViewer) {
         if (now < nextAccessCheck) return;
         nextAccessCheck = now + 1000;
         state.expire(now);
@@ -129,13 +131,13 @@ public final class TerminalStreams implements AutoCloseable {
             for (TerminalState.Subscription subscriber : subscribers) subscriber.end = "invalidate";
             return;
         }
-        Map<IAEGrid, Boolean> renew = new HashMap<>();
+        Set<IAEGrid> renew = new HashSet<>();
         for (TerminalState.Subscription subscriber : subscribers) {
             if (subscriber.end != null) continue;
             GridAccess.View grid = grids.get(subscriber.key);
             if (grid == null) subscriber.end = "invalidate";
             else if (!grid.allows(subscriber.principal)) subscriber.end = "revoked";
-            else renew.merge(grid.grid(), subscriber.icons, Boolean::logicalOr);
+            else renew.add(grid.grid());
         }
         synchronized (this) {
             for (Session session : sessions) {
@@ -327,7 +329,7 @@ public final class TerminalStreams implements AutoCloseable {
             craftable,
             resource.itemKey(),
             mappings == null || resource.itemKey() == null ? null
-                : mappings.resolve(resource.itemKey(), resource.iconBaseKey()));
+                : mappings.resolve(resource.itemKey(), resource.baseKey()));
     }
 
     @Override

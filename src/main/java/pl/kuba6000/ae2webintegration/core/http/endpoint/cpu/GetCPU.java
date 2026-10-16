@@ -80,7 +80,7 @@ public final class GetCPU extends ISyncedRequest {
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull ClusterData data, @Nullable IconMappings icons) {}
 
-    /** Include atlas references. Absent or false skips all native icon normalization. */
+    /** Include icon atlas references and page metadata in the response. */
     @QueryParam("icons")
     private boolean icons;
 
@@ -158,7 +158,7 @@ public final class GetCPU extends ISyncedRequest {
         clusterData.isPaused = clusterData.isBusy && cpu instanceof IPausableCraftingCPU pausable
             && pausable.web$isPaused();
         if (clusterData.isBusy) {
-            ResourceSnapshot output = ResourceSnapshot.capture(grid, cpu.web$getFinalOutput(), pack);
+            ResourceSnapshot output = ResourceSnapshot.capture(grid, cpu.web$getFinalOutput());
             clusterData.finalOutput = output == null ? null : new ResourceStack(output, mappings);
             AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cpu);
             clusterData.hasTrackingInfo = trackingInfo != null;

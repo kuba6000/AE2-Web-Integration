@@ -5,8 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
-import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -23,8 +21,6 @@ import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
-import pl.kuba6000.ae2webintegration.core.icons.IconPack;
-import pl.kuba6000.ae2webintegration.core.icons.IconPackWriter;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
@@ -67,7 +63,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 service,
                 CoreEngine.GRID_IDENTITIES,
                 new ConfigSettings.ResourceTracking())) {
-            coordinator.touchViewer(grid, 1000, false);
+            coordinator.touchViewer(grid, 1000);
             capture[0] = grid.web$getStorageCapture();
             change.set(true);
             assertNull(
@@ -240,7 +236,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     }
 
     @Test
-    void viewerLeaseDoesNotReadNativeStateAndIconDemandEnrichesSharedSnapshot() throws Exception {
+    void viewerLeaseDefersMetadataAndDescriptionAlwaysContainsBaseKey() throws Exception {
         AtomicInteger copies = new AtomicInteger();
         AtomicInteger bases = new AtomicInteger();
         StableKey base = StableKey.random();
@@ -251,66 +247,39 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 return this;
             }
 
-            public StableKey web$getIconBaseKey() {
+            public StableKey web$getBaseKey() {
                 bases.incrementAndGet();
                 return base;
             }
         };
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710007, iron);
         TestGridFixtures.resolvedKey(grid);
-        Path archive;
-        IconPack.Metadata metadata = new IconPack.Metadata(
-            "1.7.10",
-            "forge",
-            "test",
-            "test",
-            "today",
-            Collections.emptyMap(),
-            Collections.emptyList());
-        try (IconPackWriter writer = new IconPackWriter(
-            gridSave.toPath()
-                .resolve("icons"),
-            metadata,
-            64)) {
-            int[] pixels = new int[4096];
-            Arrays.fill(pixels, 0xff112233);
-            writer.add(base, pixels);
-            archive = writer.finish();
-        }
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
-        try (IconPack pack = IconPack.open(archive, "1.7.10", "forge", "test");
-            StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
                 CoreEngine.GRID_IDENTITIES,
-                settings,
-                () -> pack)) {
-            coordinator.touchViewer(grid, 1000, false);
+                settings)) {
+            coordinator.touchViewer(grid, 1000);
             assertEquals(0, copies.get());
             coordinator.tick(TestGridFixtures.ae(grid), 1000);
             StorageSnapshot first = coordinator.observeForViewer(grid, 1000);
             assertNotNull(first);
-            assertNull(
-                first.descriptions()
-                    .get(
-                        first.rows()
-                            .get(0)
-                            .itemKey())
-                    .iconBaseKey());
-            assertEquals(0, bases.get());
-            coordinator.touchViewer(grid, 1250, true);
-            assertEquals(0, bases.get());
-            coordinator.tick(TestGridFixtures.ae(grid), 1250);
-            StorageSnapshot enriched = coordinator.observeForViewer(grid, 1250);
-            assertNotNull(enriched);
             assertEquals(
                 base,
-                enriched.descriptions()
-                    .get(
-                        enriched.rows()
-                            .get(0)
-                            .itemKey())
-                    .iconBaseKey());
+                first.descriptions()
+                    .get(iron.web$getKey())
+                    .baseKey());
+            assertEquals(1, bases.get());
+            coordinator.touchViewer(grid, 1250);
+            coordinator.tick(TestGridFixtures.ae(grid), 1250);
+            StorageSnapshot next = coordinator.observeForViewer(grid, 1500);
+            assertNotNull(next);
+            assertSame(
+                first.descriptions()
+                    .get(iron.web$getKey()),
+                next.descriptions()
+                    .get(iron.web$getKey()));
             assertEquals(1, bases.get());
         }
     }

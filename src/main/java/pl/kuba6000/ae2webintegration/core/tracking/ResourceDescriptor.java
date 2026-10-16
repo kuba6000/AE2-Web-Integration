@@ -13,11 +13,11 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 @Desugar
 public record ResourceDescriptor(@Nullable String registryNamespace, @Nullable String registryPath, int componentCount,
     int damage, @NotNull String displayName, @NotNull ResourceType resourceType, @Nullable StableKey itemKey,
-    @Nullable StableKey iconBaseKey) {
+    @Nullable StableKey baseKey) {
 
     /** Read only on the native server thread. Unsupported identities remain displayable without a key. */
     public static @NotNull ResourceDescriptor capture(@NotNull IAEKey key, @Nullable StableKey itemKey,
-        @Nullable StableKey iconBaseKey) {
+        @Nullable StableKey baseKey) {
         return new ResourceDescriptor(
             key.web$getRegistryNamespace(),
             key.web$getRegistryPath(),
@@ -26,6 +26,6 @@ public record ResourceDescriptor(@Nullable String registryNamespace, @Nullable S
             key.web$getDisplayName(),
             key.web$getResourceType(),
             itemKey,
-            iconBaseKey);
+            baseKey);
     }
 }

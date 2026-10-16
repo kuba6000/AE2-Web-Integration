@@ -55,7 +55,7 @@ class ItemIdentityRegistryTest {
             }
 
             @Override
-            public StableKey web$getIconBaseKey() {
+            public StableKey web$getBaseKey() {
                 normalizations.incrementAndGet();
                 return base;
             }
@@ -65,12 +65,14 @@ class ItemIdentityRegistryTest {
         ItemIdentityRegistry.Listing cpuListing = registry.beginListing(cpu);
         assertEquals(key, cpuListing.remember(resource));
         cpuListing.commit();
-        assertEquals(base, registry.resolveIconBase(key));
+        var description = registry.describe(key);
+        assertNotNull(description);
+        assertEquals(base, description.baseKey());
         registry.beginListing(grid)
             .commit();
         System.gc();
         assertSame(resource, registry.resolve(key));
-        assertEquals(base, registry.resolveIconBase(key));
+        assertEquals(base, registry.resolveBaseKey(key));
         assertEquals(1, normalizations.get());
     }
 
@@ -87,18 +89,24 @@ class ItemIdentityRegistryTest {
             }
 
             @Override
-            public StableKey web$getIconBaseKey() {
+            public StableKey web$getBaseKey() {
                 attempts.incrementAndGet();
                 return null;
             }
         };
         StableKey key = registry.remember(grid, resource);
-        assertNull(registry.resolveIconBase(key));
-        assertNull(registry.resolveIconBase(key));
+        var description = assertDoesNotThrow(() -> registry.describe(key));
+        assertNotNull(description);
+        assertNull(description.baseKey());
+        assertEquals(key, description.itemKey());
+        assertEquals(resource.name, description.displayName());
+        assertEquals(7, description.damage());
+        assertSame(description, registry.describe(key));
+        assertNull(registry.resolveBaseKey(key));
         assertEquals(1, attempts.get());
         registry.clear();
         registry.remember(grid, resource);
-        assertNull(registry.resolveIconBase(key));
+        assertNull(registry.resolveBaseKey(key));
         assertEquals(2, attempts.get());
     }
 
@@ -113,14 +121,20 @@ class ItemIdentityRegistryTest {
                 return this;
             }
 
-            public StableKey web$getIconBaseKey() {
+            public StableKey web$getBaseKey() {
                 attempts.incrementAndGet();
                 throw new IllegalStateException("Native capability cannot normalize");
             }
         };
         StableKey key = registry.remember(grid, resource);
-        assertNull(registry.resolveIconBase(key));
-        assertNull(registry.resolveIconBase(key));
+        var description = assertDoesNotThrow(() -> registry.describe(key));
+        assertNotNull(description);
+        assertNull(description.baseKey());
+        assertEquals(key, description.itemKey());
+        assertEquals(resource.name, description.displayName());
+        assertEquals(7, description.damage());
+        assertSame(description, registry.describe(key));
+        assertNull(registry.resolveBaseKey(key));
         assertSame(resource, registry.resolve(key));
         assertEquals(1, attempts.get());
     }

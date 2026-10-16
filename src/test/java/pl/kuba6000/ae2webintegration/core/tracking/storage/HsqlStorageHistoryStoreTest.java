@@ -50,7 +50,7 @@ class HsqlStorageHistoryStoreTest {
     }
 
     @Test
-    void sharedDescriptionSurvivesAnotherGridsPruningAndIconlessUpdates() throws Exception {
+    void sharedDescriptionSurvivesAnotherGridsPruningAndUnavailableBaseUpdates() throws Exception {
         StableKey firstGrid = StableKey.random();
         StableKey secondGrid = StableKey.random();
         StableKey item = StableKey.random();

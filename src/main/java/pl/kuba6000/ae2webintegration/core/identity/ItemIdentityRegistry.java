@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.identity;
 
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
@@ -10,7 +9,6 @@ import org.jetbrains.annotations.Nullable;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 
-import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
@@ -45,14 +43,14 @@ public final class ItemIdentityRegistry {
         return new Listing(owner);
     }
 
-    /** Resolve only after an exact icon miss; absence is memoized for the retained identity too. */
-    public @Nullable StableKey resolveIconBase(@NotNull StableKey key) {
+    /** Resolve the optional base variant once per retained identity, including absence or normalization failure. */
+    public @Nullable StableKey resolveBaseKey(@NotNull StableKey key) {
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry entry = entries.getIfPresent(key);
         if (entry == null) return null;
         if (!entry.baseComputed) {
             try {
-                entry.base = entry.identity.web$getIconBaseKey();
+                entry.base = entry.identity.web$getBaseKey();
             } catch (RuntimeException unavailable) {
                 // A failing optional native normalizer must neither break the listing nor run every poll.
                 entry.base = null;
@@ -62,24 +60,13 @@ public final class ItemIdentityRegistry {
         return entry.base;
     }
 
-    /** Detached metadata shared by retained consumers; optional icon normalization is lazy. */
-    public @Nullable ResourceDescriptor describe(@NotNull StableKey key, @Nullable IconPack pack) {
+    /** Detached metadata shared by retained consumers, including the optional base variant. */
+    public @Nullable ResourceDescriptor describe(@NotNull StableKey key) {
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry entry = entries.getIfPresent(key);
         if (entry == null) return null;
-        if (entry.description == null) entry.description = ResourceDescriptor.capture(entry.identity, key, null);
-        if (pack != null && pack.find(key) == null && !entry.baseComputed) resolveIconBase(key);
-        if (entry.baseComputed && !Objects.equals(entry.description.iconBaseKey(), entry.base)) {
-            ResourceDescriptor previous = entry.description;
-            entry.description = new ResourceDescriptor(
-                previous.registryNamespace(),
-                previous.registryPath(),
-                previous.componentCount(),
-                previous.damage(),
-                previous.displayName(),
-                previous.resourceType(),
-                key,
-                entry.base);
+        if (entry.description == null) {
+            entry.description = ResourceDescriptor.capture(entry.identity, key, resolveBaseKey(key));
         }
         return entry.description;
     }

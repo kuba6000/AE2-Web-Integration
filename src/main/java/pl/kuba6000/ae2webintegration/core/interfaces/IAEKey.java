@@ -26,8 +26,8 @@ public interface IAEKey {
     @NotNull
     IAEKey web$copyIdentity();
 
-    /** Server-thread-only normalized native identity for icon fallback; null when unsupported. */
-    default @Nullable StableKey web$getIconBaseKey() {
+    /** Server-thread-only base variant identity; null when unsupported. Does not replace exact resource identity. */
+    default @Nullable StableKey web$getBaseKey() {
         return null;
     }
 

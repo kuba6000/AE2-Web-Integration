@@ -196,6 +196,6 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
                     resource.description()
                         .itemKey(),
                     resource.description()
-                        .iconBaseKey());
+                        .baseKey());
     }
 }

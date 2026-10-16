@@ -15,7 +15,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
-import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -207,14 +206,13 @@ public final class StorageCapture {
     }
 
     /** Native enumeration and metadata remain on the producer; only the returned value may be queued. */
-    public @NotNull StorageObservation observe(@NotNull IAEGrid grid, @Nullable IconPack pack, long observedAt,
-        boolean full) {
-        return observe(grid, pack, observedAt, full, true);
+    public @NotNull StorageObservation observe(@NotNull IAEGrid grid, long observedAt, boolean full) {
+        return observe(grid, observedAt, full, true);
     }
 
     /** Stock reads may update the live view without draining the independently timed flow bucket. */
-    public @NotNull StorageObservation observe(@NotNull IAEGrid grid, @Nullable IconPack pack, long observedAt,
-        boolean full, boolean flushFlow) {
+    public @NotNull StorageObservation observe(@NotNull IAEGrid grid, long observedAt, boolean full,
+        boolean flushFlow) {
         if (!isProducerThread()) throw new IllegalStateException("Native observation requires the producer thread");
         if (absoluteDepth != 0) throw new IllegalStateException("Native stock refresh is incomplete");
         boolean requested = reconcile.getAndSet(false);
@@ -234,12 +232,12 @@ public final class StorageCapture {
                 Set<IAEKey> included = new HashSet<>();
                 for (IAEGenericStack stack : list.web$stacks()) {
                     IAEKey key = stack.web$what();
-                    row(grid, key, stack.web$amount(), pack, rows, descriptions, unkeyed);
+                    row(grid, key, stack.web$amount(), rows, descriptions, unkeyed);
                     included.add(key);
                 }
                 for (IAEKey craftable : grid.web$getCraftingGrid()
                     .web$getCraftables(null)) {
-                    if (included.add(craftable)) row(grid, craftable, 0, pack, rows, descriptions, unkeyed);
+                    if (included.add(craftable)) row(grid, craftable, 0, rows, descriptions, unkeyed);
                 }
             } else {
                 Set<IAEKey> included = new HashSet<>();
@@ -252,7 +250,7 @@ public final class StorageCapture {
                             continue;
                         }
                         long amount = entry.hasAbsolute ? entry.absolute : list.web$getAmount(identity);
-                        row(grid, identity, amount, pack, rows, descriptions, unkeyed);
+                        row(grid, identity, amount, rows, descriptions, unkeyed);
                         included.add(identity);
                     }
                     index++;
@@ -261,13 +259,13 @@ public final class StorageCapture {
                     for (IAEGenericStack stack : list.web$stacks()) {
                         IAEKey key = stack.web$what();
                         if (needsUnkeyedRead(key) && included.add(key)) {
-                            row(grid, key, stack.web$amount(), pack, rows, descriptions, unkeyed);
+                            row(grid, key, stack.web$amount(), rows, descriptions, unkeyed);
                         }
                     }
                     for (IAEKey craftable : grid.web$getCraftingGrid()
                         .web$getCraftables(null)) {
                         if (needsUnkeyedRead(craftable) && included.add(craftable))
-                            row(grid, craftable, 0, pack, rows, descriptions, unkeyed);
+                            row(grid, craftable, 0, rows, descriptions, unkeyed);
                     }
                 }
             }
@@ -320,7 +318,7 @@ public final class StorageCapture {
                 discard(entry);
                 continue;
             }
-            if (entry.input != 0 || entry.output != 0) AE2Controller.itemIdentities.describe(entry.key, null);
+            if (entry.input != 0 || entry.output != 0) AE2Controller.itemIdentities.describe(entry.key);
             index++;
         }
         List<StorageObservation.Flow> flows = new ArrayList<>();
@@ -334,7 +332,7 @@ public final class StorageCapture {
             }
             if (entry.input != 0 || entry.output != 0) {
                 if (entry.overflow) markGap();
-                descriptions.put(entry.key, AE2Controller.itemIdentities.describe(entry.key, null));
+                descriptions.put(entry.key, AE2Controller.itemIdentities.describe(entry.key));
                 flows.add(new StorageObservation.Flow(entry.key, entry.input, entry.output));
             }
             entry.input = 0;
@@ -358,7 +356,7 @@ public final class StorageCapture {
         }
     }
 
-    private void row(IAEGrid grid, IAEKey key, long amount, @Nullable IconPack pack, List<StorageObservation.Row> rows,
+    private void row(IAEGrid grid, IAEKey key, long amount, List<StorageObservation.Row> rows,
         Map<StableKey, ResourceDescriptor> descriptions, List<StorageObservation.UnkeyedRow> unkeyed) {
         Entry entry;
         try {
@@ -381,7 +379,7 @@ public final class StorageCapture {
             unkeyed.add(unkeyedRow(grid, key, amount));
             return;
         }
-        descriptions.put(entry.key, AE2Controller.itemIdentities.describe(entry.key, pack));
+        descriptions.put(entry.key, AE2Controller.itemIdentities.describe(entry.key));
         rows.add(
             new StorageObservation.Row(
                 entry.key,
@@ -414,7 +412,7 @@ public final class StorageCapture {
     private StorageObservation.UnkeyedRow unkeyedRow(IAEGrid grid, IAEKey key, long amount) {
         hasUnkeyedResources = true;
         return new StorageObservation.UnkeyedRow(
-            ResourceSnapshot.capture(key, amount, null, null),
+            ResourceSnapshot.capture(key, amount, null),
             key.web$isCraftable(grid));
     }
 

@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.tracking.storage;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.lang.reflect.Proxy;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -12,6 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
@@ -26,6 +28,82 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 class StorageCaptureTest {
+
+    @Test
+    void flowDefersBaseNormalizationAndHistoryRetainsItWithoutAnIconPack(@TempDir Path directory) throws Exception {
+        AtomicInteger normalizations = new AtomicInteger();
+        StableKey baseKey = StableKey.random();
+        IAEKey metadata = resource(new AtomicInteger());
+        IAEKey resource = (IAEKey) Proxy
+            .newProxyInstance(IAEKey.class.getClassLoader(), new Class<?>[] { IAEKey.class }, (proxy, method, args) -> {
+                return switch (method.getName()) {
+                    case "web$copyIdentity" -> proxy;
+                    case "web$getBaseKey" -> {
+                        normalizations.incrementAndGet();
+                        yield baseKey;
+                    }
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> method.invoke(metadata, args);
+                };
+            });
+        IAEGrid grid = grid();
+        StorageCapture capture = new StorageCapture(grid, 10);
+        capture.recordFlow(resource, 12, 3);
+        capture.recordFlow(resource, 8, 2);
+        assertEquals(0, normalizations.get(), "Transfers must not normalize native resources");
+        long now = System.currentTimeMillis();
+        StorageObservation observation = capture.flushFlow(now);
+        StableKey itemKey = resource.web$getKey();
+        assertEquals(
+            baseKey,
+            observation.descriptions()
+                .get(itemKey)
+                .baseKey());
+        assertEquals(1, normalizations.get());
+        StorageObservation.Flow flow = observation.flows()
+            .get(0);
+        assertEquals(20, flow.input());
+        assertEquals(5, flow.output());
+        capture.recordFlow(resource, 4, 1);
+        assertSame(
+            observation.descriptions()
+                .get(itemKey),
+            capture.flushFlow(now + 1)
+                .descriptions()
+                .get(itemKey));
+        assertEquals(1, normalizations.get());
+        StableKey gridKey = StableKey.random();
+        Path database = directory.resolve("history");
+        StorageHistoryPoint point = new StorageHistoryPoint(
+            now,
+            1,
+            StorageHistoryPoint.Kind.FLOW,
+            itemKey,
+            0,
+            false,
+            flow.input(),
+            flow.output(),
+            true);
+        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(database, 30, 100)) {
+            store.append(gridKey, observation.descriptions(), Collections.singletonList(point));
+        }
+        AE2Controller.itemIdentities.clear();
+        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(database, 30, 100)) {
+            StorageHistory history = store.read(gridKey, itemKey, now, 10);
+            assertEquals(Collections.singletonList(point), history.points());
+            assertEquals(
+                baseKey,
+                history.descriptions()
+                    .get(itemKey)
+                    .baseKey());
+            assertEquals(
+                "Item",
+                history.descriptions()
+                    .get(itemKey)
+                    .displayName());
+        }
+    }
 
     @Test
     void zeroTransferDoesNotReadOrRetainNativeIdentity() {
@@ -122,7 +200,7 @@ class StorageCaptureTest {
                     .input());
             craftables.add(original);
             craftables.add(healthy);
-            StorageObservation stock = capture.observe(grid, null, 3000, true);
+            StorageObservation stock = capture.observe(grid, 3000, true);
             assertEquals(
                 1,
                 stock.rows()
@@ -153,7 +231,7 @@ class StorageCaptureTest {
         IAEKey key = resource(new AtomicInteger());
         StableKey itemKey = key.web$getKey();
         capture.recordFlow(key, 12, 3);
-        StorageObservation live = capture.observe(owner, null, 1000, true, false);
+        StorageObservation live = capture.observe(owner, 1000, true, false);
         assertTrue(live.stockObserved());
         assertTrue(
             live.flows()
@@ -228,7 +306,7 @@ class StorageCaptureTest {
         assertDoesNotThrow(() -> capture.recordFlow(key, 1, 0));
         IllegalStateException observed = assertThrows(
             IllegalStateException.class,
-            () -> capture.observe(grid(Collections.singletonList(key)), null, 1000, true));
+            () -> capture.observe(grid(Collections.singletonList(key)), 1000, true));
         assertSame(cause, observed);
         assertTrue(capture.requiresReconciliation());
     }
@@ -252,7 +330,7 @@ class StorageCaptureTest {
         StorageCapture capture = new StorageCapture(grid, 1);
         capture.markChanged(resource(new AtomicInteger()));
         capture.recordFlow(unsupported, 10, 3);
-        StorageObservation baseline = capture.observe(grid, null, 1000, true);
+        StorageObservation baseline = capture.observe(grid, 1000, true);
         assertTrue(baseline.flowComplete());
         assertTrue(
             baseline.flows()
@@ -270,7 +348,7 @@ class StorageCaptureTest {
                 .resource()
                 .quantity());
         amount.set(7);
-        StorageObservation update = capture.observe(grid, null, 2000, false);
+        StorageObservation update = capture.observe(grid, 2000, false);
         assertFalse(update.full());
         assertEquals(
             7,
@@ -280,7 +358,7 @@ class StorageCaptureTest {
                 .quantity());
         stacks.clear();
         assertTrue(
-            capture.observe(grid, null, 3000, false)
+            capture.observe(grid, 3000, false)
                 .unkeyed()
                 .isEmpty());
     }
@@ -291,7 +369,7 @@ class StorageCaptureTest {
         IAEGrid grid = grid();
         StorageCapture capture = new StorageCapture(grid, 10);
         capture.recordFlow(unsupported, 10, 0);
-        StorageObservation result = capture.observe(grid(Collections.singletonList(unsupported)), null, 1000, true);
+        StorageObservation result = capture.observe(grid(Collections.singletonList(unsupported)), 1000, true);
         assertTrue(result.flowComplete());
         assertTrue(
             result.flows()
@@ -330,7 +408,7 @@ class StorageCaptureTest {
         assertTrue(metadata.web$supportsStableIdentity());
         capture.recordFlow(unencodable, Long.MAX_VALUE, 3);
         capture.recordFlow(unencodable, 1, 0);
-        StorageObservation observed = capture.observe(grid, null, 1000, true);
+        StorageObservation observed = capture.observe(grid, 1000, true);
         assertFalse(observed.flowComplete());
         assertTrue(
             observed.flows()
@@ -348,7 +426,7 @@ class StorageCaptureTest {
                 .resource()
                 .quantity());
         capture.recordFlow(unencodable, 2, 0);
-        StorageObservation update = capture.observe(grid, null, 2000, false);
+        StorageObservation update = capture.observe(grid, 2000, false);
         assertEquals(
             1,
             update.unkeyed()
@@ -366,7 +444,7 @@ class StorageCaptureTest {
         IAEKey key = resource(new AtomicInteger());
         capture.recordFlow(key, Long.MAX_VALUE, 0);
         capture.recordFlow(key, 1, 0);
-        StorageObservation result = capture.observe(grid, null, 1000, true);
+        StorageObservation result = capture.observe(grid, 1000, true);
         assertFalse(result.flowComplete());
         assertEquals(
             Long.MAX_VALUE,
@@ -419,7 +497,7 @@ class StorageCaptureTest {
         IAEKey other = resource(otherCopies);
         assertThrows(
             IllegalStateException.class,
-            () -> capture.observe(grid(Collections.singletonList(other)), null, 1000, true));
+            () -> capture.observe(grid(Collections.singletonList(other)), 1000, true));
         assertEquals(1, firstCopies.get());
         assertEquals(0, otherCopies.get());
     }
@@ -429,12 +507,12 @@ class StorageCaptureTest {
         IAEKey key = resource(new AtomicInteger());
         IAEGrid grid = grid();
         StorageCapture capture = new StorageCapture(grid, 10);
-        capture.observe(grid, null, 0, true);
+        capture.observe(grid, 0, true);
         assertFalse(capture.requiresReconciliation());
         capture.beginAbsoluteChanges();
         capture.absoluteChanged(key, 73);
         capture.endAbsoluteChanges(true);
-        StorageObservation observed = capture.observe(grid, null, 10, false);
+        StorageObservation observed = capture.observe(grid, 10, false);
         assertFalse(observed.full());
         assertEquals(
             73,
@@ -448,7 +526,7 @@ class StorageCaptureTest {
         capture.endAbsoluteChanges(true);
         assertTrue(capture.requiresReconciliation());
         assertTrue(
-            capture.observe(grid, null, 20, false)
+            capture.observe(grid, 20, false)
                 .rows()
                 .isEmpty());
     }
@@ -461,7 +539,7 @@ class StorageCaptureTest {
         capture.recordFlow(first, Long.MAX_VALUE, 0);
         assertDoesNotThrow(() -> capture.recordFlow(resource(new AtomicInteger()), 1, 0));
         capture.recordFlow(first, 1, 0);
-        StorageObservation result = capture.observe(grid, null, 100, true);
+        StorageObservation result = capture.observe(grid, 100, true);
         assertFalse(result.flowComplete());
         assertEquals(
             Long.MAX_VALUE,
@@ -487,7 +565,7 @@ class StorageCaptureTest {
         other.join();
         assertEquals(0, copies.get());
         assertFalse(
-            capture.observe(grid, null, 100, true)
+            capture.observe(grid, 100, true)
                 .flowComplete());
     }
 
@@ -496,7 +574,7 @@ class StorageCaptureTest {
         IAEKey key = resource(new AtomicInteger());
         IAEGrid grid = grid(Collections.singletonList(key));
         StorageCapture capture = new StorageCapture(grid, 10);
-        StorageObservation first = capture.observe(grid, null, 0, true);
+        StorageObservation first = capture.observe(grid, 0, true);
         assertEquals(
             0,
             first.rows()
@@ -507,7 +585,7 @@ class StorageCaptureTest {
                 .get(0)
                 .craftable());
         capture.markChanged(key);
-        StorageObservation second = capture.observe(grid, null, 1, false);
+        StorageObservation second = capture.observe(grid, 1, false);
         assertTrue(
             second.rows()
                 .get(0)
@@ -523,7 +601,7 @@ class StorageCaptureTest {
         capture.recordFlow(resource, 100, 0);
         capture.recordFlow(resource, 0, 40);
         assertEquals(1, copies.get());
-        StorageObservation observation = capture.observe(grid, null, 1000, true);
+        StorageObservation observation = capture.observe(grid, 1000, true);
         assertEquals(
             1,
             observation.flows()
@@ -543,7 +621,7 @@ class StorageCaptureTest {
                 .isEmpty());
         assertTrue(observation.flowComplete());
         assertTrue(
-            capture.observe(grid, null, 2000, false)
+            capture.observe(grid, 2000, false)
                 .flows()
                 .isEmpty());
     }

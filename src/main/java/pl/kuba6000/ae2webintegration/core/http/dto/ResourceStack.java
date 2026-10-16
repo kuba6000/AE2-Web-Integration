@@ -49,6 +49,6 @@ public class ResourceStack extends ResourceDescription {
                         snapshot.description()
                             .itemKey(),
                         snapshot.description()
-                            .iconBaseKey()));
+                            .baseKey()));
     }
 }

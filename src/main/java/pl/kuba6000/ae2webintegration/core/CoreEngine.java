@@ -109,12 +109,7 @@ public class CoreEngine {
                 trackingSettings.historyRetentionDays,
                 trackingSettings.historyMaxRowsPerGrid),
             trackingSettings.maxQueuedRows);
-        storageCoordinator = new StorageTrackingCoordinator(
-            service,
-            GRID_IDENTITIES,
-            trackingSettings,
-            CoreEngine::getIconPack,
-            liveState);
+        storageCoordinator = new StorageTrackingCoordinator(service, GRID_IDENTITIES, trackingSettings, liveState);
         storageTracking = service;
         themes.close();
         themes = ThemeCatalog.load(
@@ -140,8 +135,7 @@ public class CoreEngine {
         IAE ae = AE2Controller.AE2Interface;
         if (coordinator != null && ae != null) {
             long now = System.currentTimeMillis();
-            if (streams != null)
-                streams.onServerTick(ae, now, (grid, icons) -> coordinator.touchViewer(grid, now, icons));
+            if (streams != null) streams.onServerTick(ae, now, grid -> coordinator.touchViewer(grid, now));
             coordinator.tick(ae, now);
         }
         maintainVersionChecker();
@@ -282,17 +276,13 @@ public class CoreEngine {
 
     /** Authorized terminal reads renew the shared native observation lease on the game thread. */
     public static @Nullable StorageSnapshot observeStorage(@NotNull IAEGrid grid) {
-        return observeStorage(grid, false);
-    }
-
-    public static @Nullable StorageSnapshot observeStorage(@NotNull IAEGrid grid, boolean icons) {
         return storageCoordinator == null ? null
-            : storageCoordinator.observeForViewer(grid, System.currentTimeMillis(), icons);
+            : storageCoordinator.observeForViewer(grid, System.currentTimeMillis());
     }
 
-    public static void prepareTerminal(@NotNull IAEGrid grid, boolean icons) {
+    public static void prepareTerminal(@NotNull IAEGrid grid) {
         StorageTrackingCoordinator coordinator = storageCoordinator;
-        if (coordinator != null) coordinator.prepareForViewer(grid, System.currentTimeMillis(), icons);
+        if (coordinator != null) coordinator.prepareForViewer(grid, System.currentTimeMillis());
     }
 
     public static @Nullable TerminalState getTerminalState() {
