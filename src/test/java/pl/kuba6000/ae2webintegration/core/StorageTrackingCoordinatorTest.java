@@ -18,6 +18,7 @@ import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
+import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
@@ -27,6 +28,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore;
@@ -38,6 +40,40 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 class StorageTrackingCoordinatorTest extends GridTestScope {
+
+    @Test
+    void pendingTerminalHandoffRenewsCaptureWithoutTransportTickOrHistory() throws Exception {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("viewer-demand", 10, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710019, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        TerminalRegistry terminals = new TerminalRegistry();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
+            coordinator.prepareForViewer(grid, 1000);
+            AuthSession login = new AuthSession(WebPrincipal.admin(), Long.MAX_VALUE);
+            assertNotNull(terminals.reserve(key, login, false, null, 1000));
+            coordinator.tick(TestGridFixtures.ae(grid), 9000);
+            grid.rows.set(0, new ItemIdentityRequestTest.Resource("viewer-demand", 25, false));
+            StorageCapture capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            capture.markChanged(iron);
+            coordinator.tick(TestGridFixtures.ae(grid), 12000);
+            StorageSnapshot snapshot = terminals.snapshot(key);
+            assertNotNull(snapshot);
+            assertEquals(
+                25,
+                snapshot.rows()
+                    .get(0)
+                    .quantity());
+            assertNull(service.snapshot(key));
+            coordinator.tick(TestGridFixtures.ae(grid), 20000);
+            assertNull(grid.web$getStorageCapture());
+        }
+    }
 
     @Test
     void topologyChangeDuringNativeReadCannotPublishThatBaseline() throws Exception {

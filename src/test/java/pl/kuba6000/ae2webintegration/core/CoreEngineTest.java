@@ -249,8 +249,7 @@ class CoreEngineTest {
             GetResourceHistory limited = new GetResourceHistory();
             AE2Controller.RequestContext limitedContext = TestGridFixtures
                 .context(-1, "grid=" + key + "&itemKey=" + iron.web$getKey() + "&limit=1");
-            limited
-                .handle(limitedContext.withInputs(limitedContext.getPrincipal(), limitedContext.getPathParams(), null));
+            limited.handle(limitedContext.withInputs(limitedContext, limitedContext.getPathParams(), null));
             JsonObject limitedResult = new JsonParser().parse(limited.getJSON())
                 .getAsJsonObject()
                 .getAsJsonObject("data");

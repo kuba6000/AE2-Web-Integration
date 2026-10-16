@@ -16,13 +16,14 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
+import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 
 /** Detached live state shared by viewers. Its monitor never covers encoding, native reads or socket writes. */
-public final class TerminalState {
+public final class TerminalRegistry {
 
     private static final int MAX_SUBSCRIPTIONS = 64;
     private static final int MAX_PER_PRINCIPAL = 4;
@@ -113,9 +114,11 @@ public final class TerminalState {
     }
 
     /** Snapshot and subscription registration share the same lock; no change can fall between them. */
-    public synchronized @Nullable Bootstrap reserve(@NotNull StableKey key, @NotNull WebPrincipal principal,
+    public synchronized @Nullable Bootstrap reserve(@NotNull StableKey key, @Nullable AuthSession session,
         boolean icons, @Nullable String packId, long now) {
         expire(now);
+        if (session == null || !session.isValid(now)) return null;
+        WebPrincipal principal = session.principal();
         Grid grid = grids.get(key);
         if (closed || grid == null || !grid.initialized || subscriptions.size() >= MAX_SUBSCRIPTIONS) return null;
         long count = subscriptions.values()
@@ -125,20 +128,19 @@ public final class TerminalState {
         if (count >= MAX_PER_PRINCIPAL) return null;
         String token = UUID.randomUUID()
             .toString();
-        subscriptions
-            .put(token, new Subscription(token, key, grid, principal, icons, packId, now + RESERVATION_MILLIS));
+        subscriptions.put(token, new Subscription(token, key, grid, session, icons, packId, now + RESERVATION_MILLIS));
         return new Bootstrap(token, view(grid), rows(grid), new HashMap<>(grid.descriptions), grid.unkeyed);
     }
 
-    /** Tokens are single-use and bound to the authenticated account, grid and requested representation. */
-    synchronized @Nullable Subscription attach(String token, StableKey key, WebPrincipal principal, boolean icons,
-        long now) {
+    /** Tokens are single-use and bound to the authenticated login session, grid and requested representation. */
+    synchronized @Nullable Subscription attach(String token, StableKey key, @Nullable AuthSession session,
+        boolean icons, long now) {
         expire(now);
         Subscription subscriber = subscriptions.get(token);
         if (subscriber == null || subscriber.attached
             || subscriber.end != null
             || !subscriber.key.equals(key)
-            || !subscriber.principal.equals(principal)
+            || subscriber.session != session
             || subscriber.icons != icons) return null;
         subscriber.attached = true;
         return subscriber;
@@ -221,6 +223,8 @@ public final class TerminalState {
     }
 
     synchronized void expire(long now) {
+        for (Subscription subscriber : subscriptions.values())
+            if (!subscriber.session.isValid(now)) end(subscriber, "revoked");
         subscriptions.values()
             .removeIf(s -> !s.attached && (s.expires <= now || s.end != null));
         Iterator<Grid> iterator = grids.values()
@@ -235,15 +239,23 @@ public final class TerminalState {
         }
     }
 
-    synchronized List<Subscription> subscribers() {
-        return new ArrayList<>(subscriptions.values());
+    /** Active reservations and streams keep observation alive without transport driving native reads. */
+    public synchronized Set<StableKey> viewedGrids(long now) {
+        expire(now);
+        Set<StableKey> keys = new HashSet<>();
+        for (Subscription subscriber : subscriptions.values()) if (subscriber.end == null) keys.add(subscriber.key);
+        return keys;
+    }
+
+    synchronized void reset() {
+        for (Subscription subscriber : subscriptions.values()) end(subscriber, "invalidate");
+        grids.clear();
+        subscriptions.clear();
     }
 
     synchronized void close() {
         closed = true;
-        for (Subscription subscriber : subscriptions.values()) end(subscriber, "invalidate");
-        grids.clear();
-        subscriptions.clear();
+        reset();
     }
 
     private static void end(Subscription subscriber, String reason) {
@@ -285,6 +297,7 @@ public final class TerminalState {
         final String token;
         final StableKey key;
         final WebPrincipal principal;
+        final AuthSession session;
         final boolean icons;
         final @Nullable String packId;
         final long expires;
@@ -295,12 +308,13 @@ public final class TerminalState {
         boolean attached;
         volatile @Nullable String end;
 
-        private Subscription(String token, StableKey key, Grid grid, WebPrincipal principal, boolean icons,
+        private Subscription(String token, StableKey key, Grid grid, AuthSession session, boolean icons,
             @Nullable String packId, long expires) {
             this.token = token;
             this.key = key;
             this.grid = grid;
-            this.principal = principal;
+            this.principal = session.principal();
+            this.session = session;
             this.icons = icons;
             this.packId = packId;
             this.expires = expires;

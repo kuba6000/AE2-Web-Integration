@@ -187,10 +187,7 @@ public final class ApiRouter implements HttpHandler {
                 }
             }
             JsonObject body = readJsonBody(exchange, unsafe);
-            RequestContext context = arrival.withInputs(
-                credentials == null ? WebPrincipal.anonymous() : credentials.getPrincipal(),
-                parameters,
-                body);
+            RequestContext context = arrival.withInputs(credentials, parameters, body);
             if (selected.factory() == null) {
                 GetIconPage.handle(context);
                 return;
@@ -202,8 +199,7 @@ public final class ApiRouter implements HttpHandler {
                 else((IAsyncRequest) request).handle();
             }
             if (request instanceof GetItemEvents events && events.startStream()) return;
-            response = request instanceof GetItems items ? items.finishResponse(dispatch, authenticate)
-                : request.getResponse();
+            response = request instanceof GetItems items ? items.finishResponse() : request.getResponse();
         } catch (InvalidInput exception) {
             response = ApiResponse.error(exception.error);
         } catch (ReflectiveOperationException | RuntimeException exception) {

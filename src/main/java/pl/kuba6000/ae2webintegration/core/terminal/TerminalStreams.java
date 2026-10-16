@@ -4,12 +4,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
@@ -17,9 +14,6 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -37,8 +31,8 @@ import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.dto.StoredResource;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
@@ -50,12 +44,12 @@ public final class TerminalStreams implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private static final Gson JSON = GSONUtils.GSON_BUILDER.create();
     private static final int MAX_EVENT_BYTES = 1024 * 1024;
+    private static final long MAINTENANCE_MILLIS = 100;
     private static final long HEARTBEAT_MILLIS = 10_000;
     private static final long WRITE_TIMEOUT_MILLIS = 10_000;
-    private static final long ACCESS_LEASE_MILLIS = 2000;
-    private final TerminalState state;
-    private final Supplier<IconPack> icons;
-    private final Predicate<RequestContext> authenticated;
+    private final TerminalRegistry state;
+    private final @Nullable IconPack icons;
+    private final GridIdentityRegistry identities;
     private final List<Session> sessions = new ArrayList<>();
     private final ThreadPoolExecutor writers = new ThreadPoolExecutor(
         4,
@@ -67,19 +61,18 @@ public final class TerminalStreams implements AutoCloseable {
     private final ScheduledExecutorService timer = Executors
         .newSingleThreadScheduledExecutor(task -> daemon(task, "AE2Web-TerminalTimer"));
     private volatile boolean closed;
-    private long nextAccessCheck;
 
     @Desugar
-    public record Delta(@NotNull TerminalState.View view, @NotNull List<TerminalState.Amount> updates,
+    public record Delta(@NotNull TerminalRegistry.View view, @NotNull List<TerminalRegistry.Amount> updates,
         @NotNull List<StoredResource> definitions, @NotNull List<StableKey> removed,
         @Nullable List<StoredResource> unkeyed, @Nullable IconMappings icons) {}
 
-    public TerminalStreams(@NotNull TerminalState state, @NotNull Supplier<IconPack> icons,
-        @NotNull Predicate<RequestContext> authenticated) {
+    public TerminalStreams(@NotNull TerminalRegistry state, @NotNull GridIdentityRegistry identities,
+        @Nullable IconPack icons) {
         this.state = state;
         this.icons = icons;
-        this.authenticated = authenticated;
-        timer.scheduleWithFixedDelay(this::pump, 100, 100, TimeUnit.MILLISECONDS);
+        this.identities = identities;
+        timer.scheduleWithFixedDelay(this::pump, MAINTENANCE_MILLIS, MAINTENANCE_MILLIS, TimeUnit.MILLISECONDS);
     }
 
     private static Thread daemon(Runnable task, String name) {
@@ -94,57 +87,29 @@ public final class TerminalStreams implements AutoCloseable {
         context.getExchange()
             .getRequestBody()
             .close();
-        TerminalState.Subscription subscription = state
-            .attach(token, key, context.getPrincipal(), withIcons, System.currentTimeMillis());
+        TerminalRegistry.Subscription subscription = state
+            .attach(token, key, context.getSession(), withIcons, System.currentTimeMillis());
         if (subscription == null) {
             ApiResponse.error(ApiStatus.BAD_PARAM)
                 .send(context.getExchange());
             return;
         }
-        IconPack pack = withIcons ? icons.get() : null;
+        IconPack pack = withIcons ? icons : null;
         Session session = new Session(context, subscription, pack);
         if (withIcons && !Objects.equals(subscription.packId, pack == null ? null : pack.packId()))
             subscription.end = "reset";
+        boolean accepted;
         synchronized (this) {
-            if (closed) {
-                state.release(subscription);
-                ApiResponse.error(ApiStatus.SERVER_STOPPING)
-                    .send(context.getExchange());
-                return;
-            }
-            sessions.add(session);
+            accepted = !closed && context.isLifecycleUnchanged();
+            if (accepted) sessions.add(session);
         }
-        schedule(session);
-    }
-
-    /** Includes unopened reservations so the snapshot-to-stream interval retains native observation. */
-    public void onServerTick(@NotNull IAE ae, long now, @NotNull Consumer<IAEGrid> renewViewer) {
-        if (now < nextAccessCheck) return;
-        nextAccessCheck = now + 1000;
-        state.expire(now);
-        List<TerminalState.Subscription> subscribers = state.subscribers();
-        if (subscribers.isEmpty()) return;
-        Map<StableKey, GridAccess.View> grids = new HashMap<>();
-        try {
-            for (GridAccess.View grid : GridAccess.list(ae)) grids.put(grid.key(), grid);
-        } catch (IOException failure) {
-            for (TerminalState.Subscription subscriber : subscribers) subscriber.end = "invalidate";
+        if (!accepted) {
+            state.release(subscription);
+            ApiResponse.error(ApiStatus.SERVER_STOPPING)
+                .send(context.getExchange());
             return;
         }
-        Set<IAEGrid> renew = new HashSet<>();
-        for (TerminalState.Subscription subscriber : subscribers) {
-            if (subscriber.end != null) continue;
-            GridAccess.View grid = grids.get(subscriber.key);
-            if (grid == null) subscriber.end = "invalidate";
-            else if (!grid.allows(subscriber.principal)) subscriber.end = "revoked";
-            else renew.add(grid.grid());
-        }
-        synchronized (this) {
-            for (Session session : sessions) {
-                if (session.subscriber.end == null) session.authorizedUntil = now + ACCESS_LEASE_MILLIS;
-            }
-        }
-        renew.forEach(renewViewer);
+        schedule(session);
     }
 
     private void pump() {
@@ -156,18 +121,13 @@ public final class TerminalStreams implements AutoCloseable {
             active = new ArrayList<>(sessions);
         }
         for (Session session : active) {
-            synchronized (session) {
-                FutureTask<Void> task = session.task;
-                if (task != null) {
-                    if (session.writing && now - session.started > WRITE_TIMEOUT_MILLIS) {
-                        session.subscriber.end = "reset";
-                        task.cancel(true);
-                    }
-                    continue;
-                }
+            authorize(session);
+            if (session.hasTask()) {
+                if (session
+                    .writeTimedOut(now, session.subscriber.end == null ? WRITE_TIMEOUT_MILLIS : MAINTENANCE_MILLIS))
+                    finish(session);
+                continue;
             }
-            if (!authenticated.test(session.context)) session.subscriber.end = "revoked";
-            if (now > session.authorizedUntil) session.subscriber.end = "invalidate";
             if (session.subscriber.end != null || !session.ready
                 || state.hasPending(session.subscriber)
                 || now - session.lastWrite >= HEARTBEAT_MILLIS) schedule(session);
@@ -175,27 +135,17 @@ public final class TerminalStreams implements AutoCloseable {
     }
 
     private void schedule(Session session) {
-        synchronized (session) {
-            if (session.task != null || session.finished) return;
-            FutureTask<Void> task = new FutureTask<>(() -> {
-                write(session);
-                return null;
-            });
-            session.task = task;
-            try {
-                writers.execute(task);
-            } catch (RejectedExecutionException unavailable) {
-                session.task = null;
-                finish(session);
-            }
+        FutureTask<Void> task = session.prepareTask(() -> write(session));
+        if (task == null) return;
+        try {
+            writers.execute(task);
+        } catch (RejectedExecutionException unavailable) {
+            finish(session);
         }
     }
 
     private void write(Session session) {
-        synchronized (session) {
-            session.started = System.currentTimeMillis();
-            session.writing = true;
-        }
+        if (!session.startWriting()) return;
         try {
             authorize(session);
             if (!session.ready) {
@@ -213,8 +163,7 @@ public final class TerminalStreams implements AutoCloseable {
                 session.ready = true;
                 send(session, "ready", new JsonObject());
             }
-            if (session.subscriber.icons && !samePack(icons.get(), session.pack)) session.subscriber.end = "reset";
-            TerminalState.Update update = state.drain(session.subscriber);
+            TerminalRegistry.Update update = state.drain(session.subscriber);
             if (update != null) {
                 boolean describe = !update.definitions()
                     .isEmpty() || update.unkeyed() != null
@@ -248,35 +197,32 @@ public final class TerminalStreams implements AutoCloseable {
         } finally {
             if (Thread.currentThread()
                 .isInterrupted()) session.finished = true;
+            session.completeTask();
             if (session.finished) finish(session);
-            synchronized (session) {
-                session.task = null;
-                session.writing = false;
-            }
             // Socket cancellation interrupts the writer; the next client must not inherit the flag.
             Thread.interrupted();
         }
     }
 
     private void authorize(Session session) {
-        if (!authenticated.test(session.context)) session.subscriber.end = "revoked";
-        else if (System.currentTimeMillis() > session.authorizedUntil) session.subscriber.end = "invalidate";
+        if (session.subscriber.end != null) return;
+        if (!session.context.isLifecycleUnchanged()) session.subscriber.end = "invalidate";
+        else if (!session.subscriber.session.isValid(System.currentTimeMillis())) session.subscriber.end = "revoked";
+        else {
+            IAEGrid grid = identities.getGrid(session.subscriber.key);
+            if (grid == null) session.subscriber.end = "invalidate";
+            else if (!GridAccess.allows(grid, session.subscriber.principal)) session.subscriber.end = "revoked";
+        }
     }
 
     private void finish(Session session) {
-        session.finished = true;
+        session.cancelTask();
         session.context.getExchange()
             .close();
         state.release(session.subscriber);
         synchronized (this) {
             sessions.remove(session);
         }
-    }
-
-    private static boolean samePack(IconPack left, IconPack right) {
-        return left == right || left != null && right != null
-            && left.packId()
-                .equals(right.packId());
     }
 
     private static byte[] encode(String event, Object body) {
@@ -332,20 +278,24 @@ public final class TerminalStreams implements AutoCloseable {
                 : mappings.resolve(resource.itemKey(), resource.baseKey()));
     }
 
+    /** HTTP restart retires connections and handoff tokens while keeping the world-owned transport usable. */
+    public void reset() {
+        List<Session> active;
+        synchronized (this) {
+            active = new ArrayList<>(sessions);
+            state.reset();
+        }
+        for (Session session : active) finish(session);
+    }
+
     @Override
     public void close() {
-        List<Session> active;
         synchronized (this) {
             if (closed) return;
             closed = true;
-            active = new ArrayList<>(sessions);
         }
+        reset();
         state.close();
-        for (Session session : active) synchronized (session) {
-            FutureTask<Void> task = session.task;
-            if (task != null) task.cancel(true);
-            finish(session);
-        }
         timer.shutdownNow();
         writers.shutdownNow();
     }
@@ -353,17 +303,51 @@ public final class TerminalStreams implements AutoCloseable {
     private static final class Session {
 
         private final RequestContext context;
-        private final TerminalState.Subscription subscriber;
+        private final TerminalRegistry.Subscription subscriber;
         private final @Nullable IconPack pack;
         private volatile boolean ready;
         private volatile boolean finished;
-        private volatile long authorizedUntil = System.currentTimeMillis() + ACCESS_LEASE_MILLIS;
         private volatile long lastWrite;
         private @Nullable FutureTask<Void> task;
         private long started;
         private boolean writing;
 
-        private Session(RequestContext context, TerminalState.Subscription subscriber, @Nullable IconPack pack) {
+        private synchronized @Nullable FutureTask<Void> prepareTask(Runnable write) {
+            if (task != null || finished) return null;
+            task = new FutureTask<>(write, null);
+            return task;
+        }
+
+        private synchronized boolean hasTask() {
+            return task != null;
+        }
+
+        private synchronized boolean writeTimedOut(long now, long timeout) {
+            return writing && now - started > timeout;
+        }
+
+        private synchronized boolean startWriting() {
+            if (finished) return false;
+            started = System.currentTimeMillis();
+            writing = true;
+            return true;
+        }
+
+        private synchronized void completeTask() {
+            task = null;
+            writing = false;
+        }
+
+        private void cancelTask() {
+            FutureTask<Void> pending;
+            synchronized (this) {
+                finished = true;
+                pending = task;
+            }
+            if (pending != null) pending.cancel(true);
+        }
+
+        private Session(RequestContext context, TerminalRegistry.Subscription subscriber, @Nullable IconPack pack) {
             this.context = context;
             this.subscriber = subscriber;
             this.pack = pack;

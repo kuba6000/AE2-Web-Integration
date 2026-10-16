@@ -27,6 +27,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
+import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
@@ -57,6 +58,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTrackingHist
 import pl.kuba6000.ae2webintegration.core.http.endpoint.updates.SkipUpdate;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 
 public class AE2Controller {
 
@@ -86,10 +88,19 @@ public class AE2Controller {
     public static class RequestContext {
 
         private final WebPrincipal principal;
+        private final @Nullable AuthSession session;
         private final HttpExchange exchange;
         private final Map<String, String> pathParams;
         private final JsonObject body;
         private final long lifecycleGeneration;
+
+        public RequestContext(HttpExchange exchange, @NotNull AuthSession session) {
+            this(exchange, session.principal(), session, Collections.emptyMap(), null, httpLifecycleGeneration.get());
+        }
+
+        public @Nullable AuthSession getSession() {
+            return session;
+        }
 
         public RequestContext(HttpExchange exchange, WebPrincipal principal) {
             this(exchange, principal, Collections.emptyMap(), null);
@@ -97,12 +108,13 @@ public class AE2Controller {
 
         public RequestContext(HttpExchange exchange, WebPrincipal principal, Map<String, String> pathParams,
             JsonObject body) {
-            this(exchange, principal, pathParams, body, httpLifecycleGeneration.get());
+            this(exchange, principal, null, pathParams, body, httpLifecycleGeneration.get());
         }
 
-        private RequestContext(HttpExchange exchange, WebPrincipal principal, Map<String, String> pathParams,
-            JsonObject body, long lifecycleGeneration) {
+        private RequestContext(HttpExchange exchange, WebPrincipal principal, @Nullable AuthSession session,
+            Map<String, String> pathParams, JsonObject body, long lifecycleGeneration) {
             this.principal = principal;
+            this.session = session;
             this.exchange = exchange;
             this.pathParams = pathParams;
             this.body = body;
@@ -110,8 +122,15 @@ public class AE2Controller {
         }
 
         /** Preserves the request's originating lifecycle while adding authenticated, parsed input. */
-        public RequestContext withInputs(WebPrincipal principal, Map<String, String> pathParams, JsonObject body) {
-            return new RequestContext(exchange, principal, pathParams, body, lifecycleGeneration);
+        public RequestContext withInputs(@Nullable RequestContext credentials, Map<String, String> pathParams,
+            JsonObject body) {
+            return new RequestContext(
+                exchange,
+                credentials == null ? WebPrincipal.anonymous() : credentials.principal,
+                credentials == null ? null : credentials.session,
+                pathParams,
+                body,
+                lifecycleGeneration);
         }
 
         public long getLifecycleGeneration() {
@@ -253,6 +272,8 @@ public class AE2Controller {
         synchronized (serverLifecycleLock) {
             acceptingHTTPRequests = false;
             httpLifecycleGeneration.incrementAndGet();
+            TerminalStreams streams = CoreEngine.getTerminalStreams();
+            if (streams != null) streams.reset();
             if (server != null) {
                 server.stop(0);
             }

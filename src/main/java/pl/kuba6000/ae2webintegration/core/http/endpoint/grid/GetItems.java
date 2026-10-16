@@ -5,18 +5,16 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Consumer;
-import java.util.function.Function;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
-import com.sun.net.httpserver.HttpExchange;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
@@ -34,7 +32,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
-import pl.kuba6000.ae2webintegration.core.terminal.TerminalState;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
@@ -80,7 +78,7 @@ public final class GetItems extends ISyncedRequest {
      */
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull List<StoredResource> data, @Nullable IconMappings icons,
-        @Nullable TerminalState.View view, @Nullable String subscription) {
+        @Nullable TerminalRegistry.View view, @Nullable String subscription) {
 
         public Response(ApiStatus status, List<StoredResource> data, IconMappings icons) {
             this(status, data, icons, null, null);
@@ -97,25 +95,19 @@ public final class GetItems extends ISyncedRequest {
     private @Nullable String subscription;
 
     /** Called by the router after the game-thread operation; only detached state is read here. */
-    public ApiResponse finishResponse(Consumer<ISyncedRequest> dispatch,
-        Function<HttpExchange, AE2Controller.RequestContext> authenticate) {
+    public ApiResponse finishResponse() {
         ApiResponse response = getResponse();
         if (!context.isLifecycleUnchanged()) return ApiResponse.error(ApiStatus.SERVER_STOPPING);
         if (subscription == null) return response;
-        PermissionCheck permission = new PermissionCheck(gridKey, grid);
-        permission.init(context);
-        dispatch.accept(permission);
-        ApiResponse permissionResult = permission.getResponse();
-        AE2Controller.RequestContext credentials = authenticate.apply(context.getExchange());
-        if (permissionResult.httpStatus() != HttpURLConnection.HTTP_OK || credentials == null
-            || !credentials.getPrincipal()
-                .equals(context.getPrincipal())) {
-            TerminalState terminals = CoreEngine.getTerminalState();
-            if (terminals != null) terminals.cancel(subscription);
-            return permissionResult.httpStatus() != HttpURLConnection.HTTP_OK ? permissionResult
-                : ApiResponse.error(ApiStatus.UNAUTHORIZED);
-        }
-        return response;
+        ApiStatus failure = null;
+        if (context.getSession() == null || !context.getSession()
+            .isValid(System.currentTimeMillis())) failure = ApiStatus.UNAUTHORIZED;
+        else if (CoreEngine.GRID_IDENTITIES.getGrid(gridKey) != grid) failure = ApiStatus.GRID_NOT_FOUND;
+        else if (!GridAccess.allows(grid, context.getPrincipal())) failure = ApiStatus.NO_PERMISSIONS;
+        if (failure == null) return response;
+        TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
+        if (terminals != null) terminals.cancel(subscription);
+        return ApiResponse.error(failure);
     }
 
     @Override
@@ -138,12 +130,12 @@ public final class GetItems extends ISyncedRequest {
         if (live && !context.getExchange()
             .getRequestMethod()
             .equals("HEAD")) {
-            TerminalState terminals = CoreEngine.getTerminalState();
+            TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
             IconPack pack = icons ? CoreEngine.getIconPack() : null;
-            TerminalState.Bootstrap bootstrap = terminals == null ? null
+            TerminalRegistry.Bootstrap bootstrap = terminals == null ? null
                 : terminals.reserve(
                     gridKey,
-                    context.getPrincipal(),
+                    context.getSession(),
                     icons,
                     pack == null ? null : pack.packId(),
                     System.currentTimeMillis());
@@ -231,22 +223,6 @@ public final class GetItems extends ISyncedRequest {
                 craftable,
                 itemKey,
                 icon));
-    }
-
-    private static final class PermissionCheck extends ISyncedRequest {
-
-        private final IAEGrid expectedGrid;
-
-        private PermissionCheck(StableKey key, IAEGrid expectedGrid) {
-            gridKey = key;
-            this.expectedGrid = expectedGrid;
-        }
-
-        @Override
-        protected void handle(IAEGrid current) {
-            if (current == null || current != expectedGrid) deny(ApiStatus.GRID_NOT_FOUND);
-            else done();
-        }
     }
 
 }

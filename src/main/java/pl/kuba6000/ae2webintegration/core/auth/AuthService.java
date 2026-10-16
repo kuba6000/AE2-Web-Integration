@@ -41,8 +41,7 @@ public final class AuthService {
 
     private AuthService() {}
 
-    @Desugar
-    private record AuthSession(long expiresAtMillis, @NotNull WebPrincipal principal) {}
+    private static volatile AuthSession localSession = new AuthSession(WebPrincipal.localhost(), Long.MAX_VALUE);
 
     @Desugar
     private record PendingRegistration(@NotNull String token, @NotNull String passwordHash) {}
@@ -69,6 +68,9 @@ public final class AuthService {
 
     /** Reload changes request limits and proxy trust without invalidating existing sessions. */
     public static void reloadHttpSettings() {
+        if (!Config.INSTANCE.general.allowNoPasswordOnLocalhost) localSession.invalidate();
+        else if (!localSession.isValid(System.currentTimeMillis()))
+            localSession = new AuthSession(WebPrincipal.localhost(), Long.MAX_VALUE);
         rateLimiter = new RateLimiter(
             Config.INSTANCE.general.maxRequestsBeforeLoggedInPerMinute,
             RATE_LIMIT_WINDOW_MILLIS);
@@ -106,7 +108,7 @@ public final class AuthService {
         String token = extractToken(exchange);
         if (token == null) return false;
         AuthSession session = sessions.get(token);
-        return session != null && System.currentTimeMillis() < session.expiresAtMillis();
+        return session != null && session.isValid(System.currentTimeMillis());
     }
 
     private static boolean isLocalAccess(@NotNull HttpExchange exchange, @NotNull InetAddress client) {
@@ -144,17 +146,17 @@ public final class AuthService {
 
     public static @Nullable RequestContext authenticate(@NotNull HttpExchange exchange) {
         if (isLocalAccess(exchange, resolveClientAddress(exchange))) {
-            return new RequestContext(exchange, WebPrincipal.localhost());
+            return new RequestContext(exchange, localSession);
         }
         String token = extractToken(exchange);
         if (token == null) return null;
         AuthSession session = sessions.get(token);
         if (session == null) return null;
-        if (System.currentTimeMillis() >= session.expiresAtMillis()) {
+        if (!session.isValid(System.currentTimeMillis())) {
             sessions.remove(token, session);
             return null;
         }
-        return new RequestContext(exchange, session.principal());
+        return new RequestContext(exchange, session);
     }
 
     /** Verifies credentials and publishes a session only into the originating HTTP lifecycle. */
@@ -175,8 +177,8 @@ public final class AuthService {
         String token = PasswordHelper.generateToken(SESSION_TOKEN_LENGTH);
         long seconds = rememberMe ? REMEMBER_ME_SESSION_SECONDS : SESSION_SECONDS;
         AuthSession session = new AuthSession(
-            System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(seconds),
-            principal);
+            principal,
+            System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(seconds));
         synchronized (authenticationStateLock) {
             if (!AE2Controller.isCurrentHTTPLifecycle(generation))
                 return LoginResult.failure(ApiStatus.SERVER_STOPPING);
@@ -226,13 +228,19 @@ public final class AuthService {
 
     public static void logout(@NotNull HttpExchange exchange) {
         String token = extractToken(exchange);
-        if (token != null) sessions.remove(token);
+        if (token != null) {
+            AuthSession session = sessions.remove(token);
+            if (session != null) session.invalidate();
+        }
     }
 
     public static void clearWorldState() {
         synchronized (authenticationStateLock) {
             registrations.clear();
+            sessions.values()
+                .forEach(AuthSession::invalidate);
             sessions.clear();
+            localSession.invalidate();
         }
     }
 }

@@ -25,7 +25,7 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.terminal.TerminalState;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
@@ -39,7 +39,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     private static final long VIEWER_LEASE_MILLIS = TimeUnit.SECONDS.toMillis(10);
     private static final long FAILURE_RETRY_MILLIS = TimeUnit.SECONDS.toMillis(30);
     private final StorageTrackingService service;
-    private final TerminalState terminals;
+    private final TerminalRegistry terminals;
     private final GridIdentityRegistry identities;
     private final ConfigSettings.ResourceTracking settings;
     private final Map<StableKey, Binding> bindings = new HashMap<>();
@@ -50,11 +50,11 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
 
     public StorageTrackingCoordinator(@NotNull StorageTrackingService service, @NotNull GridIdentityRegistry identities,
         @NotNull ConfigSettings.ResourceTracking settings) {
-        this(service, identities, settings, new TerminalState());
+        this(service, identities, settings, new TerminalRegistry());
     }
 
     public StorageTrackingCoordinator(@NotNull StorageTrackingService service, @NotNull GridIdentityRegistry identities,
-        @NotNull ConfigSettings.ResourceTracking settings, @NotNull TerminalState terminals) {
+        @NotNull ConfigSettings.ResourceTracking settings, @NotNull TerminalRegistry terminals) {
         this.terminals = terminals;
         this.service = service;
         this.identities = identities;
@@ -64,6 +64,10 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     /** Native reads are shared across viewers; at most one scheduled grid observation runs per tick. */
     public void tick(@NotNull IAE ae, long nowMillis) {
         if (nowMillis >= nextDiscovery) {
+            for (StableKey key : terminals.viewedGrids(nowMillis)) {
+                IAEGrid grid = identities.getGrid(key);
+                if (grid != null) touchViewer(grid, nowMillis);
+            }
             discover(ae, nowMillis);
             nextDiscovery = nowMillis + DISCOVERY_MILLIS;
         }

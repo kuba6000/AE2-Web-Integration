@@ -13,10 +13,8 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
-import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
@@ -26,7 +24,7 @@ import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.terminal.TerminalState;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
@@ -67,7 +65,7 @@ public class CoreEngine {
     private static volatile @Nullable StorageTrackingService storageTracking;
     private static @Nullable StorageTrackingCoordinator storageCoordinator;
     private static volatile @Nullable TerminalStreams terminalStreams;
-    private static volatile @Nullable TerminalState terminalState;
+    private static volatile @Nullable TerminalRegistry terminalRegistry;
 
     public static void init(@NotNull IServerPlatform serverPlatform) {
         serverRunning = false;
@@ -90,17 +88,12 @@ public class CoreEngine {
             LOG.error("Failed to load grid identities; grid requests remain unavailable", e);
         }
         serverRunning = true;
-        loadIconPack();
         stopStorageTracking();
+        loadIconPack();
         ConfigSettings.ResourceTracking trackingSettings = Config.INSTANCE.resourceTracking;
-        TerminalState liveState = new TerminalState();
-        terminalState = liveState;
-        TerminalStreams streams = new TerminalStreams(liveState, CoreEngine::getIconPack, context -> {
-            if (!context.isLifecycleUnchanged()) return false;
-            RequestContext authenticated = AuthService.authenticate(context.getExchange());
-            return authenticated != null && authenticated.getPrincipal()
-                .equals(context.getPrincipal());
-        });
+        TerminalRegistry terminals = new TerminalRegistry();
+        terminalRegistry = terminals;
+        TerminalStreams streams = new TerminalStreams(terminals, GRID_IDENTITIES, getIconPack());
         terminalStreams = streams;
         StorageTrackingService service = new StorageTrackingService(
             new HsqlStorageHistoryStore(
@@ -109,7 +102,7 @@ public class CoreEngine {
                 trackingSettings.historyRetentionDays,
                 trackingSettings.historyMaxRowsPerGrid),
             trackingSettings.maxQueuedRows);
-        storageCoordinator = new StorageTrackingCoordinator(service, GRID_IDENTITIES, trackingSettings, liveState);
+        storageCoordinator = new StorageTrackingCoordinator(service, GRID_IDENTITIES, trackingSettings, terminals);
         storageTracking = service;
         themes.close();
         themes = ThemeCatalog.load(
@@ -131,11 +124,9 @@ public class CoreEngine {
         runPlanMaintenance(System.nanoTime());
         AE2Controller.itemIdentities.cleanUp();
         StorageTrackingCoordinator coordinator = storageCoordinator;
-        TerminalStreams streams = terminalStreams;
         IAE ae = AE2Controller.AE2Interface;
         if (coordinator != null && ae != null) {
             long now = System.currentTimeMillis();
-            if (streams != null) streams.onServerTick(ae, now, grid -> coordinator.touchViewer(grid, now));
             coordinator.tick(ae, now);
         }
         maintainVersionChecker();
@@ -285,8 +276,8 @@ public class CoreEngine {
         if (coordinator != null) coordinator.prepareForViewer(grid, System.currentTimeMillis());
     }
 
-    public static @Nullable TerminalState getTerminalState() {
-        return terminalState;
+    public static @Nullable TerminalRegistry getTerminalRegistry() {
+        return terminalRegistry;
     }
 
     public static @Nullable TerminalStreams getTerminalStreams() {
@@ -296,7 +287,7 @@ public class CoreEngine {
     private static void stopTerminalStreams() {
         TerminalStreams previousStreams = terminalStreams;
         terminalStreams = null;
-        terminalState = null;
+        terminalRegistry = null;
         if (previousStreams != null) previousStreams.close();
     }
 

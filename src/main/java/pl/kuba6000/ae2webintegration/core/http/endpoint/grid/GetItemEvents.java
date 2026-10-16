@@ -6,14 +6,13 @@ import java.net.HttpURLConnection;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 
 /**
@@ -38,9 +37,9 @@ import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
  * @response 503 {@link ErrorResponse} Stream capacity reached or server unavailable.
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/items/events")
-public final class GetItemEvents extends ISyncedRequest {
+public final class GetItemEvents extends IAsyncRequest {
 
-    /** Single-use token returned with the initial snapshot. Bound to account, grid and icon mode. */
+    /** Single-use token returned with the initial snapshot. Bound to the login session, grid and icon mode. */
     @QueryParam("subscription")
     private @Nullable String subscription;
     /** Include icon references when new or changed resource definitions are sent. */
@@ -49,8 +48,8 @@ public final class GetItemEvents extends ISyncedRequest {
     private @Nullable TerminalStreams streams;
 
     @Override
-    protected void handle(IAEGrid grid) {
-        if (grid == null) {
+    public void handle() {
+        if (gridKey == null) {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }

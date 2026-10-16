@@ -56,7 +56,8 @@ class LiveTerminalHttpTest {
                 return TestGridFixtures.resolvedKey(grid);
             })
                 .get(3, TimeUnit.SECONDS);
-            game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
+            java.util.concurrent.ScheduledFuture<?> ticks = game
+                .scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
             String base = "http://127.0.0.1:" + Config.INSTANCE.general.port + "/api/grids/" + key + "/items";
             for (int i = 0; i < 6; i++) {
                 HttpURLConnection head = connection(base + "?live=true");
@@ -82,6 +83,7 @@ class LiveTerminalHttpTest {
                     .getAsJsonObject()
                     .get("quantity")
                     .getAsLong());
+            ticks.cancel(false);
             String token = snapshot.get("subscription")
                 .getAsString();
             HttpURLConnection denied = connection(base + "/events?subscription=" + token);
@@ -95,6 +97,7 @@ class LiveTerminalHttpTest {
             try (BufferedReader input = new BufferedReader(
                 new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
                 assertEquals("text/event-stream; charset=UTF-8", stream.getContentType());
+                game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
                 game.submit(() -> {
                     grid.rows.set(0, new ItemIdentityRequestTest.Resource("iron", 25, false));
                     assertNotNull(grid.web$getStorageCapture());
