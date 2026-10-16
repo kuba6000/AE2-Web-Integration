@@ -35,7 +35,7 @@ public abstract class AEItemMixin implements IAEKey {
     }
 
     @Override
-    public @Nullable StableKey web$getIconBaseKey() {
+    public @Nullable StableKey web$getBaseKey() {
         AEKey key = (AEKey) (Object) this;
         if (!(key instanceof AEItemKey) && !(key instanceof AEFluidKey)) return null;
         AEKey baseline = key.dropSecondary();
