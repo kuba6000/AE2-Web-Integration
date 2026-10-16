@@ -126,6 +126,6 @@ public abstract class NetworkMonitorTrackingMixin<T extends IAEStack<T>> impleme
     @Inject(method = "forceUpdate", at = @At("RETURN"))
     private void web$invalidated(CallbackInfo callback) {
         StorageCapture capture = ((IAEStorageGrid) myGridCache).web$getStorageCapture();
-        if (capture != null) capture.invalidate();
+        if (capture != null) capture.invalidateTerminal();
     }
 }
