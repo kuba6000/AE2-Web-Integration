@@ -7,7 +7,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -18,6 +17,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 
@@ -37,7 +37,8 @@ public final class TerminalState {
 
     @Desugar
     public record Bootstrap(@NotNull String subscription, @NotNull View view,
-        @NotNull List<StorageObservation.Row> rows) {}
+        @NotNull List<StorageObservation.Row> rows, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
+        @NotNull List<StorageObservation.UnkeyedRow> unkeyed) {}
 
     @Desugar
     public record Amount(@NotNull StableKey itemKey, long quantity, boolean craftable) {}
@@ -45,7 +46,8 @@ public final class TerminalState {
     @Desugar
     public record Update(@NotNull View view, @NotNull List<Amount> updates,
         @NotNull List<StorageObservation.Row> definitions, @NotNull List<StableKey> removed,
-        @Nullable List<StorageObservation.Row> unkeyed) {}
+        @NotNull Map<StableKey, ResourceDescriptor> descriptions,
+        @Nullable List<StorageObservation.UnkeyedRow> unkeyed) {}
 
     /** Returns true when a new baseline is needed. Called only while acquiring/renewing a viewer. */
     public synchronized boolean activate(@NotNull StableKey key, long generation, long now) {
@@ -72,24 +74,27 @@ public final class TerminalState {
         Set<StableKey> changed = new HashSet<>();
         Set<StableKey> definitions = new HashSet<>();
         Set<StableKey> remaining = observation.full() ? new HashSet<>(grid.rows.keySet()) : null;
-        List<StorageObservation.Row> unkeyed = new ArrayList<>();
         for (StorageObservation.Row row : observation.rows()) {
-            StableKey item = row.resource()
-                .itemKey();
-            boolean present = row.resource()
-                .quantity() != 0 || row.craftable();
-            if (item == null) {
-                if (present) unkeyed.add(row);
-                continue;
-            }
+            StableKey item = row.itemKey();
+            boolean present = row.quantity() != 0 || row.craftable();
             if (remaining != null) remaining.remove(item);
             StorageObservation.Row previous = present ? grid.rows.put(item, row) : grid.rows.remove(item);
-            if (present ? !row.equals(previous) : previous != null) changed.add(item);
-            if (present && (previous == null || !sameDescription(previous, row))) definitions.add(item);
+            ResourceDescriptor description = observation.descriptions()
+                .get(item);
+            ResourceDescriptor old = present ? grid.descriptions.put(item, description)
+                : grid.descriptions.remove(item);
+            if (present ? !row.equals(previous) || !description.equals(old) : previous != null) changed.add(item);
+            if (present && !description.equals(old)) definitions.add(item);
         }
         if (remaining != null) for (StableKey item : remaining) {
             grid.rows.remove(item);
+            grid.descriptions.remove(item);
             changed.add(item);
+        }
+        List<StorageObservation.UnkeyedRow> unkeyed = new ArrayList<>();
+        for (StorageObservation.UnkeyedRow row : observation.unkeyed()) {
+            if (row.resource()
+                .quantity() != 0 || row.craftable()) unkeyed.add(row);
         }
         boolean unknownChanged = !unkeyed.equals(grid.unkeyed);
         grid.unkeyed = Collections.unmodifiableList(unkeyed);
@@ -122,7 +127,7 @@ public final class TerminalState {
             .toString();
         subscriptions
             .put(token, new Subscription(token, key, grid, principal, icons, packId, now + RESERVATION_MILLIS));
-        return new Bootstrap(token, view(grid), rows(grid));
+        return new Bootstrap(token, view(grid), rows(grid), new HashMap<>(grid.descriptions), grid.unkeyed);
     }
 
     /** Tokens are single-use and bound to the authenticated account, grid and requested representation. */
@@ -147,26 +152,25 @@ public final class TerminalState {
     synchronized @Nullable Update drain(Subscription subscriber) {
         if (subscriber.end != null || !hasPending(subscriber)) return null;
         List<StorageObservation.Row> definitions = new ArrayList<>();
+        Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
         List<Amount> updates = new ArrayList<>();
         List<StableKey> removed = new ArrayList<>();
         for (StableKey key : subscriber.pending) {
             StorageObservation.Row row = subscriber.grid.rows.get(key);
             if (row == null) removed.add(key);
             else {
-                updates.add(
-                    new Amount(
-                        key,
-                        row.resource()
-                            .quantity(),
-                        row.craftable()));
-                if (subscriber.definitions.contains(key)) definitions.add(row);
+                updates.add(new Amount(key, row.quantity(), row.craftable()));
+                if (subscriber.definitions.contains(key)) {
+                    definitions.add(row);
+                    descriptions.put(key, subscriber.grid.descriptions.get(key));
+                }
             }
         }
-        List<StorageObservation.Row> unknown = subscriber.unknownChanged ? subscriber.grid.unkeyed : null;
+        List<StorageObservation.UnkeyedRow> unknown = subscriber.unknownChanged ? subscriber.grid.unkeyed : null;
         subscriber.pending.clear();
         subscriber.definitions.clear();
         subscriber.unknownChanged = false;
-        return new Update(view(subscriber.grid), updates, definitions, removed, unknown);
+        return new Update(view(subscriber.grid), updates, definitions, removed, descriptions, unknown);
     }
 
     synchronized void release(Subscription subscriber) {
@@ -183,7 +187,16 @@ public final class TerminalState {
     public synchronized @Nullable StorageSnapshot snapshot(@NotNull StableKey key) {
         Grid grid = grids.get(key);
         if (grid == null || !grid.initialized) return null;
-        return new StorageSnapshot(grid.generation, grid.revision, grid.observedAt, true, true, true, rows(grid));
+        return new StorageSnapshot(
+            grid.generation,
+            grid.revision,
+            grid.observedAt,
+            true,
+            true,
+            true,
+            rows(grid),
+            grid.descriptions,
+            grid.unkeyed);
     }
 
     /** Full-list invalidation is distinct from maintenance reconciliation and from history coverage loss. */
@@ -193,6 +206,7 @@ public final class TerminalState {
         for (Subscription subscriber : subscriptions.values())
             if (subscriber.grid == grid) end(subscriber, "invalidate");
         grid.rows.clear();
+        grid.descriptions.clear();
         grid.unkeyed = Collections.emptyList();
         grid.initialized = false;
         grid.epoch++;
@@ -239,26 +253,12 @@ public final class TerminalState {
         subscriber.unknownChanged = false;
     }
 
-    private static boolean sameDescription(StorageObservation.Row previous, StorageObservation.Row next) {
-        var a = previous.resource();
-        var b = next.resource();
-        return Objects.equals(a.registryNamespace(), b.registryNamespace())
-            && Objects.equals(a.registryPath(), b.registryPath())
-            && a.componentCount() == b.componentCount()
-            && a.damage() == b.damage()
-            && a.displayName()
-                .equals(b.displayName())
-            && a.resourceType() == b.resourceType()
-            && Objects.equals(a.iconBaseKey(), b.iconBaseKey());
-    }
-
     private static View view(Grid grid) {
         return new View(grid.generation + "." + grid.epoch, Long.toString(grid.revision));
     }
 
     private static List<StorageObservation.Row> rows(Grid grid) {
         List<StorageObservation.Row> rows = new ArrayList<>(grid.rows.values());
-        rows.addAll(grid.unkeyed);
         return rows;
     }
 
@@ -266,7 +266,8 @@ public final class TerminalState {
 
         private final long generation;
         private final Map<StableKey, StorageObservation.Row> rows = new HashMap<>();
-        private List<StorageObservation.Row> unkeyed = Collections.emptyList();
+        private final Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
+        private List<StorageObservation.UnkeyedRow> unkeyed = Collections.emptyList();
         private long epoch;
         private long revision;
         private long observedAt;

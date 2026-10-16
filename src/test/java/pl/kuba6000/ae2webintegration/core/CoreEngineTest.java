@@ -131,14 +131,8 @@ class CoreEngineTest {
             assertEquals(
                 2,
                 points.stream()
-                    .filter(point -> point.resource() != null)
+                    .filter(point -> point.itemKey() != null)
                     .count());
-            assertTrue(
-                points.stream()
-                    .filter(point -> point.resource() != null)
-                    .allMatch(
-                        point -> point.resource()
-                            .itemKey() != null));
         } finally {
             CoreEngine.onServerStopped();
             AE2Controller.AE2Interface = previous;
@@ -231,7 +225,6 @@ class CoreEngineTest {
                 Long.MAX_VALUE,
                 snapshot.rows()
                     .get(0)
-                    .resource()
                     .quantity());
             assertFalse(
                 service.history(key, null, 0, 20)

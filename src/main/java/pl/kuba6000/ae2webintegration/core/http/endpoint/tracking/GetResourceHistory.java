@@ -98,7 +98,7 @@ public final class GetResourceHistory extends IAsyncRequest {
             List<Point> points = new ArrayList<>(
                 history.points()
                     .size());
-            for (StorageHistoryPoint point : history.points()) points.add(toPoint(point));
+            for (StorageHistoryPoint point : history.points()) points.add(toPoint(point, history));
             GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
             respondDetached(
                 HttpURLConnection.HTTP_OK,
@@ -112,18 +112,22 @@ public final class GetResourceHistory extends IAsyncRequest {
                             .isStorageTracked()
                             || data.getSettings()
                                 .isFlowTracked()),
-                        history.baseline() == null ? null : toPoint(history.baseline()))));
+                        history.baseline() == null ? null : toPoint(history.baseline(), history))));
         } catch (IOException failure) {
             throw new UncheckedIOException(failure);
         }
     }
 
-    private static Point toPoint(StorageHistoryPoint point) {
+    private static Point toPoint(StorageHistoryPoint point, StorageHistory history) {
         return new Point(
             point.observedAt(),
             Long.toString(point.generation()),
             point.kind(),
-            point.resource() == null ? null : new TrackedResource(point.resource()),
+            point.itemKey() == null ? null
+                : new TrackedResource(
+                    history.descriptions()
+                        .get(point.itemKey()),
+                    point.quantity()),
             point.craftable(),
             Long.toString(point.input()),
             Long.toString(point.output()),

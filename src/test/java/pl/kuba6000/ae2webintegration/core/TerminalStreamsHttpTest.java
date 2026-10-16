@@ -37,8 +37,10 @@ import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalState;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFixtures;
 
 class TerminalStreamsHttpTest extends GridTestScope {
 
@@ -158,7 +160,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
     void tooManyPendingKeysRequiresFreshSnapshotRatherThanAnUnboundedQueue() throws Exception {
         try (Fixture fixture = new Fixture(Collections.emptyList())) {
             String token = fixture.reserve();
-            List<StorageObservation.Row> rows = new ArrayList<>();
+            List<StorageObservationFixtures.Row> rows = new ArrayList<>();
             for (int i = 0; i < 17_000; i++) rows.add(row(StableKey.random(), "Resource", 1));
             fixture.publish(2, rows);
             assertEquals(400, fixture.status(token));
@@ -223,7 +225,9 @@ class TerminalStreamsHttpTest extends GridTestScope {
         try (Fixture fixture = new Fixture(Arrays.asList(row(removed, "Stone", 4), row(null, "Essentia", 9)));
             Connection connection = fixture.open(fixture.reserve())) {
             assertEquals("ready", readEvent(connection.input).name());
-            StorageObservation.Row craftable = new StorageObservation.Row(row(added, "Iron", 0).resource(), true);
+            StorageObservationFixtures.Row craftable = new StorageObservationFixtures.Row(
+                row(added, "Iron", 0).resource(),
+                true);
             fixture.publish(2, Arrays.asList(craftable, row(null, "Essentia", 3)));
             Event update = readEvent(connection.input);
             assertEquals("delta", update.name());
@@ -480,9 +484,11 @@ class TerminalStreamsHttpTest extends GridTestScope {
         }
     }
 
-    private static StorageObservation.Row row(StableKey key, String name, long quantity) {
-        return new StorageObservation.Row(
-            new ResourceSnapshot("test", "resource", 0, 0, name, ResourceType.ITEM, quantity, key, null),
+    private static StorageObservationFixtures.Row row(StableKey key, String name, long quantity) {
+        return new StorageObservationFixtures.Row(
+            new ResourceSnapshot(
+                new ResourceDescriptor("test", "resource", 0, 0, name, ResourceType.ITEM, key, null),
+                quantity),
             false);
     }
 
@@ -520,8 +526,8 @@ class TerminalStreamsHttpTest extends GridTestScope {
         }
     }
 
-    private static StorageObservation observation(long revision, List<StorageObservation.Row> rows) {
-        return new StorageObservation(revision * 100, true, true, rows, Collections.emptyList());
+    private static StorageObservation observation(long revision, List<StorageObservationFixtures.Row> rows) {
+        return StorageObservationFixtures.observation(revision * 100, true, true, rows, Collections.emptyList());
     }
 
     private static final class Fixture implements AutoCloseable {
@@ -536,11 +542,12 @@ class TerminalStreamsHttpTest extends GridTestScope {
         private final TerminalState state = new TerminalState();
         private final TerminalStreams streams = new TerminalStreams(state, () -> null, context -> authenticated.get());
 
-        private Fixture(List<StorageObservation.Row> rows) throws Exception {
+        private Fixture(List<StorageObservationFixtures.Row> rows) throws Exception {
             this(TestGridFixtures.key(32), WebPrincipal.admin(), rows);
         }
 
-        private Fixture(StableKey grid, WebPrincipal principal, List<StorageObservation.Row> rows) throws Exception {
+        private Fixture(StableKey grid, WebPrincipal principal, List<StorageObservationFixtures.Row> rows)
+            throws Exception {
             this.grid = grid;
             this.principal = principal;
             requestPrincipal.set(principal);
@@ -592,7 +599,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             return new Connection(connection(token));
         }
 
-        private void publish(long revision, List<StorageObservation.Row> rows) {
+        private void publish(long revision, List<StorageObservationFixtures.Row> rows) {
             state.observed(grid, 5, observation(revision, rows));
         }
 

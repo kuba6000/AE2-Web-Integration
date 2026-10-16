@@ -54,7 +54,6 @@ class StorageCaptureTest {
             accepted.web$getKey(),
             next.flows()
                 .get(0)
-                .resource()
                 .itemKey());
     }
 
@@ -103,7 +102,6 @@ class StorageCaptureTest {
                 healthy.web$getKey(),
                 flow.flows()
                     .get(0)
-                    .resource()
                     .itemKey());
             assertEquals(
                 2,
@@ -126,25 +124,25 @@ class StorageCaptureTest {
             craftables.add(healthy);
             StorageObservation stock = capture.observe(grid, null, 3000, true);
             assertEquals(
-                2,
+                1,
                 stock.rows()
                     .size());
             assertEquals(
                 1,
-                stock.rows()
-                    .stream()
-                    .filter(
-                        row -> row.resource()
-                            .itemKey() == null)
-                    .count());
+                stock.unkeyed()
+                    .size());
+            assertNull(
+                stock.unkeyed()
+                    .get(0)
+                    .resource()
+                    .description()
+                    .itemKey());
             assertTrue(
                 stock.rows()
                     .stream()
                     .anyMatch(
                         row -> healthy.web$getKey()
-                            .equals(
-                                row.resource()
-                                    .itemKey())));
+                            .equals(row.itemKey())));
         }
     }
 
@@ -187,7 +185,6 @@ class StorageCaptureTest {
             itemKey,
             next.flows()
                 .get(0)
-                .resource()
                 .itemKey());
         assertEquals(
             4,
@@ -261,13 +258,14 @@ class StorageCaptureTest {
             baseline.flows()
                 .isEmpty());
         assertNull(
-            baseline.rows()
+            baseline.unkeyed()
                 .get(0)
                 .resource()
+                .description()
                 .itemKey());
         assertEquals(
             42,
-            baseline.rows()
+            baseline.unkeyed()
                 .get(0)
                 .resource()
                 .quantity());
@@ -276,14 +274,14 @@ class StorageCaptureTest {
         assertFalse(update.full());
         assertEquals(
             7,
-            update.rows()
+            update.unkeyed()
                 .get(0)
                 .resource()
                 .quantity());
         stacks.clear();
         assertTrue(
             capture.observe(grid, null, 3000, false)
-                .rows()
+                .unkeyed()
                 .isEmpty());
     }
 
@@ -299,9 +297,10 @@ class StorageCaptureTest {
             result.flows()
                 .isEmpty());
         assertNull(
-            result.rows()
+            result.unkeyed()
                 .get(0)
                 .resource()
+                .description()
                 .itemKey());
     }
 
@@ -337,13 +336,14 @@ class StorageCaptureTest {
             observed.flows()
                 .isEmpty());
         assertNull(
-            observed.rows()
+            observed.unkeyed()
                 .get(0)
                 .resource()
+                .description()
                 .itemKey());
         assertEquals(
             21,
-            observed.rows()
+            observed.unkeyed()
                 .get(0)
                 .resource()
                 .quantity());
@@ -351,7 +351,7 @@ class StorageCaptureTest {
         StorageObservation update = capture.observe(grid, null, 2000, false);
         assertEquals(
             1,
-            update.rows()
+            update.unkeyed()
                 .size());
         assertTrue(
             update.flows()
@@ -440,7 +440,6 @@ class StorageCaptureTest {
             73,
             observed.rows()
                 .get(0)
-                .resource()
                 .quantity());
         capture.beginAbsoluteChanges();
         capture.beginAbsoluteChanges();
@@ -502,7 +501,6 @@ class StorageCaptureTest {
             0,
             first.rows()
                 .get(0)
-                .resource()
                 .quantity());
         assertTrue(
             first.rows()

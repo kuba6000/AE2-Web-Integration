@@ -234,13 +234,20 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 binding.terminalEpoch = terminalEpoch;
                 binding.capture.invalidate();
                 // Preserve accepted flow, but this stock read crossed a native topology boundary.
+                Map<StableKey, ResourceDescriptor> flowDescriptions = new HashMap<>();
+                for (StorageObservation.Flow flow : observation.flows()) flowDescriptions.put(
+                    flow.itemKey(),
+                    observation.descriptions()
+                        .get(flow.itemKey()));
                 observation = new StorageObservation(
                     observation.observedAt(),
                     false,
                     observation.flowComplete(),
                     false,
                     Collections.emptyList(),
-                    observation.flows());
+                    observation.flows(),
+                    flowDescriptions,
+                    Collections.emptyList());
                 stockSample = false;
             }
             if (binding.activeUntil > nowMillis) terminals.observed(binding.key, binding.generation, observation);

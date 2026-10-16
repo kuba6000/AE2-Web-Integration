@@ -22,6 +22,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /** Producer-owned stable keys and primitive counters; native identities belong to the shared registry. */
@@ -219,6 +220,8 @@ public final class StorageCapture {
         boolean requested = reconcile.getAndSet(false);
         boolean complete = full || requested;
         List<StorageObservation.Row> rows = new ArrayList<>();
+        Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
+        List<StorageObservation.UnkeyedRow> unkeyed = new ArrayList<>();
         boolean scanUnkeyed = hasUnkeyedResources;
         hasUnkeyedResources = false;
         try {
@@ -231,12 +234,12 @@ public final class StorageCapture {
                 Set<IAEKey> included = new HashSet<>();
                 for (IAEGenericStack stack : list.web$stacks()) {
                     IAEKey key = stack.web$what();
-                    rows.add(row(grid, key, stack.web$amount(), pack));
+                    row(grid, key, stack.web$amount(), pack, rows, descriptions, unkeyed);
                     included.add(key);
                 }
                 for (IAEKey craftable : grid.web$getCraftingGrid()
                     .web$getCraftables(null)) {
-                    if (included.add(craftable)) rows.add(row(grid, craftable, 0, pack));
+                    if (included.add(craftable)) row(grid, craftable, 0, pack, rows, descriptions, unkeyed);
                 }
             } else {
                 Set<IAEKey> included = new HashSet<>();
@@ -249,7 +252,7 @@ public final class StorageCapture {
                             continue;
                         }
                         long amount = entry.hasAbsolute ? entry.absolute : list.web$getAmount(identity);
-                        rows.add(row(grid, identity, amount, pack));
+                        row(grid, identity, amount, pack, rows, descriptions, unkeyed);
                         included.add(identity);
                     }
                     index++;
@@ -258,23 +261,25 @@ public final class StorageCapture {
                     for (IAEGenericStack stack : list.web$stacks()) {
                         IAEKey key = stack.web$what();
                         if (needsUnkeyedRead(key) && included.add(key)) {
-                            rows.add(row(grid, key, stack.web$amount(), pack));
+                            row(grid, key, stack.web$amount(), pack, rows, descriptions, unkeyed);
                         }
                     }
                     for (IAEKey craftable : grid.web$getCraftingGrid()
                         .web$getCraftables(null)) {
                         if (needsUnkeyedRead(craftable) && included.add(craftable))
-                            rows.add(row(grid, craftable, 0, pack));
+                            row(grid, craftable, 0, pack, rows, descriptions, unkeyed);
                     }
                 }
             }
-            List<StorageObservation.Flow> flows = flushFlow ? drainFlow() : Collections.emptyList();
+            List<StorageObservation.Flow> flows = flushFlow ? drainFlow(descriptions) : Collections.emptyList();
             StorageObservation result = new StorageObservation(
                 observedAt,
                 complete,
                 flushFlow ? !lost.getAndSet(false) : !lost.get(),
                 rows,
-                flows);
+                flows,
+                descriptions,
+                unkeyed);
             for (Entry entry : pending) {
                 if (entry.dirty <= through) {
                     entry.dirty = 0;
@@ -293,11 +298,20 @@ public final class StorageCapture {
     /** Detaches accepted flow without touching a grid, inventory, craftables or any stock cache. */
     public @NotNull StorageObservation flushFlow(long observedAt) {
         if (!isProducerThread()) throw new IllegalStateException("Flow capture requires the producer thread");
-        List<StorageObservation.Flow> flows = drainFlow();
-        return new StorageObservation(observedAt, false, !lost.getAndSet(false), false, Collections.emptyList(), flows);
+        Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
+        List<StorageObservation.Flow> flows = drainFlow(descriptions);
+        return new StorageObservation(
+            observedAt,
+            false,
+            !lost.getAndSet(false),
+            false,
+            Collections.emptyList(),
+            flows,
+            descriptions,
+            Collections.emptyList());
     }
 
-    private List<StorageObservation.Flow> drainFlow() {
+    private List<StorageObservation.Flow> drainFlow(Map<StableKey, ResourceDescriptor> descriptions) {
         // Metadata callbacks may themselves trigger native events. Complete them before draining counters.
         for (int index = 0; index < flowPending.size();) {
             Entry entry = flowPending.get(index);
@@ -306,7 +320,7 @@ public final class StorageCapture {
                 discard(entry);
                 continue;
             }
-            if (entry.input != 0 || entry.output != 0) description(entry, identity, null);
+            if (entry.input != 0 || entry.output != 0) AE2Controller.itemIdentities.describe(entry.key, null);
             index++;
         }
         List<StorageObservation.Flow> flows = new ArrayList<>();
@@ -320,7 +334,8 @@ public final class StorageCapture {
             }
             if (entry.input != 0 || entry.output != 0) {
                 if (entry.overflow) markGap();
-                flows.add(new StorageObservation.Flow(description(entry, identity, null), entry.input, entry.output));
+                descriptions.put(entry.key, AE2Controller.itemIdentities.describe(entry.key, null));
+                flows.add(new StorageObservation.Flow(entry.key, entry.input, entry.output));
             }
             entry.input = 0;
             entry.output = 0;
@@ -343,37 +358,36 @@ public final class StorageCapture {
         }
     }
 
-    private StorageObservation.Row row(IAEGrid grid, IAEKey key, long amount, @Nullable IconPack pack) {
+    private void row(IAEGrid grid, IAEKey key, long amount, @Nullable IconPack pack, List<StorageObservation.Row> rows,
+        Map<StableKey, ResourceDescriptor> descriptions, List<StorageObservation.UnkeyedRow> unkeyed) {
         Entry entry;
         try {
             entry = admit(key);
         } catch (UnsupportedOperationException unsupported) {
-            return unkeyedRow(grid, key, amount);
+            unkeyed.add(unkeyedRow(grid, key, amount));
+            return;
         } catch (IllegalArgumentException invalidIdentity) {
             markGap();
-            return unkeyedRow(grid, key, amount);
+            unkeyed.add(unkeyedRow(grid, key, amount));
+            return;
         }
-        if (entry == null) return unkeyedRow(grid, key, amount);
+        if (entry == null) {
+            unkeyed.add(unkeyedRow(grid, key, amount));
+            return;
+        }
         IAEKey identity = identity(entry);
         if (identity == null) {
             discard(entry);
-            return unkeyedRow(grid, key, amount);
+            unkeyed.add(unkeyedRow(grid, key, amount));
+            return;
         }
-        ResourceSnapshot base = description(entry, identity, pack);
-        ResourceSnapshot resource = new ResourceSnapshot(
-            base.registryNamespace(),
-            base.registryPath(),
-            base.componentCount(),
-            base.damage(),
-            base.displayName(),
-            base.resourceType(),
-            amount,
-            base.itemKey(),
-            base.iconBaseKey());
-        return new StorageObservation.Row(
-            resource,
-            grid.web$getCraftingGrid()
-                .web$isCurrentlyCraftable(key));
+        descriptions.put(entry.key, AE2Controller.itemIdentities.describe(entry.key, pack));
+        rows.add(
+            new StorageObservation.Row(
+                entry.key,
+                amount,
+                grid.web$getCraftingGrid()
+                    .web$isCurrentlyCraftable(key)));
     }
 
     private @Nullable IAEKey identity(Entry entry) {
@@ -393,25 +407,15 @@ public final class StorageCapture {
         markGap();
     }
 
-    private @NotNull ResourceSnapshot description(Entry entry, IAEKey identity, @Nullable IconPack pack) {
-        if (entry.description == null) {
-            entry.description = ResourceSnapshot.capture(identity, 0, entry.key, pack);
-            entry.iconsChecked = pack != null && pack.find(entry.key) == null;
-        }
-        if (pack != null && !entry.iconsChecked && pack.find(entry.key) == null) {
-            entry.description = ResourceSnapshot.capture(identity, 0, entry.key, pack);
-            entry.iconsChecked = true;
-        }
-        return entry.description;
-    }
-
     private boolean needsUnkeyedRead(IAEKey key) {
         return tryAdmit(key) == null;
     }
 
-    private StorageObservation.Row unkeyedRow(IAEGrid grid, IAEKey key, long amount) {
+    private StorageObservation.UnkeyedRow unkeyedRow(IAEGrid grid, IAEKey key, long amount) {
         hasUnkeyedResources = true;
-        return new StorageObservation.Row(ResourceSnapshot.capture(key, amount, null, null), key.web$isCraftable(grid));
+        return new StorageObservation.UnkeyedRow(
+            ResourceSnapshot.capture(key, amount, null, null),
+            key.web$isCraftable(grid));
     }
 
     private long add(Entry entry, long current, long amount) {
@@ -443,8 +447,6 @@ public final class StorageCapture {
         private long absolute;
         private boolean staged;
         private long stagedAmount;
-        private @Nullable ResourceSnapshot description;
-        private boolean iconsChecked;
 
         private Entry(StableKey key) {
             this.key = key;

@@ -63,7 +63,9 @@ class TrackingStatisticsResponseTest extends GridTestScope {
         key.resourceType = resourceType;
         ResourceSnapshot output = ResourceSnapshot.capture(grid, new OutputSnapshotTest.Stack(key, 10), null);
         assertNotNull(output);
-        assertNotNull(output.itemKey());
+        assertNotNull(
+            output.description()
+                .itemKey());
         AE2JobTracker.JobTrackingInfo info = new AE2JobTracker.JobTrackingInfo(output);
         // Completed measurement records, including legitimate sub-millisecond intervals rounded to zero.
         info.timeStarted = 1000;
@@ -122,7 +124,8 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 .getAsInt());
         assertFalse(item.has("itemId"));
         assertEquals(
-            output.itemKey()
+            output.description()
+                .itemKey()
                 .toString(),
             item.get("itemKey")
                 .getAsString());

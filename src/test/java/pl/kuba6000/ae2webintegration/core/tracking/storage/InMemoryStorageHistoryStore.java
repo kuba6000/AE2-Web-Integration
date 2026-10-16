@@ -9,14 +9,18 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /** Test persistence boundary for collector scheduling; real durability is covered by HSQLDB tests. */
 public final class InMemoryStorageHistoryStore implements IStorageHistoryStore {
 
+    private final Map<StableKey, ResourceDescriptor> resources = new HashMap<>();
     private final Map<StableKey, List<StorageHistoryPoint>> records = new HashMap<>();
 
     @Override
-    public synchronized void append(@NotNull StableKey gridKey, @NotNull List<StorageHistoryPoint> points) {
+    public synchronized void append(@NotNull StableKey gridKey,
+        @NotNull Map<StableKey, ResourceDescriptor> descriptions, @NotNull List<StorageHistoryPoint> points) {
+        resources.putAll(descriptions);
         records.computeIfAbsent(gridKey, key -> new ArrayList<>())
             .addAll(points);
     }
@@ -29,17 +33,14 @@ public final class InMemoryStorageHistoryStore implements IStorageHistoryStore {
         List<StorageHistoryPoint> points = records.get(gridKey);
         if (points != null) {
             for (StorageHistoryPoint point : points) {
-                if (point.observedAt() < fromMillis || itemKey != null && point.resource() != null
-                    && !itemKey.equals(
-                        point.resource()
-                            .itemKey()))
-                    continue;
+                if (point.observedAt() < fromMillis
+                    || itemKey != null && point.itemKey() != null && !itemKey.equals(point.itemKey())) continue;
                 complete &= point.complete();
                 result.add(point);
             }
         }
         boolean truncated = result.size() > limit;
         if (truncated) result = new ArrayList<>(result.subList(result.size() - limit, result.size()));
-        return new StorageHistory(result, complete, truncated);
+        return new StorageHistory(result, resources, complete, truncated);
     }
 }

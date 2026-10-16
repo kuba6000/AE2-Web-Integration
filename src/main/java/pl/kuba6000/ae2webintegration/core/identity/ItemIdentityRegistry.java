@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.identity;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
@@ -9,8 +10,10 @@ import org.jetbrains.annotations.Nullable;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /** Server-thread-only shared identities retained by the grids, CPUs and plans that last reported them. */
 public final class ItemIdentityRegistry {
@@ -57,6 +60,28 @@ public final class ItemIdentityRegistry {
             entry.baseComputed = true;
         }
         return entry.base;
+    }
+
+    /** Detached metadata shared by retained consumers; optional icon normalization is lazy. */
+    public @Nullable ResourceDescriptor describe(@NotNull StableKey key, @Nullable IconPack pack) {
+        if (ambiguous.contains(key)) throw new Ambiguous();
+        Entry entry = entries.getIfPresent(key);
+        if (entry == null) return null;
+        if (entry.description == null) entry.description = ResourceDescriptor.capture(entry.identity, key, null);
+        if (pack != null && pack.find(key) == null && !entry.baseComputed) resolveIconBase(key);
+        if (entry.baseComputed && !Objects.equals(entry.description.iconBaseKey(), entry.base)) {
+            ResourceDescriptor previous = entry.description;
+            entry.description = new ResourceDescriptor(
+                previous.registryNamespace(),
+                previous.registryPath(),
+                previous.componentCount(),
+                previous.damage(),
+                previous.displayName(),
+                previous.resourceType(),
+                key,
+                entry.base);
+        }
+        return entry.description;
     }
 
     public @Nullable IAEKey resolve(@NotNull StableKey key) {
@@ -159,6 +184,7 @@ public final class ItemIdentityRegistry {
 
         private final StableKey key;
         private final IAEKey identity;
+        private @Nullable ResourceDescriptor description;
         private boolean baseComputed;
         private @Nullable StableKey base;
 

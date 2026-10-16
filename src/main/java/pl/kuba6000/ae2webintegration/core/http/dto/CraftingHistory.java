@@ -144,12 +144,18 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
             Collections.sort(providers);
             items.add(
                 new ResourceTiming(
-                    resource.registryNamespace(),
-                    resource.registryPath(),
-                    resource.displayName(),
-                    resource.componentCount(),
-                    resource.damage(),
-                    resource.resourceType(),
+                    resource.description()
+                        .registryNamespace(),
+                    resource.description()
+                        .registryPath(),
+                    resource.description()
+                        .displayName(),
+                    resource.description()
+                        .componentCount(),
+                    resource.description()
+                        .damage(),
+                    resource.description()
+                        .resourceType(),
                     spent,
                     craftedTotal,
                     share,
@@ -157,7 +163,8 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
                     rate,
                     timings,
                     resolveIcon(resource, mappings),
-                    resource.itemKey(),
+                    resource.description()
+                        .itemKey(),
                     providers));
         }
         items.sort((first, second) -> Double.compare(second.shareInCraftingTime, first.shareInCraftingTime));
@@ -183,7 +190,12 @@ public record CraftingHistory(@NotNull ResourceStack finalOutput, long timeStart
 
     private static @Nullable IconMappings.Reference resolveIcon(@NotNull ResourceSnapshot resource,
         @Nullable IconMappings mappings) {
-        return mappings == null || resource.itemKey() == null ? null
-            : mappings.resolve(resource.itemKey(), resource.iconBaseKey());
+        return mappings == null || resource.description()
+            .itemKey() == null ? null
+                : mappings.resolve(
+                    resource.description()
+                        .itemKey(),
+                    resource.description()
+                        .iconBaseKey());
     }
 }

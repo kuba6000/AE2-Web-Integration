@@ -36,9 +36,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalState;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
-import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 
 /**
@@ -131,7 +129,7 @@ public final class GetItems extends ISyncedRequest {
             if (live) {
                 CoreEngine.prepareTerminal(grid, icons);
                 shared = null;
-            } else shared = CoreEngine.observeStorage(grid);
+            } else shared = CoreEngine.observeStorage(grid, icons);
         } catch (RuntimeException failedObservation) {
             // The coordinator logs the failed attempt and owns retry timing; do not enumerate again here.
             deny(ApiStatus.INTERNAL_ERROR);
@@ -158,7 +156,8 @@ public final class GetItems extends ISyncedRequest {
                     HttpURLConnection.HTTP_OK,
                     new Response(
                         ApiStatus.OK,
-                        TerminalStreams.resources(bootstrap.rows(), mappings),
+                        TerminalStreams
+                            .resources(bootstrap.rows(), bootstrap.descriptions(), bootstrap.unkeyed(), mappings),
                         mappings,
                         bootstrap.view(),
                         subscription));
@@ -168,25 +167,8 @@ public final class GetItems extends ISyncedRequest {
         if (shared != null) {
             IconPack pack = icons ? CoreEngine.getIconPack() : null;
             IconMappings mappings = pack == null ? null : new IconMappings(pack);
-            List<StoredResource> items = new ArrayList<>(
-                shared.rows()
-                    .size());
-            for (StorageObservation.Row row : shared.rows()) {
-                ResourceSnapshot resource = row.resource();
-                items.add(
-                    new StoredResource(
-                        resource.registryNamespace(),
-                        resource.registryPath(),
-                        resource.displayName(),
-                        resource.componentCount(),
-                        resource.damage(),
-                        resource.resourceType(),
-                        resource.quantity(),
-                        row.craftable(),
-                        resource.itemKey(),
-                        mappings == null || resource.itemKey() == null ? null
-                            : mappings.resolve(resource.itemKey(), AE2Controller.itemIdentities)));
-            }
+            List<StoredResource> items = TerminalStreams
+                .resources(shared.rows(), shared.descriptions(), shared.unkeyed(), mappings);
             respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
             return;
         }

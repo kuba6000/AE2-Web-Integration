@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.terminal;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +38,7 @@ import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
@@ -221,9 +222,10 @@ public final class TerminalStreams implements AutoCloseable {
                 Delta delta = new Delta(
                     update.view(),
                     update.updates(),
-                    resources(update.definitions(), mappings),
+                    resources(update.definitions(), update.descriptions(), Collections.emptyList(), mappings),
                     update.removed(),
-                    update.unkeyed() == null ? null : resources(update.unkeyed(), mappings),
+                    update.unkeyed() == null ? null
+                        : resources(Collections.emptyList(), Collections.emptyMap(), update.unkeyed(), mappings),
                     mappings);
                 byte[] bytes = encode("delta", delta);
                 authorize(session);
@@ -293,25 +295,39 @@ public final class TerminalStreams implements AutoCloseable {
     }
 
     public static @NotNull List<StoredResource> resources(@NotNull List<StorageObservation.Row> rows,
+        @NotNull Map<StableKey, ResourceDescriptor> descriptions, @NotNull List<StorageObservation.UnkeyedRow> unkeyed,
         @Nullable IconMappings mappings) {
-        List<StoredResource> result = new ArrayList<>(rows.size());
+        List<StoredResource> result = new ArrayList<>(rows.size() + unkeyed.size());
         for (StorageObservation.Row row : rows) {
-            ResourceSnapshot resource = row.resource();
+            result.add(resource(descriptions.get(row.itemKey()), row.quantity(), row.craftable(), mappings));
+        }
+        for (StorageObservation.UnkeyedRow row : unkeyed) {
             result.add(
-                new StoredResource(
-                    resource.registryNamespace(),
-                    resource.registryPath(),
-                    resource.displayName(),
-                    resource.componentCount(),
-                    resource.damage(),
-                    resource.resourceType(),
-                    resource.quantity(),
+                resource(
+                    row.resource()
+                        .description(),
+                    row.resource()
+                        .quantity(),
                     row.craftable(),
-                    resource.itemKey(),
-                    mappings == null || resource.itemKey() == null ? null
-                        : mappings.resolve(resource.itemKey(), resource.iconBaseKey())));
+                    mappings));
         }
         return result;
+    }
+
+    private static StoredResource resource(ResourceDescriptor resource, long quantity, boolean craftable,
+        @Nullable IconMappings mappings) {
+        return new StoredResource(
+            resource.registryNamespace(),
+            resource.registryPath(),
+            resource.displayName(),
+            resource.componentCount(),
+            resource.damage(),
+            resource.resourceType(),
+            quantity,
+            craftable,
+            resource.itemKey(),
+            mappings == null || resource.itemKey() == null ? null
+                : mappings.resolve(resource.itemKey(), resource.iconBaseKey()));
     }
 
     @Override

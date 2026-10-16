@@ -263,7 +263,8 @@ public class AE2JobTracker {
                 new CraftingMessage(
                     key,
                     cpu.web$getName(),
-                    info.finalOutput.displayName(),
+                    info.finalOutput.description()
+                        .displayName(),
                     craftedAmount,
                     NotificationManager.formatDuration(durationMillis),
                     info.wasCancelled));

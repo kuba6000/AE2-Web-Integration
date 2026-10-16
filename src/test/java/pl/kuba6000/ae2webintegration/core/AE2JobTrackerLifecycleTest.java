@@ -239,10 +239,10 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         GridAccess.list(TestGridFixtures.ae(merged));
         assertEquals(gridKey, CoreEngine.GRID_IDENTITIES.getKey(merged));
         assertTrue(losingPlan.isCancelled());
-        assertSame(
-            winningPlan,
-            GridData.getOrCreate(gridKey)
-                .getJob(winningId).plan);
+        var retainedPlan = GridData.getOrCreate(gridKey)
+            .getJob(winningId);
+        assertNotNull(retainedPlan);
+        assertSame(winningPlan, retainedPlan.plan);
 
         TestGridFixtures.TestAE split = TestGridFixtures.ae(grid, other);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
@@ -396,7 +396,10 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         assertSame(info, GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.get(1));
         assertTrue(info.isDone);
         assertEquals(5, info.finalOutput.quantity());
-        assertEquals("resource", info.finalOutput.registryPath());
+        assertEquals(
+            "resource",
+            info.finalOutput.description()
+                .registryPath());
     }
 
     @Test

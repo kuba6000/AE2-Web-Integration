@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,6 +31,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.InMemoryStorageHistoryStore;
@@ -77,7 +79,6 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 4,
                 fresh.rows()
                     .get(0)
-                    .resource()
                     .quantity());
             assertNull(service.snapshot(key), "Viewer-only observation must not create history state");
         }
@@ -175,8 +176,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         CountDownLatch release = new CountDownLatch(1);
         IStorageHistoryStore blocked = new IStorageHistoryStore() {
 
-            public void append(@NotNull StableKey gridKey, @NotNull List<StorageHistoryPoint> points)
-                throws IOException {
+            public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
+                @NotNull List<StorageHistoryPoint> points) throws IOException {
                 entered.countDown();
                 try {
                     if (!release.await(3, TimeUnit.SECONDS)) throw new IOException("Test writer did not resume");
@@ -189,7 +190,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
 
             public @NotNull StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey resource, long from,
                 int limit) {
-                return new StorageHistory(Collections.emptyList(), true, false);
+                return new StorageHistory(Collections.emptyList(), Collections.emptyMap(), true, false);
             }
         };
         try (StorageTrackingService service = new StorageTrackingService(blocked, 2);
@@ -206,7 +207,6 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     4,
                     pending.rows()
                         .get(0)
-                        .resource()
                         .quantity());
                 grid.rows.clear();
                 grid.rows.add(new ItemIdentityRequestTest.Resource("baseline", 11, false));
@@ -219,7 +219,6 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     11,
                     updated.rows()
                         .get(0)
-                        .resource()
                         .quantity());
                 coordinator.tick(TestGridFixtures.ae(grid), 6000);
                 assertFalse(
@@ -233,7 +232,6 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     12,
                     afterRejectedHistory.rows()
                         .get(0)
-                        .resource()
                         .quantity());
             } finally {
                 release.countDown();
@@ -293,9 +291,11 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             StorageSnapshot first = coordinator.observeForViewer(grid, 1000);
             assertNotNull(first);
             assertNull(
-                first.rows()
-                    .get(0)
-                    .resource()
+                first.descriptions()
+                    .get(
+                        first.rows()
+                            .get(0)
+                            .itemKey())
                     .iconBaseKey());
             assertEquals(0, bases.get());
             coordinator.touchViewer(grid, 1250, true);
@@ -305,9 +305,11 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             assertNotNull(enriched);
             assertEquals(
                 base,
-                enriched.rows()
-                    .get(0)
-                    .resource()
+                enriched.descriptions()
+                    .get(
+                        enriched.rows()
+                            .get(0)
+                            .itemKey())
                     .iconBaseKey());
             assertEquals(1, bases.get());
         }
@@ -364,9 +366,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 points.stream()
                     .anyMatch(
                         point -> point.kind() == StorageHistoryPoint.Kind.STOCK && point.observedAt() == 11000
-                            && point.resource() != null
-                            && point.resource()
-                                .quantity() == 27));
+                            && point.itemKey() != null
+                            && point.quantity() == 27));
         }
     }
 
@@ -466,9 +467,10 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             failing.set(false);
             assertNotNull(coordinator.observeForViewer(grid, 33000));
             assertEquals(2, attempts.get());
+            var recovered = coordinator.observeForViewer(grid, 41000);
+            assertNotNull(recovered);
             assertFalse(
-                coordinator.observeForViewer(grid, 41000)
-                    .rows()
+                recovered.rows()
                     .isEmpty());
         }
     }
@@ -534,7 +536,6 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 20,
                 first.rows()
                     .get(0)
-                    .resource()
                     .quantity());
             grid.web$getStorageCapture()
                 .recordFlow(iron, 7, 3);
