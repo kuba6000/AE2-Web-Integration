@@ -44,12 +44,13 @@ export type IconMetadata = {
 export type TerminalView = { generation: string; revision: string };
 export type TerminalDelta = {
     view: TerminalView;
-    upserts: StoredResource[];
+    updates: { itemKey: string; quantity: number; craftable: boolean }[];
+    definitions: StoredResource[];
     removed: string[];
-    unkeyed: StoredResource[];
+    unkeyed?: StoredResource[] | null;
     icons: IconMetadata | null;
 };
-export type ResourceResponse<T> = { data: T; icons: IconMetadata | null; view?: TerminalView };
+export type ResourceResponse<T> = { data: T; icons: IconMetadata | null; view?: TerminalView; subscription?: string };
 export type StoredResource = ResourceStack & {
     craftable: boolean;
 };

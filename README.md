@@ -215,7 +215,8 @@ may remain as a dated baseline, within the same record limit. Configure these li
 limit. Missing measurements are shown as gaps, not zero activity.
 
 With automatic refresh enabled, the terminal receives live changes over SSE. Live viewing does not
-increase the frequency of saved storage measurements.
+require history tracking or increase the frequency of saved storage measurements. After a connection
+interruption or storage topology change, the terminal loads a fresh snapshot automatically.
 
 ## Notification services integration
 

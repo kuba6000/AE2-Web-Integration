@@ -24,7 +24,6 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.http.dto.StoredResource;
-import pl.kuba6000.ae2webintegration.core.http.stream.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
@@ -35,11 +34,12 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalState;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 /**
  * Lists stored and craftable resources on a grid.
@@ -82,10 +82,10 @@ public final class GetItems extends ISyncedRequest {
      */
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull List<StoredResource> data, @Nullable IconMappings icons,
-        @Nullable TerminalStreams.View view) {
+        @Nullable TerminalState.View view, @Nullable String subscription) {
 
         public Response(ApiStatus status, List<StoredResource> data, IconMappings icons) {
-            this(status, data, icons, null);
+            this(status, data, icons, null, null);
         }
     }
 
@@ -93,44 +93,31 @@ public final class GetItems extends ISyncedRequest {
     @QueryParam("icons")
     private boolean icons;
 
-    /** Include a resumable live cursor; waits briefly for the first detached publication. */
+    /** Reserve a live subscription together with the returned snapshot. */
     @QueryParam("live")
     private boolean live;
-    private long liveGeneration;
+    private @Nullable String subscription;
 
     /** Called by the router after the game-thread operation; only detached state is read here. */
     public ApiResponse finishResponse(Consumer<ISyncedRequest> dispatch,
         Function<HttpExchange, AE2Controller.RequestContext> authenticate) {
-        ApiResponse initial = getResponse();
-        if (!live || initial.httpStatus() != HttpURLConnection.HTTP_OK || liveGeneration == 0) return initial;
-        TerminalStreams streams = CoreEngine.getTerminalStreams();
-        StorageTrackingService service = CoreEngine.getStorageTracking();
-        if (streams == null || service == null || !context.isLifecycleUnchanged()) {
-            return ApiResponse.error(ApiStatus.SERVER_STOPPING);
-        }
-        StorageSnapshot snapshot = streams.awaitSnapshot(gridKey, liveGeneration, () -> service.snapshot(gridKey));
+        ApiResponse response = getResponse();
         if (!context.isLifecycleUnchanged()) return ApiResponse.error(ApiStatus.SERVER_STOPPING);
-        if (snapshot == null) return ApiResponse.error(ApiStatus.SERVER_BUSY);
+        if (subscription == null) return response;
         PermissionCheck permission = new PermissionCheck(gridKey, grid);
         permission.init(context);
         dispatch.accept(permission);
         ApiResponse permissionResult = permission.getResponse();
-        if (permissionResult.httpStatus() != HttpURLConnection.HTTP_OK) return permissionResult;
         AE2Controller.RequestContext credentials = authenticate.apply(context.getExchange());
-        if (credentials == null || !credentials.getPrincipal()
-            .equals(context.getPrincipal())) {
-            return ApiResponse.error(ApiStatus.UNAUTHORIZED);
+        if (permissionResult.httpStatus() != HttpURLConnection.HTTP_OK || credentials == null
+            || !credentials.getPrincipal()
+                .equals(context.getPrincipal())) {
+            TerminalState terminals = CoreEngine.getTerminalState();
+            if (terminals != null) terminals.cancel(subscription);
+            return permissionResult.httpStatus() != HttpURLConnection.HTTP_OK ? permissionResult
+                : ApiResponse.error(ApiStatus.UNAUTHORIZED);
         }
-        IconPack pack = icons ? CoreEngine.getIconPack() : null;
-        IconMappings mappings = pack == null ? null : new IconMappings(pack);
-        ApiResponse response = ApiResponse.of(
-            HttpURLConnection.HTTP_OK,
-            new Response(
-                ApiStatus.OK,
-                TerminalStreams.resources(snapshot.rows(), mappings),
-                mappings,
-                TerminalStreams.view(snapshot)));
-        return context.isLifecycleUnchanged() ? response : ApiResponse.error(ApiStatus.SERVER_STOPPING);
+        return response;
     }
 
     @Override
@@ -141,18 +128,40 @@ public final class GetItems extends ISyncedRequest {
         }
         StorageSnapshot shared;
         try {
-            shared = live ? CoreEngine.observeStorage(grid, icons) : CoreEngine.observeStorage(grid);
+            if (live) {
+                CoreEngine.prepareTerminal(grid, icons);
+                shared = null;
+            } else shared = CoreEngine.observeStorage(grid);
         } catch (RuntimeException failedObservation) {
             // The coordinator logs the failed attempt and owns retry timing; do not enumerate again here.
             deny(ApiStatus.INTERNAL_ERROR);
             return;
         }
-        if (live) {
-            if (shared == null) {
+        if (live && !context.getExchange()
+            .getRequestMethod()
+            .equals("HEAD")) {
+            TerminalState terminals = CoreEngine.getTerminalState();
+            IconPack pack = icons ? CoreEngine.getIconPack() : null;
+            TerminalState.Bootstrap bootstrap = terminals == null ? null
+                : terminals.reserve(
+                    gridKey,
+                    context.getPrincipal(),
+                    icons,
+                    pack == null ? null : pack.packId(),
+                    System.currentTimeMillis());
+            if (bootstrap == null) {
                 deny(ApiStatus.SERVER_BUSY);
             } else {
-                liveGeneration = shared.generation();
-                done();
+                subscription = bootstrap.subscription();
+                IconMappings mappings = pack == null ? null : new IconMappings(pack);
+                respondDetached(
+                    HttpURLConnection.HTTP_OK,
+                    new Response(
+                        ApiStatus.OK,
+                        TerminalStreams.resources(bootstrap.rows(), mappings),
+                        mappings,
+                        bootstrap.view(),
+                        subscription));
             }
             return;
         }

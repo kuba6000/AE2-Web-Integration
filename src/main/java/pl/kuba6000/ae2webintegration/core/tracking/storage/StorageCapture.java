@@ -132,11 +132,28 @@ public final class StorageCapture {
         }
     }
 
+    private final java.util.concurrent.atomic.AtomicLong terminalEpoch = new java.util.concurrent.atomic.AtomicLong();
+
+    /** Native full-list/topology reset, distinct from a refresh of changed craftability. */
+    public void invalidateTerminal() {
+        terminalEpoch.incrementAndGet();
+        invalidate();
+    }
+
+    public long terminalEpoch() {
+        return terminalEpoch.get();
+    }
+
     public void invalidate() {
         reconcile.set(true);
     }
 
-    /** May be called by an unexpected producer or after rejected worker publication. */
+    /** A rejected history write loses flow coverage, not the current native stock state. */
+    public void markFlowGap() {
+        lost.set(true);
+    }
+
+    /** May be called by an unexpected producer or a failed native observation. */
     public void markGap() {
         lost.set(true);
         reconcile.set(true);

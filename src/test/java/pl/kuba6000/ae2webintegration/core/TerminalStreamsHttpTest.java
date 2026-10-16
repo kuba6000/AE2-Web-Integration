@@ -3,7 +3,6 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -21,9 +20,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -37,65 +34,199 @@ import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.http.stream.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalState;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 
 class TerminalStreamsHttpTest extends GridTestScope {
 
     @Test
-    void openStreamReleasesOrdinaryHttpWorkerAndReceivesLaterPublication() throws Exception {
+    void changeAndRemovalDuringBlockedSendRemainPending() throws Exception {
         StableKey grid = TestGridFixtures.key(32);
-        ExecutorService ordinary = Executors.newSingleThreadExecutor();
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        try (TerminalStreams streams = new TerminalStreams(() -> null, context -> true)) {
-            StorageSnapshot first = new StorageSnapshot(5, 1, 100, true, true, true, Collections.emptyList());
-            assertNotNull(streams.awaitSnapshot(grid, 5, () -> first));
-            server.setExecutor(ordinary);
-            server.createContext(
-                "/events",
-                exchange -> streams
-                    .open(new AE2Controller.RequestContext(exchange, WebPrincipal.admin()), grid, "5:1", false));
-            server.createContext("/ordinary", exchange -> {
-                exchange.sendResponseHeaders(204, -1);
-                exchange.close();
-            });
-            server.start();
-            String base = "http://127.0.0.1:" + server.getAddress()
-                .getPort();
-            HttpURLConnection connection = (HttpURLConnection) new URL(base + "/events").openConnection();
-            connection.setReadTimeout(3000);
-            try (BufferedReader input = new BufferedReader(
-                new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
-                assertEquals("text/event-stream; charset=UTF-8", connection.getContentType());
-                assertEquals("ready", event(input));
-                HttpURLConnection normal = (HttpURLConnection) new URL(base + "/ordinary").openConnection();
-                normal.setReadTimeout(3000);
-                assertEquals(204, normal.getResponseCode());
-                streams.published(grid, new StorageSnapshot(5, 2, 200, true, true, true, Collections.emptyList()));
-                assertEquals("delta", event(input));
-            } finally {
-                connection.disconnect();
+        StableKey iron = TestGridFixtures.key(51);
+        TerminalState state = new TerminalState();
+        state.activate(grid, 5, System.currentTimeMillis());
+        state.observed(grid, 5, observation(1, Collections.singletonList(row(iron, "Iron", 1))));
+        TerminalState.Bootstrap bootstrap = state
+            .reserve(grid, WebPrincipal.admin(), false, null, System.currentTimeMillis());
+        assertNotNull(bootstrap);
+        CountDownLatch writing = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch sent = new CountDownLatch(2);
+        List<String> deltas = Collections.synchronizedList(new ArrayList<>());
+        java.io.OutputStream output = new java.io.OutputStream() {
+
+            @Override
+            public void write(int value) {
+                throw new AssertionError("Expected a complete encoded event");
             }
+
+            @Override
+            public void write(byte @NotNull [] bytes, int offset, int length) throws java.io.IOException {
+                String frame = new String(bytes, offset, length, StandardCharsets.UTF_8);
+                if (!frame.startsWith("event: delta")) return;
+                if (deltas.isEmpty()) {
+                    writing.countDown();
+                    try {
+                        if (!release.await(3, TimeUnit.SECONDS)) throw new java.io.IOException("Writer not released");
+                    } catch (InterruptedException interrupted) {
+                        throw new java.io.IOException(interrupted);
+                    }
+                }
+                deltas.add(frame);
+                sent.countDown();
+            }
+        };
+        TestGridFixtures.TestExchange exchange = new TestGridFixtures.TestExchange(null) {
+
+            @Override
+            public java.io.InputStream getRequestBody() {
+                return new java.io.ByteArrayInputStream(new byte[0]);
+            }
+
+            @Override
+            public java.io.OutputStream getResponseBody() {
+                return output;
+            }
+        };
+        try (TerminalStreams streams = new TerminalStreams(state, () -> null, context -> true)) {
+            streams.open(
+                new AE2Controller.RequestContext(exchange, WebPrincipal.admin()),
+                grid,
+                bootstrap.subscription(),
+                false);
+            state.observed(grid, 5, observation(2, Collections.singletonList(row(iron, "Iron", 10))));
+            assertTrue(writing.await(2, TimeUnit.SECONDS));
+            state.observed(grid, 5, observation(3, Collections.singletonList(row(iron, "Iron", 20))));
+            state.observed(grid, 5, observation(4, Collections.emptyList()));
+            release.countDown();
+            assertTrue(sent.await(2, TimeUnit.SECONDS));
+            Event first = readEvent(new BufferedReader(new java.io.StringReader(deltas.get(0))));
+            Event second = readEvent(new BufferedReader(new java.io.StringReader(deltas.get(1))));
+            assertEquals(
+                10,
+                first.data()
+                    .getAsJsonArray("updates")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("quantity")
+                    .getAsLong());
+            assertEquals(
+                iron.toString(),
+                second.data()
+                    .getAsJsonArray("removed")
+                    .get(0)
+                    .getAsString());
         } finally {
-            server.stop(0);
-            ordinary.shutdownNow();
+            release.countDown();
         }
     }
 
     @Test
-    void replayPreservesExactKeysAndReplacesUnkeyedRowsIncludingTheirRemoval() throws Exception {
+    void changedDescriptionAndReappearanceSendDefinitionsAgain() throws Exception {
+        StableKey iron = TestGridFixtures.key(51);
+        try (Fixture fixture = new Fixture(Collections.singletonList(row(iron, "Iron", 1)));
+            Connection connection = fixture.open(fixture.reserve())) {
+            assertEquals("ready", readEvent(connection.input).name());
+            fixture.publish(2, Collections.singletonList(row(iron, "Renamed iron", 1)));
+            JsonObject renamed = readEvent(connection.input).data();
+            assertEquals(
+                "Renamed iron",
+                renamed.getAsJsonArray("definitions")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("displayName")
+                    .getAsString());
+            fixture.publish(3, Collections.emptyList());
+            assertEquals(
+                1,
+                readEvent(connection.input).data()
+                    .getAsJsonArray("removed")
+                    .size());
+            fixture.publish(4, Collections.singletonList(row(iron, "Renamed iron", 2)));
+            assertEquals(
+                1,
+                readEvent(connection.input).data()
+                    .getAsJsonArray("definitions")
+                    .size());
+        }
+    }
+
+    @Test
+    void tooManyPendingKeysRequiresFreshSnapshotRatherThanAnUnboundedQueue() throws Exception {
+        try (Fixture fixture = new Fixture(Collections.emptyList())) {
+            String token = fixture.reserve();
+            List<StorageObservation.Row> rows = new ArrayList<>();
+            for (int i = 0; i < 17_000; i++) rows.add(row(StableKey.random(), "Resource", 1));
+            fixture.publish(2, rows);
+            assertEquals(400, fixture.status(token));
+            assertNotNull(fixture.reserve());
+        }
+    }
+
+    @Test
+    void quantityOnlyChangesDoNotRepeatDefinitionsOrIcons() throws Exception {
+        StableKey iron = TestGridFixtures.key(51);
+        try (Fixture fixture = new Fixture(Collections.singletonList(row(iron, "Iron", 1)));
+            Connection connection = fixture.open(fixture.reserve())) {
+            assertEquals("ready", readEvent(connection.input).name());
+            fixture.publish(2, Collections.singletonList(row(iron, "Iron", 20)));
+            JsonObject update = readEvent(connection.input).data();
+            assertEquals(
+                0,
+                update.getAsJsonArray("definitions")
+                    .size());
+            assertEquals(
+                20,
+                update.getAsJsonArray("updates")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("quantity")
+                    .getAsLong());
+            assertTrue(
+                !update.has("icons") || update.get("icons")
+                    .isJsonNull());
+            assertTrue(
+                !update.has("unkeyed") || update.get("unkeyed")
+                    .isJsonNull());
+        }
+    }
+
+    @Test
+    void changesBeforeOpeningStreamCollapseToLatestAbsoluteValues() throws Exception {
+        StableKey iron = TestGridFixtures.key(51);
+        try (Fixture fixture = new Fixture(Collections.singletonList(row(iron, "Iron", 1)))) {
+            String token = fixture.reserve();
+            fixture.publish(2, Collections.singletonList(row(iron, "Iron", 20)));
+            fixture.publish(3, Collections.singletonList(row(iron, "Iron", 35)));
+            try (Connection connection = fixture.open(token)) {
+                assertEquals("ready", readEvent(connection.input).name());
+                Event update = readEvent(connection.input);
+                assertEquals(
+                    35,
+                    update.data()
+                        .getAsJsonArray("updates")
+                        .get(0)
+                        .getAsJsonObject()
+                        .get("quantity")
+                        .getAsLong());
+            }
+        }
+    }
+
+    @Test
+    void updatesPreserveExactKeysCraftabilityAndUnkeyedReplacement() throws Exception {
         StableKey removed = TestGridFixtures.key(50);
         StableKey added = TestGridFixtures.key(51);
         try (Fixture fixture = new Fixture(Arrays.asList(row(removed, "Stone", 4), row(null, "Essentia", 9)));
-            Connection connection = fixture.open("5:1")) {
+            Connection connection = fixture.open(fixture.reserve())) {
             assertEquals("ready", readEvent(connection.input).name());
-            fixture.publish(2, Arrays.asList(row(added, "Iron", 20), row(null, "Essentia", 3)));
+            StorageObservation.Row craftable = new StorageObservation.Row(row(added, "Iron", 0).resource(), true);
+            fixture.publish(2, Arrays.asList(craftable, row(null, "Essentia", 3)));
             Event update = readEvent(connection.input);
             assertEquals("delta", update.name());
-            assertEquals("5:2", update.id());
             assertEquals(
                 removed.toString(),
                 update.data()
@@ -105,11 +236,18 @@ class TerminalStreamsHttpTest extends GridTestScope {
             assertEquals(
                 added.toString(),
                 update.data()
-                    .getAsJsonArray("upserts")
+                    .getAsJsonArray("updates")
                     .get(0)
                     .getAsJsonObject()
                     .get("itemKey")
                     .getAsString());
+            assertTrue(
+                update.data()
+                    .getAsJsonArray("updates")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("craftable")
+                    .getAsBoolean());
             assertEquals(
                 3,
                 update.data()
@@ -118,44 +256,114 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     .getAsJsonObject()
                     .get("quantity")
                     .getAsLong());
-            fixture.publish(3, Collections.singletonList(row(added, "Iron", 20)));
+            fixture.publish(3, Collections.singletonList(craftable));
             assertEquals(
                 0,
                 readEvent(connection.input).data()
                     .getAsJsonArray("unkeyed")
                     .size());
-            try (Connection resumed = fixture.open("5:2")) {
-                assertEquals("ready", readEvent(resumed.input).name());
-                Event replay = readEvent(resumed.input);
-                assertEquals("5:3", replay.id());
-                assertEquals(
-                    0,
-                    replay.data()
-                        .getAsJsonArray("unkeyed")
-                        .size());
+        }
+    }
+
+    @Test
+    void noOpReadDoesNotSendAnUpdate() throws Exception {
+        StableKey iron = TestGridFixtures.key(51);
+        try (Fixture fixture = new Fixture(Collections.singletonList(row(iron, "Iron", 1)));
+            Connection connection = fixture.open(fixture.reserve())) {
+            assertEquals("ready", readEvent(connection.input).name());
+            fixture.publish(2, Collections.singletonList(row(iron, "Iron", 1)));
+            fixture.publish(3, Collections.singletonList(row(iron, "Iron", 9)));
+            Event update = readEvent(connection.input);
+            assertEquals(
+                9,
+                update.data()
+                    .getAsJsonArray("updates")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("quantity")
+                    .getAsLong());
+            assertEquals(
+                "2",
+                update.data()
+                    .getAsJsonObject("view")
+                    .get("revision")
+                    .getAsString());
+        }
+    }
+
+    @Test
+    void subscriptionsAreSingleUseAndBoundToPrincipalAndIconMode() throws Exception {
+        try (Fixture fixture = new Fixture(Collections.emptyList())) {
+            String token = fixture.reserve();
+            fixture.requestPrincipal.set(WebPrincipal.localhost());
+            assertEquals(400, fixture.status(token));
+            fixture.requestPrincipal.set(fixture.principal);
+            fixture.requestIcons.set(true);
+            assertEquals(400, fixture.status(token));
+            fixture.requestIcons.set(false);
+            try (Connection connection = fixture.open(token)) {
+                assertEquals("ready", readEvent(connection.input).name());
+                assertEquals(400, fixture.status(token));
             }
         }
     }
 
     @Test
-    void expiredAndFutureCursorsResetWithoutReturningUnrelatedRows() throws Exception {
+    void expiredUnopenedReservationCannotOpenOrConsumeAdmissionForever() throws Exception {
         try (Fixture fixture = new Fixture(Collections.emptyList())) {
-            for (int revision = 2; revision <= 70; revision++) fixture.publish(revision, Collections.emptyList());
-            try (Connection old = fixture.open("5:1")) {
-                assertEquals("ready", readEvent(old.input).name());
-                assertEquals("reset", readEvent(old.input).name());
-                assertNull(old.input.readLine());
-            }
-            try (Connection future = fixture.open("5:71")) {
-                assertEquals("ready", readEvent(future.input).name());
-                assertEquals("reset", readEvent(future.input).name());
+            TerminalState.Bootstrap expired = fixture.state
+                .reserve(fixture.grid, fixture.principal, false, null, System.currentTimeMillis() - 20_000);
+            assertNotNull(expired);
+            assertEquals(400, fixture.status(expired.subscription()));
+            assertNotNull(fixture.reserve());
+        }
+    }
+
+    @Test
+    void nativeInvalidationClosesStreamAndRejectsUnopenedSnapshot() throws Exception {
+        try (Fixture fixture = new Fixture(Collections.emptyList());
+            Connection connection = fixture.open(fixture.reserve())) {
+            String unopened = fixture.reserve();
+            assertEquals("ready", readEvent(connection.input).name());
+            fixture.state.invalidate(fixture.grid, 5);
+            assertEquals("invalidate", readEvent(connection.input).name());
+            assertEquals(400, fixture.status(unopened));
+            fixture.publish(2, Collections.singletonList(row(TestGridFixtures.key(5), "New", 10)));
+            assertNotNull(fixture.reserve());
+        }
+    }
+
+    @Test
+    void staleGenerationCannotReplaceCurrentDataOrRetireCurrentView() throws Exception {
+        try (Fixture fixture = new Fixture(Collections.emptyList())) {
+            fixture.state.activate(fixture.grid, 6, System.currentTimeMillis());
+            fixture.state.observed(fixture.grid, 6, observation(1, Collections.emptyList()));
+            String token = fixture.reserve();
+            fixture.state.retire(fixture.grid, 5);
+            fixture.publish(2, Collections.singletonList(row(TestGridFixtures.key(3), "Stale", 100)));
+            fixture.state.observed(
+                fixture.grid,
+                6,
+                observation(2, Collections.singletonList(row(TestGridFixtures.key(4), "Current", 8))));
+            try (Connection connection = fixture.open(token)) {
+                assertEquals("ready", readEvent(connection.input).name());
+                Event update = readEvent(connection.input);
+                assertEquals(
+                    "Current",
+                    update.data()
+                        .getAsJsonArray("definitions")
+                        .get(0)
+                        .getAsJsonObject()
+                        .get("displayName")
+                        .getAsString());
             }
         }
     }
 
     @Test
     void tokenRevocationClosesStreamWithoutAnotherResourceEvent() throws Exception {
-        try (Fixture fixture = new Fixture(Collections.emptyList()); Connection connection = fixture.open("5:1")) {
+        try (Fixture fixture = new Fixture(Collections.emptyList());
+            Connection connection = fixture.open(fixture.reserve())) {
             assertEquals("ready", readEvent(connection.input).name());
             fixture.authenticated.set(false);
             fixture.publish(2, Collections.singletonList(row(TestGridFixtures.key(4), "Secret", 50)));
@@ -165,31 +373,22 @@ class TerminalStreamsHttpTest extends GridTestScope {
     }
 
     @Test
-    void retiringNativeGenerationInvalidatesExistingStreams() throws Exception {
-        try (Fixture fixture = new Fixture(Collections.emptyList()); Connection connection = fixture.open("5:1")) {
-            assertEquals("ready", readEvent(connection.input).name());
-            fixture.streams.retired(fixture.grid, 5);
-            assertEquals("invalidate", readEvent(connection.input).name());
+    void reservationsBoundPerAccountAdmissionBeforeAnyStreamOpens() throws Exception {
+        try (Fixture fixture = new Fixture(Collections.emptyList())) {
+            for (int i = 0; i < 4; i++) assertNotNull(fixture.reserve());
+            assertNull(fixture.state.reserve(fixture.grid, fixture.principal, false, null, System.currentTimeMillis()));
         }
     }
 
     @Test
-    void perAccountAdmissionIsBoundedWhileIdleStreamsShareTransportWorkers() throws Exception {
+    void openStreamReleasesOrdinaryHttpWorker() throws Exception {
         try (Fixture fixture = new Fixture(Collections.emptyList());
-            Connection one = fixture.open("5:1");
-            Connection two = fixture.open("5:1");
-            Connection three = fixture.open("5:1");
-            Connection four = fixture.open("5:1")) {
-            assertEquals("ready", readEvent(one.input).name());
-            assertEquals("ready", readEvent(two.input).name());
-            assertEquals("ready", readEvent(three.input).name());
-            assertEquals("ready", readEvent(four.input).name());
-            HttpURLConnection fifth = fixture.connection("5:1");
-            try {
-                assertEquals(503, fifth.getResponseCode());
-            } finally {
-                fifth.disconnect();
-            }
+            Connection connection = fixture.open(fixture.reserve())) {
+            assertEquals("ready", readEvent(connection.input).name());
+            HttpURLConnection ordinary = (HttpURLConnection) new URL(fixture.base() + "/ordinary").openConnection();
+            ordinary.setReadTimeout(3000);
+            assertEquals(204, ordinary.getResponseCode());
+            ordinary.disconnect();
         }
     }
 
@@ -205,7 +404,9 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     socket.connect(fixture.server.getAddress());
                     stalled.add(socket);
                     socket.getOutputStream()
-                        .write("GET /events?5:1 HTTP/1.1\r\nHost: localhost\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+                        .write(
+                            ("GET /events?" + fixture.reserve() + " HTTP/1.1\r\nHost: localhost\r\n\r\n")
+                                .getBytes(StandardCharsets.UTF_8));
                     socket.getOutputStream()
                         .flush();
                     int matched = 0;
@@ -223,7 +424,14 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(18);
                 boolean recovered = false;
                 while (System.nanoTime() < deadline && !recovered) {
-                    HttpURLConnection probe = fixture.connection("5:2");
+                    fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
+                    TerminalState.Bootstrap reservation = fixture.state
+                        .reserve(fixture.grid, fixture.principal, false, null, System.currentTimeMillis());
+                    if (reservation == null) {
+                        Thread.sleep(100);
+                        continue;
+                    }
+                    HttpURLConnection probe = fixture.connection(reservation.subscription());
                     try {
                         int status = probe.getResponseCode();
                         if (status == 200) {
@@ -255,8 +463,8 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 key,
                 TestGridFixtures.principal(TestGridFixtures.OWNER_ID),
                 Collections.emptyList());
-            Connection first = fixture.open("5:1");
-            Connection second = fixture.open("5:1")) {
+            Connection first = fixture.open(fixture.reserve());
+            Connection second = fixture.open(fixture.reserve())) {
             assertEquals("ready", readEvent(first.input).name());
             assertEquals("ready", readEvent(second.input).name());
             long now = System.currentTimeMillis();
@@ -269,94 +477,6 @@ class TerminalStreamsHttpTest extends GridTestScope {
             assertEquals(1, renewals.get());
             assertEquals("revoked", readEvent(first.input).name());
             assertEquals("revoked", readEvent(second.input).name());
-        }
-    }
-
-    @Test
-    void latePublicationCannotMoveAReplacementViewBackToAnOldGeneration() throws Exception {
-        try (Fixture fixture = new Fixture(Collections.emptyList())) {
-            StorageSnapshot replacement = new StorageSnapshot(6, 1, 200, true, true, true, Collections.emptyList());
-            assertNotNull(fixture.streams.awaitSnapshot(fixture.grid, 6, () -> replacement));
-            try (Connection connection = fixture.open("6:1")) {
-                assertEquals("ready", readEvent(connection.input).name());
-                fixture.publish(2, Collections.emptyList());
-                fixture.streams
-                    .published(fixture.grid, new StorageSnapshot(6, 2, 300, true, true, true, Collections.emptyList()));
-                Event event = readEvent(connection.input);
-                assertEquals("delta", event.name());
-                assertEquals("6:2", event.id());
-            }
-        }
-    }
-
-    @Test
-    void oldRetirementDoesNotCancelAReplacementAwaitingItsFirstPublication() throws Exception {
-        StableKey grid = TestGridFixtures.key(67);
-        ExecutorService waiting = Executors.newSingleThreadExecutor();
-        try (TerminalStreams streams = new TerminalStreams(() -> null, context -> true)) {
-            CountDownLatch registered = new CountDownLatch(1);
-            AtomicReference<StorageSnapshot> current = new AtomicReference<>(
-                new StorageSnapshot(6, 0, 100, false, false, true, Collections.emptyList()));
-            Future<StorageSnapshot> snapshot = waiting.submit(() -> streams.awaitSnapshot(grid, 6, () -> {
-                registered.countDown();
-                return current.get();
-            }));
-            assertTrue(registered.await(2, TimeUnit.SECONDS));
-            streams.retired(grid, 5);
-            StorageSnapshot first = new StorageSnapshot(6, 1, 200, true, true, true, Collections.emptyList());
-            current.set(first);
-            streams.published(grid, first);
-            assertNotNull(snapshot.get(3, TimeUnit.SECONDS));
-        } finally {
-            waiting.shutdownNow();
-        }
-    }
-
-    @Test
-    void coverageLossRejectsLateHealthyCallbacksFromThePreviousEpoch() throws Exception {
-        ExecutorService waiting = Executors.newSingleThreadExecutor();
-        try (Fixture fixture = new Fixture(Collections.emptyList())) {
-            fixture.streams.retired(fixture.grid, 5, 1);
-            AtomicReference<StorageSnapshot> current = new AtomicReference<>(
-                new StorageSnapshot(5, 1, 200, false, false, true, Collections.emptyList(), 1));
-            CountDownLatch registered = new CountDownLatch(1);
-            Future<StorageSnapshot> next = waiting.submit(() -> fixture.streams.awaitSnapshot(fixture.grid, 5, () -> {
-                registered.countDown();
-                return current.get();
-            }));
-            assertTrue(registered.await(1, TimeUnit.SECONDS));
-            fixture.streams
-                .published(fixture.grid, new StorageSnapshot(5, 2, 150, true, true, true, Collections.emptyList(), 0));
-            assertThrows(TimeoutException.class, () -> next.get(150, TimeUnit.MILLISECONDS));
-            StorageSnapshot recovered = new StorageSnapshot(5, 3, 300, true, true, true, Collections.emptyList(), 1);
-            current.set(recovered);
-            fixture.streams.published(fixture.grid, recovered);
-            assertEquals(
-                3,
-                next.get(1, TimeUnit.SECONDS)
-                    .revision());
-        } finally {
-            waiting.shutdownNow();
-        }
-    }
-
-    @Test
-    void currentSnapshotEpochFencesCallbacksWhenNoRetirementTombstoneExists() throws Exception {
-        try (Fixture fixture = new Fixture(Collections.emptyList())) {
-            StorageSnapshot fresh = new StorageSnapshot(5, 3, 300, true, true, true, Collections.emptyList(), 2);
-            assertNotNull(fixture.streams.awaitSnapshot(fixture.grid, 5, () -> fresh));
-            try (Connection connection = fixture.open("5:3")) {
-                assertEquals("ready", readEvent(connection.input).name());
-                fixture.streams.published(
-                    fixture.grid,
-                    new StorageSnapshot(5, 4, 200, true, true, true, Collections.emptyList(), 1));
-                fixture.streams.published(
-                    fixture.grid,
-                    new StorageSnapshot(5, 5, 400, true, true, true, Collections.emptyList(), 2));
-                Event next = readEvent(connection.input);
-                assertEquals("delta", next.name());
-                assertEquals("5:5", next.id());
-            }
         }
     }
 
@@ -400,13 +520,21 @@ class TerminalStreamsHttpTest extends GridTestScope {
         }
     }
 
+    private static StorageObservation observation(long revision, List<StorageObservation.Row> rows) {
+        return new StorageObservation(revision * 100, true, true, rows, Collections.emptyList());
+    }
+
     private static final class Fixture implements AutoCloseable {
 
         private final StableKey grid;
+        private final WebPrincipal principal;
+        private final AtomicReference<WebPrincipal> requestPrincipal = new AtomicReference<>();
+        private final AtomicBoolean requestIcons = new AtomicBoolean();
         private final AtomicBoolean authenticated = new AtomicBoolean(true);
         private final ExecutorService ordinary = Executors.newSingleThreadExecutor();
         private final HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        private final TerminalStreams streams = new TerminalStreams(() -> null, context -> authenticated.get());
+        private final TerminalState state = new TerminalState();
+        private final TerminalStreams streams = new TerminalStreams(state, () -> null, context -> authenticated.get());
 
         private Fixture(List<StorageObservation.Row> rows) throws Exception {
             this(TestGridFixtures.key(32), WebPrincipal.admin(), rows);
@@ -414,35 +542,58 @@ class TerminalStreamsHttpTest extends GridTestScope {
 
         private Fixture(StableKey grid, WebPrincipal principal, List<StorageObservation.Row> rows) throws Exception {
             this.grid = grid;
-            StorageSnapshot snapshot = new StorageSnapshot(5, 1, 100, true, true, true, rows);
-            assertNotNull(streams.awaitSnapshot(grid, 5, () -> snapshot));
+            this.principal = principal;
+            requestPrincipal.set(principal);
+            state.activate(grid, 5, System.currentTimeMillis());
+            state.observed(grid, 5, observation(1, rows));
             server.setExecutor(ordinary);
             server.createContext(
                 "/events",
                 exchange -> streams.open(
-                    new AE2Controller.RequestContext(exchange, principal),
+                    new AE2Controller.RequestContext(exchange, requestPrincipal.get()),
                     grid,
                     exchange.getRequestURI()
                         .getRawQuery(),
-                    false));
+                    requestIcons.get()));
+            server.createContext("/ordinary", exchange -> {
+                exchange.sendResponseHeaders(204, -1);
+                exchange.close();
+            });
             server.start();
         }
 
-        private HttpURLConnection connection(String cursor) throws Exception {
-            HttpURLConnection connection = (HttpURLConnection) new URL(
-                "http://127.0.0.1:" + server.getAddress()
-                    .getPort() + "/events?" + cursor)
-                .openConnection();
+        private String reserve() {
+            TerminalState.Bootstrap snapshot = state.reserve(grid, principal, false, null, System.currentTimeMillis());
+            assertNotNull(snapshot);
+            return snapshot.subscription();
+        }
+
+        private String base() {
+            return "http://127.0.0.1:" + server.getAddress()
+                .getPort();
+        }
+
+        private HttpURLConnection connection(String token) throws Exception {
+            HttpURLConnection connection = (HttpURLConnection) new URL(base() + "/events?" + token).openConnection();
             connection.setReadTimeout(3000);
             return connection;
         }
 
-        private Connection open(String cursor) throws Exception {
-            return new Connection(connection(cursor));
+        private int status(String token) throws Exception {
+            HttpURLConnection connection = connection(token);
+            try {
+                return connection.getResponseCode();
+            } finally {
+                connection.disconnect();
+            }
+        }
+
+        private Connection open(String token) throws Exception {
+            return new Connection(connection(token));
         }
 
         private void publish(long revision, List<StorageObservation.Row> rows) {
-            streams.published(grid, new StorageSnapshot(5, revision, revision * 100, true, true, true, rows));
+            state.observed(grid, 5, observation(revision, rows));
         }
 
         @Override
@@ -451,14 +602,5 @@ class TerminalStreamsHttpTest extends GridTestScope {
             server.stop(0);
             ordinary.shutdownNow();
         }
-    }
-
-    private static @NotNull String event(BufferedReader input) throws Exception {
-        String event = null;
-        for (String line; (line = input.readLine()) != null;) {
-            if (line.startsWith("event: ")) event = line.substring(7);
-            if (line.isEmpty() && event != null) return event;
-        }
-        return fail("Stream ended before its next event");
     }
 }

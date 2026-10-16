@@ -909,7 +909,12 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                             options.status === 200
                                 ? {
                                       status: 'OK',
-                                      ...(options.liveView ? { view: options.liveView } : {}),
+                                      ...(options.liveView
+                                          ? {
+                                                view: options.liveView,
+                                                subscription: `subscription-${options.liveView.revision}`
+                                            }
+                                          : {}),
                                       icons: url.searchParams.get('icons') === 'true' ? options.icons : null,
                                       data: first
                                           ? options.itemsA
@@ -9791,7 +9796,7 @@ test('resource tracking is independent of CPU history and renders exact flow cou
     assert.equal(await page.locator('.resource-history .hint').first().isVisible(), false);
 });
 
-test('terminal applies live deltas, resumes its cursor and stops streams outside the terminal', async (t) => {
+test('terminal applies compact updates, fetches a fresh snapshot on reconnect and stops outside terminal', async (t) => {
     const { page, options, base } = await fixture(t);
     options.liveView = { generation: '9223372036854775000', revision: '1' };
     const opened = page.waitForResponse((response) => response.url().includes('/items/events'));
@@ -9802,7 +9807,8 @@ test('terminal applies live deltas, resumes its cursor and stops streams outside
     options.itemStreams[0].write(
         `event: delta\nid: 9223372036854775000:2\ndata: ${JSON.stringify({
             view: { generation: '9223372036854775000', revision: '2' },
-            upserts: [{ ...iron, displayName: 'Live updated iron', quantity: 17 }],
+            updates: [{ itemKey: iron.itemKey, quantity: 17, craftable: iron.craftable }],
+            definitions: [{ ...iron, displayName: 'Live updated iron', quantity: 17 }],
             removed: [],
             unkeyed: [{ ...iron, itemKey: null, displayName: 'Live essentia', quantity: 3 }],
             icons: null
@@ -9812,9 +9818,24 @@ test('terminal applies live deltas, resumes its cursor and stops streams outside
     await page.getByText('Live essentia', { exact: true }).waitFor();
     assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, initialReads);
     options.itemStreams[0].write(
-        `event: delta\nid: 9223372036854775000:3\ndata: ${JSON.stringify({
+        `event: delta\ndata: ${JSON.stringify({
             view: { generation: '9223372036854775000', revision: '3' },
-            upserts: [],
+            updates: [{ itemKey: iron.itemKey, quantity: 23, craftable: iron.craftable }],
+            definitions: [],
+            removed: []
+        })}\n\n`
+    );
+    await page
+        .locator('#items button')
+        .filter({ hasText: 'Live updated iron' })
+        .getByText('23', { exact: true })
+        .waitFor();
+    assert.equal(await page.getByText('Live essentia', { exact: true }).isVisible(), true);
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({
+            view: { generation: '9223372036854775000', revision: '4' },
+            updates: [],
+            definitions: [],
             removed: [iron.itemKey],
             unkeyed: [],
             icons: null
@@ -9822,20 +9843,21 @@ test('terminal applies live deltas, resumes its cursor and stops streams outside
     );
     await page.getByText('Live updated iron', { exact: true }).waitFor({ state: 'hidden' });
     await page.getByText('Live essentia', { exact: true }).waitFor({ state: 'hidden' });
-    options.itemStreams[0].end();
-    const reconnected = page.waitForResponse((response) => response.url().includes('cursor=9223372036854775000%3A3'));
-    await reconnected;
-    await page.waitForFunction(() => !document.querySelector('#item-message').classList.contains('api-error'), null, {
-        timeout: 1000
-    });
     options.liveView = { generation: '9223372036854775000', revision: '4' };
     options.itemsA = [{ ...iron, displayName: 'Fresh snapshot iron' }];
-    options.itemStreams[0].write('event: reset\ndata: {}\n\n');
+    const reconnected = page.waitForResponse((response) => response.url().includes('subscription=subscription-4'));
+    options.itemStreams[0].end();
+    await reconnected;
     await page.getByText('Fresh snapshot iron', { exact: true }).waitFor();
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, initialReads + 1);
+    options.liveView = { generation: '9223372036854775000', revision: '5' };
+    options.itemsA = [{ ...iron, displayName: 'Reset snapshot iron' }];
+    options.itemStreams[0].write('event: invalidate\ndata: {}\n\n');
+    await page.getByText('Reset snapshot iron', { exact: true }).waitFor();
     await page.goto(`${base}#/web-settings`);
     await page.locator('#auto-refresh').uncheck();
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.getByText('Fresh snapshot iron', { exact: true }).waitFor();
+    await page.getByText('Reset snapshot iron', { exact: true }).waitFor();
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(options.itemStreams.length, 0);
 });

@@ -36,11 +36,52 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.InMemoryStorageHistor
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistory;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.StoragePublicationListener;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 class StorageTrackingCoordinatorTest extends GridTestScope {
+
+    @Test
+    void topologyChangeDuringNativeReadCannotPublishThatBaseline() throws Exception {
+        AtomicBoolean change = new AtomicBoolean();
+        StorageCapture[] capture = new StorageCapture[1];
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("reentrant-topology", 4, false) {
+
+            @Override
+            public @NotNull IAEKey web$copyIdentity() {
+                return this;
+            }
+
+            @Override
+            public @NotNull String web$getDisplayName() {
+                if (change.getAndSet(false)) capture[0].invalidateTerminal();
+                return super.web$getDisplayName();
+            }
+        };
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710012, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.touchViewer(grid, 1000, false);
+            capture[0] = grid.web$getStorageCapture();
+            change.set(true);
+            assertNull(
+                coordinator.observeForViewer(grid, 1000),
+                "An observation crossing topology reset cannot bootstrap a client");
+            StorageSnapshot fresh = coordinator.observeForViewer(grid, 1500);
+            assertNotNull(fresh);
+            assertEquals(
+                4,
+                fresh.rows()
+                    .get(0)
+                    .resource()
+                    .quantity());
+            assertNull(service.snapshot(key), "Viewer-only observation must not create history state");
+        }
+    }
 
     @Test
     void disablingFlowReleasesRetiredIdentitiesWhileTheGridRemainsLive() throws Exception {
@@ -120,71 +161,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     }
 
     @Test
-    void asynchronousFailureReconcilesAtNextViewerRead() throws Exception {
-        assertAsynchronousRecovery(true);
-    }
-
-    @Test
-    void asynchronousFailureBeforeFirstPublicationReconcilesAtNextViewerRead() throws Exception {
-        assertAsynchronousRecovery(false);
-    }
-
-    private void assertAsynchronousRecovery(boolean afterPublication) throws Exception {
-        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("recovery", 4, false);
-        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710009, iron);
-        StableKey key = TestGridFixtures.resolvedKey(grid);
-        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
-        assertNotNull(data);
-        data.getSettings()
-            .setStorageTracked(true);
-        AtomicBoolean failOnce = new AtomicBoolean(true);
-        CountDownLatch invalidated = new CountDownLatch(1);
-        StoragePublicationListener listener = new StoragePublicationListener() {
-
-            public void published(@NotNull StableKey gridKey, @NotNull StorageSnapshot snapshot) {
-                if (afterPublication && failOnce.getAndSet(false))
-                    throw new IllegalStateException("Detached publication failed");
-            }
-
-            public void retired(@NotNull StableKey gridKey, long generation) {
-                invalidated.countDown();
-            }
-        };
-        IStorageHistoryStore store = new IStorageHistoryStore() {
-
-            public void append(@NotNull StableKey gridKey, @NotNull List<StorageHistoryPoint> points) {
-                if (!afterPublication && failOnce.getAndSet(false))
-                    throw new IllegalStateException("Detached append failed");
-            }
-
-            public @NotNull StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey item, long from,
-                int limit) {
-                return new StorageHistory(Collections.emptyList(), true, false);
-            }
-        };
-        try (StorageTrackingService service = new StorageTrackingService(store, 100, listener);
-            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
-                service,
-                CoreEngine.GRID_IDENTITIES,
-                new ConfigSettings.ResourceTracking())) {
-            assertNotNull(coordinator.observeForViewer(grid, 1000));
-            assertTrue(invalidated.await(3, TimeUnit.SECONDS));
-            grid.rows.clear();
-            grid.rows.add(new ItemIdentityRequestTest.Resource("recovery", 9, false));
-            coordinator.observeForViewer(grid, 1500);
-            StorageSnapshot recovered = awaitRevision(service, key, afterPublication ? 2 : 1);
-            assertTrue(recovered.stockComplete(), "The next scheduled read must reconcile a failed detached batch");
-            assertEquals(
-                9,
-                recovered.rows()
-                    .get(0)
-                    .resource()
-                    .quantity());
-        }
-    }
-
-    @Test
-    void pendingWorkerBaselineIsSharedByImmediateViewerRequests() throws Exception {
+    void blockedHistoryDoesNotDelayLiveSnapshotOrChanges() throws Exception {
         ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("baseline", 4, false);
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710008, iron);
         StableKey key = TestGridFixtures.resolvedKey(grid);
@@ -192,6 +169,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         assertNotNull(data);
         data.getSettings()
             .setStorageTracked(true);
+        data.getSettings()
+            .setFlowTracked(true);
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         IStorageHistoryStore blocked = new IStorageHistoryStore() {
@@ -213,7 +192,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 return new StorageHistory(Collections.emptyList(), true, false);
             }
         };
-        try (StorageTrackingService service = new StorageTrackingService(blocked, 100);
+        try (StorageTrackingService service = new StorageTrackingService(blocked, 2);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
                 CoreEngine.GRID_IDENTITIES,
@@ -226,6 +205,33 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 assertEquals(
                     4,
                     pending.rows()
+                        .get(0)
+                        .resource()
+                        .quantity());
+                grid.rows.clear();
+                grid.rows.add(new ItemIdentityRequestTest.Resource("baseline", 11, false));
+                StorageCapture capture = grid.web$getStorageCapture();
+                assertNotNull(capture);
+                capture.recordFlow(iron, 7, 0);
+                StorageSnapshot updated = coordinator.observeForViewer(grid, 1500);
+                assertNotNull(updated);
+                assertEquals(
+                    11,
+                    updated.rows()
+                        .get(0)
+                        .resource()
+                        .quantity());
+                coordinator.tick(TestGridFixtures.ae(grid), 6000);
+                assertFalse(
+                    capture.requiresReconciliation(),
+                    "History queue rejection must not force a terminal rescan");
+                grid.rows.set(0, new ItemIdentityRequestTest.Resource("baseline", 12, false));
+                capture.markChanged(iron);
+                StorageSnapshot afterRejectedHistory = coordinator.observeForViewer(grid, 6500);
+                assertNotNull(afterRejectedHistory);
+                assertEquals(
+                    12,
+                    afterRejectedHistory.rows()
                         .get(0)
                         .resource()
                         .quantity());
@@ -253,7 +259,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             }
         };
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710007, iron);
-        StableKey key = TestGridFixtures.resolvedKey(grid);
+        TestGridFixtures.resolvedKey(grid);
         Path archive;
         IconPack.Metadata metadata = new IconPack.Metadata(
             "1.7.10",
@@ -284,7 +290,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             coordinator.touchViewer(grid, 1000, false);
             assertEquals(0, copies.get());
             coordinator.tick(TestGridFixtures.ae(grid), 1000);
-            StorageSnapshot first = awaitRevision(service, key, 1);
+            StorageSnapshot first = coordinator.observeForViewer(grid, 1000);
+            assertNotNull(first);
             assertNull(
                 first.rows()
                     .get(0)
@@ -294,7 +301,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             coordinator.touchViewer(grid, 1250, true);
             assertEquals(0, bases.get());
             coordinator.tick(TestGridFixtures.ae(grid), 1250);
-            StorageSnapshot enriched = awaitRevision(service, key, 2);
+            StorageSnapshot enriched = coordinator.observeForViewer(grid, 1250);
+            assertNotNull(enriched);
             assertEquals(
                 base,
                 enriched.rows()
@@ -333,7 +341,6 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             grid.rows.clear();
             grid.rows.add(new ItemIdentityRequestTest.Resource("iron", 27, false));
             coordinator.observeForViewer(grid, 2000);
-            awaitRevision(service, key, 2);
             coordinator.tick(TestGridFixtures.ae(grid), 6000);
             coordinator.observeForViewer(grid, 7000);
             coordinator.tick(TestGridFixtures.ae(grid), 11000);
@@ -438,7 +445,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             }
         };
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710003, broken);
-        StableKey key = TestGridFixtures.resolvedKey(grid);
+        TestGridFixtures.resolvedKey(grid);
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
@@ -460,7 +467,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             assertNotNull(coordinator.observeForViewer(grid, 33000));
             assertEquals(2, attempts.get());
             assertFalse(
-                awaitRevision(service, key, 1).rows()
+                coordinator.observeForViewer(grid, 41000)
+                    .rows()
                     .isEmpty());
         }
     }
@@ -535,14 +543,13 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             assertNotNull(idle);
             assertEquals(1, idle.revision(), "idle tracking must not read storage every tick");
             coordinator.observeForViewer(grid, 2000);
-            awaitRevision(service, key, 2);
             assertTrue(
                 service.history(key, iron.web$getKey(), 0, 100)
                     .points()
                     .stream()
                     .noneMatch(point -> point.input() != 0 || point.output() != 0));
             coordinator.tick(TestGridFixtures.ae(grid), 6000);
-            awaitRevision(service, key, 3);
+            awaitRevision(service, key, 2);
             assertTrue(
                 service.history(key, iron.web$getKey(), 0, 100)
                     .points()

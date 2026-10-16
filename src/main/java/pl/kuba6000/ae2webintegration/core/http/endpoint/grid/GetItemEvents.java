@@ -13,21 +13,21 @@ import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
-import pl.kuba6000.ae2webintegration.core.http.stream.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 
 /**
- * Resumes terminal changes from a live item snapshot's generation:revision cursor.
- * The Last-Event-ID header takes precedence over cursor on reconnect. Cursors are scoped to this grid.
- * Delta events upsert exact item keys, remove listed keys, and replace the entire unkeyed array.
- * Each delta carries its own icon page table. Reset, gap and invalidate require a new live snapshot;
- * revoked closes the stream after access is lost. Heartbeat comments do not advance the cursor.
+ * Opens a single-use live subscription returned by GET items?live=true.
+ * Updates contain absolute quantities and craftability, with definitions only for new or changed resources.
+ * Removed keys disappear from the terminal. An optional unkeyed array replaces all unkeyed resources.
+ * Reset and invalidate require a new snapshot and subscription; revoked indicates lost access.
+ * Reconnection never replays intermediate events. Last-Event-ID is not used.
  *
  * @pathParam gridKey Persistent grid identifier.
- * @response 200 Server-sent ready, delta, reset, gap, invalidate and revoked events.
+ * @response 200 Server-sent ready, delta, reset, invalidate and revoked events.
  * @responseMedia 200 text/event-stream
  * @responseHeader 200 Cache-Control No-store: event streams must not be cached.
- * @response 400 {@link ErrorResponse} Invalid cursor or request input.
+ * @response 400 {@link ErrorResponse} Invalid, expired or already used subscription.
  * @response 401 {@link ErrorResponse} Authentication required.
  * @response 403 {@link ErrorResponse} Grid permission denied.
  * @response 404 {@link ErrorResponse} Grid not found.
@@ -40,10 +40,10 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/items/events")
 public final class GetItemEvents extends ISyncedRequest {
 
-    /** Decimal generation:revision returned by GET items?live=true; Last-Event-ID overrides it. */
-    @QueryParam("cursor")
-    private @Nullable String cursor;
-    /** Include an icon page table with each delta. */
+    /** Single-use token returned with the initial snapshot. Bound to account, grid and icon mode. */
+    @QueryParam("subscription")
+    private @Nullable String subscription;
+    /** Include icon references when new or changed resource definitions are sent. */
     @QueryParam("icons")
     private boolean icons;
     private @Nullable TerminalStreams streams;
@@ -54,11 +54,7 @@ public final class GetItemEvents extends ISyncedRequest {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        String last = context.getExchange()
-            .getRequestHeaders()
-            .getFirst("Last-Event-ID");
-        if (last != null) cursor = last;
-        if (!TerminalStreams.validCursor(cursor)) {
+        if (subscription == null || subscription.length() != 36) {
             deny(ApiStatus.BAD_PARAM);
             return;
         }
@@ -72,7 +68,8 @@ public final class GetItemEvents extends ISyncedRequest {
 
     /** Transfers exchange ownership after the normal request's permission check and completion. */
     public boolean startStream() throws IOException {
-        if (getResponse().httpStatus() != HttpURLConnection.HTTP_OK || streams == null || cursor == null) return false;
+        if (getResponse().httpStatus() != HttpURLConnection.HTTP_OK || streams == null || subscription == null)
+            return false;
         if (!context.isLifecycleUnchanged()) {
             ApiResponse.error(ApiStatus.SERVER_STOPPING)
                 .send(context.getExchange());
@@ -88,7 +85,7 @@ public final class GetItemEvents extends ISyncedRequest {
                 .sendResponseHeaders(HttpURLConnection.HTTP_OK, -1);
             context.getExchange()
                 .close();
-        } else streams.open(context, gridKey, cursor, icons);
+        } else streams.open(context, gridKey, subscription, icons);
         return true;
     }
 }

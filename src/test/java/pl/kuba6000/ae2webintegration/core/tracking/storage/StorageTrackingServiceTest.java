@@ -3,15 +3,12 @@ package pl.kuba6000.ae2webintegration.core.tracking.storage;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.jetbrains.annotations.NotNull;
@@ -25,80 +22,24 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 class StorageTrackingServiceTest {
 
     @Test
-    void coverageLossInvalidatesLiveReplayAndFencesAnOlderQueuedSnapshot() throws Exception {
+    void coverageLossMarksHistoryIncompleteUntilAFullObservation() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
-        CountDownLatch entered = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
-        CountDownLatch published = new CountDownLatch(1);
-        AtomicInteger invalidations = new AtomicInteger();
-        AtomicLong invalidationEpoch = new AtomicLong();
-        List<StorageSnapshot> publications = Collections.synchronizedList(new ArrayList<>());
-        StoragePublicationListener listener = new StoragePublicationListener() {
-
-            public void published(@NotNull StableKey key, @NotNull StorageSnapshot snapshot) {
-                publications.add(snapshot);
-                published.countDown();
-            }
-
-            public void retired(@NotNull StableKey key, long generation) {
-                invalidations.incrementAndGet();
-            }
-
-            public void retired(@NotNull StableKey key, long generation, long lossEpoch) {
-                invalidationEpoch.set(lossEpoch);
-                StoragePublicationListener.super.retired(key, generation, lossEpoch);
-            }
-        };
-        IStorageHistoryStore blocked = new IStorageHistoryStore() {
-
-            public void append(@NotNull StableKey key, @NotNull List<StorageHistoryPoint> points) throws IOException {
-                entered.countDown();
-                try {
-                    if (!release.await(3, TimeUnit.SECONDS)) throw new IOException("Test writer did not resume");
-                } catch (InterruptedException failure) {
-                    Thread.currentThread()
-                        .interrupt();
-                    throw new IOException(failure);
-                }
-            }
-
-            public @NotNull StorageHistory read(@NotNull StableKey key, @Nullable StableKey resource, long from,
-                int limit) {
-                return new StorageHistory(Collections.emptyList(), true, false);
-            }
-        };
-        try (StorageTrackingService service = new StorageTrackingService(blocked, 100, listener)) {
-            try {
-                service.open(grid, 1);
-                service.submit(grid, 1, observation(item, 1000, 5), true, false);
-                assertTrue(entered.await(3, TimeUnit.SECONDS));
-                service.invalidate(grid, 1);
-                assertEquals(1, invalidations.get());
-                assertEquals(1, invalidationEpoch.get());
-                assertEquals(1, snapshot(service, grid).lossEpoch());
-                assertFalse(snapshot(service, grid).stockComplete());
-                release.countDown();
-                service.submit(grid, 1, observation(item, 2000, 9), false, false);
-                assertTrue(published.await(3, TimeUnit.SECONDS));
-                assertEquals(1, publications.size());
-                assertEquals(
-                    1,
-                    publications.get(0)
-                        .lossEpoch());
-                assertEquals(
-                    9,
-                    publications.get(0)
-                        .rows()
-                        .get(0)
-                        .resource()
-                        .quantity());
-                assertTrue(
-                    publications.get(0)
-                        .stockComplete());
-            } finally {
-                release.countDown();
-            }
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
+            service.open(grid, 1);
+            service.submit(grid, 1, observation(item, 1000, 5), true, false);
+            awaitRevision(service, grid, 1);
+            service.invalidate(grid, 1);
+            assertFalse(snapshot(service, grid).stockComplete());
+            service.submit(grid, 1, observation(item, 2000, 9), true, false);
+            awaitRevision(service, grid, 2);
+            assertTrue(snapshot(service, grid).stockComplete());
+            assertEquals(
+                9,
+                snapshot(service, grid).rows()
+                    .get(0)
+                    .resource()
+                    .quantity());
         }
     }
 
@@ -131,52 +72,6 @@ class StorageTrackingServiceTest {
         assertTrue(closedAfterWrite.get());
         assertNotNull(closingThread.get());
         assertNotSame(Thread.currentThread(), closingThread.get());
-    }
-
-    @Test
-    void onlyStockPublicationsAdvanceLiveRevisionAndRetirementFencesTheGeneration() throws Exception {
-        StableKey grid = StableKey.random();
-        StableKey item = StableKey.random();
-        List<StorageSnapshot> snapshots = Collections.synchronizedList(new ArrayList<>());
-        CountDownLatch published = new CountDownLatch(2);
-        AtomicLong retired = new AtomicLong();
-        StoragePublicationListener listener = new StoragePublicationListener() {
-
-            public void published(@NotNull StableKey key, @NotNull StorageSnapshot snapshot) {
-                snapshots.add(snapshot);
-                published.countDown();
-            }
-
-            public void retired(@NotNull StableKey key, long generation) {
-                retired.set(generation);
-            }
-        };
-        try (StorageTrackingService service = new StorageTrackingService(
-            new InMemoryStorageHistoryStore(),
-            100,
-            listener)) {
-            service.open(grid, 1);
-            service.submit(grid, 1, observation(item, 1000, 5), false, false);
-            service.submit(
-                grid,
-                1,
-                new StorageObservation(2000, false, true, false, Collections.emptyList(), Collections.emptyList()),
-                false,
-                true);
-            service.submit(grid, 1, observation(item, 3000, 8), false, false);
-            assertTrue(published.await(3, TimeUnit.SECONDS));
-            assertEquals(2, snapshots.size());
-            assertEquals(
-                1,
-                snapshots.get(0)
-                    .revision());
-            assertEquals(
-                2,
-                snapshots.get(1)
-                    .revision());
-            service.retire(grid, 1);
-            assertEquals(1, retired.get());
-        }
     }
 
     @Test

@@ -28,7 +28,6 @@ public final class StorageTrackingService implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
     private final IStorageHistoryStore store;
-    private final StoragePublicationListener listener;
     private final Map<StableKey, State> states = new ConcurrentHashMap<>();
     private final Semaphore capacity;
     private final int maxQueuedRows;
@@ -36,17 +35,6 @@ public final class StorageTrackingService implements AutoCloseable {
     private volatile boolean closed;
 
     public StorageTrackingService(@NotNull IStorageHistoryStore store, int maxQueuedRows) {
-        this(store, maxQueuedRows, new StoragePublicationListener() {
-
-            public void published(@NotNull StableKey gridKey, @NotNull StorageSnapshot snapshot) {}
-
-            public void retired(@NotNull StableKey gridKey, long generation) {}
-        });
-    }
-
-    public StorageTrackingService(@NotNull IStorageHistoryStore store, int maxQueuedRows,
-        @NotNull StoragePublicationListener listener) {
-        this.listener = listener;
         if (maxQueuedRows < 1) throw new IllegalArgumentException("Queue limit must be positive");
         this.store = store;
         this.maxQueuedRows = maxQueuedRows;
@@ -80,7 +68,6 @@ public final class StorageTrackingService implements AutoCloseable {
         State previous = states.get(gridKey);
         if (previous != null && previous.generation == generation) return;
         states.put(gridKey, new State(generation));
-        if (previous != null) listener.retired(gridKey, previous.generation);
     }
 
     /** Never waits for disk or queue capacity. False requires a new full observation and flow coverage gap. */
@@ -157,18 +144,16 @@ public final class StorageTrackingService implements AutoCloseable {
         return new StorageHistory(result.points(), complete, result.truncated(), result.baseline());
     }
 
-    /** Invalidates live replay immediately without discarding retained state needed for reconciliation. */
+    /** Records a history coverage gap without affecting live terminal subscriptions. */
     public void invalidate(@NotNull StableKey gridKey, long generation) {
         State state = states.get(gridKey);
         if (state == null || state.generation != generation) return;
-        long lossEpoch = state.lossEpoch.incrementAndGet();
-        listener.retired(gridKey, generation, lossEpoch);
+        state.lossEpoch.incrementAndGet();
     }
 
     public void retire(@NotNull StableKey gridKey, long generation) {
         State state = states.get(gridKey);
-        if (state != null && state.generation == generation && states.remove(gridKey, state))
-            listener.retired(gridKey, generation);
+        if (state != null && state.generation == generation) states.remove(gridKey, state);
     }
 
     @Override
@@ -183,8 +168,6 @@ public final class StorageTrackingService implements AutoCloseable {
                 .interrupt();
         } finally {
             closed = true;
-            for (Map.Entry<StableKey, State> entry : states.entrySet())
-                listener.retired(entry.getKey(), entry.getValue().generation);
             states.clear();
         }
     }
@@ -313,8 +296,6 @@ public final class StorageTrackingService implements AutoCloseable {
             visible,
             lossEpoch);
         state.handledLossEpoch = lossEpoch;
-        if (observation.stockObserved() && states.get(gridKey) == state && state.lossEpoch.get() == lossEpoch)
-            listener.published(gridKey, state.snapshot);
     }
 
     private static StorageHistoryPoint point(State state, StorageObservation observation, StorageHistoryPoint.Kind kind,

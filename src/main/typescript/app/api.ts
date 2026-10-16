@@ -63,7 +63,7 @@ export type Api = {
     ) => Promise<ResourceResponse<StoredResource[]>>;
     itemEvents: (
         gridKey: string,
-        cursor: string,
+        subscription: string,
         icons: boolean,
         handlers: {
             ready: () => void;
@@ -186,11 +186,22 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             (parsed.status === 'OK' && (!response.ok || !Object.hasOwn(parsed, 'data')))
         )
             throw new ApiError('INVALID_RESPONSE', response.status);
-        const envelope = parsed as { status: string; data: T; icons?: IconMetadata | null; view?: TerminalView };
+        const envelope = parsed as {
+            status: string;
+            data: T;
+            icons?: IconMetadata | null;
+            view?: TerminalView;
+            subscription?: string;
+        };
         if (!response.ok || envelope.status !== 'OK') {
             throw new ApiError(envelope.status, response.status, envelope.data);
         }
-        return { data: envelope.data, icons: envelope.icons ?? null, view: envelope.view };
+        return {
+            data: envelope.data,
+            icons: envelope.icons ?? null,
+            view: envelope.view,
+            subscription: envelope.subscription
+        };
     }
     function request<T>(path: string, options?: Parameters<typeof read>[1]): Promise<T> {
         return read<T>(path, options).then((result) => result.data);
@@ -207,8 +218,8 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             if (live) query.set('live', 'true');
             return read(`api/grids/${encodeURIComponent(gridKey)}/items${query.size ? `?${query}` : ''}`, { signal });
         },
-        itemEvents(gridKey, cursor, icons, handlers) {
-            const query = new URLSearchParams({ cursor });
+        itemEvents(gridKey, subscription, icons, handlers) {
+            const query = new URLSearchParams({ subscription });
             if (icons) query.set('icons', 'true');
             const source = new EventSource(
                 new URL(`api/grids/${encodeURIComponent(gridKey)}/items/events?${query}`, base)
@@ -222,7 +233,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
                     handlers.reset();
                 }
             });
-            for (const event of ['reset', 'gap', 'invalidate', 'revoked'])
+            for (const event of ['reset', 'invalidate', 'revoked'])
                 source.addEventListener(event, () => {
                     source.close();
                     handlers.reset();

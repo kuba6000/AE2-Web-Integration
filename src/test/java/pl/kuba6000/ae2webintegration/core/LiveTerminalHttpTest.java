@@ -58,6 +58,12 @@ class LiveTerminalHttpTest {
                 .get(3, TimeUnit.SECONDS);
             game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
             String base = "http://127.0.0.1:" + Config.INSTANCE.general.port + "/api/grids/" + key + "/items";
+            for (int i = 0; i < 6; i++) {
+                HttpURLConnection head = connection(base + "?live=true");
+                head.setRequestMethod("HEAD");
+                assertEquals(200, head.getResponseCode());
+                head.disconnect();
+            }
             JsonObject snapshot = json(base + "?live=true");
             JsonObject view = snapshot.getAsJsonObject("view");
             assertNotNull(view);
@@ -76,19 +82,16 @@ class LiveTerminalHttpTest {
                     .getAsJsonObject()
                     .get("quantity")
                     .getAsLong());
-            String cursor = view.get("generation")
-                .getAsString() + ":"
-                + view.get("revision")
-                    .getAsString();
-            HttpURLConnection denied = connection(base + "/events?cursor=" + cursor);
+            String token = snapshot.get("subscription")
+                .getAsString();
+            HttpURLConnection denied = connection(base + "/events?subscription=" + token);
             denied.setRequestProperty("Authorization", "Bearer invalid");
             assertEquals(401, denied.getResponseCode());
             denied.disconnect();
-            HttpURLConnection invalid = connection(base + "/events?cursor=" + cursor);
-            invalid.setRequestProperty("Last-Event-ID", "not-a-cursor");
+            HttpURLConnection invalid = connection(base + "/events?subscription=not-a-token");
             assertEquals(400, invalid.getResponseCode());
             invalid.disconnect();
-            HttpURLConnection stream = connection(base + "/events?cursor=" + cursor);
+            HttpURLConnection stream = connection(base + "/events?subscription=" + token);
             try (BufferedReader input = new BufferedReader(
                 new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
                 assertEquals("text/event-stream; charset=UTF-8", stream.getContentType());
@@ -107,8 +110,8 @@ class LiveTerminalHttpTest {
                     remaining--;
                     JsonObject payload = new JsonParser().parse(line.substring(6))
                         .getAsJsonObject();
-                    if (!payload.has("upserts")) continue;
-                    for (JsonElement row : payload.getAsJsonArray("upserts")) {
+                    if (!payload.has("updates")) continue;
+                    for (JsonElement row : payload.getAsJsonArray("updates")) {
                         if (row.getAsJsonObject()
                             .get("quantity")
                             .getAsLong() == 25) updated = true;

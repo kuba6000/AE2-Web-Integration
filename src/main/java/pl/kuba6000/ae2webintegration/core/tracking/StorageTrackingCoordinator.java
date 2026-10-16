@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.tracking;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -26,6 +27,7 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalState;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
@@ -39,6 +41,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     private static final long VIEWER_LEASE_MILLIS = TimeUnit.SECONDS.toMillis(10);
     private static final long FAILURE_RETRY_MILLIS = TimeUnit.SECONDS.toMillis(30);
     private final StorageTrackingService service;
+    private final TerminalState terminals;
     private final Supplier<@Nullable IconPack> iconPack;
     private final GridIdentityRegistry identities;
     private final ConfigSettings.ResourceTracking settings;
@@ -55,6 +58,13 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
 
     public StorageTrackingCoordinator(@NotNull StorageTrackingService service, @NotNull GridIdentityRegistry identities,
         @NotNull ConfigSettings.ResourceTracking settings, @NotNull Supplier<@Nullable IconPack> iconPack) {
+        this(service, identities, settings, iconPack, new TerminalState());
+    }
+
+    public StorageTrackingCoordinator(@NotNull StorageTrackingService service, @NotNull GridIdentityRegistry identities,
+        @NotNull ConfigSettings.ResourceTracking settings, @NotNull Supplier<@Nullable IconPack> iconPack,
+        @NotNull TerminalState terminals) {
+        this.terminals = terminals;
         this.iconPack = iconPack;
         this.service = service;
         this.identities = identities;
@@ -70,7 +80,6 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         for (int visited = 0; visited < scheduled.size(); visited++) {
             if (cursor >= scheduled.size()) cursor = 0;
             Binding binding = scheduled.get(cursor++);
-            clearPublishedBaseline(binding);
             IAEGrid grid = binding.grid.get();
             if (grid != null && GridFilter.isUsable(grid)
                 && binding.key.equals(identities.getKey(grid))
@@ -91,6 +100,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
 
     private void activate(Binding binding, long nowMillis, boolean icons) {
         boolean wasActive = binding.activeUntil > nowMillis;
+        if (terminals.activate(binding.key, binding.generation, nowMillis)) binding.capture.invalidate();
         binding.activeUntil = nowMillis + VIEWER_LEASE_MILLIS;
         boolean needsIcons = icons && binding.iconsUntil <= nowMillis;
         if (icons) binding.iconsUntil = nowMillis + VIEWER_LEASE_MILLIS;
@@ -105,29 +115,19 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     }
 
     public @Nullable StorageSnapshot observeForViewer(@NotNull IAEGrid grid, long nowMillis, boolean icons) {
+        prepareForViewer(grid, nowMillis, icons);
         StableKey key = identities.getKey(grid);
-        if (key == null || !GridFilter.isUsable(grid)) return null;
+        return key == null ? null : terminals.snapshot(key);
+    }
+
+    /** Updates shared state without materializing a full response; the HTTP bootstrap reserves its own rows. */
+    public void prepareForViewer(@NotNull IAEGrid grid, long nowMillis, boolean icons) {
+        StableKey key = identities.getKey(grid);
+        if (key == null || !GridFilter.isUsable(grid)) return;
         Binding binding = binding(key, grid, gridSettings(key), nowMillis);
         activate(binding, nowMillis, icons);
-        StorageObservation observation = due(binding, nowMillis) ? observe(binding, grid, nowMillis) : null;
+        if (due(binding, nowMillis)) observe(binding, grid, nowMillis);
         if (binding.lastFailure != null) throw binding.lastFailure;
-        StorageSnapshot snapshot = service.snapshot(key);
-        if (snapshot != null && snapshot.revision() != 0 && snapshot.stockComplete()) {
-            clearPublishedBaseline(binding);
-            return snapshot;
-        }
-        // The first request can use its detached baseline without waiting for the background writer.
-        if (observation != null && observation.full()) {
-            binding.pendingBaseline = new StorageSnapshot(
-                binding.generation,
-                0,
-                observation.observedAt(),
-                true,
-                observation.flowComplete(),
-                snapshot == null || snapshot.persistenceComplete(),
-                observation.rows());
-        }
-        return binding.pendingBaseline;
     }
 
     private void discover(IAE ae, long nowMillis) {
@@ -190,7 +190,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             scheduled.add(binding);
             grid.web$getStorageGrid()
                 .web$setStorageCapture(binding.capture);
-            service.open(key, binding.generation);
+            if (stock || flow) service.open(key, binding.generation);
         }
         if (binding.stockInterval != stockInterval) {
             binding.stockInterval = stockInterval;
@@ -206,66 +206,63 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             || binding.activeUntil > nowMillis && nowMillis >= binding.nextViewerRead;
     }
 
-    private @Nullable StorageObservation observe(Binding binding, IAEGrid grid, long nowMillis) {
+    private void observe(Binding binding, IAEGrid grid, long nowMillis) {
         long started = System.nanoTime();
-        boolean rejected = false;
         boolean stockSample = binding.stock && nowMillis >= binding.nextStockSample;
         boolean flowFlush = binding.flow && nowMillis >= binding.nextFlowFlush;
         boolean liveRead = binding.activeUntil > nowMillis && nowMillis >= binding.nextViewerRead;
         long interval = binding.activeUntil > nowMillis ? settings.activeIntervalMillis
             : binding.flow ? TimeUnit.SECONDS.toMillis(settings.flowFlushIntervalSeconds) : binding.stockInterval;
         try {
-            StorageSnapshot previous = service.snapshot(binding.key);
-            boolean reconcile = previous != null && previous.generation() == binding.generation
-                && (previous.revision() > 0 || previous.lossEpoch() > 0)
-                && !previous.stockComplete();
+            long terminalEpoch = binding.capture.terminalEpoch();
+            if (terminalEpoch != binding.terminalEpoch) {
+                terminals.invalidate(binding.key, binding.generation);
+                binding.terminalEpoch = terminalEpoch;
+            }
             StorageObservation observation = stockSample || liveRead ? binding.capture.observe(
                 grid,
                 binding.iconsUntil > nowMillis ? iconPack.get() : null,
                 nowMillis,
-                nowMillis >= binding.nextFull || reconcile,
+                stockSample || nowMillis >= binding.nextFull,
                 flowFlush) : binding.capture.flushFlow(nowMillis);
             if (observation.full())
                 binding.nextFull = nowMillis + TimeUnit.SECONDS.toMillis(settings.reconciliationIntervalSeconds);
-            if (!service.submit(binding.key, binding.generation, observation, stockSample, flowFlush)) {
-                rejected = true;
-                throw new IllegalStateException("Storage observation queue has no capacity");
+            // Native reads may themselves deliver a full-list invalidation.
+            terminalEpoch = binding.capture.terminalEpoch();
+            if (terminalEpoch != binding.terminalEpoch) {
+                terminals.invalidate(binding.key, binding.generation);
+                binding.terminalEpoch = terminalEpoch;
+                binding.capture.invalidate();
+                // Preserve accepted flow, but this stock read crossed a native topology boundary.
+                observation = new StorageObservation(
+                    observation.observedAt(),
+                    false,
+                    observation.flowComplete(),
+                    false,
+                    Collections.emptyList(),
+                    observation.flows());
+                stockSample = false;
+            }
+            if (binding.activeUntil > nowMillis) terminals.observed(binding.key, binding.generation, observation);
+            if ((stockSample || flowFlush)
+                && !service.submit(binding.key, binding.generation, observation, stockSample, flowFlush)) {
+                // History backpressure must not invalidate a healthy terminal or delay its next read.
+                binding.capture.markFlowGap();
             }
             if (stockSample) binding.nextStockSample = nowMillis + binding.stockInterval;
             if (flowFlush)
                 binding.nextFlowFlush = nowMillis + TimeUnit.SECONDS.toMillis(settings.flowFlushIntervalSeconds);
             if (observation.stockObserved()) binding.nextViewerRead = nowMillis + settings.activeIntervalMillis;
             binding.lastFailure = null;
-            if (observation.full() && binding.activeUntil > nowMillis) {
-                binding.pendingBaseline = new StorageSnapshot(
-                    binding.generation,
-                    0,
-                    observation.observedAt(),
-                    true,
-                    observation.flowComplete(),
-                    true,
-                    observation.rows());
-            }
-            return observation;
         } catch (RuntimeException failure) {
-            if (!rejected) service.invalidate(binding.key, binding.generation);
+            service.invalidate(binding.key, binding.generation);
             binding.capture.markGap();
-            binding.pendingBaseline = null;
+            terminals.invalidate(binding.key, binding.generation);
             if (binding.lastFailure == null)
                 LOG.warn("Storage observation failed for network {}", binding.key, failure);
             binding.lastFailure = failure;
             binding.retryAfter = retryAt(nowMillis, started, interval);
-            return null;
         }
-    }
-
-    private void clearPublishedBaseline(Binding binding) {
-        if (binding.pendingBaseline == null) return;
-        StorageSnapshot published = service.snapshot(binding.key);
-        if (published != null && published.generation() == binding.generation
-            && published.stockComplete()
-            && published.revision() != 0
-            && published.observedAt() >= binding.pendingBaseline.observedAt()) binding.pendingBaseline = null;
     }
 
     private static long retryAt(long nowMillis, long startedNanos, long interval) {
@@ -285,6 +282,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 .commit();
         }
         service.retire(binding.key, binding.generation);
+        terminals.retire(binding.key, binding.generation);
     }
 
     @Override
@@ -307,7 +305,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private long nextFlowFlush;
         private long nextViewerRead;
         private long retryAfter;
-        private @Nullable StorageSnapshot pendingBaseline;
+        private long terminalEpoch;
         private @Nullable RuntimeException lastFailure;
         private long activeUntil;
         private long iconsUntil;

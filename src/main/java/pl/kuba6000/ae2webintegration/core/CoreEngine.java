@@ -22,11 +22,12 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
-import pl.kuba6000.ae2webintegration.core.http.stream.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalState;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
@@ -66,6 +67,7 @@ public class CoreEngine {
     private static volatile @Nullable StorageTrackingService storageTracking;
     private static @Nullable StorageTrackingCoordinator storageCoordinator;
     private static volatile @Nullable TerminalStreams terminalStreams;
+    private static volatile @Nullable TerminalState terminalState;
 
     public static void init(@NotNull IServerPlatform serverPlatform) {
         serverRunning = false;
@@ -91,7 +93,9 @@ public class CoreEngine {
         loadIconPack();
         stopStorageTracking();
         ConfigSettings.ResourceTracking trackingSettings = Config.INSTANCE.resourceTracking;
-        TerminalStreams streams = new TerminalStreams(CoreEngine::getIconPack, context -> {
+        TerminalState liveState = new TerminalState();
+        terminalState = liveState;
+        TerminalStreams streams = new TerminalStreams(liveState, CoreEngine::getIconPack, context -> {
             if (!context.isLifecycleUnchanged()) return false;
             RequestContext authenticated = AuthService.authenticate(context.getExchange());
             return authenticated != null && authenticated.getPrincipal()
@@ -104,13 +108,13 @@ public class CoreEngine {
                     .toPath(),
                 trackingSettings.historyRetentionDays,
                 trackingSettings.historyMaxRowsPerGrid),
-            trackingSettings.maxQueuedRows,
-            streams);
+            trackingSettings.maxQueuedRows);
         storageCoordinator = new StorageTrackingCoordinator(
             service,
             GRID_IDENTITIES,
             trackingSettings,
-            CoreEngine::getIconPack);
+            CoreEngine::getIconPack,
+            liveState);
         storageTracking = service;
         themes.close();
         themes = ThemeCatalog.load(
@@ -286,6 +290,15 @@ public class CoreEngine {
             : storageCoordinator.observeForViewer(grid, System.currentTimeMillis(), icons);
     }
 
+    public static void prepareTerminal(@NotNull IAEGrid grid, boolean icons) {
+        StorageTrackingCoordinator coordinator = storageCoordinator;
+        if (coordinator != null) coordinator.prepareForViewer(grid, System.currentTimeMillis(), icons);
+    }
+
+    public static @Nullable TerminalState getTerminalState() {
+        return terminalState;
+    }
+
     public static @Nullable TerminalStreams getTerminalStreams() {
         return terminalStreams;
     }
@@ -293,6 +306,7 @@ public class CoreEngine {
     private static void stopTerminalStreams() {
         TerminalStreams previousStreams = terminalStreams;
         terminalStreams = null;
+        terminalState = null;
         if (previousStreams != null) previousStreams.close();
     }
 
