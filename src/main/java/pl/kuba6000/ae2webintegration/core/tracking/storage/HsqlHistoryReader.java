@@ -28,9 +28,26 @@ final class HsqlHistoryReader {
 
     private HsqlHistoryReader() {}
 
-    static @NotNull StorageHistory read(@NotNull Connection db, long gridId, @Nullable StableKey itemKey,
+    static @NotNull StorageHistory read(@NotNull Connection db, @NotNull StableKey gridKey, @Nullable StableKey itemKey,
         long fromMillis, long expiry, int limit) throws SQLException {
-        boolean retired = isRetired(db, gridId, fromMillis, expiry);
+        long gridId;
+        boolean retired;
+        try (PreparedStatement query = db.prepareStatement("""
+            SELECT id, deleted_until, first_observed
+            FROM history_grids
+            WHERE grid_key = ?
+            """)) {
+            query.setString(1, gridKey.toString());
+            try (ResultSet rows = query.executeQuery()) {
+                if (!rows.next())
+                    return new StorageHistory(Collections.emptyList(), Collections.emptyMap(), true, false);
+                gridId = rows.getLong("id");
+                long deletedUntil = rows.getLong("deleted_until");
+                long firstObserved = rows.getLong("first_observed");
+                retired = deletedUntil != Long.MIN_VALUE && fromMillis <= deletedUntil
+                    || fromMillis < expiry && firstObserved < expiry;
+            }
+        }
         long start = Math.max(fromMillis, expiry);
         boolean complete = !retired && !hasIncomplete(db, gridId, itemKey, start);
         List<QueryPoint> selected = selectPoints(db, gridId, itemKey, start, limit);
@@ -42,24 +59,6 @@ final class HsqlHistoryReader {
         StorageHistoryPoint baseline = findBaseline(db, gridId, itemKey, start, selected.subList(0, count));
         Map<StableKey, ResourceDescriptor> descriptions = readDescriptions(db, points, baseline);
         return new StorageHistory(points, descriptions, complete, truncated, baseline);
-    }
-
-    private static boolean isRetired(@NotNull Connection db, long gridId, long fromMillis, long expiry)
-        throws SQLException {
-        try (PreparedStatement query = db.prepareStatement("""
-            SELECT deleted_until, first_observed
-            FROM history_grids
-            WHERE id = ?
-            """)) {
-            query.setLong(1, gridId);
-            try (ResultSet rows = query.executeQuery()) {
-                if (!rows.next()) return false;
-                long deletedUntil = rows.getLong("deleted_until");
-                long firstObserved = rows.getLong("first_observed");
-                return deletedUntil != Long.MIN_VALUE && fromMillis <= deletedUntil
-                    || fromMillis < expiry && firstObserved < expiry;
-            }
-        }
     }
 
     private static @NotNull List<QueryPoint> selectPoints(@NotNull Connection db, long gridId,

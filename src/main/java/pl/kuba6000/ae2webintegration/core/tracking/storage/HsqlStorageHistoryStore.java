@@ -316,7 +316,7 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         try {
             Connection db = database();
             StorageHistory history = HsqlHistoryReader
-                .read(db, gridId(db, gridKey), itemKey, fromMillis, retention.cutoff(), limit);
+                .read(db, gridKey, itemKey, fromMillis, retention.cutoff(), limit);
             db.commit();
             return history;
         } catch (SQLException failure) {
