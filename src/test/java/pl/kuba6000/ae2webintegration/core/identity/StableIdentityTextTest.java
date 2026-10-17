@@ -13,6 +13,23 @@ import com.google.common.hash.Hashing;
 class StableIdentityTextTest {
 
     @Test
+    void optionalEncodingPreservesAcceptedHashesAndRejectsUnsupportedDataWithoutHidingFailures() {
+        StableKey expected = StableKey.create(sink -> StableKey.writeText(sink, "native-resource"));
+        assertEquals(expected, StableKey.createOptional(sink -> {
+            StableKey.writeText(sink, "native-resource");
+            return true;
+        }));
+        assertNull(StableKey.createOptional(sink -> {
+            StableKey.writeText(sink, "partially-written-resource");
+            return false;
+        }));
+        IllegalStateException failure = new IllegalStateException("Broken native serialization");
+        assertSame(
+            failure,
+            assertThrows(IllegalStateException.class, () -> StableKey.createOptional(sink -> { throw failure; })));
+    }
+
+    @Test
     @SuppressWarnings("UnnecessaryUnicodeEscape") // Keep the exact code points visible in this encoding vector.
     void textUsesByteLengthAndStandardUtf8IncludingNulAndSupplementaryCharacters() {
         Hasher sink = Hashing.sha256()

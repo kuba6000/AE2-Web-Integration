@@ -36,6 +36,8 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItemEvents;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPage;
 
 /** Complete method/path dispatch with bounded JSON input and explicit request execution threads. */
@@ -185,10 +187,7 @@ public final class ApiRouter implements HttpHandler {
                 }
             }
             JsonObject body = readJsonBody(exchange, unsafe);
-            RequestContext context = arrival.withInputs(
-                credentials == null ? WebPrincipal.anonymous() : credentials.getPrincipal(),
-                parameters,
-                body);
+            RequestContext context = arrival.withInputs(credentials, parameters, body);
             if (selected.factory() == null) {
                 GetIconPage.handle(context);
                 return;
@@ -199,7 +198,8 @@ public final class ApiRouter implements HttpHandler {
                 if (request instanceof ISyncedRequest synced) dispatch.accept(synced);
                 else((IAsyncRequest) request).handle();
             }
-            response = request.getResponse();
+            if (request instanceof GetItemEvents events && events.startStream()) return;
+            response = request instanceof GetItems items ? items.finishResponse() : request.getResponse();
         } catch (InvalidInput exception) {
             response = ApiResponse.error(exception.error);
         } catch (ReflectiveOperationException | RuntimeException exception) {

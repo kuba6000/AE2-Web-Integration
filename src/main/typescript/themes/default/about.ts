@@ -54,6 +54,8 @@ export function createAboutView(root: HTMLElement, modVersion: string | null) {
     head.append(headings);
     const body = element('tbody');
     for (const resource of [
+        { name: 'HSQLDB', url: 'https://hsqldb.org/', license: 'HSQLDB License (BSD)' },
+        { name: 'uPlot', url: 'https://github.com/leeoniya/uPlot', license: 'MIT' },
         {
             name: 'Lato',
             url: 'https://github.com/google/fonts/tree/main/ofl/lato',

@@ -590,7 +590,23 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
         pauseStatus: 'OK',
         history: [historyEntry],
         historyDetail,
-        settings: { [gridA]: { isTracked: false, name: '' }, [gridB]: { isTracked: false, name: '' } },
+        resourceHistory: { points: [], baseline: null, complete: true, truncated: false },
+        settings: {
+            [gridA]: {
+                isTracked: false,
+                isStorageTracked: false,
+                isFlowTracked: false,
+                stockSampleIntervalSeconds: 300,
+                name: ''
+            },
+            [gridB]: {
+                isTracked: false,
+                isStorageTracked: false,
+                isFlowTracked: false,
+                stockSampleIntervalSeconds: 300,
+                name: ''
+            }
+        },
         accessSources: {}
     };
     const planRequests = new Map();
@@ -798,14 +814,8 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 const result = JSON.stringify({
                     status: cpuError || 'OK',
                     data: cpuError ? null : options.cpusByGrid?.[gridKey] || options.cpus,
-                    icons:
-                        url.searchParams.get('icons') === 'true'
-                            ? options.iconsByGrid?.[gridKey] || options.icons
-                            : null
+                    icons: url.searchParams.get('icons') === 'true' ? options.icons : null
                 });
-                options.activeCpus = (options.activeCpus || 0) + 1;
-                options.maxActiveCpus = Math.max(options.maxActiveCpus || 0, options.activeCpus);
-                response.once('close', () => options.activeCpus--);
                 if (options.cpuDelay) await new Promise((resolve) => setTimeout(resolve, options.cpuDelay));
                 response.statusCode = cpuError ? 403 : 200;
                 response.end(result);
@@ -823,6 +833,18 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                         status: options.historyError || 'OK',
                         data: options.historyDetail,
                         icons: url.searchParams.get('icons') === 'true' ? options.icons : null
+                    })
+                );
+            } else if (resource.endsWith('/resource-history')) {
+                const key = resource.includes(gridA) ? gridA : gridB;
+                response.end(
+                    JSON.stringify({
+                        status: options.resourceHistoryError || 'OK',
+                        data: {
+                            ...options.resourceHistory,
+                            enabled: !!options.settings[key].isStorageTracked || !!options.settings[key].isFlowTracked
+                        },
+                        icons: url.searchParams.get('icons') === 'true' ? (options.historyIcons ?? options.icons) : null
                     })
                 );
             } else if (resource.endsWith('/settings')) {
@@ -871,6 +893,15 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                         icons: url.searchParams.get('icons') === 'true' ? options.icons : null
                     })
                 );
+            } else if (resource.endsWith('/items/events')) {
+                response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+                response.flushHeaders();
+                if (!options.delayStreamReady) response.write('event: ready\ndata: {}\n\n');
+                options.itemStreams ??= [];
+                options.itemStreams.push(response);
+                response.on('close', () => {
+                    options.itemStreams = options.itemStreams.filter((stream) => stream !== response);
+                });
             } else if (resource.endsWith('/items')) {
                 const first = resource.includes(gridA);
                 const send = () => {
@@ -880,6 +911,13 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                             options.status === 200
                                 ? {
                                       status: 'OK',
+                                      recent: options.recent,
+                                      ...(options.liveView
+                                          ? {
+                                                view: options.liveView,
+                                                subscription: `subscription-${options.liveView.revision}`
+                                            }
+                                          : {}),
                                       icons: url.searchParams.get('icons') === 'true' ? options.icons : null,
                                       data: first
                                           ? options.itemsA
@@ -911,7 +949,10 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 url.searchParams.has('INVALID_PASSWORD') ||
                 url.searchParams.has('confirmregistration'));
         const relative = resource === '/' ? (login ? 'assets/login.html' : 'assets/web/index.html') : resource.slice(1);
-        const resourceRoot = relative.endsWith('.js') ? compiledResources : resources;
+        const resourceRoot =
+            relative.endsWith('.js') || relative.endsWith('/uplot.css') || relative.endsWith('/uplot-LICENSE.txt')
+                ? compiledResources
+                : resources;
         const file = path.resolve(resourceRoot, relative);
         if (!file.startsWith(resourceRoot + path.sep)) {
             response.writeHead(404).end();
@@ -987,6 +1028,19 @@ async function poll(page) {
     const requested = page.waitForRequest((request) => request.url().endsWith('/api/grids'));
     await page.clock.fastForward(6000);
     await requested;
+}
+
+async function seedTerminalPageSize(page, base, size) {
+    await page.addInitScript(
+        ({ key, size }) => {
+            const saved = JSON.parse(localStorage.getItem(key) || '{}');
+            if (saved.terminalPageSize === undefined) {
+                saved.terminalPageSize = size;
+                localStorage.setItem(key, JSON.stringify(saved));
+            }
+        },
+        { key: `ae2web:${new URL(base).pathname}:theme:default`, size }
+    );
 }
 
 async function seedAutomaticRefresh(page, base, autoRefresh) {
@@ -1368,7 +1422,10 @@ test('unavailable icons override the saved mode and recover without losing it', 
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     await item.waitFor();
-    assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
+    assert.equal(
+        new URLSearchParams(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query).has('icons'),
+        false
+    );
     assert.equal(await item.getByText(iron.displayName, { exact: true }).isVisible(), true);
     options.pack = { available: true, packId: 'a'.repeat(64), width: 64, height: 64 };
     await poll(page);
@@ -1398,7 +1455,10 @@ test('pending icon discovery leaves inventory usable and failures preserve confi
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     await item.waitFor({ timeout: 1000 });
     assert.equal(await item.getByText(iron.displayName, { exact: true }).isVisible(), true);
-    assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
+    assert.equal(
+        new URLSearchParams(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query).has('icons'),
+        false
+    );
     await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage, null, {
         timeout: 4000
     });
@@ -1511,7 +1571,10 @@ test('saved names choice receives a dismissible icon notice outside the terminal
     await page.goto(`${base}#/grids/${gridA}/items`);
     const enable = page.getByRole('button', { name: 'Enable icons', exact: true });
     await enable.waitFor({ timeout: 3000 });
-    assert.equal(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query, '');
+    assert.equal(
+        new URLSearchParams(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query).has('icons'),
+        false
+    );
     const panel = await page.getByRole('navigation').boundingBox();
     const notice = await enable.boundingBox();
     const terminal = await page.getByRole('searchbox').boundingBox();
@@ -2103,7 +2166,12 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
             .evaluateAll((icons) => icons.map((icon) => getComputedStyle(icon).backgroundPosition)),
         ['-32px 0px', '0px 0px']
     );
-    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query, '?icons=true');
+    assert.equal(
+        new URLSearchParams(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query).get(
+            'icons'
+        ),
+        'true'
+    );
     options.itemsA = options.itemsA.map((item) => ({ ...item, quantity: item.quantity + 1 }));
     await poll(page);
     await page.getByRole('button', { name: /Certus Quartz/ }).waitFor();
@@ -2149,7 +2217,12 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(pages().length, before);
-    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query, '');
+    assert.equal(
+        new URLSearchParams(options.requests.filter((request) => request.path.endsWith('/items')).at(-1).query).has(
+            'icons'
+        ),
+        false
+    );
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     await page
         .getByRole('region', { name: 'Current job', exact: true })
@@ -2468,7 +2541,7 @@ test('Home retains the selected network and owns switching while Web settings ow
         await page.locator('#app header').getByRole('button', { name: 'Refresh', exact: true }).isVisible(),
         true
     );
-    assert.equal(await page.getByRole('checkbox', { name: 'Refresh automatically' }).count(), 0);
+    assert.equal(await page.getByRole('checkbox', { name: 'Automatic updates' }).count(), 0);
     assert.equal(await page.locator('#app header').getByRole('combobox').count(), 0);
     assert.equal(await page.locator('#selected-network').isVisible(), false);
     await page.locator('#home-network-panel').getByRole('heading', { name: gridA, exact: true }).waitFor();
@@ -2491,7 +2564,7 @@ test('Home retains the selected network and owns switching while Web settings ow
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     assert.equal(await network.count(), 0, 'The network selector belongs only to Home');
     await clickTab(page, 'Web settings');
-    const automatic = page.getByRole('checkbox', { name: 'Refresh automatically' });
+    const automatic = page.getByRole('checkbox', { name: 'Automatic updates' });
     await automatic.uncheck();
     await page.reload();
     await automatic.waitFor();
@@ -2523,7 +2596,7 @@ test('selected network survives global page reloads and direct routes take prece
     assert.equal(await terminal.getAttribute('href'), `#/grids/${gridB}/items`);
     options.grids = [];
     await page.reload();
-    await page.getByRole('checkbox', { name: 'Refresh automatically' }).waitFor();
+    await page.getByRole('checkbox', { name: 'Automatic updates' }).waitFor();
     assert.equal(await terminal.isVisible(), false, 'Remembered identity does not grant network access');
     options.grids = undefined;
     await page.reload();
@@ -3167,6 +3240,7 @@ for (const saved of [
 
 test('terminal control focus and dismissed tooltips survive polling and filtering resets pagination', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedTerminalPageSize(page, base, 100);
     options.itemsA = Array.from({ length: 102 }, (_, index) => ({
         ...iron,
         displayName: `Item ${String(index).padStart(3, '0')}`,
@@ -3206,7 +3280,7 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
     await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor({ timeout: 5000 });
     assert.match(page.url(), /\/plans\/7$/);
     await clickTab(page, 'Web settings');
-    await page.getByRole('checkbox', { name: 'Refresh automatically' }).check();
+    await page.getByRole('checkbox', { name: 'Automatic updates' }).check();
     await page.goBack();
     await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor();
     await page
@@ -3643,11 +3717,23 @@ test('history exposes resource and provider intervals with their correct locatio
 test('uncertain settings saves preserve the draft and remain unconfirmed until explicit retry succeeds', async (t) => {
     const { page, options, base } = await fixture(t);
     for (const status of ['INTERNAL_ERROR', 'TIMEOUT', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
-        options.settings[gridA] = { isTracked: false, name: '' };
+        options.settings[gridA] = {
+            isTracked: false,
+            name: '',
+            isStorageTracked: false,
+            isFlowTracked: false,
+            stockSampleIntervalSeconds: 300
+        };
         await page.goto(`${base}?case=${status}#/grids/${gridA}/settings`);
         const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
         await tracking.check();
-        options.settings[gridA] = { isTracked: true, name: '' };
+        options.settings[gridA] = {
+            isTracked: true,
+            name: '',
+            isStorageTracked: false,
+            isFlowTracked: false,
+            stockSampleIntervalSeconds: 300
+        };
         options.fault = { operation: 'settings', status };
         await page.getByRole('button', { name: 'Save settings', exact: true }).click();
         await page
@@ -3707,11 +3793,26 @@ test('settings drafts survive transient discovery failures and pending saves rec
     options.gridError = 'NO_PERMISSIONS';
     await poll(page);
     await tracking.waitFor({ state: 'hidden' });
-    options.settings[gridA] = { isTracked: true, name: '' };
+    options.settings[gridA] = {
+        isTracked: true,
+        name: '',
+        isStorageTracked: false,
+        isFlowTracked: false,
+        stockSampleIntervalSeconds: 300
+    };
     await save.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'OK', data: { isTracked: true, name: '' } })
+        body: JSON.stringify({
+            status: 'OK',
+            data: {
+                isTracked: true,
+                name: '',
+                isStorageTracked: false,
+                isFlowTracked: false,
+                stockSampleIntervalSeconds: 300
+            }
+        })
     });
     assert.equal(await tracking.count(), 0);
     options.gridError = null;
@@ -3786,7 +3887,16 @@ test('settings save remains single-flight across grids and uses the returned val
     await pending.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'OK', data: { isTracked: false, name: '' } })
+        body: JSON.stringify({
+            status: 'OK',
+            data: {
+                isTracked: false,
+                name: '',
+                isStorageTracked: false,
+                isFlowTracked: false,
+                stockSampleIntervalSeconds: 300
+            }
+        })
     });
     await page
         .getByRole('status')
@@ -3822,7 +3932,16 @@ test('old settings reads cannot replace saved data and denied saves clear access
     await delayed.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'OK', data: { isTracked: false, name: '' } })
+        body: JSON.stringify({
+            status: 'OK',
+            data: {
+                isTracked: false,
+                name: '',
+                isStorageTracked: false,
+                isFlowTracked: false,
+                stockSampleIntervalSeconds: 300
+            }
+        })
     });
     await settleResponse(page, delayed.request());
     assert.equal(await tracking.isChecked(), true);
@@ -3982,6 +4101,7 @@ test('header refresh stays active through a history detail read queued behind au
     const { page, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/history/1`);
     await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
+    let discoveryRequests = 0;
     let captureGrids;
     const gridsRequest = new Promise((resolve) => {
         captureGrids = resolve;
@@ -3992,7 +4112,10 @@ test('header refresh stays active through a history detail read queued behind au
     });
     await page.route(
         (url) => url.pathname.endsWith('/api/grids'),
-        (route) => captureGrids(route)
+        (route) => {
+            discoveryRequests++;
+            captureGrids(route);
+        }
     );
     await page.route(
         (url) => url.pathname.endsWith('/crafting-history/1'),
@@ -4012,6 +4135,7 @@ test('header refresh stays active through a history detail read queued behind au
     assert.equal(await refresh.isEnabled(), true);
     await detail.continue();
     await page.waitForFunction(() => document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false');
+    assert.equal(discoveryRequests, 1, 'Refreshing history detail reuses discovery already in flight');
 });
 
 test('CPU background refresh signals activity without disabling or dimming existing controls', async (t) => {
@@ -4096,10 +4220,12 @@ for (const width of [390, 1280])
         const read = await requested;
         assert.equal(await refresh.isEnabled(), true);
         assert.equal(await refresh.getAttribute('aria-busy'), 'true');
-        assert.equal(await refresh.locator('svg').evaluate((node) => getComputedStyle(node).animationName), 'none');
+        const visibleIcon = refresh.locator('svg:visible');
+        assert.equal(await visibleIcon.count(), 1, 'Only the current refresh glyph is visible');
+        assert.equal(await visibleIcon.evaluate((node) => getComputedStyle(node).animationName), 'none');
         assert.deepEqual(await geometry(), before);
         await page.emulateMedia({ reducedMotion: 'no-preference' });
-        assert.notEqual(await refresh.locator('svg').evaluate((node) => getComputedStyle(node).animationName), 'none');
+        assert.notEqual(await visibleIcon.evaluate((node) => getComputedStyle(node).animationName), 'none');
         await logout.focus();
         await page
             .getByRole('tooltip')
@@ -7149,13 +7275,13 @@ test('appearance, language and terminal preferences survive reload and direct li
     await page.getByRole('button', { name: /^Sort by:/ }).click();
     await page.getByRole('button', { name: /^Sort order:/ }).click();
     await clickTab(page, 'Web settings');
-    await page.getByRole('checkbox', { name: 'Refresh automatically' }).uncheck();
+    await page.getByRole('checkbox', { name: 'Automatic updates' }).uncheck();
     await page.getByRole('combobox', { name: 'Appearance' }).selectOption('dark');
     await page.getByRole('combobox', { name: 'Language' }).selectOption('pl');
     await page.reload();
     await page.getByRole('combobox', { name: 'Wygląd' }).waitFor();
     assert.equal(await page.getByRole('combobox', { name: 'Wygląd' }).inputValue(), 'dark');
-    assert.equal(await page.getByRole('checkbox', { name: 'Odświeżaj automatycznie' }).isChecked(), false);
+    assert.equal(await page.getByRole('checkbox', { name: 'Automatyczne aktualizacje' }).isChecked(), false);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Sortuj według: Ilości', exact: true }).isVisible(), true);
@@ -7444,6 +7570,7 @@ test('resource grid stays centered and stationary when scrolling becomes unneces
 
 test('terminal scrolls resources inside the viewport while search and navigation remain reachable', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedTerminalPageSize(page, base, 100);
     await seedAutomaticRefresh(page, base, false);
     options.itemsA = Array.from({ length: 105 }, (_, index) => ({
         ...iron,
@@ -7497,8 +7624,83 @@ test('terminal scrolls resources inside the viewport while search and navigation
     }
 });
 
+for (const width of [390, 1280]) {
+    test(`terminal page size persists and all mode follows filtering and live updates at ${width}px`, async (t) => {
+        const { page, options, base } = await fixture(t, '', { viewport: { width, height: 844 } });
+        options.liveView = { generation: '1', revision: '1' };
+        options.itemsA = Array.from({ length: 275 }, (_, index) => ({
+            ...iron,
+            itemKey: `resource-${index}`,
+            displayName: `Resource ${String(index).padStart(3, '0')}`,
+            quantity: 275 - index
+        }));
+        if (width === 390) await seedTerminalPageSize(page, base, 37);
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 275);
+        await clickTab(page, 'Web settings');
+        const pageSize = page.getByRole('combobox', { name: 'Resources per page', exact: true });
+        await pageSize.waitFor({ timeout: 3000 });
+        assert.equal(await pageSize.inputValue(), '500');
+        await pageSize.selectOption('50');
+        await page.reload();
+        assert.equal(await pageSize.inputValue(), '50');
+        await clickTab(page, 'Terminal');
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 50);
+        const reads = options.requests.filter((request) => request.path.endsWith('/items')).length;
+        for (let index = 0; index < 5; index++)
+            await page.getByRole('button', { name: 'Next page', exact: true }).click();
+        assert.equal(await page.locator('#items button').count(), 25);
+        assert.equal(await page.locator('#page-count').innerText(), '6 / 6');
+        const removed = options.itemsA.splice(250).map((item) => item.itemKey);
+        options.itemStreams
+            .at(-1)
+            .write(
+                `event: delta\ndata: ${JSON.stringify({ view: { generation: '1', revision: '2' }, updates: [], definitions: [], removed, icons: null })}\n\n`
+            );
+        await page.waitForFunction(() => document.querySelector('#page-count')?.textContent === '5 / 5');
+        assert.equal(await page.locator('#items button').count(), 50);
+        assert.equal(await page.getByRole('button', { name: 'Next page', exact: true }).isDisabled(), true);
+        await page.getByRole('searchbox', { name: 'Search resources', exact: true }).fill('Resource 000');
+        assert.equal(await page.locator('#items button').count(), 1);
+        assert.equal(await page.locator('#pages').isVisible(), false);
+        await page.getByRole('searchbox', { name: 'Search resources', exact: true }).fill('');
+        assert.equal(await page.locator('#page-count').innerText(), '1 / 5');
+        assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, reads);
+        await clickTab(page, 'Web settings');
+        await pageSize.selectOption('all');
+        await clickTab(page, 'Terminal');
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 250);
+        assert.equal(await page.locator('#pages').isVisible(), false);
+        await openMobilePane(page, 'Filters and sorting');
+        await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+        await closeMobilePane(page);
+        assert.ok((await page.locator('#items button').first().innerText()).includes('Resource 249'));
+        const newItem = { ...iron, itemKey: 'new-live-resource', displayName: 'New resource', quantity: 999 };
+        options.itemsA.push(newItem);
+        options.itemStreams
+            .at(-1)
+            .write(
+                `event: delta\ndata: ${JSON.stringify({ view: { generation: '1', revision: '2' }, updates: [], definitions: [newItem], removed: [], icons: null })}\n\n`
+            );
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 251);
+        assert.equal(await page.locator('#pages').isVisible(), false);
+        await page.reload();
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 251);
+        assert.equal(await page.locator('#pages').isVisible(), false);
+        const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+        assert.ok(documentWidth <= width, 'Page-size changes do not introduce horizontal overflow');
+        await clickTab(page, 'Web settings');
+        assert.equal(await pageSize.inputValue(), 'all');
+        await pageSize.selectOption('100');
+        await clickTab(page, 'Terminal');
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 100);
+        assert.equal(await page.locator('#page-count').innerText(), '1 / 3');
+    });
+}
+
 test('resource details are text, keyboard accessible and paging does not require new requests', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedTerminalPageSize(page, base, 100);
     const untrustedName = '<img src=x onerror=alert(1)> Quartz';
     options.itemsA = [
         { ...quartz, displayName: untrustedName },
@@ -8092,186 +8294,109 @@ test('selected CPU aligns its heading search and resource viewport with the main
     );
 });
 
-// Public browser/HTTP seam: Home must retain source identity across grids and expose a keyboard chooser.
-test('Home shows current work across networks and opens the exact CPU or a keyboard-selected terminal', async (t) => {
+// Home discovery must not enumerate crafting CPUs until the user opens a network's CPU view.
+test('Home initial discovery does not request CPU lists', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(base);
+    await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
+    await page.waitForLoadState('networkidle');
+    if (process.env.UI_SCREENSHOT_DIR) {
+        await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'home-network-only.png') });
+    }
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
+});
+
+// Refreshing discovery or opening the chooser must never fan out to per-network CPU reads.
+test('Home manual automatic and icon preference refreshes do not request CPU lists', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, true);
+    await atlasFixture(page, options);
+    await page.goto(base);
+    await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
+    await page.waitForLoadState('networkidle');
+    options.requests.length = 0;
+    const manual = page.waitForResponse((response) => response.url().endsWith('/api/grids'));
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await settleResponse(page, (await manual).request());
+    await poll(page);
+    await page.waitForLoadState('networkidle');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
+    await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
+    await page
+        .getByRole('dialog')
+        .getByRole('link', { name: new RegExp(gridB) })
+        .waitFor();
+    await poll(page);
+    await page.waitForLoadState('networkidle');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
+    await page.keyboard.press('Escape');
+    for (const preference of ['both', 'names']) {
+        await clickTab(page, 'Web settings');
+        const display = page.getByRole('combobox', { name: 'Terminal display', exact: true });
+        await page.waitForFunction(
+            (select) => !select.querySelector('option[value="both"]').disabled,
+            await display.elementHandle()
+        );
+        await display.selectOption(preference);
+        await clickTab(page, 'Home');
+        await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await page.waitForLoadState('networkidle');
+        assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
+    }
+});
+
+test('Home keyboard chooser selects a network and CPUs only load for the selected network', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await seedAutomaticRefresh(page, base, false);
     options.cpusByGrid = {
-        [gridA]: { shared: { ...cpu, isBusy: true, finalOutput: iron } },
-        [gridB]: { shared: { ...cpu, isBusy: true, isPaused: true, finalOutput: quartz } }
+        [gridA]: { 'cpu-a': { ...cpu, name: 'Alpha processor' } },
+        [gridB]: { 'cpu-b': { ...cpu, name: 'Beta processor' } }
     };
     await page.goto(base);
-    const ironWork = page.getByRole('link', { name: /Iron Ingot/ });
-    const quartzWork = page.getByRole('link', { name: /Certus Quartz Crystal/ });
-    await quartzWork.waitFor();
-    assert.equal(await ironWork.getAttribute('href'), `#/grids/${gridA}/cpus/shared`);
-    assert.equal(await quartzWork.getAttribute('href'), `#/grids/${gridB}/cpus/shared`);
-    assert.equal(
-        options.requests.some((request) => /\/cpus\/[^/]+$/.test(request.path)),
-        false
-    );
     const choose = page.getByRole('button', { name: 'Choose a network', exact: true });
     await choose.focus();
     await page.keyboard.press('Enter');
     const dialog = page.getByRole('dialog');
     await dialog.waitFor();
-    assert.ok(
-        (await dialog.boundingBox()).height < page.viewportSize().height * 0.9,
-        'A short network list should keep its dialog sized to content'
-    );
+    assert.ok((await dialog.boundingBox()).height < page.viewportSize().height * 0.9);
     await page.keyboard.press('Escape');
     assert.equal(await choose.evaluate((node) => node === document.activeElement), true);
     await choose.click();
-    const beta = dialog.getByRole('link', { name: new RegExp(gridB) });
-    await beta.focus();
+    await dialog.getByRole('link', { name: new RegExp(gridB) }).focus();
     await page.keyboard.press('Enter');
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     assert.equal(await dialog.isVisible(), false);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
+    await clickTab(page, 'CPUs');
+    await page.getByRole('link', { name: /Beta processor/ }).waitFor();
+    const cpuRequests = options.requests.filter((request) => request.path.endsWith('/cpus'));
+    assert.ok(cpuRequests.length > 0);
+    assert.ok(cpuRequests.every((request) => request.path === `/api/grids/${gridB}/cpus`));
     await clickTab(page, 'Home');
-    await ironWork.waitFor();
-    await quartzWork.waitFor();
+    await choose.waitFor();
+    await page.waitForLoadState('networkidle');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, cpuRequests.length);
 });
 
-// Product rendering uses the public response atlas, and a failed source cannot masquerade as idle.
-test('Home renders summary icons and keeps unavailable networks explicit in the open chooser', async (t) => {
+test('Home keeps denied discovery explicit in the chooser and supports retry', async (t) => {
     const { page, options, base } = await fixture(t);
     await seedAutomaticRefresh(page, base, true);
-    await atlasFixture(page, options);
-    options.cpusByGrid = {
-        [gridA]: { shared: { ...cpu, isBusy: true, finalOutput: { ...iron, icon: { page: 0, x: 0, y: 0 } } } },
-        [gridB]: { shared: { ...cpu, isBusy: true, finalOutput: { ...quartz, icon: { page: 0, x: 64, y: 0 } } } }
-    };
     await page.goto(base);
-    const product = page.getByRole('link', { name: /Iron Ingot/ });
-    await product.waitFor();
-    await product.locator('.resource-icon').waitFor();
-    await page.waitForFunction(() => document.querySelector('#home .resource-icon')?.style.backgroundImage);
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
-    options.cpuErrors = { [gridA]: 'NO_PERMISSIONS' };
-    await poll(page);
-    await page
-        .getByRole('dialog')
-        .getByRole('link', { name: new RegExp(gridB) })
-        .waitFor();
-    await page.keyboard.press('Escape');
-    await page.getByText(/no longer have access/).waitFor();
-    assert.equal(await product.count(), 0);
-    await page.getByRole('link', { name: /Certus Quartz Crystal/ }).waitFor();
-    await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('link', { name: new RegExp(gridA) }).waitFor();
     options.gridError = 'NO_PERMISSIONS';
     await poll(page);
-    const dialog = page.getByRole('dialog');
     await dialog.getByRole('status').waitFor();
     assert.equal(await dialog.getByRole('link').count(), 0);
     options.gridError = null;
-    options.cpuErrors = {};
     await dialog.getByRole('button', { name: 'Try again', exact: true }).click();
     await dialog.getByRole('link', { name: new RegExp(gridA) }).waitFor();
-});
-
-// Discovery must supersede pending summaries even when an icon/route refresh started first.
-test('Home clears revoked sources during pending reads and stops reading summaries outside Home', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, true);
-    options.cpus = { running: { ...cpu, isBusy: true, finalOutput: iron } };
-    await page.goto(`${base}#/web-settings`);
-    await page.getByRole('checkbox', { name: 'Refresh automatically' }).waitFor();
-    options.cpuDelay = 800;
-    options.gridDelay = 100;
-    options.grids = [{ key: gridB, owner: 'Beta', cpuCount: 1, accessSources: {} }];
-    const oldRead = page.waitForRequest((request) => request.url().includes(`${gridA}/cpus`));
-    await clickTab(page, 'Home');
-    const pending = await oldRead;
-    await poll(page);
-    await settleResponse(page, pending);
-    await page.getByRole('link', { name: /Iron Ingot/ }).waitFor();
-    assert.equal(await page.getByRole('link', { name: /Iron Ingot/ }).count(), 1);
-    assert.equal(
-        await page.getByRole('link', { name: /Iron Ingot/ }).getAttribute('href'),
-        `#/grids/${gridB}/cpus/running`
-    );
-    await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
-    assert.equal(
-        await page
-            .getByRole('dialog')
-            .getByRole('link', { name: new RegExp(gridA) })
-            .count(),
-        0
-    );
-    await page.keyboard.press('Escape');
-    const refresh = page.waitForRequest((request) => request.url().endsWith(`${gridB}/cpus`));
-    await poll(page);
-    const late = await refresh;
-    await clickTab(page, 'Web settings');
-    await settleResponse(page, late);
-    const reads = options.requests.filter((request) => request.path.endsWith('/cpus')).length;
-    await poll(page);
-    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, reads);
-    assert.equal(await page.getByRole('link', { name: /Iron Ingot/ }).count(), 0);
-});
-
-test('Home bounds cross-network reads and keeps per-response atlas identity and name-only preferences', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
-    await atlasFixture(page, options);
-    options.cpusByGrid = {
-        [gridA]: { running: { ...cpu, isBusy: true, finalOutput: { ...iron, icon: { page: 0, x: 0, y: 0 } } } },
-        [gridB]: { running: { ...cpu, isBusy: true, finalOutput: { ...quartz, icon: { page: 0, x: 64, y: 0 } } } }
-    };
-    options.iconsByGrid = {
-        [gridA]: options.icons,
-        [gridB]: { ...options.icons, pages: [{ ...options.icons.pages[0], digest: 'c'.repeat(64) }] }
-    };
-    options.grids = [
-        { key: gridA, owner: 'Alpha', cpuCount: 1, accessSources: {} },
-        { key: gridB, owner: 'Beta', cpuCount: 1, accessSources: {} },
-        ...Array.from({ length: 6 }, (_, index) => ({
-            key: `network-${index}`,
-            owner: `Owner ${index}`,
-            cpuCount: 1,
-            accessSources: {}
-        }))
-    ];
-    options.cpuDelay = 100;
-    // Capability discovery may legitimately restart a Home read; measure one load after it settles.
-    await page.goto(`${base}#/web-settings`);
-    const display = page.getByRole('combobox', { name: 'Terminal display', exact: true });
-    await page.waitForFunction(
-        (select) => !select.querySelector('option[value="both"]').disabled,
-        await display.elementHandle()
-    );
-    options.requests.length = 0;
-    await clickTab(page, 'Home');
-    const first = page.getByRole('link', { name: /Iron Ingot/ });
-    const second = page.getByRole('link', { name: /Certus Quartz Crystal/ });
-    await second.waitFor();
-    await page.waitForFunction(() =>
-        [...document.querySelectorAll('#home .resource-icon')].every((icon) => icon.style.backgroundImage)
-    );
-    const firstImage = await first.locator('.resource-icon').evaluate((icon) => icon.style.backgroundImage);
-    const secondImage = await second.locator('.resource-icon').evaluate((icon) => icon.style.backgroundImage);
-    assert.notEqual(firstImage, secondImage, 'Each response-local page=0 must resolve its own digest');
-    assert.notEqual(
-        await first.locator('.resource-icon').evaluate((icon) => getComputedStyle(icon).backgroundPosition),
-        await second.locator('.resource-icon').evaluate((icon) => getComputedStyle(icon).backgroundPosition)
-    );
-    await page.waitForFunction(() => !document.querySelector('#home .home-status')?.textContent.includes('Loading'));
-    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, options.grids.length);
-    assert.ok(options.maxActiveCpus <= 3, 'Home must bound concurrent per-grid reads');
-    assert.equal(
-        options.requests.some((request) => /\/cpus\/[^/]+$/.test(request.path)),
-        false
-    );
-    await clickTab(page, 'Web settings');
-    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
-    options.requests.length = 0;
-    await clickTab(page, 'Home');
-    await second.waitFor();
-    assert.equal(await first.locator('.resource-icon').isVisible(), false);
-    assert.ok(
-        options.requests
-            .filter((request) => request.path.endsWith('/cpus'))
-            .every((request) => !request.query.includes('icons=true'))
-    );
+    await page.waitForLoadState('networkidle');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
 });
 
 // An empty successful discovery still needs an explicit recovery action with polling disabled.
@@ -8302,19 +8427,11 @@ test('Home and its chooser contain long identities on mobile in light and dark a
     ];
     options.settings[gridA].name = longName;
     options.settings[gridB].name = longName;
-    options.cpusByGrid = {
-        [gridA]: { running: { ...cpu, name: longName, isBusy: true, finalOutput: { ...iron, displayName: longName } } },
-        [gridB]: { running: { ...cpu, isBusy: true, isPaused: true, finalOutput: null } }
-    };
     for (const appearance of ['light', 'dark']) {
         await page.goto(`${base}#/web-settings`);
         await page.getByRole('combobox', { name: 'Appearance', exact: true }).selectOption(appearance);
         await clickTab(page, 'Home');
-        await page.getByRole('link', { name: /Current output unavailable/ }).waitFor();
-        const work = page.getByRole('link', { name: new RegExp(`^${longName} ×`) });
-        await work.focus();
-        await poll(page);
-        assert.equal(await work.evaluate((node) => node === document.activeElement), true);
+        await page.getByRole('heading', { name: 'Home', exact: true }).waitFor();
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         assert.ok(await page.locator('#workspace').evaluate((node) => node.scrollWidth <= node.clientWidth));
         await openMobilePane(page, 'Network');
@@ -8335,6 +8452,12 @@ test('Home and its chooser contain long identities on mobile in light and dark a
         assert.ok(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth));
         const bounds = await dialog.boundingBox();
         assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
+        if (process.env.UI_SCREENSHOT_DIR) {
+            await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+            await page.screenshot({
+                path: path.join(process.env.UI_SCREENSHOT_DIR, `home-chooser-mobile-${appearance}.png`)
+            });
+        }
         await page.keyboard.press('Escape');
         if (page.viewportSize().width <= 600)
             await page.getByRole('button', { name: 'Network', exact: true }).waitFor();
@@ -8643,7 +8766,7 @@ test('Network pending and uncertain name saves retain source identity and notify
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     const pending = await captured;
     await clickTab(page, 'Home');
-    options.settings[gridA] = { name: 'Canonical', isTracked: true };
+    options.settings[gridA] = { ...options.settings[gridA], name: 'Canonical', isTracked: true };
     await pending.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -8678,6 +8801,7 @@ test('Network pending and uncertain name saves retain source identity and notify
     await page
         .getByRole('status')
         .filter({ hasText: /settings saved/i })
+        .filter({ hasText: 'Unconfirmed' })
         .waitFor();
     assert.deepEqual(options.requests.filter((request) => request.method === 'PATCH').at(-1).body, {
         name: 'Unconfirmed'
@@ -8789,7 +8913,7 @@ test('Network details scroll long access lists under a fixed heading and keep mo
         await page.getByRole('button', { name: 'Save settings', exact: true }).click();
         await page
             .getByRole('status')
-            .filter({ hasText: /settings saved/i })
+            .filter({ hasText: `Mobile ${appearance}` })
             .waitFor();
         const region = page.getByRole('region', { name: 'Network details', exact: true });
         assert.ok(await region.evaluate((node) => node.scrollWidth <= node.clientWidth));
@@ -8861,7 +8985,7 @@ test('Network refetch publishes remote name and tracking changes with polling di
     await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('link', { name: 'Enable tracking', exact: true }).waitFor();
-    options.settings[gridA] = { name: 'Remote factory', isTracked: true };
+    options.settings[gridA] = { ...options.settings[gridA], name: 'Remote factory', isTracked: true };
     await clickTab(page, 'Network');
     await page.getByRole('textbox', { name: 'Network name', exact: true }).waitFor();
     assert.equal(await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).isChecked(), true);
@@ -9702,4 +9826,1223 @@ test('a restored cached page reloads its disposed application', async (t) => {
     await reload;
     await page.getByRole('searchbox', { name: 'Search resources', exact: true }).waitFor();
     assert.equal(options.requests.filter((request) => request.path === '/api/context').length, 2);
+});
+
+test('resource tracking is independent of CPU history and renders exact flow counts', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    await page.locator('#network-flow-tracking').check();
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('#network-flow-tracking').disabled);
+    assert.equal(options.settings[gridA].isFlowTracked, true);
+    assert.equal(options.settings[gridA].isStorageTracked, false);
+    await page.locator('#network-storage-tracking').check();
+    await page.locator('#network-stock-interval').fill('60');
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('#network-storage-tracking').disabled);
+    assert.equal(options.settings[gridA].isStorageTracked, true);
+    assert.equal(options.settings[gridA].isTracked, false);
+    assert.equal(options.settings[gridA].stockSampleIntervalSeconds, 60);
+    await page.locator('#network-stock-interval').fill('0');
+    assert.equal(await page.getByRole('button', { name: 'Save settings', exact: true }).isDisabled(), true);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    await page.waitForFunction(() => !document.querySelector('#network-flow-tracking').disabled);
+    assert.equal(await page.locator('#network-flow-tracking').isChecked(), true);
+    assert.equal(await page.locator('#network-stock-interval').inputValue(), '0');
+    await page.reload();
+    await page.waitForFunction(() => !document.querySelector('#network-flow-tracking').disabled);
+    assert.equal(await page.locator('#network-stock-interval').inputValue(), '60');
+    options.resourceHistory = {
+        baseline: {
+            observedAt: 1690000000000,
+            generation: '1',
+            kind: 'STOCK',
+            resource: { ...iron, quantity: '1234567890123456789' },
+            craftable: false,
+            input: '0',
+            output: '0',
+            complete: true
+        },
+        points: [
+            {
+                observedAt: 1700000000000,
+                generation: 'run',
+                kind: 'FLOW',
+                resource: null,
+                input: '9223372036854775807',
+                output: '0',
+                complete: false
+            }
+        ],
+        complete: false,
+        truncated: true
+    };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#items button').first().click();
+    await page.locator('.resource-history canvas').waitFor();
+    assert.equal(await page.locator('.resource-history ol').count(), 0);
+    assert.equal(await page.locator('.resource-history .hint').first().isVisible(), true);
+    options.resourceHistory.points = [];
+    options.resourceHistory.complete = true;
+    options.resourceHistory.truncated = false;
+    await page.locator('#refresh').click();
+    await page.waitForFunction(() => document.querySelector('.resource-history .hint').hidden);
+    await page.locator('.resource-history canvas').waitFor();
+    assert.equal(await page.locator('.resource-history .hint').first().isVisible(), false);
+});
+
+test('tracking cold links load their own atlas mappings and respect names-only through reload and pack replacement', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    options.historyIcons = { ...options.icons, pages: [{ digest: 'c'.repeat(64), width: 128, height: 64 }] };
+    options.packDelay = 150;
+    options.resourceHistory = {
+        baseline: {
+            observedAt: Date.now() - 1000000,
+            generation: '1',
+            kind: 'STOCK',
+            resource: { ...iron, quantity: '10', icon: { page: 0, x: 64, y: 0 } },
+            complete: true
+        },
+        points: [],
+        complete: true,
+        truncated: false
+    };
+    await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
+    const icon = page.locator('.tracking-view .resource-icon');
+    await page.waitForFunction(() => document.querySelector('.tracking-view .resource-icon')?.style.backgroundImage);
+    const reads = () => options.requests.filter((request) => request.path.endsWith('/resource-history'));
+    assert.equal(new URLSearchParams(reads()[0].query).has('icons'), false);
+    assert.equal(new URLSearchParams(reads().at(-1).query).get('icons'), 'true');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, 0);
+    assert.ok(
+        options.requests.some((request) => request.path.includes(`/pages/${'c'.repeat(64)}`)),
+        'Uses history page table rather than terminal page table'
+    );
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('.tracking-view .resource-icon')?.style.backgroundImage);
+    assert.equal(await icon.isVisible(), true);
+    options.packDelay = 0;
+    options.pack = { ...options.pack, packId: 'd'.repeat(64) };
+    options.historyIcons = { ...options.historyIcons, packId: options.pack.packId };
+    const replaced = page.waitForRequest((request) => request.url().includes(`/icon-packs/${'d'.repeat(64)}/`));
+    await poll(page);
+    await replaced;
+    await page.waitForFunction(() => document.querySelector('.tracking-view .resource-icon')?.style.backgroundImage);
+    await clickTab(page, 'Web settings');
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
+    const atlasReads = options.requests.filter((request) => request.path.includes('/icon-packs/')).length;
+    await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
+    await page.locator('.tracking-view canvas').waitFor();
+    assert.equal(await icon.isVisible(), false);
+    assert.equal(new URLSearchParams(reads().at(-1).query).has('icons'), false);
+    assert.equal(options.requests.filter((request) => request.path.includes('/icon-packs/')).length, atlasReads);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, 0);
+});
+
+test('late tracking icon responses cannot restore images after names-only selection', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    const history = {
+        baseline: {
+            observedAt: Date.now() - 1000000,
+            generation: '1',
+            kind: 'STOCK',
+            resource: { ...iron, quantity: '10', icon: { page: 0, x: 0, y: 0 } },
+            complete: true
+        },
+        points: [],
+        complete: true,
+        truncated: false,
+        enabled: true
+    };
+    options.resourceHistory = history;
+    let delayed;
+    const intercepted = new Promise((resolve) => {
+        page.route('**/resource-history?**', (route) => {
+            if (new URL(route.request().url()).searchParams.get('icons') === 'true' && !delayed) {
+                delayed = route;
+                resolve();
+            } else void route.continue();
+        });
+    });
+    await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
+    await intercepted;
+    await clickTab(page, 'Web settings');
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
+    await page.evaluate((key) => {
+        location.hash = `/grids/${key}/tracking/iron`;
+    }, gridA);
+    await page.locator('.tracking-view canvas').waitFor();
+    await delayed.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'OK', data: history, icons: options.icons })
+    });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.locator('.tracking-view .resource-icon:visible').count(), 0);
+    assert.equal(options.requests.filter((request) => request.path.includes('/icon-packs/')).length, 0);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, 0);
+});
+
+test('tracking uses historical mappings after terminal entry and clears them on denied history reads', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
+    options.historyIcons = { ...options.icons, pages: [{ digest: 'c'.repeat(64), width: 128, height: 64 }] };
+    options.resourceHistory = {
+        baseline: {
+            observedAt: Date.now() - 1000000,
+            generation: '1',
+            kind: 'STOCK',
+            resource: { ...iron, quantity: '10', icon: { page: 0, x: 64, y: 0 } },
+            complete: true
+        },
+        points: [],
+        complete: true,
+        truncated: false
+    };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#items button').first().click();
+    await page.locator('.resource-history canvas').waitFor();
+    await page.locator('.resource-history .tracking-open').click();
+    await page.waitForFunction(() => document.querySelector('.tracking-view .resource-icon')?.style.backgroundImage);
+    assert.ok(options.requests.some((request) => request.path.includes(`/pages/${'c'.repeat(64)}`)));
+    assert.equal(
+        await page
+            .locator('.tracking-view .resource-icon')
+            .evaluate((node) => getComputedStyle(node).backgroundPositionX),
+        '-32px'
+    );
+    options.resourceHistoryError = 'NO_PERMISSIONS';
+    await page.locator('#refresh').click();
+    await page.waitForFunction(() => !document.querySelector('.tracking-view .resource-icon')?.style.backgroundImage);
+    assert.equal(await page.locator('.tracking-view canvas:visible').count(), 0);
+});
+
+for (const touch of [false, true]) {
+    test(`compact stock trend uses one hour and preserves measured values and gaps (${touch ? 'touch' : 'mouse'})`, async (t) => {
+        const { page, options, base } = await fixture(
+            t,
+            '',
+            touch ? { viewport: { width: 390, height: 844 }, hasTouch: true } : {}
+        );
+        const now = Date.now();
+        const stock = (age, quantity) => ({
+            observedAt: now - age,
+            generation: '1',
+            kind: 'STOCK',
+            resource: { ...iron, quantity },
+            complete: true
+        });
+        options.resourceHistory = {
+            baseline: stock(3700000, '9223372036854775807'),
+            points: [
+                stock(1800000, '9223372036854775808'),
+                { observedAt: now - 900000, generation: '1', kind: 'GAP', resource: null, complete: false },
+                stock(300000, '42')
+            ],
+            enabled: true,
+            complete: false,
+            truncated: false
+        };
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        const request = page.waitForRequest((request) => request.url().includes('/resource-history?'));
+        await page.locator('#items button').first().click();
+        const first = await request;
+        const from = Number(new URL(first.url()).searchParams.get('from'));
+        assert.ok(Math.abs(now - from - 3600000) < 5000, 'The first selected-item history request covers one hour');
+        if (touch && !(await page.getByRole('dialog', { name: 'Resource details', exact: true }).isVisible()))
+            await openMobilePane(page, 'Resource details');
+        const chart = page.locator('.resource-history .tracking-chart');
+        await chart.locator('canvas').waitFor();
+        assert.equal(await page.locator('.resource-history select:visible').count(), 0);
+        assert.equal(await chart.locator('.u-axis:visible, .u-legend:visible').count(), 0);
+        const overlay = chart.locator('.u-over');
+        await overlay.scrollIntoViewIfNeeded();
+        const bounds = await overlay.boundingBox();
+        const host = await chart.boundingBox();
+        assert.ok(bounds.width > host.width * 0.9, 'The sparkline uses its width without axis gutters');
+        const selectAt = async (fraction) => {
+            const position = { x: bounds.x + bounds.width * fraction, y: bounds.y + bounds.height / 2 };
+            if (touch) await page.touchscreen.tap(position.x, position.y);
+            else await page.mouse.move(position.x, position.y);
+        };
+        await selectAt(0.25);
+        const readout = chart.locator('.tracking-sparkline-readout');
+        await readout.waitFor();
+        assert.deepEqual(await chart.boundingBox(), host, 'Hovering the trend does not change its layout');
+        assert.ok((await readout.innerText()).replace(/[^0-9]/g, '').includes('9223372036854775807'));
+        assert.equal(await readout.locator('time').getAttribute('datetime'), new Date(now - 3700000).toISOString());
+        if (touch) {
+            await page.mouse.move(1, 1);
+            assert.equal(await readout.isVisible(), true);
+        }
+        await selectAt(0.85);
+        assert.match(await readout.innerText(), /—/);
+        assert.equal(await readout.locator('time').count(), 0);
+        await selectAt(0.97);
+        assert.ok((await readout.innerText()).includes('42'));
+        assert.equal(await readout.locator('time').getAttribute('datetime'), new Date(now - 300000).toISOString());
+        assert.equal(options.requests.filter((request) => request.path.endsWith('/resource-history')).length, 1);
+        await page.locator('.resource-history .tracking-open').click();
+        await page.locator('.tracking-view canvas').waitFor();
+        await Promise.all([
+            page.waitForResponse((response) => response.url().includes('/resource-history?')),
+            page.locator('.tracking-view select').first().selectOption('86400000')
+        ]);
+        await page.locator('.tracking-view .tracking-back').click();
+        if (touch && !(await page.getByRole('dialog', { name: 'Resource details', exact: true }).isVisible()))
+            await openMobilePane(page, 'Resource details');
+        await page.locator('.resource-history canvas').waitFor();
+        await page.locator('.resource-history .tracking-open').click();
+        await page.locator('.tracking-view canvas').waitFor();
+        assert.equal(await page.locator('.tracking-view select').first().inputValue(), '86400000');
+        const requests = options.requests.filter((request) => request.path.endsWith('/resource-history'));
+        const windows = requests.map((request) =>
+            Math.round((now - Number(new URLSearchParams(request.query).get('from'))) / 60000)
+        );
+        assert.deepEqual(windows, [60, 15, 1440, 60, 1440], 'Each view fetches its intended period once');
+    });
+}
+
+test('tracking opens from resources, retains terminal state, and survives a direct-link refresh', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const now = Date.now();
+    options.recent = {
+        flowWindowMillis: 120000,
+        stockWindowMillis: 3600000,
+        bucketMillis: 5000,
+        observedAt: now,
+        flowObservedAt: now,
+        stockObservedAt: now,
+        flowSince: now - 120000,
+        stockSince: now - 3600000,
+        flowComplete: true,
+        stockComplete: true,
+        resources: { iron: { input: '9223372036854775807', output: '8', stockChange: '12' } }
+    };
+    options.resourceHistory = {
+        baseline: {
+            observedAt: now - 1000000,
+            generation: '1',
+            kind: 'STOCK',
+            resource: { ...iron, quantity: '12' },
+            complete: true
+        },
+        points: [
+            {
+                observedAt: now - 10000,
+                generation: '1',
+                kind: 'FLOW',
+                input: '9223372036854775807',
+                output: '8',
+                resource: null,
+                complete: true
+            }
+        ],
+        complete: true,
+        truncated: false
+    };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#search').fill('iron');
+    const item = page.locator('#items button').first();
+    await item.hover();
+    await page.locator('#resource-tooltip .recent-flow').waitFor();
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/resource-history')).length, 0);
+    assert.equal(await page.locator('#resource-tooltip [aria-label="+9223372036854775807"]').count(), 1);
+    await item.click();
+    await page.locator('.resource-history canvas').waitFor();
+    await page.locator('.resource-history .tracking-open').click();
+    await page.locator('.tracking-view canvas').waitFor();
+    assert.ok(
+        (await page.locator('.tracking-view .tracking-totals').innerText())
+            .replace(/[^0-9]/g, '')
+            .includes('9223372036854775807')
+    );
+    await Promise.all([
+        page.waitForResponse((response) => response.url().includes('/resource-history?')),
+        page.locator('.tracking-view select').first().selectOption('3600000')
+    ]);
+    await page.locator('.tracking-view select').nth(1).selectOption('smooth');
+    await page.locator('.tracking-view .tracking-back').click();
+    assert.equal(await page.locator('#search').inputValue(), 'iron');
+    await page.locator('#items button').first().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'View tracking' }).click();
+    await page.locator('.tracking-view canvas').waitFor();
+    await page.reload();
+    await page.locator('.tracking-view canvas').waitFor();
+    assert.equal(await page.locator('.tracking-view select').nth(1).inputValue(), 'smooth');
+    assert.ok((await page.locator('.tracking-view .tracking-resource-name').innerText()).includes('Iron'));
+});
+
+test('tracking chart keeps missing periods blank and pixel rendering survives narrow zoom', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const now = Date.now();
+    const stock = (age, quantity) => ({
+        observedAt: now - age,
+        generation: '1',
+        kind: 'STOCK',
+        resource: { ...iron, quantity: String(quantity) },
+        complete: true
+    });
+    options.resourceHistory = {
+        baseline: stock(1000000, 10),
+        complete: false,
+        truncated: false,
+        points: [
+            stock(750000, 20),
+            stock(600000, 50),
+            { observedAt: now - 500000, generation: '1', kind: 'GAP', complete: false },
+            stock(250000, 60),
+            stock(100000, 30)
+        ]
+    };
+    await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
+    await page.locator('.tracking-view canvas').waitFor();
+    const raster = await page.locator('.tracking-view .uplot').evaluate((root) => {
+        const canvas = root.querySelector('canvas'),
+            box = canvas.getBoundingClientRect(),
+            plot = root.querySelector('.u-over').getBoundingClientRect();
+        const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+        const scale = canvas.width / box.width;
+        let gold = 0,
+            gap = 0;
+        for (let y = 0; y < canvas.height; y++)
+            for (let x = 0; x < canvas.width; x++) {
+                const i = (y * canvas.width + x) * 4;
+                if (pixels[i] === 214 && pixels[i + 1] === 155 && pixels[i + 2] === 40) {
+                    gold++;
+                    const fraction = (x / scale + box.left - plot.left) / plot.width;
+                    if (fraction > 0.52 && fraction < 0.65) gap++;
+                }
+            }
+        return { gold, gap };
+    });
+    assert.ok(raster.gold > 10, 'Known stock is rendered');
+    assert.equal(raster.gap, 0, 'No data stroke may cross the missing interval');
+    const bounds = await page.locator('.tracking-view .u-over').boundingBox();
+    await page.mouse.move(bounds.x + bounds.width * 0.2, bounds.y + 50);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width * 0.2 + 2, bounds.y + 50);
+    await page.mouse.up();
+    await page.locator('.tracking-view select').nth(1).selectOption('smooth', { timeout: 3000 });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth);
+});
+
+test('tracking legend choices survive automatic history refresh and chart rebuilds', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const now = Date.now();
+    options.resourceHistory = {
+        baseline: {
+            observedAt: now - 1000000,
+            generation: '1',
+            kind: 'STOCK',
+            resource: { ...iron, quantity: '20' },
+            complete: true
+        },
+        complete: true,
+        truncated: false,
+        points: [
+            { observedAt: now - 10000, generation: '1', kind: 'FLOW', input: '12', output: '4', complete: true },
+            { observedAt: now - 5000, generation: '1', kind: 'FLOW_OBSERVATION', complete: true }
+        ]
+    };
+    await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
+    const label = (name) => page.locator('.tracking-view .u-legend tr').filter({ hasText: name }).locator('th');
+    await label('Stored').waitFor();
+    for (const name of ['Stored', 'Input']) await label(name).click();
+    const choices = async () =>
+        Promise.all(
+            ['Input', 'Output', 'Stored', 'Net'].map((name) =>
+                label(name).evaluate((element) => Number(getComputedStyle(element).opacity) >= 1)
+            )
+        );
+    assert.deepEqual(await choices(), [false, true, false, true]);
+    const refreshed = page.waitForResponse((response) => response.url().includes('/resource-history?'));
+    await page.clock.fastForward(31000);
+    await (await refreshed).finished();
+    await page.waitForFunction(() => document.querySelector('#refresh').getAttribute('aria-busy') === 'false');
+    assert.deepEqual(await choices(), [false, true, false, true], 'Automatic refresh preserves each legend choice');
+    await page.locator('.tracking-view select').nth(1).selectOption('smooth');
+    assert.deepEqual(await choices(), [false, true, false, true], 'Stroke changes preserve visibility');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForFunction(
+        () => document.querySelector('.tracking-view canvas').getBoundingClientRect().width < 390
+    );
+    assert.deepEqual(await choices(), [false, true, false, true], 'Responsive rebuilds preserve visibility');
+    const bounds = await page.locator('.tracking-view .u-over').boundingBox();
+    await page.mouse.move(bounds.x + bounds.width * 0.25, bounds.y + 30);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width * 0.75, bounds.y + 30);
+    await page.mouse.up();
+    assert.deepEqual(await choices(), [false, true, false, true], 'Zoom regrouping preserves visibility');
+    for (const name of ['Stored', 'Input']) await label(name).click();
+    await page.getByRole('button', { name: 'Reset zoom', exact: true }).click();
+    assert.deepEqual(await choices(), [true, true, true, true], 'Re-enabled series also survive reset');
+});
+
+test('flow grouping adapts from original counters on zoom reset and resize while Pixel Net stays crisp', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const now = Math.floor(Date.now() / 30000) * 30000;
+    await page.clock.setFixedTime(now);
+    const amount = 100000000000000003n;
+    const points = [];
+    for (let age = 900000, index = 0; age >= 0; age -= 5000, index++) {
+        const common = { observedAt: now - age, generation: '1', complete: true };
+        points.push({
+            ...common,
+            kind: 'FLOW',
+            input: String(amount),
+            output: String(amount - BigInt(7 * ((index % 3) + 1)))
+        });
+        points.push({ ...common, kind: 'FLOW_OBSERVATION' });
+        if (age === 600000) points.push({ ...common, kind: 'STOCK', resource: { ...iron, quantity: '60' } });
+    }
+    options.resourceHistory = {
+        baseline: {
+            observedAt: now - 1000000,
+            generation: '1',
+            kind: 'STOCK',
+            complete: true,
+            resource: { ...iron, quantity: '20' }
+        },
+        points,
+        complete: true,
+        truncated: false
+    };
+    await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
+    await page.waitForFunction(
+        () =>
+            document.querySelector('.tracking-view .uplot') &&
+            document.querySelector('#refresh').getAttribute('aria-busy') === 'false'
+    );
+    await page.evaluate(() => document.fonts.ready);
+    const area = page.locator('.tracking-view .u-over');
+    const value = async (name) =>
+        BigInt(
+            (
+                await page
+                    .locator('.tracking-view .u-legend tr')
+                    .filter({ hasText: name })
+                    .locator('.u-value')
+                    .innerText()
+            ).replace(/[^0-9-]/g, '')
+        );
+    const hover = async (position) => {
+        await page.locator('.tracking-view .tracking-chart').scrollIntoViewIfNeeded();
+        const box = await area.boundingBox();
+        await page.mouse.move(box.x + box.width * position, box.y + 40);
+        return box;
+    };
+    let box = await hover(0.5);
+    const coarse = await value('Input');
+    assert.ok(coarse > amount && coarse % amount === 0n, 'The full range groups multiple raw flushes');
+    const inputCoarse = coarse;
+    await page.mouse.move(box.x + box.width * 0.48, box.y + 40);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.52, box.y + 40);
+    await page.mouse.up();
+    await hover(0.5);
+    assert.equal(await value('Input'), amount, 'Zoom exposes original five-second counters, not sums of previous bins');
+    assert.ok([7n, 14n, 21n].includes(await value('Net')));
+    box = await hover(0.5);
+    await page.mouse.click(box.x + box.width * 0.5, box.y + 40);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForFunction(() => document.querySelector('.tracking-view .tracking-chart-pinned'));
+    assert.equal(await value('Input'), amount);
+    await page.locator('.tracking-view .tracking-toolbar button').click();
+    await hover(0.5);
+    const phone = await value('Input');
+    assert.ok(phone > inputCoarse && phone % amount === 0n, 'A narrow full-range chart uses wider, exact bins');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await hover(0.5);
+    assert.equal(await value('Input'), inputCoarse, 'Returning to desktop reaggregates the original counters');
+    options.resourceHistory = {
+        ...options.resourceHistory,
+        points: points.map((point) =>
+            point.kind === 'FLOW'
+                ? { ...point, input: '100', output: String(20 + (((point.observedAt - now + 900000) / 5000) % 7) * 10) }
+                : point
+        )
+    };
+    await page.locator('#refresh').click();
+    await page.waitForFunction(() => document.querySelector('#refresh').getAttribute('aria-busy') === 'false');
+    for (const name of ['Input', 'Output'])
+        await page.locator('.tracking-view .u-legend tr').filter({ hasText: name }).locator('th').click();
+    const raster = async () =>
+        page.locator('.tracking-view canvas').evaluate((canvas) => {
+            const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+            let blue = 0,
+                translucent = 0;
+            for (let i = 0; i < data.length; i += 4)
+                if (
+                    Math.abs(data[i] - 128) <= 2 &&
+                    Math.abs(data[i + 1] - 201) <= 2 &&
+                    Math.abs(data[i + 2] - 237) <= 2 &&
+                    data[i + 3] > 0
+                ) {
+                    blue++;
+                    if (data[i + 3] < 255) translucent++;
+                }
+            return { blue, translucent };
+        });
+    let pixels = await raster();
+    assert.ok(pixels.blue > 20);
+    assert.equal(pixels.translucent, 0, 'Pixel Net has a hard-edged raster');
+    await page.locator('.tracking-view select').nth(1).selectOption('smooth');
+    pixels = await raster();
+    assert.ok(pixels.blue > 20 && pixels.translucent > 0, `Smooth Net retains antialiasing: ${JSON.stringify(pixels)}`);
+    for (const name of ['Input', 'Output'])
+        await page.locator('.tracking-view .u-legend tr').filter({ hasText: name }).locator('th').click();
+    options.resourceHistory = {
+        ...options.resourceHistory,
+        complete: false,
+        points: [
+            { observedAt: now - 900000, generation: '1', kind: 'FLOW', input: '11', output: '0', complete: true },
+            { observedAt: now - 600000, generation: '1', kind: 'GAP', complete: false },
+            ...[450000, 447000].flatMap((age, index) => [
+                {
+                    observedAt: now - age,
+                    generation: '1',
+                    kind: 'FLOW',
+                    input: String(index ? 7 : 5),
+                    output: '0',
+                    complete: true
+                },
+                { observedAt: now - age, generation: '1', kind: 'FLOW_OBSERVATION', complete: true }
+            ])
+        ]
+    };
+    await page.locator('#refresh').click();
+    await page.waitForFunction(() => document.querySelector('#refresh').getAttribute('aria-busy') === 'false');
+    assert.equal(
+        await page.locator('.tracking-view .tracking-count-full').first().innerText(),
+        '12',
+        'Full-range totals exclude the flush ending exactly at the range start'
+    );
+    box = await hover(0.48);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.52, box.y + 40);
+    await page.mouse.up();
+    box = await hover(0.55);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.57, box.y + 40);
+    await page.mouse.up();
+    await hover(0.5);
+    assert.equal(await value('Input'), 7n, 'The first cropped bin excludes the previous flush at its left boundary');
+    const intervalLabel = await page
+        .locator('.tracking-view .u-legend tr')
+        .filter({ hasText: 'Time' })
+        .locator('.u-value')
+        .innerText();
+    const times = [...intervalLabel.matchAll(/(\d{2}):(\d{2}):(\d{2})/g)].map(
+        (match) => Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])
+    );
+    assert.equal(
+        (times[1] - times[0] + 86400) % 86400,
+        3,
+        'Fine zoom reaches an observed cadence outside the nice-interval list'
+    );
+    assert.equal(
+        await page.locator('.tracking-view .u-legend tr').filter({ hasText: 'Stored' }).locator('.u-value').innerText(),
+        '—',
+        'Cropping after an offscreen gap never revives an earlier stock baseline'
+    );
+});
+
+test('sparse stock remains held between real measurements and Net keeps exact interval differences', async (t) => {
+    const { page, options, base } = await fixture(t);
+    // Hover fractions below address clock-aligned five-second bins in the zoomed window.
+    const now = Date.UTC(2026, 0, 1, 12, 0, 0);
+    await page.clock.setFixedTime(now);
+    const point = (age, kind, fields = {}) => ({
+        observedAt: now - age,
+        generation: '1',
+        kind,
+        complete: true,
+        ...fields
+    });
+    options.resourceHistory = {
+        baseline: point(1000000, 'STOCK', { resource: { ...iron, quantity: '20' } }),
+        complete: true,
+        truncated: false,
+        points: [
+            point(452500, 'OBSERVATION'),
+            point(451000, 'FLOW', { input: '9223372036854775807', output: '9223372036854775804' }),
+            point(450000, 'STOCK', { resource: { ...iron, quantity: '80' } }),
+            point(446000, 'FLOW', { input: '3', output: '9' }),
+            point(441000, 'FLOW_OBSERVATION')
+        ]
+    };
+    await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
+    await page.waitForFunction(
+        () =>
+            document.querySelector('.tracking-view .uplot') &&
+            document.querySelector('#refresh').getAttribute('aria-busy') === 'false'
+    );
+    await page.evaluate(() => document.fonts.ready);
+    const area = page.locator('.tracking-view .u-over');
+    await page.locator('.tracking-view .tracking-chart').scrollIntoViewIfNeeded();
+    let bounds = await area.boundingBox();
+    await page.mouse.move(bounds.x + bounds.width * 0.48, bounds.y + 40);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width * 0.52, bounds.y + 40);
+    await page.mouse.up();
+    for (const style of ['pixel', 'smooth']) {
+        await page.locator('.tracking-view select').nth(1).selectOption(style);
+        bounds = await area.boundingBox();
+        for (const [position, net, stored] of [
+            [0.45, '3', '20'],
+            [0.6, '-6', '80'],
+            [0.72, '0', '80'],
+            [0.9, '—', '80']
+        ]) {
+            await page.mouse.move(bounds.x + bounds.width * position, bounds.y + 40);
+            const value = (name) =>
+                page.locator('.tracking-view .u-legend tr').filter({ hasText: name }).locator('.u-value');
+            assert.equal(await value('Net').innerText(), net);
+            assert.ok((await value('Stored').innerText()).startsWith(stored));
+        }
+        const raster = await page.locator('.tracking-view .uplot').evaluate((root) => {
+            const canvas = root.querySelector('canvas'),
+                box = canvas.getBoundingClientRect(),
+                plot = root.querySelector('.u-over').getBoundingClientRect();
+            const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+            const scale = canvas.width / box.width;
+            const goldRows = (fraction) => {
+                const x = Math.round((plot.left - box.left + plot.width * fraction) * scale),
+                    rows = [];
+                for (let y = Math.ceil((plot.top - box.top) * scale); y < (plot.bottom - box.top) * scale; y++) {
+                    const i = (y * canvas.width + x) * 4;
+                    if (pixels[i] === 214 && pixels[i + 1] === 155 && pixels[i + 2] === 40 && pixels[i + 3] > 100)
+                        rows.push(y);
+                }
+                return rows;
+            };
+            let markerHeight = 0;
+            for (let fraction = 0.39; fraction < 0.46; fraction += 1 / plot.width)
+                markerHeight = Math.max(markerHeight, goldRows(fraction).length);
+            return { before: goldRows(0.3), held: goldRows(0.47), markerHeight };
+        });
+        assert.ok(raster.before.length > 0 && raster.held.length > 0, `${style}: ${JSON.stringify(raster)}`);
+        assert.ok(Math.abs(raster.before[0] - raster.held[0]) <= 2, 'Stored stays level until the next measurement');
+        assert.ok(
+            raster.markerHeight > raster.before.length,
+            `An unchanged real observation has a marker; synthetic carry points do not: ${JSON.stringify(raster)}`
+        );
+    }
+});
+
+test('flow bars and hover span the entire aggregation interval independently of stock samples', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const now = Math.floor(Date.now() / 30000) * 30000;
+    await page.clock.setFixedTime(now);
+    const stock = (age, quantity) => ({
+        observedAt: now - age,
+        generation: '1',
+        kind: 'STOCK',
+        resource: { ...iron, quantity: String(quantity) },
+        complete: true
+    });
+    options.resourceHistory = {
+        baseline: stock(1000000, 10),
+        complete: true,
+        truncated: false,
+        points: [
+            stock(454900, 20),
+            stock(454000, 40),
+            stock(452500, 15),
+            stock(450100, 60),
+            { observedAt: now - 450001, generation: '1', kind: 'FLOW', input: '123', output: '45', complete: true }
+        ]
+    };
+    await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
+    await page.locator('.tracking-view canvas').waitFor();
+    const area = page.locator('.tracking-view .u-over');
+    await page.locator('.tracking-view .tracking-chart').scrollIntoViewIfNeeded();
+    let bounds = await area.boundingBox();
+    await page.mouse.move(bounds.x + bounds.width * 0.48, bounds.y + 40);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width * 0.52, bounds.y + 40);
+    await page.mouse.up();
+    bounds = await area.boundingBox();
+    for (const position of [0.38, 0.49]) {
+        await page.mouse.move(bounds.x + bounds.width * position, bounds.y + 40);
+        await page.waitForFunction(
+            () =>
+                [...document.querySelectorAll('.tracking-view .u-legend tr')]
+                    .find((row) => row.querySelector('th')?.textContent.includes('Input'))
+                    ?.querySelector('.u-value')?.textContent === '123'
+        );
+        assert.equal(
+            await page
+                .locator('.tracking-view .u-legend tr')
+                .filter({ hasText: 'Output' })
+                .locator('.u-value')
+                .innerText(),
+            '45'
+        );
+    }
+    const filled = await page.locator('.tracking-view .uplot').evaluate((root) => {
+        const canvas = root.querySelector('canvas'),
+            box = canvas.getBoundingClientRect(),
+            plot = root.querySelector('.u-over').getBoundingClientRect();
+        const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+        return [0.38, 0.49].map((fraction) => {
+            const x = Math.round(((plot.left - box.left + plot.width * fraction) * canvas.width) / box.width);
+            let green = 0;
+            for (let y = 0; y < canvas.height; y++) {
+                const i = (y * canvas.width + x) * 4;
+                if (
+                    data[i] >= 80 &&
+                    data[i] <= 100 &&
+                    data[i + 1] >= 155 &&
+                    data[i + 1] <= 175 &&
+                    data[i + 2] >= 100 &&
+                    data[i + 2] <= 115 &&
+                    data[i + 3] > 30
+                )
+                    green++;
+            }
+            return green;
+        });
+    });
+    assert.ok(
+        filled.every((pixels) => pixels > 10),
+        'The bar fills both sides of its time interval: ' + JSON.stringify(filled)
+    );
+    // A missing neighboring interval must never borrow the previous bucket's counters.
+    await page.mouse.move(bounds.x + bounds.width * 0.7, bounds.y + 40);
+    await page.waitForFunction(
+        () =>
+            [...document.querySelectorAll('.tracking-view .u-legend tr')]
+                .find((row) => row.querySelector('th')?.textContent.includes('Input'))
+                ?.querySelector('.u-value')?.textContent === '—'
+    );
+    await page.mouse.move(bounds.x + bounds.width * 0.38, bounds.y + 40);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width * 0.49, bounds.y + 40);
+    await page.mouse.up();
+    bounds = await area.boundingBox();
+    await page.mouse.move(bounds.x + bounds.width * 0.5, bounds.y + 40);
+    await page.waitForFunction(
+        () =>
+            [...document.querySelectorAll('.tracking-view .u-legend tr')]
+                .find((row) => row.querySelector('th')?.textContent.includes('Input'))
+                ?.querySelector('.u-value')?.textContent === '123'
+    );
+});
+
+for (const touch of [false, true]) {
+    test(`tracking cursor pins, moves and releases without confusing a drag with a click (${touch ? 'touch' : 'mouse'})`, async (t) => {
+        const { page, options, base } = await fixture(
+            t,
+            '',
+            touch ? { viewport: { width: 390, height: 844 }, hasTouch: true } : {}
+        );
+        const now = Math.floor(Date.now() / 30000) * 30000;
+        await page.clock.setFixedTime(now);
+        options.resourceHistory = {
+            baseline: {
+                observedAt: now - 1000000,
+                generation: '1',
+                kind: 'STOCK',
+                resource: { ...iron, quantity: '10' },
+                complete: true
+            },
+            complete: true,
+            truncated: false,
+            points: [675001, 225001].map((age, index) => ({
+                observedAt: now - age,
+                generation: '1',
+                kind: 'FLOW',
+                input: String(index ? 222 : 111),
+                output: '0',
+                complete: true
+            }))
+        };
+        await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
+        const area = page.locator('.tracking-view .u-over');
+        await page.waitForFunction(
+            () =>
+                document.querySelector('.tracking-view .uplot') &&
+                document.querySelector('#refresh').getAttribute('aria-busy') === 'false'
+        );
+        await page.evaluate(() => document.fonts.ready);
+        await page.locator('.tracking-view .tracking-chart').scrollIntoViewIfNeeded();
+        let bounds = await area.boundingBox();
+        const choose = async (fraction) => {
+            await page.locator('.tracking-view .tracking-chart').scrollIntoViewIfNeeded();
+            bounds = await area.boundingBox();
+            const x = bounds.x + bounds.width * fraction,
+                y = bounds.y + 40;
+            if (touch) await page.touchscreen.tap(x, y);
+            else await page.mouse.click(x, y);
+        };
+        const input = page.locator('.tracking-view .u-legend tr').filter({ hasText: 'Input' }).locator('.u-value');
+        await choose(0.247);
+        await page.mouse.move(1, 1);
+        assert.equal(await input.innerText(), '111', 'Selection remains after the pointer/finger leaves');
+        await choose(0.747);
+        await page.mouse.move(1, 1);
+        assert.equal(await input.innerText(), '222', 'A new click moves the pinned timestamp');
+        await page.locator('.tracking-view select').nth(1).selectOption('smooth');
+        assert.equal(await input.innerText(), '222', 'Changing rendering style preserves the pinned timestamp');
+        await page.locator('#refresh').click();
+        await page.waitForFunction(() => document.querySelector('#refresh').getAttribute('aria-busy') === 'false');
+        assert.equal(await input.innerText(), '222', 'Refreshing data preserves the pinned timestamp');
+        const originalViewport = page.viewportSize();
+        const time = page.locator('.tracking-view .u-legend tr').filter({ hasText: 'Time' }).locator('.u-value');
+        const pinnedTime = await time.innerText();
+        await page.setViewportSize({ ...originalViewport, width: originalViewport.width + 40 });
+        await page.evaluate(
+            () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        );
+        assert.equal(await input.innerText(), '222');
+        assert.equal(
+            await time.innerText(),
+            pinnedTime,
+            'Resizing preserves the selected time, not its old pixel position'
+        );
+        await page.setViewportSize(originalViewport);
+        await page.locator('.tracking-view .tracking-chart').scrollIntoViewIfNeeded();
+        bounds = await area.boundingBox();
+        await choose(0.747);
+        await page.mouse.move(1, 1);
+        assert.equal(await input.innerText(), '—', 'Clicking the same point releases selection');
+        await choose(0.247);
+        await page.keyboard.press('Escape');
+        await page.mouse.move(1, 1);
+        assert.equal(await input.innerText(), '—');
+        await choose(0.247);
+        await page.locator('.tracking-view').getByRole('button', { name: 'Reset zoom' }).click();
+        await page.mouse.move(1, 1);
+        assert.equal(await input.innerText(), '—', 'Reset zoom also clears the pinned timestamp');
+        await page.locator('.tracking-view .tracking-chart').scrollIntoViewIfNeeded();
+        bounds = await area.boundingBox();
+        await choose(0.747);
+        const y = bounds.y + 40;
+        if (touch) {
+            const client = await page.context().newCDPSession(page);
+            await client.send('Input.dispatchTouchEvent', {
+                type: 'touchStart',
+                touchPoints: [{ x: bounds.x + bounds.width * 0.2, y }]
+            });
+            await client.send('Input.dispatchTouchEvent', {
+                type: 'touchMove',
+                touchPoints: [{ x: bounds.x + bounds.width * 0.25, y }]
+            });
+            await client.send('Input.dispatchTouchEvent', {
+                type: 'touchMove',
+                touchPoints: [{ x: bounds.x + bounds.width * 0.3, y }]
+            });
+            await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+            await client.detach();
+        } else {
+            await page.mouse.move(bounds.x + bounds.width * 0.2, y);
+            await page.mouse.down();
+            await page.mouse.move(bounds.x + bounds.width * 0.3, y, { steps: 4 });
+            await page.mouse.up();
+        }
+        await choose(0.47);
+        await page.mouse.move(1, 1);
+        assert.equal(await input.innerText(), '111', 'Dragging while pinned zooms instead of clicking another point');
+        if (!touch) {
+            await page.mouse.dblclick(bounds.x + bounds.width * 0.5, bounds.y + 40);
+            await page.mouse.move(1, 1);
+            assert.equal(await input.innerText(), '—');
+        } else await page.locator('.tracking-view').getByRole('button', { name: 'Reset zoom' }).click();
+        await page.locator('.tracking-view .tracking-chart').scrollIntoViewIfNeeded();
+        bounds = await area.boundingBox();
+        await choose(0.747);
+        await page.mouse.move(1, 1);
+        assert.equal(await input.innerText(), '222', 'Reset restores the original time range');
+        if (!touch) {
+            await page.mouse.move(bounds.x + bounds.width * 0.2, y);
+            await page.mouse.down();
+            await page.mouse.move(bounds.x + bounds.width * 0.3, y);
+            await page.mouse.move(bounds.x + bounds.width * 0.2, y);
+            await page.mouse.up();
+            await page.mouse.move(1, 1);
+            assert.equal(await input.innerText(), '—', 'A drag returning to its origin must not become a click');
+        }
+    });
+}
+
+test('recent tracking shows independent measured periods and does not advance stock time with flow updates', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const now = Date.now();
+    options.liveView = { generation: '1', revision: '1' };
+    options.recent = {
+        flowWindowMillis: 120000,
+        stockWindowMillis: 3600000,
+        bucketMillis: 5000,
+        observedAt: now,
+        flowObservedAt: now,
+        stockObservedAt: now - 60000,
+        flowSince: now - 30000,
+        stockSince: now - 360000,
+        flowComplete: true,
+        stockComplete: true,
+        resources: { iron: { input: '100', output: '10', stockChange: '42' } }
+    };
+    const opened = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await opened;
+    const item = page.locator('#items button').filter({ hasText: 'Iron' }).first();
+    await item.hover();
+    const tooltip = page.locator('#resource-tooltip');
+    await tooltip.locator('.recent-flow').waitFor();
+    assert.match(await tooltip.locator('.recent-flow').innerText(), /\(2 min\)/);
+    assert.match(await tooltip.locator('.recent-stock').innerText(), /\(1 h\)/);
+    assert.match(await tooltip.locator('.recent-stock-period').innerText(), /5 min/);
+    assert.match(await tooltip.locator('.recent-flow-period').innerText(), /30 s/);
+    const sampledAt = new Date(now - 60000).toISOString();
+    assert.equal(await tooltip.locator('time').getAttribute('datetime'), sampledAt);
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({ view: { generation: '1', revision: '2' }, updates: [], definitions: [], removed: [], recent: { ...options.recent, observedAt: now + 30000, flowObservedAt: now + 30000, resources: { iron: { input: '200', output: '10', stockChange: '42' } } } })}\n\n`
+    );
+    await tooltip.locator('[aria-label="+200"]').waitFor();
+    assert.equal(await tooltip.locator('time').getAttribute('datetime'), sampledAt);
+    assert.match(await tooltip.locator('.recent-stock-period').innerText(), /5 min/);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/resource-history')).length, 0);
+    await item.click();
+    const details = page.locator('#details');
+    await details.locator('.recent-stock').waitFor();
+    assert.match(await details.locator('.recent-stock').innerText(), /\(1 h\)/);
+    assert.equal(await details.locator('time').getAttribute('datetime'), sampledAt);
+});
+
+test('flow-only SSE updates and expiry refresh hovered summaries without history reads', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const now = Date.now();
+    options.liveView = { generation: '1', revision: '1' };
+    options.recent = {
+        flowWindowMillis: 120000,
+        stockWindowMillis: 3600000,
+        bucketMillis: 5000,
+        observedAt: now,
+        flowObservedAt: now,
+        stockObservedAt: null,
+        flowSince: now - 120000,
+        stockSince: null,
+        flowComplete: true,
+        stockComplete: false,
+        resources: { iron: { input: '100', output: '100', stockChange: null } }
+    };
+    const opened = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await opened;
+    await page.locator('#items button').filter({ hasText: 'Iron' }).first().hover();
+    await page.locator('#resource-tooltip [aria-label="+100"]').waitFor();
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({ view: { generation: '1', revision: '2' }, updates: [], definitions: [], removed: [], recent: { ...options.recent, observedAt: now + 120000, resources: { iron: { input: '0', output: '0', stockChange: null } } } })}\n\n`
+    );
+    await page.locator('#resource-tooltip [aria-label="−0"]').waitFor();
+    assert.equal(await page.locator('#resource-tooltip [aria-label="+100"]').count(), 0);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/resource-history')).length, 0);
+});
+
+test('header confirms live events and manual resync waits for a new stream before showing live', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.liveView = { generation: '1', revision: '1' };
+    options.delayStreamReady = true;
+    const opened = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await opened;
+    const control = page.locator('#refresh');
+    const dot = control.locator('.live-icon');
+    assert.equal(await dot.isVisible(), false, 'A subscription is not a confirmed live connection');
+    const initialBounds = await control.boundingBox();
+    const frame = () =>
+        control.evaluate((button) => {
+            const style = getComputedStyle(button);
+            return { background: style.backgroundColor, border: style.borderTopColor, shadow: style.boxShadow };
+        });
+    const initialFrame = await frame();
+    options.itemStreams[0].write('event: ready\ndata: {}\n\n');
+    await dot.waitFor({ state: 'visible' });
+    assert.deepEqual(await control.boundingBox(), initialBounds);
+    assert.deepEqual(await frame(), initialFrame, 'The live control retains its normal button frame');
+    await control.focus();
+    const time = page.locator('#resource-tooltip time');
+    await time.waitFor();
+    const firstEvent = await time.getAttribute('datetime');
+    await page.clock.fastForward(1000);
+    options.itemStreams[0].write(': keepalive\n\n');
+    assert.equal(await time.getAttribute('datetime'), firstEvent);
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({ view: { generation: '1', revision: '2' }, updates: [], definitions: [], removed: [], icons: null })}\n\n`
+    );
+    await page.waitForFunction(
+        (previous) => document.querySelector('#resource-tooltip time')?.dateTime !== previous,
+        firstEvent
+    );
+    const reads = options.requests.filter((request) => request.path.endsWith('/items')).length;
+    const reconnect = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await control.click();
+    await reconnect;
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, reads + 1);
+    assert.equal(await dot.isVisible(), false);
+    assert.equal(await control.getAttribute('aria-busy'), 'true');
+    options.itemStreams.at(-1).write('event: ready\ndata: {}\n\n');
+    await dot.waitFor({ state: 'visible' });
+    options.itemStreams.at(-1).end();
+    await dot.waitFor({ state: 'hidden' });
+    await page.locator('a[data-view="web-settings"]').click();
+    assert.equal(await dot.isVisible(), false);
+    await page.locator('#auto-refresh').uncheck();
+    await page.locator('#terminal-link').click();
+    await page.locator('#items button').first().waitFor();
+    assert.equal(await dot.isVisible(), false);
+    assert.equal(await control.getAttribute('aria-busy'), 'false');
+    const refresh = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/items'));
+    await control.click();
+    const snapshot = await refresh;
+    assert.equal(new URL(snapshot.url()).searchParams.has('live'), false);
+    assert.equal(options.itemStreams.length, 0);
+});
+
+test('live status can be focused and resynced by touch without changing header geometry', async (t) => {
+    const { page, options, base } = await fixture(t, '', { viewport: { width: 390, height: 844 }, hasTouch: true });
+    options.liveView = { generation: '1', revision: '1' };
+    options.delayStreamReady = true;
+    const opened = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await opened;
+    const control = page.locator('#refresh');
+    const before = await control.boundingBox();
+    options.itemStreams[0].write('event: ready\ndata: {}\n\n');
+    await control.locator('.live-icon').waitFor({ state: 'visible' });
+    assert.deepEqual(await control.boundingBox(), before);
+    await control.focus();
+    await page.getByRole('tooltip').locator('time').waitFor();
+    const reconnected = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await control.tap();
+    await reconnected;
+    assert.equal(await control.locator('.live-icon').isVisible(), false);
+    assert.deepEqual(await control.boundingBox(), before);
+});
+
+test('terminal applies compact updates, fetches a fresh snapshot on reconnect and stops outside terminal', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.liveView = { generation: '9223372036854775000', revision: '1' };
+    const opened = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await opened;
+    await page.locator('#items button').first().waitFor();
+    const initialReads = options.requests.filter((request) => request.path.endsWith('/items')).length;
+    options.itemStreams[0].write(
+        `event: delta\nid: 9223372036854775000:2\ndata: ${JSON.stringify({
+            view: { generation: '9223372036854775000', revision: '2' },
+            updates: [{ itemKey: iron.itemKey, quantity: 17, craftable: iron.craftable }],
+            definitions: [{ ...iron, displayName: 'Live updated iron', quantity: 17 }],
+            removed: [],
+            unkeyed: [{ ...iron, itemKey: null, displayName: 'Live essentia', quantity: 3 }],
+            icons: null
+        })}\n\n`
+    );
+    await page.getByText('Live updated iron', { exact: true }).waitFor();
+    await page.getByText('Live essentia', { exact: true }).waitFor();
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, initialReads);
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({
+            view: { generation: '9223372036854775000', revision: '3' },
+            updates: [{ itemKey: iron.itemKey, quantity: 23, craftable: iron.craftable }],
+            definitions: [],
+            removed: []
+        })}\n\n`
+    );
+    await page
+        .locator('#items button')
+        .filter({ hasText: 'Live updated iron' })
+        .getByText('23', { exact: true })
+        .waitFor();
+    assert.equal(await page.getByText('Live essentia', { exact: true }).isVisible(), true);
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({
+            view: { generation: '9223372036854775000', revision: '4' },
+            updates: [],
+            definitions: [],
+            removed: [iron.itemKey],
+            unkeyed: [],
+            icons: null
+        })}\n\n`
+    );
+    await page.getByText('Live updated iron', { exact: true }).waitFor({ state: 'hidden' });
+    await page.getByText('Live essentia', { exact: true }).waitFor({ state: 'hidden' });
+    options.liveView = { generation: '9223372036854775000', revision: '4' };
+    options.itemsA = [{ ...iron, displayName: 'Fresh snapshot iron' }];
+    const reconnected = page.waitForResponse((response) => response.url().includes('subscription=subscription-4'));
+    options.itemStreams[0].end();
+    await reconnected;
+    await page.getByText('Fresh snapshot iron', { exact: true }).waitFor();
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, initialReads + 1);
+    options.liveView = { generation: '9223372036854775000', revision: '5' };
+    options.itemsA = [{ ...iron, displayName: 'Reset snapshot iron' }];
+    options.itemStreams[0].write('event: invalidate\ndata: {}\n\n');
+    await page.getByText('Reset snapshot iron', { exact: true }).waitFor();
+    await page.goto(`${base}#/web-settings`);
+    await page.locator('#auto-refresh').uncheck();
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.getByText('Reset snapshot iron', { exact: true }).waitFor();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(options.itemStreams.length, 0);
+});
+
+test('terminal keeps its layout through a dropped stream and retains recovery errors until SSE is ready', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.liveView = { generation: '1', revision: '1' };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const live = page.locator('#refresh .live-icon');
+    await live.waitFor({ state: 'visible' });
+    const row = page.locator('#items button').first();
+    await row.click();
+    const items = page.locator('#items');
+    const count = await items.locator('button').count();
+    const bounds = await items.boundingBox();
+    const selected = await page.locator('#items button[aria-pressed="true"]').innerText();
+    const message = page.locator('#item-message');
+    let failSnapshot = true;
+    await page.route('**/api/grids/*/items?*', async (route) => {
+        if (!failSnapshot) return route.continue();
+        await route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: JSON.stringify({ status: 'SERVER_BUSY', data: null })
+        });
+    });
+    options.itemStreams.at(-1).end();
+    await live.waitFor({ state: 'hidden' });
+    assert.equal(await message.innerText(), '');
+    assert.deepEqual(await items.boundingBox(), bounds, 'Disconnect does not move the resource grid');
+    assert.equal(await page.locator('#refresh').getAttribute('aria-busy'), 'true');
+    await page.clock.fastForward(2100);
+    await page.waitForFunction(() => document.querySelector('#item-message')?.textContent.length > 0);
+    assert.equal(await items.locator('button').count(), count);
+    assert.equal(await page.locator('#items button[aria-pressed="true"]').innerText(), selected);
+    const failedMessage = await message.innerText();
+    failSnapshot = false;
+    options.delayStreamReady = true;
+    const retry = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await page.locator('#refresh').click();
+    await retry;
+    assert.equal(await message.innerText(), failedMessage, 'Snapshot success does not clear a stream recovery error');
+    options.itemStreams.at(-1).end();
+    await page.waitForFunction((previous) => {
+        const text = document.querySelector('#item-message')?.textContent;
+        return text && text !== previous;
+    }, failedMessage);
+    assert.equal(await items.locator('button').count(), count);
+    const recovered = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await page.clock.fastForward(2100);
+    await recovered;
+    assert.notEqual(await message.innerText(), '');
+    options.itemStreams.at(-1).write('event: ready\ndata: {}\n\n');
+    await live.waitFor({ state: 'visible' });
+    assert.equal(await message.innerText(), '');
+    assert.equal(await page.locator('#items button[aria-pressed="true"]').innerText(), selected);
+    assert.deepEqual(await items.boundingBox(), bounds);
 });

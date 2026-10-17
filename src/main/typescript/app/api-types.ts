@@ -41,7 +41,37 @@ export type IconMetadata = {
     height: number;
     pages: { digest: string; width: number; height: number }[];
 };
-export type ResourceResponse<T> = { data: T; icons: IconMetadata | null };
+export type TerminalView = { generation: string; revision: string };
+export type RecentResource = { input: string | null; output: string | null; stockChange: string | null };
+export type RecentTracking = {
+    flowWindowMillis: number;
+    stockWindowMillis: number;
+    bucketMillis: number;
+    observedAt: number;
+    flowObservedAt: number | null;
+    stockObservedAt: number | null;
+    flowSince: number | null;
+    stockSince: number | null;
+    flowComplete: boolean;
+    stockComplete: boolean;
+    resources: Record<string, RecentResource>;
+};
+export type TerminalDelta = {
+    recent?: RecentTracking;
+    view: TerminalView;
+    updates: { itemKey: string; quantity: number; craftable: boolean }[];
+    definitions: StoredResource[];
+    removed: string[];
+    unkeyed?: StoredResource[] | null;
+    icons: IconMetadata | null;
+};
+export type ResourceResponse<T> = {
+    data: T;
+    icons: IconMetadata | null;
+    view?: TerminalView;
+    subscription?: string;
+    recent?: RecentTracking;
+};
 export type StoredResource = ResourceStack & {
     craftable: boolean;
 };
@@ -63,7 +93,13 @@ export type Grid = {
     isTrackingEnabled: boolean;
     accessSources: AccessSources;
 };
-export type GridSettings = { isTracked: boolean; name: string };
+export type GridSettings = {
+    isTracked: boolean;
+    isStorageTracked: boolean;
+    isFlowTracked: boolean;
+    stockSampleIntervalSeconds: number;
+    name: string;
+};
 export type CpuSelectionMode = 'PLAYER_ONLY' | 'AUTOMATION_ONLY' | 'ALL';
 export type CpuInfo = {
     acceptsPlayerJobs: boolean;
@@ -142,4 +178,23 @@ export type CraftingHistory = {
     wasCancelled: boolean;
     items: ResourceTiming[];
     interfaceShare: ProviderTiming[];
+};
+
+/** Tracking counters use decimal strings so long values are never rounded by JSON parsing. */
+export type ResourceHistoryPoint = {
+    observedAt: number;
+    generation: string;
+    kind: 'STOCK' | 'FLOW' | 'OBSERVATION' | 'FLOW_OBSERVATION' | 'GAP';
+    resource: (ResourceDescription & { quantity: string }) | null;
+    craftable: boolean;
+    input: string;
+    output: string;
+    complete: boolean;
+};
+export type ResourceHistory = {
+    baseline: ResourceHistoryPoint | null;
+    points: ResourceHistoryPoint[];
+    complete: boolean;
+    truncated: boolean;
+    enabled: boolean;
 };

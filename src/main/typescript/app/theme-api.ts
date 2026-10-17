@@ -1,7 +1,8 @@
+import type { TerminalStreamState } from './terminal.js';
 import type { CraftingState } from './crafting.js';
 import type { CpuState } from './cpus.js';
 import type { HistoryState } from './history.js';
-import type { HomeState } from './home.js';
+import type { ResourceHistoryState } from './resource-history.js';
 import type { SettingsState } from './settings.js';
 import type {
     StoredResource,
@@ -11,6 +12,7 @@ import type {
     GridSettings,
     AvailableUpdate
 } from './api-types.js';
+import type { RecentTracking } from './api-types.js';
 import type { Preferences } from './preferences.js';
 import type { Route } from './router.js';
 import type { IconSprite, IconTarget } from './icons.js';
@@ -36,14 +38,16 @@ export type ThemeState = ReadonlyData<{
     refreshing: boolean;
     refreshingView: boolean;
     updatedAt: number | null;
+    stream: TerminalStreamState | null;
     search: string;
     selected: StoredResource | null;
     selectedGridKey: string | null;
     preferences: Preferences;
     crafting: CraftingState;
     cpus: CpuState;
-    home: HomeState;
     history: HistoryState;
+    resourceHistory: ResourceHistoryState;
+    recent: RecentTracking | null;
     settings: SettingsState;
 }>;
 export type ThemeView = Exclude<Route['view'], 'missing'>;
@@ -67,7 +71,9 @@ export type ThemeApplication = {
     subscribe(listener: (state: ThemeState) => void): () => void;
     refresh(options?: { reloadDetail?: boolean }): Promise<void>;
     search(value: string): void;
-    select(resource: ReadonlyData<StoredResource> | null): void;
+    /** Optionally choose the selected resource's history period without changing the full tracking view's range. */
+    select(resource: ReadonlyData<StoredResource> | null, historyRangeMillis?: number): void;
+    resourceHistory: { range(millis: number): Promise<void> };
     preference<K extends keyof Preferences>(name: K, value: Preferences[K]): void;
     displayIcons(enabled: boolean): void;
     readonly crafting: {

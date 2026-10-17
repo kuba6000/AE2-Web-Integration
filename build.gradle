@@ -108,6 +108,7 @@ repositories {
 }
 
 dependencies {
+    implementation 'org.hsqldb:hsqldb:2.7.4:jdk8'
     compileOnly 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
     testCompileOnly 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
     annotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
@@ -168,6 +169,11 @@ test {
             includeTestsMatching '*CraftingOptionsHttpTest'
             includeTestsMatching '*CpuPauseHttpTest'
             includeTestsMatching '*UpdateSkipHttpTest'
+            includeTestsMatching '*HsqlStorageHistoryStoreTest'
+            includeTestsMatching '*TerminalStreamsHttpTest'
+            includeTestsMatching '*LiveTerminalHttpTest'
+            includeTestsMatching '*StorageTrackingServiceTest'
+            includeTestsMatching '*CoreEngineTest'
         }
         shouldRunAfter tasks.named('test')
     }

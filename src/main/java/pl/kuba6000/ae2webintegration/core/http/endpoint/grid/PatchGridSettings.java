@@ -73,16 +73,24 @@ public final class PatchGridSettings extends IAsyncRequest {
     /**
      * Settings to update; omitted members remain unchanged.
      *
-     * @param isTracked whether the grid should collect crafting history
-     * @param name      custom network name; empty clears it. Outer Unicode spaces and U+FEFF are trimmed,
-     *                  matching JavaScript String.trim after control characters are rejected.
-     *                  At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
-     *                  U+007F–009F) are rejected even at the edges. Null is invalid; omission preserves the name.
+     * @param isTracked                  whether the grid should collect crafting history
+     * @param isStorageTracked           whether the grid should collect periodic resource quantities
+     * @param isFlowTracked              whether the grid should collect accepted input/output history
+     * @param stockSampleIntervalSeconds seconds between stock samples, from 1 through 86400
+     * @param name                       custom network name; empty clears it. Outer Unicode spaces and U+FEFF are
+     *                                   trimmed,
+     *                                   matching JavaScript String.trim after control characters are rejected.
+     *                                   At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
+     *                                   U+007F–009F) are rejected even at the edges. Null is invalid; omission
+     *                                   preserves the
+     *                                   name.
      * @example isTracked true
      * @example name Factory
      */
     @Desugar
-    public record Input(@OptionalInput @Nullable Boolean isTracked, @OptionalInput @Nullable String name) {}
+    public record Input(@OptionalInput @Nullable Boolean isTracked, @OptionalInput @Nullable String name,
+        @OptionalInput @Nullable Boolean isStorageTracked, @OptionalInput @Nullable Boolean isFlowTracked,
+        @OptionalInput @Nullable Integer stockSampleIntervalSeconds) {}
 
     @Body
     private @NotNull Input input;
@@ -92,6 +100,10 @@ public final class PatchGridSettings extends IAsyncRequest {
         String name;
         try {
             name = input.name() == null ? null : normalizeName(input.name());
+            if (input.stockSampleIntervalSeconds() != null && (input.stockSampleIntervalSeconds() < 1
+                || input.stockSampleIntervalSeconds() > GridSettingsData.MAX_STOCK_SAMPLE_INTERVAL_SECONDS)) {
+                throw new IllegalArgumentException("Stock interval must be 1..86400 seconds");
+            }
         } catch (IllegalArgumentException e) {
             deny(ApiStatus.BAD_PARAM);
             return;
@@ -113,7 +125,14 @@ public final class PatchGridSettings extends IAsyncRequest {
                 if (input.isTracked() != null) {
                     settings.setTracked(input.isTracked());
                 }
-                if (input.name() != null || input.isTracked() != null) registry.saveIfDirty();
+                if (input.isStorageTracked() != null) settings.setStorageTracked(input.isStorageTracked());
+                if (input.isFlowTracked() != null) settings.setFlowTracked(input.isFlowTracked());
+                if (input.stockSampleIntervalSeconds() != null)
+                    settings.setStockSampleIntervalSeconds(input.stockSampleIntervalSeconds());
+                if (input.name() != null || input.isTracked() != null
+                    || input.isStorageTracked() != null
+                    || input.isFlowTracked() != null
+                    || input.stockSampleIntervalSeconds() != null) registry.saveIfDirty();
                 // Completion serializes under the same monitor used by settings mutations and file writes.
                 respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, settings));
             } catch (IOException e) {

@@ -2,6 +2,8 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
@@ -56,6 +58,7 @@ import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
@@ -645,6 +648,36 @@ class ServerLifecycleHttpTest {
             assertEquals("", read(head).body());
             assertEquals(expected.getBytes(StandardCharsets.UTF_8).length, head.getContentLength());
         }
+    }
+
+    @Test
+    void logoutInvalidatesRetainedLoginSessionButNotOtherLoginOfSameAccount() throws Exception {
+        startApi();
+        String first = login();
+        String second = login();
+        TestGridFixtures.TestExchange firstRequest = new TestGridFixtures.TestExchange(null);
+        firstRequest.getRequestHeaders()
+            .set("Authorization", "Bearer " + first);
+        TestGridFixtures.TestExchange secondRequest = new TestGridFixtures.TestExchange(null);
+        secondRequest.getRequestHeaders()
+            .set("Authorization", "Bearer " + second);
+        AE2Controller.RequestContext firstContext = AuthService.authenticate(firstRequest);
+        AE2Controller.RequestContext secondContext = AuthService.authenticate(secondRequest);
+        assertNotNull(firstContext);
+        assertNotNull(secondContext);
+        assertNotNull(firstContext.getSession());
+        assertNotNull(secondContext.getSession());
+        assertNotSame(firstContext.getSession(), secondContext.getSession());
+        HttpURLConnection logout = connection("/api/auth/logout", first);
+        logout.setRequestMethod("POST");
+        assertEquals(HttpURLConnection.HTTP_OK, read(logout).status());
+        assertFalse(
+            firstContext.getSession()
+                .isValid(System.currentTimeMillis()));
+        assertTrue(
+            secondContext.getSession()
+                .isValid(System.currentTimeMillis()));
+        assertEquals(HttpURLConnection.HTTP_OK, get("/api/context", second).status());
     }
 
     @Test

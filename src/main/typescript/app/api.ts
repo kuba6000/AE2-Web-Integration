@@ -7,9 +7,10 @@ import type {
     CpuDetail,
     HistoryEntry,
     CraftingHistory,
-    GridSettings
+    GridSettings,
+    ResourceHistory
 } from './api-types.js';
-import type { ResourceResponse, IconMetadata, ApplicationContext } from './api-types.js';
+import type { ResourceResponse, IconMetadata, ApplicationContext, TerminalView, TerminalDelta } from './api-types.js';
 
 /** Wire codes declared by core ApiStatus; unrecognized replies leave mutations unconfirmed. */
 const responseStatuses = new Set([
@@ -54,7 +55,23 @@ export type Api = {
         signal?: AbortSignal
     ) => Promise<{ available: boolean; packId: string | null; width: number; height: number }>;
     grids: (signal?: AbortSignal) => Promise<Grid[]>;
-    items: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<StoredResource[]>>;
+    items: (
+        gridKey: string,
+        signal?: AbortSignal,
+        icons?: boolean,
+        live?: boolean
+    ) => Promise<ResourceResponse<StoredResource[]>>;
+    itemEvents: (
+        gridKey: string,
+        subscription: string,
+        icons: boolean,
+        handlers: {
+            ready: () => void;
+            delta: (delta: TerminalDelta) => void;
+            reset: () => void;
+            error: () => void;
+        }
+    ) => () => void;
     createPlan: (
         gridKey: string,
         body: { itemKey: string; quantity: number; lightMode?: boolean; ignoreMissing?: boolean; autoStart?: boolean }
@@ -85,6 +102,13 @@ export type Api = {
         signal?: AbortSignal,
         icons?: boolean
     ) => Promise<ResourceResponse<CraftingHistory>>;
+    resourceHistory: (
+        gridKey: string,
+        itemKey: string,
+        signal?: AbortSignal,
+        from?: number,
+        icons?: boolean
+    ) => Promise<ResourceResponse<ResourceHistory>>;
     settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettings>;
     saveSettings: (gridKey: string, body: Partial<GridSettings>) => Promise<GridSettings>;
     submitPlan: (gridKey: string, planId: string | number, cpuKey?: string) => Promise<null>;
@@ -168,11 +192,24 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             (parsed.status === 'OK' && (!response.ok || !Object.hasOwn(parsed, 'data')))
         )
             throw new ApiError('INVALID_RESPONSE', response.status);
-        const envelope = parsed as { status: string; data: T; icons?: IconMetadata | null };
+        const envelope = parsed as {
+            status: string;
+            data: T;
+            icons?: IconMetadata | null;
+            view?: TerminalView;
+            subscription?: string;
+            recent?: import('./api-types.js').RecentTracking;
+        };
         if (!response.ok || envelope.status !== 'OK') {
             throw new ApiError(envelope.status, response.status, envelope.data);
         }
-        return { data: envelope.data, icons: envelope.icons ?? null };
+        return {
+            data: envelope.data,
+            recent: envelope.recent,
+            icons: envelope.icons ?? null,
+            view: envelope.view,
+            subscription: envelope.subscription
+        };
     }
     function request<T>(path: string, options?: Parameters<typeof read>[1]): Promise<T> {
         return read<T>(path, options).then((result) => result.data);
@@ -183,8 +220,38 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
         skipUpdate: (tag) => request('api/updates/skip', { method: 'POST', body: { tag } }),
         iconPack: (signal) => request('api/icon-pack', { signal }),
         grids: (signal) => request('api/grids', { signal }),
-        items: (gridKey, signal, icons = false) =>
-            read(`api/grids/${encodeURIComponent(gridKey)}/items${icons ? '?icons=true' : ''}`, { signal }),
+        items: (gridKey, signal, icons = false, live = false) => {
+            const query = new URLSearchParams();
+            if (icons) query.set('icons', 'true');
+            if (live) query.set('live', 'true');
+            return read(`api/grids/${encodeURIComponent(gridKey)}/items${query.size ? `?${query}` : ''}`, { signal });
+        },
+        itemEvents(gridKey, subscription, icons, handlers) {
+            const query = new URLSearchParams({ subscription });
+            if (icons) query.set('icons', 'true');
+            const source = new EventSource(
+                new URL(`api/grids/${encodeURIComponent(gridKey)}/items/events?${query}`, base)
+            );
+            source.addEventListener('ready', handlers.ready);
+            source.addEventListener('delta', (event) => {
+                try {
+                    handlers.delta(JSON.parse(event.data) as TerminalDelta);
+                } catch {
+                    source.close();
+                    handlers.reset();
+                }
+            });
+            for (const event of ['reset', 'invalidate', 'revoked'])
+                source.addEventListener(event, () => {
+                    source.close();
+                    handlers.reset();
+                });
+            source.onerror = () => {
+                source.close();
+                handlers.error();
+            };
+            return () => source.close();
+        },
         createPlan: (gridKey, body) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans`, { method: 'POST', body }),
         plan: (gridKey, planId, signal, icons) =>
@@ -213,6 +280,11 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             read(`api/grids/${encodeURIComponent(gridKey)}/crafting-history/${entryId}${icons ? '?icons=true' : ''}`, {
                 signal
             }),
+        resourceHistory: (gridKey, itemKey, signal, from = Date.now() - 900000, icons = false) =>
+            read(
+                `api/grids/${encodeURIComponent(gridKey)}/resource-history?itemKey=${encodeURIComponent(itemKey)}&from=${from}&limit=10000${icons ? '&icons=true' : ''}`,
+                { signal }
+            ),
         settings: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { signal }),
         saveSettings: (gridKey, body) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { method: 'PATCH', body }),

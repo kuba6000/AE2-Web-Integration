@@ -44,6 +44,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 
@@ -55,7 +56,9 @@ import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
 final class TestGridFixtures {
 
     static ResourceSnapshot planOutput() {
-        return new ResourceSnapshot("test", "output", 0, 0, "Output", ResourceType.ITEM, 1, key(9001), null);
+        return new ResourceSnapshot(
+            new ResourceDescriptor("test", "output", 0, 0, "Output", ResourceType.ITEM, key(9001), null),
+            1);
     }
 
     private TestGridFixtures() {}

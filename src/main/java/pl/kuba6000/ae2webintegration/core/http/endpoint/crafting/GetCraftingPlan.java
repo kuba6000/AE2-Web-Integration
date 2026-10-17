@@ -227,7 +227,8 @@ public final class GetCraftingPlan extends ISyncedRequest {
                     IconMappings.Reference icon = null;
                     try {
                         itemKey = identities.remember(key);
-                        if (mappings != null) icon = mappings.resolve(itemKey, AE2Controller.itemIdentities);
+                        if (itemKey != null && mappings != null)
+                            icon = mappings.resolve(itemKey, AE2Controller.itemIdentities);
                     } catch (RuntimeException unavailable) {
                         // Optional identity or icon failures must not hide the calculated resource counts.
                     }

@@ -11,6 +11,7 @@ import com.google.common.cache.CacheBuilder;
 
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /** Server-thread-only shared identities retained by the grids, CPUs and plans that last reported them. */
 public final class ItemIdentityRegistry {
@@ -28,10 +29,10 @@ public final class ItemIdentityRegistry {
     // Remember observed conflicts until world teardown, without retaining native resource data.
     private final Set<StableKey> ambiguous = new HashSet<>();
 
-    /** Retain an output identity until its owner next publishes a complete resource snapshot. */
-    public @NotNull StableKey remember(@NotNull IIdentityHolder owner, @NotNull IAEKey resource) {
-        cleanUp();
+    /** Retain an encodable identity until the next owner snapshot; known unsupported resources return null. */
+    public @Nullable StableKey remember(@NotNull IIdentityHolder owner, @NotNull IAEKey resource) {
         Entry entry = findOrCreate(resource);
+        if (entry == null) return null;
         owners.asMap()
             .computeIfAbsent(owner, ignored -> new HashSet<>())
             .add(entry);
@@ -40,19 +41,17 @@ public final class ItemIdentityRegistry {
 
     /** Start a replacement list; the previous list stays owned until commit succeeds. */
     public @NotNull Listing beginListing(@NotNull IIdentityHolder owner) {
-        cleanUp();
         return new Listing(owner);
     }
 
-    /** Resolve only after an exact icon miss; absence is memoized for the retained identity too. */
-    public @Nullable StableKey resolveIconBase(@NotNull StableKey key) {
-        cleanUp();
+    /** Resolve the optional base variant once per retained identity, including absence or normalization failure. */
+    public @Nullable StableKey resolveBaseKey(@NotNull StableKey key) {
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry entry = entries.getIfPresent(key);
         if (entry == null) return null;
         if (!entry.baseComputed) {
             try {
-                entry.base = entry.identity.web$getIconBaseKey();
+                entry.base = entry.identity.web$getBaseKey();
             } catch (RuntimeException unavailable) {
                 // A failing optional native normalizer must neither break the listing nor run every poll.
                 entry.base = null;
@@ -62,8 +61,18 @@ public final class ItemIdentityRegistry {
         return entry.base;
     }
 
+    /** Detached metadata shared by retained consumers, including the optional base variant. */
+    public @Nullable ResourceDescriptor describe(@NotNull StableKey key) {
+        if (ambiguous.contains(key)) throw new Ambiguous();
+        Entry entry = entries.getIfPresent(key);
+        if (entry == null) return null;
+        if (entry.description == null) {
+            entry.description = ResourceDescriptor.capture(entry.identity, key, resolveBaseKey(key));
+        }
+        return entry.description;
+    }
+
     public @Nullable IAEKey resolve(@NotNull StableKey key) {
-        cleanUp();
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry entry = entries.getIfPresent(key);
         return entry == null ? null : entry.identity;
@@ -76,14 +85,16 @@ public final class ItemIdentityRegistry {
         ambiguous.clear();
     }
 
-    private @NotNull Entry findOrCreate(@NotNull IAEKey resource) {
+    private @Nullable Entry findOrCreate(@NotNull IAEKey resource) {
         Entry remembered = reverse.getIfPresent(resource);
         if (remembered != null) {
             if (ambiguous.contains(remembered.key)) throw new Ambiguous();
             return remembered;
         }
+        if (!resource.web$supportsStableIdentity()) return null;
         IAEKey copy = resource.web$copyIdentity();
         StableKey key = copy.web$getKey();
+        if (key == null) return null;
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry existing = entries.getIfPresent(key);
         if (existing != null) {
@@ -101,7 +112,8 @@ public final class ItemIdentityRegistry {
         return entry;
     }
 
-    private void cleanUp() {
+    /** Periodic server-thread maintenance, independent of resource lookups and transfers. */
+    public void cleanUp() {
         // Weak owner keys use instance identity. Remove collected owners before cleaning global
         // weak-value indexes; neither operation scans the live item catalogues.
         owners.cleanUp();
@@ -119,11 +131,21 @@ public final class ItemIdentityRegistry {
             this.owner = owner;
         }
 
-        public @NotNull StableKey remember(@NotNull IAEKey resource) {
+        public @Nullable StableKey remember(@NotNull IAEKey resource) {
             requireOpen();
             Entry entry = findOrCreate(resource);
+            if (entry == null) return null;
             collected.add(entry);
             return entry.key;
+        }
+
+        /** Keep a known resource needed by tracking even when it is absent from the new inventory. */
+        public void retain(@NotNull StableKey key) {
+            requireOpen();
+            if (ambiguous.contains(key)) throw new Ambiguous();
+            Entry entry = entries.getIfPresent(key);
+            if (entry == null) throw new IllegalStateException("Resource identity is no longer retained: " + key);
+            collected.add(entry);
         }
 
         public void commit() {
@@ -153,6 +175,7 @@ public final class ItemIdentityRegistry {
 
         private final StableKey key;
         private final IAEKey identity;
+        private @Nullable ResourceDescriptor description;
         private boolean baseComputed;
         private @Nullable StableKey base;
 

@@ -200,6 +200,24 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 In public mode, a player can create an account from the login page. After choosing a password, the page displays
 an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
 
+### Resource history
+
+Network settings have independent switches for input/output history and periodic storage quantities.
+Choose the storage sampling interval there. Input/output recording alone does not scan the inventory;
+accepted input includes resources consumed by void storage. Select a resource in the terminal and open
+**Resource history** in its details to view measurements.
+
+History is stored in an embedded HSQLDB database under the world's `ae2webintegration/history` directory.
+No database installation is needed. The defaults retain up to 7 days and 250,000 records per network;
+the oldest records are removed when either limit is reached. One older stock measurement per resource
+may remain as a dated baseline, within the same record limit. Configure these limits under
+`resource_tracking` in `config.toml` and restart the server to apply them. The record limit is not a byte
+limit. Missing measurements are shown as gaps, not zero activity.
+
+With automatic refresh enabled, the terminal receives live changes over SSE. Live viewing does not
+require history tracking or increase the frequency of saved storage measurements. After a connection
+interruption or storage topology change, the terminal loads a fresh snapshot automatically.
+
 ## Notification services integration
 
 **Integrations only works when public mode is disabled.**
@@ -296,6 +314,8 @@ documentation host.
 
 Project code and original interface icons are licensed under **LGPL-3.0-or-later**.
 Bundled third-party assets retain their own licenses:
+
+- [uPlot](https://github.com/leeoniya/uPlot), by Leon Sorokin — MIT (default theme charts).
 
 | Component | Author / source | License |
 | --- | --- | --- |

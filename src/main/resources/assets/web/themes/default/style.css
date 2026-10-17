@@ -1430,6 +1430,11 @@ label {
 #logout {
     color: light-dark(#862323, #ffb4ab);
 }
+.live-icon {
+    display: grid;
+    place-items: center;
+    color: light-dark(#246b32, #8bdb8f);
+}
 #refresh[aria-busy='true'] .theme-icon {
     animation: refresh-spin 0.8s linear infinite;
 }
@@ -1870,7 +1875,6 @@ label {
 .resource-icon {
     display: none;
 }
-.home-product.has-resource-icon .resource-icon,
 .resource-icons-enabled .resource-icon,
 .cpu-icons-enabled .cpu-item .resource-icon,
 .product-icons-enabled
@@ -1880,6 +1884,7 @@ label {
         .cpu-selector-link,
         .history-product,
         .history-summary-icon,
+        .tracking-resource,
         .history-analysis-name
     )
     .resource-icon {
@@ -1894,7 +1899,6 @@ label {
     background-repeat: no-repeat;
     outline: 1px dashed var(--border);
 }
-.home-product.has-resource-icon .resource-icon-ready,
 .resource-icons-enabled .resource-icon-ready,
 .cpu-icons-enabled .cpu-item .resource-icon-ready,
 .product-icons-enabled
@@ -1904,6 +1908,7 @@ label {
         .cpu-selector-link,
         .history-product,
         .history-summary-icon,
+        .tracking-resource,
         .history-analysis-name
     )
     .resource-icon-ready {
@@ -2417,81 +2422,21 @@ code {
     justify-content: space-between;
     gap: 16px;
 }
-.home-work h3 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 400;
-}
-.home-work-count,
 .home-status,
 .home-scope {
     color: var(--muted);
     font-size: 11px;
-}
-.home-status,
-.home-scope {
     line-height: 1.7;
     margin: 8px 0 12px;
-}
-.home-work-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-.home-work-list li {
-    border-bottom: 1px solid var(--border);
 }
 .network-choice {
     background: color-mix(in srgb, var(--panel) 65%, var(--slot));
 }
-.home-work-link {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 4px 12px;
-    padding: 10px 6px;
-    text-decoration: none;
-    color: var(--text);
-}
-.home-work-link:hover,
 .network-choice-link:hover {
     background: color-mix(in srgb, var(--text) 6%, transparent);
 }
-.home-work-link:focus-visible,
 .network-choice-link:focus-visible {
     outline-offset: -2px;
-}
-.home-product {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 32px;
-    min-width: 0;
-    font-size: 12px;
-    overflow-wrap: anywhere;
-}
-.home-product strong {
-    font-weight: 400;
-}
-.home-product:not(.has-resource-icon) .resource-icon {
-    display: none;
-}
-.home-work-detail {
-    grid-column: 1 / -1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-    font-size: 10px;
-    color: var(--muted);
-}
-.home-work-detail > span,
-.network-choice-link {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-.home-cpu-state {
-    font-size: 10px;
-    color: var(--muted);
 }
 .home-retry {
     margin-top: 10px;
@@ -2522,6 +2467,8 @@ code {
     gap: 10px;
 }
 .network-choice-link {
+    min-width: 0;
+    overflow-wrap: anywhere;
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 10px 14px;
@@ -3274,5 +3221,168 @@ button.toast:hover {
     .notifications {
         right: 8px;
         width: calc(100vw - 16px);
+    }
+}
+
+.resource-history {
+    margin-top: 12px;
+    font-size: 13px;
+}
+.resource-history .tracking-chart {
+    position: relative;
+}
+.tracking-sparkline-readout {
+    position: absolute;
+    z-index: 1;
+    inset: 4px 4px auto;
+    display: grid;
+    gap: 3px;
+    padding: 5px 7px;
+    background: var(--surface);
+    font-size: 11px;
+    pointer-events: none;
+    overflow-wrap: anywhere;
+}
+.resource-history h2 {
+    font-size: 14px;
+}
+.tracking-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: end;
+    margin-block: 12px;
+}
+.tracking-toolbar label {
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+}
+.tracking-toolbar select {
+    min-width: 90px;
+}
+.tracking-chart {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+.tracking-chart .uplot {
+    font-family: inherit;
+}
+.tracking-chart .u-over:focus {
+    outline: none;
+}
+.tracking-chart .u-over:focus-visible {
+    outline: 1px solid var(--focus);
+    outline-offset: -2px;
+}
+.tracking-chart .u-legend {
+    font-size: 12px;
+    text-align: left;
+    max-width: 100%;
+}
+.tracking-chart .u-value {
+    overflow-wrap: anywhere;
+    max-width: 220px;
+}
+.tracking-chart .u-marker {
+    border-radius: 0;
+}
+.tracking-chart .u-cursor-pt {
+    border-radius: 0;
+}
+.tracking-chart-pinned .u-cursor-x {
+    border-right-style: solid;
+}
+.tracking-view {
+    min-width: 0;
+}
+.tracking-resource-name {
+    overflow-wrap: anywhere;
+    margin-block: 12px;
+}
+.tracking-resource {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.tracking-back {
+    font-size: 12px;
+    margin-left: auto;
+}
+.tracking-totals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    margin-block: 16px;
+}
+.tracking-totals > div {
+    display: grid;
+    gap: 6px;
+    min-width: 100px;
+    overflow-wrap: anywhere;
+}
+.tracking-totals strong {
+    font-size: 16px;
+}
+.tracking-count-short {
+    display: none;
+}
+.tracking-open {
+    display: inline-block;
+    margin-block: 10px;
+}
+.tracking-positive {
+    color: light-dark(#28683a, #83c78d);
+}
+.tracking-negative {
+    color: light-dark(#9b3030, #ef9393);
+}
+.tracking-neutral {
+    opacity: 0.8;
+}
+.recent-note {
+    display: block;
+}
+.recent-flow,
+.recent-stock {
+    display: block;
+    margin-top: 5px;
+}
+.tooltip .tracking-positive {
+    color: #83c78d;
+}
+.tooltip .tracking-negative {
+    color: #ef9393;
+}
+@media (width <= 600px) {
+    .tracking-view > .terminal-heading {
+        flex-wrap: wrap;
+    }
+    .tracking-chart .u-legend {
+        font-size: 11px;
+    }
+    .tracking-chart .u-legend tbody {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 12px;
+    }
+    .tracking-chart .u-legend tr {
+        margin-right: 0;
+    }
+    .tracking-totals {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .tracking-totals > div {
+        min-width: 0;
+        font-size: 12px;
+    }
+    .tracking-count-full {
+        display: none;
+    }
+    .tracking-count-short {
+        display: inline;
     }
 }

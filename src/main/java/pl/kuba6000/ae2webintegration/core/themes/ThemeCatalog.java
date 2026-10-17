@@ -58,7 +58,8 @@ public final class ThemeCatalog implements Closeable {
             "settings",
             "cpus",
             "history",
-            "plan"));
+            "plan",
+            "tracking"));
 
     @Desugar
     public record Manifest(@NotNull String id, @NotNull String name, @NotNull String version,

@@ -15,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.toml.TomlParser;
+import com.electronwill.nightconfig.toml.TomlWriter;
 
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.config.Config;
@@ -23,6 +24,73 @@ class ConfigFileTest {
 
     @TempDir
     Path root;
+
+    @Test
+    void flowHistoryIntervalIsConfigurableAndRejectsZero() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertTrue(document.contains("resource_tracking.flow_flush_interval_seconds"));
+        document.set("resource_tracking.flow_flush_interval_seconds", 11);
+        TomlWriter writer = new TomlWriter();
+        Files.write(
+            file,
+            writer.writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        assertEquals(11, Config.INSTANCE.resourceTracking.flowFlushIntervalSeconds);
+        document.set("resource_tracking.flow_flush_interval_seconds", 0);
+        Files.write(
+            file,
+            writer.writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, Config::reload);
+    }
+
+    @Test
+    void historyRetentionAndRowLimitsArePersistedAndValidated() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(7, (Integer) document.get("resource_tracking.history_retention_days"));
+        assertTrue(document.contains("resource_tracking.history_max_rows_per_grid"));
+        for (String key : new String[] { "history_retention_days", "history_max_rows_per_grid" }) {
+            Object original = document.get("resource_tracking." + key);
+            document.set("resource_tracking." + key, 0);
+            Files.write(
+                file,
+                new TomlWriter().writeToString(document)
+                    .getBytes(StandardCharsets.UTF_8));
+            assertThrows(IllegalArgumentException.class, Config::reload);
+            document.set("resource_tracking." + key, original);
+        }
+        document.set("resource_tracking.history_retention_days", 3);
+        document.set("resource_tracking.history_max_rows_per_grid", 5000);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        Config.init(root.toFile());
+        CommentedConfig reloaded = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(3, (Integer) reloaded.get("resource_tracking.history_retention_days"));
+        assertEquals(5000, (Integer) reloaded.get("resource_tracking.history_max_rows_per_grid"));
+    }
+
+    @Test
+    void resourceTrackingLimitsArePersistedAndInvalidIntervalsAreRejected() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        String contents = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        CommentedConfig document = new TomlParser().parse(contents);
+        assertTrue(document.contains("resource_tracking.active_interval_millis"));
+        assertTrue(document.contains("resource_tracking.history_max_rows_per_grid"));
+        Files.write(
+            file,
+            contents.replaceAll("active_interval_millis = [0-9]+", "active_interval_millis = 0")
+                .getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, Config::reload);
+    }
 
     @Test
     void firstStartCreatesReadableConfigAndRetainsPasswordAcrossRestarts() throws Exception {

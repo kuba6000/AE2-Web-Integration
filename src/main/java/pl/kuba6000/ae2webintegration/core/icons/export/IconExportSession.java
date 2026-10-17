@@ -197,6 +197,11 @@ public final class IconExportSession<C extends IIconCandidate<C>> {
             omit(candidate.context() + "/identity", failure);
             return;
         }
+        if (key == null) {
+            failures.add(new Failure(candidate.context() + "/identity", "Unsupported resource identity"));
+            progress.omitted++;
+            return;
+        }
         C previous = identities.get(key);
         if (previous != null) {
             if (!previous.sameIdentity(candidate))

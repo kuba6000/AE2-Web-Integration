@@ -12,6 +12,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -28,6 +30,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -53,7 +57,10 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 
 /** Public HTTP and server lifecycle contract; generated packs use the public archive writer. */
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -124,6 +131,135 @@ class IconDeliveryHttpTest {
         CoreEngine.onServerStopped();
         AE2Controller.serverPlatform = previousPlatform;
         config.close();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { true, false })
+    void resourceHistoryResolvesRequestedIconsFromSavedKeysWithoutNativeReads(boolean installed) throws Exception {
+        StableKey exact = TestGridFixtures.key(121);
+        StableKey fallback = TestGridFixtures.key(122);
+        StableKey missing = TestGridFixtures.key(123);
+        if (installed) installPack(exact);
+        CoreEngine.onServerStarted();
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
+            81078,
+            false,
+            AEControllerState.CONTROLLER_ONLINE) {
+
+            @Override
+            public IAEStorageGrid web$getStorageGrid() {
+                throw new AssertionError("Async history must not read native storage");
+            }
+
+            @Override
+            public IAECraftingGrid web$getCraftingGrid() {
+                throw new AssertionError("Async history must not read native crafting");
+            }
+        };
+        StableKey gridKey = TestGridFixtures.resolvedKey(grid);
+        var service = CoreEngine.getStorageTracking();
+        assertNotNull(service);
+        Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
+        descriptions
+            .put(exact, new ResourceDescriptor("test", "exact", 0, 0, "Exact", ResourceType.ITEM, exact, missing));
+        descriptions.put(
+            fallback,
+            new ResourceDescriptor("test", "fallback", 0, 2, "Fallback", ResourceType.ITEM, fallback, exact));
+        descriptions
+            .put(missing, new ResourceDescriptor("test", "missing", 0, 0, "Missing", ResourceType.ITEM, missing, null));
+        long observedAt = System.currentTimeMillis();
+        service.open(gridKey, 1);
+        assertTrue(
+            service.submit(
+                gridKey,
+                1,
+                new StorageObservation(
+                    observedAt,
+                    true,
+                    true,
+                    Arrays.asList(
+                        new StorageObservation.Row(exact, 5, false),
+                        new StorageObservation.Row(fallback, Long.MAX_VALUE, false),
+                        new StorageObservation.Row(missing, 7, false)),
+                    Collections.emptyList(),
+                    descriptions,
+                    Collections.emptyList()),
+                true,
+                false));
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        var snapshot = service.snapshot(gridKey);
+        assertNotNull(snapshot);
+        while (snapshot.revision() == 0 && System.nanoTime() < deadline) {
+            Thread.sleep(5);
+            snapshot = service.snapshot(gridKey);
+            assertNotNull(snapshot);
+        }
+        assertTrue(snapshot.revision() > 0);
+        AE2Controller.itemIdentities.clear();
+        String path = "/api/grids/" + gridKey + "/resource-history";
+        JsonObject plain = json(connection(path));
+        for (var point : plain.getAsJsonObject("data")
+            .getAsJsonArray("points")) {
+            var resource = point.getAsJsonObject()
+                .get("resource");
+            if (!resource.isJsonNull()) assertTrue(
+                resource.getAsJsonObject()
+                    .get("icon")
+                    .isJsonNull());
+        }
+        JsonObject response = json(connection(path + "?icons=true"));
+        assertTrue(response.has("icons"));
+        if (installed) {
+            assertEquals(
+                packId,
+                response.getAsJsonObject("icons")
+                    .get("packId")
+                    .getAsString());
+            assertEquals(
+                1,
+                response.getAsJsonObject("icons")
+                    .getAsJsonArray("pages")
+                    .size());
+        } else assertTrue(
+            response.get("icons")
+                .isJsonNull());
+        for (var point : response.getAsJsonObject("data")
+            .getAsJsonArray("points")) {
+            var resource = point.getAsJsonObject()
+                .get("resource");
+            if (resource.isJsonNull()) continue;
+            JsonObject row = resource.getAsJsonObject();
+            boolean expectedIcon = installed && !missing.toString()
+                .equals(
+                    row.get("itemKey")
+                        .getAsString());
+            assertEquals(
+                !expectedIcon,
+                row.get("icon")
+                    .isJsonNull());
+            if (expectedIcon) assertEquals(
+                0,
+                row.getAsJsonObject("icon")
+                    .get("page")
+                    .getAsInt());
+        }
+        JsonObject baselineResponse = json(connection(path + "?icons=true&itemKey=" + fallback + "&limit=1"));
+        JsonObject baseline = baselineResponse.getAsJsonObject("data")
+            .getAsJsonObject("baseline")
+            .getAsJsonObject("resource");
+        assertEquals(
+            "9223372036854775807",
+            baseline.get("quantity")
+                .getAsString());
+        assertEquals(
+            !installed,
+            baseline.get("icon")
+                .isJsonNull());
+        JsonObject disabled = json(connection(path + "?icons=false"));
+        assertTrue(
+            disabled.get("icons")
+                .isJsonNull());
+        assertSame(grid, CoreEngine.GRID_IDENTITIES.getGrid(gridKey));
     }
 
     @Test
@@ -339,7 +475,7 @@ class IconDeliveryHttpTest {
         assertTrue(
             plain.has("icons") && plain.get("icons")
                 .isJsonNull());
-        assertEquals(0, normalized.get());
+        assertEquals(2, normalized.get());
         for (int poll = 0; poll < 2; poll++) {
             JsonObject response = syncedJson(path + "?icons=true");
             JsonObject icons = response.getAsJsonObject("icons");
@@ -386,9 +522,9 @@ class IconDeliveryHttpTest {
                     .get("icon")
                     .isJsonNull());
         }
-        assertEquals(1, normalized.get(), "Exact matches never normalize; warm fallback reuses its retained memo");
+        assertEquals(2, normalized.get(), "Descriptions normalize once independently of icon requests");
         syncedJson(path + "?icons=false");
-        assertEquals(1, normalized.get());
+        assertEquals(2, normalized.get());
         HttpURLConnection invalid = connection(path + "?icons=perhaps");
         assertEquals(400, invalid.getResponseCode());
         invalid.disconnect();
@@ -406,7 +542,7 @@ class IconDeliveryHttpTest {
                 return exact;
             }
 
-            public StableKey web$getIconBaseKey() {
+            public StableKey web$getBaseKey() {
                 calls.incrementAndGet();
                 return base;
             }
@@ -435,7 +571,7 @@ class IconDeliveryHttpTest {
                 }
 
                 @Override
-                public StableKey web$getIconBaseKey() {
+                public StableKey web$getBaseKey() {
                     throw new IllegalStateException("Unsupported icon");
                 }
             } };
@@ -444,12 +580,18 @@ class IconDeliveryHttpTest {
             false,
             AEControllerState.CONTROLLER_ONLINE) {
 
+            private StorageCapture storageCapture;
+
             @Override
             public IAECraftingGrid web$getCraftingGrid() {
                 return (IAECraftingGrid) Proxy.newProxyInstance(
                     getClass().getClassLoader(),
                     new Class<?>[] { IAECraftingGrid.class },
-                    (proxy, method, args) -> Collections.emptySet());
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "web$getCraftables", "web$getCPUs" -> Collections.emptySet();
+                        case "web$isCurrentlyCraftable" -> false;
+                        default -> throw new AssertionError(method.getName());
+                    });
             }
 
             @Override
@@ -458,7 +600,12 @@ class IconDeliveryHttpTest {
                     getClass().getClassLoader(),
                     new Class<?>[] { IAEStorageGrid.class },
                     (proxy, method, args) -> switch (method.getName()) {
-                        case "web$getStorageList" -> stacks();
+                        case "web$getStorageList", "web$getStorageSnapshot" -> stacks();
+                        case "web$getStorageCapture" -> storageCapture;
+                        case "web$setStorageCapture" -> {
+                            storageCapture = (StorageCapture) args[0];
+                            yield null;
+                        }
                         case "web$getInventory" -> Proxy.newProxyInstance(
                             getClass().getClassLoader(),
                             new Class<?>[] { pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem.class },
@@ -471,11 +618,7 @@ class IconDeliveryHttpTest {
         String gridPath = "/api/grids/" + TestGridFixtures.resolvedKey(grid);
         CompletableFuture<IAECraftingJob> future = new CompletableFuture<>();
         int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(
-                future,
-                ResourceSnapshot.capture(grid, resources[0], 37, CoreEngine.getIconPack()),
-                new CraftingOptions(false, false),
-                false);
+            .addJob(future, ResourceSnapshot.capture(grid, resources[0], 37), new CraftingOptions(false, false), false);
         String path = gridPath + "/crafting-plans/" + id;
         JsonObject pending = syncedJson(path + "?icons=true");
         assertFalse(
@@ -534,7 +677,7 @@ class IconDeliveryHttpTest {
                 .getAsJsonObject("finalOutput")
                 .get("icon")
                 .isJsonNull());
-        assertEquals(0, normalizations.get());
+        assertEquals(1, normalizations.get());
         for (int poll = 0; poll < 2; poll++) {
             JsonObject response = syncedJson(path + "?icons=true");
             assertEquals(
@@ -592,7 +735,7 @@ class IconDeliveryHttpTest {
             syncedJson(gridPath + "/items");
             System.gc();
         }
-        assertEquals(1, normalizations.get());
+        assertEquals(2, normalizations.get());
         JsonObject disabled = syncedJson(path + "?icons=false");
         assertTrue(
             disabled.get("icons")
@@ -651,9 +794,12 @@ class IconDeliveryHttpTest {
             (proxy, method, args) -> switch (method.getName()) {
                 case "web$getCPUs" -> Collections.singleton(cpu);
                 case "web$getCraftables" -> Collections.emptySet();
+                case "web$isCurrentlyCraftable" -> false;
                 default -> null;
             });
         TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(93, false, AEControllerState.CONTROLLER_ONLINE) {
+
+            private StorageCapture storageCapture;
 
             public IAECraftingGrid web$getCraftingGrid() {
                 return crafting;
@@ -663,7 +809,15 @@ class IconDeliveryHttpTest {
                 return (IAEStorageGrid) Proxy.newProxyInstance(
                     getClass().getClassLoader(),
                     new Class<?>[] { IAEStorageGrid.class },
-                    (proxy, method, args) -> stacks());
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "web$getStorageList", "web$getStorageSnapshot" -> stacks();
+                        case "web$getStorageCapture" -> storageCapture;
+                        case "web$setStorageCapture" -> {
+                            storageCapture = (StorageCapture) args[0];
+                            yield null;
+                        }
+                        default -> throw new AssertionError(method.getName());
+                    });
             }
         };
         AE2Controller.AE2Interface = new TestGridFixtures.TestAE(grid) {
@@ -678,7 +832,7 @@ class IconDeliveryHttpTest {
         assertTrue(
             overview.get("icons")
                 .isJsonNull());
-        assertEquals(0, normalizations.get());
+        assertEquals(1, normalizations.get());
         JsonObject enabledOverview = syncedJson(gridPath + "/cpus?icons=true");
         JsonObject product = enabledOverview.getAsJsonObject("data")
             .getAsJsonObject(cpuKey.toString());
@@ -696,7 +850,7 @@ class IconDeliveryHttpTest {
             enabledOverview.getAsJsonObject("icons")
                 .get("packId")
                 .getAsString());
-        assertEquals(0, normalizations.get());
+        assertEquals(1, normalizations.get());
         JsonObject plain = syncedJson(path);
         assertTrue(
             plain.has("icons") && plain.get("icons")
@@ -709,7 +863,7 @@ class IconDeliveryHttpTest {
                 .getAsJsonObject("finalOutput")
                 .get("icon")
                 .isJsonNull());
-        assertEquals(0, normalizations.get());
+        assertEquals(1, normalizations.get());
         for (int poll = 0; poll < 2; poll++) {
             JsonObject response = syncedJson(path + "?icons=true");
             JsonObject detail = response.getAsJsonObject("data");
@@ -771,7 +925,7 @@ class IconDeliveryHttpTest {
             syncedJson(gridPath + "/items?icons=true");
             System.gc();
         }
-        assertEquals(1, normalizations.get());
+        assertEquals(2, normalizations.get());
         resources.set(stacks());
         JsonObject outputOnly = syncedJson(path + "?icons=true").getAsJsonObject("data");
         assertEquals(
@@ -855,7 +1009,7 @@ class IconDeliveryHttpTest {
                 return TestGridFixtures.key(97);
             }
 
-            public StableKey web$getIconBaseKey() {
+            public StableKey web$getBaseKey() {
                 throw new IllegalStateException("Unsupported base identity");
             }
         });
@@ -918,7 +1072,10 @@ class IconDeliveryHttpTest {
                 .getAsJsonObject("finalOutput")
                 .get("quantity")
                 .getAsLong());
-        assertEquals(previousNormalizations, normalizations.get());
+        assertEquals(previousNormalizations + 1, normalizations.get());
+        var capturedDescription = AE2Controller.itemIdentities.describe(baseKey);
+        assertNotNull(capturedDescription);
+        assertEquals(baseKey, capturedDescription.baseKey());
     }
 
     private static IStackList stacks(IAEGenericStack... rows) {
@@ -985,13 +1142,14 @@ class IconDeliveryHttpTest {
                     assertFalse(unavailable.get(), "Native identity accessed after history publication");
                     assertSame(serverThread, Thread.currentThread(), "Native identity accessed from HTTP worker");
                     return switch (method.getName()) {
+                        case "web$supportsStableIdentity" -> true;
                         case "web$getKey" -> variant == 0 ? exact : TestGridFixtures.key(104 + variant);
                         case "web$copyIdentity" -> proxy;
                         case "web$getResourceType" -> ResourceType.ITEM;
                         case "web$getRegistryNamespace" -> "example";
                         case "web$getComponentCount", "web$getDamage" -> 0;
                         case "web$getRegistryPath", "web$getDisplayName" -> "product-" + variant;
-                        case "web$getIconBaseKey" -> {
+                        case "web$getBaseKey" -> {
                             normalizations.incrementAndGet();
                             if (variant == 2) throw new IllegalStateException("Unsupported base identity");
                             yield base;
@@ -1028,7 +1186,10 @@ class IconDeliveryHttpTest {
         output.set(exactOutput);
         AE2JobTracker.addJob(cpu, grid, false);
         AE2JobTracker.completeCrafting(grid, cpu);
-        assertEquals(2, normalizations.get(), "Only missing exact icons normalize, once during capture");
+        assertEquals(
+            3,
+            normalizations.get(),
+            "Every captured description retains its base variant independently of icons");
         unavailable.set(true);
         AE2Controller.itemIdentities.clear();
         String path = "/api/grids/" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "/crafting-history";
@@ -1051,7 +1212,7 @@ class IconDeliveryHttpTest {
             JsonObject row = entry.getAsJsonObject();
             JsonObject product = row.getAsJsonObject("finalOutput");
             assertFalse(row.has("icon"));
-            assertFalse(product.has("iconBaseKey"), "Detached icon identity is not part of the stack wire contract");
+            assertFalse(product.has("baseKey"), "Detached icon identity is not part of the stack wire contract");
             assertFalse(
                 product.get("itemKey")
                     .isJsonNull(),
@@ -1134,7 +1295,7 @@ class IconDeliveryHttpTest {
                 }
             }
         }
-        assertEquals(2, normalizations.get());
+        assertEquals(3, normalizations.get());
     }
 
     @SuppressWarnings("BusyWait")

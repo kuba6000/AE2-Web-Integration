@@ -3,7 +3,7 @@ import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
 import type { Notify } from './notifications.js';
 
-type Edited = { name: boolean; isTracked: boolean };
+type Edited = Record<keyof GridSettings, boolean>;
 export type SettingsState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     current: GridSettings | null;
@@ -30,6 +30,10 @@ export function networkNameError(name: string) {
     return controls || name.trim().length > 128 ? 'networkNameInvalid' : null;
 }
 
+export function stockIntervalError(seconds: number) {
+    return Number.isInteger(seconds) && seconds >= 1 && seconds <= 86400 ? null : 'stockIntervalInvalid';
+}
+
 /** Field drafts and in-flight saves belong to their source grid across route changes. */
 export function createGridSettings(
     api: Api,
@@ -37,8 +41,20 @@ export function createGridSettings(
     updated: (gridKey: string, settings: GridSettings) => void,
     notify: Notify
 ) {
-    const empty = (): GridSettings => ({ name: '', isTracked: false });
-    const unedited = (): Edited => ({ name: false, isTracked: false });
+    const empty = (): GridSettings => ({
+        name: '',
+        isTracked: false,
+        isStorageTracked: false,
+        isFlowTracked: false,
+        stockSampleIntervalSeconds: 300
+    });
+    const unedited = (): Edited => ({
+        name: false,
+        isTracked: false,
+        isStorageTracked: false,
+        isFlowTracked: false,
+        stockSampleIntervalSeconds: false
+    });
     const state: SettingsState = {
         status: 'idle',
         current: null,
@@ -84,7 +100,7 @@ export function createGridSettings(
     return {
         state,
         route(next: Route) {
-            if (route.view === 'settings' && state.current && (state.edited.name || state.edited.isTracked))
+            if (route.view === 'settings' && state.current && Object.values(state.edited).some(Boolean))
                 drafts.set(route.gridKey, { draft: { ...state.draft }, edited: { ...state.edited } });
             generation++;
             request?.abort();
@@ -101,7 +117,11 @@ export function createGridSettings(
                     ? { ...draft.edited }
                     : {
                           name: !!previous?.uncertain && previous.desired.name !== undefined,
-                          isTracked: !!previous?.uncertain && previous.desired.isTracked !== undefined
+                          isTracked: !!previous?.uncertain && previous.desired.isTracked !== undefined,
+                          isStorageTracked: !!previous?.uncertain && previous.desired.isStorageTracked !== undefined,
+                          isFlowTracked: !!previous?.uncertain && previous.desired.isFlowTracked !== undefined,
+                          stockSampleIntervalSeconds:
+                              !!previous?.uncertain && previous.desired.stockSampleIntervalSeconds !== undefined
                       },
                 sources: {},
                 saving: !!previous?.pending,
@@ -123,6 +143,10 @@ export function createGridSettings(
                 state.current = data;
                 if (!state.edited.name) state.draft.name = data.name;
                 if (!state.edited.isTracked) state.draft.isTracked = data.isTracked;
+                if (!state.edited.isStorageTracked) state.draft.isStorageTracked = data.isStorageTracked;
+                if (!state.edited.isFlowTracked) state.draft.isFlowTracked = data.isFlowTracked;
+                if (!state.edited.stockSampleIntervalSeconds)
+                    state.draft.stockSampleIntervalSeconds = data.stockSampleIntervalSeconds;
                 state.sources = sourcesForRoute;
                 state.status = 'ready';
                 state.error = null;
@@ -147,9 +171,10 @@ export function createGridSettings(
         },
         async save() {
             if (route.view !== 'settings' || state.saving || state.status !== 'ready' || !state.current) return;
-            const invalidName = networkNameError(state.draft.name);
-            if (invalidName) {
-                state.error = invalidName;
+            const invalidSetting =
+                networkNameError(state.draft.name) || stockIntervalError(state.draft.stockSampleIntervalSeconds);
+            if (invalidSetting) {
+                state.error = invalidSetting;
                 changed();
                 return;
             }
@@ -160,6 +185,18 @@ export function createGridSettings(
                 desired.isTracked = state.draft.isTracked;
             if (state.draft.name.trim() !== state.current.name || uncertain?.name !== undefined)
                 desired.name = state.draft.name.trim();
+            if (
+                state.draft.isStorageTracked !== state.current.isStorageTracked ||
+                uncertain?.isStorageTracked !== undefined
+            )
+                desired.isStorageTracked = state.draft.isStorageTracked;
+            if (state.draft.isFlowTracked !== state.current.isFlowTracked || uncertain?.isFlowTracked !== undefined)
+                desired.isFlowTracked = state.draft.isFlowTracked;
+            if (
+                state.draft.stockSampleIntervalSeconds !== state.current.stockSampleIntervalSeconds ||
+                uncertain?.stockSampleIntervalSeconds !== undefined
+            )
+                desired.stockSampleIntervalSeconds = state.draft.stockSampleIntervalSeconds;
             if (!Object.keys(desired).length) return;
             const version = ++generation;
             const operation: SaveOperation = { pending: true, desired, uncertain: state.uncertain };
@@ -214,6 +251,10 @@ export function createGridSettings(
                     Object.assign(state.draft, operation.desired);
                     if (operation.desired.name !== undefined) state.edited.name = true;
                     if (operation.desired.isTracked !== undefined) state.edited.isTracked = true;
+                    if (operation.desired.isStorageTracked !== undefined) state.edited.isStorageTracked = true;
+                    if (operation.desired.isFlowTracked !== undefined) state.edited.isFlowTracked = true;
+                    if (operation.desired.stockSampleIntervalSeconds !== undefined)
+                        state.edited.stockSampleIntervalSeconds = true;
                 }
             }
             changed();

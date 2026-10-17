@@ -7,6 +7,8 @@ import java.net.HttpURLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -15,6 +17,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -32,6 +36,138 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class ItemIdentityRequestTest extends GridTestScope {
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void missingNativeIdentityStillDisplaysTerminalAndCapturedResources(boolean supportsType) {
+        Resource metadata = new Resource("unkeyed", 21, true);
+        IAEKey resource = (IAEKey) Proxy
+            .newProxyInstance(IAEKey.class.getClassLoader(), new Class<?>[] { IAEKey.class }, (proxy, method, args) -> {
+                if (method.getName()
+                    .equals("web$supportsStableIdentity")) return supportsType;
+                if (method.getName()
+                    .equals("web$getKey")) return null;
+                if (method.getName()
+                    .equals("web$copyIdentity")) {
+                    assertTrue(supportsType, "Unsupported types must remain displayable without copying");
+                    return proxy;
+                }
+                return method.invoke(metadata, args);
+            });
+        Grid grid = new Grid(910015);
+        grid.rows.add(new IAEGenericStack() {
+
+            public @NotNull IAEKey web$what() {
+                return resource;
+            }
+
+            public long web$amount() {
+                return 21;
+            }
+        });
+        JsonObject row = run(new GetItems(), grid, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            "unkeyed",
+            row.get("displayName")
+                .getAsString());
+        assertEquals(
+            21,
+            row.get("quantity")
+                .getAsLong());
+        assertTrue(
+            row.get("itemKey")
+                .isJsonNull());
+        assertTrue(
+            row.get("icon")
+                .isJsonNull());
+        var captured = pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot.capture(grid, resource, 21);
+        assertNull(
+            captured.description()
+                .itemKey());
+        assertNull(
+            captured.description()
+                .baseKey());
+        assertEquals(
+            "unkeyed",
+            captured.description()
+                .displayName());
+        assertEquals(21, captured.quantity());
+    }
+
+    @Test
+    void itemSnapshotIsDiscardedWhenItsHttpLifecycleEndsBeforeDelivery() {
+        Grid grid = new Grid(910013, new Resource("iron", Long.MAX_VALUE, true));
+        GetItems request = new GetItems();
+        IAE ae = new TestGridFixtures.TestAE(grid);
+        assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + TestGridFixtures.resolvedKey(grid))));
+        request.runOnServerThread(ae);
+        AE2Controller.stopHTTPServer();
+        assertEquals(
+            HttpURLConnection.HTTP_UNAVAILABLE,
+            request.getResponse()
+                .httpStatus());
+        assertEquals(
+            "SERVER_STOPPING",
+            new JsonParser().parse(request.getJSON())
+                .getAsJsonObject()
+                .get("status")
+                .getAsString());
+    }
+
+    @Test
+    void itemSnapshotRetainsExactCapturedValuesAfterNativeStorageChanges() throws Exception {
+        Thread owner = Thread.currentThread();
+        Resource resource = new Resource("Żelazo", Long.MAX_VALUE, true) {
+
+            @Override
+            public long web$amount() {
+                assertSame(owner, Thread.currentThread());
+                return super.web$amount();
+            }
+
+            @Override
+            public @NotNull String web$getDisplayName() {
+                assertSame(owner, Thread.currentThread());
+                return super.web$getDisplayName();
+            }
+        };
+        Grid grid = new Grid(910014, resource);
+        GetItems request = new GetItems();
+        IAE ae = new TestGridFixtures.TestAE(grid);
+        assertTrue(request.init(TestGridFixtures.context(-1, "grid=" + TestGridFixtures.resolvedKey(grid))));
+        request.runOnServerThread(ae);
+        grid.rows.clear();
+        ExecutorService http = Executors.newSingleThreadExecutor();
+        try {
+            String json = http.submit(request::getJSON)
+                .get(1, TimeUnit.SECONDS);
+            JsonObject row = new JsonParser().parse(json)
+                .getAsJsonObject()
+                .getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject();
+            assertEquals(
+                Long.MAX_VALUE,
+                row.get("quantity")
+                    .getAsLong());
+            assertEquals(
+                "Żelazo",
+                row.get("displayName")
+                    .getAsString());
+            assertEquals(
+                resource.web$getKey()
+                    .toString(),
+                row.get("itemKey")
+                    .getAsString());
+            assertTrue(
+                row.get("craftable")
+                    .getAsBoolean());
+        } finally {
+            http.shutdownNow();
+        }
+    }
 
     @Test
     void listingExposesTheResourceTypeForTerminalFiltering() {
@@ -569,10 +705,21 @@ class ItemIdentityRequestTest extends GridTestScope {
 
     static final class Grid extends TestGridFixtures.TestGrid implements IAECraftingGrid, IAEStorageGrid {
 
+        private pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture storageCapture;
+
+        public pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture web$getStorageCapture() {
+            return storageCapture;
+        }
+
+        public void web$setStorageCapture(pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture capture) {
+            storageCapture = capture;
+        }
+
         final List<IAEGenericStack> rows;
         Set<IAEKey> recipes = Collections.emptySet();
         boolean currentCraftable = true;
         int jobs;
+        int storageReads;
         long orderedAmount;
         IAEKey ordered;
 
@@ -635,6 +782,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         }
 
         public IStackList web$getStorageList() {
+            storageReads++;
             return new IStackList() {
 
                 public long web$getAmount(IAEKey key) {

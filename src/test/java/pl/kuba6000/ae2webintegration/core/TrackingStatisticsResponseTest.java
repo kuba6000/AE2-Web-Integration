@@ -61,9 +61,11 @@ class TrackingStatisticsResponseTest extends GridTestScope {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(GRID);
         OutputSnapshotTest.Resource key = new OutputSnapshotTest.Resource();
         key.resourceType = resourceType;
-        ResourceSnapshot output = ResourceSnapshot.capture(grid, new OutputSnapshotTest.Stack(key, 10), null);
+        ResourceSnapshot output = ResourceSnapshot.capture(grid, new OutputSnapshotTest.Stack(key, 10));
         assertNotNull(output);
-        assertNotNull(output.itemKey());
+        assertNotNull(
+            output.description()
+                .itemKey());
         AE2JobTracker.JobTrackingInfo info = new AE2JobTracker.JobTrackingInfo(output);
         // Completed measurement records, including legitimate sub-millisecond intervals rounded to zero.
         info.timeStarted = 1000;
@@ -71,7 +73,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
         info.isDone = true;
         info.timeSpentOn.put(key, spent);
         info.craftedTotal.put(key, crafted);
-        info.resourceSnapshots.put(key, ResourceSnapshot.capture(grid, key, crafted, null));
+        info.resourceSnapshots.put(key, ResourceSnapshot.capture(grid, key, crafted));
         info.itemShare.put(key, new ArrayList<>(Collections.singletonList(Pair.of(1000L, 1000L + spent))));
         StableKey actualKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
         GridData.getOrCreate(actualKey).trackingInfo.trackingInfos.put(1, info);
@@ -122,7 +124,8 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 .getAsInt());
         assertFalse(item.has("itemId"));
         assertEquals(
-            output.itemKey()
+            output.description()
+                .itemKey()
                 .toString(),
             item.get("itemKey")
                 .getAsString());

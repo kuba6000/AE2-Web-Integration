@@ -1,8 +1,15 @@
-import type { ThemeContext, ThemeApplication, ThemeState } from '../../app/theme-api.js';
+import type { ThemeContext, ThemeApplication, ThemeState, ThemeSettings } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
 import { element } from './dom.js';
 
 export type TerminalDisplay = 'names' | 'both' | 'icons';
+
+const PAGE_SIZES = [50, 100, 250, 500, 1000, 'all'] as const;
+
+export function terminalPageSize(settings: ThemeSettings) {
+    const saved = settings.get('terminalPageSize');
+    return PAGE_SIZES.find((size) => size === saved) ?? 500;
+}
 
 export function createWebSettings(
     root: HTMLElement,
@@ -62,10 +69,15 @@ export function createWebSettings(
                     </label>
                     <p class="hint" id="icon-availability" role="status"></p>
                 </div>
+                <label>
+                    <span data-theme-text="resourcesPerPage"></span>
+                    <select id="terminal-page-size"></select>
+                </label>
             </section>
         </div>`;
     const controls = {
         terminalDisplay: root.querySelector<HTMLSelectElement>('#terminal-display')!,
+        pageSize: root.querySelector<HTMLSelectElement>('#terminal-page-size')!,
         iconAvailability: root.querySelector<HTMLParagraphElement>('#icon-availability')!,
         language: root.querySelector<HTMLSelectElement>('#language')!,
         appearance: root.querySelector<HTMLSelectElement>('#appearance')!,
@@ -78,6 +90,16 @@ export function createWebSettings(
         option.value = String(count);
         controls.resourceColumns.append(option);
     }
+    for (const size of PAGE_SIZES) {
+        const option = element('option', String(size));
+        option.value = String(size);
+        if (size === 'all') option.dataset.themeText = 'allResources';
+        controls.pageSize.append(option);
+    }
+    controls.pageSize.addEventListener('change', () => {
+        const selected = PAGE_SIZES.find((size) => String(size) === controls.pageSize.value);
+        if (selected !== undefined) settings.set('terminalPageSize', selected);
+    });
     const appearances = ['light', 'dark', 'system'];
     const savedAppearance = settings.get('appearance');
     let appearance =
@@ -160,6 +182,7 @@ export function createWebSettings(
         languageSelect.value = language;
         controls.appearance.value = appearance;
         controls.font.value = font;
+        controls.pageSize.value = String(terminalPageSize(settings));
         document.documentElement.dataset.font = font;
 
         autoRefresh.checked = state.preferences.autoRefresh;

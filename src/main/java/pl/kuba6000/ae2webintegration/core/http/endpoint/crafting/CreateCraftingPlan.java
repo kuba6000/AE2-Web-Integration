@@ -11,7 +11,6 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
-import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
@@ -155,8 +154,7 @@ public final class CreateCraftingPlan extends ISyncedRequest {
             return;
         }
         CraftingOptions options = new CraftingOptions(input.lightMode(), input.ignoreMissing());
-        ResourceSnapshot finalOutput = ResourceSnapshot
-            .capture(itemKey, input.quantity(), input.itemKey(), CoreEngine.getIconPack());
+        ResourceSnapshot finalOutput = ResourceSnapshot.capture(itemKey, input.quantity(), input.itemKey());
         Future<IAECraftingJob> job = craftingGrid.web$beginCraftingJob(grid, itemKey, input.quantity(), options);
         int jobId = gridData.addJob(job, finalOutput, options, input.autoStart());
         respond(HttpURLConnection.HTTP_ACCEPTED, new Response(ApiStatus.OK, new PlanCreated(jobId)));
