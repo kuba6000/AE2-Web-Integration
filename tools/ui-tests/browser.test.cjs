@@ -10979,6 +10979,200 @@ test('live additions append and removed resources remain inert zero slots until 
     assert.deepEqual(await names(), ['Aaron', 'Bravo', 'Alpha']);
 });
 
+test('explicit null unkeyed payloads retain initial anonymous rows through keyed recent and ordering updates', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.liveView = { generation: '1', revision: '1' };
+    options.itemsA = [
+        ...Array.from({ length: 600 }, (_, index) => ({
+            ...iron,
+            itemKey: `resource-${index}`,
+            displayName: `Resource ${String(index).padStart(3, '0')}`,
+            quantity: index + 100
+        })),
+        { ...iron, itemKey: null, displayName: 'Anonymous resource', quantity: 1, craftable: false }
+    ];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#refresh .live-icon').waitFor();
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    const anonymous = page.locator('#items button').filter({ hasText: 'Anonymous resource' });
+    await anonymous.evaluate((button) => {
+        window.initialAnonymous = button;
+    });
+    await anonymous.focus();
+    const send = (revision, data) =>
+        options.itemStreams[0].write(
+            `event: delta\ndata: ${JSON.stringify({
+                view: { generation: '1', revision },
+                definitions: [],
+                removed: [],
+                updates: [],
+                unkeyed: null,
+                ...data
+            })}\n\n`
+        );
+    send('2', { updates: [{ itemKey: 'resource-0', quantity: 900, craftable: true }] });
+    await page.locator('#items button').filter({ hasText: 'Resource 000' }).getByText('900', { exact: true }).waitFor();
+    assert.equal(
+        await anonymous.evaluate((button) => button === window.initialAnonymous && button === document.activeElement),
+        true
+    );
+    await page.locator('#refresh').focus();
+    const previousEvent = await page.getByRole('tooltip').locator('time').getAttribute('datetime');
+    await page.clock.fastForward(1000);
+    send('3', {
+        recent: {
+            flowWindowMillis: 120000,
+            stockWindowMillis: 3600000,
+            bucketMillis: 5000,
+            observedAt: Date.now(),
+            flowObservedAt: Date.now(),
+            stockObservedAt: null,
+            flowSince: Date.now() - 120000,
+            stockSince: null,
+            flowComplete: true,
+            stockComplete: false,
+            resources: {}
+        }
+    });
+    await page.waitForFunction(
+        (previous) => document.querySelector('#resource-tooltip time')?.dateTime !== previous,
+        previousEvent
+    );
+    assert.equal(await anonymous.evaluate((button) => button === window.initialAnonymous), true);
+    assert.equal(await page.locator('#items button').count(), 500);
+    await page.clock.fastForward(30000);
+    assert.equal(await anonymous.evaluate((button) => button === window.initialAnonymous), true);
+    assert.equal(await page.locator('#items strong').first().textContent(), 'Anonymous resource');
+    send('4', { unkeyed: [] });
+    await anonymous.waitFor({ state: 'detached' });
+    assert.equal(await page.locator('#items button').count(), 500);
+});
+
+test('replacement unkeyed payloads keep occupied anonymous positions on a paginated live inventory', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.liveView = { generation: '1', revision: '1' };
+    const unknown = (displayName, quantity) => ({ ...iron, itemKey: null, displayName, quantity, craftable: false });
+    options.itemsA = [
+        ...Array.from({ length: 600 }, (_, index) => ({
+            ...iron,
+            itemKey: `resource-${index}`,
+            displayName: `Resource ${String(index).padStart(3, '0')}`,
+            quantity: index + 100
+        })),
+        unknown('Unknown first', 99),
+        unknown('Unknown middle', 350)
+    ];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#refresh .live-icon').waitFor();
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    const names = () => page.locator('#items strong').allTextContents();
+    const original = await names();
+    assert.equal(original.length, 500);
+    const firstSlot = original.indexOf('Unknown first');
+    const middleSlot = original.indexOf('Unknown middle');
+    assert.ok(firstSlot >= 0 && middleSlot > firstSlot);
+    const oldUnknown = page.locator('#items button').filter({ hasText: 'Unknown first' });
+    await oldUnknown.evaluate((button) => {
+        window.previousAnonymous = button;
+    });
+    await oldUnknown.focus();
+    const send = (revision, data) =>
+        options.itemStreams[0].write(
+            `event: delta\ndata: ${JSON.stringify({
+                view: { generation: '1', revision },
+                definitions: [],
+                removed: [],
+                updates: [],
+                ...data
+            })}\n\n`
+        );
+    send('2', {
+        updates: [{ itemKey: 'resource-0', quantity: 777, craftable: true }],
+        unkeyed: [unknown('Replacement first', 900), unknown('Replacement middle', 901)]
+    });
+    await page.locator('#items button').filter({ hasText: 'Resource 000' }).getByText('777', { exact: true }).waitFor();
+    const replaced = await names();
+    assert.equal(
+        replaced[firstSlot],
+        'Replacement first',
+        'A fresh anonymous payload must not move visible unknown resources beyond the current page'
+    );
+    assert.equal(replaced[middleSlot], 'Replacement middle');
+    assert.deepEqual(
+        replaced.filter((name) => name.startsWith('Resource ')),
+        original.filter((name) => name.startsWith('Resource '))
+    );
+    assert.equal(
+        await page.evaluate(() => window.previousAnonymous.isConnected),
+        false,
+        'A replacement is a fresh resource, not an invented identity match'
+    );
+    assert.equal(await page.getByRole('tooltip').isVisible(), false);
+    send('3', { updates: [{ itemKey: 'resource-1', quantity: 778, craftable: true }] });
+    await page.locator('#items button').filter({ hasText: 'Resource 001' }).getByText('778', { exact: true }).waitFor();
+    assert.deepEqual(await names(), replaced);
+    await page.locator('#refresh').focus();
+    const eventTime = await page.getByRole('tooltip').locator('time').getAttribute('datetime');
+    await page.clock.fastForward(1000);
+    send('4', {
+        recent: {
+            flowWindowMillis: 120000,
+            stockWindowMillis: 3600000,
+            bucketMillis: 5000,
+            observedAt: Date.now(),
+            flowObservedAt: Date.now(),
+            stockObservedAt: null,
+            flowSince: Date.now() - 120000,
+            stockSince: null,
+            flowComplete: true,
+            stockComplete: false,
+            resources: {}
+        }
+    });
+    await page.waitForFunction(
+        (previous) => document.querySelector('#resource-tooltip time')?.dateTime !== previous,
+        eventTime
+    );
+    assert.deepEqual(await names(), replaced, 'A recent-only event keeps anonymous resources on the same page');
+    send('5', { unkeyed: [unknown('Only unknown', 902)] });
+    await page.locator('#items button').filter({ hasText: 'Only unknown' }).waitFor();
+    assert.equal((await names())[firstSlot], 'Only unknown');
+    assert.equal(
+        await page
+            .locator('#items strong')
+            .filter({ hasText: /Replacement/ })
+            .count(),
+        0
+    );
+    send('6', { unkeyed: [unknown('Unknown one', 903), unknown('Unknown two', 904), unknown('Unknown three', 905)] });
+    await page.locator('#items button').filter({ hasText: 'Unknown one' }).waitFor();
+    assert.equal((await names())[firstSlot], 'Unknown one');
+    assert.equal(
+        await page
+            .locator('#items strong')
+            .filter({ hasText: /Unknown (two|three)/ })
+            .count(),
+        0
+    );
+    await page.getByRole('button', { name: 'Next page', exact: true }).click();
+    assert.deepEqual(
+        (await names()).slice(-2),
+        ['Unknown two', 'Unknown three'],
+        'Only surplus anonymous resources append to the held list'
+    );
+    send('7', { unkeyed: [] });
+    await page.locator('#items strong').filter({ hasText: 'Unknown two' }).waitFor({ state: 'detached' });
+    assert.equal(await page.locator('#items button').count(), 100);
+    await page.getByRole('button', { name: 'Previous page', exact: true }).click();
+    assert.equal(
+        await page
+            .locator('#items strong')
+            .filter({ hasText: /Unknown/ })
+            .count(),
+        0
+    );
+});
+
 test('unkeyed rows retain only object identity while explicit controls immediately recompute the held view', async (t) => {
     const { page, options, base } = await fixture(t);
     options.liveView = { generation: '1', revision: '1' };
@@ -11020,7 +11214,7 @@ test('unkeyed rows retain only object identity while explicit controls immediate
         })}\n\n`
     );
     await page.locator('#items button').filter({ hasText: 'Replacement' }).waitFor();
-    assert.deepEqual(await names(), ['Alpha', 'Bravo', 'Replacement']);
+    assert.deepEqual(await names(), ['Alpha', 'Replacement', 'Bravo']);
     await page.getByRole('button', { name: 'Availability: All', exact: true }).click();
     assert.deepEqual(
         await names(),

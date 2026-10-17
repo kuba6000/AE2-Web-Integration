@@ -11,12 +11,13 @@ test('recent-only events keep the inventory snapshot reusable by themes while pu
     const { createTerminal } = await import(moduleUrl);
     let events;
     const item = { itemKey: 'iron', displayName: 'Iron', quantity: 12, craftable: false };
+    const anonymous = { itemKey: null, displayName: 'Unknown', quantity: 5, craftable: false };
     const terminal = createTerminal(
         {
             grids: async () => [{ key: 'grid', name: 'Grid' }],
             iconPack: async () => ({ available: false, packId: null }),
             items: async () => ({
-                data: [item],
+                data: [item, anonymous],
                 icons: null,
                 view: { generation: '1', revision: '1' },
                 subscription: 'session'
@@ -52,25 +53,42 @@ test('recent-only events keep the inventory snapshot reusable by themes while pu
         definitions: [],
         updates: [],
         removed: [],
+        unkeyed: null,
         recent: { resources: { iron: { input: '7', output: '3', stockChange: null } } }
     });
     assert.equal(observed.recent.resources.iron.input, '7');
     assert.equal(observed.items, inventory, 'Tracking-only events do not invalidate a theme inventory cache');
+    assert.equal(observed.items[1], anonymous);
     assert.equal(terminal.state.itemSnapshotRevision, snapshotRevision);
     events.delta({
         view: { generation: '1', revision: '3' },
         definitions: [],
         removed: [],
+        unkeyed: null,
         updates: [{ itemKey: 'iron', quantity: 14, craftable: false }]
     });
     assert.notEqual(observed.items, inventory);
     assert.equal(observed.items[0].quantity, 14);
+    assert.equal(
+        observed.items[1],
+        anonymous,
+        'An explicit null unkeyed payload retains the original anonymous objects'
+    );
     assert.equal(inventory[0].quantity, 12, 'Previously delivered inventory snapshots retain their quantities');
     assert.equal(
         terminal.state.itemSnapshotRevision,
         snapshotRevision,
         'Live stock changes retain full-snapshot provenance'
     );
+    events.delta({
+        view: { generation: '1', revision: '4' },
+        definitions: [],
+        removed: [],
+        updates: [{ itemKey: 'iron', quantity: 15, craftable: false }]
+    });
+    assert.equal(observed.items[1], anonymous, 'An omitted unkeyed payload also retains anonymous objects');
+    events.delta({ view: { generation: '1', revision: '5' }, definitions: [], removed: [], updates: [], unkeyed: [] });
+    assert.equal(observed.items.length, 1, 'An explicit empty payload removes all anonymous resources');
     await terminal.refresh();
     assert.equal(terminal.state.itemSnapshotRevision, snapshotRevision + 1);
 });

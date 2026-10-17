@@ -248,19 +248,28 @@ export function createResourceTerminal(
             } else {
                 const current = new Map(state.items.map((item) => [item.itemKey ?? item, item]));
                 const existing = new Set(allFiltered.map((item) => item.itemKey ?? item));
-                allFiltered = allFiltered.flatMap((item) => {
-                    const latest = current.get(item.itemKey ?? item);
-                    if (item.itemKey && latest !== item) changedOrderKeys.add(item.itemKey);
-                    if (latest) return [latest];
-                    if (!item.itemKey) return [];
-                    return [item.quantity === 0 && !item.craftable ? item : { ...item, quantity: 0, craftable: false }];
-                });
                 const added = filterResources(
                     state.items.filter((item) => !existing.has(item.itemKey ?? item)),
                     options
                 );
+                const anonymous = added.filter((item) => !item.itemKey);
+                let anonymousSlot = 0;
+                allFiltered = allFiltered.flatMap((item) => {
+                    const latest = current.get(item.itemKey ?? item);
+                    if (item.itemKey && latest !== item) changedOrderKeys.add(item.itemKey);
+                    if (latest) return [latest];
+                    if (!item.itemKey) {
+                        // Refill anonymous positions without claiming that replacement resources share identity.
+                        const replacement = anonymous[anonymousSlot++];
+                        if (!replacement) return [];
+                        existing.add(replacement);
+                        return [replacement];
+                    }
+                    return [item.quantity === 0 && !item.craftable ? item : { ...item, quantity: 0, craftable: false }];
+                });
                 for (const item of added) if (item.itemKey) changedOrderKeys.add(item.itemKey);
-                if (added.length) allFiltered = [...allFiltered, ...added];
+                if (added.length)
+                    allFiltered = [...allFiltered, ...added.filter((item) => !existing.has(item.itemKey ?? item))];
             }
             listInput = { items: state.items, signature, snapshot: state.itemSnapshotRevision };
             renderPage();
