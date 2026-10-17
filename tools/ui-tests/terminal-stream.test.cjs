@@ -130,3 +130,156 @@ test('terminal live status rejects closed stream callbacks and disabling automat
     assert.equal(observed.length, emitted);
     assert.equal(terminal.state.stream, null);
 });
+
+test('terminal reconnect retains its snapshot and reports only failed recovery until a confirmed stream returns', async (t) => {
+    const originalDocument = global.document;
+    global.document = new EventTarget();
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { createTerminal } = await import(moduleUrl);
+    const connections = [],
+        errors = [];
+    const item = { itemKey: 'iron', displayName: 'Iron', quantity: 12, craftable: false };
+    const icons = { packId: 'pack', pages: [] };
+    const recent = {
+        flowWindowMillis: 120000,
+        stockWindowMillis: 3600000,
+        bucketMillis: 5000,
+        observedAt: 300000,
+        flowObservedAt: 300000,
+        stockObservedAt: 300000,
+        flowSince: 180000,
+        stockSince: 0,
+        flowComplete: true,
+        stockComplete: true,
+        resources: { iron: { input: '12', output: '0', stockChange: '12' } }
+    };
+    let failure,
+        gridFailure,
+        reads = 0;
+    const terminal = createTerminal(
+        {
+            grids: async () => {
+                if (gridFailure) throw { status: gridFailure };
+                return [{ key: 'grid', name: 'Grid' }];
+            },
+            iconPack: async () => ({ available: false, packId: null }),
+            resourceHistory: async () => ({ data: null }),
+            items: async () => {
+                reads++;
+                if (failure) throw { status: failure };
+                return {
+                    data: [item],
+                    icons,
+                    recent,
+                    view: { generation: '1', revision: '1' },
+                    subscription: 'session'
+                };
+            },
+            itemEvents: (_key, _subscription, _icons, handlers) => {
+                connections.push(handlers);
+                return () => {};
+            }
+        },
+        {
+            values: { autoRefresh: true },
+            set(name, value) {
+                this.values[name] = value;
+            }
+        },
+        { enabled() {}, dispose() {} },
+        {}
+    );
+    t.after(() => {
+        terminal.dispose();
+        global.document = originalDocument;
+    });
+    terminal.subscribe((state) => errors.push(state.itemError));
+    terminal.route({ view: 'items', gridKey: 'grid' });
+    await terminal.refresh();
+    connections.at(-1).ready();
+    terminal.select(item);
+    const selected = terminal.state.selected;
+    connections.at(-1).error();
+    assert.equal(
+        terminal.state.itemError,
+        null,
+        'A previously confirmed stream may disconnect without a visible error'
+    );
+    assert.equal(terminal.state.stream.status, 'connecting');
+    const beforeRetry = reads;
+    await terminal.refresh({ automatic: true });
+    assert.equal(reads, beforeRetry, 'Discovery does not bypass the reconnect backoff');
+    gridFailure = 'NETWORK_ERROR';
+    await terminal.refresh({ automatic: true });
+    assert.equal(
+        terminal.state.itemError,
+        null,
+        'A background discovery failure cannot preempt the first reconnect attempt'
+    );
+    gridFailure = undefined;
+    failure = 'NETWORK_ERROR';
+    t.mock.timers.tick(2000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(terminal.state.itemError, 'NETWORK_ERROR');
+    assert.equal(terminal.state.itemStatus, 'ready');
+    assert.deepEqual(terminal.state.items, [item]);
+    assert.equal(terminal.state.itemIcons, icons);
+    assert.equal(terminal.state.recent, recent);
+    assert.equal(terminal.state.selected, selected);
+    gridFailure = 'NETWORK_ERROR';
+    await terminal.refresh({ automatic: true });
+    assert.deepEqual(
+        terminal.state.items,
+        [item],
+        'Offline discovery during recovery does not discard the cached view'
+    );
+    assert.equal(terminal.state.selected, selected);
+    gridFailure = undefined;
+    failure = undefined;
+    errors.length = 0;
+    await terminal.refresh({ automatic: true });
+    assert.ok(
+        errors.every((error) => error === 'NETWORK_ERROR'),
+        'HTTP success alone does not claim SSE recovery'
+    );
+    connections.at(-1).error();
+    assert.equal(
+        terminal.state.itemError,
+        'NETWORK_ERROR',
+        'A replacement connection that never becomes ready is a failure'
+    );
+    t.mock.timers.tick(2000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(terminal.state.itemError, 'NETWORK_ERROR');
+    connections.at(-1).ready();
+    assert.equal(terminal.state.itemError, null);
+    assert.equal(terminal.state.stream.status, 'live');
+    await terminal.refresh();
+    connections.at(-1).error();
+    assert.equal(
+        terminal.state.itemError,
+        'NETWORK_ERROR',
+        'An initial/manual attach failure is not a confirmed disconnect'
+    );
+    failure = 'NO_PERMISSIONS';
+    t.mock.timers.tick(2000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(terminal.state.itemStatus, 'error');
+    assert.equal(terminal.state.selected, null);
+    assert.equal(terminal.state.items.length, 0);
+    assert.equal(terminal.state.recent, null);
+    assert.equal(terminal.state.stream, null);
+    failure = undefined;
+    await terminal.refresh();
+    connections.at(-1).ready();
+    connections.at(-1).error();
+    gridFailure = 'UNAUTHORIZED';
+    await terminal.refresh({ automatic: true });
+    assert.equal(terminal.state.gridError, 'UNAUTHORIZED');
+    assert.equal(terminal.state.items.length, 0, 'Access loss still clears private data during backoff');
+    assert.equal(terminal.state.stream, null);
+    const readsBeforeRevokedRetry = reads;
+    t.mock.timers.tick(2000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(reads, readsBeforeRevokedRetry, 'Revocation cancels the pending reconnect');
+});

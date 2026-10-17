@@ -173,12 +173,24 @@ export function createTerminal(
             preferences.set('selectedGridKey', state.selectedGridKey);
     }
 
+    function isTransientFailure(status: string) {
+        return [
+            'NETWORK_ERROR',
+            'INTERNAL_ERROR',
+            'SERVER_BUSY',
+            'SERVER_STOPPING',
+            'TIMEOUT',
+            'TOO_MANY_REQUESTS'
+        ].includes(status);
+    }
+
     function stopStream() {
         streamSerial++;
         state.stream = null;
         closeStream?.();
         closeStream = undefined;
         clearTimeout(reconnect);
+        reconnect = undefined;
         liveView = undefined;
         subscription = undefined;
     }
@@ -204,6 +216,7 @@ export function createTerminal(
                     return;
                 }
                 state.stream = { status: 'live', lastEventAt: Date.now() };
+                state.itemError = null;
                 if (BigInt(delta.view.revision) <= BigInt(liveView.revision)) {
                     notify();
                     return;
@@ -263,11 +276,12 @@ export function createTerminal(
             },
             error() {
                 if (!current()) return;
-                state.itemError = 'NETWORK_ERROR';
+                if (state.stream?.status !== 'live') state.itemError = 'NETWORK_ERROR';
                 stopStream();
                 state.stream = { status: 'connecting', lastEventAt: null };
                 notify();
                 reconnect = setTimeout(() => {
+                    reconnect = undefined;
                     if (!disposed && version === serial) void loadItems();
                 }, 2000);
             }
@@ -298,14 +312,16 @@ export function createTerminal(
             notify();
             return;
         }
+        const recovering = state.stream?.status === 'connecting' && state.itemStatus === 'ready';
         stopStream();
+        if (recovering) state.stream = { status: 'connecting', lastEventAt: null };
         itemRequest?.abort();
         const request = new AbortController();
         itemRequest = request;
         const version = ++serial;
         state.refreshing = true;
         if (state.itemStatus !== 'ready') state.itemStatus = 'loading';
-        state.itemError = null;
+        if (!recovering) state.itemError = null;
         notify();
         try {
             const result = await api.items(
@@ -327,6 +343,10 @@ export function createTerminal(
             liveView = result.view;
             subscription = result.subscription;
             startStream(key, version);
+            if (!liveView || !subscription || !state.preferences.autoRefresh) {
+                state.stream = null;
+                state.itemError = null;
+            }
             if (state.selected?.itemKey && resourceHistory.state.status === 'idle')
                 await resourceHistory.select(key, state.selected.itemKey, selectedHistoryRange);
             else if (state.selected) await resourceHistory.refresh(automatic);
@@ -334,8 +354,15 @@ export function createTerminal(
         } catch (caught) {
             const error = caught as ApiFailure;
             if (disposed || version !== serial || error.name === 'AbortError') return;
+            const status = error.status || 'NETWORK_ERROR';
+            if (recovering && isTransientFailure(status)) {
+                state.itemError = status;
+                return;
+            }
+            stopStream();
             resourceHistory.clear();
             state.items = [];
+            state.recent = null;
             state.itemIcons = null;
             state.selected = null;
             state.updatedAt = null;
@@ -455,7 +482,7 @@ export function createTerminal(
                 state.gridStatus = 'ready';
                 state.gridError = null;
                 notify();
-                if (!automatic || !liveView) await loadItems(automatic);
+                if (!automatic || (!liveView && !reconnect && !state.refreshing)) await loadItems(automatic);
                 else if (!state.grids.some((grid) => grid.key === state.route.gridKey)) invalidateItems();
                 else if (state.selected) await resourceHistory.refresh(automatic);
                 await loadCrafting();
@@ -466,6 +493,17 @@ export function createTerminal(
             } catch (caught) {
                 const error = caught as ApiFailure;
                 if (disposed || error.name === 'AbortError') return;
+                const status = error.status || 'NETWORK_ERROR';
+                if (
+                    state.route.view === 'items' &&
+                    state.itemStatus === 'ready' &&
+                    state.stream?.status === 'connecting' &&
+                    isTransientFailure(status)
+                ) {
+                    if (!reconnect && !state.refreshing) state.itemError = status;
+                    notify();
+                    return;
+                }
                 state.gridStatus = 'error';
                 state.grids = [];
                 state.selectedGridKey = null;

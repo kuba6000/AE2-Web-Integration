@@ -10991,3 +10991,58 @@ test('terminal applies compact updates, fetches a fresh snapshot on reconnect an
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(options.itemStreams.length, 0);
 });
+
+test('terminal keeps its layout through a dropped stream and retains recovery errors until SSE is ready', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.liveView = { generation: '1', revision: '1' };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const live = page.locator('#refresh .live-icon');
+    await live.waitFor({ state: 'visible' });
+    const row = page.locator('#items button').first();
+    await row.click();
+    const items = page.locator('#items');
+    const count = await items.locator('button').count();
+    const bounds = await items.boundingBox();
+    const selected = await page.locator('#items button[aria-pressed="true"]').innerText();
+    const message = page.locator('#item-message');
+    let failSnapshot = true;
+    await page.route('**/api/grids/*/items?*', async (route) => {
+        if (!failSnapshot) return route.continue();
+        await route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: JSON.stringify({ status: 'SERVER_BUSY', data: null })
+        });
+    });
+    options.itemStreams.at(-1).end();
+    await live.waitFor({ state: 'hidden' });
+    assert.equal(await message.innerText(), '');
+    assert.deepEqual(await items.boundingBox(), bounds, 'Disconnect does not move the resource grid');
+    assert.equal(await page.locator('#refresh').getAttribute('aria-busy'), 'true');
+    await page.clock.fastForward(2100);
+    await page.waitForFunction(() => document.querySelector('#item-message')?.textContent.length > 0);
+    assert.equal(await items.locator('button').count(), count);
+    assert.equal(await page.locator('#items button[aria-pressed="true"]').innerText(), selected);
+    const failedMessage = await message.innerText();
+    failSnapshot = false;
+    options.delayStreamReady = true;
+    const retry = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await page.locator('#refresh').click();
+    await retry;
+    assert.equal(await message.innerText(), failedMessage, 'Snapshot success does not clear a stream recovery error');
+    options.itemStreams.at(-1).end();
+    await page.waitForFunction((previous) => {
+        const text = document.querySelector('#item-message')?.textContent;
+        return text && text !== previous;
+    }, failedMessage);
+    assert.equal(await items.locator('button').count(), count);
+    const recovered = page.waitForResponse((response) => response.url().includes('/items/events'));
+    await page.clock.fastForward(2100);
+    await recovered;
+    assert.notEqual(await message.innerText(), '');
+    options.itemStreams.at(-1).write('event: ready\ndata: {}\n\n');
+    await live.waitFor({ state: 'visible' });
+    assert.equal(await message.innerText(), '');
+    assert.equal(await page.locator('#items button[aria-pressed="true"]').innerText(), selected);
+    assert.deepEqual(await items.boundingBox(), bounds);
+});
