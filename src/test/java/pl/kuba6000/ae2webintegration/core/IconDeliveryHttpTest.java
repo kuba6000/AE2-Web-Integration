@@ -1142,6 +1142,7 @@ class IconDeliveryHttpTest {
                     assertFalse(unavailable.get(), "Native identity accessed after history publication");
                     assertSame(serverThread, Thread.currentThread(), "Native identity accessed from HTTP worker");
                     return switch (method.getName()) {
+                        case "web$supportsStableIdentity" -> true;
                         case "web$getKey" -> variant == 0 ? exact : TestGridFixtures.key(104 + variant);
                         case "web$copyIdentity" -> proxy;
                         case "web$getResourceType" -> ResourceType.ITEM;

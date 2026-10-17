@@ -17,6 +17,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -34,6 +36,65 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class ItemIdentityRequestTest extends GridTestScope {
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void missingNativeIdentityStillDisplaysTerminalAndCapturedResources(boolean supportsType) {
+        Resource metadata = new Resource("unkeyed", 21, true);
+        IAEKey resource = (IAEKey) Proxy
+            .newProxyInstance(IAEKey.class.getClassLoader(), new Class<?>[] { IAEKey.class }, (proxy, method, args) -> {
+                if (method.getName()
+                    .equals("web$supportsStableIdentity")) return supportsType;
+                if (method.getName()
+                    .equals("web$getKey")) return null;
+                if (method.getName()
+                    .equals("web$copyIdentity")) {
+                    assertTrue(supportsType, "Unsupported types must remain displayable without copying");
+                    return proxy;
+                }
+                return method.invoke(metadata, args);
+            });
+        Grid grid = new Grid(910015);
+        grid.rows.add(new IAEGenericStack() {
+
+            public @NotNull IAEKey web$what() {
+                return resource;
+            }
+
+            public long web$amount() {
+                return 21;
+            }
+        });
+        JsonObject row = run(new GetItems(), grid, "").getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            "unkeyed",
+            row.get("displayName")
+                .getAsString());
+        assertEquals(
+            21,
+            row.get("quantity")
+                .getAsLong());
+        assertTrue(
+            row.get("itemKey")
+                .isJsonNull());
+        assertTrue(
+            row.get("icon")
+                .isJsonNull());
+        var captured = pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot.capture(grid, resource, 21);
+        assertNull(
+            captured.description()
+                .itemKey());
+        assertNull(
+            captured.description()
+                .baseKey());
+        assertEquals(
+            "unkeyed",
+            captured.description()
+                .displayName());
+        assertEquals(21, captured.quantity());
+    }
 
     @Test
     void itemSnapshotIsDiscardedWhenItsHttpLifecycleEndsBeforeDelivery() {

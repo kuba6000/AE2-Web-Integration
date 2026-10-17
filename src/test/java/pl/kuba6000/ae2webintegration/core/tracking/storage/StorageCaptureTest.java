@@ -30,6 +30,41 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 class StorageCaptureTest {
 
     @Test
+    void unsupportedVariantAtCapacityStaysUnkeyedWithoutLosingKnownFlow() {
+        IAEKey known = resource(new AtomicInteger());
+        IAEKey variant = unsupported(true);
+        IAEGrid grid = grid(java.util.Arrays.asList(known, variant));
+        StorageCapture capture = new StorageCapture(grid, 1);
+        capture.recordFlow(known, 4, 0);
+        capture.recordFlow(variant, 10, 0);
+        StorageObservation observation = capture.observe(grid, 1000, true);
+        assertTrue(observation.flowComplete());
+        assertEquals(
+            1,
+            observation.rows()
+                .size());
+        assertEquals(
+            1,
+            observation.unkeyed()
+                .size());
+        assertNull(
+            observation.unkeyed()
+                .get(0)
+                .resource()
+                .description()
+                .itemKey());
+        assertEquals(
+            1,
+            observation.flows()
+                .size());
+        assertEquals(
+            4,
+            observation.flows()
+                .get(0)
+                .input());
+    }
+
+    @Test
     void flowDefersBaseNormalizationAndHistoryRetainsItWithoutAnIconPack(@TempDir Path directory) throws Exception {
         AtomicInteger normalizations = new AtomicInteger();
         StableKey baseKey = StableKey.random();
@@ -215,12 +250,12 @@ class StorageCaptureTest {
                     .resource()
                     .description()
                     .itemKey());
+            StableKey healthyKey = healthy.web$getKey();
+            assertNotNull(healthyKey);
             assertTrue(
                 stock.rows()
                     .stream()
-                    .anyMatch(
-                        row -> healthy.web$getKey()
-                            .equals(row.itemKey())));
+                    .anyMatch(row -> healthyKey.equals(row.itemKey())));
         }
     }
 
@@ -364,7 +399,7 @@ class StorageCaptureTest {
     }
 
     @Test
-    void unsupportedNativeCopyIsAnUnkeyedDisplayResourceNotACapacityFailure() {
+    void unsupportedVariantIsAnUnkeyedDisplayResourceNotACapacityFailure() {
         IAEKey unsupported = unsupported(true);
         IAEGrid grid = grid();
         StorageCapture capture = new StorageCapture(grid, 10);
@@ -464,10 +499,10 @@ class StorageCaptureTest {
                     case "web$supportsStableIdentity":
                         return claimsSupport;
                     case "web$copyIdentity":
-                        if (claimsSupport) throw new UnsupportedOperationException("No native copy");
+                        if (claimsSupport) return proxy;
                         throw new AssertionError("Unsupported resource must not be copied");
                     case "web$getKey":
-                        throw new AssertionError("Unsupported resource must not be hashed");
+                        return null;
                     case "web$getRegistryNamespace":
                         return "test";
                     case "web$getRegistryPath":

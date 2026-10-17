@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -41,6 +42,15 @@ public final class StableKey {
     public static @NotNull StableKey create(@NotNull Consumer<PrimitiveSink> writeIdentity) {
         Hasher hasher = HASH.newHasher();
         writeIdentity.accept(hasher);
+        return new StableKey(
+            hasher.hash()
+                .asBytes());
+    }
+
+    /** Hash an encodable identity once; false rejects unsupported data, while actual write failures propagate. */
+    public static @Nullable StableKey createOptional(@NotNull Predicate<PrimitiveSink> writeIdentity) {
+        Hasher hasher = HASH.newHasher();
+        if (!writeIdentity.test(hasher)) return null;
         return new StableKey(
             hasher.hash()
                 .asBytes());

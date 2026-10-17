@@ -58,8 +58,10 @@ class CraftingOptionsHttpTest extends GridTestScope {
     void start() throws Exception {
         grid = new TestGrid();
         base = "/api/grids/" + TestGridFixtures.resolvedKey(grid) + "/crafting-plans";
-        itemKey = AE2Controller.itemIdentities.remember(grid, new ItemIdentityRequestTest.Resource("output", 0, true))
-            .toString();
+        var identity = AE2Controller.itemIdentities
+            .remember(grid, new ItemIdentityRequestTest.Resource("output", 0, true));
+        assertNotNull(identity);
+        itemKey = identity.toString();
         previousAe = AE2Controller.AE2Interface;
         AE2Controller.AE2Interface = new TestGridFixtures.TestAE(grid) {
 

@@ -78,6 +78,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
                 grid,
                 cpu.web$getFinalOutput()
                     .web$what());
+            assertNotNull(itemKey);
 
             IAE processInterface = TestGridFixtures.ae(grid);
             AE2Controller.AE2Interface = processInterface;

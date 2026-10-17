@@ -65,9 +65,6 @@ public final class StorageCapture {
         }
         try {
             return admit(resource);
-        } catch (UnsupportedOperationException unsupported) {
-            hasUnkeyedResources = true;
-            return null;
         } catch (RuntimeException failure) {
             hasUnkeyedResources = true;
             markGap();
@@ -81,14 +78,25 @@ public final class StorageCapture {
             return null;
         }
         // At saturation, avoid retaining new identities in the grid's shared registry ownership.
-        if (resources.size() >= maxResources && !resources.containsKey(resource.web$getKey())) {
-            markGap();
-            throw new IllegalStateException(
-                "Storage resource capacity reached: retained=" + resources.size() + ", limit=" + maxResources);
+        if (resources.size() >= maxResources) {
+            StableKey key = resource.web$getKey();
+            if (key == null) {
+                hasUnkeyedResources = true;
+                return null;
+            }
+            if (!resources.containsKey(key)) {
+                markGap();
+                throw new IllegalStateException(
+                    "Storage resource capacity reached: retained=" + resources.size() + ", limit=" + maxResources);
+            }
         }
         IAEGrid owner = grid.get();
         if (owner == null) throw new IllegalStateException("Storage grid is no longer available");
         StableKey key = AE2Controller.itemIdentities.remember(owner, resource);
+        if (key == null) {
+            hasUnkeyedResources = true;
+            return null;
+        }
         return resources.computeIfAbsent(key, Entry::new);
     }
 
@@ -361,10 +369,7 @@ public final class StorageCapture {
         Entry entry;
         try {
             entry = admit(key);
-        } catch (UnsupportedOperationException unsupported) {
-            unkeyed.add(unkeyedRow(grid, key, amount));
-            return;
-        } catch (IllegalArgumentException invalidIdentity) {
+        } catch (IllegalArgumentException | UnsupportedOperationException invalidIdentity) {
             markGap();
             unkeyed.add(unkeyedRow(grid, key, amount));
             return;

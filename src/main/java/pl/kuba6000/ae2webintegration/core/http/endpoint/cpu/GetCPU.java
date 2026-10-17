@@ -217,7 +217,7 @@ public final class GetCPU extends ISyncedRequest {
         IconMappings.Reference icon = null;
         try {
             itemKey = listing.remember(resource);
-            if (mappings != null) icon = mappings.resolve(itemKey, AE2Controller.itemIdentities);
+            if (itemKey != null && mappings != null) icon = mappings.resolve(itemKey, AE2Controller.itemIdentities);
         } catch (RuntimeException unavailable) {
             // Optional identity or icon failures must not hide accumulated work or a successfully captured key.
         }

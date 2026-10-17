@@ -29,9 +29,10 @@ public final class ItemIdentityRegistry {
     // Remember observed conflicts until world teardown, without retaining native resource data.
     private final Set<StableKey> ambiguous = new HashSet<>();
 
-    /** Retain an output identity until its owner next publishes a complete resource snapshot. */
-    public @NotNull StableKey remember(@NotNull IIdentityHolder owner, @NotNull IAEKey resource) {
+    /** Retain an encodable identity until the next owner snapshot; known unsupported resources return null. */
+    public @Nullable StableKey remember(@NotNull IIdentityHolder owner, @NotNull IAEKey resource) {
         Entry entry = findOrCreate(resource);
+        if (entry == null) return null;
         owners.asMap()
             .computeIfAbsent(owner, ignored -> new HashSet<>())
             .add(entry);
@@ -84,14 +85,16 @@ public final class ItemIdentityRegistry {
         ambiguous.clear();
     }
 
-    private @NotNull Entry findOrCreate(@NotNull IAEKey resource) {
+    private @Nullable Entry findOrCreate(@NotNull IAEKey resource) {
         Entry remembered = reverse.getIfPresent(resource);
         if (remembered != null) {
             if (ambiguous.contains(remembered.key)) throw new Ambiguous();
             return remembered;
         }
+        if (!resource.web$supportsStableIdentity()) return null;
         IAEKey copy = resource.web$copyIdentity();
         StableKey key = copy.web$getKey();
+        if (key == null) return null;
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry existing = entries.getIfPresent(key);
         if (existing != null) {
@@ -128,9 +131,10 @@ public final class ItemIdentityRegistry {
             this.owner = owner;
         }
 
-        public @NotNull StableKey remember(@NotNull IAEKey resource) {
+        public @Nullable StableKey remember(@NotNull IAEKey resource) {
             requireOpen();
             Entry entry = findOrCreate(resource);
+            if (entry == null) return null;
             collected.add(entry);
             return entry.key;
         }

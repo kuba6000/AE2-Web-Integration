@@ -217,7 +217,7 @@ public final class GetItems extends ISyncedRequest {
         try {
             StableKey identity = listing.remember(key);
             itemKey = identity;
-            if (mappings != null) icon = mappings.resolve(identity, AE2Controller.itemIdentities);
+            if (identity != null && mappings != null) icon = mappings.resolve(identity, AE2Controller.itemIdentities);
 
         } catch (RuntimeException unavailable) {
             // Optional identity or icon failures must not hide available resources or a successfully captured key.
