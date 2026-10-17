@@ -12,12 +12,10 @@ import { createResourceHistoryView } from './resource-history.js';
 import { slotQuantity } from './resource-quantity.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 import { terminalIcons as symbols, craftingHammer } from './icons/pixel/terminal.js';
-import type { TerminalDisplay } from './web-settings.js';
+import { terminalPageSize, type TerminalDisplay } from './web-settings.js';
 import type { Tooltips } from './tooltips.js';
 import type { createCraftingView } from './crafting.js';
 import type { createMobilePanels } from './mobile-panels.js';
-
-const PAGE_SIZE = 100;
 
 function iconButton(group: 'filter' | 'sort' | 'sortOrder' | 'showItems' | 'showFluids', value: keyof typeof symbols) {
     return `<button type="button" class="tool-button" data-preference="${group}" data-value="${value}">${symbols[value]}</button>`;
@@ -179,7 +177,8 @@ export function createResourceTerminal(
             state.preferences.showItems,
             state.preferences.showFluids,
             language,
-            state.route.gridKey
+            state.route.gridKey,
+            terminalPageSize(settings)
         ].join('\0');
         const changed = !listInput || listInput.items !== state.items || listInput.signature !== signature;
         if (changed) {
@@ -350,13 +349,15 @@ export function createResourceTerminal(
         return row;
     }
     function renderPage() {
+        const configuredSize = terminalPageSize(settings);
+        const pageSize = configuredSize === 'all' ? Math.max(1, allFiltered.length) : configuredSize;
         const list = controls.items;
         const focused = rows.find((row) => row.button === document.activeElement);
         const previous = new Map(rows.filter((row) => row.item.itemKey).map((row) => [row.item.itemKey, row]));
-        page = Math.min(page, Math.max(0, Math.ceil(allFiltered.length / PAGE_SIZE) - 1));
+        page = Math.min(page, Math.max(0, Math.ceil(allFiltered.length / pageSize) - 1));
         // Reordering can blur a focused button; restoring focus must preserve tooltip dismissal.
         updatingRows = true;
-        const next = allFiltered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((item, index) => {
+        const next = allFiltered.slice(page * pageSize, (page + 1) * pageSize).map((item, index) => {
             const row = previous.get(item.itemKey) || createItemRow(item);
             row.item = item;
             row.name.replaceChildren(renderMinecraftText(item.displayName));
@@ -390,10 +391,10 @@ export function createResourceTerminal(
         }
         updatingRows = false;
         refreshItemTooltip();
-        controls.pages.hidden = allFiltered.length <= PAGE_SIZE;
+        controls.pages.hidden = allFiltered.length <= pageSize;
         controls.previousPage.disabled = page === 0;
-        controls.nextPage.disabled = (page + 1) * PAGE_SIZE >= allFiltered.length;
-        controls.pageCount.textContent = `${page + 1} / ${Math.max(1, Math.ceil(allFiltered.length / PAGE_SIZE))}`;
+        controls.nextPage.disabled = (page + 1) * pageSize >= allFiltered.length;
+        controls.pageCount.textContent = `${page + 1} / ${Math.max(1, Math.ceil(allFiltered.length / pageSize))}`;
         slots.update(rows.length);
     }
     let detailsInput: { item: ThemeState['selected']; recent: ThemeState['recent']; language: string } | undefined;

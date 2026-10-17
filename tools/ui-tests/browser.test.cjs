@@ -1030,6 +1030,19 @@ async function poll(page) {
     await requested;
 }
 
+async function seedTerminalPageSize(page, base, size) {
+    await page.addInitScript(
+        ({ key, size }) => {
+            const saved = JSON.parse(localStorage.getItem(key) || '{}');
+            if (saved.terminalPageSize === undefined) {
+                saved.terminalPageSize = size;
+                localStorage.setItem(key, JSON.stringify(saved));
+            }
+        },
+        { key: `ae2web:${new URL(base).pathname}:theme:default`, size }
+    );
+}
+
 async function seedAutomaticRefresh(page, base, autoRefresh) {
     await page.addInitScript(
         ({ key, autoRefresh }) => {
@@ -3227,6 +3240,7 @@ for (const saved of [
 
 test('terminal control focus and dismissed tooltips survive polling and filtering resets pagination', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedTerminalPageSize(page, base, 100);
     options.itemsA = Array.from({ length: 102 }, (_, index) => ({
         ...iron,
         displayName: `Item ${String(index).padStart(3, '0')}`,
@@ -7556,6 +7570,7 @@ test('resource grid stays centered and stationary when scrolling becomes unneces
 
 test('terminal scrolls resources inside the viewport while search and navigation remain reachable', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedTerminalPageSize(page, base, 100);
     await seedAutomaticRefresh(page, base, false);
     options.itemsA = Array.from({ length: 105 }, (_, index) => ({
         ...iron,
@@ -7609,8 +7624,83 @@ test('terminal scrolls resources inside the viewport while search and navigation
     }
 });
 
+for (const width of [390, 1280]) {
+    test(`terminal page size persists and all mode follows filtering and live updates at ${width}px`, async (t) => {
+        const { page, options, base } = await fixture(t, '', { viewport: { width, height: 844 } });
+        options.liveView = { generation: '1', revision: '1' };
+        options.itemsA = Array.from({ length: 275 }, (_, index) => ({
+            ...iron,
+            itemKey: `resource-${index}`,
+            displayName: `Resource ${String(index).padStart(3, '0')}`,
+            quantity: 275 - index
+        }));
+        if (width === 390) await seedTerminalPageSize(page, base, 37);
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 275);
+        await clickTab(page, 'Web settings');
+        const pageSize = page.getByRole('combobox', { name: 'Resources per page', exact: true });
+        await pageSize.waitFor({ timeout: 3000 });
+        assert.equal(await pageSize.inputValue(), '500');
+        await pageSize.selectOption('50');
+        await page.reload();
+        assert.equal(await pageSize.inputValue(), '50');
+        await clickTab(page, 'Terminal');
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 50);
+        const reads = options.requests.filter((request) => request.path.endsWith('/items')).length;
+        for (let index = 0; index < 5; index++)
+            await page.getByRole('button', { name: 'Next page', exact: true }).click();
+        assert.equal(await page.locator('#items button').count(), 25);
+        assert.equal(await page.locator('#page-count').innerText(), '6 / 6');
+        const removed = options.itemsA.splice(250).map((item) => item.itemKey);
+        options.itemStreams
+            .at(-1)
+            .write(
+                `event: delta\ndata: ${JSON.stringify({ view: { generation: '1', revision: '2' }, updates: [], definitions: [], removed, icons: null })}\n\n`
+            );
+        await page.waitForFunction(() => document.querySelector('#page-count')?.textContent === '5 / 5');
+        assert.equal(await page.locator('#items button').count(), 50);
+        assert.equal(await page.getByRole('button', { name: 'Next page', exact: true }).isDisabled(), true);
+        await page.getByRole('searchbox', { name: 'Search resources', exact: true }).fill('Resource 000');
+        assert.equal(await page.locator('#items button').count(), 1);
+        assert.equal(await page.locator('#pages').isVisible(), false);
+        await page.getByRole('searchbox', { name: 'Search resources', exact: true }).fill('');
+        assert.equal(await page.locator('#page-count').innerText(), '1 / 5');
+        assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, reads);
+        await clickTab(page, 'Web settings');
+        await pageSize.selectOption('all');
+        await clickTab(page, 'Terminal');
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 250);
+        assert.equal(await page.locator('#pages').isVisible(), false);
+        await openMobilePane(page, 'Filters and sorting');
+        await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+        await closeMobilePane(page);
+        assert.ok((await page.locator('#items button').first().innerText()).includes('Resource 249'));
+        const newItem = { ...iron, itemKey: 'new-live-resource', displayName: 'New resource', quantity: 999 };
+        options.itemsA.push(newItem);
+        options.itemStreams
+            .at(-1)
+            .write(
+                `event: delta\ndata: ${JSON.stringify({ view: { generation: '1', revision: '2' }, updates: [], definitions: [newItem], removed: [], icons: null })}\n\n`
+            );
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 251);
+        assert.equal(await page.locator('#pages').isVisible(), false);
+        await page.reload();
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 251);
+        assert.equal(await page.locator('#pages').isVisible(), false);
+        const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+        assert.ok(documentWidth <= width, 'Page-size changes do not introduce horizontal overflow');
+        await clickTab(page, 'Web settings');
+        assert.equal(await pageSize.inputValue(), 'all');
+        await pageSize.selectOption('100');
+        await clickTab(page, 'Terminal');
+        await page.waitForFunction(() => document.querySelectorAll('#items button').length === 100);
+        assert.equal(await page.locator('#page-count').innerText(), '1 / 3');
+    });
+}
+
 test('resource details are text, keyboard accessible and paging does not require new requests', async (t) => {
     const { page, options, base } = await fixture(t);
+    await seedTerminalPageSize(page, base, 100);
     const untrustedName = '<img src=x onerror=alert(1)> Quartz';
     options.itemsA = [
         { ...quartz, displayName: untrustedName },
