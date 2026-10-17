@@ -27,7 +27,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         this.context = context;
     }
 
-    public abstract @NotNull StableKey key();
+    public abstract @Nullable StableKey key();
 
     public abstract boolean sameIdentity(@NotNull IconCandidate other);
 
@@ -65,7 +65,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
-        @NotNull
+        @Nullable
         public StableKey key() {
             Item item = stack.getItem();
             int metadata = Items.blaze_rod.getDamage(stack);
@@ -108,7 +108,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
-        @NotNull
+        @Nullable
         public StableKey key() {
             return LegacyItemIdentity.encode(stack);
         }

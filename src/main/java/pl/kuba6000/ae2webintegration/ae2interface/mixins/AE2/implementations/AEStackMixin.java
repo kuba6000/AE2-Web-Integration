@@ -46,7 +46,7 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
     }
 
     @Override
-    default @NotNull StableKey web$getKey() {
+    default @Nullable StableKey web$getKey() {
         return LegacyItemIdentity.encode(this);
     }
 
@@ -73,7 +73,7 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
         if (this instanceof IAEItemStack item && web$getResourceType() == ResourceType.ITEM) {
             String name = GameData.getItemRegistry()
                 .getNameForObject(item.getItem());
-            return name.substring(0, name.indexOf(':'));
+            return name == null ? null : name.substring(0, name.indexOf(':'));
         }
         Fluid fluid = null;
         if (this instanceof IAEFluidStack stack) fluid = stack.getFluid();
@@ -82,7 +82,7 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
         }
         if (fluid == null) return null;
         String name = FluidRegistry.getDefaultFluidName(fluid);
-        return name.substring(0, name.indexOf(':'));
+        return name == null ? null : name.substring(0, name.indexOf(':'));
     }
 
     @Override
@@ -90,7 +90,7 @@ public interface AEStackMixin extends IAEStack, IAEGenericStack, IAEKey {
         if (this instanceof IAEItemStack item && web$getResourceType() == ResourceType.ITEM) {
             String name = GameData.getItemRegistry()
                 .getNameForObject(item.getItem());
-            return name.substring(name.indexOf(':') + 1);
+            return name == null ? null : name.substring(name.indexOf(':') + 1);
         }
         if (this instanceof IAEFluidStack stack) return stack.getFluid()
             .getName();
