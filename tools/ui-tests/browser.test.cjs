@@ -1335,13 +1335,13 @@ test('autostart navigation revokes pending intent and delayed plans cannot cross
     assert.equal(options.requests.filter((r) => r.path.endsWith('/submit')).length, 0);
 });
 
-test('crafting light mode follows authenticated server capability and only sends an explicit supported choice', async (t) => {
+test('crafting lite mode follows authenticated server capability and only sends an explicit supported choice', async (t) => {
     for (const supported of [false, true]) {
         const { page, options, base } = await fixture(t);
         options.capabilities = { craftingLightMode: supported };
         await page.goto(`${base}#/grids/${gridA}/items`);
         await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
-        const lightMode = page.getByRole('checkbox', { name: 'Light mode', exact: true });
+        const lightMode = page.getByRole('checkbox', { name: 'Lite mode', exact: true });
         if (supported) await lightMode.check({ timeout: 3000 });
         else assert.equal(await lightMode.isVisible(), false);
         await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
@@ -6604,7 +6604,7 @@ test('delayed plan metadata cannot restore another grid order or automatic inten
     assert.equal(options.requests.filter((entry) => entry.method !== 'GET').length, 0);
 });
 
-test('plan recalculation preserves the order and light mode, supports autostart and locks uncertain replacement', async (t) => {
+test('plan recalculation preserves the order and lite mode, supports autostart and locks uncertain replacement', async (t) => {
     const { page, options, base } = await fixture(t);
     options.capabilities.craftingLightMode = true;
     options.plan = { ...readyPlan, isSimulating: true };
@@ -6612,7 +6612,7 @@ test('plan recalculation preserves the order and light mode, supports autostart 
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
     await page.getByRole('textbox', { name: 'Craft quantity' }).fill('32');
-    await page.getByRole('checkbox', { name: 'Light mode', exact: true }).check();
+    await page.getByRole('checkbox', { name: 'Lite mode', exact: true }).check();
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     const start = page.getByRole('button', { name: 'Start', exact: true });
     await start.waitFor();
@@ -6668,7 +6668,7 @@ test('ignore-missing recalculation keeps original options first and never retrie
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Start automatically', exact: true }).check();
-    await page.getByRole('checkbox', { name: 'Light mode', exact: true }).check();
+    await page.getByRole('checkbox', { name: 'Lite mode', exact: true }).check();
     await page.getByRole('checkbox', { name: 'Ignore missing ingredients', exact: true }).check();
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     await page.waitForURL(/\/plans\/7$/);
