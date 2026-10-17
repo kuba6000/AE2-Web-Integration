@@ -523,19 +523,22 @@ class StorageTrackingServiceTest {
     }
 
     @Test
-    void persistenceFailureDoesNotHideLiveStateButReportsIncompleteHistory() throws Exception {
+    void persistenceFailureKeepsPublishingButOnlyANewGenerationResumesRecording() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
+        AtomicBoolean failNextWrite = new AtomicBoolean(true);
+        InMemoryStorageHistoryStore stored = new InMemoryStorageHistoryStore();
         IStorageHistoryStore failing = new IStorageHistoryStore() {
 
             public void append(@NotNull StableKey key, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
                 @NotNull List<StorageHistoryPoint> points) throws IOException {
-                throw new IOException("Disk full");
+                if (failNextWrite.getAndSet(false)) throw new IOException("Disk full");
+                stored.append(key, descriptions, points);
             }
 
             public @NotNull StorageHistory read(@NotNull StableKey key, @Nullable StableKey resource, long from,
                 int limit) {
-                return new StorageHistory(Collections.emptyList(), Collections.emptyMap(), true, false);
+                return stored.read(key, resource, from, limit);
             }
         };
         try (StorageTrackingService service = new StorageTrackingService(failing, 100)) {
@@ -551,6 +554,41 @@ class StorageTrackingServiceTest {
             assertFalse(
                 service.history(grid, item, 0, 10)
                     .complete());
+            service.open(grid, 1);
+            assertTrue(service.submit(grid, 1, observation(item, 20, 7), true));
+            awaitRevision(service, grid, 2);
+            assertEquals(
+                7,
+                snapshot(service, grid).rows()
+                    .get(0)
+                    .quantity());
+            assertFalse(snapshot(service, grid).persistenceComplete());
+            assertTrue(
+                service.history(grid, item, 0, 100)
+                    .points()
+                    .isEmpty());
+
+            service.open(grid, 2);
+            assertTrue(service.submit(grid, 2, observation(item, 30, 7), true));
+            awaitRevision(service, grid, 1);
+            assertTrue(snapshot(service, grid).persistenceComplete());
+            List<StorageHistoryPoint> resumed = service.history(grid, item, 0, 100)
+                .points();
+            assertEquals(4, resumed.size());
+            assertTrue(
+                resumed.stream()
+                    .allMatch(point -> point.generation() == 2 && point.observedAt() == 30));
+            assertTrue(
+                resumed.stream()
+                    .anyMatch(
+                        point -> point.kind() == StorageHistoryPoint.Kind.STOCK && point.quantity() == 7
+                            && item.equals(point.itemKey())));
+            assertTrue(
+                resumed.stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.GAP));
+            assertTrue(
+                resumed.stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.FLOW_OBSERVATION));
         }
     }
 

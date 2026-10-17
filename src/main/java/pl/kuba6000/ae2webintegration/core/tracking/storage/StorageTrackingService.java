@@ -70,7 +70,7 @@ public final class StorageTrackingService implements AutoCloseable {
         states.put(gridKey, new State(generation));
     }
 
-    /** Never waits for disk or queue capacity. False requires a new full observation and flow coverage gap. */
+    /** Never waits for disk or queue capacity. Rejection marks history coverage incomplete. */
     public boolean submit(@NotNull StableKey gridKey, long generation, @NotNull StorageObservation observation,
         boolean persist) {
         return submit(gridKey, generation, observation, persist, persist);
@@ -184,107 +184,21 @@ public final class StorageTrackingService implements AutoCloseable {
     private void apply(StableKey gridKey, State state, StorageObservation observation, boolean persistStock,
         boolean persistFlow, long lossEpoch) {
         boolean gap = lossEpoch != state.handledLossEpoch;
-        Map<StableKey, StorageObservation.Row> next = state.rows;
+        Map<StableKey, StorageObservation.Row> next = state.mergeStock(observation);
         Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>(state.snapshot.descriptions());
         descriptions.putAll(observation.descriptions());
-        if (observation.stockObserved()) {
-            next = observation.full() ? new HashMap<>() : new HashMap<>(state.rows);
-            for (StorageObservation.Row row : observation.rows()) {
-                if (row.quantity() != 0 || row.craftable()) next.put(row.itemKey(), row);
-                else next.remove(row.itemKey());
-            }
-            state.unkeyed = new ArrayList<>();
-            for (StorageObservation.UnkeyedRow row : observation.unkeyed()) {
-                if (row.resource()
-                    .quantity() != 0 || row.craftable()) state.unkeyed.add(row);
-            }
-        }
+
         boolean persistence = state.snapshot.persistenceComplete();
         if (persistence && (persistStock || persistFlow)) {
-            List<StorageHistoryPoint> points = new ArrayList<>();
-            boolean initialStock = persistStock && state.sampledRows == null;
-            boolean initialFlow = persistFlow && !state.flowStarted;
-            if (gap || !observation.flowComplete() || initialStock || initialFlow)
-                points.add(point(state, observation, StorageHistoryPoint.Kind.GAP, null, 0, false, 0, 0, false));
-            if (persistStock) {
-                for (Map.Entry<StableKey, StorageObservation.Row> entry : next.entrySet()) {
-                    StorageObservation.Row row = entry.getValue();
-                    if (state.sampledRows == null || !row.equals(state.sampledRows.get(entry.getKey()))) points.add(
-                        point(
-                            state,
-                            observation,
-                            StorageHistoryPoint.Kind.STOCK,
-                            row.itemKey(),
-                            row.quantity(),
-                            row.craftable(),
-                            0,
-                            0,
-                            true));
-                }
-                if (state.sampledRows != null) {
-                    for (Map.Entry<StableKey, StorageObservation.Row> old : state.sampledRows.entrySet()) {
-                        if (!next.containsKey(old.getKey())) points.add(
-                            point(
-                                state,
-                                observation,
-                                StorageHistoryPoint.Kind.STOCK,
-                                old.getKey(),
-                                0,
-                                false,
-                                0,
-                                0,
-                                true));
-                    }
-                }
-                points.add(
-                    point(
-                        state,
-                        observation,
-                        StorageHistoryPoint.Kind.OBSERVATION,
-                        null,
-                        0,
-                        false,
-                        0,
-                        0,
-                        observation.full() || state.snapshot.stockComplete() && !gap));
-            }
-            if (persistFlow) {
-                for (StorageObservation.Flow flow : observation.flows()) {
-                    points.add(
-                        point(
-                            state,
-                            observation,
-                            StorageHistoryPoint.Kind.FLOW,
-                            flow.itemKey(),
-                            0,
-                            false,
-                            flow.input(),
-                            flow.output(),
-                            observation.flowComplete() && !gap));
-                }
-                points.add(
-                    point(
-                        state,
-                        observation,
-                        StorageHistoryPoint.Kind.FLOW_OBSERVATION,
-                        null,
-                        0,
-                        false,
-                        0,
-                        0,
-                        observation.flowComplete() && !gap));
-            }
+            List<StorageHistoryPoint> points = state.historyPoints(observation, next, persistStock, persistFlow, gap);
+            Map<StableKey, ResourceDescriptor> writtenDescriptions = descriptionsFor(points, observation, descriptions);
             try {
-                Map<StableKey, ResourceDescriptor> writtenDescriptions = new HashMap<>(observation.descriptions());
-                for (StorageHistoryPoint point : points) {
-                    if (point.itemKey() != null && !writtenDescriptions.containsKey(point.itemKey()))
-                        writtenDescriptions.put(point.itemKey(), descriptions.get(point.itemKey()));
-                }
                 store.append(gridKey, writtenDescriptions, points);
+                // Only a successful append advances the durable baseline.
                 if (persistStock) state.sampledRows = new HashMap<>(next);
                 if (persistFlow) state.flowStarted = true;
             } catch (IOException failure) {
-                // A failed store stays failed until the owner reopens this generation. Live capture remains useful.
+                // A failed store stays failed until a new generation is opened. Live capture remains useful.
                 persistence = false;
                 LOG.warn(
                     "Storage history recording stopped for network {} generation {}",
@@ -293,44 +207,20 @@ public final class StorageTrackingService implements AutoCloseable {
                     failure);
             }
         }
-        state.rows = next;
-        StorageSnapshot previous = state.snapshot;
-        List<StorageObservation.Row> visible = previous.rows();
-        if (observation.stockObserved()) {
-            visible = new ArrayList<>(next.values());
+        state.publish(observation, next, descriptions, persistence, lossEpoch);
+    }
+
+    private static Map<StableKey, ResourceDescriptor> descriptionsFor(List<StorageHistoryPoint> points,
+        StorageObservation observation, Map<StableKey, ResourceDescriptor> retained) {
+        Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>(observation.descriptions());
+        for (StorageHistoryPoint point : points) {
+            StableKey key = point.itemKey();
+            if (key != null && !descriptions.containsKey(key)) descriptions.put(key, retained.get(key));
         }
-        Map<StableKey, StorageObservation.Row> sampled = state.sampledRows;
-        Map<StableKey, StorageObservation.Row> current = next;
-        descriptions.keySet()
-            .removeIf(key -> !current.containsKey(key) && (sampled == null || !sampled.containsKey(key)));
-        state.snapshot = new StorageSnapshot(
-            state.generation,
-            previous.revision() + (observation.stockObserved() ? 1 : 0),
-            observation.stockObserved() ? observation.observedAt() : previous.observedAt(),
-            observation.full() || previous.stockComplete() && !gap,
-            previous.flowComplete() && observation.flowComplete() && !gap,
-            persistence,
-            visible,
-            descriptions,
-            state.unkeyed,
-            lossEpoch);
-        state.handledLossEpoch = lossEpoch;
+        return descriptions;
     }
 
-    private static StorageHistoryPoint point(State state, StorageObservation observation, StorageHistoryPoint.Kind kind,
-        @Nullable StableKey itemKey, long quantity, boolean craftable, long input, long output, boolean complete) {
-        return new StorageHistoryPoint(
-            observation.observedAt(),
-            state.generation,
-            kind,
-            itemKey,
-            quantity,
-            craftable,
-            input,
-            output,
-            complete);
-    }
-
+    /** The worker owns stock and sampling state; other threads only record loss or read the immutable snapshot. */
     private static final class State {
 
         private final long generation;
@@ -355,6 +245,120 @@ public final class StorageTrackingService implements AutoCloseable {
                 Collections.emptyList(),
                 Collections.emptyMap(),
                 Collections.emptyList());
+        }
+
+        private Map<StableKey, StorageObservation.Row> mergeStock(StorageObservation observation) {
+            if (!observation.stockObserved()) return rows;
+            Map<StableKey, StorageObservation.Row> next = observation.full() ? new HashMap<>() : new HashMap<>(rows);
+            for (StorageObservation.Row row : observation.rows()) {
+                if (row.quantity() != 0 || row.craftable()) next.put(row.itemKey(), row);
+                else next.remove(row.itemKey());
+            }
+            unkeyed = new ArrayList<>();
+            for (StorageObservation.UnkeyedRow row : observation.unkeyed()) {
+                if (row.resource()
+                    .quantity() != 0 || row.craftable()) unkeyed.add(row);
+            }
+            return next;
+        }
+
+        private List<StorageHistoryPoint> historyPoints(StorageObservation observation,
+            Map<StableKey, StorageObservation.Row> next, boolean persistStock, boolean persistFlow, boolean gap) {
+            List<StorageHistoryPoint> points = new ArrayList<>();
+            boolean initialStock = persistStock && sampledRows == null;
+            boolean initialFlow = persistFlow && !flowStarted;
+            if (gap || !observation.flowComplete() || initialStock || initialFlow)
+                points.add(point(observation, StorageHistoryPoint.Kind.GAP, null, 0, false, 0, 0, false));
+            if (persistStock) appendStockPoints(points, observation, next, gap);
+            if (persistFlow) appendFlowPoints(points, observation, gap);
+            return points;
+        }
+
+        private void appendStockPoints(List<StorageHistoryPoint> points, StorageObservation observation,
+            Map<StableKey, StorageObservation.Row> next, boolean gap) {
+            for (StorageObservation.Row row : next.values()) {
+                if (sampledRows == null || !row.equals(sampledRows.get(row.itemKey()))) points.add(
+                    point(
+                        observation,
+                        StorageHistoryPoint.Kind.STOCK,
+                        row.itemKey(),
+                        row.quantity(),
+                        row.craftable(),
+                        0,
+                        0,
+                        true));
+            }
+            if (sampledRows != null) {
+                for (StableKey key : sampledRows.keySet()) {
+                    if (!next.containsKey(key))
+                        points.add(point(observation, StorageHistoryPoint.Kind.STOCK, key, 0, false, 0, 0, true));
+                }
+            }
+            points.add(
+                point(
+                    observation,
+                    StorageHistoryPoint.Kind.OBSERVATION,
+                    null,
+                    0,
+                    false,
+                    0,
+                    0,
+                    observation.full() || snapshot.stockComplete() && !gap));
+        }
+
+        private void appendFlowPoints(List<StorageHistoryPoint> points, StorageObservation observation, boolean gap) {
+            boolean complete = observation.flowComplete() && !gap;
+            for (StorageObservation.Flow flow : observation.flows()) {
+                points.add(
+                    point(
+                        observation,
+                        StorageHistoryPoint.Kind.FLOW,
+                        flow.itemKey(),
+                        0,
+                        false,
+                        flow.input(),
+                        flow.output(),
+                        complete));
+            }
+            points.add(point(observation, StorageHistoryPoint.Kind.FLOW_OBSERVATION, null, 0, false, 0, 0, complete));
+        }
+
+        private void publish(StorageObservation observation, Map<StableKey, StorageObservation.Row> next,
+            Map<StableKey, ResourceDescriptor> descriptions, boolean persistence, long observedLossEpoch) {
+            boolean gap = observedLossEpoch != handledLossEpoch;
+            rows = next;
+            StorageSnapshot previous = snapshot;
+            List<StorageObservation.Row> visible = previous.rows();
+            if (observation.stockObserved()) visible = new ArrayList<>(next.values());
+            // Unsampled removals still need their description when the next durable zero sample is written.
+            descriptions.keySet()
+                .removeIf(key -> !next.containsKey(key) && (sampledRows == null || !sampledRows.containsKey(key)));
+            snapshot = new StorageSnapshot(
+                generation,
+                previous.revision() + (observation.stockObserved() ? 1 : 0),
+                observation.stockObserved() ? observation.observedAt() : previous.observedAt(),
+                observation.full() || previous.stockComplete() && !gap,
+                previous.flowComplete() && observation.flowComplete() && !gap,
+                persistence,
+                visible,
+                descriptions,
+                unkeyed,
+                observedLossEpoch);
+            handledLossEpoch = observedLossEpoch;
+        }
+
+        private StorageHistoryPoint point(StorageObservation observation, StorageHistoryPoint.Kind kind,
+            @Nullable StableKey itemKey, long quantity, boolean craftable, long input, long output, boolean complete) {
+            return new StorageHistoryPoint(
+                observation.observedAt(),
+                generation,
+                kind,
+                itemKey,
+                quantity,
+                craftable,
+                input,
+                output,
+                complete);
         }
     }
 }
