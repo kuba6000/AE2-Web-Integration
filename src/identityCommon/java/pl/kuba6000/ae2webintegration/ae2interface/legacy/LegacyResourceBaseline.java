@@ -7,10 +7,10 @@ import net.minecraftforge.fluids.FluidStack;
 
 import org.jetbrains.annotations.NotNull;
 
-/** Fresh native fallback stacks; original tags are neither retained nor modified. */
-public final class LegacyIconBaseline {
+/** Fresh native base variants; original tags are neither retained nor modified. */
+public final class LegacyResourceBaseline {
 
-    private LegacyIconBaseline() {}
+    private LegacyResourceBaseline() {}
 
     public static @NotNull ItemStack item(@NotNull ItemStack source) {
         Item item = source.getItem();

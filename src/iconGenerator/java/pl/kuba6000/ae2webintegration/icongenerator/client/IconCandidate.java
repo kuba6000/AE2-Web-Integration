@@ -12,8 +12,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import appeng.util.Platform;
-import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyIconBaseline;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyResourceBaseline;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCandidate;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -27,7 +27,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         this.context = context;
     }
 
-    public abstract @NotNull StableKey key();
+    public abstract @Nullable StableKey key();
 
     public abstract boolean sameIdentity(@NotNull IconCandidate other);
 
@@ -65,7 +65,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
-        @NotNull
+        @Nullable
         public StableKey key() {
             Item item = stack.getItem();
             int metadata = Items.blaze_rod.getDamage(stack);
@@ -88,7 +88,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         @Override
         @NotNull
         public IconCandidate baseline() {
-            return item(context + "/base", LegacyIconBaseline.item(stack));
+            return item(context + "/base", LegacyResourceBaseline.item(stack));
         }
 
         @Override
@@ -108,7 +108,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
-        @NotNull
+        @Nullable
         public StableKey key() {
             return LegacyItemIdentity.encode(stack);
         }
@@ -122,7 +122,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         @Override
         @NotNull
         public IconCandidate baseline() {
-            return fluid(context + "/base", LegacyIconBaseline.fluid(stack));
+            return fluid(context + "/base", LegacyResourceBaseline.fluid(stack));
         }
 
         @Override

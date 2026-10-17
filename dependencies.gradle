@@ -34,6 +34,7 @@
  * For more details, see https://docs.gradle.org/8.0.1/userguide/java_library_plugin.html#sec:java_library_configurations_graph
  */
 dependencies {
+    shadowImplementation('org.hsqldb:hsqldb:2.7.4:jdk8') { transitive = false }
     implementation project(':core')
     // Select the jar explicitly so shadow resolution does not hit variant ambiguity on the submodule.
     shadowImplementation(project(path: ':core', configuration: 'default')) {
@@ -47,16 +48,18 @@ dependencies {
     }
 
     api("com.github.GTNewHorizons:GTNHLib:0.11.39:dev")
-    api("com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-1030-GTNH:dev")
+    api("com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-1083-GTNH:dev")
     api("com.github.GTNewHorizons:AE2FluidCraft-Rework:1.5.103-gtnh:dev")
     runtimeOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.8.125-GTNH:dev")
 }
 
 tasks.named("shadowJar").configure {
+    relocate('org.hsqldb', 'pl.kuba6000.ae2webintegration.internal.hsqldb')
     relocate('com.electronwill.nightconfig', 'pl.kuba6000.ae2webintegration.internal.nightconfig')
     if (minimizeShadowedDependencies.toBoolean()) {
         // Object conversion discovers field annotations reflectively.
         minimize {
+            exclude(dependency('org.hsqldb:hsqldb:.*'))
             exclude(dependency('com.electronwill.night-config:core:.*'))
             exclude(dependency('com.electronwill.night-config:toml:.*'))
         }

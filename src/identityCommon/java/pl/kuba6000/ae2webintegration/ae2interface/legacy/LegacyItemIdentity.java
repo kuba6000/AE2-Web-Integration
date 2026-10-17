@@ -42,15 +42,16 @@ public final class LegacyItemIdentity {
 
     private LegacyItemIdentity() {}
 
-    public static @NotNull StableKey encode(@NotNull ItemStack stack) {
+    public static @Nullable StableKey encode(@NotNull ItemStack stack) {
         Item item = stack.getItem();
+        if (item == null) return null;
         int metadata = Items.blaze_rod.getDamage(stack);
         NBTTagCompound tag = prepareItemTag(stack);
         return encode(item, metadata, tag);
     }
 
     /** Encodes captured item fields; tag must already follow prepareItemTag's root normalization. */
-    public static @NotNull StableKey encode(@NotNull Item item, int metadata, @Nullable NBTTagCompound tag) {
+    public static @Nullable StableKey encode(@NotNull Item item, int metadata, @Nullable NBTTagCompound tag) {
         return encode(
             "item",
             GameData.getItemRegistry()
@@ -74,7 +75,7 @@ public final class LegacyItemIdentity {
         return tag;
     }
 
-    public static @NotNull StableKey encode(@NotNull FluidStack stack) {
+    public static @Nullable StableKey encode(@NotNull FluidStack stack) {
         // The supported AEFluidStack factory discards FluidStack.tag; preserve its existing identity.
         return encode(
             "fluid",
@@ -84,7 +85,7 @@ public final class LegacyItemIdentity {
             null);
     }
 
-    public static @NotNull StableKey encode(@NotNull IAEStack<?> stack) {
+    public static @Nullable StableKey encode(@NotNull IAEStack<?> stack) {
         if (stack instanceof AEItemStack item) {
             return encode(
                 "item",
@@ -101,7 +102,7 @@ public final class LegacyItemIdentity {
                 0,
                 (NBTTagCompound) fluid.getTagCompound());
         }
-        throw new UnsupportedOperationException("Unsupported legacy resource identity");
+        return null;
     }
 
     public static @NotNull IAEStack<?> copy(@NotNull IAEStack<?> stack) {
@@ -114,19 +115,18 @@ public final class LegacyItemIdentity {
         return result;
     }
 
-    private static StableKey encode(String kind, @Nullable String registry, int metadata,
+    private static @Nullable StableKey encode(String kind, @Nullable String registry, int metadata,
         @Nullable NBTTagCompound secondary) {
-        if (registry == null || registry.isEmpty()) {
-            throw new UnsupportedOperationException("Resource has no registered identity");
-        }
-        return StableKey.create(sink -> {
+        if (registry == null || registry.isEmpty()) return null;
+        return StableKey.createOptional(sink -> {
             DataOutputStream output = new DataOutputStream(Funnels.asOutputStream(sink));
             try {
                 StableKey.writeText(sink, kind);
                 StableKey.writeText(sink, registry);
                 output.writeInt(metadata);
                 output.writeByte(secondary == null ? 0 : 1);
-                if (secondary != null) new Tags(output, sink, "fluid".equals(kind)).write(secondary, 0, true, false);
+                return secondary == null
+                    || new Tags(output, sink, "fluid".equals(kind)).write(secondary, 0, true, false);
             } catch (IOException exception) {
                 throw new UncheckedIOException(exception);
             }
@@ -146,12 +146,14 @@ public final class LegacyItemIdentity {
             this.normalizeZero = normalizeZero;
         }
 
-        private void write(NBTBase tag, int depth, boolean includeType, boolean owned) throws IOException {
+        private boolean write(NBTBase tag, int depth, boolean includeType, boolean owned) throws IOException {
             if (depth > MAX_DEPTH || ++nodes > MAX_NODES)
                 throw new IllegalArgumentException("NBT identity exceeds structural limits");
             int type = tag.getId();
             if (includeType) output.writeByte(type);
             switch (type) {
+                case NBT.TAG_END:
+                    throw new IllegalArgumentException("Unexpected NBT end tag");
                 case NBT.TAG_BYTE:
                     output.writeByte(((NBTPrimitive) tag).func_150290_f());
                     break;
@@ -166,17 +168,17 @@ public final class LegacyItemIdentity {
                     break;
                 case NBT.TAG_FLOAT:
                     float floatValue = ((NBTPrimitive) tag).func_150288_h();
-                    if (Float.isNaN(floatValue)) throw new UnsupportedOperationException("NaN identity");
+                    if (Float.isNaN(floatValue)) return false;
                     if (!normalizeZero && Float.floatToRawIntBits(floatValue) == Integer.MIN_VALUE) {
-                        throw new UnsupportedOperationException("Negative-zero item identity");
+                        return false;
                     }
                     output.writeFloat(floatValue == 0 ? 0 : floatValue);
                     break;
                 case NBT.TAG_DOUBLE:
                     double doubleValue = ((NBTPrimitive) tag).func_150286_g();
-                    if (Double.isNaN(doubleValue)) throw new UnsupportedOperationException("NaN identity");
+                    if (Double.isNaN(doubleValue)) return false;
                     if (!normalizeZero && Double.doubleToRawLongBits(doubleValue) == Long.MIN_VALUE) {
-                        throw new UnsupportedOperationException("Negative-zero item identity");
+                        return false;
                     }
                     output.writeDouble(doubleValue == 0 ? 0 : doubleValue);
                     break;
@@ -194,10 +196,10 @@ public final class LegacyItemIdentity {
                     checkChildren(length);
                     // GTNH's AE2 intern equality ignores the retained type of an empty item list.
                     int elementType = length == 0 && !normalizeZero ? NBT.TAG_END : list.func_150303_d();
-                    if (elementType < NBT.TAG_END || elementType > NBT.TAG_INT_ARRAY
-                        || elementType == NBT.TAG_END && length != 0) {
-                        throw new UnsupportedOperationException("Invalid NBT list type");
+                    if (elementType == NBT.TAG_END && length != 0) {
+                        throw new IllegalArgumentException("Invalid NBT list type");
                     }
+                    if (elementType < NBT.TAG_END || elementType > NBT.TAG_INT_ARRAY) return false;
                     output.writeByte(elementType);
                     output.writeInt(length);
                     if (length == 0) break;
@@ -206,7 +208,8 @@ public final class LegacyItemIdentity {
                         || elementType == NBT.TAG_COMPOUND
                         || elementType == NBT.TAG_INT_ARRAY) {
                         for (int index = 0; index < length; index++) {
-                            write(publicListElement(list, index, elementType), depth + 1, false, owned);
+                            if (!write(publicListElement(list, index, elementType), depth + 1, false, owned))
+                                return false;
                         }
                     } else {
                         // Only list types without public getters need a detached subtree. Once
@@ -216,9 +219,9 @@ public final class LegacyItemIdentity {
                         for (int index = length - 1; index >= 0; index--) children[index] = detached.removeTag(index);
                         for (NBTBase child : children) {
                             if (child.getId() != elementType) {
-                                throw new UnsupportedOperationException("Mixed NBT list");
+                                throw new IllegalArgumentException("Mixed NBT list");
                             }
-                            write(child, depth + 1, false, true);
+                            if (!write(child, depth + 1, false, true)) return false;
                         }
                     }
                     break;
@@ -231,7 +234,7 @@ public final class LegacyItemIdentity {
                     output.writeInt(names.length);
                     for (String name : names) {
                         StableKey.writeText(sink, name);
-                        write(compound.getTag(name), depth + 1, true, owned);
+                        if (!write(compound.getTag(name), depth + 1, true, owned)) return false;
                     }
                     break;
                 case NBT.TAG_INT_ARRAY:
@@ -241,8 +244,9 @@ public final class LegacyItemIdentity {
                     break;
 
                 default:
-                    throw new UnsupportedOperationException("Unsupported NBT identity type: " + type);
+                    return false;
             }
+            return true;
         }
 
         private static NBTBase publicListElement(NBTTagList list, int index, int type) {
