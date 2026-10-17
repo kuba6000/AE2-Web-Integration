@@ -8,6 +8,7 @@ configurations {
 }
 
 dependencies {
+    coreShadow('org.hsqldb:hsqldb:2.7.4:jdk8') { transitive = false }
     coreShadow(project(':core')) {
         transitive = false
     }
@@ -22,6 +23,7 @@ def nestedDependencies = tasks.register('nestedDependenciesJar', Zip) {
 }
 
 tasks.named('shadowJar').configure {
+    relocate('org.hsqldb', 'pl.kuba6000.ae2webintegration.internal.hsqldb')
     dependsOn(':core:jar', 'createMinecraftArtifacts')
     from(nestedDependencies)
     archiveClassifier = 'dev'
@@ -33,7 +35,9 @@ tasks.named('shadowJar').configure {
     }
 
     if (findProperty('minimizeShadowedDependencies')?.toString()?.toBoolean() != false) {
-        minimize()
+        minimize {
+            exclude(dependency('org.hsqldb:hsqldb:.*'))
+        }
     }
     if (findProperty('relocateShadowedDependencies')?.toString()?.toBoolean() != false) {
         relocate('com.google', "${shadowRelocationPrefix}.com.google")

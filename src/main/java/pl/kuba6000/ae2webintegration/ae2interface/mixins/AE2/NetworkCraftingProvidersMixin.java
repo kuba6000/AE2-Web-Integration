@@ -6,20 +6,36 @@ import java.util.Map;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.me.service.helpers.NetworkCraftingProviders;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingRevision;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IProviderState;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 
 @Mixin(value = NetworkCraftingProviders.class, remap = false)
-public class NetworkCraftingProvidersMixin implements ICraftingMediumTracker {
+public class NetworkCraftingProvidersMixin implements ICraftingMediumTracker, ICraftingRevision {
 
     @Unique
     private final Map<ICraftingProvider, IGridNode> web$providerToNode = new IdentityHashMap<>();
+
+    @Unique
+    private long web$craftingRevision;
+
+    @Inject(method = "setLastModifiedOnTick", at = @At("RETURN"))
+    private void web$craftingModified(CallbackInfo ci) {
+        web$craftingRevision++;
+    }
+
+    @Override
+    public long web$getCraftingRevision() {
+        return web$craftingRevision;
+    }
 
     @Redirect(
         method = "addProvider",
