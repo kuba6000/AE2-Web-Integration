@@ -42,6 +42,7 @@ test('recent-only events keep the inventory snapshot reusable by themes while pu
     terminal.route({ view: 'items', gridKey: 'grid' });
     await terminal.refresh();
     const inventory = terminal.state.items;
+    const snapshotRevision = terminal.state.itemSnapshotRevision;
     let observed;
     terminal.subscribe((state) => {
         observed = { items: state.items, recent: state.recent };
@@ -55,6 +56,7 @@ test('recent-only events keep the inventory snapshot reusable by themes while pu
     });
     assert.equal(observed.recent.resources.iron.input, '7');
     assert.equal(observed.items, inventory, 'Tracking-only events do not invalidate a theme inventory cache');
+    assert.equal(terminal.state.itemSnapshotRevision, snapshotRevision);
     events.delta({
         view: { generation: '1', revision: '3' },
         definitions: [],
@@ -64,6 +66,13 @@ test('recent-only events keep the inventory snapshot reusable by themes while pu
     assert.notEqual(observed.items, inventory);
     assert.equal(observed.items[0].quantity, 14);
     assert.equal(inventory[0].quantity, 12, 'Previously delivered inventory snapshots retain their quantities');
+    assert.equal(
+        terminal.state.itemSnapshotRevision,
+        snapshotRevision,
+        'Live stock changes retain full-snapshot provenance'
+    );
+    await terminal.refresh();
+    assert.equal(terminal.state.itemSnapshotRevision, snapshotRevision + 1);
 });
 
 test('terminal live status rejects closed stream callbacks and disabling automatic refresh keeps manual reads non-streaming', async (t) => {

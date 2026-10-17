@@ -2,7 +2,7 @@ import type { ThemeApplication, ThemeState, ThemeLifetime, ThemeSettings } from 
 import { trackingHref } from '../../app/router.js';
 import { recentTrackingLines } from './recent-tracking.js';
 import type { Translator } from '../../app/i18n.js';
-import { registryId, selectResources } from '../../app/resource-helpers.js';
+import { filterResources, registryId, selectResources } from '../../app/resource-helpers.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { element } from './dom.js';
@@ -123,7 +123,9 @@ export function createResourceTerminal(
     let locale: Translator;
     let effectiveDisplay: TerminalDisplay = 'names';
     let page = 0;
-    let listInput: { items: ThemeState['items']; signature: string } | undefined;
+    let listInput: { items: ThemeState['items']; signature: string; snapshot: number } | undefined;
+    let orderTimer: ReturnType<typeof setTimeout> | undefined;
+    const changedOrderKeys = new Set<string>();
     let state: ThemeState;
     let rows: ReturnType<typeof createItemRow>[] = [];
     let iconInput:
@@ -192,7 +194,21 @@ export function createResourceTerminal(
         const box = row.button.getBoundingClientRect();
         showTooltip(row.button, row.item, pointer ? x : box.left, pointer ? y : box.bottom);
     }
-    function renderItems() {
+    function stopOrdering() {
+        clearTimeout(orderTimer);
+        orderTimer = undefined;
+    }
+    lifetime.onCleanup(stopOrdering);
+    function scheduleOrdering() {
+        stopOrdering();
+        if (state.itemStatus !== 'ready' || !state.stream) return;
+        orderTimer = setTimeout(() => {
+            orderTimer = undefined;
+            if (!lifetime.signal.aborted && state.route.view === 'items' && state.itemStatus === 'ready')
+                renderItems(true);
+        }, 30000);
+    }
+    function renderItems(reorder = false) {
         const signature = [
             state.search,
             state.preferences.filter,
@@ -200,17 +216,24 @@ export function createResourceTerminal(
             state.preferences.sortOrder,
             state.preferences.showItems,
             state.preferences.showFluids,
+            state.preferences.autoRefresh,
             language,
             state.route.gridKey,
             terminalPageSize(settings)
         ].join('\0');
-        const changed = !listInput || listInput.items !== state.items || listInput.signature !== signature;
+        const resetOrder =
+            reorder ||
+            !listInput ||
+            listInput.signature !== signature ||
+            listInput.snapshot !== state.itemSnapshotRevision ||
+            state.itemStatus !== 'ready';
+        const changed = resetOrder || listInput?.items !== state.items;
         if (changed) {
             if (listInput?.signature !== signature) {
                 page = 0;
                 controls.itemScroll.scrollTop = 0;
             }
-            allFiltered = selectResources(state.items, {
+            const options = {
                 search: state.search,
                 language,
                 filter: state.preferences.filter,
@@ -218,17 +241,44 @@ export function createResourceTerminal(
                 showFluids: state.preferences.showFluids,
                 sort: state.preferences.sort,
                 sortOrder: state.preferences.sortOrder
-            });
-            listInput = { items: state.items, signature };
+            };
+            if (resetOrder) {
+                allFiltered = selectResources(state.items, options);
+                scheduleOrdering();
+            } else {
+                const current = new Map(state.items.map((item) => [item.itemKey ?? item, item]));
+                const existing = new Set(allFiltered.map((item) => item.itemKey ?? item));
+                allFiltered = allFiltered.flatMap((item) => {
+                    const latest = current.get(item.itemKey ?? item);
+                    if (item.itemKey && latest !== item) changedOrderKeys.add(item.itemKey);
+                    if (latest) return [latest];
+                    if (!item.itemKey) return [];
+                    return [item.quantity === 0 && !item.craftable ? item : { ...item, quantity: 0, craftable: false }];
+                });
+                const added = filterResources(
+                    state.items.filter((item) => !existing.has(item.itemKey ?? item)),
+                    options
+                );
+                for (const item of added) if (item.itemKey) changedOrderKeys.add(item.itemKey);
+                if (added.length) allFiltered = [...allFiltered, ...added];
+            }
+            listInput = { items: state.items, signature, snapshot: state.itemSnapshotRevision };
             renderPage();
+            if (resetOrder) changedOrderKeys.clear();
         }
         updateIcons();
         for (const row of rows) updateSelection(row);
+        if (menuItem) {
+            const current = currentResource(menuItem);
+            if (current) menuItem = current;
+            menuCraft.disabled = !current?.craftable || !current.itemKey;
+        }
         let message = '';
         if (state.gridStatus === 'ready') {
             if (state.itemStatus === 'loading') message = locale.common('loading');
             else if (state.itemError) message = locale.common(state.itemError);
-            else if (state.itemStatus === 'ready' && !state.items.length) message = locale.common('empty');
+            else if (state.itemStatus === 'ready' && !state.items.length && !allFiltered.length)
+                message = locale.common('empty');
         }
         controls.itemMessage.textContent = message;
         controls.itemMessage.classList.toggle('api-error', !!state.itemError && !!message);
@@ -261,14 +311,21 @@ export function createResourceTerminal(
         if (restore && menuSource?.isConnected) menuSource.focus({ preventScroll: true });
         menuItem = null;
     }
+    function currentResource(item: ThemeState['items'][number]) {
+        return state.items.find((current) => (item.itemKey ? current.itemKey === item.itemKey : current === item));
+    }
     function showResourceMenu(item: ThemeState['items'][number], source: HTMLElement, x: number, y: number) {
-        application.select(item, 3600000);
+        const current = currentResource(item);
+        if (current) {
+            item = current;
+            application.select(item, 3600000);
+        }
         hideTooltip();
         menuItem = item;
         menuSource = source;
         menuGrid = state.route.gridKey;
         menuCraft.textContent = locale.common('craft');
-        menuCraft.disabled = !item.craftable || !item.itemKey;
+        menuCraft.disabled = !current?.craftable || !current.itemKey;
         menuTracking.textContent = locale.t('viewTracking');
         menuTracking.disabled = !item.itemKey;
         resourceMenu.hidden = false;
@@ -277,10 +334,10 @@ export function createResourceTerminal(
         (menuCraft.disabled ? menuTracking : menuCraft).focus();
     }
     menuCraft.addEventListener('click', () => {
-        const item = menuItem;
+        const item = menuItem && currentResource(menuItem);
         const source = menuSource;
         closeResourceMenu(false);
-        if (item && source) craftingView.open(item, source);
+        if (item?.craftable && item.itemKey && source) craftingView.open(item, source);
     });
     resourceMenu.addEventListener('keydown', (event) => {
         const actions = [menuCraft, menuTracking].filter((button) => !button.disabled);
@@ -320,7 +377,9 @@ export function createResourceTerminal(
         button.append(createResourceIcon(), row.name, amount);
         row.li.append(button);
         button.addEventListener('click', () => {
-            application.select(row.item, 3600000);
+            const item = currentResource(row.item);
+            if (!item) return;
+            application.select(item, 3600000);
             hideTooltip();
             mobile.open(controls.resourcePanel, locale.common('details'), button);
         });
@@ -328,11 +387,12 @@ export function createResourceTerminal(
             if (event.button === 1 && row.item.craftable && row.item.itemKey) event.preventDefault();
         });
         button.addEventListener('auxclick', (event) => {
-            if (event.button !== 1 || !row.item.craftable || !row.item.itemKey) return;
+            const item = currentResource(row.item);
+            if (event.button !== 1 || !item?.craftable || !item.itemKey) return;
             event.preventDefault();
-            application.select(row.item, 3600000);
+            application.select(item, 3600000);
             hideTooltip();
-            craftingView.open(row.item, button);
+            craftingView.open(item, button);
         });
         button.addEventListener('contextmenu', (event) => {
             event.preventDefault();
@@ -376,15 +436,16 @@ export function createResourceTerminal(
         const pageSize = configuredSize === 'all' ? Math.max(1, allFiltered.length) : configuredSize;
         const list = controls.items;
         const focused = rows.find((row) => row.button === document.activeElement);
-        const previous = new Map(rows.filter((row) => row.item.itemKey).map((row) => [row.item.itemKey, row]));
+        const previous = new Map(rows.map((row) => [row.item.itemKey ?? row.item, row]));
         const changedRows = new Set<ReturnType<typeof createItemRow>>();
         page = Math.min(page, Math.max(0, Math.ceil(allFiltered.length / pageSize) - 1));
         // Reordering can blur a focused button; restoring focus must preserve tooltip dismissal.
         updatingRows = true;
         const next = allFiltered.slice(page * pageSize, (page + 1) * pageSize).map((item) => {
-            const row = previous.get(item.itemKey) || createItemRow(item);
+            const row = previous.get(item.itemKey ?? item) || createItemRow(item);
             const initial = !row.language;
-            if (initial || row.item !== item) changedRows.add(row);
+            if (initial || row.item !== item || (item.itemKey && changedOrderKeys.has(item.itemKey)))
+                changedRows.add(row);
             const languageChanged = row.language !== language;
             const nameChanged = initial || row.item.displayName !== item.displayName;
             const quantityChanged = initial || row.item.quantity !== item.quantity;
@@ -641,12 +702,18 @@ export function createResourceTerminal(
                 renderItems();
                 renderDetails();
                 refreshItemTooltip();
-            } else if (itemTooltip || toolTooltip) hideTooltip();
+            } else {
+                stopOrdering();
+                changedOrderKeys.clear();
+                listInput = undefined;
+                if (itemTooltip || toolTooltip) hideTooltip();
+            }
             if (state.route.view !== 'items' || state.itemStatus === 'error' || menuGrid !== state.route.gridKey)
                 closeResourceMenu(false);
             slots.update(rows.length);
         },
         dispose() {
+            stopOrdering();
             historyView.dispose();
             itemIcons.dispose();
             slots.dispose();

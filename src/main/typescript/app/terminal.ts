@@ -32,6 +32,7 @@ export type TerminalData = {
     gridStatus: 'loading' | 'ready' | 'error';
     gridError: string | null;
     items: StoredResource[];
+    itemSnapshotRevision: number;
     itemIcons: IconMetadata | null;
     iconPack: { available: boolean | null; status: 'loading' | 'ready' | 'error' };
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';
@@ -148,6 +149,7 @@ export function createTerminal(
         gridStatus: 'loading',
         gridError: null,
         items: [],
+        itemSnapshotRevision: 0,
         itemIcons: null,
         iconPack: { available: null, status: 'loading' },
         itemStatus: 'idle',
@@ -338,6 +340,7 @@ export function createTerminal(
             const items = result.data;
             state.itemIcons = result.icons;
             state.items = items;
+            state.itemSnapshotRevision++;
             state.recent = result.recent ?? null;
             state.selected = state.selected
                 ? items.find((item) => item.itemKey && item.itemKey === state.selected?.itemKey) || null

@@ -7665,7 +7665,13 @@ for (const width of [390, 1280]) {
             .write(
                 `event: delta\ndata: ${JSON.stringify({ view: { generation: '1', revision: '2' }, updates: [], definitions: [], removed, icons: null })}\n\n`
             );
+        await page.locator('#items button').first().getByText('0', { exact: true }).waitFor();
+        assert.equal(await page.locator('#page-count').innerText(), '6 / 6');
+        await page.locator('#items button').first().focus();
+        await page.getByRole('tooltip').getByText('Stored: 0', { exact: true }).waitFor();
+        await page.clock.fastForward(30000);
         await page.waitForFunction(() => document.querySelector('#page-count')?.textContent === '5 / 5');
+        assert.equal(await page.getByRole('tooltip').isVisible(), false);
         assert.equal(await page.locator('#items button').count(), 50);
         assert.equal(await page.getByRole('button', { name: 'Next page', exact: true }).isDisabled(), true);
         await page.getByRole('searchbox', { name: 'Search resources', exact: true }).fill('Resource 000');
@@ -10823,7 +10829,7 @@ test('recent tracking shows independent measured periods and does not advance st
     assert.equal(await details.locator('time').getAttribute('datetime'), sampledAt);
 });
 
-test('a live quantity update preserves unchanged resource content and equal-quantity ordering', async (t) => {
+test('live quantities update immediately while terminal order uses a fixed thirty-second window and snapshots sort immediately', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.addInitScript(() => {
         window.deltaDurations = [];
@@ -10873,15 +10879,208 @@ test('a live quantity update preserves unchanged resource content and equal-quan
             removed: []
         })}\n\n`
     );
+    await page.getByRole('tooltip').getByText('Stored: 20,001', { exact: true }).waitFor();
+    assert.deepEqual(
+        await page.locator('#items strong').allTextContents(),
+        before,
+        'Live quantities do not immediately move resources'
+    );
+    await page.clock.fastForward(20000);
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({
+            view: { generation: '1', revision: '3' },
+            updates: [{ itemKey: 'resource-0', quantity: 20002, craftable: true }],
+            definitions: [],
+            removed: []
+        })}\n\n`
+    );
+    await page.getByRole('tooltip').getByText('Stored: 20,002', { exact: true }).waitFor();
+    assert.deepEqual(await page.locator('#items strong').allTextContents(), before);
+    await page.clock.fastForward(15000);
     await page.waitForFunction(() => document.querySelector('#items strong')?.textContent === 'Resource 001');
     assert.deepEqual(await page.locator('#items strong').allTextContents(), [...before.slice(1), before[0]]);
     assert.equal(await page.evaluate(() => document.activeElement?.textContent.includes('Resource 000')), true);
     await page.getByRole('tooltip').getByText('Resource 000', { exact: true }).waitFor();
-    await page.getByRole('tooltip').getByText('Stored: 20,001', { exact: true }).waitFor();
+    await page.getByRole('tooltip').getByText('Stored: 20,002', { exact: true }).waitFor();
     const mutations = await page.evaluate(() => window.resourceContentChanges.length);
     t.diagnostic(`Resource content mutations for one quantity update among 500 rows: ${mutations}`);
     t.diagnostic(`SSE callback duration (ms): ${await page.evaluate(() => window.deltaDurations.join(', '))}`);
     assert.ok(mutations < 10, 'A delta must not replace the unchanged names and quantities of the entire inventory');
+    options.itemsA[0] = { ...options.itemsA[0], quantity: 1 };
+    options.liveView = { generation: '1', revision: '4' };
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/items'));
+    await page.locator('#refresh').click();
+    await refreshed;
+    await page.waitForFunction(() => document.querySelector('#items strong')?.textContent === 'Resource 000');
+    await page.locator('#items button').first().getByText('1', { exact: true }).waitFor();
+});
+
+test('live additions append and removed resources remain inert zero slots until reordering or return', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.liveView = { generation: '1', revision: '1' };
+    options.itemsA = ['Alpha', 'Bravo', 'Charlie'].map((displayName, index) => ({
+        ...iron,
+        itemKey: displayName,
+        displayName,
+        quantity: (index + 1) * 10
+    }));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#refresh .live-icon').waitFor();
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    const names = () => page.locator('#items strong').allTextContents();
+    const bravo = page.locator('#items button').filter({ hasText: 'Bravo' });
+    await bravo.evaluate((button) => {
+        window.originalBravo = button;
+    });
+    await bravo.click({ button: 'right' });
+    await page.getByRole('menu').waitFor();
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({
+            view: { generation: '1', revision: '2' },
+            updates: [{ itemKey: 'Alpha', quantity: 40, craftable: true }],
+            definitions: [{ ...iron, itemKey: 'Aaron', displayName: 'Aaron', quantity: 5 }],
+            removed: ['Bravo']
+        })}\n\n`
+    );
+    await page.locator('#items button').filter({ hasText: 'Aaron' }).waitFor();
+    assert.deepEqual(await names(), ['Alpha', 'Bravo', 'Charlie', 'Aaron']);
+    await bravo.getByText('0', { exact: true }).waitFor();
+    assert.equal(
+        await page.getByRole('menuitem', { name: 'Craft', exact: true }).isDisabled(),
+        true,
+        'A removed resource cannot retain a stale craft action'
+    );
+    assert.equal(await page.getByRole('menuitem', { name: 'View tracking', exact: true }).isEnabled(), true);
+    await page.keyboard.press('Escape');
+    const historyReads = options.requests.filter((request) => request.path.endsWith('/resource-history')).length;
+    await bravo.click();
+    assert.equal(await bravo.getAttribute('aria-pressed'), 'false');
+    assert.equal(
+        options.requests.filter((request) => request.path.endsWith('/resource-history')).length,
+        historyReads,
+        'Ghost clicks do not publish synthetic selections'
+    );
+    await bravo.focus();
+    await page.getByRole('tooltip').getByText('Stored: 0', { exact: true }).waitFor();
+    await page.clock.fastForward(10000);
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({
+            view: { generation: '1', revision: '3' },
+            updates: [],
+            definitions: [{ ...options.itemsA[1], quantity: 25 }],
+            removed: ['Charlie']
+        })}\n\n`
+    );
+    await bravo.getByText('25', { exact: true }).waitFor();
+    assert.equal(await bravo.evaluate((button) => button === window.originalBravo), true);
+    assert.deepEqual(await names(), ['Alpha', 'Bravo', 'Charlie', 'Aaron']);
+    await page.clock.fastForward(25000);
+    await page.waitForFunction(() => document.querySelectorAll('#items button').length === 3);
+    assert.deepEqual(await names(), ['Aaron', 'Bravo', 'Alpha']);
+});
+
+test('unkeyed rows retain only object identity while explicit controls immediately recompute the held view', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.liveView = { generation: '1', revision: '1' };
+    options.itemsA = [
+        { ...iron, itemKey: 'alpha', displayName: 'Alpha', quantity: 10 },
+        { ...iron, itemKey: 'bravo', displayName: 'Bravo', quantity: 20 },
+        { ...iron, itemKey: null, displayName: 'Unknown', quantity: 15 }
+    ];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#refresh .live-icon').waitFor();
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    const names = () => page.locator('#items strong').allTextContents();
+    const unknown = page.locator('#items button').filter({ hasText: 'Unknown' });
+    await unknown.evaluate((button) => {
+        window.originalUnknown = button;
+    });
+    await unknown.focus();
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({
+            view: { generation: '1', revision: '2' },
+            definitions: [],
+            removed: [],
+            updates: [{ itemKey: 'alpha', quantity: 40, craftable: true }]
+        })}\n\n`
+    );
+    await page.locator('#items button').filter({ hasText: 'Alpha' }).getByText('40', { exact: true }).waitFor();
+    assert.deepEqual(await names(), ['Alpha', 'Unknown', 'Bravo']);
+    assert.equal(
+        await unknown.evaluate((button) => button === window.originalUnknown && button === document.activeElement),
+        true
+    );
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({
+            view: { generation: '1', revision: '3' },
+            definitions: [],
+            removed: ['bravo'],
+            updates: [],
+            unkeyed: [{ ...options.itemsA[2], displayName: 'Replacement', quantity: 5 }]
+        })}\n\n`
+    );
+    await page.locator('#items button').filter({ hasText: 'Replacement' }).waitFor();
+    assert.deepEqual(await names(), ['Alpha', 'Bravo', 'Replacement']);
+    await page.getByRole('button', { name: 'Availability: All', exact: true }).click();
+    assert.deepEqual(
+        await names(),
+        ['Replacement', 'Alpha'],
+        'A filter change removes ghosts and recomputes immediately'
+    );
+    await page.getByRole('button', { name: 'Sort order: Ascending', exact: true }).click();
+    assert.deepEqual(await names(), ['Alpha', 'Replacement']);
+    const search = page.getByRole('searchbox', { name: 'Search resources', exact: true });
+    await search.fill('Alpha');
+    assert.deepEqual(await names(), ['Alpha']);
+    await search.fill('');
+    assert.deepEqual(await names(), ['Alpha', 'Replacement']);
+});
+
+test('ghost expiry reveals the empty state and denied reads clear ghosts immediately', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.liveView = { generation: '1', revision: '1' };
+    options.itemsA = [iron];
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#refresh .live-icon').waitFor();
+    const item = page.locator('#items button').first();
+    await item.focus();
+    const remove = (revision) =>
+        options.itemStreams.at(-1).write(
+            `event: delta\ndata: ${JSON.stringify({
+                view: { generation: '1', revision },
+                definitions: [],
+                updates: [],
+                removed: [iron.itemKey]
+            })}\n\n`
+        );
+    remove('2');
+    await page.getByRole('tooltip').getByText('Stored: 0', { exact: true }).waitFor();
+    assert.equal(
+        await page.locator('#item-message').textContent(),
+        '',
+        'The empty message must wait for the final ghost to disappear'
+    );
+    await page.clock.fastForward(30000);
+    assert.equal(await page.locator('#items button').count(), 0);
+    assert.equal(await page.getByRole('tooltip').isVisible(), false);
+    assert.notEqual(await page.locator('#item-message').textContent(), '');
+    options.liveView = { generation: '1', revision: '3' };
+    await page.locator('#refresh').click();
+    await item.waitFor();
+    await page.locator('#refresh .live-icon').waitFor();
+    await item.focus();
+    remove('4');
+    await page.getByRole('tooltip').getByText('Stored: 0', { exact: true }).waitFor();
+    options.status = 403;
+    await page.locator('#refresh').click();
+    await item.waitFor({ state: 'detached' });
+    await page.goto(`${base}#/web-settings`);
+    await page.clock.fastForward(60000);
+    assert.equal(
+        await page.locator('#items button').count(),
+        0,
+        'An old ordering timer cannot restore denied data after navigation'
+    );
 });
 
 test('flow-only SSE updates and expiry refresh hovered summaries without history reads', async (t) => {
@@ -11126,6 +11325,12 @@ test('terminal applies compact updates, fetches a fresh snapshot on reconnect an
             icons: null
         })}\n\n`
     );
+    await page
+        .locator('#items button')
+        .filter({ hasText: 'Live updated iron' })
+        .getByText('0', { exact: true })
+        .waitFor();
+    await page.clock.fastForward(30000);
     await page.getByText('Live updated iron', { exact: true }).waitFor({ state: 'hidden' });
     await page.getByText('Live essentia', { exact: true }).waitFor({ state: 'hidden' });
     options.liveView = { generation: '9223372036854775000', revision: '4' };

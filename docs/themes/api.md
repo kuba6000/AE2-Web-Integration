@@ -38,6 +38,10 @@ network settings. State is borrowed readonly data, not a separately cloned snaps
 arrays when presenting it. `subscribe` returns an early-unsubscribe function; host cleanup also removes
 the subscription.
 
+`itemSnapshotRevision` changes when a full terminal snapshot is accepted; SSE deltas leave it unchanged.
+Themes can use it to distinguish a refreshed inventory from incremental updates. `items` always contains
+the current resources; any delayed sorting or temporary empty rows belong to the theme's own view.
+
 | Service                                                                    | Purpose                                                   |
 | -------------------------------------------------------------------------- | --------------------------------------------------------- |
 | `refresh({ reloadDetail: true })`                                          | Explicit refresh, including an open detail view           |

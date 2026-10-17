@@ -31,6 +31,8 @@ export type ThemeState = ReadonlyData<{
     gridStatus: 'loading' | 'ready' | 'error';
     gridError: string | null;
     items: StoredResource[];
+    /** Advances only when a full item snapshot is accepted, independently of live deltas. */
+    itemSnapshotRevision: number;
     itemIcons: IconMetadata | null;
     iconPack: { available: boolean | null; status: 'loading' | 'ready' | 'error' };
     itemStatus: 'idle' | 'loading' | 'ready' | 'error';
