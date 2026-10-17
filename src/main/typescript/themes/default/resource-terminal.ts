@@ -2,7 +2,7 @@ import type { ThemeApplication, ThemeState, ThemeLifetime, ThemeSettings } from 
 import { trackingHref } from '../../app/router.js';
 import { recentTrackingLines } from './recent-tracking.js';
 import type { Translator } from '../../app/i18n.js';
-import { filterResources, registryId, selectResources } from '../../app/resource-helpers.js';
+import { filterResources, registryId, selectResources, sortResources } from '../../app/resource-helpers.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { element } from './dom.js';
@@ -252,7 +252,10 @@ export function createResourceTerminal(
                     state.items.filter((item) => !existing.has(item.itemKey ?? item)),
                     options
                 );
-                const anonymous = added.filter((item) => !item.itemKey);
+                const anonymous = sortResources(
+                    added.filter((item) => !item.itemKey),
+                    options
+                );
                 let anonymousSlot = 0;
                 allFiltered = allFiltered.flatMap((item) => {
                     const latest = current.get(item.itemKey ?? item);
@@ -269,7 +272,11 @@ export function createResourceTerminal(
                 });
                 for (const item of added) if (item.itemKey) changedOrderKeys.add(item.itemKey);
                 if (added.length)
-                    allFiltered = [...allFiltered, ...added.filter((item) => !existing.has(item.itemKey ?? item))];
+                    allFiltered = [
+                        ...allFiltered,
+                        ...added.filter((item) => item.itemKey),
+                        ...anonymous.filter((item) => !existing.has(item))
+                    ];
             }
             listInput = { items: state.items, signature, snapshot: state.itemSnapshotRevision };
             renderPage();

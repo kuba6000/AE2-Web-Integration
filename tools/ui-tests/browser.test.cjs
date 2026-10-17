@@ -11173,6 +11173,74 @@ test('replacement unkeyed payloads keep occupied anonymous positions on a pagina
     );
 });
 
+for (const { sort, direction, expected } of [
+    { sort: 'quantity', direction: 'ascending', expected: ['Y lowest', 'Z low', 'M middle', 'A high', 'B highest'] },
+    { sort: 'quantity', direction: 'descending', expected: ['B highest', 'A high', 'M middle', 'Z low', 'Y lowest'] },
+    { sort: 'name', direction: 'ascending', expected: ['A high', 'B highest', 'M middle', 'Y lowest', 'Z low'] },
+    { sort: 'name', direction: 'descending', expected: ['Z low', 'Y lowest', 'M middle', 'B highest', 'A high'] }
+]) {
+    test(`anonymous replacements and surplus use current ${sort} ${direction} order before refilling slots`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        options.liveView = { generation: '1', revision: '1' };
+        const anonymous = (displayName, quantity) => ({
+            ...iron,
+            itemKey: null,
+            displayName,
+            quantity,
+            craftable: false
+        });
+        const incoming = [
+            anonymous('Y lowest', 60),
+            anonymous('Z low', 70),
+            anonymous('M middle', 80),
+            anonymous('A high', 90),
+            anonymous('B highest', 100)
+        ];
+        options.itemsA = [
+            { ...iron, itemKey: 'key-a', displayName: 'Keyed A', quantity: 10 },
+            { ...iron, itemKey: 'key-b', displayName: 'Keyed B', quantity: 20 },
+            anonymous('Old anonymous 1', 5),
+            anonymous('Old anonymous 2', 15)
+        ];
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        await page.locator('#refresh .live-icon').waitFor();
+        if (sort === 'quantity') await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+        if (direction === 'descending')
+            await page.getByRole('button', { name: 'Sort order: Ascending', exact: true }).click();
+        const before = await page.locator('#items strong').allTextContents();
+        await page
+            .locator('#items button')
+            .filter({ hasText: 'Old anonymous' })
+            .evaluateAll((buttons) => {
+                window.oldAnonymous = buttons;
+            });
+        await page.locator('#items button').filter({ hasText: 'Old anonymous' }).first().focus();
+        options.itemStreams[0].write(
+            `event: delta\ndata: ${JSON.stringify({
+                view: { generation: '1', revision: '2' },
+                updates: [],
+                removed: [],
+                definitions: [
+                    { ...iron, itemKey: 'new-z', displayName: 'Keyed new Z', quantity: 30 },
+                    { ...iron, itemKey: 'new-a', displayName: 'Keyed new A', quantity: 1 }
+                ],
+                unkeyed: [...expected].reverse().map((name) => incoming.find((item) => item.displayName === name))
+            })}\n\n`
+        );
+        await page.locator('#items button').filter({ hasText: 'Keyed new Z' }).waitFor();
+        let position = 0;
+        const held = before.map((name) => (name.startsWith('Old anonymous') ? expected[position++] : name));
+        assert.deepEqual(await page.locator('#items strong').allTextContents(), [
+            ...held,
+            'Keyed new Z',
+            'Keyed new A',
+            ...expected.slice(2)
+        ]);
+        assert.equal(await page.evaluate(() => window.oldAnonymous.every((button) => !button.isConnected)), true);
+        assert.equal(await page.getByRole('tooltip').isVisible(), false);
+    });
+}
+
 test('unkeyed rows retain only object identity while explicit controls immediately recompute the held view', async (t) => {
     const { page, options, base } = await fixture(t);
     options.liveView = { generation: '1', revision: '1' };
