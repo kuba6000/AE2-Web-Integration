@@ -17,18 +17,18 @@ import com.github.bsideup.jabel.Desugar;
 /** Retention and row budgets, executed inside the owning store transaction. */
 final class HsqlHistoryRetention {
 
-    // Keep the newest expired stock value as an anchor until a newer old value supersedes it.
+    // Retain the latest expired stock anchors and gap barrier; deleting the barrier would invent continuity.
     private static final String EXPIRED_POINTS = """
         p.observed_at < ?
         AND (
-            p.kind <> 'STOCK'
-            OR p.item_key IS NULL
+            p.kind NOT IN ('STOCK', 'GAP')
+            OR p.kind = 'STOCK' AND p.item_key IS NULL
             OR EXISTS (
                 SELECT 1
                 FROM history_points newer
                 WHERE newer.grid_id = p.grid_id
-                    AND newer.item_key = p.item_key
-                    AND newer.kind = 'STOCK'
+                    AND (newer.item_key = p.item_key OR p.kind = 'GAP')
+                    AND newer.kind = p.kind
                     AND newer.observed_at < ?
                     AND (
                         newer.observed_at > p.observed_at

@@ -24,6 +24,71 @@ class HsqlStorageHistoryStoreTest {
     Path directory;
 
     @Test
+    void expiredGapCannotResurrectAnOlderRetainedStockAnchor() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        long now = System.currentTimeMillis();
+        long old = now - TimeUnit.DAYS.toMillis(8);
+        StorageHistoryPoint gap = new StorageHistoryPoint(
+            old + 100,
+            7,
+            StorageHistoryPoint.Kind.GAP,
+            null,
+            0,
+            false,
+            0,
+            0,
+            false);
+        try (HsqlStorageHistoryStore store = store(100)) {
+            append(store, grid, Arrays.asList(stock(item, old, 10), gap));
+            assertNull(
+                store.read(grid, item, now - 1000, 10)
+                    .baseline());
+        }
+        try (HsqlStorageHistoryStore store = store(100)) {
+            assertNull(
+                store.read(grid, item, now - 1000, 10)
+                    .baseline());
+        }
+    }
+
+    @Test
+    void stockBaselineDoesNotCrossAGapBeforeTheRequestedWindow() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        long now = System.currentTimeMillis();
+        StorageHistoryPoint initial = stock(item, now, 10);
+        StorageHistoryPoint gap = new StorageHistoryPoint(
+            now + 100,
+            7,
+            StorageHistoryPoint.Kind.GAP,
+            null,
+            0,
+            false,
+            0,
+            0,
+            false);
+        try (HsqlStorageHistoryStore store = store(100)) {
+            append(store, grid, Arrays.asList(initial, gap));
+            assertNull(
+                store.read(grid, item, now + 200, 10)
+                    .baseline());
+            StorageHistoryPoint recovered = stock(item, now + 100, 10);
+            append(store, grid, Collections.singletonList(recovered));
+            assertEquals(
+                recovered,
+                store.read(grid, item, now + 200, 10)
+                    .baseline(),
+                "A fresh stock observation after the gap recovers, including the same millisecond");
+            append(store, grid, Collections.singletonList(gap));
+            assertNull(
+                store.read(grid, item, now + 200, 10)
+                    .baseline(),
+                "A later gap in the same millisecond invalidates that anchor again");
+        }
+    }
+
+    @Test
     void reopenPreservesExactValuesWithOneCurrentDescriptionPerItem() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();

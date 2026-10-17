@@ -80,7 +80,8 @@ final class HsqlHistoryReader {
         if (itemKey == null) return null;
         long boundary = selected.isEmpty() ? fromMillis : selected.get(selected.size() - 1).point.observedAt();
         QueryPoint anchor = queryBaseline(db, gridId, itemKey, boundary);
-        if (anchor == null) return null;
+        if (anchor == null || !anchor.point.complete() || crossesGap(db, gridId, itemKey, anchor, boundary))
+            return null;
         for (QueryPoint point : selected) {
             if (point.id == anchor.id) return null;
         }
@@ -151,6 +152,34 @@ final class HsqlHistoryReader {
             try (ResultSet rows = query.executeQuery()) {
                 if (!rows.next()) return null;
                 return new QueryPoint(rows.getLong("id"), readPoint(rows));
+            }
+        }
+    }
+
+    private static boolean crossesGap(Connection db, long gridId, StableKey itemKey, QueryPoint anchor, long boundary)
+        throws SQLException {
+        try (PreparedStatement query = db.prepareStatement("""
+            SELECT id
+            FROM history_points
+            WHERE grid_id = ?
+                AND (observed_at > ? OR observed_at = ? AND id > ?)
+                AND observed_at <= ?
+                AND (
+                    kind = 'GAP'
+                    OR generation <> ?
+                    OR complete = FALSE AND (kind = 'OBSERVATION' OR item_key = ? AND kind = 'STOCK')
+                )
+            """)) {
+            query.setLong(1, gridId);
+            query.setLong(2, anchor.point.observedAt());
+            query.setLong(3, anchor.point.observedAt());
+            query.setLong(4, anchor.id);
+            query.setLong(5, boundary);
+            query.setLong(6, anchor.point.generation());
+            query.setString(7, itemKey.toString());
+            query.setMaxRows(1);
+            try (ResultSet rows = query.executeQuery()) {
+                return rows.next();
             }
         }
     }
