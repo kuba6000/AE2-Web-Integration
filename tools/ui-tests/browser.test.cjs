@@ -4206,10 +4206,12 @@ for (const width of [390, 1280])
         const read = await requested;
         assert.equal(await refresh.isEnabled(), true);
         assert.equal(await refresh.getAttribute('aria-busy'), 'true');
-        assert.equal(await refresh.locator('svg').evaluate((node) => getComputedStyle(node).animationName), 'none');
+        const visibleIcon = refresh.locator('svg:visible');
+        assert.equal(await visibleIcon.count(), 1, 'Only the current refresh glyph is visible');
+        assert.equal(await visibleIcon.evaluate((node) => getComputedStyle(node).animationName), 'none');
         assert.deepEqual(await geometry(), before);
         await page.emulateMedia({ reducedMotion: 'no-preference' });
-        assert.notEqual(await refresh.locator('svg').evaluate((node) => getComputedStyle(node).animationName), 'none');
+        assert.notEqual(await visibleIcon.evaluate((node) => getComputedStyle(node).animationName), 'none');
         await logout.focus();
         await page
             .getByRole('tooltip')
