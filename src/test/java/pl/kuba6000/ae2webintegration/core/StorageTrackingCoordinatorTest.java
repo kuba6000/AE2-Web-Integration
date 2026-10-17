@@ -408,7 +408,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 terminals)) {
             coordinator.prepareForViewer(grid, 1000);
             AuthSession login = new AuthSession(WebPrincipal.admin(), Long.MAX_VALUE);
-            assertNotNull(terminals.reserve(key, login, false, null, 1000));
+            assertNotNull(terminals.reserve(key, login, false, null, null, 1000));
             coordinator.tick(TestGridFixtures.ae(grid), 9000);
             grid.rows.set(0, new ItemIdentityRequestTest.Resource("viewer-demand", 25, false));
             StorageCapture capture = grid.web$getStorageCapture();

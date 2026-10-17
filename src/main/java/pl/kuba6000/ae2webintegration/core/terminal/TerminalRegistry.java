@@ -18,6 +18,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
@@ -28,9 +29,10 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 public final class TerminalRegistry {
 
     private static final int MAX_SUBSCRIPTIONS = 64;
-    private static final int MAX_PER_PRINCIPAL = 4;
+    private static final int MAX_PER_VIEWER = 6;
     private static final int MAX_PENDING_KEYS = 16_384;
     private static final long RESERVATION_MILLIS = 10_000;
+    private static final long STREAM_LEASE_MILLIS = 90_000;
     private boolean closed;
     private long nextRecentToken;
     private final Map<StableKey, Grid> grids = new HashMap<>();
@@ -127,17 +129,23 @@ public final class TerminalRegistry {
 
     /** Snapshot and subscription registration share the same lock; no change can fall between them. */
     public synchronized @Nullable Bootstrap reserve(@NotNull StableKey key, @Nullable AuthSession session,
-        boolean icons, @Nullable String packId, long now) {
+        boolean icons, @Nullable String packId, @Nullable String replace, long now) {
         expire(now);
         if (session == null || !session.isValid(now)) return null;
-        WebPrincipal principal = session.principal();
         Grid grid = grids.get(key);
-        if (closed || grid == null || !grid.initialized || subscriptions.size() >= MAX_SUBSCRIPTIONS) return null;
+        if (closed || grid == null || !grid.initialized) return null;
+        Subscription previous = subscriptions.get(replace);
+        if (previous != null && previous.session == session && previous.key.equals(key)) {
+            end(previous, "reset");
+            release(previous);
+        }
+        if (subscriptions.size() >= MAX_SUBSCRIPTIONS) return null;
+        boolean publicMode = Config.INSTANCE.general.publicMode;
         long count = subscriptions.values()
             .stream()
-            .filter(s -> s.principal.equals(principal))
+            .filter(s -> publicMode ? s.principal.equals(session.principal()) : s.session == session)
             .count();
-        if (count >= MAX_PER_PRINCIPAL) return null;
+        if (count >= MAX_PER_VIEWER) return null;
         String token = UUID.randomUUID()
             .toString();
         subscriptions.put(token, new Subscription(token, key, grid, session, icons, packId, now + RESERVATION_MILLIS));
@@ -161,11 +169,26 @@ public final class TerminalRegistry {
             || subscriber.session != session
             || subscriber.icons != icons) return null;
         subscriber.attached = true;
+        subscriber.expires = now + STREAM_LEASE_MILLIS;
         return subscriber;
     }
 
     synchronized boolean hasPending(Subscription subscriber) {
         return !subscriber.pending.isEmpty() || subscriber.unknownChanged || subscriber.recentChanged;
+    }
+
+    /** A client acknowledges its live stream independently of successful server-side socket writes. */
+    public synchronized boolean renew(@NotNull StableKey key, @Nullable AuthSession session, @NotNull String token,
+        long now) {
+        expire(now);
+        Subscription subscriber = subscriptions.get(token);
+        if (closed || subscriber == null
+            || !subscriber.attached
+            || subscriber.end != null
+            || subscriber.session != session
+            || !subscriber.key.equals(key)) return false;
+        subscriber.expires = now + STREAM_LEASE_MILLIS;
+        return true;
     }
 
     /** Frozen detached rows leave the lock; changes during encoding/writing create a new pending batch. */
@@ -326,10 +349,12 @@ public final class TerminalRegistry {
     }
 
     synchronized void expire(long now) {
-        for (Subscription subscriber : subscriptions.values())
+        for (Subscription subscriber : subscriptions.values()) {
             if (!subscriber.session.isValid(now)) end(subscriber, "revoked");
+            else if (subscriber.attached && subscriber.expires <= now) end(subscriber, "reset");
+        }
         subscriptions.values()
-            .removeIf(s -> !s.attached && (s.expires <= now || s.end != null));
+            .removeIf(s -> s.end != null || !s.attached && s.expires <= now);
         Iterator<Grid> iterator = grids.values()
             .iterator();
         while (iterator.hasNext()) {
@@ -407,7 +432,7 @@ public final class TerminalRegistry {
         final AuthSession session;
         final boolean icons;
         final @Nullable String packId;
-        final long expires;
+        long expires;
         final Grid grid;
         final Set<StableKey> pending = new HashSet<>();
         final Set<StableKey> definitions = new HashSet<>();

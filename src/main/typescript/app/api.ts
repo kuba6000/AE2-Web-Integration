@@ -130,6 +130,28 @@ export class ApiError extends Error {
 
 /** One transport for the application. Authentication remains in the server's HttpOnly cookie. */
 export function createApi(base: URL, onUnauthorized: () => void): Api {
+    const subscriptionStorageKey = `ae2web:${base.pathname}:terminal-subscriptions`;
+    const subscriptions = new Map<string, string>();
+    try {
+        // New tabs may inherit their opener's sessionStorage; only reloads reclaim a previous connection.
+        if ((performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming)?.type === 'reload') {
+            const saved: unknown = JSON.parse(sessionStorage.getItem(subscriptionStorageKey) ?? '{}');
+            if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+                for (const [key, token] of Object.entries(saved))
+                    if (typeof token === 'string') subscriptions.set(key, token);
+            }
+        } else sessionStorage.removeItem(subscriptionStorageKey);
+    } catch {
+        // A blocked or corrupt browser store still permits in-document resync.
+    }
+    function rememberSubscription(gridKey: string, token: string) {
+        subscriptions.set(gridKey, token);
+        try {
+            sessionStorage.setItem(subscriptionStorageKey, JSON.stringify(Object.fromEntries(subscriptions)));
+        } catch {
+            // In-memory ownership remains usable when browser storage is unavailable.
+        }
+    }
     async function read<T>(
         path: string,
         {
@@ -220,11 +242,20 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
         skipUpdate: (tag) => request('api/updates/skip', { method: 'POST', body: { tag } }),
         iconPack: (signal) => request('api/icon-pack', { signal }),
         grids: (signal) => request('api/grids', { signal }),
-        items: (gridKey, signal, icons = false, live = false) => {
+        items: async (gridKey, signal, icons = false, live = false) => {
             const query = new URLSearchParams();
             if (icons) query.set('icons', 'true');
-            if (live) query.set('live', 'true');
-            return read(`api/grids/${encodeURIComponent(gridKey)}/items${query.size ? `?${query}` : ''}`, { signal });
+            if (live) {
+                query.set('live', 'true');
+                const previous = subscriptions.get(gridKey);
+                if (previous) query.set('replace', previous);
+            }
+            const result = await read<StoredResource[]>(
+                `api/grids/${encodeURIComponent(gridKey)}/items${query.size ? `?${query}` : ''}`,
+                { signal }
+            );
+            if (live && result.subscription && !signal?.aborted) rememberSubscription(gridKey, result.subscription);
+            return result;
         },
         itemEvents(gridKey, subscription, icons, handlers) {
             const query = new URLSearchParams({ subscription });
@@ -232,25 +263,47 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             const source = new EventSource(
                 new URL(`api/grids/${encodeURIComponent(gridKey)}/items/events?${query}`, base)
             );
+            const renewal = new AbortController();
+            let renewedAt = performance.now();
+            let renewing = false;
+            const close = () => {
+                source.close();
+                renewal.abort();
+            };
+            const failed = () => {
+                if (renewal.signal.aborted) return;
+                close();
+                handlers.error();
+            };
+            source.addEventListener('heartbeat', () => {
+                if (renewal.signal.aborted || renewing || performance.now() - renewedAt < 30000) return;
+                renewing = true;
+                renewedAt = performance.now();
+                void request<null>(
+                    `api/grids/${encodeURIComponent(gridKey)}/items/events?subscription=${encodeURIComponent(subscription)}`,
+                    { method: 'POST', signal: renewal.signal }
+                )
+                    .catch(failed)
+                    .finally(() => {
+                        renewing = false;
+                    });
+            });
             source.addEventListener('ready', handlers.ready);
             source.addEventListener('delta', (event) => {
                 try {
                     handlers.delta(JSON.parse(event.data) as TerminalDelta);
                 } catch {
-                    source.close();
+                    close();
                     handlers.reset();
                 }
             });
             for (const event of ['reset', 'invalidate', 'revoked'])
                 source.addEventListener(event, () => {
-                    source.close();
+                    close();
                     handlers.reset();
                 });
-            source.onerror = () => {
-                source.close();
-                handlers.error();
-            };
-            return () => source.close();
+            source.onerror = failed;
+            return close;
         },
         createPlan: (gridKey, body) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans`, { method: 'POST', body }),

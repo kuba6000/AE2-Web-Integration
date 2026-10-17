@@ -50,6 +50,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGrids;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItemEvents;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.RenewItemEvents;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPack;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.themes.GetThemes;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetResourceHistory;
@@ -235,6 +236,7 @@ public class AE2Controller {
                 api.register(PauseCPU.class);
                 api.register(GetItems.class);
                 api.register(GetItemEvents.class);
+                api.register(RenewItemEvents.class);
                 api.register(GetGridSettings.class);
                 api.register(PatchGridSettings.class);
                 api.register(CreateCraftingPlan.class);

@@ -189,7 +189,7 @@ public final class TerminalStreams implements AutoCloseable {
             if (session.subscriber.end != null) {
                 send(session, session.subscriber.end, new JsonObject());
                 session.finished = true;
-            } else output(session, ": heartbeat\n\n".getBytes(StandardCharsets.UTF_8));
+            } else send(session, "heartbeat", new JsonObject());
             session.lastWrite = System.currentTimeMillis();
         } catch (IOException failure) {
             LOG.debug("Terminal connection closed", failure);

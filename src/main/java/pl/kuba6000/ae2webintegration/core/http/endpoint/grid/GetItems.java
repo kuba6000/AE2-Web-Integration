@@ -94,6 +94,9 @@ public final class GetItems extends ISyncedRequest {
     /** Reserve a live subscription together with the returned snapshot. */
     @QueryParam("live")
     private boolean live;
+    /** Replace this login's previous subscription for the same grid when reserving a new live snapshot. */
+    @QueryParam("replace")
+    private @Nullable String replace;
     private @Nullable String subscription;
 
     /** Called by the router after the game-thread operation; only detached state is read here. */
@@ -114,6 +117,10 @@ public final class GetItems extends ISyncedRequest {
 
     @Override
     protected void handle(IAEGrid grid) {
+        if (replace != null && replace.length() != 36) {
+            deny(ApiStatus.BAD_PARAM);
+            return;
+        }
         if (grid == null) {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
@@ -140,6 +147,7 @@ public final class GetItems extends ISyncedRequest {
                     context.getSession(),
                     icons,
                     pack == null ? null : pack.packId(),
+                    replace,
                     System.currentTimeMillis());
             if (bootstrap == null) {
                 deny(ApiStatus.SERVER_BUSY);

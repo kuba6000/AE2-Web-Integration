@@ -21,9 +21,11 @@ import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
  * Removed keys disappear from the terminal. An optional unkeyed array replaces all unkeyed resources.
  * Reset and invalidate require a new snapshot and subscription; revoked indicates lost access.
  * Reconnection never replays intermediate events. Last-Event-ID is not used.
+ * Heartbeat events must be acknowledged by POST to this path with the subscription token.
+ * Renew about every 30 seconds; a stream without acknowledgement expires after 90 seconds.
  *
  * @pathParam gridKey Persistent grid identifier.
- * @response 200 Server-sent ready, delta, reset, invalidate and revoked events.
+ * @response 200 Server-sent ready, delta, heartbeat, reset, invalidate and revoked events.
  * @responseMedia 200 text/event-stream
  * @responseHeader 200 Cache-Control No-store: event streams must not be cached.
  * @response 400 {@link ErrorResponse} Invalid, expired or already used subscription.

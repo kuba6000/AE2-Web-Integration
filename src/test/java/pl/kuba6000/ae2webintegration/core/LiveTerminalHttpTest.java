@@ -9,8 +9,11 @@ import java.io.File;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -35,6 +38,105 @@ class LiveTerminalHttpTest {
 
     @TempDir
     File root;
+
+    @Test
+    void liveBootstrapCanReplaceItsPreviousHalfClosedSubscriptionAtCapacity() throws Exception {
+        IAE previous = AE2Controller.AE2Interface;
+        ScheduledExecutorService game = Executors.newSingleThreadScheduledExecutor();
+        List<Socket> streams = new ArrayList<>();
+        CoreEngine.init(new Platform(root));
+        try (ServerSocket port = new ServerSocket(0)) {
+            Config.INSTANCE.general.port = port.getLocalPort();
+        }
+        Config.INSTANCE.general.allowNoPasswordOnLocalhost = true;
+        Config.INSTANCE.general.checkForUpdates = false;
+        Config.INSTANCE.resourceTracking.activeIntervalMillis = 50;
+        try {
+            CoreEngine.onServerStarted();
+            ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(
+                443325,
+                new ItemIdentityRequestTest.Resource("iron", 10, false));
+            StableKey key = game.submit(() -> {
+                AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
+                return TestGridFixtures.resolvedKey(grid);
+            })
+                .get(3, TimeUnit.SECONDS);
+            var ticks = game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
+            String path = "/api/grids/" + key + "/items";
+            String base = "http://127.0.0.1:" + Config.INSTANCE.general.port + path;
+            String previousSubscription = null;
+            for (int client = 0; client < 6; client++) {
+                JsonObject snapshot = json(base + "?live=true");
+                String subscription = snapshot.get("subscription")
+                    .getAsString();
+                if (client == 0) {
+                    previousSubscription = subscription;
+                    assertEquals(400, renew(base, subscription, true));
+                }
+                Socket socket = new Socket("127.0.0.1", Config.INSTANCE.general.port);
+                streams.add(socket);
+                socket.setSoTimeout(3000);
+                socket.getOutputStream()
+                    .write(
+                        ("GET " + path
+                            + "/events?subscription="
+                            + subscription
+                            + " HTTP/1.1\r\nHost: localhost\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                BufferedReader input = new BufferedReader(
+                    new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                String line;
+                do {
+                    line = input.readLine();
+                    assertNotNull(line);
+                } while (!line.equals("event: ready"));
+                socket.shutdownOutput();
+            }
+            ticks.cancel(false);
+            assertEquals(403, renew(base, previousSubscription, false));
+            assertEquals(
+                400,
+                renew(
+                    base,
+                    UUID.randomUUID()
+                        .toString(),
+                    true));
+            assertEquals(200, renew(base, previousSubscription, true));
+            game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
+            HttpURLConnection full = connection(base + "?live=true");
+            try {
+                assertEquals(503, full.getResponseCode());
+            } finally {
+                full.disconnect();
+            }
+            JsonObject replacement = json(base + "?live=true&replace=" + previousSubscription);
+            assertNotNull(replacement.get("subscription"));
+            assertEquals(400, renew(base, previousSubscription, true));
+            assertEquals(
+                10,
+                replacement.getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("quantity")
+                    .getAsLong());
+        } finally {
+            for (Socket socket : streams) socket.close();
+            game.shutdownNow();
+            game.awaitTermination(3, TimeUnit.SECONDS);
+            CoreEngine.onServerStopped();
+            AE2Controller.AE2Interface = previous;
+        }
+    }
+
+    private static int renew(String base, String token, boolean csrf) throws Exception {
+        HttpURLConnection connection = connection(base + "/events?subscription=" + token);
+        connection.setRequestMethod("POST");
+        if (csrf) connection.setRequestProperty("X-AE2-Request", "true");
+        try {
+            return connection.getResponseCode();
+        } finally {
+            connection.disconnect();
+        }
+    }
 
     @Test
     void liveSnapshotAndRegisteredStreamShareNativeCaptureAndEnforceAuthentication() throws Exception {

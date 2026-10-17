@@ -893,6 +893,14 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                         icons: url.searchParams.get('icons') === 'true' ? options.icons : null
                     })
                 );
+            } else if (resource.endsWith('/items/events') && request.method === 'POST') {
+                response.statusCode = options.renewalStatus || 200;
+                const send = () =>
+                    response.end(
+                        JSON.stringify({ status: response.statusCode === 200 ? 'OK' : 'BAD_PARAM', data: null })
+                    );
+                if (options.renewalDelay) setTimeout(send, options.renewalDelay);
+                else send();
             } else if (resource.endsWith('/items/events')) {
                 response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
                 response.flushHeaders();
@@ -10904,6 +10912,92 @@ test('flow-only SSE updates and expiry refresh hovered summaries without history
     await page.locator('#resource-tooltip [aria-label="−0"]').waitFor();
     assert.equal(await page.locator('#resource-tooltip [aria-label="+100"]').count(), 0);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/resource-history')).length, 0);
+});
+
+test('live resync replaces only this tab and grid subscription through reload and navigation', async (t) => {
+    const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
+    options.liveView = { generation: '1', revision: '1' };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#refresh .live-icon').waitFor();
+    const resync = async (revision, action) => {
+        options.liveView = { generation: '1', revision: String(revision) };
+        const request = page.waitForRequest((request) => new URL(request.url()).pathname.endsWith('/items'));
+        await action();
+        const query = new URL((await request).url()).searchParams;
+        await page.locator('#refresh .live-icon').waitFor();
+        return query;
+    };
+    assert.equal((await resync(2, () => page.locator('#refresh').click())).get('replace'), 'subscription-1');
+    assert.equal((await resync(3, () => page.reload())).get('replace'), 'subscription-2');
+    assert.equal((await resync(4, () => page.goto(`${base}#/grids/${gridB}/items`))).has('replace'), false);
+    assert.equal((await resync(5, () => page.goto(`${base}#/grids/${gridA}/items`))).get('replace'), 'subscription-3');
+    options.liveView = { generation: '1', revision: '6' };
+    const otherRequest = page.context().waitForEvent('request', {
+        predicate: (request) => new URL(request.url()).pathname.endsWith('/items')
+    });
+    const opened = page.waitForEvent('popup');
+    await page.evaluate((url) => window.open(url), `${base}#/grids/${gridA}/items`);
+    const other = await opened;
+    t.after(() => other.close());
+    assert.equal(
+        new URL((await otherRequest).url()).searchParams.has('replace'),
+        false,
+        'An opener-cloned tab must not retire the original tab'
+    );
+    await other.locator('#refresh .live-icon').waitFor();
+});
+
+test('terminal heartbeats renew a bounded lease without refreshing inventory or data time and failures recover', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.liveView = { generation: '1', revision: '1' };
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    const live = page.locator('#refresh .live-icon');
+    await live.waitFor();
+    await page.locator('#refresh').focus();
+    const eventTime = await page.getByRole('tooltip').locator('time').getAttribute('datetime');
+    const reads = options.requests.filter((request) => request.path.endsWith('/items')).length;
+    const renewals = () =>
+        options.requests.filter((request) => request.path.endsWith('/items/events') && request.method === 'POST');
+    await page.clock.fastForward(30000);
+    const renewed = page.waitForResponse(
+        (response) => response.url().includes('/items/events') && response.request().method() === 'POST',
+        { timeout: 1500 }
+    );
+    options.itemStreams[0].write('event: heartbeat\ndata: {}\n\n');
+    const response = await renewed;
+    assert.equal(new URL(response.url()).searchParams.get('subscription'), 'subscription-1');
+    assert.equal(response.request().headers()['x-ae2-request'], 'true');
+    options.itemStreams[0].write('event: heartbeat\ndata: {}\n\nevent: heartbeat\ndata: {}\n\n');
+    await page.waitForTimeout(100);
+    assert.equal(renewals().length, 1, 'Repeated heartbeats share the renewal interval');
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, reads);
+    assert.equal(await page.getByRole('tooltip').locator('time').getAttribute('datetime'), eventTime);
+    options.renewalStatus = 400;
+    await page.clock.fastForward(30000);
+    options.itemStreams[0].write('event: heartbeat\ndata: {}\n\n');
+    await live.waitFor({ state: 'hidden' });
+    assert.equal(renewals().length, 2);
+    options.renewalStatus = 200;
+    const resumed = page.waitForResponse(
+        (response) => response.url().includes('/items/events') && response.request().method() === 'GET'
+    );
+    await page.clock.fastForward(2000);
+    await resumed;
+    await live.waitFor();
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, reads + 1);
+    options.renewalDelay = 1000;
+    await page.clock.fastForward(30000);
+    const renewing = page.waitForRequest(
+        (request) => request.url().includes('/items/events') && request.method() === 'POST'
+    );
+    options.itemStreams[0].write('event: heartbeat\ndata: {}\n\n');
+    const pending = await renewing;
+    const aborted = page.waitForEvent('requestfailed', { predicate: (request) => request === pending });
+    await page.goto(`${base}#/web-settings`);
+    await aborted;
+    const afterClose = renewals().length;
+    await page.clock.fastForward(120000);
+    assert.equal(renewals().length, afterClose, 'A closed stream cannot keep renewing its lease');
 });
 
 test('header confirms live events and manual resync waits for a new stream before showing live', async (t) => {

@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,6 +35,7 @@ import com.sun.net.httpserver.HttpServer;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
@@ -57,7 +59,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             RecentTrackingService recent = new RecentTrackingService(fixture.state, 100)) {
             recent.open(fixture.grid, 5, false, true, 100, 1000);
             var bootstrap = fixture.state
-                .reserve(fixture.grid, fixture.session, false, null, System.currentTimeMillis());
+                .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
             assertNotNull(bootstrap);
             assertNull(bootstrap.recent());
             try (Connection connection = fixture.open(bootstrap.subscription())) {
@@ -165,7 +167,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             recent.observe(observation(1000, rows), true, true);
             fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), recent.snapshot());
             TerminalRegistry.Bootstrap bootstrap = fixture.state
-                .reserve(fixture.grid, fixture.session, false, null, System.currentTimeMillis());
+                .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
             assertNotNull(bootstrap);
             var initialRecent = bootstrap.recent();
             assertNotNull(initialRecent);
@@ -238,7 +240,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             AuthSession shortLogin = new AuthSession(fixture.principal, System.currentTimeMillis() + 600);
             fixture.requestSession.set(shortLogin);
             TerminalRegistry.Bootstrap snapshot = fixture.state
-                .reserve(fixture.grid, shortLogin, false, null, System.currentTimeMillis());
+                .reserve(fixture.grid, shortLogin, false, null, null, System.currentTimeMillis());
             assertNotNull(snapshot);
             try (Connection connection = fixture.open(snapshot.subscription())) {
                 assertEquals("ready", readEvent(connection.input).name());
@@ -277,7 +279,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             fixture.requestSession.set(other);
             assertEquals(400, fixture.status(first));
             TerminalRegistry.Bootstrap second = fixture.state
-                .reserve(fixture.grid, other, false, null, System.currentTimeMillis());
+                .reserve(fixture.grid, other, false, null, null, System.currentTimeMillis());
             assertNotNull(second);
             fixture.session.invalidate();
             assertEquals(400, fixture.status(first));
@@ -296,7 +298,8 @@ class TerminalStreamsHttpTest extends GridTestScope {
         TerminalRegistry state = new TerminalRegistry();
         state.activate(grid, 5, System.currentTimeMillis());
         state.observed(grid, 5, observation(1, Collections.singletonList(row(iron, "Iron", 1))));
-        TerminalRegistry.Bootstrap bootstrap = state.reserve(grid, session, false, null, System.currentTimeMillis());
+        TerminalRegistry.Bootstrap bootstrap = state
+            .reserve(grid, session, false, null, null, System.currentTimeMillis());
         assertNotNull(bootstrap);
         CountDownLatch writing = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -556,7 +559,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
     void expiredUnopenedReservationCannotOpenOrConsumeAdmissionForever() throws Exception {
         try (Fixture fixture = new Fixture(Collections.emptyList())) {
             TerminalRegistry.Bootstrap expired = fixture.state
-                .reserve(fixture.grid, fixture.session, false, null, System.currentTimeMillis() - 20_000);
+                .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis() - 20_000);
             assertNotNull(expired);
             assertEquals(400, fixture.status(expired.subscription()));
             assertNotNull(fixture.reserve());
@@ -617,10 +620,114 @@ class TerminalStreamsHttpTest extends GridTestScope {
     }
 
     @Test
-    void reservationsBoundPerAccountAdmissionBeforeAnyStreamOpens() throws Exception {
+    void renewalsExtendOnlyTheirOwnedLiveStreamAndCannotReviveExpiredTokens() throws Exception {
         try (Fixture fixture = new Fixture(Collections.emptyList())) {
-            for (int i = 0; i < 4; i++) assertNotNull(fixture.reserve());
-            assertNull(fixture.state.reserve(fixture.grid, fixture.session, false, null, System.currentTimeMillis()));
+            String firstToken = fixture.reserve();
+            String secondToken = fixture.reserve();
+            try (Connection first = fixture.open(firstToken); Connection second = fixture.open(secondToken)) {
+                assertEquals("ready", readEvent(first.input).name());
+                assertEquals("ready", readEvent(second.input).name());
+                long now = System.currentTimeMillis();
+                AuthSession otherLogin = new AuthSession(fixture.principal, Long.MAX_VALUE);
+                assertFalse(fixture.state.renew(fixture.grid, otherLogin, secondToken, now + 60_000));
+                assertFalse(fixture.state.renew(TestGridFixtures.key(999), fixture.session, secondToken, now + 60_000));
+                assertTrue(fixture.state.renew(fixture.grid, fixture.session, firstToken, now + 60_000));
+                fixture.state.viewedGrids(now + 100_000);
+                assertEquals("reset", readEvent(second.input).name());
+                fixture.publish(2, Collections.singletonList(row(TestGridFixtures.key(98), "Iron", 2)));
+                assertEquals("delta", readEvent(first.input).name());
+                assertFalse(fixture.state.renew(fixture.grid, fixture.session, secondToken, now + 100_000));
+                assertFalse(fixture.state.renew(fixture.grid, fixture.session, firstToken, now + 160_000));
+                assertEquals("reset", readEvent(first.input).name());
+            }
+        }
+    }
+
+    @Test
+    void replacementCannotRetireAnotherLoginOrAnotherGridAtCapacity() throws Exception {
+        boolean publicMode = Config.INSTANCE.general.publicMode;
+        Config.INSTANCE.general.publicMode = true;
+        try (Fixture fixture = new Fixture(Collections.emptyList())) {
+            String token = fixture.reserve();
+            try (Connection connection = fixture.open(token)) {
+                assertEquals("ready", readEvent(connection.input).name());
+                for (int i = 0; i < 5; i++) fixture.reserve();
+                long now = System.currentTimeMillis();
+                AuthSession otherLogin = new AuthSession(fixture.principal, Long.MAX_VALUE);
+                assertNull(fixture.state.reserve(fixture.grid, otherLogin, false, null, token, now));
+                StableKey otherGrid = TestGridFixtures.key(999);
+                fixture.state.activate(otherGrid, 5, now);
+                fixture.state.observed(otherGrid, 5, observation(1, Collections.emptyList()));
+                assertNull(fixture.state.reserve(otherGrid, fixture.session, false, null, token, now));
+                assertNull(fixture.state.reserve(fixture.grid, fixture.session, false, null, "unknown", now));
+                fixture.publish(2, Collections.singletonList(row(TestGridFixtures.key(98), "Iron", 2)));
+                assertEquals("delta", readEvent(connection.input).name());
+                assertNotNull(fixture.state.reserve(fixture.grid, fixture.session, false, null, token, now));
+                assertEquals("reset", readEvent(connection.input).name());
+                assertNull(fixture.state.reserve(fixture.grid, fixture.session, false, null, token, now));
+            }
+        } finally {
+            Config.INSTANCE.general.publicMode = publicMode;
+        }
+    }
+
+    @Test
+    void privateLoginLimitsDoNotBypassGlobalStreamCapacity() throws Exception {
+        boolean publicMode = Config.INSTANCE.general.publicMode;
+        Config.INSTANCE.general.publicMode = false;
+        try (Fixture fixture = new Fixture(Collections.emptyList())) {
+            for (int i = 0; i < 64; i++) fixture.reserve(new AuthSession(fixture.principal, Long.MAX_VALUE));
+            assertNull(
+                fixture.state.reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis()));
+        } finally {
+            Config.INSTANCE.general.publicMode = publicMode;
+        }
+    }
+
+    @Test
+    void abandonedAttachedStreamsExpireWithoutDependingOnSocketFailure() throws Exception {
+        try (Fixture fixture = new Fixture(Collections.emptyList());
+            Connection connection = fixture.open(fixture.reserve())) {
+            assertEquals("ready", readEvent(connection.input).name());
+            assertTrue(
+                fixture.state.viewedGrids(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(2))
+                    .isEmpty());
+            assertEquals("reset", readEvent(connection.input).name());
+            fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
+            fixture.publish(2, Collections.emptyList());
+            assertNotNull(fixture.reserve());
+        }
+    }
+
+    @Test
+    void privateReservationsBoundEachLoginIndependentlyBeforeAnyStreamOpens() throws Exception {
+        boolean publicMode = Config.INSTANCE.general.publicMode;
+        Config.INSTANCE.general.publicMode = false;
+        try (Fixture fixture = new Fixture(Collections.emptyList())) {
+            for (int i = 0; i < 6; i++) assertNotNull(fixture.reserve());
+            assertNull(
+                fixture.state.reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis()));
+            AuthSession otherLogin = new AuthSession(fixture.principal, Long.MAX_VALUE);
+            for (int i = 0; i < 6; i++) assertNotNull(fixture.reserve(otherLogin));
+            assertNull(fixture.state.reserve(fixture.grid, otherLogin, false, null, null, System.currentTimeMillis()));
+        } finally {
+            Config.INSTANCE.general.publicMode = publicMode;
+        }
+    }
+
+    @Test
+    void publicReservationsShareAccountLimitAcrossLoginsButNotAcrossAccounts() throws Exception {
+        boolean publicMode = Config.INSTANCE.general.publicMode;
+        Config.INSTANCE.general.publicMode = true;
+        try (Fixture fixture = new Fixture(Collections.emptyList())) {
+            AuthSession otherLogin = new AuthSession(fixture.principal, Long.MAX_VALUE);
+            for (int i = 0; i < 6; i++) assertNotNull(fixture.reserve(i % 2 == 0 ? fixture.session : otherLogin));
+            assertNull(fixture.state.reserve(fixture.grid, otherLogin, false, null, null, System.currentTimeMillis()));
+            assertNull(
+                fixture.state.reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis()));
+            assertNotNull(fixture.reserve(new AuthSession(WebPrincipal.localhost(), Long.MAX_VALUE)));
+        } finally {
+            Config.INSTANCE.general.publicMode = publicMode;
         }
     }
 
@@ -637,11 +744,42 @@ class TerminalStreamsHttpTest extends GridTestScope {
     }
 
     @Test
+    void disconnectedIdleViewersReleaseAdmissionForAnotherSnapshot() throws Exception {
+        try (Fixture fixture = new Fixture(Collections.emptyList())) {
+            for (int client = 0; client < 6; client++) {
+                try (Socket socket = new Socket()) {
+                    socket.setSoTimeout(3000);
+                    socket.connect(fixture.server.getAddress());
+                    socket.getOutputStream()
+                        .write(
+                            ("GET /events?" + fixture.reserve() + " HTTP/1.1\r\nHost: localhost\r\n\r\n")
+                                .getBytes(StandardCharsets.UTF_8));
+                    BufferedReader input = new BufferedReader(
+                        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                    assertEquals("ready", readEvent(input).name());
+                }
+            }
+            TerminalRegistry.Bootstrap replacement = null;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(25);
+            while (replacement == null && System.nanoTime() < deadline) {
+                fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
+                replacement = fixture.state
+                    .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
+                if (replacement == null) Thread.sleep(100);
+            }
+            assertNotNull(replacement, "Disconnected viewers must release admission without storage changes");
+            try (Connection connection = fixture.open(replacement.subscription())) {
+                assertEquals("ready", readEvent(connection.input).name());
+            }
+        }
+    }
+
+    @Test
     void stalledReadersAreCancelledAndWriterCapacityBecomesUsableAgain() throws Exception {
         List<Socket> stalled = new ArrayList<>();
         try (Fixture fixture = new Fixture(Collections.emptyList())) {
             try {
-                for (int client = 0; client < 4; client++) {
+                for (int client = 0; client < 6; client++) {
                     Socket socket = new Socket();
                     socket.setReceiveBufferSize(1024);
                     socket.setSoTimeout(3000);
@@ -677,7 +815,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     fixture.publish(revision++, Collections.singletonList(row(TestGridFixtures.key(99), name, 1)));
                     fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
                     TerminalRegistry.Bootstrap reservation = fixture.state
-                        .reserve(fixture.grid, fixture.session, false, null, System.currentTimeMillis());
+                        .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
                     if (reservation == null) {
                         Thread.sleep(100);
                         continue;
@@ -743,7 +881,11 @@ class TerminalStreamsHttpTest extends GridTestScope {
             if (line.startsWith("id: ")) id = line.substring(4);
             if (line.startsWith("data: ")) data = new JsonParser().parse(line.substring(6))
                 .getAsJsonObject();
-            if (line.isEmpty() && name != null) return new Event(name, id, data);
+            if (line.isEmpty() && name != null) {
+                if (!name.equals("heartbeat")) return new Event(name, id, data);
+                name = null;
+                data = null;
+            }
         }
         return fail("Stream ended before its next event");
     }
@@ -814,7 +956,12 @@ class TerminalStreamsHttpTest extends GridTestScope {
         }
 
         private String reserve() {
-            TerminalRegistry.Bootstrap snapshot = state.reserve(grid, session, false, null, System.currentTimeMillis());
+            return reserve(session);
+        }
+
+        private String reserve(AuthSession login) {
+            TerminalRegistry.Bootstrap snapshot = state
+                .reserve(grid, login, false, null, null, System.currentTimeMillis());
             assertNotNull(snapshot);
             return snapshot.subscription();
         }
