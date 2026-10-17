@@ -5,6 +5,67 @@ const { pathToFileURL } = require('node:url');
 
 const moduleUrl = pathToFileURL(path.resolve(__dirname, '../../build/generated/frontend/assets/web/app/terminal.js'));
 
+test('recent-only events keep the inventory snapshot reusable by themes while publishing fresh tracking', async (t) => {
+    const originalDocument = global.document;
+    global.document = new EventTarget();
+    const { createTerminal } = await import(moduleUrl);
+    let events;
+    const item = { itemKey: 'iron', displayName: 'Iron', quantity: 12, craftable: false };
+    const terminal = createTerminal(
+        {
+            grids: async () => [{ key: 'grid', name: 'Grid' }],
+            iconPack: async () => ({ available: false, packId: null }),
+            items: async () => ({
+                data: [item],
+                icons: null,
+                view: { generation: '1', revision: '1' },
+                subscription: 'session'
+            }),
+            itemEvents: (_key, _subscription, _icons, handlers) => {
+                events = handlers;
+                return () => {};
+            }
+        },
+        {
+            values: { autoRefresh: true },
+            set(name, value) {
+                this.values[name] = value;
+            }
+        },
+        { enabled() {}, dispose() {} },
+        {}
+    );
+    t.after(() => {
+        terminal.dispose();
+        global.document = originalDocument;
+    });
+    terminal.route({ view: 'items', gridKey: 'grid' });
+    await terminal.refresh();
+    const inventory = terminal.state.items;
+    let observed;
+    terminal.subscribe((state) => {
+        observed = { items: state.items, recent: state.recent };
+    });
+    events.delta({
+        view: { generation: '1', revision: '2' },
+        definitions: [],
+        updates: [],
+        removed: [],
+        recent: { resources: { iron: { input: '7', output: '3', stockChange: null } } }
+    });
+    assert.equal(observed.recent.resources.iron.input, '7');
+    assert.equal(observed.items, inventory, 'Tracking-only events do not invalidate a theme inventory cache');
+    events.delta({
+        view: { generation: '1', revision: '3' },
+        definitions: [],
+        removed: [],
+        updates: [{ itemKey: 'iron', quantity: 14, craftable: false }]
+    });
+    assert.notEqual(observed.items, inventory);
+    assert.equal(observed.items[0].quantity, 14);
+    assert.equal(inventory[0].quantity, 12, 'Previously delivered inventory snapshots retain their quantities');
+});
+
 test('terminal live status rejects closed stream callbacks and disabling automatic refresh keeps manual reads non-streaming', async (t) => {
     const originalDocument = global.document;
     global.document = new EventTarget();

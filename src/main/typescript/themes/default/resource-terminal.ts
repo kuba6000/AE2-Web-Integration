@@ -126,7 +126,31 @@ export function createResourceTerminal(
     let listInput: { items: ThemeState['items']; signature: string } | undefined;
     let state: ThemeState;
     let rows: ReturnType<typeof createItemRow>[] = [];
+    let iconInput:
+        | {
+              metadata: ThemeState['itemIcons'];
+              targets: { element: HTMLElement; icon: ThemeState['items'][number]['icon'] }[];
+          }
+        | undefined;
     let allFiltered: ThemeState['items'] = [];
+    function updateIcons() {
+        const targets =
+            state.route.view === 'items' && effectiveDisplay !== 'names'
+                ? rows.map((row) => ({ element: row.button, icon: row.item.icon }))
+                : [];
+        if (
+            iconInput?.metadata === state.itemIcons &&
+            iconInput.targets.length === targets.length &&
+            targets.every(
+                (target, index) =>
+                    target.element === iconInput!.targets[index].element &&
+                    target.icon === iconInput!.targets[index].icon
+            )
+        )
+            return;
+        iconInput = { metadata: state.itemIcons, targets };
+        itemIcons.update(targets, state.itemIcons);
+    }
     function hideTooltip() {
         tooltips.hide();
         itemTooltip = null;
@@ -198,17 +222,8 @@ export function createResourceTerminal(
             listInput = { items: state.items, signature };
             renderPage();
         }
-        itemIcons.update(
-            state.route.view === 'items' && effectiveDisplay !== 'names'
-                ? rows.map((row) => ({ element: row.button, icon: row.item.icon }))
-                : [],
-            state.itemIcons
-        );
-        for (const row of rows) {
-            const selected = row.item === state.selected;
-            row.button.classList.toggle('selected', selected);
-            row.button.setAttribute('aria-pressed', String(selected));
-        }
+        updateIcons();
+        for (const row of rows) updateSelection(row);
         let message = '';
         if (state.gridStatus === 'ready') {
             if (state.itemStatus === 'loading') message = locale.common('loading');
@@ -288,6 +303,8 @@ export function createResourceTerminal(
     function createItemRow(item: ThemeState['items'][number]) {
         const row = {
             item,
+            language: '',
+            display: '',
             li: element('li'),
             button: element('button', '', 'item slot-frame'),
             name: element('strong'),
@@ -348,44 +365,71 @@ export function createResourceTerminal(
         });
         return row;
     }
+    function updateSelection(row: ReturnType<typeof createItemRow>) {
+        const selected = row.item === state.selected;
+        if (row.button.getAttribute('aria-pressed') === String(selected)) return;
+        row.button.classList.toggle('selected', selected);
+        row.button.setAttribute('aria-pressed', String(selected));
+    }
     function renderPage() {
         const configuredSize = terminalPageSize(settings);
         const pageSize = configuredSize === 'all' ? Math.max(1, allFiltered.length) : configuredSize;
         const list = controls.items;
         const focused = rows.find((row) => row.button === document.activeElement);
         const previous = new Map(rows.filter((row) => row.item.itemKey).map((row) => [row.item.itemKey, row]));
+        const changedRows = new Set<ReturnType<typeof createItemRow>>();
         page = Math.min(page, Math.max(0, Math.ceil(allFiltered.length / pageSize) - 1));
         // Reordering can blur a focused button; restoring focus must preserve tooltip dismissal.
         updatingRows = true;
-        const next = allFiltered.slice(page * pageSize, (page + 1) * pageSize).map((item, index) => {
+        const next = allFiltered.slice(page * pageSize, (page + 1) * pageSize).map((item) => {
             const row = previous.get(item.itemKey) || createItemRow(item);
+            const initial = !row.language;
+            if (initial || row.item !== item) changedRows.add(row);
+            const languageChanged = row.language !== language;
+            const nameChanged = initial || row.item.displayName !== item.displayName;
+            const quantityChanged = initial || row.item.quantity !== item.quantity;
+            const craftableChanged = initial || row.item.craftable !== item.craftable;
             row.item = item;
-            row.name.replaceChildren(renderMinecraftText(item.displayName));
-            row.quantity.textContent = slotQuantity(item.quantity, locale);
-            if (effectiveDisplay === 'icons') {
-                row.button.setAttribute(
-                    'aria-label',
-                    `${plainMinecraftText(item.displayName)}, ${locale.common('stored')}: ${locale.number(item.quantity)}, ${locale.common(item.craftable ? 'craftableYes' : 'craftableNo')}`
-                );
-            } else {
-                row.button.removeAttribute('aria-label');
+            if (nameChanged) row.name.replaceChildren(renderMinecraftText(item.displayName));
+            if (quantityChanged || languageChanged) {
+                const quantity = slotQuantity(item.quantity, locale);
+                if (row.quantity.textContent !== quantity) row.quantity.textContent = quantity;
             }
-            row.craftable.hidden = !item.craftable;
-            row.craftable.setAttribute('aria-label', locale.common('craftableYes'));
-            row.button.classList.toggle('selected', item === state.selected);
-            row.button.setAttribute('aria-pressed', String(item === state.selected));
-            if (list.children[index] !== row.li) list.insertBefore(row.li, list.children[index] || null);
+            if (
+                nameChanged ||
+                quantityChanged ||
+                craftableChanged ||
+                languageChanged ||
+                row.display !== effectiveDisplay
+            ) {
+                if (effectiveDisplay === 'icons') {
+                    row.button.setAttribute(
+                        'aria-label',
+                        `${plainMinecraftText(item.displayName)}, ${locale.common('stored')}: ${locale.number(item.quantity)}, ${locale.common(item.craftable ? 'craftableYes' : 'craftableNo')}`
+                    );
+                } else row.button.removeAttribute('aria-label');
+            }
+            if (craftableChanged) row.craftable.hidden = !item.craftable;
+            if (languageChanged) row.craftable.setAttribute('aria-label', locale.common('craftableYes'));
+            row.language = language;
+            row.display = effectiveDisplay;
+            updateSelection(row);
             return row;
         });
         const retained = new Set(next);
         for (const row of rows) if (!retained.has(row)) row.li.remove();
+        // Move changed resources first, rather than moving every unchanged row they crossed.
+        for (let index = next.length - 1; index >= 0; index--) {
+            const row = next[index];
+            const following = next[index + 1]?.li || list.querySelector('.empty-slot');
+            if (changedRows.has(row) && following?.parentNode === list && row.li.nextSibling !== following)
+                list.insertBefore(row.li, following);
+            else if (changedRows.has(row) && !following && row.li.nextSibling !== null) list.append(row.li);
+        }
+        for (const [index, row] of next.entries())
+            if (list.children[index] !== row.li) list.insertBefore(row.li, list.children[index] || null);
         rows = next;
-        itemIcons.update(
-            state.route.view === 'items' && effectiveDisplay !== 'names'
-                ? rows.map((row) => ({ element: row.button, icon: row.item.icon }))
-                : [],
-            state.itemIcons
-        );
+        updateIcons();
         if (focused?.button.isConnected && document.activeElement !== focused.button) {
             focused.button.focus({ preventScroll: true });
         }

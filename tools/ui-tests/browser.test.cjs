@@ -10815,6 +10815,67 @@ test('recent tracking shows independent measured periods and does not advance st
     assert.equal(await details.locator('time').getAttribute('datetime'), sampledAt);
 });
 
+test('a live quantity update preserves unchanged resource content and equal-quantity ordering', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.addInitScript(() => {
+        window.deltaDurations = [];
+        const add = EventSource.prototype.addEventListener;
+        EventSource.prototype.addEventListener = function (name, listener, options) {
+            if (name !== 'delta') return add.call(this, name, listener, options);
+            return add.call(
+                this,
+                name,
+                (event) => {
+                    const start = performance.now();
+                    listener(event);
+                    window.deltaDurations.push(performance.now() - start);
+                },
+                options
+            );
+        };
+    });
+    options.liveView = { generation: '1', revision: '1' };
+    options.itemsA = Array.from({ length: 500 }, (_, index) => ({
+        ...iron,
+        itemKey: `resource-${index}`,
+        displayName: `Resource ${String(index).padStart(3, '0')}`,
+        quantity: 20000
+    }));
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#refresh .live-icon').waitFor();
+    await page.getByRole('button', { name: 'Sort by: Name', exact: true }).click();
+    const target = page.locator('#items button').first();
+    await target.focus();
+    await page.getByRole('tooltip').waitFor();
+    const before = await page.locator('#items strong').allTextContents();
+    await page.evaluate(() => {
+        window.resourceContentChanges = [];
+        new MutationObserver((records) => {
+            for (const record of records) {
+                if (record.type === 'childList' || record.type === 'characterData')
+                    window.resourceContentChanges.push(record.target.textContent);
+            }
+        }).observe(document.querySelector('#items'), { subtree: true, childList: true, characterData: true });
+    });
+    options.itemStreams[0].write(
+        `event: delta\ndata: ${JSON.stringify({
+            view: { generation: '1', revision: '2' },
+            updates: [{ itemKey: 'resource-0', quantity: 20001, craftable: true }],
+            definitions: [],
+            removed: []
+        })}\n\n`
+    );
+    await page.waitForFunction(() => document.querySelector('#items strong')?.textContent === 'Resource 001');
+    assert.deepEqual(await page.locator('#items strong').allTextContents(), [...before.slice(1), before[0]]);
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent.includes('Resource 000')), true);
+    await page.getByRole('tooltip').getByText('Resource 000', { exact: true }).waitFor();
+    await page.getByRole('tooltip').getByText('Stored: 20,001', { exact: true }).waitFor();
+    const mutations = await page.evaluate(() => window.resourceContentChanges.length);
+    t.diagnostic(`Resource content mutations for one quantity update among 500 rows: ${mutations}`);
+    t.diagnostic(`SSE callback duration (ms): ${await page.evaluate(() => window.deltaDurations.join(', '))}`);
+    assert.ok(mutations < 10, 'A delta must not replace the unchanged names and quantities of the entire inventory');
+});
+
 test('flow-only SSE updates and expiry refresh hovered summaries without history reads', async (t) => {
     const { page, options, base } = await fixture(t);
     const now = Date.now();

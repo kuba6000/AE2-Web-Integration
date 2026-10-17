@@ -240,8 +240,6 @@ export function createTerminal(
                     ...item,
                     icon: item.icon && delta.icons ? { ...item.icon, page: indices[item.icon.page] } : null
                 });
-                const keyed = new Map(state.items.filter((item) => item.itemKey).map((item) => [item.itemKey!, item]));
-                for (const removed of delta.removed) keyed.delete(removed);
                 if (delta.recent) {
                     state.recent = {
                         ...delta.recent,
@@ -249,21 +247,27 @@ export function createTerminal(
                     };
                 }
                 if (state.recent) for (const removed of delta.removed) delete state.recent.resources[removed];
-                for (const item of delta.definitions) if (item.itemKey) keyed.set(item.itemKey, remap(item));
-                for (const update of delta.updates) {
-                    const item = keyed.get(update.itemKey);
-                    if (!item) {
-                        stopStream();
-                        void loadItems();
-                        return;
+                if (delta.definitions.length || delta.updates.length || delta.removed.length || delta.unkeyed) {
+                    const keyed = new Map(
+                        state.items.filter((item) => item.itemKey).map((item) => [item.itemKey!, item])
+                    );
+                    for (const removed of delta.removed) keyed.delete(removed);
+                    for (const item of delta.definitions) if (item.itemKey) keyed.set(item.itemKey, remap(item));
+                    for (const update of delta.updates) {
+                        const item = keyed.get(update.itemKey);
+                        if (!item) {
+                            stopStream();
+                            void loadItems();
+                            return;
+                        }
+                        keyed.set(update.itemKey, { ...item, quantity: update.quantity, craftable: update.craftable });
                     }
-                    keyed.set(update.itemKey, { ...item, quantity: update.quantity, craftable: update.craftable });
+                    const unkeyed = delta.unkeyed?.map(remap) ?? state.items.filter((item) => !item.itemKey);
+                    state.items = [...keyed.values(), ...unkeyed];
+                    state.selected = state.selected?.itemKey ? (keyed.get(state.selected.itemKey) ?? null) : null;
+                    if (!state.selected) resourceHistory.clear();
                 }
-                const unkeyed = delta.unkeyed?.map(remap) ?? state.items.filter((item) => !item.itemKey);
-                state.items = [...keyed.values(), ...unkeyed];
                 if (delta.icons) state.itemIcons = { ...delta.icons, pages };
-                state.selected = state.selected?.itemKey ? (keyed.get(state.selected.itemKey) ?? null) : null;
-                if (!state.selected) resourceHistory.clear();
                 state.updatedAt = Date.now();
                 state.itemError = null;
                 liveView = delta.view;
