@@ -10364,7 +10364,8 @@ test('flow grouping adapts from original counters on zoom reset and resize while
 
 test('sparse stock remains held between real measurements and Net keeps exact interval differences', async (t) => {
     const { page, options, base } = await fixture(t);
-    const now = Date.now();
+    // Hover fractions below address clock-aligned five-second bins in the zoomed window.
+    const now = Date.UTC(2026, 0, 1, 12, 0, 0);
     await page.clock.setFixedTime(now);
     const point = (age, kind, fields = {}) => ({
         observedAt: now - age,
