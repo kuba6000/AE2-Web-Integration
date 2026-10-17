@@ -10,10 +10,10 @@ import org.jetbrains.annotations.Nullable;
 
 import appeng.fluids.util.AEFluidStack;
 
-/** Native normalization shared by server fallback keys and client capture candidates. */
-public final class LegacyIconBaseline {
+/** Native base-variant normalization shared by server descriptions and client capture candidates. */
+public final class LegacyResourceBaseline {
 
-    private LegacyIconBaseline() {}
+    private LegacyResourceBaseline() {}
 
     /** Source-dependent durability is captured before copying can normalize Forge capabilities. */
     public static @NotNull ItemStack item(@NotNull Item item, int metadata, int sourceMaxDamage) {

@@ -12,8 +12,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import appeng.util.Platform;
-import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyIconBaseline;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyResourceBaseline;
 import pl.kuba6000.ae2webintegration.core.icons.export.IIconCandidate;
 import pl.kuba6000.ae2webintegration.core.icons.export.PackExportWriter.Capture;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -50,7 +50,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         private final int sourceMaxDamage;
         private final @Nullable NBTTagCompound tag;
         private final @Nullable NBTTagCompound capabilities;
-        private final StableKey key;
+        private final @Nullable StableKey key;
 
         private ItemCandidate(@NotNull String context, @NotNull ItemStack source) {
             super(context);
@@ -72,7 +72,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
-        public @NotNull StableKey key() {
+        public @Nullable StableKey key() {
             return key;
         }
 
@@ -88,7 +88,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         public @NotNull IconCandidate baseline() {
             return new ItemCandidate(
                 context() + "/base",
-                LegacyIconBaseline.item(stack.getItem(), metadata, sourceMaxDamage));
+                LegacyResourceBaseline.item(stack.getItem(), metadata, sourceMaxDamage));
         }
 
         @Override
@@ -108,7 +108,7 @@ abstract class IconCandidate implements IIconCandidate<IconCandidate> {
         }
 
         @Override
-        public @NotNull StableKey key() {
+        public @Nullable StableKey key() {
             return LegacyItemIdentity.encode(stack);
         }
 

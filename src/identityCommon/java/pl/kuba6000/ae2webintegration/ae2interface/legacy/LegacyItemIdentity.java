@@ -16,6 +16,7 @@ import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagIntArray;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.nbt.NBTTagString;
+import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.common.util.Constants.NBT;
 import net.minecraftforge.fluids.FluidStack;
 
@@ -39,37 +40,33 @@ public final class LegacyItemIdentity {
 
     private LegacyItemIdentity() {}
 
-    public static @NotNull StableKey encode(@NotNull ItemStack stack) {
-        if (stack.isEmpty()) throw new UnsupportedOperationException("Resource has no registered identity");
+    public static @Nullable StableKey encode(@NotNull ItemStack stack) {
+        if (stack.isEmpty()) return null;
         NBTTagCompound capabilities = (NBTTagCompound) stack.writeToNBT(new NBTTagCompound())
             .getTag("ForgeCaps");
         return encode(stack.getItem(), stack.getItemDamage(), stack.getTagCompound(), capabilities);
     }
 
     /** The caller may retain native serialized capabilities captured before an ownership copy. */
-    public static @NotNull StableKey encode(@NotNull Item item, int metadata, @Nullable NBTTagCompound tag,
+    public static @Nullable StableKey encode(@NotNull Item item, int metadata, @Nullable NBTTagCompound tag,
         @Nullable NBTTagCompound capabilities) {
-        if (item.getRegistryName() == null) {
-            throw new UnsupportedOperationException("Resource has no registered identity");
-        }
-        return StableKey.create(sink -> {
+        ResourceLocation registryName = item.getRegistryName();
+        if (registryName == null) return null;
+        return StableKey.createOptional(sink -> {
             DataOutputStream output = new DataOutputStream(Funnels.asOutputStream(sink));
             try {
                 StableKey.writeText(sink, "item");
-                StableKey.writeText(
-                    sink,
-                    item.getRegistryName()
-                        .toString());
+                StableKey.writeText(sink, registryName.toString());
                 output.writeInt(metadata);
                 output.writeByte(1);
-                new Tags(output, sink, false).writeItem(tag, capabilities);
+                return new Tags(output, sink, false).writeItem(tag, capabilities);
             } catch (IOException exception) {
                 throw new UncheckedIOException(exception);
             }
         });
     }
 
-    public static @NotNull StableKey encode(@NotNull FluidStack stack) {
+    public static @Nullable StableKey encode(@NotNull FluidStack stack) {
         // AE2UEL copies this tag without changing it and treats an empty compound as absent.
         return encode(
             "fluid",
@@ -79,8 +76,10 @@ public final class LegacyItemIdentity {
             stack.tag == null || stack.tag.isEmpty() ? null : stack.tag);
     }
 
-    public static @NotNull StableKey encode(@NotNull IAEStack<?> stack) {
+    public static @Nullable StableKey encode(@NotNull IAEStack<?> stack) {
         if (stack instanceof AEItemStack item) {
+            ResourceLocation registryName = item.getItem()
+                .getRegistryName();
             NBTTagCompound identity = item.getDefinition()
                 .writeToNBT(new NBTTagCompound());
             // Amount is presentation state; the full-width damage is framed separately below.
@@ -89,11 +88,7 @@ public final class LegacyItemIdentity {
             identity.removeTag("Damage");
             return encode(
                 "item",
-                item.getItem()
-                    .getRegistryName() == null ? null
-                        : item.getItem()
-                            .getRegistryName()
-                            .toString(),
+                registryName == null ? null : registryName.toString(),
                 item.getItemDamage(),
                 identity);
         }
@@ -109,7 +104,7 @@ public final class LegacyItemIdentity {
                 0,
                 tag.isEmpty() ? null : tag);
         }
-        throw new UnsupportedOperationException("Unsupported legacy resource identity");
+        return null;
     }
 
     public static @NotNull IAEStack<?> copy(@NotNull IAEStack<?> stack) {
@@ -122,19 +117,17 @@ public final class LegacyItemIdentity {
         return result;
     }
 
-    private static StableKey encode(String kind, @Nullable String registry, int metadata,
+    private static @Nullable StableKey encode(String kind, @Nullable String registry, int metadata,
         @Nullable NBTTagCompound secondary) {
-        if (registry == null || registry.isEmpty()) {
-            throw new UnsupportedOperationException("Resource has no registered identity");
-        }
-        return StableKey.create(sink -> {
+        if (registry == null || registry.isEmpty()) return null;
+        return StableKey.createOptional(sink -> {
             DataOutputStream output = new DataOutputStream(Funnels.asOutputStream(sink));
             try {
                 StableKey.writeText(sink, kind);
                 StableKey.writeText(sink, registry);
                 output.writeInt(metadata);
                 output.writeByte(secondary == null ? 0 : 1);
-                if (secondary != null) new Tags(output, sink, "fluid".equals(kind)).write(secondary, 0, true);
+                return secondary == null || new Tags(output, sink, "fluid".equals(kind)).write(secondary, 0, true);
             } catch (IOException exception) {
                 throw new UncheckedIOException(exception);
             }
@@ -154,7 +147,8 @@ public final class LegacyItemIdentity {
             this.normalizeZero = normalizeZero;
         }
 
-        private void writeItem(@Nullable NBTTagCompound tag, @Nullable NBTTagCompound capabilities) throws IOException {
+        private boolean writeItem(@Nullable NBTTagCompound tag, @Nullable NBTTagCompound capabilities)
+            throws IOException {
             // Native item serialization leaves a compound after excluding id/count/damage.
             // Stream its fixed field order instead of constructing another envelope for hashing.
             nodes = 1;
@@ -163,20 +157,23 @@ public final class LegacyItemIdentity {
             output.writeInt((tag == null ? 0 : 1) + (hasCapabilities ? 1 : 0));
             if (hasCapabilities) {
                 StableKey.writeText(sink, "ForgeCaps");
-                write(capabilities, 1, true);
+                if (!write(capabilities, 1, true)) return false;
             }
             if (tag != null) {
                 StableKey.writeText(sink, "tag");
-                write(tag, 1, true);
+                if (!write(tag, 1, true)) return false;
             }
+            return true;
         }
 
-        private void write(NBTBase tag, int depth, boolean includeType) throws IOException {
+        private boolean write(NBTBase tag, int depth, boolean includeType) throws IOException {
             if (depth > MAX_DEPTH || ++nodes > MAX_NODES)
                 throw new IllegalArgumentException("NBT identity exceeds structural limits");
             int type = tag.getId();
             if (includeType) output.writeByte(type);
             switch (type) {
+                case NBT.TAG_END:
+                    throw new IllegalArgumentException("Unexpected NBT end tag");
                 case NBT.TAG_BYTE:
                     output.writeByte(((NBTPrimitive) tag).getByte());
                     break;
@@ -191,17 +188,17 @@ public final class LegacyItemIdentity {
                     break;
                 case NBT.TAG_FLOAT:
                     float floatValue = ((NBTPrimitive) tag).getFloat();
-                    if (Float.isNaN(floatValue)) throw new UnsupportedOperationException("NaN identity");
+                    if (Float.isNaN(floatValue)) return false;
                     if (!normalizeZero && Float.floatToRawIntBits(floatValue) == Integer.MIN_VALUE) {
-                        throw new UnsupportedOperationException("Negative-zero item identity");
+                        return false;
                     }
                     output.writeFloat(floatValue == 0 ? 0 : floatValue);
                     break;
                 case NBT.TAG_DOUBLE:
                     double doubleValue = ((NBTPrimitive) tag).getDouble();
-                    if (Double.isNaN(doubleValue)) throw new UnsupportedOperationException("NaN identity");
+                    if (Double.isNaN(doubleValue)) return false;
                     if (!normalizeZero && Double.doubleToRawLongBits(doubleValue) == Long.MIN_VALUE) {
-                        throw new UnsupportedOperationException("Negative-zero item identity");
+                        return false;
                     }
                     output.writeDouble(doubleValue == 0 ? 0 : doubleValue);
                     break;
@@ -218,18 +215,18 @@ public final class LegacyItemIdentity {
                     int length = list.tagCount();
                     checkChildren(length);
                     int elementType = list.getTagType();
-                    if (elementType < NBT.TAG_END || elementType > NBT.TAG_LONG_ARRAY
-                        || elementType == NBT.TAG_END && length != 0) {
-                        throw new UnsupportedOperationException("Invalid NBT list type");
+                    if (elementType == NBT.TAG_END && length != 0) {
+                        throw new IllegalArgumentException("Invalid NBT list type");
                     }
+                    if (elementType < NBT.TAG_END || elementType > NBT.TAG_LONG_ARRAY) return false;
                     output.writeByte(elementType);
                     output.writeInt(length);
                     for (int index = 0; index < length; index++) {
                         NBTBase child = list.get(index);
                         if (child.getId() != elementType) {
-                            throw new UnsupportedOperationException("Mixed NBT list");
+                            throw new IllegalArgumentException("Mixed NBT list");
                         }
-                        write(child, depth + 1, false);
+                        if (!write(child, depth + 1, false)) return false;
                     }
                     break;
                 case NBT.TAG_COMPOUND:
@@ -241,7 +238,7 @@ public final class LegacyItemIdentity {
                     output.writeInt(names.length);
                     for (String name : names) {
                         StableKey.writeText(sink, name);
-                        write(compound.getTag(name), depth + 1, true);
+                        if (!write(compound.getTag(name), depth + 1, true)) return false;
                     }
                     break;
                 case NBT.TAG_INT_ARRAY:
@@ -257,8 +254,9 @@ public final class LegacyItemIdentity {
                     CompressedStreamTools.write(leaf, output);
                     break;
                 default:
-                    throw new UnsupportedOperationException("Unsupported NBT identity type: " + type);
+                    return false;
             }
+            return true;
         }
 
         private void checkChildren(int count) {
