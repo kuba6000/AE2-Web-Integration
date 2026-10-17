@@ -12,6 +12,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -28,6 +30,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -53,8 +57,10 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 
 /** Public HTTP and server lifecycle contract; generated packs use the public archive writer. */
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -125,6 +131,135 @@ class IconDeliveryHttpTest {
         CoreEngine.onServerStopped();
         AE2Controller.serverPlatform = previousPlatform;
         config.close();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { true, false })
+    void resourceHistoryResolvesRequestedIconsFromSavedKeysWithoutNativeReads(boolean installed) throws Exception {
+        StableKey exact = TestGridFixtures.key(121);
+        StableKey fallback = TestGridFixtures.key(122);
+        StableKey missing = TestGridFixtures.key(123);
+        if (installed) installPack(exact);
+        CoreEngine.onServerStarted();
+        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
+            81078,
+            false,
+            AEControllerState.CONTROLLER_ONLINE) {
+
+            @Override
+            public IAEStorageGrid web$getStorageGrid() {
+                throw new AssertionError("Async history must not read native storage");
+            }
+
+            @Override
+            public IAECraftingGrid web$getCraftingGrid() {
+                throw new AssertionError("Async history must not read native crafting");
+            }
+        };
+        StableKey gridKey = TestGridFixtures.resolvedKey(grid);
+        var service = CoreEngine.getStorageTracking();
+        assertNotNull(service);
+        Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
+        descriptions
+            .put(exact, new ResourceDescriptor("test", "exact", 0, 0, "Exact", ResourceType.ITEM, exact, missing));
+        descriptions.put(
+            fallback,
+            new ResourceDescriptor("test", "fallback", 0, 2, "Fallback", ResourceType.ITEM, fallback, exact));
+        descriptions
+            .put(missing, new ResourceDescriptor("test", "missing", 0, 0, "Missing", ResourceType.ITEM, missing, null));
+        long observedAt = System.currentTimeMillis();
+        service.open(gridKey, 1);
+        assertTrue(
+            service.submit(
+                gridKey,
+                1,
+                new StorageObservation(
+                    observedAt,
+                    true,
+                    true,
+                    Arrays.asList(
+                        new StorageObservation.Row(exact, 5, false),
+                        new StorageObservation.Row(fallback, Long.MAX_VALUE, false),
+                        new StorageObservation.Row(missing, 7, false)),
+                    Collections.emptyList(),
+                    descriptions,
+                    Collections.emptyList()),
+                true,
+                false));
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        var snapshot = service.snapshot(gridKey);
+        assertNotNull(snapshot);
+        while (snapshot.revision() == 0 && System.nanoTime() < deadline) {
+            Thread.sleep(5);
+            snapshot = service.snapshot(gridKey);
+            assertNotNull(snapshot);
+        }
+        assertTrue(snapshot.revision() > 0);
+        AE2Controller.itemIdentities.clear();
+        String path = "/api/grids/" + gridKey + "/resource-history";
+        JsonObject plain = json(connection(path));
+        for (var point : plain.getAsJsonObject("data")
+            .getAsJsonArray("points")) {
+            var resource = point.getAsJsonObject()
+                .get("resource");
+            if (!resource.isJsonNull()) assertTrue(
+                resource.getAsJsonObject()
+                    .get("icon")
+                    .isJsonNull());
+        }
+        JsonObject response = json(connection(path + "?icons=true"));
+        assertTrue(response.has("icons"));
+        if (installed) {
+            assertEquals(
+                packId,
+                response.getAsJsonObject("icons")
+                    .get("packId")
+                    .getAsString());
+            assertEquals(
+                1,
+                response.getAsJsonObject("icons")
+                    .getAsJsonArray("pages")
+                    .size());
+        } else assertTrue(
+            response.get("icons")
+                .isJsonNull());
+        for (var point : response.getAsJsonObject("data")
+            .getAsJsonArray("points")) {
+            var resource = point.getAsJsonObject()
+                .get("resource");
+            if (resource.isJsonNull()) continue;
+            JsonObject row = resource.getAsJsonObject();
+            boolean expectedIcon = installed && !missing.toString()
+                .equals(
+                    row.get("itemKey")
+                        .getAsString());
+            assertEquals(
+                !expectedIcon,
+                row.get("icon")
+                    .isJsonNull());
+            if (expectedIcon) assertEquals(
+                0,
+                row.getAsJsonObject("icon")
+                    .get("page")
+                    .getAsInt());
+        }
+        JsonObject baselineResponse = json(connection(path + "?icons=true&itemKey=" + fallback + "&limit=1"));
+        JsonObject baseline = baselineResponse.getAsJsonObject("data")
+            .getAsJsonObject("baseline")
+            .getAsJsonObject("resource");
+        assertEquals(
+            "9223372036854775807",
+            baseline.get("quantity")
+                .getAsString());
+        assertEquals(
+            !installed,
+            baseline.get("icon")
+                .isJsonNull());
+        JsonObject disabled = json(connection(path + "?icons=false"));
+        assertTrue(
+            disabled.get("icons")
+                .isJsonNull());
+        assertSame(grid, CoreEngine.GRID_IDENTITIES.getGrid(gridKey));
     }
 
     @Test

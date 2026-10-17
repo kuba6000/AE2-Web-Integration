@@ -40,12 +40,166 @@ import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFixtures;
 
 class TerminalStreamsHttpTest extends GridTestScope {
 
     private TestGridFixtures.TestGrid nativeGrid;
+
+    @Test
+    void unchangedStockSamplePublishesItsMeasurementTimeWithoutResourceUpdates() throws Exception {
+        StableKey iron = TestGridFixtures.key(51);
+        List<StorageObservationFixtures.Row> rows = Collections.singletonList(row(iron, "Iron", 1));
+        try (Fixture fixture = new Fixture(rows)) {
+            RecentResourceActivity recent = new RecentResourceActivity(true, false, 100, 1000);
+            recent.observe(
+                StorageObservationFixtures.observation(1000, true, true, rows, Collections.emptyList()),
+                true,
+                false);
+            recent.observe(
+                StorageObservationFixtures.observation(301000, true, true, rows, Collections.emptyList()),
+                true,
+                false);
+            fixture.state.recent(fixture.grid, 5, recent.snapshot());
+            try (Connection connection = fixture.open(fixture.reserve())) {
+                assertEquals("ready", readEvent(connection.input).name());
+                recent.observe(
+                    StorageObservationFixtures.observation(601000, true, true, rows, Collections.emptyList()),
+                    true,
+                    false);
+                fixture.state.recent(fixture.grid, 5, recent.snapshot());
+                JsonObject delta = readEvent(connection.input).data();
+                assertEquals(
+                    0,
+                    delta.getAsJsonArray("updates")
+                        .size());
+                assertEquals(
+                    0,
+                    delta.getAsJsonArray("definitions")
+                        .size());
+                JsonObject summary = delta.getAsJsonObject("recent");
+                assertEquals(
+                    601000,
+                    summary.get("stockObservedAt")
+                        .getAsLong());
+                assertEquals(
+                    1000,
+                    summary.get("stockSince")
+                        .getAsLong());
+            }
+        }
+    }
+
+    @Test
+    void reappearingResourceReceivesItsRecentSummaryEvenWhenItsTotalsDidNotChange() throws Exception {
+        StableKey iron = TestGridFixtures.key(51);
+        List<StorageObservationFixtures.Row> rows = Collections.singletonList(row(iron, "Iron", 1));
+        try (Fixture fixture = new Fixture(rows)) {
+            RecentResourceActivity recent = new RecentResourceActivity(true, true, 100, 1000);
+            recent.observe(observation(1000, rows), true, true);
+            fixture.state.recent(fixture.grid, 5, recent.snapshot());
+            try (Connection connection = fixture.open(fixture.reserve())) {
+                assertEquals("ready", readEvent(connection.input).name());
+                fixture.publish(2000, Collections.emptyList());
+                assertEquals(
+                    1,
+                    readEvent(connection.input).data()
+                        .getAsJsonArray("removed")
+                        .size());
+                fixture.publish(3000, rows);
+                JsonObject delta = readEvent(connection.input).data();
+                assertEquals(
+                    1,
+                    delta.getAsJsonArray("definitions")
+                        .size());
+                assertEquals(
+                    "0",
+                    delta.getAsJsonObject("recent")
+                        .getAsJsonObject("resources")
+                        .getAsJsonObject(iron.toString())
+                        .get("input")
+                        .getAsString());
+            }
+        }
+    }
+
+    @Test
+    void recentFlowAndExpiryReachStreamWithoutRepeatingQuantitiesOrDefinitions() throws Exception {
+        StableKey iron = TestGridFixtures.key(51);
+        List<StorageObservationFixtures.Row> rows = Collections.singletonList(row(iron, "Iron", 1));
+        try (Fixture fixture = new Fixture(rows)) {
+            RecentResourceActivity recent = new RecentResourceActivity(true, true, 100, 1000);
+            recent.observe(observation(1000, rows), true, true);
+            fixture.state.recent(fixture.grid, 5, recent.snapshot());
+            TerminalRegistry.Bootstrap bootstrap = fixture.state
+                .reserve(fixture.grid, fixture.session, false, null, System.currentTimeMillis());
+            assertNotNull(bootstrap);
+            var initialRecent = bootstrap.recent();
+            assertNotNull(initialRecent);
+            assertEquals(
+                "0",
+                initialRecent.resources()
+                    .get(iron)
+                    .input());
+            try (Connection connection = fixture.open(bootstrap.subscription())) {
+                assertEquals("ready", readEvent(connection.input).name());
+                recent.observe(
+                    new StorageObservation(
+                        6000,
+                        false,
+                        true,
+                        false,
+                        Collections.emptyList(),
+                        Collections.singletonList(new StorageObservation.Flow(iron, Long.MAX_VALUE, 100)),
+                        Collections.emptyMap(),
+                        Collections.emptyList()),
+                    false,
+                    true);
+                fixture.state.recent(fixture.grid, 5, recent.snapshot());
+                JsonObject delta = readEvent(connection.input).data();
+                assertEquals(
+                    0,
+                    delta.getAsJsonArray("updates")
+                        .size());
+                assertEquals(
+                    0,
+                    delta.getAsJsonArray("definitions")
+                        .size());
+                JsonObject amount = delta.getAsJsonObject("recent")
+                    .getAsJsonObject("resources")
+                    .getAsJsonObject(iron.toString());
+                assertTrue(
+                    amount.get("input")
+                        .getAsJsonPrimitive()
+                        .isString());
+                assertEquals(
+                    "9223372036854775807",
+                    amount.get("input")
+                        .getAsString());
+                recent.advance(131000);
+                assertEquals(
+                    6000,
+                    recent.snapshot()
+                        .flowObservedAt(),
+                    "Expiry is not a new flow measurement");
+                fixture.state.recent(fixture.grid, 5, recent.snapshot());
+                delta = readEvent(connection.input).data();
+                assertEquals(
+                    0,
+                    delta.getAsJsonArray("updates")
+                        .size());
+                assertEquals(
+                    "0",
+                    delta.getAsJsonObject("recent")
+                        .getAsJsonObject("resources")
+                        .getAsJsonObject(iron.toString())
+                        .get("input")
+                        .getAsString());
+            }
+        }
+    }
 
     @Test
     void loginExpiryClosesIdleStreamWithoutRequestsOrServerTicks() throws Exception {

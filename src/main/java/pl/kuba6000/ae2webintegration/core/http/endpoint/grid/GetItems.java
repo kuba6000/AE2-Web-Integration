@@ -34,6 +34,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 
@@ -78,10 +79,11 @@ public final class GetItems extends ISyncedRequest {
      */
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull List<StoredResource> data, @Nullable IconMappings icons,
-        @Nullable TerminalRegistry.View view, @Nullable String subscription) {
+        @Nullable TerminalRegistry.View view, @Nullable String subscription,
+        @Nullable RecentResourceActivity.Summary recent) {
 
         public Response(ApiStatus status, List<StoredResource> data, IconMappings icons) {
-            this(status, data, icons, null, null);
+            this(status, data, icons, null, null, null);
         }
     }
 
@@ -152,7 +154,8 @@ public final class GetItems extends ISyncedRequest {
                             .resources(bootstrap.rows(), bootstrap.descriptions(), bootstrap.unkeyed(), mappings),
                         mappings,
                         bootstrap.view(),
-                        subscription));
+                        subscription,
+                        bootstrap.recent()));
             }
             return;
         }
@@ -161,7 +164,16 @@ public final class GetItems extends ISyncedRequest {
             IconMappings mappings = pack == null ? null : new IconMappings(pack);
             List<StoredResource> items = TerminalStreams
                 .resources(shared.rows(), shared.descriptions(), shared.unkeyed(), mappings);
-            respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
+            TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
+            respondDetached(
+                HttpURLConnection.HTTP_OK,
+                new Response(
+                    ApiStatus.OK,
+                    items,
+                    mappings,
+                    null,
+                    null,
+                    terminals == null ? null : terminals.recent(gridKey)));
             return;
         }
         IAEStorageGrid storageGrid = grid.web$getStorageGrid();

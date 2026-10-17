@@ -4,7 +4,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -20,7 +23,10 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.http.dto.TrackedResource;
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistory;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
@@ -65,8 +71,12 @@ public final class GetResourceHistory extends IAsyncRequest {
     @QueryParam("limit")
     private int limit = DEFAULT_QUERY_LIMIT;
 
+    /** Include response-local icon references and the atlas page table. */
+    @QueryParam("icons")
+    private boolean icons;
+
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull History data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull History data, @Nullable IconMappings icons) {}
 
     /**
      * Baseline is the last retained stock measurement preceding the returned window, or null when unknown.
@@ -95,10 +105,13 @@ public final class GetResourceHistory extends IAsyncRequest {
         }
         try {
             StorageHistory history = service.history(gridKey, itemKey, from, limit);
+            IconPack pack = icons ? CoreEngine.getIconPack() : null;
+            IconMappings mappings = pack == null ? null : new IconMappings(pack);
+            Map<StableKey, IconMappings.Reference> references = iconReferences(history, mappings);
             List<Point> points = new ArrayList<>(
                 history.points()
                     .size());
-            for (StorageHistoryPoint point : history.points()) points.add(toPoint(point, history));
+            for (StorageHistoryPoint point : history.points()) points.add(toPoint(point, history, references));
             GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
             respondDetached(
                 HttpURLConnection.HTTP_OK,
@@ -112,13 +125,31 @@ public final class GetResourceHistory extends IAsyncRequest {
                             .isStorageTracked()
                             || data.getSettings()
                                 .isFlowTracked()),
-                        history.baseline() == null ? null : toPoint(history.baseline(), history))));
+                        history.baseline() == null ? null : toPoint(history.baseline(), history, references)),
+                    mappings));
         } catch (IOException failure) {
             throw new UncheckedIOException(failure);
         }
     }
 
-    private static Point toPoint(StorageHistoryPoint point, StorageHistory history) {
+    private static Map<StableKey, IconMappings.Reference> iconReferences(StorageHistory history,
+        @Nullable IconMappings mappings) {
+        if (mappings == null) return Collections.emptyMap();
+        Map<StableKey, IconMappings.Reference> references = new HashMap<>();
+        for (Map.Entry<StableKey, ResourceDescriptor> entry : history.descriptions()
+            .entrySet()) {
+            references.put(
+                entry.getKey(),
+                mappings.resolve(
+                    entry.getKey(),
+                    entry.getValue()
+                        .baseKey()));
+        }
+        return references;
+    }
+
+    private static Point toPoint(StorageHistoryPoint point, StorageHistory history,
+        Map<StableKey, IconMappings.Reference> references) {
         return new Point(
             point.observedAt(),
             Long.toString(point.generation()),
@@ -127,7 +158,8 @@ public final class GetResourceHistory extends IAsyncRequest {
                 : new TrackedResource(
                     history.descriptions()
                         .get(point.itemKey()),
-                    point.quantity()),
+                    point.quantity(),
+                    references.get(point.itemKey())),
             point.craftable(),
             Long.toString(point.input()),
             Long.toString(point.output()),

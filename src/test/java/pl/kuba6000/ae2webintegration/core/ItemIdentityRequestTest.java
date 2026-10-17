@@ -658,6 +658,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         Set<IAEKey> recipes = Collections.emptySet();
         boolean currentCraftable = true;
         int jobs;
+        int storageReads;
         long orderedAmount;
         IAEKey ordered;
 
@@ -720,6 +721,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         }
 
         public IStackList web$getStorageList() {
+            storageReads++;
             return new IStackList() {
 
                 public long web$getAmount(IAEKey key) {

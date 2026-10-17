@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -19,6 +20,7 @@ import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 
@@ -39,7 +41,7 @@ public final class TerminalRegistry {
     @Desugar
     public record Bootstrap(@NotNull String subscription, @NotNull View view,
         @NotNull List<StorageObservation.Row> rows, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
-        @NotNull List<StorageObservation.UnkeyedRow> unkeyed) {}
+        @NotNull List<StorageObservation.UnkeyedRow> unkeyed, @Nullable RecentResourceActivity.Summary recent) {}
 
     @Desugar
     public record Amount(@NotNull StableKey itemKey, long quantity, boolean craftable) {}
@@ -47,8 +49,8 @@ public final class TerminalRegistry {
     @Desugar
     public record Update(@NotNull View view, @NotNull List<Amount> updates,
         @NotNull List<StorageObservation.Row> definitions, @NotNull List<StableKey> removed,
-        @NotNull Map<StableKey, ResourceDescriptor> descriptions,
-        @Nullable List<StorageObservation.UnkeyedRow> unkeyed) {}
+        @NotNull Map<StableKey, ResourceDescriptor> descriptions, @Nullable List<StorageObservation.UnkeyedRow> unkeyed,
+        @Nullable RecentResourceActivity.Summary recent) {}
 
     /** Returns true when a new baseline is needed. Called only while acquiring/renewing a viewer. */
     public synchronized boolean activate(@NotNull StableKey key, long generation, long now) {
@@ -108,6 +110,13 @@ public final class TerminalRegistry {
             if (subscriber.grid != grid || subscriber.end != null) continue;
             subscriber.pending.addAll(changed);
             subscriber.definitions.addAll(definitions);
+            if (grid.recent != null) for (StableKey item : definitions) {
+                if (grid.recent.resources()
+                    .containsKey(item)) {
+                    subscriber.recentKeys.add(item);
+                    subscriber.recentChanged = true;
+                }
+            }
             subscriber.unknownChanged |= unknownChanged;
             if (subscriber.pending.size() > MAX_PENDING_KEYS) end(subscriber, "reset");
         }
@@ -129,7 +138,13 @@ public final class TerminalRegistry {
         String token = UUID.randomUUID()
             .toString();
         subscriptions.put(token, new Subscription(token, key, grid, session, icons, packId, now + RESERVATION_MILLIS));
-        return new Bootstrap(token, view(grid), rows(grid), new HashMap<>(grid.descriptions), grid.unkeyed);
+        return new Bootstrap(
+            token,
+            view(grid),
+            rows(grid),
+            new HashMap<>(grid.descriptions),
+            grid.unkeyed,
+            grid.recent);
     }
 
     /** Tokens are single-use and bound to the authenticated login session, grid and requested representation. */
@@ -147,7 +162,7 @@ public final class TerminalRegistry {
     }
 
     synchronized boolean hasPending(Subscription subscriber) {
-        return !subscriber.pending.isEmpty() || subscriber.unknownChanged;
+        return !subscriber.pending.isEmpty() || subscriber.unknownChanged || subscriber.recentChanged;
     }
 
     /** Frozen detached rows leave the lock; changes during encoding/writing create a new pending batch. */
@@ -169,16 +184,29 @@ public final class TerminalRegistry {
             }
         }
         List<StorageObservation.UnkeyedRow> unknown = subscriber.unknownChanged ? subscriber.grid.unkeyed : null;
+        RecentResourceActivity.Summary recent = null;
+        if (subscriber.recentChanged && subscriber.grid.recent != null) {
+            Map<StableKey, RecentResourceActivity.Amount> amounts = new HashMap<>();
+            for (StableKey key : subscriber.recentKeys) {
+                RecentResourceActivity.Amount amount = subscriber.grid.recent.resources()
+                    .get(key);
+                if (amount != null) amounts.put(key, amount);
+            }
+            recent = subscriber.grid.recent.withResources(amounts);
+        }
         subscriber.pending.clear();
         subscriber.definitions.clear();
         subscriber.unknownChanged = false;
-        return new Update(view(subscriber.grid), updates, definitions, removed, descriptions, unknown);
+        subscriber.recentChanged = false;
+        subscriber.recentKeys.clear();
+        return new Update(view(subscriber.grid), updates, definitions, removed, descriptions, unknown, recent);
     }
 
     synchronized void release(Subscription subscriber) {
         subscriptions.remove(subscriber.token, subscriber);
         subscriber.pending.clear();
         subscriber.definitions.clear();
+        subscriber.recentKeys.clear();
     }
 
     public synchronized void cancel(@NotNull String token) {
@@ -201,6 +229,62 @@ public final class TerminalRegistry {
             grid.unkeyed);
     }
 
+    /** Published alongside stock; detached immutable summaries never require a history query. */
+    public synchronized void recent(@NotNull StableKey key, long generation,
+        @NotNull RecentResourceActivity.Summary summary) {
+        Grid grid = grids.get(key);
+        if (grid == null || grid.generation != generation) return;
+        summary = visibleRecent(grid, summary);
+        RecentResourceActivity.Summary previous = grid.recent;
+        grid.recent = summary;
+        Set<StableKey> changed = new HashSet<>();
+        for (Map.Entry<StableKey, RecentResourceActivity.Amount> entry : summary.resources()
+            .entrySet()) {
+            if (previous == null || !entry.getValue()
+                .equals(
+                    previous.resources()
+                        .get(entry.getKey())))
+                changed.add(entry.getKey());
+        }
+        if (changed.isEmpty() && !coverageChanged(previous, summary)) return;
+        grid.revision++;
+        for (Subscription subscriber : subscriptions.values()) {
+            if (subscriber.grid != grid || subscriber.end != null) continue;
+            subscriber.recentChanged = true;
+            subscriber.recentKeys.addAll(changed);
+            if (subscriber.recentKeys.size() > MAX_PENDING_KEYS) end(subscriber, "reset");
+        }
+    }
+
+    private static RecentResourceActivity.Summary visibleRecent(Grid grid, RecentResourceActivity.Summary summary) {
+        Map<StableKey, RecentResourceActivity.Amount> visible = new HashMap<>();
+        String flowZero = summary.flowSince() == null || !summary.flowComplete() ? null : "0";
+        String stockZero = summary.stockSince() == null
+            || Objects.equals(summary.stockSince(), summary.stockObservedAt())
+            || !summary.stockComplete() ? null : "0";
+        RecentResourceActivity.Amount zero = new RecentResourceActivity.Amount(flowZero, flowZero, stockZero);
+        for (StableKey item : grid.rows.keySet()) visible.put(
+            item,
+            summary.resources()
+                .getOrDefault(item, zero));
+        return summary.withResources(visible);
+    }
+
+    private static boolean coverageChanged(@Nullable RecentResourceActivity.Summary previous,
+        RecentResourceActivity.Summary current) {
+        return previous == null || previous.flowComplete() != current.flowComplete()
+            || previous.stockComplete() != current.stockComplete()
+            || !Objects.equals(previous.flowSince(), current.flowSince())
+            || !Objects.equals(previous.stockSince(), current.stockSince())
+            || !Objects.equals(previous.flowObservedAt(), current.flowObservedAt())
+            || !Objects.equals(previous.stockObservedAt(), current.stockObservedAt());
+    }
+
+    public synchronized @Nullable RecentResourceActivity.Summary recent(@NotNull StableKey key) {
+        Grid grid = grids.get(key);
+        return grid == null ? null : grid.recent;
+    }
+
     /** Full-list invalidation is distinct from maintenance reconciliation and from history coverage loss. */
     public synchronized void invalidate(@NotNull StableKey key, long generation) {
         Grid grid = grids.get(key);
@@ -211,6 +295,7 @@ public final class TerminalRegistry {
         grid.descriptions.clear();
         grid.unkeyed = Collections.emptyList();
         grid.initialized = false;
+        grid.recent = null;
         grid.epoch++;
         grid.revision = 0;
     }
@@ -263,6 +348,8 @@ public final class TerminalRegistry {
         subscriber.pending.clear();
         subscriber.definitions.clear();
         subscriber.unknownChanged = false;
+        subscriber.recentChanged = false;
+        subscriber.recentKeys.clear();
     }
 
     private static View view(Grid grid) {
@@ -285,6 +372,7 @@ public final class TerminalRegistry {
         private long observedAt;
         private long activeUntil;
         private boolean initialized;
+        private @Nullable RecentResourceActivity.Summary recent;
 
         private Grid(long generation, long activeUntil) {
             this.generation = generation;
@@ -304,6 +392,8 @@ public final class TerminalRegistry {
         final Grid grid;
         final Set<StableKey> pending = new HashSet<>();
         final Set<StableKey> definitions = new HashSet<>();
+        final Set<StableKey> recentKeys = new HashSet<>();
+        boolean recentChanged;
         boolean unknownChanged;
         boolean attached;
         volatile @Nullable String end;

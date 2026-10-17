@@ -35,6 +35,7 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
@@ -65,7 +66,8 @@ public final class TerminalStreams implements AutoCloseable {
     @Desugar
     public record Delta(@NotNull TerminalRegistry.View view, @NotNull List<TerminalRegistry.Amount> updates,
         @NotNull List<StoredResource> definitions, @NotNull List<StableKey> removed,
-        @Nullable List<StoredResource> unkeyed, @Nullable IconMappings icons) {}
+        @Nullable List<StoredResource> unkeyed, @Nullable IconMappings icons,
+        @Nullable RecentResourceActivity.Summary recent) {}
 
     public TerminalStreams(@NotNull TerminalRegistry state, @NotNull GridIdentityRegistry identities,
         @Nullable IconPack icons) {
@@ -177,7 +179,8 @@ public final class TerminalStreams implements AutoCloseable {
                     update.removed(),
                     update.unkeyed() == null ? null
                         : resources(Collections.emptyList(), Collections.emptyMap(), update.unkeyed(), mappings),
-                    mappings);
+                    mappings,
+                    update.recent());
                 byte[] bytes = encode("delta", delta);
                 authorize(session);
                 if (bytes.length > MAX_EVENT_BYTES) session.subscriber.end = "reset";

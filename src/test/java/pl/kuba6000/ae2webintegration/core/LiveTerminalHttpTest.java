@@ -53,7 +53,12 @@ class LiveTerminalHttpTest {
             ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(443324, iron);
             StableKey key = game.submit(() -> {
                 AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
-                return TestGridFixtures.resolvedKey(grid);
+                StableKey gridKey = TestGridFixtures.resolvedKey(grid);
+                var data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
+                assertNotNull(data);
+                data.getSettings()
+                    .setFlowTracked(true);
+                return gridKey;
             })
                 .get(3, TimeUnit.SECONDS);
             java.util.concurrent.ScheduledFuture<?> ticks = game
@@ -66,6 +71,19 @@ class LiveTerminalHttpTest {
                 head.disconnect();
             }
             JsonObject snapshot = json(base + "?live=true");
+            JsonObject recent = snapshot.getAsJsonObject("recent");
+            assertNotNull(recent);
+            assertEquals(
+                "0",
+                recent.getAsJsonObject("resources")
+                    .getAsJsonObject(
+                        iron.web$getKey()
+                            .toString())
+                    .get("input")
+                    .getAsString());
+            assertTrue(
+                recent.get("stockSince")
+                    .isJsonNull());
             JsonObject view = snapshot.getAsJsonObject("view");
             assertNotNull(view);
             assertTrue(

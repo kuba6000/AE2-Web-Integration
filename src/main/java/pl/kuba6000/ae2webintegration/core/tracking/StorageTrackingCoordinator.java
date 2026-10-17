@@ -26,6 +26,7 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
@@ -166,7 +167,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 key,
                 ++generation,
                 grid,
-                new StorageCapture(grid, settings.maxResourcesPerGrid, flow));
+                new StorageCapture(grid, settings.maxResourcesPerGrid, flow),
+                new RecentResourceActivity(stock, flow, settings.maxResourcesPerGrid, nowMillis));
             binding.activeUntil = activeUntil;
             binding.stock = stock;
             binding.flow = flow;
@@ -188,7 +190,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         if (binding.lastFailure != null && nowMillis < binding.retryAfter) return false;
         return binding.stock && nowMillis >= binding.nextStockSample
             || binding.flow && nowMillis >= binding.nextFlowFlush
-            || binding.activeUntil > nowMillis && nowMillis >= binding.nextViewerRead;
+            || binding.activeUntil > nowMillis && nowMillis >= binding.nextViewerRead
+            || binding.flow && binding.activeUntil > nowMillis && nowMillis >= binding.nextRecentPublication;
     }
 
     private void observe(Binding binding, IAEGrid grid, long nowMillis) {
@@ -198,14 +201,19 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         boolean liveRead = binding.activeUntil > nowMillis && nowMillis >= binding.nextViewerRead;
         long interval = binding.activeUntil > nowMillis ? settings.activeIntervalMillis
             : binding.flow ? TimeUnit.SECONDS.toMillis(settings.flowFlushIntervalSeconds) : binding.stockInterval;
+        if (!stockSample && !flowFlush && !liveRead) {
+            publishRecent(binding, nowMillis);
+            return;
+        }
         try {
             long terminalEpoch = binding.capture.terminalEpoch();
             if (terminalEpoch != binding.terminalEpoch) {
                 terminals.invalidate(binding.key, binding.generation);
                 binding.terminalEpoch = terminalEpoch;
+                binding.recent.reset(nowMillis);
             }
             StorageObservation observation = stockSample || liveRead
-                ? binding.capture.observe(grid, nowMillis, stockSample || nowMillis >= binding.nextFull, flowFlush)
+                ? binding.capture.observe(grid, nowMillis, stockSample || nowMillis >= binding.nextFull, binding.flow)
                 : binding.capture.flushFlow(nowMillis);
             if (observation.full())
                 binding.nextFull = nowMillis + TimeUnit.SECONDS.toMillis(settings.reconciliationIntervalSeconds);
@@ -214,6 +222,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             if (terminalEpoch != binding.terminalEpoch) {
                 terminals.invalidate(binding.key, binding.generation);
                 binding.terminalEpoch = terminalEpoch;
+                binding.recent.reset(nowMillis);
                 binding.capture.invalidate();
                 // Preserve accepted flow, but this stock read crossed a native topology boundary.
                 Map<StableKey, ResourceDescriptor> flowDescriptions = new HashMap<>();
@@ -232,11 +241,18 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                     Collections.emptyList());
                 stockSample = false;
             }
-            if (binding.activeUntil > nowMillis) terminals.observed(binding.key, binding.generation, observation);
-            if ((stockSample || flowFlush)
-                && !service.submit(binding.key, binding.generation, observation, stockSample, flowFlush)) {
-                // History backpressure must not invalidate a healthy terminal or delay its next read.
-                binding.capture.markFlowGap();
+            binding.accumulateFlow(observation);
+            if (stockSample || flowFlush) {
+                StorageObservation history = flowFlush ? binding.flushHistory(observation) : observation;
+                binding.recent.observe(history, stockSample, flowFlush);
+                // Persistence failure does not discard measurements already captured by tracking.
+                service.submit(binding.key, binding.generation, history, stockSample, flowFlush);
+            }
+            if (binding.activeUntil > nowMillis) {
+                terminals.observed(binding.key, binding.generation, observation);
+                if (stockSample || flowFlush
+                    || nowMillis >= binding.nextRecentPublication
+                    || terminals.recent(binding.key) == null) publishRecent(binding, nowMillis);
             }
             if (stockSample) binding.nextStockSample = nowMillis + binding.stockInterval;
             if (flowFlush)
@@ -246,12 +262,20 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         } catch (RuntimeException failure) {
             service.invalidate(binding.key, binding.generation);
             binding.capture.markGap();
+            binding.recent.reset(nowMillis);
             terminals.invalidate(binding.key, binding.generation);
             if (binding.lastFailure == null)
                 LOG.warn("Storage observation failed for network {}", binding.key, failure);
             binding.lastFailure = failure;
             binding.retryAfter = retryAt(nowMillis, started, interval);
         }
+    }
+
+    private void publishRecent(Binding binding, long nowMillis) {
+        if (!binding.stock && !binding.flow) return;
+        binding.recent.advance(nowMillis);
+        terminals.recent(binding.key, binding.generation, binding.recent.snapshot());
+        binding.nextRecentPublication = nowMillis + RecentResourceActivity.BUCKET_MILLIS;
     }
 
     private static long retryAt(long nowMillis, long startedNanos, long interval) {
@@ -287,6 +311,10 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private final long generation;
         private final WeakReference<IAEGrid> grid;
         private final StorageCapture capture;
+        private final RecentResourceActivity recent;
+        private final Map<StableKey, PendingFlow> pendingFlow = new HashMap<>();
+        private boolean pendingFlowComplete = true;
+        private long nextRecentPublication;
         private boolean stock;
         private boolean flow;
         private long stockInterval;
@@ -299,11 +327,69 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private long activeUntil;
         private long nextFull;
 
-        private Binding(StableKey key, long generation, IAEGrid grid, StorageCapture capture) {
+        private Binding(StableKey key, long generation, IAEGrid grid, StorageCapture capture,
+            RecentResourceActivity recent) {
             this.key = key;
             this.generation = generation;
             this.grid = new WeakReference<>(grid);
             this.capture = capture;
+            this.recent = recent;
+        }
+
+        private void accumulateFlow(StorageObservation observation) {
+            pendingFlowComplete &= observation.flowComplete();
+            for (StorageObservation.Flow flow : observation.flows()) {
+                PendingFlow pending = pendingFlow.computeIfAbsent(
+                    flow.itemKey(),
+                    key -> new PendingFlow(
+                        observation.descriptions()
+                            .get(key)));
+                pending.input = addFlow(pending.input, flow.input());
+                pending.output = addFlow(pending.output, flow.output());
+            }
+        }
+
+        private long addFlow(long current, long amount) {
+            if (Long.MAX_VALUE - current < amount) {
+                pendingFlowComplete = false;
+                return Long.MAX_VALUE;
+            }
+            return current + amount;
+        }
+
+        private StorageObservation flushHistory(StorageObservation observation) {
+            List<StorageObservation.Flow> flows = new ArrayList<>(pendingFlow.size());
+            Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>(observation.descriptions());
+            for (Map.Entry<StableKey, PendingFlow> entry : pendingFlow.entrySet()) {
+                PendingFlow pending = entry.getValue();
+                flows.add(new StorageObservation.Flow(entry.getKey(), pending.input, pending.output));
+                descriptions.put(entry.getKey(), pending.description);
+            }
+            StorageObservation history = new StorageObservation(
+                observation.observedAt(),
+                observation.full(),
+                pendingFlowComplete,
+                observation.stockObserved(),
+                observation.rows(),
+                flows,
+                descriptions,
+                observation.unkeyed());
+            pendingFlow.clear();
+            pendingFlowComplete = true;
+            return history;
+        }
+
+    }
+
+    private static final class PendingFlow {
+
+        private final ResourceDescriptor description;
+        private long input;
+        private long output;
+
+        private PendingFlow(ResourceDescriptor description) {
+            this.description = description;
         }
     }
+
 }

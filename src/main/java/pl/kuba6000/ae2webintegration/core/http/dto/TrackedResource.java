@@ -1,7 +1,9 @@
 package pl.kuba6000.ae2webintegration.core.http.dto;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /** A history resource count encoded exactly, including values above JavaScript's safe integer range. */
@@ -11,7 +13,7 @@ public final class TrackedResource extends ResourceDescription {
     /** Exact signed decimal resource count. */
     public final @NotNull String quantity;
 
-    public TrackedResource(@NotNull ResourceDescriptor resource, long quantity) {
+    public TrackedResource(@NotNull ResourceDescriptor resource, long quantity, @Nullable IconMappings.Reference icon) {
         super(
             resource.registryNamespace(),
             resource.registryPath(),
@@ -20,7 +22,7 @@ public final class TrackedResource extends ResourceDescription {
             resource.damage(),
             resource.resourceType(),
             resource.itemKey(),
-            null);
+            icon);
         this.quantity = Long.toString(quantity);
     }
 }

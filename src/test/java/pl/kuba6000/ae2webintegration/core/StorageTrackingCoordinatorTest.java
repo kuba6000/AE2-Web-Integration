@@ -42,6 +42,333 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingServic
 class StorageTrackingCoordinatorTest extends GridTestScope {
 
     @Test
+    void sampledStockKeepsAnHourWhileFlowExpiresAndReportsActualMeasurementTimes() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("separate-windows", 10, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710031, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        var data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        data.getSettings()
+            .setStorageTracked(true);
+        data.getSettings()
+            .setFlowTracked(true);
+        TerminalRegistry terminals = new TerminalRegistry();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
+            coordinator.prepareForViewer(grid, 1000);
+            var summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertNull(
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .stockChange());
+            var capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            capture.recordFlow(iron, 17, 3);
+            coordinator.prepareForViewer(grid, 6000);
+            summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertEquals(
+                "17",
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .input());
+            coordinator.prepareForViewer(grid, 131000);
+            summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertEquals(
+                "0",
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .input());
+            assertEquals(1000, summary.stockObservedAt());
+            grid.rows.set(0, new ItemIdentityRequestTest.Resource("separate-windows", 25, false));
+            coordinator.prepareForViewer(grid, 301000);
+            summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertEquals(
+                "15",
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .stockChange());
+            assertEquals(1000, summary.stockSince());
+            assertEquals(301000, summary.stockObservedAt());
+            for (long now = 601000; now <= 3601000; now += 300000) coordinator.prepareForViewer(grid, now);
+            summary = terminals.recent(key);
+            assertNotNull(summary);
+            Long stockObservedAt = summary.stockObservedAt();
+            Long stockSince = summary.stockSince();
+            assertNotNull(stockObservedAt);
+            assertNotNull(stockSince);
+            assertEquals(3600000, stockObservedAt - stockSince);
+            assertEquals(
+                "15",
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .stockChange());
+            coordinator.prepareForViewer(grid, 3901000);
+            summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertEquals(
+                "0",
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .stockChange());
+            assertEquals(301000, summary.stockSince());
+            assertEquals(3901000, summary.stockObservedAt(), "Unchanged samples still update measurement time");
+            data.getSettings()
+                .setStockSampleIntervalSeconds(7200);
+            coordinator.prepareForViewer(grid, 4001000);
+            coordinator.prepareForViewer(grid, 11201000);
+            summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertEquals(summary.stockObservedAt(), summary.stockSince());
+            assertNull(
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .stockChange(),
+                "Samples farther apart than the window cannot describe an hourly change");
+        }
+    }
+
+    @Test
+    void stockCacheUsesOnlyConfiguredSamplesEvenWhenTerminalReadsMoreOften() {
+        AtomicInteger reads = new AtomicInteger();
+        AtomicInteger measuredQuantity = new AtomicInteger(10);
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("sample-only", 10, false) {
+
+            @Override
+            public long web$amount() {
+                reads.incrementAndGet();
+                return measuredQuantity.get();
+            }
+        };
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710030, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        var data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        data.getSettings()
+            .setStorageTracked(true);
+        TerminalRegistry terminals = new TerminalRegistry();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            var capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            int initialReads = reads.get();
+            int initialStorageReads = grid.storageReads;
+            measuredQuantity.set(20);
+            capture.markChanged(iron);
+            coordinator.tick(TestGridFixtures.ae(grid), 6000);
+            assertEquals(initialReads, reads.get(), "An idle hot cache must not trigger native stock reads");
+            assertEquals(initialStorageReads, grid.storageReads);
+            coordinator.tick(TestGridFixtures.ae(grid), 301000);
+            measuredQuantity.set(99);
+            capture.markChanged(iron);
+            coordinator.prepareForViewer(grid, 306000);
+            var snapshot = terminals.snapshot(key);
+            assertNotNull(snapshot);
+            var summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertEquals(
+                99,
+                snapshot.rows()
+                    .get(0)
+                    .quantity());
+            assertEquals(
+                "10",
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .stockChange(),
+                "A terminal bootstrap must preserve the two actual tracking samples");
+            measuredQuantity.set(200);
+            capture.markChanged(iron);
+            coordinator.prepareForViewer(grid, 311000);
+            summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertEquals(
+                "10",
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .stockChange());
+        }
+    }
+
+    @Test
+    void recentFlowRemainsKnownWhenDurableQueueRejectsAndStockTrackingIsDisabled() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("recent-flow-only", 10, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710028, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        var configuration = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(configuration);
+        configuration.getSettings()
+            .setFlowTracked(true);
+        TerminalRegistry terminals = new TerminalRegistry();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 1);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
+            coordinator.prepareForViewer(grid, 1000);
+            var initial = terminals.recent(key);
+            assertNotNull(initial);
+            assertNull(initial.stockSince());
+            assertEquals(
+                "0",
+                initial.resources()
+                    .get(iron.web$getKey())
+                    .input());
+            var capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            capture.recordFlow(iron, Long.MAX_VALUE, 2);
+            coordinator.prepareForViewer(grid, 6000);
+            capture.recordFlow(iron, Long.MAX_VALUE, 3);
+            coordinator.prepareForViewer(grid, 11000);
+            var summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertTrue(summary.flowComplete(), "Durable queue loss must not poison measured live flow");
+            var amount = summary.resources()
+                .get(iron.web$getKey());
+            assertEquals("18446744073709551614", amount.input());
+            assertEquals("5", amount.output());
+            assertNull(amount.stockChange());
+            capture.markGap();
+            coordinator.prepareForViewer(grid, 16000);
+            summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertFalse(summary.flowComplete());
+            coordinator.prepareForViewer(grid, 141000);
+            summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertTrue(summary.flowComplete());
+            assertEquals(
+                "0",
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .input());
+        }
+    }
+
+    @Test
+    void recentStockDoesNotPretendToMeasureFlowAndRestartsWhenTrackingChanges() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("recent-stock-only", 10, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710029, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        var configuration = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(configuration);
+        configuration.getSettings()
+            .setStorageTracked(true);
+        TerminalRegistry terminals = new TerminalRegistry();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
+            coordinator.prepareForViewer(grid, 1000);
+            var capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            capture.recordFlow(iron, 50, 20);
+            grid.rows.set(0, new ItemIdentityRequestTest.Resource("recent-stock-only", 5, false));
+            coordinator.prepareForViewer(grid, 301000);
+            var summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertNull(summary.flowSince());
+            assertNull(
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .input());
+            assertEquals(
+                "-5",
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .stockChange());
+            configuration.getSettings()
+                .setStorageTracked(false);
+            coordinator.prepareForViewer(grid, 306000);
+            assertNull(terminals.recent(key));
+        }
+    }
+
+    @Test
+    void recentFlowAndStockAreIndependentAndExpireWithoutNewTransfers() {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("recent-iron", 10, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710027, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        data.getSettings()
+            .setStorageTracked(true);
+        data.getSettings()
+            .setFlowTracked(true);
+        TerminalRegistry terminals = new TerminalRegistry();
+        ConfigSettings.ResourceTracking configuration = new ConfigSettings.ResourceTracking();
+        configuration.flowFlushIntervalSeconds = 30;
+        InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
+        try (StorageTrackingService service = new StorageTrackingService(store, 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                configuration,
+                terminals)) {
+            coordinator.prepareForViewer(grid, 1000);
+            StorageCapture capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            capture.recordFlow(iron, 100, 100);
+            coordinator.prepareForViewer(grid, 6000);
+            var summary = terminals.recent(key);
+            assertNotNull(summary);
+            var amount = summary.resources()
+                .get(iron.web$getKey());
+            assertEquals("0", amount.input());
+            assertEquals("0", amount.output());
+            assertNull(amount.stockChange());
+            assertEquals(1000, summary.flowSince());
+            assertTrue(
+                store.read(key, iron.web$getKey(), 0, 100)
+                    .points()
+                    .stream()
+                    .noneMatch(point -> point.kind() == StorageHistoryPoint.Kind.FLOW));
+            grid.rows.set(0, new ItemIdentityRequestTest.Resource("recent-iron", 17, false));
+            capture.markChanged(iron);
+            coordinator.prepareForViewer(grid, 11000);
+            summary = terminals.recent(key);
+            assertNotNull(summary);
+            assertNull(
+                summary.resources()
+                    .get(iron.web$getKey())
+                    .stockChange());
+            coordinator.tick(TestGridFixtures.ae(grid), 31000);
+            coordinator.prepareForViewer(grid, 161000);
+            summary = terminals.recent(key);
+            assertNotNull(summary);
+            amount = summary.resources()
+                .get(iron.web$getKey());
+            assertEquals("0", amount.input());
+            assertEquals("0", amount.output());
+            assertNull(amount.stockChange());
+            service.close();
+            assertEquals(
+                100,
+                store.read(key, iron.web$getKey(), 0, 100)
+                    .points()
+                    .stream()
+                    .filter(point -> point.kind() == StorageHistoryPoint.Kind.FLOW)
+                    .mapToLong(StorageHistoryPoint::input)
+                    .sum());
+        }
+    }
+
+    @Test
     void pendingTerminalHandoffRenewsCaptureWithoutTransportTickOrHistory() throws Exception {
         ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("viewer-demand", 10, false);
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710019, iron);
