@@ -48,7 +48,7 @@ final class IconCandidate implements IIconCandidate<IconCandidate> {
     }
 
     @Override
-    public @NotNull StableKey key() {
+    public @Nullable StableKey key() {
         return item.isEmpty() ? NativeItemIdentity.getKey(fluid, registries)
             : NativeItemIdentity.getKey(item, registries);
     }

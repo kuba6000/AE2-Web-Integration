@@ -30,7 +30,7 @@ public abstract class AEItemMixin implements IAEKey {
     }
 
     @Override
-    public @NotNull StableKey web$getKey() {
+    public @Nullable StableKey web$getKey() {
         return NativeItemIdentity.getKey((AEKey) (Object) this);
     }
 
