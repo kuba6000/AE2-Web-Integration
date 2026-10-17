@@ -41,12 +41,43 @@ import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentTrackingService;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFixtures;
 
 class TerminalStreamsHttpTest extends GridTestScope {
 
     private TestGridFixtures.TestGrid nativeGrid;
+
+    @Test
+    void reservedTerminalReceivesAsynchronousRecentDataAfterAnEmptyBootstrap() throws Exception {
+        StableKey iron = TestGridFixtures.key(51);
+        List<StorageObservationFixtures.Row> rows = Collections.singletonList(row(iron, "Iron", 1));
+        try (Fixture fixture = new Fixture(rows);
+            RecentTrackingService recent = new RecentTrackingService(fixture.state, 100)) {
+            recent.open(fixture.grid, 5, false, true, 100, 1000);
+            var bootstrap = fixture.state
+                .reserve(fixture.grid, fixture.session, false, null, System.currentTimeMillis());
+            assertNotNull(bootstrap);
+            assertNull(bootstrap.recent());
+            try (Connection connection = fixture.open(bootstrap.subscription())) {
+                assertEquals("ready", readEvent(connection.input).name());
+                assertTrue(recent.refresh(fixture.grid, 5, 1000));
+                JsonObject delta = readEvent(connection.input).data();
+                assertEquals(
+                    0,
+                    delta.getAsJsonArray("updates")
+                        .size());
+                assertEquals(
+                    "0",
+                    delta.getAsJsonObject("recent")
+                        .getAsJsonObject("resources")
+                        .getAsJsonObject(iron.toString())
+                        .get("input")
+                        .getAsString());
+            }
+        }
+    }
 
     @Test
     void unchangedStockSamplePublishesItsMeasurementTimeWithoutResourceUpdates() throws Exception {
@@ -62,14 +93,14 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 StorageObservationFixtures.observation(301000, true, true, rows, Collections.emptyList()),
                 true,
                 false);
-            fixture.state.recent(fixture.grid, 5, recent.snapshot());
+            fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), recent.snapshot());
             try (Connection connection = fixture.open(fixture.reserve())) {
                 assertEquals("ready", readEvent(connection.input).name());
                 recent.observe(
                     StorageObservationFixtures.observation(601000, true, true, rows, Collections.emptyList()),
                     true,
                     false);
-                fixture.state.recent(fixture.grid, 5, recent.snapshot());
+                fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), recent.snapshot());
                 JsonObject delta = readEvent(connection.input).data();
                 assertEquals(
                     0,
@@ -99,7 +130,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
         try (Fixture fixture = new Fixture(rows)) {
             RecentResourceActivity recent = new RecentResourceActivity(true, true, 100, 1000);
             recent.observe(observation(1000, rows), true, true);
-            fixture.state.recent(fixture.grid, 5, recent.snapshot());
+            fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), recent.snapshot());
             try (Connection connection = fixture.open(fixture.reserve())) {
                 assertEquals("ready", readEvent(connection.input).name());
                 fixture.publish(2000, Collections.emptyList());
@@ -132,7 +163,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
         try (Fixture fixture = new Fixture(rows)) {
             RecentResourceActivity recent = new RecentResourceActivity(true, true, 100, 1000);
             recent.observe(observation(1000, rows), true, true);
-            fixture.state.recent(fixture.grid, 5, recent.snapshot());
+            fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), recent.snapshot());
             TerminalRegistry.Bootstrap bootstrap = fixture.state
                 .reserve(fixture.grid, fixture.session, false, null, System.currentTimeMillis());
             assertNotNull(bootstrap);
@@ -157,7 +188,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                         Collections.emptyList()),
                     false,
                     true);
-                fixture.state.recent(fixture.grid, 5, recent.snapshot());
+                fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), recent.snapshot());
                 JsonObject delta = readEvent(connection.input).data();
                 assertEquals(
                     0,
@@ -184,7 +215,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     recent.snapshot()
                         .flowObservedAt(),
                     "Expiry is not a new flow measurement");
-                fixture.state.recent(fixture.grid, 5, recent.snapshot());
+                fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), recent.snapshot());
                 delta = readEvent(connection.input).data();
                 assertEquals(
                     0,

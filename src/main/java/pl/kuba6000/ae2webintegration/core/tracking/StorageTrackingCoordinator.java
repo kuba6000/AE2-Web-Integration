@@ -27,6 +27,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentTrackingService;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
@@ -40,6 +41,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     private static final long VIEWER_LEASE_MILLIS = TimeUnit.SECONDS.toMillis(10);
     private static final long FAILURE_RETRY_MILLIS = TimeUnit.SECONDS.toMillis(30);
     private final StorageTrackingService service;
+    private final RecentTrackingService recent;
     private final TerminalRegistry terminals;
     private final GridIdentityRegistry identities;
     private final ConfigSettings.ResourceTracking settings;
@@ -60,6 +62,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         this.service = service;
         this.identities = identities;
         this.settings = settings;
+        recent = new RecentTrackingService(terminals, settings.maxQueuedRows);
     }
 
     /** Native reads are shared across viewers; at most one scheduled grid observation runs per tick. */
@@ -167,8 +170,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 key,
                 ++generation,
                 grid,
-                new StorageCapture(grid, settings.maxResourcesPerGrid, flow),
-                new RecentResourceActivity(stock, flow, settings.maxResourcesPerGrid, nowMillis));
+                new StorageCapture(grid, settings.maxResourcesPerGrid, flow));
             binding.activeUntil = activeUntil;
             binding.stock = stock;
             binding.flow = flow;
@@ -177,7 +179,10 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             scheduled.add(binding);
             grid.web$getStorageGrid()
                 .web$setStorageCapture(binding.capture);
-            if (stock || flow) service.open(key, binding.generation);
+            if (stock || flow) {
+                service.open(key, binding.generation);
+                recent.open(key, binding.generation, stock, flow, settings.maxResourcesPerGrid, nowMillis);
+            }
         }
         if (binding.stockInterval != stockInterval) {
             binding.stockInterval = stockInterval;
@@ -210,7 +215,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             if (terminalEpoch != binding.terminalEpoch) {
                 terminals.invalidate(binding.key, binding.generation);
                 binding.terminalEpoch = terminalEpoch;
-                binding.recent.reset(nowMillis);
+                recent.invalidate(binding.key, binding.generation, nowMillis);
             }
             StorageObservation observation = stockSample || liveRead
                 ? binding.capture.observe(grid, nowMillis, stockSample || nowMillis >= binding.nextFull, binding.flow)
@@ -222,7 +227,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             if (terminalEpoch != binding.terminalEpoch) {
                 terminals.invalidate(binding.key, binding.generation);
                 binding.terminalEpoch = terminalEpoch;
-                binding.recent.reset(nowMillis);
+                recent.invalidate(binding.key, binding.generation, nowMillis);
                 binding.capture.invalidate();
                 // Preserve accepted flow, but this stock read crossed a native topology boundary.
                 Map<StableKey, ResourceDescriptor> flowDescriptions = new HashMap<>();
@@ -242,17 +247,18 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 stockSample = false;
             }
             binding.accumulateFlow(observation);
+            if (binding.activeUntil > nowMillis) terminals.observed(binding.key, binding.generation, observation);
             if (stockSample || flowFlush) {
                 StorageObservation history = flowFlush ? binding.flushHistory(observation) : observation;
-                binding.recent.observe(history, stockSample, flowFlush);
+                recent.submit(binding.key, binding.generation, history, stockSample, flowFlush);
                 // Persistence failure does not discard measurements already captured by tracking.
                 service.submit(binding.key, binding.generation, history, stockSample, flowFlush);
             }
             if (binding.activeUntil > nowMillis) {
-                terminals.observed(binding.key, binding.generation, observation);
-                if (stockSample || flowFlush
-                    || nowMillis >= binding.nextRecentPublication
-                    || terminals.recent(binding.key) == null) publishRecent(binding, nowMillis);
+                if (stockSample || flowFlush)
+                    binding.nextRecentPublication = nowMillis + RecentResourceActivity.BUCKET_MILLIS;
+                else if (nowMillis >= binding.nextRecentPublication || terminals.recent(binding.key) == null)
+                    publishRecent(binding, nowMillis);
             }
             if (stockSample) binding.nextStockSample = nowMillis + binding.stockInterval;
             if (flowFlush)
@@ -262,7 +268,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         } catch (RuntimeException failure) {
             service.invalidate(binding.key, binding.generation);
             binding.capture.markGap();
-            binding.recent.reset(nowMillis);
+            recent.invalidate(binding.key, binding.generation, nowMillis);
             terminals.invalidate(binding.key, binding.generation);
             if (binding.lastFailure == null)
                 LOG.warn("Storage observation failed for network {}", binding.key, failure);
@@ -273,8 +279,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
 
     private void publishRecent(Binding binding, long nowMillis) {
         if (!binding.stock && !binding.flow) return;
-        binding.recent.advance(nowMillis);
-        terminals.recent(binding.key, binding.generation, binding.recent.snapshot());
+        recent.refresh(binding.key, binding.generation, nowMillis);
         binding.nextRecentPublication = nowMillis + RecentResourceActivity.BUCKET_MILLIS;
     }
 
@@ -294,6 +299,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             AE2Controller.itemIdentities.beginListing(grid)
                 .commit();
         }
+        recent.retire(binding.key, binding.generation);
         service.retire(binding.key, binding.generation);
         terminals.retire(binding.key, binding.generation);
     }
@@ -303,6 +309,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         for (Binding binding : bindings.values()) detach(binding);
         bindings.clear();
         scheduled.clear();
+        recent.close();
     }
 
     private static final class Binding {
@@ -311,7 +318,6 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private final long generation;
         private final WeakReference<IAEGrid> grid;
         private final StorageCapture capture;
-        private final RecentResourceActivity recent;
         private final Map<StableKey, PendingFlow> pendingFlow = new HashMap<>();
         private boolean pendingFlowComplete = true;
         private long nextRecentPublication;
@@ -327,13 +333,11 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private long activeUntil;
         private long nextFull;
 
-        private Binding(StableKey key, long generation, IAEGrid grid, StorageCapture capture,
-            RecentResourceActivity recent) {
+        private Binding(StableKey key, long generation, IAEGrid grid, StorageCapture capture) {
             this.key = key;
             this.generation = generation;
             this.grid = new WeakReference<>(grid);
             this.capture = capture;
-            this.recent = recent;
         }
 
         private void accumulateFlow(StorageObservation observation) {

@@ -33,6 +33,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.InMemoryStorageHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistory;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
@@ -42,7 +43,32 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingServic
 class StorageTrackingCoordinatorTest extends GridTestScope {
 
     @Test
-    void sampledStockKeepsAnHourWhileFlowExpiresAndReportsActualMeasurementTimes() {
+    void recentPublicationDoesNotRunOnTheNativeCaptureThread() throws Exception {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("async-recent", 10, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710032, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        var data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        data.getSettings()
+            .setStorageTracked(true);
+        TerminalRegistry terminals = new TerminalRegistry();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
+            synchronized (terminals) {
+                coordinator.prepareForViewer(grid, 1000);
+                assertNotNull(terminals.snapshot(key));
+                assertNull(terminals.recent(key), "Capture may enqueue recent work, but cannot execute it inline");
+            }
+            assertNotNull(awaitRecent(terminals, key, 1000));
+        }
+    }
+
+    @Test
+    void sampledStockKeepsAnHourWhileFlowExpiresAndReportsActualMeasurementTimes() throws Exception {
         ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("separate-windows", 10, false);
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710031, iron);
         StableKey key = TestGridFixtures.resolvedKey(grid);
@@ -60,7 +86,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 new ConfigSettings.ResourceTracking(),
                 terminals)) {
             coordinator.prepareForViewer(grid, 1000);
-            var summary = terminals.recent(key);
+            var summary = awaitRecent(terminals, key, 1000);
             assertNotNull(summary);
             assertNull(
                 summary.resources()
@@ -70,7 +96,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             assertNotNull(capture);
             capture.recordFlow(iron, 17, 3);
             coordinator.prepareForViewer(grid, 6000);
-            summary = terminals.recent(key);
+            summary = awaitRecent(terminals, key, 6000);
             assertNotNull(summary);
             assertEquals(
                 "17",
@@ -78,7 +104,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     .get(iron.web$getKey())
                     .input());
             coordinator.prepareForViewer(grid, 131000);
-            summary = terminals.recent(key);
+            summary = awaitRecent(terminals, key, 131000);
             assertNotNull(summary);
             assertEquals(
                 "0",
@@ -88,7 +114,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             assertEquals(1000, summary.stockObservedAt());
             grid.rows.set(0, new ItemIdentityRequestTest.Resource("separate-windows", 25, false));
             coordinator.prepareForViewer(grid, 301000);
-            summary = terminals.recent(key);
+            summary = awaitRecent(terminals, key, 301000);
             assertNotNull(summary);
             assertEquals(
                 "15",
@@ -98,7 +124,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             assertEquals(1000, summary.stockSince());
             assertEquals(301000, summary.stockObservedAt());
             for (long now = 601000; now <= 3601000; now += 300000) coordinator.prepareForViewer(grid, now);
-            summary = terminals.recent(key);
+            summary = awaitRecent(terminals, key, 3601000);
             assertNotNull(summary);
             Long stockObservedAt = summary.stockObservedAt();
             Long stockSince = summary.stockSince();
@@ -111,7 +137,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     .get(iron.web$getKey())
                     .stockChange());
             coordinator.prepareForViewer(grid, 3901000);
-            summary = terminals.recent(key);
+            summary = awaitRecent(terminals, key, 3901000);
             assertNotNull(summary);
             assertEquals(
                 "0",
@@ -124,7 +150,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 .setStockSampleIntervalSeconds(7200);
             coordinator.prepareForViewer(grid, 4001000);
             coordinator.prepareForViewer(grid, 11201000);
-            summary = terminals.recent(key);
+            summary = awaitRecent(terminals, key, 11201000);
             assertNotNull(summary);
             assertEquals(summary.stockObservedAt(), summary.stockSince());
             assertNull(
@@ -136,7 +162,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     }
 
     @Test
-    void stockCacheUsesOnlyConfiguredSamplesEvenWhenTerminalReadsMoreOften() {
+    void stockCacheUsesOnlyConfiguredSamplesEvenWhenTerminalReadsMoreOften() throws Exception {
         AtomicInteger reads = new AtomicInteger();
         AtomicInteger measuredQuantity = new AtomicInteger(10);
         ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("sample-only", 10, false) {
@@ -176,7 +202,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             coordinator.prepareForViewer(grid, 306000);
             var snapshot = terminals.snapshot(key);
             assertNotNull(snapshot);
-            var summary = terminals.recent(key);
+            var summary = awaitRecent(terminals, key, 306000);
             assertNotNull(summary);
             assertEquals(
                 99,
@@ -192,7 +218,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             measuredQuantity.set(200);
             capture.markChanged(iron);
             coordinator.prepareForViewer(grid, 311000);
-            summary = terminals.recent(key);
+            summary = awaitRecent(terminals, key, 311000);
             assertNotNull(summary);
             assertEquals(
                 "10",
@@ -203,7 +229,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     }
 
     @Test
-    void recentFlowRemainsKnownWhenDurableQueueRejectsAndStockTrackingIsDisabled() {
+    void recentFlowRemainsKnownWhenDurableQueueRejectsAndStockTrackingIsDisabled() throws Exception {
         ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("recent-flow-only", 10, false);
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710028, iron);
         StableKey key = TestGridFixtures.resolvedKey(grid);
@@ -219,7 +245,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 new ConfigSettings.ResourceTracking(),
                 terminals)) {
             coordinator.prepareForViewer(grid, 1000);
-            var initial = terminals.recent(key);
+            var initial = awaitRecent(terminals, key, 1000);
             assertNotNull(initial);
             assertNull(initial.stockSince());
             assertEquals(
@@ -233,7 +259,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             coordinator.prepareForViewer(grid, 6000);
             capture.recordFlow(iron, Long.MAX_VALUE, 3);
             coordinator.prepareForViewer(grid, 11000);
-            var summary = terminals.recent(key);
+            var summary = awaitRecent(terminals, key, 11000);
             assertNotNull(summary);
             assertTrue(summary.flowComplete(), "Durable queue loss must not poison measured live flow");
             var amount = summary.resources()
@@ -243,11 +269,11 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             assertNull(amount.stockChange());
             capture.markGap();
             coordinator.prepareForViewer(grid, 16000);
-            summary = terminals.recent(key);
+            summary = awaitRecent(terminals, key, 16000);
             assertNotNull(summary);
             assertFalse(summary.flowComplete());
             coordinator.prepareForViewer(grid, 141000);
-            summary = terminals.recent(key);
+            summary = awaitRecent(terminals, key, 141000);
             assertNotNull(summary);
             assertTrue(summary.flowComplete());
             assertEquals(
@@ -259,7 +285,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     }
 
     @Test
-    void recentStockDoesNotPretendToMeasureFlowAndRestartsWhenTrackingChanges() {
+    void recentStockDoesNotPretendToMeasureFlowAndRestartsWhenTrackingChanges() throws Exception {
         ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("recent-stock-only", 10, false);
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710029, iron);
         StableKey key = TestGridFixtures.resolvedKey(grid);
@@ -280,7 +306,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             capture.recordFlow(iron, 50, 20);
             grid.rows.set(0, new ItemIdentityRequestTest.Resource("recent-stock-only", 5, false));
             coordinator.prepareForViewer(grid, 301000);
-            var summary = terminals.recent(key);
+            var summary = awaitRecent(terminals, key, 301000);
             assertNotNull(summary);
             assertNull(summary.flowSince());
             assertNull(
@@ -300,7 +326,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     }
 
     @Test
-    void recentFlowAndStockAreIndependentAndExpireWithoutNewTransfers() {
+    void recentFlowAndStockAreIndependentAndExpireWithoutNewTransfers() throws Exception {
         ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("recent-iron", 10, false);
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710027, iron);
         StableKey key = TestGridFixtures.resolvedKey(grid);
@@ -325,7 +351,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             assertNotNull(capture);
             capture.recordFlow(iron, 100, 100);
             coordinator.prepareForViewer(grid, 6000);
-            var summary = terminals.recent(key);
+            var summary = awaitRecent(terminals, key, 6000);
             assertNotNull(summary);
             var amount = summary.resources()
                 .get(iron.web$getKey());
@@ -341,7 +367,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             grid.rows.set(0, new ItemIdentityRequestTest.Resource("recent-iron", 17, false));
             capture.markChanged(iron);
             coordinator.prepareForViewer(grid, 11000);
-            summary = terminals.recent(key);
+            summary = awaitRecent(terminals, key, 11000);
             assertNotNull(summary);
             assertNull(
                 summary.resources()
@@ -349,7 +375,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     .stockChange());
             coordinator.tick(TestGridFixtures.ae(grid), 31000);
             coordinator.prepareForViewer(grid, 161000);
-            summary = terminals.recent(key);
+            summary = awaitRecent(terminals, key, 161000);
             assertNotNull(summary);
             amount = summary.resources()
                 .get(iron.web$getKey());
@@ -552,11 +578,13 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 return new StorageHistory(Collections.emptyList(), Collections.emptyMap(), true, false);
             }
         };
+        TerminalRegistry terminals = new TerminalRegistry();
         try (StorageTrackingService service = new StorageTrackingService(blocked, 2);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
                 CoreEngine.GRID_IDENTITIES,
-                new ConfigSettings.ResourceTracking())) {
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
             try {
                 assertNotNull(coordinator.observeForViewer(grid, 1000));
                 assertTrue(entered.await(3, TimeUnit.SECONDS));
@@ -580,6 +608,13 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                         .get(0)
                         .quantity());
                 coordinator.tick(TestGridFixtures.ae(grid), 6000);
+                var summary = awaitRecent(terminals, key, 6000);
+                assertEquals(
+                    "7",
+                    summary.resources()
+                        .get(iron.web$getKey())
+                        .input());
+                assertTrue(summary.flowComplete(), "Blocked or rejected database writes do not block recent flow");
                 assertFalse(
                     capture.requiresReconciliation(),
                     "History queue rejection must not force a terminal rescan");
@@ -901,6 +936,17 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     .isEmpty(),
                 "disabling does not erase history");
         }
+    }
+
+    private static @NotNull RecentResourceActivity.Summary awaitRecent(TerminalRegistry terminals, StableKey key,
+        long observedAt) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        while (System.nanoTime() < deadline) {
+            var summary = terminals.recent(key);
+            if (summary != null && summary.observedAt() >= observedAt) return summary;
+            Thread.sleep(1);
+        }
+        throw new AssertionError("Recent tracking did not publish observation " + observedAt);
     }
 
     private static @NotNull StorageSnapshot awaitRevision(StorageTrackingService service, StableKey key, long revision)

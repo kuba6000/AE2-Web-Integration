@@ -16,7 +16,7 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 /**
- * Producer-owned recent measurements, fed exclusively by configured tracking samples, independent of database
+ * Worker-owned recent measurements, fed exclusively by configured tracking samples, independent of database
  * availability.
  */
 public final class RecentResourceActivity {

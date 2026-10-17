@@ -71,19 +71,9 @@ class LiveTerminalHttpTest {
                 head.disconnect();
             }
             JsonObject snapshot = json(base + "?live=true");
-            JsonObject recent = snapshot.getAsJsonObject("recent");
-            assertNotNull(recent);
-            assertEquals(
-                "0",
-                recent.getAsJsonObject("resources")
-                    .getAsJsonObject(
-                        iron.web$getKey()
-                            .toString())
-                    .get("input")
-                    .getAsString());
-            assertTrue(
-                recent.get("stockSince")
-                    .isJsonNull());
+            JsonObject recent = snapshot.get("recent")
+                .isJsonNull() ? null : snapshot.getAsJsonObject("recent");
+            if (recent != null) assertRecentFlow(recent, iron.web$getKey());
             JsonObject view = snapshot.getAsJsonObject("view");
             assertNotNull(view);
             assertTrue(
@@ -124,13 +114,19 @@ class LiveTerminalHttpTest {
                 })
                     .get(3, TimeUnit.SECONDS);
                 boolean updated = false;
-                for (int remaining = 30; remaining > 0 && !updated;) {
+                boolean receivedRecent = recent != null;
+                for (int remaining = 30; remaining > 0 && (!updated || !receivedRecent);) {
                     String line = input.readLine();
                     assertNotNull(line);
                     if (!line.startsWith("data: ")) continue;
                     remaining--;
                     JsonObject payload = new JsonParser().parse(line.substring(6))
                         .getAsJsonObject();
+                    if (payload.has("recent") && !payload.get("recent")
+                        .isJsonNull()) {
+                        assertRecentFlow(payload.getAsJsonObject("recent"), iron.web$getKey());
+                        receivedRecent = true;
+                    }
                     if (!payload.has("updates")) continue;
                     for (JsonElement row : payload.getAsJsonArray("updates")) {
                         if (row.getAsJsonObject()
@@ -139,6 +135,7 @@ class LiveTerminalHttpTest {
                     }
                 }
                 assertTrue(updated, "The native change must reach the authorized terminal stream");
+                assertTrue(receivedRecent, "Recent data may arrive after bootstrap through its existing subscription");
             } finally {
                 stream.disconnect();
             }
@@ -159,6 +156,18 @@ class LiveTerminalHttpTest {
             CoreEngine.onServerStopped();
             AE2Controller.AE2Interface = previous;
         }
+    }
+
+    private static void assertRecentFlow(JsonObject recent, StableKey iron) {
+        JsonObject amounts = recent.getAsJsonObject("resources");
+        if (amounts.has(iron.toString())) assertEquals(
+            "0",
+            amounts.getAsJsonObject(iron.toString())
+                .get("input")
+                .getAsString());
+        assertTrue(
+            recent.get("stockSince")
+                .isJsonNull());
     }
 
     private static HttpURLConnection connection(String url) throws Exception {

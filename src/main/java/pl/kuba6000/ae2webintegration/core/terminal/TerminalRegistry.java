@@ -32,6 +32,7 @@ public final class TerminalRegistry {
     private static final int MAX_PENDING_KEYS = 16_384;
     private static final long RESERVATION_MILLIS = 10_000;
     private boolean closed;
+    private long nextRecentToken;
     private final Map<StableKey, Grid> grids = new HashMap<>();
     private final Map<String, Subscription> subscriptions = new HashMap<>();
 
@@ -64,7 +65,9 @@ public final class TerminalRegistry {
         if (current != null && current.generation > generation) return false;
         if (current != null) retire(key, current.generation);
         if (grids.size() >= MAX_SUBSCRIPTIONS) return false;
-        grids.put(key, new Grid(generation, now + RESERVATION_MILLIS));
+        Grid created = new Grid(generation, now + RESERVATION_MILLIS);
+        created.recentToken = ++nextRecentToken;
+        grids.put(key, created);
         return true;
     }
 
@@ -229,11 +232,25 @@ public final class TerminalRegistry {
             grid.unkeyed);
     }
 
-    /** Published alongside stock; detached immutable summaries never require a history query. */
-    public synchronized void recent(@NotNull StableKey key, long generation,
-        @NotNull RecentResourceActivity.Summary summary) {
+    /** A token identifies this terminal lifetime and its current cache coverage, not only the native generation. */
+    public synchronized long recentToken(@NotNull StableKey key, long generation) {
+        Grid grid = grids.get(key);
+        return grid == null || grid.generation != generation ? 0 : grid.recentToken;
+    }
+
+    /** Reject late cache publication without waiting for a queue slot or rebuilding a summary. */
+    public synchronized void invalidateRecent(@NotNull StableKey key, long generation) {
         Grid grid = grids.get(key);
         if (grid == null || grid.generation != generation) return;
+        grid.recentToken = ++nextRecentToken;
+        grid.recent = null;
+    }
+
+    /** Published alongside stock; detached immutable summaries never require a history query. */
+    public synchronized void recent(@NotNull StableKey key, long generation, long publicationToken,
+        @NotNull RecentResourceActivity.Summary summary) {
+        Grid grid = grids.get(key);
+        if (grid == null || grid.generation != generation || grid.recentToken != publicationToken) return;
         summary = visibleRecent(grid, summary);
         RecentResourceActivity.Summary previous = grid.recent;
         grid.recent = summary;
@@ -296,6 +313,7 @@ public final class TerminalRegistry {
         grid.unkeyed = Collections.emptyList();
         grid.initialized = false;
         grid.recent = null;
+        grid.recentToken = ++nextRecentToken;
         grid.epoch++;
         grid.revision = 0;
     }
@@ -373,6 +391,7 @@ public final class TerminalRegistry {
         private long activeUntil;
         private boolean initialized;
         private @Nullable RecentResourceActivity.Summary recent;
+        private long recentToken;
 
         private Grid(long generation, long activeUntil) {
             this.generation = generation;
