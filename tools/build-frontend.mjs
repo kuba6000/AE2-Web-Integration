@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { rmSync, copyFileSync } from 'node:fs';
+import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,3 +19,15 @@ const result = spawnSync(process.execPath, [compiler, '--project', 'tsconfig.jso
 });
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
+
+// Keep chart code inside the built-in theme; other themes do not load this dependency.
+await build({
+    entryPoints: [require.resolve('uplot/dist/uPlot.esm.js')],
+    outfile: path.join(output, 'themes/default/uplot.js'),
+    bundle: true,
+    format: 'esm',
+    target: 'es2022',
+    legalComments: 'inline'
+});
+copyFileSync(require.resolve('uplot/dist/uPlot.min.css'), path.join(output, 'themes/default/uplot.css'));
+copyFileSync(require.resolve('uplot/LICENSE'), path.join(output, 'themes/default/uplot-LICENSE.txt'));

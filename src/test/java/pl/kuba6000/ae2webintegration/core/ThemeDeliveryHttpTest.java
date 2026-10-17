@@ -97,6 +97,20 @@ class ThemeDeliveryHttpTest {
     }
 
     @Test
+    void installedThemeCanDeclareResourceTrackingView() throws Exception {
+        install("tracking.zip", manifest("tracking").replace("\"items\"", "\"tracking\""), Collections.emptyMap());
+        CoreEngine.onServerStarted();
+        JsonObject theme = catalog().getAsJsonArray("themes")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            "tracking",
+            theme.getAsJsonArray("views")
+                .get(1)
+                .getAsString());
+    }
+
+    @Test
     void installedZipExposesManifestDefaultAndAuthenticatedAssetsWithoutExtraction() throws Exception {
         Path archive = install(
             "list.zip",

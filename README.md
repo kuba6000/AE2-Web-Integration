@@ -315,6 +315,8 @@ documentation host.
 Project code and original interface icons are licensed under **LGPL-3.0-or-later**.
 Bundled third-party assets retain their own licenses:
 
+- [uPlot](https://github.com/leeoniya/uPlot), by Leon Sorokin — MIT (default theme charts).
+
 | Component | Author / source | License |
 | --- | --- | --- |
 | Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](LICENSE) |

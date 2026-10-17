@@ -1,4 +1,6 @@
-import type { ThemeApplication, ThemeState, ThemeLifetime } from '../../app/theme-api.js';
+import type { ThemeApplication, ThemeState, ThemeLifetime, ThemeSettings } from '../../app/theme-api.js';
+import { trackingHref } from '../../app/router.js';
+import { recentTrackingLines } from './recent-tracking.js';
 import type { Translator } from '../../app/i18n.js';
 import { registryId, selectResources } from '../../app/resource-helpers.js';
 import { plainMinecraftText } from '../../app/minecraft-text.js';
@@ -46,12 +48,14 @@ export function createResourceTerminal(
         craftingView,
         tooltips,
         mobile,
-        lifetime
+        lifetime,
+        settings
     }: {
         craftingView: Pick<ReturnType<typeof createCraftingView>, 'open' | 'order'>;
         tooltips: Tooltips;
         mobile: Pick<ReturnType<typeof createMobilePanels>, 'open'>;
         lifetime: ThemeLifetime;
+        settings: ThemeSettings;
     }
 ) {
     const root = document.createElement('div');
@@ -100,7 +104,7 @@ export function createResourceTerminal(
         details: root.querySelector<HTMLDivElement>('#details')!,
         order: root.querySelector<HTMLDivElement>('#order')!
     };
-    const historyView = createResourceHistoryView(controls.resourcePanel);
+    const historyView = createResourceHistoryView(controls.resourcePanel, application, settings);
     const toolButtons: NodeListOf<
         HTMLButtonElement & {
             dataset: {
@@ -139,7 +143,8 @@ export function createResourceTerminal(
                 name,
                 ...resourceMetadata(item, 'span', locale),
                 element('span', `${locale.common('stored')}: ${locale.number(item.quantity)}`),
-                element('span', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))
+                element('span', locale.common(item.craftable ? 'craftableYes' : 'craftableNo')),
+                ...recentTrackingLines(state.recent, item.itemKey, locale)
             ],
             x,
             y
@@ -222,6 +227,16 @@ export function createResourceTerminal(
     menuCraft.type = 'button';
     menuCraft.role = 'menuitem';
     resourceMenu.append(menuCraft);
+    const menuTracking = element('button');
+    menuTracking.type = 'button';
+    menuTracking.role = 'menuitem';
+    resourceMenu.append(menuTracking);
+    menuTracking.addEventListener('click', () => {
+        if (!menuItem?.itemKey || !menuGrid) return;
+        const href = trackingHref(menuGrid, menuItem.itemKey);
+        closeResourceMenu(false);
+        location.hash = href;
+    });
     host.append(resourceMenu);
     let menuItem: ThemeState['selected'] = null;
     let menuSource: HTMLElement | null = null;
@@ -240,10 +255,12 @@ export function createResourceTerminal(
         menuGrid = state.route.gridKey;
         menuCraft.textContent = locale.common('craft');
         menuCraft.disabled = !item.craftable || !item.itemKey;
+        menuTracking.textContent = locale.t('viewTracking');
+        menuTracking.disabled = !item.itemKey;
         resourceMenu.hidden = false;
         resourceMenu.style.left = `${Math.max(8, Math.min(x, innerWidth - resourceMenu.offsetWidth - 8))}px`;
         resourceMenu.style.top = `${Math.max(8, Math.min(y, innerHeight - resourceMenu.offsetHeight - 8))}px`;
-        menuCraft.focus();
+        (menuCraft.disabled ? menuTracking : menuCraft).focus();
     }
     menuCraft.addEventListener('click', () => {
         const item = menuItem;
@@ -252,7 +269,17 @@ export function createResourceTerminal(
         if (item && source) craftingView.open(item, source);
     });
     resourceMenu.addEventListener('keydown', (event) => {
-        if (event.key === 'Tab') closeResourceMenu(false);
+        const actions = [menuCraft, menuTracking].filter((button) => !button.disabled);
+        const current = actions.indexOf(document.activeElement as HTMLButtonElement);
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            actions[(current + (event.key === 'ArrowDown' ? 1 : actions.length - 1)) % actions.length]?.focus();
+        }
+        if (
+            event.key === 'Tab' &&
+            ((event.shiftKey && current === 0) || (!event.shiftKey && current === actions.length - 1))
+        )
+            closeResourceMenu(false);
     });
     const outsideResourceMenu = (event: PointerEvent) => {
         if (!resourceMenu.contains(event.target as Node)) closeResourceMenu(false);
@@ -369,24 +396,30 @@ export function createResourceTerminal(
         controls.pageCount.textContent = `${page + 1} / ${Math.max(1, Math.ceil(allFiltered.length / PAGE_SIZE))}`;
         slots.update(rows.length);
     }
+    let detailsInput: { item: ThemeState['selected']; recent: ThemeState['recent']; language: string } | undefined;
     function renderDetails() {
         const details = controls.details;
         const item = state.selected;
-        historyView.render(state, locale, language);
+        historyView.render(state, locale);
         controls.order.hidden = !item?.craftable || !item.itemKey;
         if (!item) {
+            detailsInput = undefined;
             details.replaceChildren(element('p', locale.common('selectItem')));
             return;
         }
-        const name = element('h4');
-        name.append(renderMinecraftText(item.displayName));
-        details.replaceChildren(
-            name,
-            ...resourceMetadata(item, 'p', locale),
-            element('p', `${locale.common('stored')}: ${locale.number(item.quantity)}`),
-            element('p', locale.common(item.craftable ? 'craftableYes' : 'craftableNo'))
-        );
-        if (!item.itemKey) details.append(element('p', locale.common('identityUnavailable'), 'hint'));
+        if (detailsInput?.item !== item || detailsInput.recent !== state.recent || detailsInput.language !== language) {
+            detailsInput = { item, recent: state.recent, language };
+            const name = element('h4');
+            name.append(renderMinecraftText(item.displayName));
+            details.replaceChildren(
+                name,
+                ...resourceMetadata(item, 'p', locale),
+                element('p', `${locale.common('stored')}: ${locale.number(item.quantity)}`),
+                element('p', locale.common(item.craftable ? 'craftableYes' : 'craftableNo')),
+                ...recentTrackingLines(state.recent, item.itemKey, locale)
+            );
+            if (!item.itemKey) details.append(element('p', locale.common('identityUnavailable'), 'hint'));
+        }
         if (item.craftable && item.itemKey) {
             const order = craftingView.order(item, state.crafting, locale);
             if (order.parentNode !== controls.order) controls.order.append(order);
@@ -559,13 +592,17 @@ export function createResourceTerminal(
             }
             renderControls();
             if (search.value !== state.search) search.value = state.search;
-            renderItems();
-            renderDetails();
+            if (state.route.view === 'items') {
+                renderItems();
+                renderDetails();
+                refreshItemTooltip();
+            } else if (itemTooltip || toolTooltip) hideTooltip();
             if (state.route.view !== 'items' || state.itemStatus === 'error' || menuGrid !== state.route.gridKey)
                 closeResourceMenu(false);
             slots.update(rows.length);
         },
         dispose() {
+            historyView.dispose();
             itemIcons.dispose();
             slots.dispose();
             resourceMenu.remove();

@@ -28,7 +28,7 @@ export function createHeader(
                     <span class="account-user">${userIcon}<span id="username"></span></span>
                     <span class="account-actions">
                         <button id="logout" class="account-action" data-label="logout">${powerIcon}</button>
-                        <button id="refresh" class="account-action" data-label="refresh" aria-busy="false">${refreshIcon}</button>
+                        <button id="refresh" class="account-action" data-label="refresh" aria-busy="false">${refreshIcon}<span class="live-dot" hidden aria-hidden="true"></span></button>
                     </span>
                     <span id="activity" class="sr-only" role="status" aria-live="off" hidden>
                         <span id="activity-text"></span>
@@ -55,6 +55,8 @@ export function createHeader(
         username: panel.querySelector<HTMLSpanElement>('#username')!,
         selectedNetwork: panel.querySelector<HTMLSpanElement>('#selected-network')!,
         refresh: panel.querySelector<HTMLButtonElement>('#refresh')!,
+        refreshIcon: panel.querySelector<SVGElement>('#refresh .theme-icon')!,
+        liveDot: panel.querySelector<HTMLElement>('#refresh .live-dot')!,
         activity: panel.querySelector<HTMLSpanElement>('#activity')!,
         activityText: panel.querySelector<HTMLSpanElement>('#activity-text')!,
         terminalLink: panel.querySelector<HTMLAnchorElement>('#terminal-link')!,
@@ -78,6 +80,13 @@ export function createHeader(
 
     bindTooltip(controls.logout, () => [element('span', locale.common('logout'))]);
     bindTooltip(controls.refresh, () => {
+        if (state.stream?.status === 'live' && state.stream.lastEventAt !== null) {
+            const timestamp = element('time', locale.time(state.stream.lastEventAt));
+            timestamp.dateTime = new Date(state.stream.lastEventAt).toISOString();
+            const event = element('span', `${locale.t('liveLastEvent')}: `);
+            event.append(timestamp);
+            return [element('strong', locale.t('liveUpdates')), event, element('span', locale.t('liveResync'))];
+        }
         const lines = [element('span', locale.common('refresh'))];
         if (state.updatedAt)
             lines.push(element('span', locale.common('updated', { time: locale.time(state.updatedAt) })));
@@ -112,7 +121,7 @@ export function createHeader(
         links.forEach((link) => {
             if (
                 link.dataset.view === state.route.view ||
-                (link.dataset.view === 'items' && state.route.view === 'plan')
+                (link.dataset.view === 'items' && (state.route.view === 'plan' || state.route.view === 'tracking'))
             )
                 link.setAttribute('aria-current', 'page');
             else link.removeAttribute('aria-current');
@@ -144,7 +153,12 @@ export function createHeader(
             (state.route.view === 'settings' && state.settings.status === 'loading');
         const active =
             state.refreshingView || state.refreshing || state.gridStatus === 'loading' || viewLoading || actionPending;
-        controls.refresh.setAttribute('aria-busy', String(active));
+        const live = state.stream?.status === 'live';
+        controls.liveDot.hidden = !live;
+        controls.refreshIcon.style.display = live ? 'none' : '';
+        controls.refresh.classList.toggle('is-live', live);
+        controls.refresh.setAttribute('aria-label', live ? locale.t('liveUpdates') : locale.common('refresh'));
+        controls.refresh.setAttribute('aria-busy', String(!live && (active || state.stream?.status === 'connecting')));
         controls.activity.hidden = !active;
         controls.activity.setAttribute('aria-label', locale.common('activity'));
         controls.activity.setAttribute('aria-live', actionPending ? 'polite' : 'off');

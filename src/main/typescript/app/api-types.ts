@@ -42,7 +42,22 @@ export type IconMetadata = {
     pages: { digest: string; width: number; height: number }[];
 };
 export type TerminalView = { generation: string; revision: string };
+export type RecentResource = { input: string | null; output: string | null; stockChange: string | null };
+export type RecentTracking = {
+    flowWindowMillis: number;
+    stockWindowMillis: number;
+    bucketMillis: number;
+    observedAt: number;
+    flowObservedAt: number | null;
+    stockObservedAt: number | null;
+    flowSince: number | null;
+    stockSince: number | null;
+    flowComplete: boolean;
+    stockComplete: boolean;
+    resources: Record<string, RecentResource>;
+};
 export type TerminalDelta = {
+    recent?: RecentTracking;
     view: TerminalView;
     updates: { itemKey: string; quantity: number; craftable: boolean }[];
     definitions: StoredResource[];
@@ -50,7 +65,13 @@ export type TerminalDelta = {
     unkeyed?: StoredResource[] | null;
     icons: IconMetadata | null;
 };
-export type ResourceResponse<T> = { data: T; icons: IconMetadata | null; view?: TerminalView; subscription?: string };
+export type ResourceResponse<T> = {
+    data: T;
+    icons: IconMetadata | null;
+    view?: TerminalView;
+    subscription?: string;
+    recent?: RecentTracking;
+};
 export type StoredResource = ResourceStack & {
     craftable: boolean;
 };

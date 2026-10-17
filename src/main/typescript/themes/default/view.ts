@@ -19,6 +19,7 @@ import { createCpuView } from './cpus.js';
 import { createHistoryView } from './history.js';
 import { createSettingsView } from './settings.js';
 import { createAboutView } from './about.js';
+import { createResourceHistoryView } from './resource-history.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
 
 /* Theme renderer. Server operations and preference ownership are supplied by the application. */
@@ -82,7 +83,13 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         lifetime
     );
     lifetime.onCleanup(() => craftingView.dispose());
-    const resourceTerminal = createResourceTerminal(root, application, { craftingView, tooltips, mobile, lifetime });
+    const resourceTerminal = createResourceTerminal(root, application, {
+        craftingView,
+        tooltips,
+        mobile,
+        lifetime,
+        settings
+    });
     lifetime.onCleanup(resourceTerminal.dispose);
     workspace.prepend(resourceTerminal.tools);
     windowFrame.insertBefore(resourceTerminal.element, missingView);
@@ -93,6 +100,8 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     lifetime.onCleanup(() => historyView.dispose());
     const settingsView = createSettingsView(windowFrame, application);
     const aboutView = createAboutView(windowFrame, modVersion);
+    const trackingView = createResourceHistoryView(windowFrame, application, settings, true);
+    lifetime.onCleanup(trackingView.dispose);
     function updateLabels() {
         locale = i18n.forLanguage(language);
         document.documentElement.lang = language;
@@ -155,6 +164,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         tooltips.refresh();
         cpuView.render(state.route, state.cpus, locale);
         historyView.render(state, locale);
+        trackingView.render(state, locale, effectiveDisplay !== 'names');
         settingsView.render(state, locale);
         aboutView.render(state.route, locale);
         const panes: MobilePane[] = [];

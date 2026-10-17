@@ -1430,6 +1430,16 @@ label {
 #logout {
     color: light-dark(#862323, #ffb4ab);
 }
+#refresh.is-live {
+    background: transparent;
+    border-color: transparent;
+}
+.live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: light-dark(#b74343, #d56b6b);
+}
 #refresh[aria-busy='true'] .theme-icon {
     animation: refresh-spin 0.8s linear infinite;
 }
@@ -1879,6 +1889,7 @@ label {
         .cpu-selector-link,
         .history-product,
         .history-summary-icon,
+        .tracking-resource,
         .history-analysis-name
     )
     .resource-icon {
@@ -1902,6 +1913,7 @@ label {
         .cpu-selector-link,
         .history-product,
         .history-summary-icon,
+        .tracking-resource,
         .history-analysis-name
     )
     .resource-icon-ready {
@@ -3221,21 +3233,146 @@ button.toast:hover {
     margin-top: 12px;
     font-size: 13px;
 }
-.resource-history summary {
-    cursor: pointer;
+.resource-history h2 {
+    font-size: 14px;
 }
-.resource-history-points {
-    max-height: 240px;
-    overflow: auto;
-    padding: 0;
-    list-style: none;
+.tracking-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: end;
+    margin-block: 12px;
 }
-.resource-history-points li {
+.tracking-toolbar label {
     display: grid;
-    gap: 3px;
-    margin-block: 10px;
+    gap: 6px;
+    font-size: 12px;
+}
+.tracking-toolbar select {
+    min-width: 90px;
+}
+.tracking-chart {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+.tracking-chart .uplot {
+    font-family: inherit;
+}
+.tracking-chart .u-over:focus {
+    outline: none;
+}
+.tracking-chart .u-over:focus-visible {
+    outline: 1px solid var(--focus);
+    outline-offset: -2px;
+}
+.tracking-chart .u-legend {
+    font-size: 12px;
+    text-align: left;
+    max-width: 100%;
+}
+.tracking-chart .u-value {
+    overflow-wrap: anywhere;
+    max-width: 220px;
+}
+.tracking-chart .u-marker {
+    border-radius: 0;
+}
+.tracking-chart .u-cursor-pt {
+    border-radius: 0;
+}
+.tracking-chart-pinned .u-cursor-x {
+    border-right-style: solid;
+}
+.tracking-view {
+    min-width: 0;
+}
+.tracking-resource-name {
+    overflow-wrap: anywhere;
+    margin-block: 12px;
+}
+.tracking-resource {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.tracking-back {
+    font-size: 12px;
+    margin-left: auto;
+}
+.tracking-totals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    margin-block: 16px;
+}
+.tracking-totals > div {
+    display: grid;
+    gap: 6px;
+    min-width: 100px;
     overflow-wrap: anywhere;
 }
-.resource-history-points time {
+.tracking-totals strong {
+    font-size: 16px;
+}
+.tracking-count-short {
+    display: none;
+}
+.tracking-open {
+    display: inline-block;
+    margin-block: 10px;
+}
+.tracking-positive {
+    color: light-dark(#28683a, #83c78d);
+}
+.tracking-negative {
+    color: light-dark(#9b3030, #ef9393);
+}
+.tracking-neutral {
     opacity: 0.8;
+}
+.recent-note {
+    display: block;
+}
+.recent-flow,
+.recent-stock {
+    display: block;
+    margin-top: 5px;
+}
+.tooltip .tracking-positive {
+    color: #83c78d;
+}
+.tooltip .tracking-negative {
+    color: #ef9393;
+}
+@media (width <= 600px) {
+    .tracking-view > .terminal-heading {
+        flex-wrap: wrap;
+    }
+    .tracking-chart .u-legend {
+        font-size: 11px;
+    }
+    .tracking-chart .u-legend tbody {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 12px;
+    }
+    .tracking-chart .u-legend tr {
+        margin-right: 0;
+    }
+    .tracking-totals {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .tracking-totals > div {
+        min-width: 0;
+        font-size: 12px;
+    }
+    .tracking-count-full {
+        display: none;
+    }
+    .tracking-count-short {
+        display: inline;
+    }
 }

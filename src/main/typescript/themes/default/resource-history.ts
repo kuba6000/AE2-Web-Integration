@@ -1,86 +1,196 @@
-import type { ThemeState } from '../../app/theme-api.js';
-import type { Translator } from '../../app/i18n.js';
+import type { ThemeApplication, ThemeSettings, ThemeState, Translator } from '../../app/theme-api.js';
+import { trackingHref } from '../../app/router.js';
+import { createTrackingChart } from './tracking-chart.js';
+import { renderMinecraftText } from './minecraft-text.js';
 import { element } from './dom.js';
+import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 
-export function createResourceHistoryView(host: HTMLElement) {
-    const section = element('details', '', 'resource-history');
-    const title = element('summary');
+export function createResourceHistoryView(
+    host: HTMLElement,
+    application: ThemeApplication,
+    settings: ThemeSettings,
+    full = false
+) {
+    const section = element('section', '', full ? 'tracking-view' : 'resource-history');
+    section.hidden = true;
+    const heading = element('h2');
+    const resourceName = element('h3', '', 'tracking-resource-name');
+    const resourceIcon = createResourceIcon();
+    const iconHost = element('div', '', 'tracking-resource');
+    iconHost.append(resourceIcon, resourceName);
+    const toolbar = element('div', '', 'tracking-toolbar');
+    const rangeLabel = element('label');
+    const range = element('select');
+    for (const [value, text] of [
+        [900000, '15 min'],
+        [3600000, '1 h'],
+        [86400000, '24 h']
+    ] as const) {
+        const option = element('option', text);
+        option.value = String(value);
+        range.append(option);
+    }
+    range.addEventListener('change', () => void application.resourceHistory.range(Number(range.value)));
+    const rangeText = element('span');
+    rangeLabel.append(rangeText, range);
+    const modeLabel = element('label');
+    const modeText = element('span');
+    const mode = element('select');
+    for (const value of ['pixel', 'smooth']) {
+        const option = element('option');
+        option.value = value;
+        mode.append(option);
+    }
+    mode.value = settings.get('chartStroke', 'pixel') === 'smooth' ? 'smooth' : 'pixel';
+    modeLabel.append(modeText, mode);
+    modeLabel.hidden = !full;
+    const reset = element('button');
+    reset.type = 'button';
+    reset.hidden = !full;
+    toolbar.append(rangeLabel, modeLabel, reset);
     const status = element('p', '', 'hint');
-    const settings = element('a');
-    const baseline = element('p', '', 'resource-history-baseline');
-    const rows = element('ol');
-    rows.className = 'resource-history-points';
-    section.append(title, status, settings, baseline, rows);
+    status.role = 'status';
+    const chartHost = element('div', '', 'tracking-chart');
+    chartHost.role = 'img';
+    const totals = element('div', '', 'tracking-totals');
+    const help = element('p', '', 'hint');
+    const link = element('a', '', 'tracking-open');
+    const back = element('a', '', 'tracking-back');
+    const headingBar = element('div', '', 'terminal-heading');
+    headingBar.append(heading, back);
+    section.append(headingBar, iconHost, toolbar, status, totals, chartHost, help, link);
     host.append(section);
-    let previousPoints: ThemeState['resourceHistory']['points'] | undefined;
-    let previousBaseline: ThemeState['resourceHistory']['baseline'] | undefined;
-    let previousSignature = '';
-    return {
-        render(state: ThemeState, locale: Translator, language: string) {
-            const history = state.resourceHistory;
-            section.hidden = !state.selected?.itemKey;
-            const signature = [
-                language,
-                state.route.gridKey,
-                history.status,
-                history.enabled,
-                history.complete,
-                history.truncated,
-                history.error
-            ].join('\0');
-            if (
-                previousPoints === history.points &&
-                previousBaseline === history.baseline &&
-                previousSignature === signature
-            )
-                return;
-            previousPoints = history.points;
-            previousBaseline = history.baseline;
-            previousSignature = signature;
-            title.textContent = locale.common('resourceHistory');
-            rows.replaceChildren();
-            settings.textContent = locale.common('gridSettings');
-            settings.href = `#/grids/${encodeURIComponent(state.route.gridKey ?? '')}/settings`;
-            settings.hidden = history.enabled || history.status !== 'ready';
-            let message = '';
-            if (history.status === 'loading') message = locale.common('loading');
-            else if (history.error) message = locale.common(history.error);
-            else if (!history.enabled) message = locale.common('resourceHistoryDisabled');
-            else if (!history.points.length && !history.baseline?.resource)
-                message = locale.common('resourceHistoryEmpty');
-            if (history.status === 'ready' && !history.complete) message += ` ${locale.common('resourceHistoryGap')}`;
+    let displayInterval = 5000;
+    const updateHelp = () => {
+        if (lastLocale)
+            help.textContent = lastLocale.t('trackingChartHelp', { period: lastLocale.duration(displayInterval) });
+    };
+    const chart = createTrackingChart(chartHost, !full, (interval) => {
+        displayInterval = interval;
+        updateHelp();
+    });
+    const icons = application.icons.observe(section, paintResourceIcon);
+    reset.addEventListener('click', () => chart.resetZoom());
+    let lastState: ThemeState, lastLocale: Translator;
+    let lastShowIcons = false;
+    mode.addEventListener('change', () => {
+        settings.set('chartStroke', mode.value);
+        render(lastState, lastLocale, lastShowIcons);
+    });
+    function render(state: ThemeState, locale: Translator, showIcons = false) {
+        lastShowIcons = showIcons;
+        lastState = state;
+        lastLocale = locale;
+        const active = full
+            ? state.route.view === 'tracking'
+            : state.route.view === 'items' && !!state.selected?.itemKey;
+        section.hidden = !active;
+        if (!active) return;
+        const itemKey = state.route.view === 'tracking' ? state.route.itemKey : state.selected?.itemKey;
+        const history = state.resourceHistory;
+        const hasStock =
+            !!history.baseline?.resource || history.points.some((point) => point.kind === 'STOCK' && point.resource);
+        const historicalResource =
+            [...history.points].reverse().find((point) => point.resource?.itemKey === itemKey)?.resource ??
+            history.baseline?.resource;
+        const resource =
+            historicalResource ??
+            (history.status !== 'error' && state.selected?.itemKey === itemKey ? state.selected : null);
+        const iconMetadata = historicalResource ? history.icons : state.itemIcons;
+        heading.textContent = locale.t(full ? 'trackingDetails' : 'trackingStockHistory');
+        resourceName.hidden = !full;
+        iconHost.hidden = !full;
+        resourceIcon.hidden = !showIcons;
+        icons.update(full && showIcons && resource ? [{ element: iconHost, icon: resource.icon }] : [], iconMetadata);
+        resourceName.replaceChildren(
+            ...(resource ? [renderMinecraftText(resource.displayName)] : [document.createTextNode(itemKey ?? '')])
+        );
+        back.hidden = !full;
+        back.textContent = `← ${locale.common('terminal')}`;
+        back.href = `#/grids/${encodeURIComponent(state.route.gridKey ?? '')}/items`;
+        link.hidden = full;
+        link.textContent = locale.t('viewTracking');
+        link.href = trackingHref(state.route.gridKey!, itemKey!);
+        rangeText.textContent = locale.t('trackingRange');
+        range.value = String(history.rangeMillis);
+        modeText.textContent = locale.t('trackingStroke');
+        mode.options[0].textContent = locale.t('trackingPixel');
+        mode.options[1].textContent = locale.t('trackingSmooth');
+        reset.textContent = locale.t('trackingResetZoom');
+        let message = '';
+        if (history.status === 'loading') message = locale.common('loading');
+        else if (history.error) message = locale.common(history.error);
+        else if (!history.points.length && !history.baseline?.resource) message = locale.common('resourceHistoryEmpty');
+        else if (!full && !hasStock && history.status === 'ready') message = locale.t('trackingNoStock');
+        if (history.status === 'ready') {
+            if (!history.enabled) message += ` ${locale.common('resourceHistoryDisabled')}`;
             if (history.truncated) message += ` ${locale.common('resourceHistoryTruncated')}`;
-            status.textContent = message.trim();
-            status.hidden = !status.textContent;
-            const numbers = new Intl.NumberFormat(language);
-            baseline.hidden = !history.baseline?.resource;
-            baseline.textContent = history.baseline?.resource
-                ? locale.common('resourceHistoryBaseline', {
-                      quantity: numbers.format(BigInt(history.baseline.resource.quantity)),
-                      time: locale.dateTime(history.baseline.observedAt)
-                  })
-                : '';
-            for (const point of [...history.points].reverse()) {
-                const row = element('li');
-                row.append(element('time', locale.dateTime(point.observedAt)));
-                let text: string;
-                if (point.kind === 'STOCK' && point.resource) {
-                    text = `${locale.common('stored')}: ${numbers.format(BigInt(point.resource.quantity))}`;
-                } else if (point.kind === 'FLOW') {
-                    text = `${locale.common('resourceHistoryInput')}: ${numbers.format(BigInt(point.input))} · ${locale.common('resourceHistoryOutput')}: ${numbers.format(BigInt(point.output))}`;
-                } else
-                    text = locale.common(
-                        point.kind === 'GAP'
-                            ? 'resourceHistoryGap'
-                            : point.kind === 'FLOW_OBSERVATION'
-                              ? 'resourceHistoryFlowObservation'
-                              : 'resourceHistoryObservation'
-                    );
-                row.append(element('span', text));
-                if (!point.complete && point.kind !== 'GAP')
-                    row.append(element('span', locale.common('resourceHistoryGap'), 'hint'));
-                rows.append(row);
+        }
+        status.textContent = message.trim();
+        status.hidden = !message;
+        chartHost.hidden =
+            history.status !== 'ready' ||
+            (!history.points.length && !history.baseline?.resource) ||
+            (!full && !hasStock);
+        chartHost.setAttribute('aria-label', locale.t('trackingChart'));
+        help.hidden = !full;
+        updateHelp();
+        totals.replaceChildren();
+        totals.hidden = !full;
+        if (full && history.status === 'ready') {
+            let input = 0n,
+                output = 0n;
+            const flowObserved = history.points.some(
+                (point) =>
+                    point.complete &&
+                    point.observedAt > history.from &&
+                    point.observedAt <= history.until &&
+                    (point.kind === 'FLOW' || point.kind === 'FLOW_OBSERVATION')
+            );
+            for (const point of history.points)
+                if (
+                    point.kind === 'FLOW' &&
+                    point.complete &&
+                    point.observedAt > history.from &&
+                    point.observedAt <= history.until
+                ) {
+                    input += BigInt(point.input);
+                    output += BigInt(point.output);
+                }
+            const numbers = new Intl.NumberFormat(state.preferences.language);
+            for (const [label, value, color] of [
+                [locale.common('resourceHistoryInput'), input, 'tracking-positive'],
+                [locale.common('resourceHistoryOutput'), output, 'tracking-negative'],
+                [locale.t('trackingNet'), input - output, input >= output ? 'tracking-positive' : 'tracking-negative']
+            ] as const) {
+                const stat = element('div');
+                const count = element('strong', '', color);
+                count.append(
+                    element('span', flowObserved ? numbers.format(value) : '—', 'tracking-count-full'),
+                    element(
+                        'span',
+                        flowObserved
+                            ? new Intl.NumberFormat(state.preferences.language, {
+                                  notation: 'compact',
+                                  maximumFractionDigits: 1
+                              }).format(value)
+                            : '—',
+                        'tracking-count-short'
+                    )
+                );
+                count.setAttribute('aria-label', flowObserved ? numbers.format(value) : '—');
+                stat.append(element('span', label), count);
+                totals.append(stat);
             }
+        }
+        if (!chartHost.hidden)
+            chart.render(history, locale, settings.get('chartStroke', 'pixel') !== 'smooth', itemKey!);
+    }
+    return {
+        render,
+        dispose: () => {
+            chart.dispose();
+            icons.dispose();
         }
     };
 }

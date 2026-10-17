@@ -102,7 +102,13 @@ export type Api = {
         signal?: AbortSignal,
         icons?: boolean
     ) => Promise<ResourceResponse<CraftingHistory>>;
-    resourceHistory: (gridKey: string, itemKey: string, signal?: AbortSignal) => Promise<ResourceHistory>;
+    resourceHistory: (
+        gridKey: string,
+        itemKey: string,
+        signal?: AbortSignal,
+        from?: number,
+        icons?: boolean
+    ) => Promise<ResourceResponse<ResourceHistory>>;
     settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettings>;
     saveSettings: (gridKey: string, body: Partial<GridSettings>) => Promise<GridSettings>;
     submitPlan: (gridKey: string, planId: string | number, cpuKey?: string) => Promise<null>;
@@ -192,12 +198,14 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             icons?: IconMetadata | null;
             view?: TerminalView;
             subscription?: string;
+            recent?: import('./api-types.js').RecentTracking;
         };
         if (!response.ok || envelope.status !== 'OK') {
             throw new ApiError(envelope.status, response.status, envelope.data);
         }
         return {
             data: envelope.data,
+            recent: envelope.recent,
             icons: envelope.icons ?? null,
             view: envelope.view,
             subscription: envelope.subscription
@@ -272,9 +280,9 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             read(`api/grids/${encodeURIComponent(gridKey)}/crafting-history/${entryId}${icons ? '?icons=true' : ''}`, {
                 signal
             }),
-        resourceHistory: (gridKey, itemKey, signal) =>
-            request(
-                `api/grids/${encodeURIComponent(gridKey)}/resource-history?itemKey=${encodeURIComponent(itemKey)}&limit=200`,
+        resourceHistory: (gridKey, itemKey, signal, from = Date.now() - 900000, icons = false) =>
+            read(
+                `api/grids/${encodeURIComponent(gridKey)}/resource-history?itemKey=${encodeURIComponent(itemKey)}&from=${from}&limit=10000${icons ? '&icons=true' : ''}`,
                 { signal }
             ),
         settings: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { signal }),

@@ -8,6 +8,7 @@ import type {
     TerminalView,
     TerminalDelta
 } from './api-types.js';
+import type { RecentTracking } from './api-types.js';
 import type { createIconLoader } from './icons.js';
 import type { Preferences, createPreferences } from './preferences.js';
 import type { CraftingState } from './crafting.js';
@@ -22,6 +23,8 @@ import { createResourceHistory, type ResourceHistoryState } from './resource-his
 import { createGridSettings } from './settings.js';
 import { createNotifications } from './notifications.js';
 
+export type TerminalStreamState = { status: 'connecting'; lastEventAt: null } | { status: 'live'; lastEventAt: number };
+
 export type TerminalData = {
     capabilities: ApplicationContext['capabilities'];
     route: Route;
@@ -35,6 +38,7 @@ export type TerminalData = {
     itemError: string | null;
     refreshing: boolean;
     updatedAt: number | null;
+    stream: TerminalStreamState | null;
     search: string;
     selected: StoredResource | null;
     preferences: Preferences;
@@ -46,6 +50,7 @@ export type TerminalState = TerminalData & {
     cpus: CpuState;
     history: HistoryState;
     resourceHistory: ResourceHistoryState;
+    recent: RecentTracking | null;
     settings: SettingsState;
 };
 
@@ -68,9 +73,11 @@ export function createTerminal(
     let closeStream: (() => void) | undefined;
     let reconnect: ReturnType<typeof setTimeout> | undefined;
     let serial = 0;
+    let streamSerial = 0;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let refreshingGrids: Promise<void> | null = null;
+    let refreshingAutomatically = false;
     const discoveryUpdates = new Map<string, GridSettings>();
     const notify = () => {
         if (!disposed) for (const listener of listeners) listener(state);
@@ -110,7 +117,7 @@ export function createTerminal(
         },
         () => iconsEnabled && state.iconPack.available === true
     );
-    const resourceHistory = createResourceHistory(api, notify);
+    const resourceHistory = createResourceHistory(api, notify, () => iconsEnabled && state.iconPack.available === true);
     const settings = createGridSettings(
         api,
         () => {
@@ -146,6 +153,7 @@ export function createTerminal(
         itemError: null,
         refreshing: false,
         updatedAt: null,
+        stream: null,
         search: '',
         selected: null,
         preferences: preferences.values,
@@ -153,6 +161,7 @@ export function createTerminal(
         cpus: cpus.state,
         history: history.state,
         resourceHistory: resourceHistory.state,
+        recent: null,
         settings: settings.state
     };
 
@@ -164,6 +173,8 @@ export function createTerminal(
     }
 
     function stopStream() {
+        streamSerial++;
+        state.stream = null;
         closeStream?.();
         closeStream = undefined;
         clearTimeout(reconnect);
@@ -172,21 +183,30 @@ export function createTerminal(
     }
     function startStream(key: string, version: number) {
         if (!liveView || !subscription || !state.preferences.autoRefresh || disposed || version !== serial) return;
+        const connection = ++streamSerial;
         closeStream?.();
+        state.stream = { status: 'connecting', lastEventAt: null };
+        const current = () =>
+            !disposed && version === serial && connection === streamSerial && state.preferences.autoRefresh;
         closeStream = api.itemEvents(key, subscription, iconsEnabled && state.iconPack.available === true, {
             ready() {
-                if (disposed || version !== serial || !liveView) return;
+                if (!current() || !liveView) return;
+                state.stream = { status: 'live', lastEventAt: Date.now() };
                 state.itemError = null;
                 notify();
             },
             delta(delta: TerminalDelta) {
-                if (disposed || version !== serial || !liveView) return;
+                if (!current() || !liveView) return;
                 if (delta.view.generation !== liveView.generation) {
                     stopStream();
                     void loadItems();
                     return;
                 }
-                if (BigInt(delta.view.revision) <= BigInt(liveView.revision)) return;
+                state.stream = { status: 'live', lastEventAt: Date.now() };
+                if (BigInt(delta.view.revision) <= BigInt(liveView.revision)) {
+                    notify();
+                    return;
+                }
                 const previous = state.itemIcons;
                 if (previous && delta.icons && previous.packId !== delta.icons.packId) {
                     stopStream();
@@ -208,6 +228,13 @@ export function createTerminal(
                 });
                 const keyed = new Map(state.items.filter((item) => item.itemKey).map((item) => [item.itemKey!, item]));
                 for (const removed of delta.removed) keyed.delete(removed);
+                if (delta.recent) {
+                    state.recent = {
+                        ...delta.recent,
+                        resources: { ...state.recent?.resources, ...delta.recent.resources }
+                    };
+                }
+                if (state.recent) for (const removed of delta.removed) delete state.recent.resources[removed];
                 for (const item of delta.definitions) if (item.itemKey) keyed.set(item.itemKey, remap(item));
                 for (const update of delta.updates) {
                     const item = keyed.get(update.itemKey);
@@ -229,15 +256,16 @@ export function createTerminal(
                 notify();
             },
             reset() {
-                if (disposed || version !== serial) return;
+                if (!current()) return;
                 stopStream();
                 void loadItems();
             },
             error() {
-                if (disposed || version !== serial) return;
+                if (!current()) return;
                 state.itemError = 'NETWORK_ERROR';
-                notify();
                 stopStream();
+                state.stream = { status: 'connecting', lastEventAt: null };
+                notify();
                 reconnect = setTimeout(() => {
                     if (!disposed && version === serial) void loadItems();
                 }, 2000);
@@ -250,6 +278,7 @@ export function createTerminal(
         serial++;
         itemRequest?.abort();
         state.items = [];
+        state.recent = null;
         state.itemIcons = null;
         state.selected = null;
         state.itemStatus = 'idle';
@@ -257,7 +286,7 @@ export function createTerminal(
         state.updatedAt = null;
         state.refreshing = false;
     }
-    async function loadItems() {
+    async function loadItems(automatic = false) {
         const key = state.route.gridKey;
         if (disposed || state.route.view !== 'items' || !key || state.gridStatus !== 'ready') return;
         if (!state.grids.some((grid) => grid.key === key)) {
@@ -287,6 +316,7 @@ export function createTerminal(
             const items = result.data;
             state.itemIcons = result.icons;
             state.items = items;
+            state.recent = result.recent ?? null;
             state.selected = state.selected
                 ? items.find((item) => item.itemKey && item.itemKey === state.selected?.itemKey) || null
                 : null;
@@ -295,7 +325,7 @@ export function createTerminal(
             liveView = result.view;
             subscription = result.subscription;
             startStream(key, version);
-            if (state.selected) await resourceHistory.refresh();
+            if (state.selected) await resourceHistory.refresh(automatic);
             else resourceHistory.clear();
         } catch (caught) {
             const error = caught as ApiFailure;
@@ -334,6 +364,7 @@ export function createTerminal(
                 cpus.invalidateIcons();
                 crafting.invalidateIcons();
                 history.invalidateIcons();
+                resourceHistory.invalidateIcons();
             }
             notify();
             if (changed) {
@@ -341,6 +372,7 @@ export function createTerminal(
                 void loadCpus();
                 void loadCrafting();
                 if (state.route.view === 'history') void loadHistory();
+                void resourceHistory.refresh();
             }
         } catch (caught) {
             if (disposed || request !== iconRequest || (caught as ApiFailure).name === 'AbortError') return;
@@ -381,13 +413,27 @@ export function createTerminal(
         if (!grid) settings.block('GRID_NOT_FOUND');
         else return settings.refresh(grid.accessSources);
     }
-    async function refresh({ reloadDetail = false, automatic = false } = {}) {
+    async function refresh({ reloadDetail = false, automatic = false } = {}): Promise<void> {
         if (disposed) return;
-        if (refreshingGrids) return reloadDetail ? refreshingGrids.then(() => loadHistory(true)) : refreshingGrids;
+        if (refreshingGrids) {
+            if (!automatic && state.route.view === 'items') {
+                if (!refreshingAutomatically) return refreshingGrids;
+                const route = state.route;
+                return refreshingGrids.then(() => {
+                    if (!disposed && state.route === route) return refresh({ reloadDetail });
+                });
+            }
+            return reloadDetail ? refreshingGrids.then(() => loadHistory(true)) : refreshingGrids;
+        }
+        if (!automatic && state.stream) {
+            stopStream();
+            state.stream = { status: 'connecting', lastEventAt: null };
+        }
         clearTimeout(timer);
         discoveryUpdates.clear();
         gridRequest = new AbortController();
         void loadIconPack();
+        refreshingAutomatically = automatic;
         refreshingGrids = (async () => {
             try {
                 const grids = await api.grids(gridRequest.signal);
@@ -405,13 +451,14 @@ export function createTerminal(
                 state.gridStatus = 'ready';
                 state.gridError = null;
                 notify();
-                if (!automatic || !liveView) await loadItems();
+                if (!automatic || !liveView) await loadItems(automatic);
                 else if (!state.grids.some((grid) => grid.key === state.route.gridKey)) invalidateItems();
-                else if (state.selected) await resourceHistory.refresh();
+                else if (state.selected) await resourceHistory.refresh(automatic);
                 await loadCrafting();
                 await loadCpus();
                 await loadHistory(reloadDetail);
                 await loadSettings();
+                if (state.route.view === 'tracking') await resourceHistory.refresh(automatic);
             } catch (caught) {
                 const error = caught as ApiFailure;
                 if (disposed || error.name === 'AbortError') return;
@@ -428,6 +475,7 @@ export function createTerminal(
             } finally {
                 discoveryUpdates.clear();
                 refreshingGrids = null;
+                refreshingAutomatically = false;
                 notify();
                 schedule();
             }
@@ -442,6 +490,7 @@ export function createTerminal(
         cpus,
         history,
         settings,
+        resourceHistory,
         icons,
         displayIcons(enabled: boolean) {
             if (iconsEnabled === enabled) return;
@@ -450,11 +499,13 @@ export function createTerminal(
             cpus.invalidateIcons();
             crafting.invalidateIcons();
             history.invalidateIcons();
+            resourceHistory.invalidateIcons();
             icons.enabled(enabled && state.iconPack.available === true);
             void loadItems();
             void loadCpus();
             void loadCrafting();
             if (state.route.view === 'history') void loadHistory();
+            void resourceHistory.refresh();
             notify();
         },
         subscribe(listener: (state: TerminalState) => void) {
@@ -464,8 +515,21 @@ export function createTerminal(
         },
         refresh,
         route(route: Route) {
-            invalidateItems();
+            const related =
+                route.gridKey &&
+                route.gridKey === state.route.gridKey &&
+                ['items', 'tracking'].includes(route.view) &&
+                ['items', 'tracking'].includes(state.route.view);
+            if (related) {
+                stopStream();
+                serial++;
+                itemRequest?.abort();
+                state.refreshing = false;
+            } else invalidateItems();
             state.route = route;
+            if (route.view === 'tracking') void resourceHistory.select(route.gridKey, route.itemKey);
+            else if (related && state.selected?.itemKey)
+                void resourceHistory.select(route.gridKey, state.selected.itemKey);
             if (route.gridKey) {
                 state.selectedGridKey = route.gridKey;
                 if (state.gridStatus === 'ready') restoreSelectedGrid();
@@ -493,12 +557,12 @@ export function createTerminal(
         },
         preference<K extends keyof Preferences>(name: K, value: Preferences[K]) {
             preferences.set(name, value);
-            notify();
             if (name === 'autoRefresh') {
                 if (value) void loadItems();
                 else stopStream();
                 schedule();
             }
+            notify();
         },
         dispose() {
             disposed = true;

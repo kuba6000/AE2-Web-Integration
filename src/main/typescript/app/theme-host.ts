@@ -72,6 +72,7 @@ export function mountTheme(
         refresh: application.refresh,
         search: application.search,
         select: application.select,
+        resourceHistory: { range: application.resourceHistory.range },
         preference: application.preference,
         displayIcons: application.displayIcons,
         crafting: {
