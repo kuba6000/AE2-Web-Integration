@@ -8,12 +8,14 @@ configurations {
 }
 
 dependencies {
+    coreShadow('org.hsqldb:hsqldb:2.7.4:jdk8') { transitive = false }
     coreShadow(project(':core')) {
         transitive = false
     }
 }
 
 tasks.named('shadowJar').configure {
+    relocate('org.hsqldb', 'pl.kuba6000.ae2webintegration.internal.hsqldb')
     dependsOn(':core:jar')
     archiveClassifier = ''
     configurations = [project.configurations.coreShadow]
