@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.AE2.implementations;
 
 import net.minecraft.item.Item;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.ResourceLocation;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -27,7 +28,12 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
     }
 
     @Override
-    default @NotNull StableKey web$getKey() {
+    default boolean web$supportsStableIdentity() {
+        return this instanceof AEItemStack;
+    }
+
+    @Override
+    default @Nullable StableKey web$getKey() {
         return LegacyItemIdentity.encode(this);
     }
 
@@ -55,15 +61,15 @@ public interface AEItemStackMixin extends IAEItemStack, IAEKey, IAEGenericStack 
     int getItemDamage();
 
     @Override
-    default @NotNull String web$getRegistryNamespace() {
-        return getItem().getRegistryName()
-            .getNamespace();
+    default @Nullable String web$getRegistryNamespace() {
+        ResourceLocation name = getItem().getRegistryName();
+        return name == null ? null : name.getNamespace();
     }
 
     @Override
-    default @NotNull String web$getRegistryPath() {
-        return getItem().getRegistryName()
-            .getPath();
+    default @Nullable String web$getRegistryPath() {
+        ResourceLocation name = getItem().getRegistryName();
+        return name == null ? null : name.getPath();
     }
 
     @Override

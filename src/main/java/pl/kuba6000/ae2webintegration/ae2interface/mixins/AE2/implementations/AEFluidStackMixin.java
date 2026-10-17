@@ -26,7 +26,13 @@ public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStac
     }
 
     @Override
-    default @NotNull StableKey web$getKey() {
+    default boolean web$supportsStableIdentity() {
+        IAEFluidStack stack = this;
+        return stack instanceof AEFluidStack;
+    }
+
+    @Override
+    default @Nullable StableKey web$getKey() {
         return LegacyItemIdentity.encode(this);
     }
 
@@ -44,9 +50,9 @@ public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStac
     }
 
     @Override
-    default @NotNull String web$getRegistryNamespace() {
+    default @Nullable String web$getRegistryNamespace() {
         String name = FluidRegistry.getDefaultFluidName(getFluid());
-        return name.substring(0, name.indexOf(':'));
+        return name == null ? null : name.substring(0, name.indexOf(':'));
     }
 
     @Override
