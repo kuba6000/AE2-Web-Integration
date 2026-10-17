@@ -262,6 +262,39 @@ class HsqlStorageHistoryStoreTest {
     }
 
     @Test
+    void equalTimeItemQueriesPreserveAppendOrderAndDoNotDuplicateTheBaseline() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        long now = System.currentTimeMillis();
+        StorageHistoryPoint first = stock(item, now, 10);
+        StorageHistoryPoint latest = stock(item, now, 20);
+        StorageHistoryPoint marker = new StorageHistoryPoint(
+            now,
+            7,
+            StorageHistoryPoint.Kind.OBSERVATION,
+            null,
+            0,
+            false,
+            0,
+            0,
+            true);
+        try (HsqlStorageHistoryStore store = store(100)) {
+            append(store, grid, Arrays.asList(first, latest, marker));
+
+            StorageHistory limited = store.read(grid, item, now, 2);
+            assertEquals(Arrays.asList(latest, marker), limited.points());
+            assertNull(limited.baseline());
+            assertTrue(limited.truncated());
+            assertTrue(limited.complete());
+
+            StorageHistory markerOnly = store.read(grid, item, now, 1);
+            assertEquals(Collections.singletonList(marker), markerOnly.points());
+            assertEquals(latest, markerOnly.baseline());
+            assertEquals(Collections.singletonMap(item, description(item, "Item")), markerOnly.descriptions());
+        }
+    }
+
+    @Test
     void shorterRetentionImmediatelyAppliesToPreviouslyStoredData() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
