@@ -664,10 +664,17 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 }
                 char[] label = new char[900_000];
                 Arrays.fill(label, 'x');
-                fixture.publish(2, Collections.singletonList(row(TestGridFixtures.key(99), new String(label), 1)));
+                String firstLabel = new String(label);
+                label[0] = 'y';
+                String secondLabel = new String(label);
+                long revision = 2;
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(18);
                 boolean recovered = false;
                 while (System.nanoTime() < deadline && !recovered) {
+                    // A single event can fit entirely in an OS send buffer without blocking a writer.
+                    // Keep changing definitions below the per-event limit until unread connections exert backpressure.
+                    String name = (revision & 1) == 0 ? firstLabel : secondLabel;
+                    fixture.publish(revision++, Collections.singletonList(row(TestGridFixtures.key(99), name, 1)));
                     fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
                     TerminalRegistry.Bootstrap reservation = fixture.state
                         .reserve(fixture.grid, fixture.session, false, null, System.currentTimeMillis());
