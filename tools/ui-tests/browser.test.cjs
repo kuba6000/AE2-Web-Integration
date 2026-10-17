@@ -9928,6 +9928,92 @@ test('tracking uses historical mappings after terminal entry and clears them on 
     assert.equal(await page.locator('.tracking-view canvas:visible').count(), 0);
 });
 
+for (const touch of [false, true]) {
+    test(`compact stock trend uses one hour and preserves measured values and gaps (${touch ? 'touch' : 'mouse'})`, async (t) => {
+        const { page, options, base } = await fixture(
+            t,
+            '',
+            touch ? { viewport: { width: 390, height: 844 }, hasTouch: true } : {}
+        );
+        const now = Date.now();
+        const stock = (age, quantity) => ({
+            observedAt: now - age,
+            generation: '1',
+            kind: 'STOCK',
+            resource: { ...iron, quantity },
+            complete: true
+        });
+        options.resourceHistory = {
+            baseline: stock(3700000, '9223372036854775807'),
+            points: [
+                stock(1800000, '9223372036854775808'),
+                { observedAt: now - 900000, generation: '1', kind: 'GAP', resource: null, complete: false },
+                stock(300000, '42')
+            ],
+            enabled: true,
+            complete: false,
+            truncated: false
+        };
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        const request = page.waitForRequest((request) => request.url().includes('/resource-history?'));
+        await page.locator('#items button').first().click();
+        const first = await request;
+        const from = Number(new URL(first.url()).searchParams.get('from'));
+        assert.ok(Math.abs(now - from - 3600000) < 5000, 'The first selected-item history request covers one hour');
+        if (touch && !(await page.getByRole('dialog', { name: 'Resource details', exact: true }).isVisible()))
+            await openMobilePane(page, 'Resource details');
+        const chart = page.locator('.resource-history .tracking-chart');
+        await chart.locator('canvas').waitFor();
+        assert.equal(await page.locator('.resource-history select:visible').count(), 0);
+        assert.equal(await chart.locator('.u-axis:visible, .u-legend:visible').count(), 0);
+        const overlay = chart.locator('.u-over');
+        await overlay.scrollIntoViewIfNeeded();
+        const bounds = await overlay.boundingBox();
+        const host = await chart.boundingBox();
+        assert.ok(bounds.width > host.width * 0.9, 'The sparkline uses its width without axis gutters');
+        const selectAt = async (fraction) => {
+            const position = { x: bounds.x + bounds.width * fraction, y: bounds.y + bounds.height / 2 };
+            if (touch) await page.touchscreen.tap(position.x, position.y);
+            else await page.mouse.move(position.x, position.y);
+        };
+        await selectAt(0.25);
+        const readout = chart.locator('.tracking-sparkline-readout');
+        await readout.waitFor();
+        assert.deepEqual(await chart.boundingBox(), host, 'Hovering the trend does not change its layout');
+        assert.ok((await readout.innerText()).replace(/[^0-9]/g, '').includes('9223372036854775807'));
+        assert.equal(await readout.locator('time').getAttribute('datetime'), new Date(now - 3700000).toISOString());
+        if (touch) {
+            await page.mouse.move(1, 1);
+            assert.equal(await readout.isVisible(), true);
+        }
+        await selectAt(0.85);
+        assert.match(await readout.innerText(), /—/);
+        assert.equal(await readout.locator('time').count(), 0);
+        await selectAt(0.97);
+        assert.ok((await readout.innerText()).includes('42'));
+        assert.equal(await readout.locator('time').getAttribute('datetime'), new Date(now - 300000).toISOString());
+        assert.equal(options.requests.filter((request) => request.path.endsWith('/resource-history')).length, 1);
+        await page.locator('.resource-history .tracking-open').click();
+        await page.locator('.tracking-view canvas').waitFor();
+        await Promise.all([
+            page.waitForResponse((response) => response.url().includes('/resource-history?')),
+            page.locator('.tracking-view select').first().selectOption('86400000')
+        ]);
+        await page.locator('.tracking-view .tracking-back').click();
+        if (touch && !(await page.getByRole('dialog', { name: 'Resource details', exact: true }).isVisible()))
+            await openMobilePane(page, 'Resource details');
+        await page.locator('.resource-history canvas').waitFor();
+        await page.locator('.resource-history .tracking-open').click();
+        await page.locator('.tracking-view canvas').waitFor();
+        assert.equal(await page.locator('.tracking-view select').first().inputValue(), '86400000');
+        const requests = options.requests.filter((request) => request.path.endsWith('/resource-history'));
+        const windows = requests.map((request) =>
+            Math.round((now - Number(new URLSearchParams(request.query).get('from'))) / 60000)
+        );
+        assert.deepEqual(windows, [60, 15, 1440, 60, 1440], 'Each view fetches its intended period once');
+    });
+}
+
 test('tracking opens from resources, retains terminal state, and survives a direct-link refresh', async (t) => {
     const { page, options, base } = await fixture(t);
     const now = Date.now();
@@ -10674,12 +10760,19 @@ test('header confirms live events and manual resync waits for a new stream befor
     await page.goto(`${base}#/grids/${gridA}/items`);
     await opened;
     const control = page.locator('#refresh');
-    const dot = control.locator('.live-dot');
+    const dot = control.locator('.live-icon');
     assert.equal(await dot.isVisible(), false, 'A subscription is not a confirmed live connection');
     const initialBounds = await control.boundingBox();
+    const frame = () =>
+        control.evaluate((button) => {
+            const style = getComputedStyle(button);
+            return { background: style.backgroundColor, border: style.borderTopColor, shadow: style.boxShadow };
+        });
+    const initialFrame = await frame();
     options.itemStreams[0].write('event: ready\ndata: {}\n\n');
     await dot.waitFor({ state: 'visible' });
     assert.deepEqual(await control.boundingBox(), initialBounds);
+    assert.deepEqual(await frame(), initialFrame, 'The live control retains its normal button frame');
     await control.focus();
     const time = page.locator('#resource-tooltip time');
     await time.waitFor();
@@ -10729,14 +10822,14 @@ test('live status can be focused and resynced by touch without changing header g
     const control = page.locator('#refresh');
     const before = await control.boundingBox();
     options.itemStreams[0].write('event: ready\ndata: {}\n\n');
-    await control.locator('.live-dot').waitFor({ state: 'visible' });
+    await control.locator('.live-icon').waitFor({ state: 'visible' });
     assert.deepEqual(await control.boundingBox(), before);
     await control.focus();
     await page.getByRole('tooltip').locator('time').waitFor();
     const reconnected = page.waitForResponse((response) => response.url().includes('/items/events'));
     await control.tap();
     await reconnected;
-    assert.equal(await control.locator('.live-dot').isVisible(), false);
+    assert.equal(await control.locator('.live-icon').isVisible(), false);
     assert.deepEqual(await control.boundingBox(), before);
 });
 

@@ -248,7 +248,7 @@ export function createResourceTerminal(
         menuItem = null;
     }
     function showResourceMenu(item: ThemeState['items'][number], source: HTMLElement, x: number, y: number) {
-        application.select(item);
+        application.select(item, 3600000);
         hideTooltip();
         menuItem = item;
         menuSource = source;
@@ -304,7 +304,7 @@ export function createResourceTerminal(
         button.append(createResourceIcon(), row.name, amount);
         row.li.append(button);
         button.addEventListener('click', () => {
-            application.select(row.item);
+            application.select(row.item, 3600000);
             hideTooltip();
             mobile.open(controls.resourcePanel, locale.common('details'), button);
         });
@@ -314,7 +314,7 @@ export function createResourceTerminal(
         button.addEventListener('auxclick', (event) => {
             if (event.button !== 1 || !row.item.craftable || !row.item.itemKey) return;
             event.preventDefault();
-            application.select(row.item);
+            application.select(row.item, 3600000);
             hideTooltip();
             craftingView.open(row.item, button);
         });

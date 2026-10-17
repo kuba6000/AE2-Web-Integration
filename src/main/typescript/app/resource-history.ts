@@ -34,6 +34,7 @@ export function createResourceHistory(
         truncated: false,
         error: null
     };
+    let preferredRangeMillis = state.rangeMillis;
     let selected: { gridKey: string; itemKey: string } | null = null;
     let request: AbortController | undefined;
     let generation = 0;
@@ -100,8 +101,12 @@ export function createResourceHistory(
             request?.abort();
             reading = false;
         },
-        async select(gridKey: string | null, itemKey: string | null) {
+        async select(gridKey: string | null, itemKey: string | null, rangeMillis?: number) {
             clear();
+            state.rangeMillis =
+                rangeMillis !== undefined && Number.isSafeInteger(rangeMillis) && rangeMillis > 0
+                    ? rangeMillis
+                    : preferredRangeMillis;
             if (gridKey && itemKey) {
                 selected = { gridKey, itemKey };
                 await refresh();
@@ -109,7 +114,9 @@ export function createResourceHistory(
         },
         refresh,
         async range(millis: number) {
-            if (!Number.isSafeInteger(millis) || millis <= 0 || state.rangeMillis === millis) return;
+            if (!Number.isSafeInteger(millis) || millis <= 0) return;
+            preferredRangeMillis = millis;
+            if (state.rangeMillis === millis) return;
             const current = selected;
             clear();
             state.rangeMillis = millis;

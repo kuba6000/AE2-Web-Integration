@@ -131,3 +131,35 @@ test('changing selection rejects late history from the previous resource', async
     assert.equal(history.state.status, 'idle');
     assert.deepEqual(history.state.points, []);
 });
+
+test('a selection range is applied before its first read without replacing the preferred full history range', async () => {
+    const { createResourceHistory } = await import(moduleUrl);
+    const requests = [];
+    const history = createResourceHistory(
+        {
+            resourceHistory: async (_grid, _item, _signal, from) => {
+                requests.push(from);
+                return {
+                    data: { points: [], baseline: null, enabled: true, complete: true, truncated: false },
+                    icons: null
+                };
+            }
+        },
+        () => {},
+        () => false
+    );
+    await history.range(86400000);
+    const before = Date.now();
+    await history.select('grid', 'item', 3600000);
+    assert.equal(requests.length, 1);
+    assert.ok(requests[0] >= before - 3600000 && requests[0] <= Date.now() - 3600000);
+    assert.equal(history.state.rangeMillis, 3600000);
+    await history.select('grid', 'item');
+    assert.equal(history.state.rangeMillis, 86400000);
+    await history.select('grid', 'item', 3600000);
+    assert.equal(history.state.rangeMillis, 3600000);
+    await history.select('grid', 'item');
+    assert.equal(history.state.rangeMillis, 86400000);
+    assert.equal(requests.length, 4);
+    history.dispose();
+});

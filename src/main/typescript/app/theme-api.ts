@@ -71,7 +71,8 @@ export type ThemeApplication = {
     subscribe(listener: (state: ThemeState) => void): () => void;
     refresh(options?: { reloadDetail?: boolean }): Promise<void>;
     search(value: string): void;
-    select(resource: ReadonlyData<StoredResource> | null): void;
+    /** Optionally choose the selected resource's history period without changing the full tracking view's range. */
+    select(resource: ReadonlyData<StoredResource> | null, historyRangeMillis?: number): void;
     resourceHistory: { range(millis: number): Promise<void> };
     preference<K extends keyof Preferences>(name: K, value: Preferences[K]): void;
     displayIcons(enabled: boolean): void;

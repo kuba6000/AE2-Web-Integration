@@ -6,6 +6,7 @@ import { networkLabel } from './network.js';
 import { craftingHammer } from './icons/pixel/terminal.js';
 import { userIcon } from './icons/hackernoon/user.js';
 import { refreshIcon } from './icons/hackernoon/refresh.js';
+import { wifiIcon } from './icons/hackernoon/wifi.js';
 import { powerIcon } from './icons/pixel/account.js';
 import { element } from './dom.js';
 import type { TooltipBindings } from './tooltip-bindings.js';
@@ -28,7 +29,7 @@ export function createHeader(
                     <span class="account-user">${userIcon}<span id="username"></span></span>
                     <span class="account-actions">
                         <button id="logout" class="account-action" data-label="logout">${powerIcon}</button>
-                        <button id="refresh" class="account-action" data-label="refresh" aria-busy="false">${refreshIcon}<span class="live-dot" hidden aria-hidden="true"></span></button>
+                        <button id="refresh" class="account-action" data-label="refresh" aria-busy="false">${refreshIcon}<span class="live-icon" hidden aria-hidden="true">${wifiIcon}</span></button>
                     </span>
                     <span id="activity" class="sr-only" role="status" aria-live="off" hidden>
                         <span id="activity-text"></span>
@@ -56,7 +57,7 @@ export function createHeader(
         selectedNetwork: panel.querySelector<HTMLSpanElement>('#selected-network')!,
         refresh: panel.querySelector<HTMLButtonElement>('#refresh')!,
         refreshIcon: panel.querySelector<SVGElement>('#refresh .theme-icon')!,
-        liveDot: panel.querySelector<HTMLElement>('#refresh .live-dot')!,
+        liveIcon: panel.querySelector<HTMLElement>('#refresh .live-icon')!,
         activity: panel.querySelector<HTMLSpanElement>('#activity')!,
         activityText: panel.querySelector<HTMLSpanElement>('#activity-text')!,
         terminalLink: panel.querySelector<HTMLAnchorElement>('#terminal-link')!,
@@ -154,9 +155,8 @@ export function createHeader(
         const active =
             state.refreshingView || state.refreshing || state.gridStatus === 'loading' || viewLoading || actionPending;
         const live = state.stream?.status === 'live';
-        controls.liveDot.hidden = !live;
+        controls.liveIcon.hidden = !live;
         controls.refreshIcon.style.display = live ? 'none' : '';
-        controls.refresh.classList.toggle('is-live', live);
         controls.refresh.setAttribute('aria-label', live ? locale.t('liveUpdates') : locale.common('refresh'));
         controls.refresh.setAttribute('aria-busy', String(!live && (active || state.stream?.status === 'connecting')));
         controls.activity.hidden = !active;

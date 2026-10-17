@@ -63,6 +63,7 @@ export function createTerminal(
 ) {
     const notifications = createNotifications();
     let iconsEnabled = false;
+    let selectedHistoryRange: number | undefined;
     const listeners = new Set<(state: TerminalState) => void>();
     let gridRequest: AbortController | undefined;
     let itemRequest: AbortController | undefined;
@@ -281,6 +282,7 @@ export function createTerminal(
         state.recent = null;
         state.itemIcons = null;
         state.selected = null;
+        selectedHistoryRange = undefined;
         state.itemStatus = 'idle';
         state.itemError = null;
         state.updatedAt = null;
@@ -325,7 +327,9 @@ export function createTerminal(
             liveView = result.view;
             subscription = result.subscription;
             startStream(key, version);
-            if (state.selected) await resourceHistory.refresh(automatic);
+            if (state.selected?.itemKey && resourceHistory.state.status === 'idle')
+                await resourceHistory.select(key, state.selected.itemKey, selectedHistoryRange);
+            else if (state.selected) await resourceHistory.refresh(automatic);
             else resourceHistory.clear();
         } catch (caught) {
             const error = caught as ApiFailure;
@@ -528,8 +532,7 @@ export function createTerminal(
             } else invalidateItems();
             state.route = route;
             if (route.view === 'tracking') void resourceHistory.select(route.gridKey, route.itemKey);
-            else if (related && state.selected?.itemKey)
-                void resourceHistory.select(route.gridKey, state.selected.itemKey);
+            else if (related) resourceHistory.clear();
             if (route.gridKey) {
                 state.selectedGridKey = route.gridKey;
                 if (state.gridStatus === 'ready') restoreSelectedGrid();
@@ -550,9 +553,10 @@ export function createTerminal(
             state.search = value;
             notify();
         },
-        select(item: StoredResource | null) {
+        select(item: StoredResource | null, historyRangeMillis?: number) {
             state.selected = item;
-            void resourceHistory.select(state.route.gridKey, item?.itemKey ?? null);
+            selectedHistoryRange = item ? historyRangeMillis : undefined;
+            void resourceHistory.select(state.route.gridKey, item?.itemKey ?? null, selectedHistoryRange);
             notify();
         },
         preference<K extends keyof Preferences>(name: K, value: Preferences[K]) {

@@ -19,6 +19,7 @@ export function createResourceHistoryView(
     const iconHost = element('div', '', 'tracking-resource');
     iconHost.append(resourceIcon, resourceName);
     const toolbar = element('div', '', 'tracking-toolbar');
+    toolbar.hidden = !full;
     const rangeLabel = element('label');
     const range = element('select');
     for (const [value, text] of [
@@ -97,7 +98,9 @@ export function createResourceHistoryView(
             historicalResource ??
             (history.status !== 'error' && state.selected?.itemKey === itemKey ? state.selected : null);
         const iconMetadata = historicalResource ? history.icons : state.itemIcons;
-        heading.textContent = locale.t(full ? 'trackingDetails' : 'trackingStockHistory');
+        heading.textContent = full
+            ? locale.t('trackingDetails')
+            : locale.t('trackingStockTrend', { period: locale.duration(3600000) });
         resourceName.hidden = !full;
         iconHost.hidden = !full;
         resourceIcon.hidden = !showIcons;
@@ -132,7 +135,7 @@ export function createResourceHistoryView(
             history.status !== 'ready' ||
             (!history.points.length && !history.baseline?.resource) ||
             (!full && !hasStock);
-        chartHost.setAttribute('aria-label', locale.t('trackingChart'));
+        chartHost.setAttribute('aria-label', locale.t(full ? 'trackingChart' : 'trackingStockHistory'));
         help.hidden = !full;
         updateHelp();
         totals.replaceChildren();

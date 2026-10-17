@@ -1430,15 +1430,10 @@ label {
 #logout {
     color: light-dark(#862323, #ffb4ab);
 }
-#refresh.is-live {
-    background: transparent;
-    border-color: transparent;
-}
-.live-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: light-dark(#b74343, #d56b6b);
+.live-icon {
+    display: grid;
+    place-items: center;
+    color: light-dark(#246b32, #8bdb8f);
 }
 #refresh[aria-busy='true'] .theme-icon {
     animation: refresh-spin 0.8s linear infinite;
@@ -3232,6 +3227,21 @@ button.toast:hover {
 .resource-history {
     margin-top: 12px;
     font-size: 13px;
+}
+.resource-history .tracking-chart {
+    position: relative;
+}
+.tracking-sparkline-readout {
+    position: absolute;
+    z-index: 1;
+    inset: 4px 4px auto;
+    display: grid;
+    gap: 3px;
+    padding: 5px 7px;
+    background: var(--surface);
+    font-size: 11px;
+    pointer-events: none;
+    overflow-wrap: anywhere;
 }
 .resource-history h2 {
     font-size: 14px;

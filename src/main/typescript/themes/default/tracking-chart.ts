@@ -1,9 +1,15 @@
 import uPlot from './uplot.js';
+import { element } from './dom.js';
 import type { ThemeState, Translator } from '../../app/theme-api.js';
 import { chartSamples, flowDisplayInterval, flowResolution, type ChartSample } from './tracking-chart-data.js';
 
 /** Theme-owned renderer. Exact counters stay in samples; Canvas coordinates are approximate. */
 export function createTrackingChart(host: HTMLElement, compact: boolean, intervalChanged: (millis: number) => void) {
+    const readout = compact ? element('div', '', 'tracking-sparkline-readout') : null;
+    if (readout) {
+        readout.hidden = true;
+        host.append(readout);
+    }
     let plot: uPlot | undefined;
     let samples: ChartSample[] = [];
     let pixel = true;
@@ -42,7 +48,7 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
         if (event.key === 'Escape' && pinned && host.getClientRects().length) clearPin();
     };
     window.addEventListener('keydown', releaseOnEscape);
-    const chartHeight = () => (compact ? 170 : mobile ? 280 : 380);
+    const chartHeight = () => (compact ? 110 : mobile ? 280 : 380);
     const pixelCanvas = document.createElement('canvas');
     const pixelContext = pixelCanvas.getContext('2d')!;
     const amount = (value: bigint | null) =>
@@ -207,7 +213,7 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
             {
                 width: host.clientWidth,
                 height: chartHeight(),
-                padding: [12, 8, 0, 0],
+                padding: compact ? [8, 8, 8, 8] : [12, 8, 0, 0],
                 cursor: {
                     drag: { x: !compact, y: false, dist: 4 },
                     points: { show: false },
@@ -248,46 +254,50 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
                         }
                     }
                 },
-                axes: [
-                    {
-                        ...axis,
-                        space: compact ? 65 : 85,
-                        values: (_chart, values) => {
-                            const clock = values.some((value, index) => index > 0 && value - values[index - 1] < 60)
-                                ? timeWithSeconds
-                                : time;
-                            return values.map((value, index) => {
-                                const instant = new Date(value * 1000);
-                                const previous = new Date((values[index - 1] ?? value) * 1000);
-                                if (index > 0 && instant.toDateString() !== previous.toDateString())
-                                    return `${date.format(instant)}\n${clock.format(instant)}`;
-                                return clock.format(instant);
-                            });
-                        }
-                    },
-                    {
-                        ...axis,
-                        scale: 'stock',
-                        show: hasStock,
-                        size: valueAxisSize,
-                        label: compact || mobile ? undefined : locale.common('stored'),
-                        labelFont: axis.font,
-                        labelGap: 6,
-                        values: (_u, values) => values.map((value) => numbers.format(value))
-                    },
-                    {
-                        ...axis,
-                        show: !compact && hasFlow,
-                        scale: 'flow',
-                        side: 1,
-                        grid: { ...axis.grid, show: !hasStock },
-                        size: valueAxisSize,
-                        label: mobile ? undefined : locale.t('trackingFlow'),
-                        labelFont: axis.font,
-                        labelGap: 6,
-                        values: (_u, values) => values.map((value) => numbers.format(value))
-                    }
-                ],
+                axes: compact
+                    ? [{ show: false }, { show: false }]
+                    : [
+                          {
+                              ...axis,
+                              space: 85,
+                              values: (_chart, values) => {
+                                  const clock = values.some(
+                                      (value, index) => index > 0 && value - values[index - 1] < 60
+                                  )
+                                      ? timeWithSeconds
+                                      : time;
+                                  return values.map((value, index) => {
+                                      const instant = new Date(value * 1000);
+                                      const previous = new Date((values[index - 1] ?? value) * 1000);
+                                      if (index > 0 && instant.toDateString() !== previous.toDateString())
+                                          return `${date.format(instant)}\n${clock.format(instant)}`;
+                                      return clock.format(instant);
+                                  });
+                              }
+                          },
+                          {
+                              ...axis,
+                              scale: 'stock',
+                              show: hasStock,
+                              size: valueAxisSize,
+                              label: mobile ? undefined : locale.common('stored'),
+                              labelFont: axis.font,
+                              labelGap: 6,
+                              values: (_u, values) => values.map((value) => numbers.format(value))
+                          },
+                          {
+                              ...axis,
+                              show: hasFlow,
+                              scale: 'flow',
+                              side: 1,
+                              grid: { ...axis.grid, show: !hasStock },
+                              size: valueAxisSize,
+                              label: mobile ? undefined : locale.t('trackingFlow'),
+                              labelFont: axis.font,
+                              labelGap: 6,
+                              values: (_u, values) => values.map((value) => numbers.format(value))
+                          }
+                      ],
                 series: [
                     {
                         label: locale.t('trackingTime'),
@@ -357,6 +367,26 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
                     }
                 ],
                 hooks: {
+                    setCursor: [
+                        (chart) => {
+                            if (!readout) return;
+                            const index = chart.cursor.idxs?.[3];
+                            if ((chart.cursor.left ?? -1) < 0 || index == null) {
+                                readout.hidden = true;
+                                return;
+                            }
+                            readout.hidden = false;
+                            const sample = samples[index];
+                            readout.replaceChildren(
+                                element('strong', `${locale.common('stored')}: ${amount(sample.stock)}`)
+                            );
+                            if (sample.stock !== null && sample.stockObservedAt !== undefined) {
+                                const time = element('time', locale.dateTime(sample.stockObservedAt, history!.until));
+                                time.dateTime = new Date(sample.stockObservedAt).toISOString();
+                                readout.append(time);
+                            }
+                        }
+                    ],
                     draw: [
                         (chart) => {
                             drawPixelLine(chart, false);
@@ -393,69 +423,66 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
             host
         );
         const current = plot;
-        if (!compact) {
-            current.over.tabIndex = 0;
-            current.over.style.touchAction = 'pan-y pinch-zoom';
-            current.over.addEventListener('pointerdown', (event) => {
-                if (event.button !== 0 || !event.isPrimary) return;
-                pressed = { x: event.clientX, y: event.clientY, touch: event.pointerType === 'touch', moved: false };
-                current.over.setPointerCapture(event.pointerId);
-            });
-            current.over.addEventListener('pointermove', (event) => {
-                if (!event.isPrimary) return;
-                if (pressed && Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 4)
-                    pressed.moved = true;
-            });
-            current.over.addEventListener('pointerup', (event) => {
-                if (!event.isPrimary) return;
-                const start = pressed;
-                if (!start) return;
-                pressed = null;
-                const bounds = current.over.getBoundingClientRect();
-                const dx = event.clientX - start.x,
-                    dy = event.clientY - start.y;
-                if (start.moved || Math.hypot(dx, dy) > 4) {
-                    pinned = null;
-                    host.classList.remove('tracking-chart-pinned');
-                    if (start.touch && Math.abs(dx) > 4 && Math.abs(dx) > Math.abs(dy)) {
-                        const first = current.posToVal(start.x - bounds.left, 'x');
-                        const last = current.posToVal(event.clientX - bounds.left, 'x');
-                        current.setScale('x', { min: Math.min(first, last), max: Math.max(first, last) });
-                    }
-                    return;
+        current.over.tabIndex = 0;
+        current.over.style.touchAction = 'pan-y pinch-zoom';
+        current.over.addEventListener('pointerdown', (event) => {
+            if (event.button !== 0 || !event.isPrimary) return;
+            pressed = { x: event.clientX, y: event.clientY, touch: event.pointerType === 'touch', moved: false };
+            current.over.setPointerCapture(event.pointerId);
+        });
+        current.over.addEventListener('pointermove', (event) => {
+            if (!event.isPrimary) return;
+            if (pressed && Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 4) pressed.moved = true;
+        });
+        current.over.addEventListener('pointerup', (event) => {
+            if (!event.isPrimary) return;
+            const start = pressed;
+            if (!start) return;
+            pressed = null;
+            const bounds = current.over.getBoundingClientRect();
+            const dx = event.clientX - start.x,
+                dy = event.clientY - start.y;
+            if (start.moved || Math.hypot(dx, dy) > 4) {
+                pinned = null;
+                host.classList.remove('tracking-chart-pinned');
+                if (!compact && start.touch && Math.abs(dx) > 4 && Math.abs(dx) > Math.abs(dy)) {
+                    const first = current.posToVal(start.x - bounds.left, 'x');
+                    const last = current.posToVal(event.clientX - bounds.left, 'x');
+                    current.setScale('x', { min: Math.min(first, last), max: Math.max(first, last) });
                 }
-                const left = event.clientX - bounds.left;
-                if (pinned && Math.abs(current.valToPos(pinned.time, 'x') - left) <= 4) {
-                    clearPin();
-                    current.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
-                    return;
-                }
-                pinned = {
-                    time: current.posToVal(left, 'x'),
-                    top: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height))
-                };
-                restorePin(current);
-                // Pointerup precedes uPlot's mouseup: moving the pinned cursor must not leave
-                // a synthetic drag selection for that subsequent native handler to zoom into.
+                return;
+            }
+            const left = event.clientX - bounds.left;
+            if (pinned && Math.abs(current.valToPos(pinned.time, 'x') - left) <= 4) {
+                clearPin();
                 current.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
-            });
-            current.over.addEventListener('pointercancel', (event) => {
-                if (!event.isPrimary) return;
-                pressed = null;
-                restorePin(current);
-            });
-            current.over.addEventListener(
-                'dblclick',
-                (event) => {
-                    // The plot holds only the visible sample window; native reset would stop there.
-                    event.stopImmediatePropagation();
-                    clearPin();
-                    preserveZoom = false;
-                    scheduleBuild();
-                },
-                { capture: true }
-            );
-        }
+                return;
+            }
+            pinned = {
+                time: current.posToVal(left, 'x'),
+                top: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height))
+            };
+            restorePin(current);
+            // Pointerup precedes uPlot's mouseup: moving the pinned cursor must not leave
+            // a synthetic drag selection for that subsequent native handler to zoom into.
+            current.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
+        });
+        current.over.addEventListener('pointercancel', (event) => {
+            if (!event.isPrimary) return;
+            pressed = null;
+            restorePin(current);
+        });
+        current.over.addEventListener(
+            'dblclick',
+            (event) => {
+                // The plot holds only the visible sample window; native reset would stop there.
+                event.stopImmediatePropagation();
+                clearPin();
+                preserveZoom = false;
+                scheduleBuild();
+            },
+            { capture: true }
+        );
         const touchCursor = (event: PointerEvent) => {
             if (event.pointerType !== 'touch' || !event.isPrimary) return;
             const bounds = current.over.getBoundingClientRect();
@@ -500,6 +527,7 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
             window.removeEventListener('keydown', releaseOnEscape);
             resize.disconnect();
             plot?.destroy();
+            readout?.remove();
         }
     };
 }
