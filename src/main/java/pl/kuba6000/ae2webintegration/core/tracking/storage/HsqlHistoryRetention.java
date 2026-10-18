@@ -74,7 +74,7 @@ final class HsqlHistoryRetention {
     private static GridBudget budget(@NotNull Connection db, long gridId) throws SQLException {
         try (PreparedStatement query = db.prepareStatement("""
             SELECT row_count, retention_days
-            FROM history_grids
+            FROM grids
             WHERE id = ?
             """)) {
             query.setLong(1, gridId);
@@ -176,7 +176,7 @@ final class HsqlHistoryRetention {
     private static void updateCoverage(@NotNull Connection db, long gridId, long count, long deletedUntil)
         throws SQLException {
         try (PreparedStatement update = db.prepareStatement("""
-            UPDATE history_grids
+            UPDATE grids
             SET row_count = ?,
                 deleted_until = CASE WHEN deleted_until < ? THEN ? ELSE deleted_until END
             WHERE id = ?
@@ -197,9 +197,7 @@ final class HsqlHistoryRetention {
         long earliestTime = Long.MAX_VALUE;
         long earliestId = Long.MAX_VALUE;
         // Metadata is small; each history probe keeps a constant grid/time index range.
-        try (
-            PreparedStatement grids = db
-                .prepareStatement("SELECT id, retention_days FROM history_grids WHERE row_count > 0");
+        try (PreparedStatement grids = db.prepareStatement("SELECT id, retention_days FROM grids WHERE row_count > 0");
             ResultSet policies = grids.executeQuery()) {
             while (policies.next()) {
                 long gridId = policies.getLong("id");
@@ -238,7 +236,7 @@ final class HsqlHistoryRetention {
             Long overBudget = null;
             try (PreparedStatement query = db.prepareStatement("""
                 SELECT id
-                FROM history_grids
+                FROM grids
                 WHERE row_count > ?
                 """)) {
                 query.setInt(1, maxRowsPerGrid);

@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -73,7 +72,7 @@ public final class StorageTrackingService implements AutoCloseable {
 
     /** Live publication, durable stock sampling and flow buckets have independent schedules. */
     public boolean submit(@NotNull StableKey gridKey, long generation, @NotNull StorageObservation observation,
-        boolean persistStock, boolean persistFlow, long flowFrom, int retentionDays) {
+        boolean persistStock, boolean persistFlow, long flowFrom) {
         if (persistStock && !observation.stockObserved())
             throw new IllegalArgumentException("A stock sample requires observed stock");
         State state = states.get(gridKey);
@@ -92,15 +91,7 @@ public final class StorageTrackingService implements AutoCloseable {
             long lossEpoch = state.lossEpoch.get();
             worker.execute(() -> {
                 try {
-                    if (!closed) apply(
-                        gridKey,
-                        state,
-                        observation,
-                        persistStock,
-                        persistFlow,
-                        flowFrom,
-                        retentionDays,
-                        lossEpoch);
+                    if (!closed) apply(gridKey, state, observation, persistStock, persistFlow, flowFrom, lossEpoch);
                 } catch (RuntimeException failed) {
                     if (!state.workerFailureLogged) {
                         state.workerFailureLogged = true;
@@ -120,18 +111,6 @@ public final class StorageTrackingService implements AutoCloseable {
             capacity.release((int) cost);
             invalidate(gridKey, generation);
             return false;
-        }
-    }
-
-    /** Queue policy edits with measurements; callers may await completion only off the game thread. */
-    public @NotNull Future<?> setRetention(@NotNull StableKey gridKey, int retentionDays) throws IOException {
-        try {
-            return worker.submit(() -> {
-                store.setRetention(gridKey, retentionDays);
-                return null;
-            });
-        } catch (RejectedExecutionException rejected) {
-            throw new IOException("History policy update was not accepted", rejected);
         }
     }
 
@@ -197,13 +176,11 @@ public final class StorageTrackingService implements AutoCloseable {
     }
 
     private void stopWorker() {
-        for (Runnable pending : worker.shutdownNow()) {
-            if (pending instanceof Future<?>) ((Future<?>) pending).cancel(false);
-        }
+        worker.shutdownNow();
     }
 
     private void apply(StableKey gridKey, State state, StorageObservation observation, boolean persistStock,
-        boolean persistFlow, long flowFrom, int retentionDays, long lossEpoch) {
+        boolean persistFlow, long flowFrom, long lossEpoch) {
         boolean gap = lossEpoch != state.handledLossEpoch;
         if (gap || !observation.flowComplete() || persistFlow && !state.flowStarted) state.needsStockBaseline = true;
         Map<StableKey, StorageObservation.Row> next = state.mergeStock(observation);
@@ -216,7 +193,7 @@ public final class StorageTrackingService implements AutoCloseable {
                 .historyPoints(observation, next, persistStock, persistFlow, flowFrom, gap);
             Map<StableKey, ResourceDescriptor> writtenDescriptions = descriptionsFor(points, observation, descriptions);
             try {
-                store.append(gridKey, writtenDescriptions, points, retentionDays);
+                store.append(gridKey, writtenDescriptions, points);
                 // Only a successful append advances the durable baseline.
                 if (persistStock) {
                     Map<StableKey, Long> sampled = new HashMap<>();

@@ -23,7 +23,6 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
-import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
@@ -43,7 +42,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
         TestGridFixtures.track(grid);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        worlds.initialize(gridSave);
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         IAE previous = AE2Controller.AE2Interface;
         try {
@@ -131,9 +130,8 @@ class CoreEngineLifecycleTest extends GridTestScope {
             assertSame(processInterface, AE2Controller.AE2Interface);
             assertSame(processPlatform, AE2Controller.serverPlatform);
             assertTrue(
-                TestGridFixtures.isTracked(
-                    new GridIdentityRegistry(new File(gridSave, "ae2webintegration/grid-identities.json")),
-                    gridKey),
+                TestGridFixtures
+                    .isTracked(worlds.registry(new File(gridSave, "ae2webintegration/grid-identities.json")), gridKey),
                 "settings remain in the stopped save");
             assertFalse(
                 TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, gridKey),

@@ -26,7 +26,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 class GridIdentityLifecycleTest extends GridTestScope {
 
     @Test
-    void corruptSaveStartsANewRegistryWithoutRetainingPreviousWorldBindings() throws Exception {
+    void failedWorldImportDoesNotPublishPreviousWorldBindings() throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(81);
         TestGridFixtures.track(grid);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
@@ -37,23 +37,13 @@ class GridIdentityLifecycleTest extends GridTestScope {
         byte[] invalid = "{".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         java.nio.file.Files.write(invalidFile, invalid);
 
-        CoreEngine.GRID_IDENTITIES.initialize(invalidSave);
-        assertTrue(CoreEngine.GRID_IDENTITIES.isInitialized());
+        assertThrows(java.io.IOException.class, () -> worlds.initialize(invalidSave));
+        assertFalse(CoreEngine.GRID_IDENTITIES.isInitialized());
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
-        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        StableKey replacement = CoreEngine.GRID_IDENTITIES.getKey(grid);
-        assertNotNull(replacement);
-        assertNotEquals(key, replacement);
-        assertEquals(
-            replacement,
-            GridAccess.list(TestGridFixtures.ae(grid))
-                .get(0)
-                .key());
-        assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, replacement));
-        assertNull(CoreEngine.GRID_IDENTITIES.getPersistentData(key));
+        assertArrayEquals(invalid, java.nio.file.Files.readAllBytes(invalidFile));
 
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        worlds.initialize(gridSave);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         GridAccess.list(TestGridFixtures.ae(grid));
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
@@ -109,7 +99,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         controllers.remove(removed);
         CoreEngine.GRID_IDENTITIES.controllerRemoved(removed);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        worlds.initialize(gridSave);
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         assertEquals(key, CoreEngine.GRID_IDENTITIES.getKey(grid));
@@ -132,7 +122,9 @@ class GridIdentityLifecycleTest extends GridTestScope {
             GridAccess.list(TestGridFixtures.ae(grid))
                 .isEmpty());
         assertEquals(0, reads.get());
-        assertFalse(new File(gridSave, "ae2webintegration/grid-identities.json").exists());
+        assertNull(
+            worlds.registry(TestGridFixtures.Worlds.source(gridSave))
+                .findIdentity(grid.position()));
 
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
@@ -161,13 +153,15 @@ class GridIdentityLifecycleTest extends GridTestScope {
         TestGridFixtures.track(grid);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        java.nio.file.Path file = new File(gridSave, "ae2webintegration/grid-identities.json").toPath();
-        byte[] saved = java.nio.file.Files.readAllBytes(file);
+
         mayRead[0] = false;
         grid.controllerState(AEControllerState.CONTROLLER_CONFLICT);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
-        assertArrayEquals(saved, java.nio.file.Files.readAllBytes(file));
+        assertEquals(
+            key,
+            worlds.registry(TestGridFixtures.Worlds.source(gridSave))
+                .findIdentity(grid.position()));
         assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
 
         grid.controllerState(AEControllerState.CONTROLLER_ONLINE);
@@ -229,7 +223,9 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertNotNull(entry);
         assertSame(plan, entry.plan);
         assertFalse(plan.isCancelled());
-        assertTrue(new File(gridSave, "ae2webintegration/grid-identities.json").exists());
+        assertNotNull(
+            worlds.registry(TestGridFixtures.Worlds.source(gridSave))
+                .findIdentity(grid.position()));
 
         GridAccess.list(TestGridFixtures.ae());
         CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
@@ -253,8 +249,10 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertTrue(view.allows(TestGridFixtures.principal(42)));
         assertTrue(view.allows(TestGridFixtures.principal(TestGridFixtures.OWNER_ID)));
         assertFalse(view.allows(TestGridFixtures.principal(99)));
-        assertTrue(new File(gridSave, "ae2webintegration/grid-identities.json").exists());
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        assertNotNull(
+            worlds.registry(TestGridFixtures.Worlds.source(gridSave))
+                .findIdentity(grid.position()));
+        worlds.initialize(gridSave);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         assertEquals(
             view.key(),
@@ -319,10 +317,10 @@ class GridIdentityLifecycleTest extends GridTestScope {
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
         CoreEngine.GRID_IDENTITIES.clear();
-        CoreEngine.GRID_IDENTITIES.initialize(new File(gridSave, "other-save"));
+        worlds.initialize(new File(gridSave, "other-save"));
         GridAccess.list(TestGridFixtures.ae(grid));
         assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        worlds.initialize(gridSave);
         assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);

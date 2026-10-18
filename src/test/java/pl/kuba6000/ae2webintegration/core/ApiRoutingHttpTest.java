@@ -10,7 +10,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.AbstractCollection;
 import java.util.Collections;
@@ -48,7 +47,6 @@ import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetResourceHistory;
-import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 
 class ApiRoutingHttpTest extends GridTestScope {
@@ -118,7 +116,8 @@ class ApiRoutingHttpTest extends GridTestScope {
             configured.data.flowFlushIntervalSeconds = new ConfigSettings.Range(20, 900, 180);
             configured.data.historyRetentionDays = new ConfigSettings.Range(2, 30, 14);
             Config.INSTANCE = configured;
-            CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+            worlds.close(TestGridFixtures.Worlds.source(gridSave));
+            worlds.initialize(gridSave);
             grid = TestGridFixtures.grid(1);
             StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
             String path = "/api/grids/" + key + "/settings";
@@ -566,7 +565,8 @@ class ApiRoutingHttpTest extends GridTestScope {
                 .getAsBoolean());
         Path file = gridSave.toPath()
             .resolve("ae2webintegration/grid-identities.json");
-        var restored = new GridIdentityRegistry(file.toFile()).getPersistentData(key);
+        var restored = worlds.registry(file.toFile())
+            .getPersistentData(key);
         assertNotNull(restored);
         JsonObject loaded = new Gson().toJsonTree(restored.getSettings())
             .getAsJsonObject();
@@ -643,7 +643,8 @@ class ApiRoutingHttpTest extends GridTestScope {
                 .getAsInt());
         Path file = gridSave.toPath()
             .resolve("ae2webintegration/grid-identities.json");
-        var restored = new GridIdentityRegistry(file.toFile()).getPersistentData(key);
+        var restored = worlds.registry(file.toFile())
+            .getPersistentData(key);
         assertNotNull(restored);
         JsonObject loaded = new Gson().toJsonTree(restored.getSettings())
             .getAsJsonObject();
@@ -715,26 +716,27 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
-    void failedNameSaveReturnsErrorAndSameValueRetryPersistsAcrossRestart() throws Exception {
+    void failedNameSaveReturnsErrorAndRetryAfterRestartPersists() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         String path = "/api/grids/" + key + "/settings";
         String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
         Path file = gridSave.toPath()
             .resolve("ae2webintegration/grid-identities.json");
-        Path blocker = file.resolveSibling("grid-identities.json.tmp");
-        Files.createDirectory(blocker);
+        worlds.close(file.toFile());
         String body = "{\"name\":\"Factory\"}";
         assertEquals(HttpURLConnection.HTTP_INTERNAL_ERROR, request("PATCH", path, headers, body).status());
-        var unsaved = new GridIdentityRegistry(file.toFile()).getPersistentData(key);
+        var unsaved = worlds.registry(file.toFile())
+            .getPersistentData(key);
         assertNotNull(unsaved);
         assertEquals(
             "",
             unsaved.getSettings()
                 .getName());
-        Files.deleteIfExists(blocker);
+        worlds.initialize(gridSave);
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         assertEquals(HttpURLConnection.HTTP_OK, request("PATCH", path, headers, body).status());
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        worlds.initialize(gridSave);
         grid = TestGridFixtures.grid(1);
         JsonObject loaded = request("GET", path, headers, "").json()
             .getAsJsonObject("data");

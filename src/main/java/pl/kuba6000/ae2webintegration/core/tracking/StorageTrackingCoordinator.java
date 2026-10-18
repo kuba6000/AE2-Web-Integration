@@ -192,7 +192,6 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 recent.open(key, binding.generation, stock, flow, settings.maxResourcesPerGrid, nowMillis);
             }
         }
-        if (configuration != null) binding.retainedSettings = configuration;
         if (binding.flowInterval != flowInterval) {
             binding.flowInterval = flowInterval;
             binding.nextFlowFlush = binding.flowFrom + flowInterval;
@@ -307,15 +306,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     }
 
     private void submitHistory(Binding binding, StorageObservation observation, boolean stock, boolean flow) {
-        // Keep first-history policy capture ordered with settings edits and their writer commands.
-        synchronized (identities) {
-            GridPersistentData data = identities.getPersistentData(binding.key);
-            if (data != null) binding.retainedSettings = data.getSettings();
-            int days = binding.retainedSettings == null ? identities.getDataPolicy()
-                .historyRetentionDays()
-                .defaultValue() : binding.retainedSettings.getHistoryRetentionDays();
-            service.submit(binding.key, binding.generation, observation, stock, flow, binding.flowFrom, days);
-        }
+        service.submit(binding.key, binding.generation, observation, stock, flow, binding.flowFrom);
     }
 
     private void detach(Binding binding, long nowMillis) {
@@ -375,8 +366,6 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private boolean flow;
         private long stockInterval;
         private long flowInterval;
-        // Last-controller removal may precede the final flush, including a just-accepted settings edit.
-        private @Nullable GridSettingsData retainedSettings;
         private long nextStockSample;
         private long nextFlowFlush;
         private long nextFlowSample;

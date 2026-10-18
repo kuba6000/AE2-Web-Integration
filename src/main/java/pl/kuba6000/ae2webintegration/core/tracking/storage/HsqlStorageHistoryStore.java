@@ -1,13 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,19 +12,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import org.hsqldb.jdbc.JDBCDriver;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import com.github.bsideup.jabel.Desugar;
-
-import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
@@ -55,258 +44,58 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         }
     }
 
-    private static final Set<Path> OPEN_DATABASES = ConcurrentHashMap.newKeySet();
+    private static final org.apache.logging.log4j.Logger LOG = org.apache.logging.log4j.LogManager
+        .getLogger("ae2webintegration");
 
-    private static final int MAX_READERS = 4;
-
-    private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
-    private final Object writerLock = new Object();
-    private final Semaphore readers = new Semaphore(MAX_READERS, true);
-    private final Path databaseBase;
+    private final pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase database;
     private final HsqlHistoryRetention retention;
-    private final DataPolicy.Range retentionBounds;
-    private Map<StableKey, Integer> initialRetentions;
-    private volatile @Nullable Database openedDatabase;
-    private @Nullable Path ownedPath;
-    private boolean closed;
+    private volatile boolean initialized;
 
-    public HsqlStorageHistoryStore(@NotNull Path databaseBase, @NotNull DataPolicy.Range retentionBounds,
-        int maxRowsPerGrid, @NotNull Map<StableKey, Integer> initialRetentions) {
-        if (retentionBounds.defaultValue() < 1 || maxRowsPerGrid < 1)
-            throw new IllegalArgumentException("History limits must be positive");
-        if (databaseBase.toString()
-            .indexOf(';') >= 0)
-            throw new IllegalArgumentException("History path cannot contain JDBC property separators");
-        this.databaseBase = databaseBase.toAbsolutePath();
-        this.retention = new HsqlHistoryRetention(maxRowsPerGrid);
-        this.retentionBounds = retentionBounds;
-        this.initialRetentions = new HashMap<>(initialRetentions);
+    public HsqlStorageHistoryStore(@NotNull pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase database) {
+        this.database = database;
+        retention = new HsqlHistoryRetention(
+            database.policy()
+                .historyMaxRowsPerGrid());
     }
 
-    @Desugar
-    private record Database(@NotNull Connection writer, @NotNull String url) {}
-
-    private @NotNull Database database() throws SQLException, IOException {
-        if (closed) throw new IOException("History store is closed");
-        Database existing = openedDatabase;
-        if (existing != null) return existing;
-        Files.createDirectories(databaseBase.getParent());
-        Path canonical = databaseBase.getParent()
-            .toRealPath()
-            .resolve(databaseBase.getFileName());
-        if (!OPEN_DATABASES.add(canonical))
-            throw new IOException("Storage history database is still owned by an active service");
-        ownedPath = canonical;
-        String url = "jdbc:hsqldb:file:" + canonical.toString()
-            .replace('\\', '/');
-        Connection opened;
-        try {
-            opened = connect(url);
-        } catch (SQLException failedConnection) {
-            releaseOwnership();
-            throw failedConnection;
-        }
-        try {
-            initializeSchema(opened);
-            opened.setAutoCommit(false);
-            initializeRetentions(opened);
-            retention.enforceExistingBudgets(opened);
-            retention.maintain(opened);
-            opened.commit();
-            Database initialized = new Database(opened, url);
-            initialRetentions = Collections.emptyMap();
-            openedDatabase = initialized;
-            return initialized;
-        } catch (SQLException failure) {
-            try {
-                opened.rollback();
-            } catch (SQLException rollbackFailure) {
-                failure.addSuppressed(rollbackFailure);
+    /** Enforces persisted budgets before world services publish; standalone callers may initialize lazily. */
+    public void initialize() throws IOException {
+        if (initialized) return;
+        database.write(db -> {
+            if (!initialized) {
+                retention.enforceExistingBudgets(db);
             }
-            try {
-                shutdown(opened);
-            } catch (SQLException failedShutdown) {
-                failure.addSuppressed(failedShutdown);
-            }
-            throw failure;
-        }
+            return null;
+        });
+        initialized = true;
+        maintain();
     }
 
-    private void initializeRetentions(Connection db) throws SQLException {
-        try (PreparedStatement clamp = db.prepareStatement("""
-            UPDATE history_grids SET retention_days = CASE
-                WHEN retention_days < ? THEN ? WHEN retention_days > ? THEN ? ELSE retention_days END
-            WHERE retention_days < ? OR retention_days > ?
-            """)) {
-            clamp.setInt(1, retentionBounds.min());
-            clamp.setInt(2, retentionBounds.min());
-            clamp.setInt(3, retentionBounds.max());
-            clamp.setInt(4, retentionBounds.max());
-            clamp.setInt(5, retentionBounds.min());
-            clamp.setInt(6, retentionBounds.max());
-            clamp.executeUpdate();
-        }
-        if (initialRetentions.isEmpty()) return;
-        try (PreparedStatement update = db
-            .prepareStatement("UPDATE history_grids SET retention_days = ? WHERE grid_key = ?")) {
-            for (Map.Entry<StableKey, Integer> entry : initialRetentions.entrySet()) {
-                update.setInt(1, retentionBounds.clamp(entry.getValue()));
-                update.setString(
-                    2,
-                    entry.getKey()
-                        .toString());
-                update.addBatch();
-            }
-            update.executeBatch();
-        }
-    }
-
-    private static @NotNull Connection connect(@NotNull String url) throws SQLException {
-        Properties properties = new Properties();
-        properties.setProperty("user", "SA");
-        properties.setProperty("password", "");
-        return new JDBCDriver().connect(url, properties);
-    }
-
-    private static void initializeSchema(@NotNull Connection db) throws SQLException {
-        try (Statement sql = db.createStatement()) {
-            sql.execute("SET DATABASE TRANSACTION CONTROL MVCC");
-            sql.execute("SET FILES WRITE DELAY FALSE");
-            sql.execute("SET FILES CACHE SIZE 16384");
-            sql.execute("SET FILES LOG SIZE 16");
-            sql.execute("SET FILES DEFRAG 25");
-            sql.execute("""
-                CREATE CACHED TABLE IF NOT EXISTS history_grids (
-                    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                    grid_key VARCHAR(22) NOT NULL UNIQUE,
-                    row_count BIGINT NOT NULL,
-                    deleted_until BIGINT NOT NULL,
-                    first_observed BIGINT NOT NULL,
-                    retention_days INTEGER NOT NULL
-                )
-                """);
-            sql.execute("""
-                CREATE CACHED TABLE IF NOT EXISTS history_resources (
-                    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                    item_key VARCHAR(22) NOT NULL UNIQUE,
-                    registry_namespace VARCHAR(4096),
-                    registry_path VARCHAR(16384),
-                    components INTEGER NOT NULL,
-                    damage INTEGER NOT NULL,
-                    display_name VARCHAR(1048576) NOT NULL,
-                    resource_type VARCHAR(16) NOT NULL,
-                    base_key VARCHAR(22)
-                )
-                """);
-            sql.execute("CREATE SEQUENCE IF NOT EXISTS history_event_ids AS BIGINT START WITH 1");
-            sql.execute("""
-                CREATE CACHED TABLE IF NOT EXISTS history_stock (
-                    id BIGINT PRIMARY KEY,
-                    grid_id BIGINT NOT NULL REFERENCES history_grids(id),
-                    observed_at BIGINT NOT NULL,
-                    generation BIGINT NOT NULL,
-                    resource_id BIGINT NOT NULL REFERENCES history_resources(id),
-                    quantity BIGINT NOT NULL
-                )
-                """);
-            sql.execute("""
-                CREATE CACHED TABLE IF NOT EXISTS history_flow (
-                    id BIGINT PRIMARY KEY,
-                    grid_id BIGINT NOT NULL REFERENCES history_grids(id),
-                    observed_at BIGINT NOT NULL,
-                    generation BIGINT NOT NULL,
-                    resource_id BIGINT NOT NULL REFERENCES history_resources(id),
-                    input_amount BIGINT NOT NULL,
-                    output_amount BIGINT NOT NULL,
-                    flow_from BIGINT NOT NULL
-                )
-                """);
-            sql.execute("""
-                CREATE CACHED TABLE IF NOT EXISTS history_coverage (
-                    id BIGINT PRIMARY KEY,
-                    grid_id BIGINT NOT NULL REFERENCES history_grids(id),
-                    observed_at BIGINT NOT NULL,
-                    generation BIGINT NOT NULL,
-                    kind VARCHAR(16) NOT NULL CHECK (kind IN ('GAP', 'OBSERVATION', 'FLOW_OBSERVATION')),
-                    flow_from BIGINT
-                )
-                """);
-            for (Table table : Table.values()) {
-                String name = table.sqlName;
-                sql.execute(
-                    "CREATE INDEX IF NOT EXISTS " + name + "_grid_time ON " + name + "(grid_id, observed_at, id)");
-                sql.execute("CREATE INDEX IF NOT EXISTS " + name + "_expiry ON " + name + "(observed_at, id)");
-                if (table != Table.COVERAGE) {
-                    sql.execute(
-                        "CREATE INDEX IF NOT EXISTS " + name
-                            + "_item_time ON "
-                            + name
-                            + "(grid_id, resource_id, observed_at, id)");
-                    sql.execute("CREATE INDEX IF NOT EXISTS " + name + "_resource ON " + name + "(resource_id)");
-                }
-            }
-            sql.execute(
-                "CREATE INDEX IF NOT EXISTS history_coverage_gap ON history_coverage(grid_id, kind, observed_at, id)");
-        }
-    }
-
+    @Override
     public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
         @NotNull List<StorageHistoryPoint> points) throws IOException {
-        append(gridKey, descriptions, points, retentionBounds.defaultValue());
+        initialize();
+        database.write(db -> {
+            long gridId = gridId(db, gridKey);
+            if (gridId == -1) throw new IOException("History requires a durable grid identity");
+            updateDescriptions(db, descriptions, points);
+            insertPoints(db, gridId, points, resourceIds(db, points));
+            retention.prune(db, gridId, false);
+            return null;
+        });
+        // Optional expiry yields the fair gate after the atomic measurement transaction.
+        maintain();
     }
 
-    @Override
-    public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
-        @NotNull List<StorageHistoryPoint> points, int retentionDays) throws IOException {
-        retentionBounds.validate(retentionDays);
-        lifecycle.readLock()
-            .lock();
+    private void maintain() {
         try {
-            synchronized (writerLock) {
-                try {
-                    Connection db = database().writer();
-                    updateDescriptions(db, descriptions, points);
-                    long gridId = ensureGrid(db, gridKey, retentionDays);
-                    insertPoints(db, gridId, points, resourceIds(db, points));
-                    retention.prune(db, gridId, false);
-                    retention.maintain(db);
-                    db.commit();
-                } catch (SQLException failure) {
-                    rollback(failure);
-                    throw new IOException("Cannot append storage history", failure);
-                }
-            }
-        } finally {
-            lifecycle.readLock()
-                .unlock();
-        }
-    }
-
-    /** Updates retained history policy independently of measurement recording. */
-    @Override
-    public void setRetention(@NotNull StableKey gridKey, int retentionDays) throws IOException {
-        retentionBounds.validate(retentionDays);
-        lifecycle.readLock()
-            .lock();
-        try {
-            synchronized (writerLock) {
-                try {
-                    Connection db = database().writer();
-                    try (PreparedStatement update = db
-                        .prepareStatement("UPDATE history_grids SET retention_days = ? WHERE grid_key = ?")) {
-                        update.setInt(1, retentionDays);
-                        update.setString(2, gridKey.toString());
-                        update.executeUpdate();
-                    }
-                    db.commit();
-                } catch (SQLException failure) {
-                    rollback(failure);
-                    throw new IOException("Cannot update history retention", failure);
-                }
-            }
-        } finally {
-            lifecycle.readLock()
-                .unlock();
+            database.write(db -> {
+                retention.maintain(db);
+                return null;
+            });
+        } catch (IOException failure) {
+            // Measurements already committed; optional cleanup failure must not mark those writes lost.
+            LOG.warn("Optional history cleanup failed; a later maintenance opportunity will retry", failure);
         }
     }
 
@@ -367,7 +156,7 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
             if (pending != null) pending.executeBatch();
         }
         try (PreparedStatement update = db.prepareStatement("""
-            UPDATE history_grids
+            UPDATE grids
             SET row_count = row_count + ?,
                 first_observed = CASE WHEN first_observed > ? THEN ? ELSE first_observed END
             WHERE id = ?
@@ -405,27 +194,10 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         return ids;
     }
 
-    private static long ensureGrid(@NotNull Connection db, @NotNull StableKey gridKey, int retentionDays)
-        throws SQLException {
-        long existing = gridId(db, gridKey);
-        if (existing != -1) return existing;
-        try (PreparedStatement insert = db.prepareStatement("""
-            INSERT INTO history_grids (grid_key, row_count, deleted_until, first_observed, retention_days)
-            VALUES (?, 0, ?, ?, ?)
-            """)) {
-            insert.setString(1, gridKey.toString());
-            insert.setLong(2, Long.MIN_VALUE);
-            insert.setLong(3, Long.MAX_VALUE);
-            insert.setInt(4, retentionDays);
-            insert.executeUpdate();
-        }
-        return gridId(db, gridKey);
-    }
-
     private static long gridId(@NotNull Connection db, @NotNull StableKey key) throws SQLException {
         try (PreparedStatement query = db.prepareStatement("""
             SELECT id
-            FROM history_grids
+            FROM grids
             WHERE grid_key = ?
             """)) {
             query.setString(1, key.toString());
@@ -510,97 +282,16 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         int limit) throws IOException {
         if (limit < 1 || limit > 10000)
             throw new IllegalArgumentException("History query limit must be between 1 and 10000");
-        try {
-            readers.acquire();
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread()
-                .interrupt();
-            throw new IOException("Interrupted while waiting to read storage history", interrupted);
-        }
-        lifecycle.readLock()
-            .lock();
-        try {
-            if (closed) throw new IOException("History store is closed");
-            Database initialized = openedDatabase;
-            if (initialized == null) {
-                synchronized (writerLock) {
-                    initialized = database();
-                }
-            }
-            try (Connection db = connect(initialized.url())) {
-                db.setReadOnly(true);
-                // MVCC repeatable-read keeps all statements of one response on the same committed snapshot.
-                db.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
-                db.setAutoCommit(false);
-                StorageHistory history = HsqlHistoryReader
-                    .read(db, gridKey, itemKey, fromMillis, System.currentTimeMillis(), limit);
-                db.commit();
-                return history;
-            }
-        } catch (SQLException failure) {
-            throw new IOException("Cannot query storage history", failure);
-        } finally {
-            lifecycle.readLock()
-                .unlock();
-            readers.release();
-        }
+        if (Thread.currentThread()
+            .isInterrupted()) throw new IOException("Interrupted while waiting to read history");
+        initialize();
+        return database
+            .read(db -> HsqlHistoryReader.read(db, gridKey, itemKey, fromMillis, System.currentTimeMillis(), limit));
     }
 
-    private void rollback(SQLException failure) {
-        try {
-            Database initialized = openedDatabase;
-            if (initialized != null) initialized.writer()
-                .rollback();
-        } catch (SQLException rollbackFailure) {
-            failure.addSuppressed(rollbackFailure);
-        }
-    }
-
+    /** Called only after registry admission stops and the history worker drains. */
     @Override
     public void close() throws IOException {
-        lifecycle.writeLock()
-            .lock();
-        try {
-            if (closed) return;
-            closed = true;
-            Database initialized = openedDatabase;
-            if (initialized == null) return;
-            try {
-                shutdown(initialized.writer());
-            } catch (SQLException failure) {
-                throw new IOException("Cannot close storage history", failure);
-            } finally {
-                openedDatabase = null;
-            }
-        } finally {
-            lifecycle.writeLock()
-                .unlock();
-        }
-    }
-
-    private void shutdown(@NotNull Connection db) throws SQLException {
-        SQLException failure = null;
-        boolean stopped = false;
-        try (Statement sql = db.createStatement()) {
-            sql.execute("SHUTDOWN");
-            stopped = true;
-        } catch (SQLException failedShutdown) {
-            failure = failedShutdown;
-        }
-        try {
-            db.close();
-        } catch (SQLException failedClose) {
-            if (failure == null) failure = failedClose;
-            else failure.addSuppressed(failedClose);
-        }
-        // A failed SHUTDOWN keeps the path reserved until process exit: another owner must not share that engine.
-        if (stopped) releaseOwnership();
-        if (failure != null) throw failure;
-    }
-
-    private void releaseOwnership() {
-        if (ownedPath == null) return;
-        OPEN_DATABASES.remove(ownedPath);
-        ownedPath = null;
+        database.close();
     }
 }

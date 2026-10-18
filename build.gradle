@@ -163,6 +163,7 @@ test {
             includeTestsMatching '*TrackingStatisticsResponseTest'
             includeTestsMatching '*ItemIdentityRequestTest'
             includeTestsMatching '*GridIdentityRegistryTest'
+            includeTestsMatching '*WorldDatabaseTest'
             includeTestsMatching '*DimensionalCoordsTest'
             includeTestsMatching '*GridAccessSourceTest'
             includeTestsMatching '*CraftingPlanRequestLifecycleTest'

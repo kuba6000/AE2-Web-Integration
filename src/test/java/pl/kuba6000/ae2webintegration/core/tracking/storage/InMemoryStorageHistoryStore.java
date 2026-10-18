@@ -19,12 +19,8 @@ public final class InMemoryStorageHistoryStore implements IStorageHistoryStore {
     private final Map<StableKey, List<StorageHistoryPoint>> records = new HashMap<>();
 
     @Override
-    public void setRetention(@NotNull StableKey gridKey, int retentionDays) {}
-
-    @Override
     public synchronized void append(@NotNull StableKey gridKey,
-        @NotNull Map<StableKey, ResourceDescriptor> descriptions, @NotNull List<StorageHistoryPoint> points,
-        int retentionDays) {
+        @NotNull Map<StableKey, ResourceDescriptor> descriptions, @NotNull List<StorageHistoryPoint> points) {
         resources.putAll(descriptions);
         records.computeIfAbsent(gridKey, key -> new ArrayList<>())
             .addAll(points);

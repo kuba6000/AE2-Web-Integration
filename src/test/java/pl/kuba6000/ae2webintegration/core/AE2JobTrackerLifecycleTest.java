@@ -160,7 +160,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
 
     @Test
     void jobsWithoutAValidatedIdentityAreNotTrackedRetroactively() throws Exception {
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        worlds.initialize(gridSave);
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, grid, false);
         assertNull(AE2JobTracker.findActiveJob(cpu));
@@ -196,7 +196,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         EqualCpu cpu = new EqualCpu();
         AE2JobTracker.addJob(cpu, grid, false);
         AE2JobTracker.JobTrackingInfo info = AE2JobTracker.findActiveJob(cpu);
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        worlds.initialize(gridSave);
         cpu.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
 
         AE2JobTracker.addJob(cpu, grid, true);

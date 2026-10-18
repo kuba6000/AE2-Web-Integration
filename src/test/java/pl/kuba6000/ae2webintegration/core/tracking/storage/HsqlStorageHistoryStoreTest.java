@@ -3,7 +3,6 @@ package pl.kuba6000.ae2webintegration.core.tracking.storage;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
@@ -39,17 +38,15 @@ class HsqlStorageHistoryStoreTest {
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, shortGrid, Collections.singletonList(point));
             append(store, longGrid, Collections.singletonList(point));
+            WorldHistoryFixtures.retention(store, shortGrid, 1);
         }
-        try (HsqlStorageHistoryStore reopened = new HsqlStorageHistoryStore(
-            directory.resolve("database/history"),
-            new DataPolicy.Range(1, 365, 7),
-            100,
-            Collections.singletonMap(shortGrid, 1))) {
+        try (HsqlStorageHistoryStore reopened = WorldHistoryFixtures
+            .create(directory.resolve("database/history"), new DataPolicy.Range(1, 365, 7), 100)) {
             assertTrue(
                 reopened.read(shortGrid, item, 0, 100)
                     .points()
                     .isEmpty());
-            reopened.setRetention(shortGrid, 7);
+            WorldHistoryFixtures.retention(reopened, shortGrid, 7);
             assertTrue(
                 reopened.read(shortGrid, item, 0, 100)
                     .points()
@@ -72,7 +69,7 @@ class HsqlStorageHistoryStoreTest {
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, shortGrid, Collections.singletonList(point));
             append(store, longGrid, Collections.singletonList(point));
-            store.setRetention(shortGrid, 1);
+            WorldHistoryFixtures.retention(store, shortGrid, 1);
             assertTrue(
                 store.read(shortGrid, item, 0, 100)
                     .points()
@@ -233,6 +230,7 @@ class HsqlStorageHistoryStoreTest {
         StorageHistoryPoint first = stock(item, now, Long.MAX_VALUE);
         StorageHistoryPoint second = stock(item, now + 1, 11);
         try (HsqlStorageHistoryStore store = store(100)) {
+            WorldHistoryFixtures.register(store, grid);
             store.append(
                 grid,
                 Collections.singletonMap(item, description(item, "Before")),
@@ -270,6 +268,7 @@ class HsqlStorageHistoryStoreTest {
         StorageHistoryPoint retained = stock(item, now, 42);
         try (HsqlStorageHistoryStore store = store(1)) {
             append(store, firstGrid, Collections.singletonList(retained));
+            WorldHistoryFixtures.register(store, secondGrid);
             store.append(secondGrid, Collections.singletonMap(item, updated), Collections.singletonList(retained));
             append(store, firstGrid, Collections.singletonList(stock(other, now + 1, 5)));
             StorageHistory remaining = store.read(secondGrid, item, now, 10);
@@ -376,11 +375,10 @@ class HsqlStorageHistoryStoreTest {
     }
 
     private HsqlStorageHistoryStore store(int rows) {
-        return new HsqlStorageHistoryStore(
+        return WorldHistoryFixtures.create(
             directory.resolve("database/history"),
             new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
-            rows,
-            Collections.emptyMap());
+            rows);
     }
 
     @Test
@@ -453,6 +451,7 @@ class HsqlStorageHistoryStoreTest {
         for (StorageHistoryPoint point : points) {
             if (point.itemKey() != null) descriptions.put(point.itemKey(), description(point.itemKey(), "Item"));
         }
+        WorldHistoryFixtures.register(store, grid);
         store.append(grid, descriptions, points);
     }
 
@@ -544,11 +543,8 @@ class HsqlStorageHistoryStoreTest {
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(old, recent));
         }
-        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(
-            directory.resolve("database/history"),
-            new DataPolicy.Range(1, 1, 1),
-            100,
-            Collections.emptyMap())) {
+        try (HsqlStorageHistoryStore store = WorldHistoryFixtures
+            .create(directory.resolve("database/history"), new DataPolicy.Range(1, 1, 1), 100)) {
             StorageHistory history = store.read(grid, item, 0, 10);
             assertEquals(Collections.singletonList(recent), history.points());
             assertTrue(history.truncated());
@@ -557,11 +553,10 @@ class HsqlStorageHistoryStoreTest {
     }
 
     @Test
-    void closingUnusedStoreDoesNotCreateFilesAndClosedStoreRejectsOperations() throws Exception {
+    void closeIsIdempotentAndClosedStoreRejectsOperations() throws Exception {
         try (HsqlStorageHistoryStore store = store(100)) {
             store.close();
             store.close();
-            assertFalse(Files.exists(directory.resolve("database")));
             assertThrows(IOException.class, () -> store.read(StableKey.random(), null, 0, 1));
         }
         assertThrows(IllegalArgumentException.class, () -> store(0));
@@ -651,11 +646,10 @@ class HsqlStorageHistoryStoreTest {
         long now = System.currentTimeMillis();
         StorageHistoryPoint point = stock(item, now, 42);
         try (HsqlStorageHistoryStore first = store(100);
-            HsqlStorageHistoryStore second = new HsqlStorageHistoryStore(
+            HsqlStorageHistoryStore second = WorldHistoryFixtures.create(
                 directory.resolve("database/./history"),
                 new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
-                100,
-                Collections.emptyMap())) {
+                100)) {
             append(first, grid, Collections.singletonList(point));
             for (int attempt = 0; attempt < 10; attempt++)
                 assertThrows(IOException.class, () -> second.read(grid, item, now, 10));

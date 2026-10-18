@@ -2,20 +2,13 @@ package pl.kuba6000.ae2webintegration.core.identity;
 
 import static com.google.common.base.Preconditions.checkState;
 
-import java.io.File;
 import java.io.IOException;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
-import java.util.UUID;
 import java.util.WeakHashMap;
 
 import org.apache.logging.log4j.LogManager;
@@ -24,11 +17,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.google.common.collect.MapMaker;
-import com.google.gson.Gson;
-import com.google.gson.InstanceCreator;
-import com.google.gson.JsonDeserializer;
-import com.google.gson.JsonObject;
-import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
@@ -39,14 +27,14 @@ import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
-import pl.kuba6000.ae2webintegration.core.utils.AtomicFileWriter;
-import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 
 /** Persisted identities and weak live-grid bindings for one save; native reads run on the server thread. */
 public final class GridIdentityRegistry {
 
-    private @Nullable File file;
-    private boolean dirty;
+    private @Nullable WorldGridStore store;
+    private final Set<StableKey> dirtyKeys = new HashSet<>();
     private @NotNull DataPolicy dataPolicy = DataPolicy.from(Config.INSTANCE.data);
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private final WeakHashMap<IAEGrid, StableKey> keys = new WeakHashMap<>();
@@ -58,36 +46,28 @@ public final class GridIdentityRegistry {
     /** Inactive until the server opens a save. */
     public GridIdentityRegistry() {}
 
-    public synchronized void initialize(@NotNull File saveDirectory) throws IOException {
+    public synchronized void initialize(@NotNull WorldDatabase database, @NotNull Path importSource)
+        throws IOException {
         clear();
-        dataPolicy = DataPolicy.from(Config.INSTANCE.data);
-        file = new File(saveDirectory, "ae2webintegration/grid-identities.json");
-        try {
-            loadOrReset();
-        } catch (IOException e) {
-            clear();
-            throw e;
-        }
+        dataPolicy = database.policy();
+        var persistence = new WorldGridStore(database);
+        Map<StableKey, GridPersistentData> loaded = persistence.load(importSource);
+        store = persistence;
+        records = loaded;
+        records.forEach((key, data) -> {
+            bindSettings(key, data);
+            data.getControllers()
+                .forEach(position -> knownPositions.put(position, key));
+        });
     }
 
     public synchronized void clear() {
-        file = null;
-        dirty = false;
+        store = null;
+        dirtyKeys.clear();
         records.clear();
         knownPositions.clear();
         keys.clear();
         grids.clear();
-    }
-
-    private File storageFile() {
-        if (file == null) throw new IllegalStateException("Grid identities are not initialized for this save");
-        return file;
-    }
-
-    /** Invalid data is backed up before starting a new registry; filesystem failures still abort construction. */
-    public GridIdentityRegistry(@NotNull File file) throws IOException {
-        this.file = file;
-        loadOrReset();
     }
 
     /** Reads the validated binding, or null when unavailable, without discovering controllers or changing maps. */
@@ -106,12 +86,12 @@ public final class GridIdentityRegistry {
     }
 
     public synchronized boolean isInitialized() {
-        return file != null;
+        return store != null;
     }
 
     /** AE2 completed controller validation. Conflicted/controllerless grids leave both maps untouched. */
     public synchronized void controllerValidated(@NotNull IAEGrid grid) {
-        if (file == null) return;
+        if (!isInitialized()) return;
         IAEPathingGrid pathing = grid.web$getPathingGrid();
         if (pathing == null || pathing.web$getControllerState() != AEControllerState.CONTROLLER_ONLINE) return;
         Set<DimensionalCoords> controllers = new LinkedHashSet<>(grid.web$getControllers());
@@ -160,7 +140,7 @@ public final class GridIdentityRegistry {
 
     /** Called only for physical removal, never chunk unload or a grid-node rebuild. */
     public synchronized void controllerRemoved(@NotNull DimensionalCoords position) {
-        if (file == null) return;
+        if (!isInitialized()) return;
         StableKey affected = findIdentity(position);
         if (affected == null) return;
         try {
@@ -171,97 +151,21 @@ public final class GridIdentityRegistry {
         }
     }
 
-    private void loadOrReset() throws IOException {
-        boolean normalized = false;
-        try {
-            normalized = load();
-        } catch (IOException failure) {
-            Path source = storageFile().toPath();
-            if (!Files.isRegularFile(source)) throw failure;
-            Path backup = source.resolveSibling(source.getFileName() + ".corrupt-" + UUID.randomUUID() + ".bak");
-            // Never overwrite the original unless its complete backup was successfully written.
-            Files.copy(source, backup);
-            records.clear();
-            knownPositions.clear();
-            dirty = false;
-            writeRecords(records);
-            LOG.error(
-                "Failed to load grid identities. Original saved to {}; started a new registry. "
-                    + "Networks will receive new identifiers and default settings.",
-                backup,
-                failure);
-        }
-        if (normalized) saveIfDirty();
-    }
-
     public synchronized @NotNull DataPolicy getDataPolicy() {
         return dataPolicy;
     }
 
-    /** Detached policy snapshot includes retained identities whose grids are currently unloaded. */
-    public synchronized @NotNull Map<StableKey, Integer> historyRetentions() {
-        Map<StableKey, Integer> selected = new HashMap<>();
-        records.forEach(
-            (key, value) -> selected.put(
-                key,
-                value.getSettings()
-                    .getHistoryRetentionDays()));
-        return selected;
-    }
-
-    private boolean load() throws IOException {
-        File file = storageFile();
-        if (Files.notExists(file.toPath())) return false;
-        try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
-            Gson currentFormat = GSONUtils.GSON_BUILDER.create();
-            // TODO: Remove after the transition release; published 1.2.0-pre-* saves use dimid.
-            JsonDeserializer<DimensionalCoords> coordinates = (json, type, context) -> {
-                JsonObject position = json.getAsJsonObject();
-                if (!position.has("dimensionId") && position.has("dimid")) {
-                    position.add("dimensionId", position.remove("dimid"));
-                    dirty = true;
-                }
-                return currentFormat.fromJson(position, DimensionalCoords.class);
-            };
-            Map<StableKey, GridPersistentData> stored = GSONUtils.createBuilder()
-                .registerTypeAdapter(DimensionalCoords.class, coordinates)
-                .registerTypeAdapter(
-                    GridSettingsData.class,
-                    (InstanceCreator<GridSettingsData>) type -> new GridSettingsData(dataPolicy))
-                .create()
-                .fromJson(reader, new TypeToken<Map<StableKey, GridPersistentData>>() {}.getType());
-            if (stored == null) throw new IOException("Empty grid identity file: " + file);
-            boolean normalized = false;
-            for (Map.Entry<StableKey, GridPersistentData> entry : stored.entrySet()) {
-                GridPersistentData record = entry.getValue();
-                if (record == null) throw new IOException("Incomplete grid identity record: " + entry.getKey());
-                normalized |= bindSettings(entry.getKey(), record);
-                for (DimensionalCoords position : record.getControllers()) {
-                    // Persisted coordinates must contain the current dimension field before entering the index.
-                    if (position == null || position.dimensionId() == null
-                        || position.dimensionId()
-                            .isEmpty())
-                        throw new IOException("Incomplete controller coordinates: " + entry.getKey());
-                    knownPositions.put(position, entry.getKey());
-                }
-            }
-            records = stored;
-            return normalized;
-        } catch (RuntimeException e) {
-            throw new IOException("Invalid grid identity file: " + file, e);
-        }
-    }
-
-    private boolean bindSettings(StableKey key, GridPersistentData data) {
+    private void bindSettings(StableKey key, GridPersistentData data) {
         GridSettingsData settings = data.getSettings();
         boolean normalized = settings.applyPolicy(dataPolicy);
-        if (normalized) dirty = true;
+        if (normalized) dirtyKeys.add(key);
         data.attach(this, () -> {
-            // Runs under this registry's monitor; retired or previous-save settings must not dirty the file.
+            // Runs under this registry's monitor; retired or previous-save settings must not dirty persisted settings.
             GridPersistentData current = records.get(key);
-            if (current != null && current.getSettings() == settings) dirty = true;
+            if (current != null && current.getSettings() == settings) {
+                dirtyKeys.add(key);
+            }
         });
-        return normalized;
     }
 
     private boolean preferIdentity(StableKey contender, StableKey winner) {
@@ -281,10 +185,10 @@ public final class GridIdentityRegistry {
         return records.get(key);
     }
 
-    /** Flushes the file when retained data changed, without rebuilding controller indexes. */
+    /** Commits changed settings without rebuilding controller indexes. */
     public synchronized void saveIfDirty() throws IOException {
-        checkState(file != null, "Grid identities are not initialized for this save");
-        if (dirty) writeRecords(records);
+        checkState(isInitialized(), "Grid identities are not initialized for this save");
+        if (!dirtyKeys.isEmpty()) writeRecords(records);
     }
 
     /** Resolves only a retained association, without discovering native grids. */
@@ -324,12 +228,9 @@ public final class GridIdentityRegistry {
     }
 
     private void writeRecords(Map<StableKey, GridPersistentData> data) throws IOException {
-        Map<StableKey, GridPersistentData> ordered = new TreeMap<>(Comparator.comparing(StableKey::toString));
-        ordered.putAll(data);
-        AtomicFileWriter.write(
-            storageFile(),
-            writer -> GSONUtils.GSON_BUILDER.create()
-                .toJson(ordered, writer));
-        dirty = false;
+        WorldGridStore persistence = store;
+        if (persistence == null) throw new IOException("Grid identities are not initialized for this save");
+        persistence.save(records, data, dirtyKeys);
+        dirtyKeys.clear();
     }
 }

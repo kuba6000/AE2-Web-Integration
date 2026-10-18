@@ -2,9 +2,6 @@ package pl.kuba6000.ae2webintegration.core.http.endpoint.grid;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -23,7 +20,6 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.http.dto.GridSettingsView;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 /**
  * Updates selected grid settings.
@@ -125,7 +121,6 @@ public final class PatchGridSettings extends IAsyncRequest {
             return;
         }
         GridIdentityRegistry registry = CoreEngine.GRID_IDENTITIES;
-        Future<?> retentionUpdate = null;
         GridSettingsView result;
         synchronized (registry) {
             GridPersistentData data = registry.getPersistentData(gridKey);
@@ -134,12 +129,6 @@ public final class PatchGridSettings extends IAsyncRequest {
                 return;
             }
             GridSettingsData settings = data.getSettings();
-            boolean retentionRequested = input.historyRetentionDays() != null;
-            StorageTrackingService service = CoreEngine.getStorageTracking();
-            if (retentionRequested && service == null) {
-                deny(ApiStatus.SERVER_STOPPING);
-                return;
-            }
             try {
                 if (name != null) settings.setName(name);
                 if (input.isTracked() != null) {
@@ -159,26 +148,11 @@ public final class PatchGridSettings extends IAsyncRequest {
                     || input.stockSampleIntervalSeconds() != null
                     || input.flowFlushIntervalSeconds() != null
                     || input.historyRetentionDays() != null) registry.saveIfDirty();
-                if (retentionRequested && service != null)
-                    retentionUpdate = service.setRetention(gridKey, settings.getHistoryRetentionDays());
                 result = GridSettingsView.from(settings, registry.getDataPolicy());
             } catch (IOException e) {
                 deny(ApiStatus.INTERNAL_ERROR);
                 return;
             }
-        }
-        // The writer never needs the registry monitor; waiting here cannot block its policy command.
-        try {
-            if (retentionUpdate != null) retentionUpdate.get();
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread()
-                .interrupt();
-            // The accepted writer command may still commit; report an uncertain mutation result.
-            deny(ApiStatus.INTERNAL_ERROR);
-            return;
-        } catch (ExecutionException | CancellationException failed) {
-            deny(ApiStatus.INTERNAL_ERROR);
-            return;
         }
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, result));
     }

@@ -18,12 +18,14 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
+import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
@@ -60,6 +62,7 @@ public class CoreEngine {
     private static volatile String modVersion;
     private static volatile @Nullable VersionChecker versionChecker;
     private static boolean serverRunning;
+    private static @Nullable WorldDatabase worldDatabase;
     private static volatile @Nullable IconPack iconPack;
     private static volatile ThemeCatalog themes = new ThemeCatalog();
     private static volatile @Nullable StorageTrackingService storageTracking;
@@ -82,38 +85,53 @@ public class CoreEngine {
     }
 
     public static void onServerStarted() {
+        // Finish the previous world before binding any new identity or storage owner.
+        onServerStopping();
+        WorldDatabase database = new WorldDatabase(
+            new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/world").toPath(),
+            DataPolicy.from(Config.INSTANCE.data));
+        HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database);
         try {
-            CoreEngine.GRID_IDENTITIES.initialize(AE2Controller.serverPlatform.getWorldDirectory());
-        } catch (IOException e) {
-            LOG.error("Failed to load grid identities; grid requests remain unavailable", e);
+            database.open();
+            GRID_IDENTITIES.initialize(
+                database,
+                new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/grid-identities.json")
+                    .toPath());
+            history.initialize();
+        } catch (IOException | RuntimeException failure) {
+            GRID_IDENTITIES.clear();
+            try {
+                database.close();
+            } catch (IOException closeFailure) {
+                failure.addSuppressed(closeFailure);
+            }
+            LOG.error("Failed to open world database; grid services remain unavailable", failure);
+            return;
         }
-        serverRunning = true;
-        stopStorageTracking();
-        loadIconPack();
-        ConfigSettings.ResourceTracking trackingSettings = Config.INSTANCE.resourceTracking;
-        var dataPolicy = GRID_IDENTITIES.getDataPolicy();
-        TerminalRegistry terminals = new TerminalRegistry();
-        terminalRegistry = terminals;
-        TerminalStreams streams = new TerminalStreams(terminals, GRID_IDENTITIES, getIconPack());
-        terminalStreams = streams;
-        StorageTrackingService service = new StorageTrackingService(
-            new HsqlStorageHistoryStore(
-                new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/history/tracking")
-                    .toPath(),
-                dataPolicy.historyRetentionDays(),
-                dataPolicy.historyMaxRowsPerGrid(),
-                GRID_IDENTITIES.historyRetentions()),
-            trackingSettings.maxQueuedRows);
-        storageCoordinator = new StorageTrackingCoordinator(service, GRID_IDENTITIES, trackingSettings, terminals);
-        storageTracking = service;
-        themes.close();
-        themes = ThemeCatalog.load(
-            Config.getConfigFile("themes")
-                .toPath());
-        AE2Controller.init();
-        StartupHandler.logOpenAdminAccessWarning();
-        maintainVersionChecker();
-        StartupHandler.handleNotificationIntegration();
+        try {
+            worldDatabase = database;
+            serverRunning = true;
+            loadIconPack();
+            ConfigSettings.ResourceTracking trackingSettings = Config.INSTANCE.resourceTracking;
+            TerminalRegistry terminals = new TerminalRegistry();
+            terminalRegistry = terminals;
+            TerminalStreams streams = new TerminalStreams(terminals, GRID_IDENTITIES, getIconPack());
+            terminalStreams = streams;
+            StorageTrackingService service = new StorageTrackingService(history, trackingSettings.maxQueuedRows);
+            storageTracking = service;
+            storageCoordinator = new StorageTrackingCoordinator(service, GRID_IDENTITIES, trackingSettings, terminals);
+            themes.close();
+            themes = ThemeCatalog.load(
+                Config.getConfigFile("themes")
+                    .toPath());
+            AE2Controller.init();
+            StartupHandler.logOpenAdminAccessWarning();
+            maintainVersionChecker();
+            StartupHandler.handleNotificationIntegration();
+        } catch (RuntimeException failure) {
+            onServerStopping();
+            LOG.error("World services failed during startup", failure);
+        }
     }
 
     /**
@@ -299,9 +317,21 @@ public class CoreEngine {
             storageCoordinator.close();
             storageCoordinator = null;
         }
+        // Captured tails already refer to retained SQL grid rows; retire RAM admission before worker closure.
+        GRID_IDENTITIES.clear();
         StorageTrackingService previous = storageTracking;
         storageTracking = null;
+        WorldDatabase database = worldDatabase;
+        worldDatabase = null;
         if (previous != null) previous.close();
+        else if (database != null) {
+            try {
+                database.close();
+            } catch (IOException failure) {
+                LOG.error("Cannot close world database", failure);
+            }
+        }
+
     }
 
     /** Immutable metadata is safe to read on either thread; page streams lease the archive until closed. */

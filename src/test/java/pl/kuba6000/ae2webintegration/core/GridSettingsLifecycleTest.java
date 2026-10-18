@@ -3,8 +3,6 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.net.HttpURLConnection;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Collections;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +18,6 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
-import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
@@ -73,12 +70,9 @@ class GridSettingsLifecycleTest extends GridTestScope {
     }
 
     @Test
-    void failedPersistenceReturnsInternalErrorAndRetainsSettingsForRetry() throws Exception {
-        Path file = gridSave.toPath()
-            .resolve("ae2webintegration/grid-identities.json");
-        Path blocker = gridSave.toPath()
-            .resolve("ae2webintegration/grid-identities.json.tmp");
-        Files.createDirectory(blocker);
+    void failedPersistenceReturnsInternalErrorAndRetryAfterRestartPersists() throws Exception {
+        java.io.File file = TestGridFixtures.Worlds.source(gridSave);
+        worlds.close(file);
         PatchGridSettings request = new PatchGridSettings();
         request.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=1"));
         assertEquals(
@@ -90,16 +84,17 @@ class GridSettingsLifecycleTest extends GridTestScope {
         assertTrue(
             data.getSettings()
                 .isTracked());
-        assertFalse(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
+        assertFalse(TestGridFixtures.isTracked(worlds.registry(file), key));
 
-        Files.deleteIfExists(blocker);
+        worlds.initialize(gridSave);
+        CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
         PatchGridSettings retry = new PatchGridSettings();
         retry.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=1"));
         assertEquals(
             "OK",
             response(retry).get("status")
                 .getAsString());
-        assertTrue(TestGridFixtures.isTracked(new GridIdentityRegistry(file.toFile()), key));
+        assertTrue(TestGridFixtures.isTracked(worlds.registry(file), key));
     }
 
     @Test

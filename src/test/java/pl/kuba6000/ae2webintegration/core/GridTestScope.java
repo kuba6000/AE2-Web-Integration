@@ -10,16 +10,23 @@ import org.junit.jupiter.api.io.TempDir;
 /** Independent save lifecycle for tests that use native-grid snapshots. */
 abstract class GridTestScope {
 
+    final TestGridFixtures.Worlds worlds = new TestGridFixtures.Worlds();
+
     @TempDir
     File gridSave;
 
     @BeforeEach
     void initializeGridSave() throws IOException {
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        worlds.initialize(gridSave);
     }
 
     @AfterEach
     void clearGridSave() {
         CoreEngine.GRID_IDENTITIES.clear();
+        try {
+            worlds.close();
+        } catch (IOException failure) {
+            throw new java.io.UncheckedIOException(failure);
+        }
     }
 }

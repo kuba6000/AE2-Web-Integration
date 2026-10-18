@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -9,6 +10,7 @@ import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -32,6 +34,8 @@ import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
@@ -44,6 +48,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
@@ -54,6 +59,59 @@ import pl.kuba6000.ae2webintegration.core.utils.HTTPUtils;
  */
 @SuppressWarnings({ "PMD.AvoidMagicNumbers", "UnstableApiUsage" })
 final class TestGridFixtures {
+
+    /** Owns temporary world databases; registry reloads share an already open owner. */
+    static final class Worlds implements AutoCloseable {
+
+        private final Map<Path, WorldDatabase> databases = new HashMap<>();
+
+        WorldDatabase database(File source) throws IOException {
+            Path path = source.toPath()
+                .toAbsolutePath()
+                .normalize();
+            var database = databases.get(path);
+            if (database == null) {
+                database = new WorldDatabase(
+                    path.resolveSibling(path.getFileName() + ".world"),
+                    DataPolicy.from(Config.INSTANCE.data));
+                database.open();
+                databases.put(path, database);
+            }
+            return database;
+        }
+
+        GridIdentityRegistry registry(File source) throws IOException {
+            var registry = new GridIdentityRegistry();
+            registry.initialize(database(source), source.toPath());
+            return registry;
+        }
+
+        void initialize(File save) throws IOException {
+            File source = source(save);
+            CoreEngine.GRID_IDENTITIES.initialize(database(source), source.toPath());
+        }
+
+        void close(File source) throws IOException {
+            var database = databases.remove(
+                source.toPath()
+                    .toAbsolutePath()
+                    .normalize());
+            if (database != null) database.close();
+        }
+
+        static File source(File save) {
+            return new File(save, "ae2webintegration/grid-identities.json");
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                for (var database : databases.values()) database.close();
+            } finally {
+                databases.clear();
+            }
+        }
+    }
 
     static ResourceSnapshot planOutput() {
         return new ResourceSnapshot(

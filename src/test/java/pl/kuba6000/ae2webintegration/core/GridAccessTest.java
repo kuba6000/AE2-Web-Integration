@@ -66,7 +66,7 @@ class GridAccessTest extends GridTestScope {
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
         TestGridFixtures.setTracked(CoreEngine.GRID_IDENTITIES, key, true);
-        CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+        worlds.initialize(gridSave);
         assertTrue(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
         assertNull(CoreEngine.GRID_IDENTITIES.getGrid(key));
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);

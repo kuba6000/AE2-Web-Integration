@@ -14,10 +14,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 public interface IStorageHistoryStore extends AutoCloseable {
 
     void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
-        @NotNull List<StorageHistoryPoint> points, int retentionDays) throws IOException;
-
-    /** Changes an existing history policy without requiring another measurement. */
-    void setRetention(@NotNull StableKey gridKey, int retentionDays) throws IOException;
+        @NotNull List<StorageHistoryPoint> points) throws IOException;
 
     @NotNull
     StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey itemKey, long fromMillis, int limit)

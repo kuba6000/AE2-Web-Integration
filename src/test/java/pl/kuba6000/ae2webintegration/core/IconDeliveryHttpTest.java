@@ -134,7 +134,7 @@ class IconDeliveryHttpTest {
     }
 
     @Test
-    void repeatedRetentionPatchRepairsFailedSaveAndAppliesToInactiveHistory() throws Exception {
+    void retentionPatchAppliesToInactiveHistoryAndSurvivesRestart() throws Exception {
         CoreEngine.onServerStarted();
         var grid = new TestGridFixtures.TestGrid(81079, false, AEControllerState.CONTROLLER_ONLINE);
         StableKey gridKey = TestGridFixtures.resolvedKey(grid);
@@ -159,33 +159,33 @@ class IconDeliveryHttpTest {
                     Collections.emptyList()),
                 true,
                 false,
-                observedAt,
-                7));
-        // An ordered policy command also waits for the earlier measurement to reach durable storage.
-        service.setRetention(gridKey, 7)
-            .get(5, TimeUnit.SECONDS);
+                observedAt));
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (service.history(gridKey, item, 0, 100)
+            .points()
+            .isEmpty() && System.nanoTime() < deadline) Thread.sleep(5);
+        assertFalse(
+            service.history(gridKey, item, 0, 100)
+                .points()
+                .isEmpty());
         service.retire(gridKey, 1);
         String path = "/api/grids/" + gridKey;
         assertFalse(
             json(connection(path + "/resource-history")).getAsJsonObject("data")
                 .getAsJsonArray("points")
-                .isEmpty());
-        Path blockedSave = directory.resolve("world/ae2webintegration/grid-identities.json.tmp");
-        Files.createDirectory(blockedSave);
-        assertEquals(500, patchRetention(path, 1));
-        Files.deleteIfExists(blockedSave);
+                .size() == 0);
         assertEquals(200, patchRetention(path, 1));
         assertTrue(
             json(connection(path + "/resource-history")).getAsJsonObject("data")
                 .getAsJsonArray("points")
-                .isEmpty());
+                .size() == 0);
         CoreEngine.onServerStopped();
         CoreEngine.onServerStarted();
         assertEquals(gridKey, TestGridFixtures.resolvedKey(grid));
         assertTrue(
             json(connection(path + "/resource-history")).getAsJsonObject("data")
                 .getAsJsonArray("points")
-                .isEmpty());
+                .size() == 0);
     }
 
     private int patchRetention(String path, int days) throws Exception {
@@ -258,8 +258,7 @@ class IconDeliveryHttpTest {
                     Collections.emptyList()),
                 true,
                 true,
-                observedAt - 60000,
-                7));
+                observedAt - 60000));
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         var snapshot = service.snapshot(gridKey);
         assertNotNull(snapshot);

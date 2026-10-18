@@ -78,12 +78,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         settings.setFlowTracked(true);
         long startedAt = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10);
         var store = new pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore(
-            gridSave.toPath()
-                .resolve("history"),
-            CoreEngine.GRID_IDENTITIES.getDataPolicy()
-                .historyRetentionDays(),
-            100,
-            Collections.emptyMap());
+            worlds.database(TestGridFixtures.Worlds.source(gridSave)));
         try (StorageTrackingService service = new StorageTrackingService(store, 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
@@ -98,8 +93,13 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     .iterator()
                     .next());
             coordinator.tick(TestGridFixtures.ae(), startedAt + 1000);
-            service.setRetention(TestGridFixtures.key(124), 7)
-                .get(5, TimeUnit.SECONDS);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (store.read(key, item.web$getKey(), 0, 100)
+                .points()
+                .stream()
+                .noneMatch(point -> point.kind() == StorageHistoryPoint.Kind.FLOW) && System.nanoTime() < deadline) {
+                Thread.sleep(5);
+            }
             assertTrue(
                 store.read(key, item.web$getKey(), 0, 100)
                     .points()
@@ -863,10 +863,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         IStorageHistoryStore blocked = new IStorageHistoryStore() {
 
             @Override
-            public void setRetention(@NotNull StableKey key, int retentionDays) {}
-
             public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
-                @NotNull List<StorageHistoryPoint> points, int retentionDays) throws IOException {
+                @NotNull List<StorageHistoryPoint> points) throws IOException {
                 entered.countDown();
                 try {
                     if (!release.await(3, TimeUnit.SECONDS)) throw new IOException("Test writer did not resume");

@@ -37,7 +37,7 @@ final class HsqlHistoryReader {
         long expiry;
         try (PreparedStatement query = db.prepareStatement("""
             SELECT id, deleted_until, first_observed, retention_days
-            FROM history_grids
+            FROM grids
             WHERE grid_key = ?
             """)) {
             query.setString(1, gridKey.toString());
