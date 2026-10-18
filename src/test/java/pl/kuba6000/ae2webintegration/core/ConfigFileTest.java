@@ -33,6 +33,8 @@ class ConfigFileTest {
         assertEquals(300, (Integer) document.get("data.stock_sample_interval_seconds.default"));
         assertEquals(60, (Integer) document.get("data.flow_flush_interval_seconds.default"));
         assertEquals(7, (Integer) document.get("data.history_retention_days.default"));
+        assertEquals(60, (Integer) document.get("data.stock_sample_interval_seconds.min"));
+        assertEquals(60, (Integer) document.get("data.flow_flush_interval_seconds.min"));
         document.set("data.stock_sample_interval_seconds.min", 10);
         document.set("data.stock_sample_interval_seconds.max", 600);
         document.set("data.stock_sample_interval_seconds.default", 120);
@@ -61,6 +63,7 @@ class ConfigFileTest {
         Path file = root.resolve("ae2webintegration/config.toml");
         CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
         document.set("data.flow_flush_interval_seconds.default", 5);
+        document.set("data.flow_flush_interval_seconds.min", 1);
         Files.write(
             file,
             new TomlWriter().writeToString(document)
@@ -84,6 +87,7 @@ class ConfigFileTest {
         CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
         assertTrue(document.contains("data.flow_flush_interval_seconds.default"));
         document.set("data.flow_flush_interval_seconds.default", 11);
+        document.set("data.flow_flush_interval_seconds.min", 1);
         TomlWriter writer = new TomlWriter();
         Files.write(
             file,

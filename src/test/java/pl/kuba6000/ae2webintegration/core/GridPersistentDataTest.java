@@ -33,7 +33,7 @@ class GridPersistentDataTest extends GridTestScope {
         assertFalse(settings.isStorageTracked());
         assertEquals(300, settings.getStockSampleIntervalSeconds());
         settings.setFlowTracked(true);
-        settings.setStockSampleIntervalSeconds(17);
+        settings.setStockSampleIntervalSeconds(117);
         CoreEngine.GRID_IDENTITIES.saveIfDirty();
         GridPersistentData loaded = new GridIdentityRegistry(
             new File(gridSave, "ae2webintegration/grid-identities.json")).getPersistentData(key);
@@ -45,7 +45,7 @@ class GridPersistentDataTest extends GridTestScope {
             loaded.getSettings()
                 .isStorageTracked());
         assertEquals(
-            17,
+            117,
             loaded.getSettings()
                 .getStockSampleIntervalSeconds());
         assertFalse(
@@ -53,7 +53,7 @@ class GridPersistentDataTest extends GridTestScope {
                 .isDefault());
         assertThrows(IllegalArgumentException.class, () -> settings.setStockSampleIntervalSeconds(0));
         assertThrows(IllegalArgumentException.class, () -> settings.setStockSampleIntervalSeconds(86401));
-        assertEquals(17, settings.getStockSampleIntervalSeconds());
+        assertEquals(117, settings.getStockSampleIntervalSeconds());
         settings.setFlowTracked(false);
         settings.setStockSampleIntervalSeconds(300);
         assertTrue(settings.isDefault());

@@ -15,12 +15,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
+import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
@@ -43,6 +46,27 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 class StorageTrackingCoordinatorTest extends GridTestScope {
+
+    private ConfigSettings previousConfig;
+
+    @Override
+    @BeforeEach
+    void initializeGridSave() throws IOException {
+        previousConfig = Config.INSTANCE;
+        ConfigSettings configured = new ConfigSettings();
+        // Short simulated intervals exercise scheduling independently of administrator defaults.
+        configured.data.stockSampleIntervalSeconds.min = 1;
+        configured.data.flowFlushIntervalSeconds.min = 1;
+        Config.INSTANCE = configured;
+        super.initializeGridSave();
+    }
+
+    @Override
+    @AfterEach
+    void clearGridSave() {
+        super.clearGridSave();
+        Config.INSTANCE = previousConfig;
+    }
 
     @Test
     void retiredGridKeepsChosenRetentionForItsFirstPendingFlow() throws Exception {

@@ -109,11 +109,11 @@ public final class ConfigSettings {
 
         @Path("stock_sample_interval_seconds")
         @Comment("Seconds between saved quantity samples; each network selects a value within these bounds.")
-        public Range stockSampleIntervalSeconds = new Range(1, 86400, 300);
+        public Range stockSampleIntervalSeconds = new Range(60, 86400, 300);
 
         @Path("flow_flush_interval_seconds")
         @Comment("Seconds covered by each saved input/output total; recent activity remains independent.")
-        public Range flowFlushIntervalSeconds = new Range(1, 86400, 60);
+        public Range flowFlushIntervalSeconds = new Range(60, 86400, 60);
 
         @Path("history_retention_days")
         @Comment("Days of detailed history selected per network, subject to the record cap below.")
