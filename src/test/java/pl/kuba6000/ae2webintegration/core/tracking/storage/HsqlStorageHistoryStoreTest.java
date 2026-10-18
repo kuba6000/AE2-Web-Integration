@@ -537,7 +537,8 @@ class HsqlStorageHistoryStoreTest {
                 7,
                 100)) {
             append(first, grid, Collections.singletonList(point));
-            assertThrows(IOException.class, () -> second.read(grid, item, now, 10));
+            for (int attempt = 0; attempt < 10; attempt++)
+                assertThrows(IOException.class, () -> second.read(grid, item, now, 10));
             assertEquals(
                 Collections.singletonList(point),
                 first.read(grid, item, now, 10)

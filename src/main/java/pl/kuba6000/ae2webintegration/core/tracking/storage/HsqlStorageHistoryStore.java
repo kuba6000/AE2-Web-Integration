@@ -18,10 +18,14 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.hsqldb.jdbc.JDBCDriver;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
@@ -52,9 +56,14 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
 
     private static final Set<Path> OPEN_DATABASES = ConcurrentHashMap.newKeySet();
 
+    private static final int MAX_READERS = 4;
+
+    private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
+    private final Object writerLock = new Object();
+    private final Semaphore readers = new Semaphore(MAX_READERS, true);
     private final Path databaseBase;
     private final HsqlHistoryRetention retention;
-    private @Nullable Connection connection;
+    private volatile @Nullable Database openedDatabase;
     private @Nullable Path ownedPath;
     private boolean closed;
 
@@ -68,9 +77,13 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         this.retention = new HsqlHistoryRetention(retentionDays, maxRowsPerGrid);
     }
 
-    private @NotNull Connection database() throws SQLException, IOException {
+    @Desugar
+    private record Database(@NotNull Connection writer, @NotNull String url) {}
+
+    private @NotNull Database database() throws SQLException, IOException {
         if (closed) throw new IOException("History store is closed");
-        if (connection != null) return connection;
+        Database existing = openedDatabase;
+        if (existing != null) return existing;
         Files.createDirectories(databaseBase.getParent());
         Path canonical = databaseBase.getParent()
             .toRealPath()
@@ -78,15 +91,11 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         if (!OPEN_DATABASES.add(canonical))
             throw new IOException("Storage history database is still owned by an active service");
         ownedPath = canonical;
-        Properties properties = new Properties();
-        properties.setProperty("user", "SA");
-        properties.setProperty("password", "");
+        String url = "jdbc:hsqldb:file:" + canonical.toString()
+            .replace('\\', '/');
         Connection opened;
         try {
-            opened = new JDBCDriver().connect(
-                "jdbc:hsqldb:file:" + canonical.toString()
-                    .replace('\\', '/'),
-                properties);
+            opened = connect(url);
         } catch (SQLException failedConnection) {
             releaseOwnership();
             throw failedConnection;
@@ -97,8 +106,9 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
             retention.enforceExistingBudgets(opened);
             retention.maintain(opened);
             opened.commit();
-            connection = opened;
-            return opened;
+            Database initialized = new Database(opened, url);
+            openedDatabase = initialized;
+            return initialized;
         } catch (SQLException failure) {
             try {
                 opened.rollback();
@@ -114,8 +124,16 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         }
     }
 
+    private static @NotNull Connection connect(@NotNull String url) throws SQLException {
+        Properties properties = new Properties();
+        properties.setProperty("user", "SA");
+        properties.setProperty("password", "");
+        return new JDBCDriver().connect(url, properties);
+    }
+
     private static void initializeSchema(@NotNull Connection db) throws SQLException {
         try (Statement sql = db.createStatement()) {
+            sql.execute("SET DATABASE TRANSACTION CONTROL MVCC");
             sql.execute("SET FILES WRITE DELAY FALSE");
             sql.execute("SET FILES CACHE SIZE 16384");
             sql.execute("SET FILES LOG SIZE 16");
@@ -193,20 +211,28 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
     }
 
     @Override
-    public synchronized void append(@NotNull StableKey gridKey,
-        @NotNull Map<StableKey, ResourceDescriptor> descriptions, @NotNull List<StorageHistoryPoint> points)
-        throws IOException {
+    public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
+        @NotNull List<StorageHistoryPoint> points) throws IOException {
+        lifecycle.readLock()
+            .lock();
         try {
-            Connection db = database();
-            updateDescriptions(db, descriptions, points);
-            long gridId = ensureGrid(db, gridKey);
-            insertPoints(db, gridId, points, resourceIds(db, points));
-            retention.prune(db, gridId, false);
-            retention.maintain(db);
-            db.commit();
-        } catch (SQLException failure) {
-            rollback(failure);
-            throw new IOException("Cannot append storage history", failure);
+            synchronized (writerLock) {
+                try {
+                    Connection db = database().writer();
+                    updateDescriptions(db, descriptions, points);
+                    long gridId = ensureGrid(db, gridKey);
+                    insertPoints(db, gridId, points, resourceIds(db, points));
+                    retention.prune(db, gridId, false);
+                    retention.maintain(db);
+                    db.commit();
+                } catch (SQLException failure) {
+                    rollback(failure);
+                    throw new IOException("Cannot append storage history", failure);
+                }
+            }
+        } finally {
+            lifecycle.readLock()
+                .unlock();
         }
     }
 
@@ -396,41 +422,75 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
     }
 
     @Override
-    public synchronized @NotNull StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey itemKey,
-        long fromMillis, int limit) throws IOException {
+    public @NotNull StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey itemKey, long fromMillis,
+        int limit) throws IOException {
         if (limit < 1 || limit > 10000)
             throw new IllegalArgumentException("History query limit must be between 1 and 10000");
         try {
-            Connection db = database();
-            StorageHistory history = HsqlHistoryReader
-                .read(db, gridKey, itemKey, fromMillis, retention.cutoff(), limit);
-            db.commit();
-            return history;
+            readers.acquire();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread()
+                .interrupt();
+            throw new IOException("Interrupted while waiting to read storage history", interrupted);
+        }
+        lifecycle.readLock()
+            .lock();
+        try {
+            if (closed) throw new IOException("History store is closed");
+            Database initialized = openedDatabase;
+            if (initialized == null) {
+                synchronized (writerLock) {
+                    initialized = database();
+                }
+            }
+            try (Connection db = connect(initialized.url())) {
+                db.setReadOnly(true);
+                // MVCC repeatable-read keeps all statements of one response on the same committed snapshot.
+                db.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+                db.setAutoCommit(false);
+                StorageHistory history = HsqlHistoryReader
+                    .read(db, gridKey, itemKey, fromMillis, retention.cutoff(), limit);
+                db.commit();
+                return history;
+            }
         } catch (SQLException failure) {
-            rollback(failure);
             throw new IOException("Cannot query storage history", failure);
+        } finally {
+            lifecycle.readLock()
+                .unlock();
+            readers.release();
         }
     }
 
     private void rollback(SQLException failure) {
         try {
-            if (connection != null) connection.rollback();
+            Database initialized = openedDatabase;
+            if (initialized != null) initialized.writer()
+                .rollback();
         } catch (SQLException rollbackFailure) {
             failure.addSuppressed(rollbackFailure);
         }
     }
 
     @Override
-    public synchronized void close() throws IOException {
-        if (closed) return;
-        closed = true;
-        if (connection == null) return;
+    public void close() throws IOException {
+        lifecycle.writeLock()
+            .lock();
         try {
-            shutdown(connection);
-        } catch (SQLException failure) {
-            throw new IOException("Cannot close storage history", failure);
+            if (closed) return;
+            closed = true;
+            Database initialized = openedDatabase;
+            if (initialized == null) return;
+            try {
+                shutdown(initialized.writer());
+            } catch (SQLException failure) {
+                throw new IOException("Cannot close storage history", failure);
+            } finally {
+                openedDatabase = null;
+            }
         } finally {
-            connection = null;
+            lifecycle.writeLock()
+                .unlock();
         }
     }
 
