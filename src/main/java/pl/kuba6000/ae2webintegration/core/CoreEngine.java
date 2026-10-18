@@ -88,7 +88,7 @@ public class CoreEngine {
         // Finish the previous world before binding any new identity or storage owner.
         onServerStopping();
         WorldDatabase database = new WorldDatabase(
-            new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/world").toPath(),
+            new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/grids").toPath(),
             DataPolicy.from(Config.INSTANCE.data));
         HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database);
         try {

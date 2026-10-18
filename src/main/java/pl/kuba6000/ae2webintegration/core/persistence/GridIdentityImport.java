@@ -8,6 +8,8 @@ import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Map;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import com.google.gson.Gson;
@@ -26,7 +28,20 @@ import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 /** One-time adapter for released grid identity JSON; remove after the transition release. */
 final class GridIdentityImport {
 
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
+
     private GridIdentityImport() {}
+
+    static void archive(@NotNull Path source) {
+        if (Files.notExists(source)) return;
+        Path archived = source.resolveSibling(source.getFileName() + ".old");
+        try {
+            Files.move(source, archived);
+        } catch (IOException failure) {
+            // Import has committed; preserve both files if the archive exists or the move fails.
+            LOG.warn("Grid identities were imported, but could not rename {} to {}", source, archived, failure);
+        }
+    }
 
     static @NotNull Map<StableKey, GridPersistentData> read(@NotNull Path source, @NotNull DataPolicy policy)
         throws IOException {

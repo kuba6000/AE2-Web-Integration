@@ -16,6 +16,8 @@ import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
 
+import com.github.bsideup.jabel.Desugar;
+
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -32,7 +34,7 @@ public final class WorldGridStore {
     }
 
     public @NotNull Map<StableKey, GridPersistentData> load(@NotNull Path importSource) throws IOException {
-        return database.write(db -> {
+        LoadedGrids loaded = database.write(db -> {
             boolean imported;
             try (Statement query = db.createStatement();
                 ResultSet rows = query
@@ -47,9 +49,15 @@ public final class WorldGridStore {
                     update.executeUpdate("UPDATE world_schema SET identities_imported = TRUE WHERE singleton = 1");
                 }
             }
-            return readRecords(db);
+            return new LoadedGrids(readRecords(db), !imported);
         });
+        // The filesystem move must follow the durable data/import-marker commit.
+        if (loaded.imported()) GridIdentityImport.archive(importSource);
+        return loaded.records();
     }
+
+    @Desugar
+    private record LoadedGrids(@NotNull Map<StableKey, GridPersistentData> records, boolean imported) {}
 
     static void normalizePolicy(Connection db, DataPolicy policy) throws SQLException {
         normalize(db, "stock_seconds", policy.stockSampleIntervalSeconds());

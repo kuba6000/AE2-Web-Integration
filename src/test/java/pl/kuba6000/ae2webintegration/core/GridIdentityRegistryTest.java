@@ -401,7 +401,7 @@ class GridIdentityRegistryTest {
     @ParameterizedTest
     @ValueSource(strings = { "0", "minecraft:overworld" })
     @SuppressWarnings("ReadWriteStringCanBeUsed") // Java 8 runtime compatibility.
-    void releasedDimensionFieldPreservesIdentityAndSettingsWithoutChangingSource(String dimension) throws Exception {
+    void releasedDimensionFieldPreservesIdentityAndSettingsInArchivedSource(String dimension) throws Exception {
         Path file = directory.resolve("released-identities.json");
         StableKey key = StableKey.parse("DtK3pQIgqQ-xyPjLOqQW9A");
         String document = "{\"" + key
@@ -414,10 +414,12 @@ class GridIdentityRegistryTest {
         DimensionalCoords controller = new DimensionalCoords(dimension, -643, 4, -907);
         assertEquals(key, registry.findIdentity(controller));
         assertTrue(TestGridFixtures.isTracked(registry, key));
-        assertEquals(document, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        Path archived = file.resolveSibling("released-identities.json.old");
+        assertFalse(Files.exists(file));
+        assertEquals(document, new String(Files.readAllBytes(archived), StandardCharsets.UTF_8));
 
         registry.saveIfDirty();
-        assertEquals(document, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(document, new String(Files.readAllBytes(archived), StandardCharsets.UTF_8));
         GridIdentityRegistry restarted = worlds.registry(file.toFile());
         assertEquals(key, restarted.findIdentity(controller));
         assertTrue(TestGridFixtures.isTracked(restarted, key));

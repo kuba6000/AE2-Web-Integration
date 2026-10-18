@@ -33,6 +33,7 @@ class WorldDatabaseTest {
             var registry = new pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry();
             assertThrows(IOException.class, () -> registry.initialize(database, source));
             assertFalse(registry.isInitialized());
+            assertFalse(java.nio.file.Files.exists(source.resolveSibling("legacy.json.old")));
             assertArrayEquals(
                 invalid.getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 java.nio.file.Files.readAllBytes(source));
@@ -207,9 +208,36 @@ class WorldDatabaseTest {
                     .getSettings()
                     .getHistoryRetentionDays());
         }
+        assertFalse(java.nio.file.Files.exists(json));
         assertTrue(
-            new String(java.nio.file.Files.readAllBytes(json), java.nio.charset.StandardCharsets.UTF_8)
-                .contains("Imported"));
+            new String(
+                java.nio.file.Files.readAllBytes(json.resolveSibling("grid-identities.json.old")),
+                java.nio.charset.StandardCharsets.UTF_8).contains("Imported"));
+    }
+
+    @Test
+    void existingArchiveIsPreservedAndDoesNotUndoCommittedImport() throws Exception {
+        Path source = directory.resolve("grid-identities.json");
+        Path archived = directory.resolve("grid-identities.json.old");
+        var key = TestGridFixtures.key(39);
+        byte[] original = importJson(key).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] previous = "previous backup".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        java.nio.file.Files.write(source, original);
+        java.nio.file.Files.write(archived, previous);
+        var policy = DataPolicy.from(new ConfigSettings.Data());
+        try (WorldDatabase database = new WorldDatabase(directory.resolve("grids"), policy)) {
+            var registry = new pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry();
+            registry.initialize(database, source);
+            assertNotNull(registry.getPersistentData(key));
+        }
+        assertArrayEquals(original, java.nio.file.Files.readAllBytes(source));
+        assertArrayEquals(previous, java.nio.file.Files.readAllBytes(archived));
+        java.nio.file.Files.write(source, "{broken".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        try (WorldDatabase database = new WorldDatabase(directory.resolve("grids"), policy)) {
+            var registry = new pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry();
+            registry.initialize(database, source);
+            assertNotNull(registry.getPersistentData(key));
+        }
     }
 
     @Test
