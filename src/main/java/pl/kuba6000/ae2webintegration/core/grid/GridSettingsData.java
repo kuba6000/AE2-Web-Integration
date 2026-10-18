@@ -2,12 +2,12 @@ package pl.kuba6000.ae2webintegration.core.grid;
 
 import org.jetbrains.annotations.NotNull;
 
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
+
 /** Mutable configuration owned by one retained grid identity. */
 @SuppressWarnings("SynchronizeOnNonFinalField") // Bound to the registry before publication; never rebound while in use.
 public final class GridSettingsData {
-
-    public static final int DEFAULT_STOCK_SAMPLE_INTERVAL_SECONDS = 300;
-    public static final int MAX_STOCK_SAMPLE_INTERVAL_SECONDS = 86400;
 
     /**
      * Whether this grid records crafting activity.
@@ -20,7 +20,10 @@ public final class GridSettingsData {
     /** Whether this grid records accepted resource input/output history. */
     private boolean isFlowTracked;
     /** Seconds between durable stock samples, independent of terminal refreshes. */
-    private int stockSampleIntervalSeconds = DEFAULT_STOCK_SAMPLE_INTERVAL_SECONDS;
+    private int stockSampleIntervalSeconds;
+    private int flowFlushIntervalSeconds;
+    private int historyRetentionDays;
+    private transient @NotNull DataPolicy policy;
     /**
      * Custom network name; empty when unnamed.
      *
@@ -30,11 +33,47 @@ public final class GridSettingsData {
     private transient @NotNull Object lock = this;
     private transient @NotNull Runnable markDirty = () -> {};
 
+    public GridSettingsData() {
+        this(DataPolicy.from(new ConfigSettings.Data()));
+    }
+
+    public GridSettingsData(@NotNull DataPolicy policy) {
+        this.policy = policy;
+        stockSampleIntervalSeconds = policy.stockSampleIntervalSeconds()
+            .defaultValue();
+        flowFlushIntervalSeconds = policy.flowFlushIntervalSeconds()
+            .defaultValue();
+        historyRetentionDays = policy.historyRetentionDays()
+            .defaultValue();
+    }
+
+    /** Normalize restored values before publication, preserving identity when server bounds tighten. */
+    public boolean applyPolicy(@NotNull DataPolicy policy) {
+        this.policy = policy;
+        int stock = policy.stockSampleIntervalSeconds()
+            .clamp(stockSampleIntervalSeconds);
+        int flow = policy.flowFlushIntervalSeconds()
+            .clamp(flowFlushIntervalSeconds);
+        int retention = policy.historyRetentionDays()
+            .clamp(historyRetentionDays);
+        boolean changed = stock != stockSampleIntervalSeconds || flow != flowFlushIntervalSeconds
+            || retention != historyRetentionDays;
+        stockSampleIntervalSeconds = stock;
+        flowFlushIntervalSeconds = flow;
+        historyRetentionDays = retention;
+        return changed;
+    }
+
     /** Bound before publication; getters, edits and persistence then share the registry monitor. */
     @SuppressWarnings("ConstantValue") // Gson can load an explicit null into a required field.
     void attach(@NotNull Object lock, @NotNull Runnable markDirty) {
         if (name == null) throw new IllegalArgumentException("Missing grid name");
-        validateStockInterval(stockSampleIntervalSeconds);
+        policy.stockSampleIntervalSeconds()
+            .validate(stockSampleIntervalSeconds);
+        policy.flowFlushIntervalSeconds()
+            .validate(flowFlushIntervalSeconds);
+        policy.historyRetentionDays()
+            .validate(historyRetentionDays);
         this.lock = lock;
         this.markDirty = markDirty;
     }
@@ -88,7 +127,8 @@ public final class GridSettingsData {
     }
 
     public void setStockSampleIntervalSeconds(int value) {
-        validateStockInterval(value);
+        policy.stockSampleIntervalSeconds()
+            .validate(value);
         synchronized (lock) {
             if (stockSampleIntervalSeconds == value) return;
             stockSampleIntervalSeconds = value;
@@ -96,9 +136,36 @@ public final class GridSettingsData {
         }
     }
 
-    private static void validateStockInterval(int value) {
-        if (value < 1 || value > MAX_STOCK_SAMPLE_INTERVAL_SECONDS) throw new IllegalArgumentException(
-            "Stock interval must be 1.." + MAX_STOCK_SAMPLE_INTERVAL_SECONDS + " seconds");
+    public int getFlowFlushIntervalSeconds() {
+        synchronized (lock) {
+            return flowFlushIntervalSeconds;
+        }
+    }
+
+    public void setFlowFlushIntervalSeconds(int value) {
+        policy.flowFlushIntervalSeconds()
+            .validate(value);
+        synchronized (lock) {
+            if (flowFlushIntervalSeconds == value) return;
+            flowFlushIntervalSeconds = value;
+            markDirty.run();
+        }
+    }
+
+    public int getHistoryRetentionDays() {
+        synchronized (lock) {
+            return historyRetentionDays;
+        }
+    }
+
+    public void setHistoryRetentionDays(int value) {
+        policy.historyRetentionDays()
+            .validate(value);
+        synchronized (lock) {
+            if (historyRetentionDays == value) return;
+            historyRetentionDays = value;
+            markDirty.run();
+        }
     }
 
     public @NotNull String getName() {
@@ -119,7 +186,12 @@ public final class GridSettingsData {
         synchronized (lock) {
             return !isTracked && !isStorageTracked
                 && !isFlowTracked
-                && stockSampleIntervalSeconds == DEFAULT_STOCK_SAMPLE_INTERVAL_SECONDS
+                && stockSampleIntervalSeconds == policy.stockSampleIntervalSeconds()
+                    .defaultValue()
+                && flowFlushIntervalSeconds == policy.flowFlushIntervalSeconds()
+                    .defaultValue()
+                && historyRetentionDays == policy.historyRetentionDays()
+                    .defaultValue()
                 && name.isEmpty();
         }
     }

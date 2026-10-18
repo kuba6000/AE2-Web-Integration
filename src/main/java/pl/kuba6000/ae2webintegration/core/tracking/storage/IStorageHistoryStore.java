@@ -10,11 +10,14 @@ import org.jetbrains.annotations.Nullable;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
-/** Blocking persistence boundary. Neither operation may access native game state. */
+/** Blocking persistence boundary. Operations may not access native game state. */
 public interface IStorageHistoryStore extends AutoCloseable {
 
     void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
-        @NotNull List<StorageHistoryPoint> points) throws IOException;
+        @NotNull List<StorageHistoryPoint> points, int retentionDays) throws IOException;
+
+    /** Changes an existing history policy without requiring another measurement. */
+    void setRetention(@NotNull StableKey gridKey, int retentionDays) throws IOException;
 
     @NotNull
     StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey itemKey, long fromMillis, int limit)

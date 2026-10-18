@@ -41,7 +41,11 @@ class HsqlStorageHistoryConcurrencyTest {
         CountDownLatch writing = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(3);
-        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(directory.resolve("history"), 7, 100)) {
+        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(
+            directory.resolve("history"),
+            new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
+            100,
+            Collections.emptyMap())) {
             store.append(
                 grid,
                 Collections.singletonMap(item, description(item, "Before")),
@@ -95,8 +99,9 @@ class HsqlStorageHistoryConcurrencyTest {
         ExecutorService tasks = Executors.newFixedThreadPool(4);
         try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(
             directory.resolve("history"),
-            7,
-            items.size())) {
+            new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
+            items.size(),
+            Collections.emptyMap())) {
             appendRevision(store, grid, items, now, 0);
             Future<?> writer = tasks.submit(() -> {
                 assertTrue(start.await(5, TimeUnit.SECONDS));
@@ -151,8 +156,17 @@ class HsqlStorageHistoryConcurrencyTest {
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(2);
         Path path = directory.resolve("history");
-        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(path, 7, 100);
-            HsqlStorageHistoryStore next = new HsqlStorageHistoryStore(path, 7, 100)) {
+        try (
+            HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(
+                path,
+                new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
+                100,
+                Collections.emptyMap());
+            HsqlStorageHistoryStore next = new HsqlStorageHistoryStore(
+                path,
+                new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
+                100,
+                Collections.emptyMap())) {
             Future<?> writer = tasks.submit(() -> {
                 store.append(
                     grid,
@@ -196,7 +210,11 @@ class HsqlStorageHistoryConcurrencyTest {
         Path path = directory.resolve("history");
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(6);
-        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(path, 7, 100)) {
+        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(
+            path,
+            new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
+            100,
+            Collections.emptyMap())) {
             List<Future<?>> operations = new ArrayList<>();
             operations.add(tasks.submit(() -> {
                 assertTrue(start.await(5, TimeUnit.SECONDS));
@@ -222,7 +240,11 @@ class HsqlStorageHistoryConcurrencyTest {
             start.countDown();
             tasks.shutdownNow();
         }
-        try (HsqlStorageHistoryStore reopened = new HsqlStorageHistoryStore(path, 7, 100)) {
+        try (HsqlStorageHistoryStore reopened = new HsqlStorageHistoryStore(
+            path,
+            new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
+            100,
+            Collections.emptyMap())) {
             assertEquals(
                 1,
                 reopened.read(grid, item, now, 10)
@@ -236,7 +258,11 @@ class HsqlStorageHistoryConcurrencyTest {
     void interruptedReadDoesNotInitializeOrConsumeReaderCapacity() throws Exception {
         Path path = directory.resolve("database/history");
         StableKey grid = StableKey.random();
-        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(path, 7, 100)) {
+        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(
+            path,
+            new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
+            100,
+            Collections.emptyMap())) {
             for (int attempt = 0; attempt < 10; attempt++) {
                 Thread.currentThread()
                     .interrupt();

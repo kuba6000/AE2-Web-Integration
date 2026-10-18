@@ -15,10 +15,87 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 class HsqlStorageHistoryStoreTest {
+
+    @Test
+    void startupMaintenanceDeletesOnlyFlowsExpiredByTheirOwnGridPolicy() throws Exception {
+        StableKey shortGrid = StableKey.random();
+        StableKey longGrid = StableKey.random();
+        StableKey item = StableKey.random();
+        long old = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2);
+        StorageHistoryPoint point = new StorageHistoryPoint(
+            old,
+            1,
+            StorageHistoryPoint.Kind.FLOW,
+            item,
+            0,
+            9,
+            3,
+            old - 60000);
+        try (HsqlStorageHistoryStore store = store(100)) {
+            append(store, shortGrid, Collections.singletonList(point));
+            append(store, longGrid, Collections.singletonList(point));
+        }
+        try (HsqlStorageHistoryStore reopened = new HsqlStorageHistoryStore(
+            directory.resolve("database/history"),
+            new DataPolicy.Range(1, 365, 7),
+            100,
+            Collections.singletonMap(shortGrid, 1))) {
+            assertTrue(
+                reopened.read(shortGrid, item, 0, 100)
+                    .points()
+                    .isEmpty());
+            reopened.setRetention(shortGrid, 7);
+            assertTrue(
+                reopened.read(shortGrid, item, 0, 100)
+                    .points()
+                    .isEmpty(),
+                "Increasing retention must not resurrect physically expired flow");
+            assertEquals(
+                Collections.singletonList(point),
+                reopened.read(longGrid, item, 0, 100)
+                    .points());
+        }
+    }
+
+    @Test
+    void retentionEditAppliesWithoutNewMeasurementsAndSurvivesReopen() throws Exception {
+        StableKey shortGrid = StableKey.random();
+        StableKey longGrid = StableKey.random();
+        StableKey item = StableKey.random();
+        long old = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2);
+        StorageHistoryPoint point = stock(item, old, 9);
+        try (HsqlStorageHistoryStore store = store(100)) {
+            append(store, shortGrid, Collections.singletonList(point));
+            append(store, longGrid, Collections.singletonList(point));
+            store.setRetention(shortGrid, 1);
+            assertTrue(
+                store.read(shortGrid, item, 0, 100)
+                    .points()
+                    .isEmpty());
+            assertTrue(
+                store.read(shortGrid, item, 0, 100)
+                    .truncated());
+            assertEquals(
+                Collections.singletonList(point),
+                store.read(longGrid, item, 0, 100)
+                    .points());
+        }
+        try (HsqlStorageHistoryStore reopened = store(100)) {
+            assertTrue(
+                reopened.read(shortGrid, item, 0, 100)
+                    .points()
+                    .isEmpty());
+            assertEquals(
+                Collections.singletonList(point),
+                reopened.read(longGrid, item, 0, 100)
+                    .points());
+        }
+    }
 
     @Test
     void boundedPartialFlowIncludesItsGapAsOneExtraBoundaryMarker() throws Exception {
@@ -299,7 +376,11 @@ class HsqlStorageHistoryStoreTest {
     }
 
     private HsqlStorageHistoryStore store(int rows) {
-        return new HsqlStorageHistoryStore(directory.resolve("database/history"), 7, rows);
+        return new HsqlStorageHistoryStore(
+            directory.resolve("database/history"),
+            new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
+            rows,
+            Collections.emptyMap());
     }
 
     @Test
@@ -454,7 +535,7 @@ class HsqlStorageHistoryStoreTest {
     }
 
     @Test
-    void shorterRetentionImmediatelyAppliesToPreviouslyStoredData() throws Exception {
+    void tighterRetentionBoundsApplyToInactiveHistoryWithoutGridLookup() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
@@ -465,8 +546,9 @@ class HsqlStorageHistoryStoreTest {
         }
         try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(
             directory.resolve("database/history"),
-            1,
-            100)) {
+            new DataPolicy.Range(1, 1, 1),
+            100,
+            Collections.emptyMap())) {
             StorageHistory history = store.read(grid, item, 0, 10);
             assertEquals(Collections.singletonList(recent), history.points());
             assertTrue(history.truncated());
@@ -571,8 +653,9 @@ class HsqlStorageHistoryStoreTest {
         try (HsqlStorageHistoryStore first = store(100);
             HsqlStorageHistoryStore second = new HsqlStorageHistoryStore(
                 directory.resolve("database/./history"),
-                7,
-                100)) {
+                new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
+                100,
+                Collections.emptyMap())) {
             append(first, grid, Collections.singletonList(point));
             for (int attempt = 0; attempt < 10; attempt++)
                 assertThrows(IOException.class, () -> second.read(grid, item, now, 10));

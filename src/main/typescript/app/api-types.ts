@@ -98,8 +98,14 @@ export type GridSettings = {
     isStorageTracked: boolean;
     isFlowTracked: boolean;
     stockSampleIntervalSeconds: number;
+    flowFlushIntervalSeconds: number;
+    historyRetentionDays: number;
     name: string;
 };
+export type HistorySetting = 'stockSampleIntervalSeconds' | 'flowFlushIntervalSeconds' | 'historyRetentionDays';
+export type SettingRange = { min: number; max: number; defaultValue: number };
+export type GridSettingsLimits = Record<HistorySetting, SettingRange> & { historyMaxRowsPerGrid: number };
+export type GridSettingsResponse = GridSettings & { limits: GridSettingsLimits };
 export type CpuSelectionMode = 'PLAYER_ONLY' | 'AUTOMATION_ONLY' | 'ALL';
 export type CpuInfo = {
     acceptsPlayerJobs: boolean;

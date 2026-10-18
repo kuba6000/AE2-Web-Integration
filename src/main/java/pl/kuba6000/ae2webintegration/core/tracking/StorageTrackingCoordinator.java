@@ -157,8 +157,14 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     private Binding binding(StableKey key, IAEGrid grid, @Nullable GridSettingsData configuration, long nowMillis) {
         boolean stock = configuration != null && configuration.isStorageTracked();
         boolean flow = configuration != null && configuration.isFlowTracked();
-        long stockInterval = TimeUnit.SECONDS
-            .toMillis(configuration == null ? 300 : configuration.getStockSampleIntervalSeconds());
+        long stockInterval = TimeUnit.SECONDS.toMillis(
+            configuration == null ? identities.getDataPolicy()
+                .stockSampleIntervalSeconds()
+                .defaultValue() : configuration.getStockSampleIntervalSeconds());
+        long flowInterval = TimeUnit.SECONDS.toMillis(
+            configuration == null ? identities.getDataPolicy()
+                .flowFlushIntervalSeconds()
+                .defaultValue() : configuration.getFlowFlushIntervalSeconds());
         Binding binding = bindings.get(key);
         if (binding == null || binding.grid.get() != grid || binding.stock != stock || binding.flow != flow) {
             long activeUntil = binding == null ? 0 : binding.activeUntil;
@@ -174,7 +180,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             binding.activeUntil = activeUntil;
             binding.stock = stock;
             binding.flow = flow;
-            binding.nextFlowFlush = nowMillis + TimeUnit.SECONDS.toMillis(settings.flowFlushIntervalSeconds);
+            binding.nextFlowFlush = nowMillis + flowInterval;
             binding.nextFlowSample = nowMillis + RecentResourceActivity.BUCKET_MILLIS;
             binding.flowFrom = nowMillis;
             bindings.put(key, binding);
@@ -185,6 +191,11 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 service.open(key, binding.generation);
                 recent.open(key, binding.generation, stock, flow, settings.maxResourcesPerGrid, nowMillis);
             }
+        }
+        if (configuration != null) binding.retainedSettings = configuration;
+        if (binding.flowInterval != flowInterval) {
+            binding.flowInterval = flowInterval;
+            binding.nextFlowFlush = binding.flowFrom + flowInterval;
         }
         if (binding.stockInterval != stockInterval) {
             binding.stockInterval = stockInterval;
@@ -209,7 +220,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         boolean flowSample = binding.flow && (flowFlush || nowMillis >= binding.nextFlowSample);
         boolean liveRead = binding.activeUntil > nowMillis && nowMillis >= binding.nextViewerRead;
         long interval = binding.activeUntil > nowMillis ? settings.activeIntervalMillis
-            : binding.flow ? TimeUnit.SECONDS.toMillis(settings.flowFlushIntervalSeconds) : binding.stockInterval;
+            : binding.flow ? binding.flowInterval : binding.stockInterval;
         if (!stockSample && !flowSample && !liveRead) {
             publishRecent(binding, nowMillis);
             return;
@@ -257,7 +268,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             if (stockSample || flowFlush) {
                 StorageObservation history = flowFlush ? binding.flushHistory(observation) : observation;
                 // Persistence failure does not discard measurements already captured by tracking.
-                service.submit(binding.key, binding.generation, history, stockSample, flowFlush, binding.flowFrom);
+                submitHistory(binding, history, stockSample, flowFlush);
                 if (flowFlush) binding.flowFrom = nowMillis;
             }
             if (binding.activeUntil > nowMillis) {
@@ -267,8 +278,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                     publishRecent(binding, nowMillis);
             }
             if (stockSample) binding.nextStockSample = nowMillis + binding.stockInterval;
-            if (flowFlush)
-                binding.nextFlowFlush = nowMillis + TimeUnit.SECONDS.toMillis(settings.flowFlushIntervalSeconds);
+            if (flowFlush) binding.nextFlowFlush = nowMillis + binding.flowInterval;
             if (flowSample) binding.nextFlowSample = nowMillis + RecentResourceActivity.BUCKET_MILLIS;
             if (observation.stockObserved()) binding.nextViewerRead = nowMillis + settings.activeIntervalMillis;
             binding.lastFailure = null;
@@ -296,6 +306,18 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         return nowMillis + elapsed + Math.max(interval, FAILURE_RETRY_MILLIS);
     }
 
+    private void submitHistory(Binding binding, StorageObservation observation, boolean stock, boolean flow) {
+        // Keep first-history policy capture ordered with settings edits and their writer commands.
+        synchronized (identities) {
+            GridPersistentData data = identities.getPersistentData(binding.key);
+            if (data != null) binding.retainedSettings = data.getSettings();
+            int days = binding.retainedSettings == null ? identities.getDataPolicy()
+                .historyRetentionDays()
+                .defaultValue() : binding.retainedSettings.getHistoryRetentionDays();
+            service.submit(binding.key, binding.generation, observation, stock, flow, binding.flowFrom, days);
+        }
+    }
+
     private void detach(Binding binding, long nowMillis) {
         if (binding.flow && binding.capture.isProducerThread()) {
             StorageObservation observation;
@@ -315,13 +337,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                     Collections.emptyList());
             }
             binding.accumulateFlow(observation);
-            service.submit(
-                binding.key,
-                binding.generation,
-                binding.flushHistory(observation),
-                false,
-                true,
-                binding.flowFrom);
+            submitHistory(binding, binding.flushHistory(observation), false, true);
         }
         IAEGrid grid = binding.grid.get();
         if (grid != null && grid.web$getStorageGrid()
@@ -358,6 +374,9 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private boolean stock;
         private boolean flow;
         private long stockInterval;
+        private long flowInterval;
+        // Last-controller removal may precede the final flush, including a just-accepted settings edit.
+        private @Nullable GridSettingsData retainedSettings;
         private long nextStockSample;
         private long nextFlowFlush;
         private long nextFlowSample;

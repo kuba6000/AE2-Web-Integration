@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -30,11 +31,12 @@ final class HsqlHistoryReader {
     private HsqlHistoryReader() {}
 
     static @NotNull StorageHistory read(@NotNull Connection db, @NotNull StableKey gridKey, @Nullable StableKey itemKey,
-        long fromMillis, long expiry, int limit) throws SQLException {
+        long fromMillis, long nowMillis, int limit) throws SQLException {
         long gridId;
         boolean retired;
+        long expiry;
         try (PreparedStatement query = db.prepareStatement("""
-            SELECT id, deleted_until, first_observed
+            SELECT id, deleted_until, first_observed, retention_days
             FROM history_grids
             WHERE grid_key = ?
             """)) {
@@ -45,6 +47,7 @@ final class HsqlHistoryReader {
                 gridId = rows.getLong("id");
                 long deletedUntil = rows.getLong("deleted_until");
                 long firstObserved = rows.getLong("first_observed");
+                expiry = nowMillis - TimeUnit.DAYS.toMillis(rows.getInt("retention_days"));
                 retired = deletedUntil != Long.MIN_VALUE && fromMillis <= deletedUntil
                     || fromMillis < expiry && firstObserved < expiry;
             }

@@ -2672,6 +2672,91 @@ code {
 .settings-view form input[type='text'] {
     width: 100%;
 }
+.network-tracking-controls {
+    display: grid;
+    gap: 18px;
+    width: min(100%, 520px);
+}
+.network-policy-control {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+}
+.network-policy-heading {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 6px 12px;
+}
+.settings-view form .network-policy-heading label {
+    width: auto;
+}
+.network-policy-heading output {
+    color: var(--muted);
+    font-size: 12px;
+}
+.network-policy-inputs {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+}
+.network-policy-inputs input[type='range'] {
+    appearance: none;
+    width: 100%;
+    min-width: 0;
+    min-height: 30px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+.network-policy-inputs input[type='range']::-webkit-slider-runnable-track {
+    height: 8px;
+    border: 2px solid;
+    border-color: var(--control-edge-dark) var(--control-edge-light) var(--control-edge-light) var(--control-edge-dark);
+    border-radius: 0;
+    background: var(--surface);
+}
+.network-policy-inputs input[type='range']::-moz-range-track {
+    height: 4px;
+    border: 2px solid;
+    border-color: var(--control-edge-dark) var(--control-edge-light) var(--control-edge-light) var(--control-edge-dark);
+    border-radius: 0;
+    background: var(--surface);
+}
+.network-policy-inputs input[type='range']::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 20px;
+    margin-top: -8px;
+    border: 2px solid;
+    border-color: var(--control-edge-light) var(--control-edge-dark) var(--control-edge-dark) var(--control-edge-light);
+    border-radius: 0;
+    background: var(--panel);
+}
+.network-policy-inputs input[type='range']::-moz-range-thumb {
+    width: 12px;
+    height: 16px;
+    border: 2px solid;
+    border-color: var(--control-edge-light) var(--control-edge-dark) var(--control-edge-dark) var(--control-edge-light);
+    border-radius: 0;
+    background: var(--panel);
+}
+.network-policy-inputs input[type='range']:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.network-policy-exact {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+}
+.network-policy-exact input {
+    width: 82px;
+}
 .settings-actions {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);

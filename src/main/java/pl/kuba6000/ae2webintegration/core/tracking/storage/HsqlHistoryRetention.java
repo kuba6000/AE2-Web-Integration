@@ -21,38 +21,42 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistorySto
 final class HsqlHistoryRetention {
 
     // Retain the latest expired stock anchors and gap barrier; deleting the barrier would invent continuity.
-    private static String expiredPoints(Table table) {
-        if (table == Table.FLOW) return "p.observed_at < ?\n";
+    private static String expiredPoints(Table table, String cutoff) {
+        if (table == Table.FLOW) return "p.observed_at < " + cutoff + "\n";
         String matching = table == Table.STOCK ? "newer.resource_id = p.resource_id" : "newer.kind = 'GAP'";
         String ordinary = table == Table.COVERAGE ? "p.kind <> 'GAP' OR " : "";
-        return "p.observed_at < ? AND (" + ordinary + "EXISTS (SELECT 1 FROM " + table.sqlName + " newer\n" + """
-            WHERE newer.grid_id = p.grid_id AND
-            """ + matching + "\n" + """
-                AND newer.observed_at < ?
-                AND (newer.observed_at > p.observed_at OR newer.observed_at = p.observed_at AND newer.id > p.id)
-            ))
-            """;
+        return "p.observed_at < " + cutoff
+            + " AND ("
+            + ordinary
+            + "EXISTS (SELECT 1 FROM "
+            + table.sqlName
+            + " newer\n"
+            + """
+                WHERE newer.grid_id = p.grid_id AND
+                """
+            + matching
+            + "\n"
+            + """
+                    AND newer.observed_at < %s
+                    AND (newer.observed_at > p.observed_at OR newer.observed_at = p.observed_at AND newer.id > p.id)
+                ))
+                """.replace("%s", cutoff);
     }
 
     private static final int PRUNE_BATCH_SIZE = 1000;
     private static final long MAINTENANCE_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(1);
 
-    private final int retentionDays;
     private final int maxRowsPerGrid;
     private long nextMaintenance;
 
-    HsqlHistoryRetention(int retentionDays, int maxRowsPerGrid) {
-        this.retentionDays = retentionDays;
+    HsqlHistoryRetention(int maxRowsPerGrid) {
         this.maxRowsPerGrid = maxRowsPerGrid;
     }
 
-    long cutoff() {
-        return System.currentTimeMillis() - TimeUnit.DAYS.toMillis(retentionDays);
-    }
-
     void prune(@NotNull Connection db, long gridId, boolean expire) throws SQLException {
-        long count = rowCount(db, gridId);
-        long expiry = cutoff();
+        GridBudget budget = budget(db, gridId);
+        long count = budget.count();
+        long expiry = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(budget.retentionDays());
         while (true) {
             boolean overCapacity = count > maxRowsPerGrid;
             if (!overCapacity && !expire) return;
@@ -67,19 +71,22 @@ final class HsqlHistoryRetention {
         }
     }
 
-    private static long rowCount(@NotNull Connection db, long gridId) throws SQLException {
+    private static GridBudget budget(@NotNull Connection db, long gridId) throws SQLException {
         try (PreparedStatement query = db.prepareStatement("""
-            SELECT row_count
+            SELECT row_count, retention_days
             FROM history_grids
             WHERE id = ?
             """)) {
             query.setLong(1, gridId);
             try (ResultSet rows = query.executeQuery()) {
                 rows.next();
-                return rows.getLong(1);
+                return new GridBudget(rows.getLong(1), rows.getInt(2));
             }
         }
     }
+
+    @Desugar
+    private record GridBudget(long count, int retentionDays) {}
 
     private static @NotNull PruneBatch selectBatch(@NotNull Connection db, long gridId, long expiry,
         boolean overCapacity, int limit) throws SQLException {
@@ -87,7 +94,7 @@ final class HsqlHistoryRetention {
         Set<Long> resources = new HashSet<>();
         long deletedUntil = Long.MIN_VALUE;
         for (Table table : Table.values()) {
-            String expiryFilter = overCapacity ? "" : "AND " + expiredPoints(table);
+            String expiryFilter = overCapacity ? "" : "AND " + expiredPoints(table, "?");
             String resource = table == Table.COVERAGE ? "CAST(NULL AS BIGINT)" : "p.resource_id";
             try (PreparedStatement query = db.prepareStatement(
                 "SELECT p.id, " + resource + " AS resource_id, p.observed_at FROM " + table.sqlName + " p\n" + """
@@ -189,23 +196,35 @@ final class HsqlHistoryRetention {
         Long expired = null;
         long earliestTime = Long.MAX_VALUE;
         long earliestId = Long.MAX_VALUE;
-        for (Table table : Table.values()) {
-            try (PreparedStatement query = db
-                .prepareStatement("SELECT p.grid_id, p.observed_at, p.id FROM " + table.sqlName + " p\n" + """
-                    WHERE
-                    """ + expiredPoints(table) + "ORDER BY p.observed_at, p.id")) {
-                long expiry = cutoff();
-                query.setLong(1, expiry);
-                if (table != Table.FLOW) query.setLong(2, expiry);
-                query.setMaxRows(1);
-                try (ResultSet rows = query.executeQuery()) {
-                    if (rows.next()) {
-                        long time = rows.getLong("observed_at");
-                        long id = rows.getLong("id");
-                        if (time < earliestTime || time == earliestTime && id < earliestId) {
-                            expired = rows.getLong("grid_id");
-                            earliestTime = time;
-                            earliestId = id;
+        // Metadata is small; each history probe keeps a constant grid/time index range.
+        try (
+            PreparedStatement grids = db
+                .prepareStatement("SELECT id, retention_days FROM history_grids WHERE row_count > 0");
+            ResultSet policies = grids.executeQuery()) {
+            while (policies.next()) {
+                long gridId = policies.getLong("id");
+                long expiry = now - TimeUnit.DAYS.toMillis(policies.getInt("retention_days"));
+                for (Table table : Table.values()) {
+                    try (PreparedStatement query = db.prepareStatement(
+                        "SELECT p.observed_at, p.id FROM " + table.sqlName
+                            + " p\n"
+                            + "WHERE p.grid_id = ? AND "
+                            + expiredPoints(table, "?")
+                            + "ORDER BY p.observed_at, p.id")) {
+                        query.setLong(1, gridId);
+                        query.setLong(2, expiry);
+                        if (table != Table.FLOW) query.setLong(3, expiry);
+                        query.setMaxRows(1);
+                        try (ResultSet rows = query.executeQuery()) {
+                            if (rows.next()) {
+                                long time = rows.getLong("observed_at");
+                                long id = rows.getLong("id");
+                                if (time < earliestTime || time == earliestTime && id < earliestId) {
+                                    expired = gridId;
+                                    earliestTime = time;
+                                    earliestId = id;
+                                }
+                            }
                         }
                     }
                 }

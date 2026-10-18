@@ -23,6 +23,8 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -33,6 +35,58 @@ class GridIdentityRegistryTest {
 
     @TempDir
     Path directory;
+
+    @Test
+    void configuredDefaultsAndTighterBoundsPreserveSavedIdentities() throws Exception {
+        ConfigSettings previous = Config.INSTANCE;
+        try {
+            ConfigSettings configured = new ConfigSettings();
+            configured.data.stockSampleIntervalSeconds = new ConfigSettings.Range(10, 600, 120);
+            Config.INSTANCE = configured;
+            File file = directory.resolve("policy.json")
+                .toFile();
+            GridIdentityRegistry registry = new GridIdentityRegistry(file);
+            StableKey key = resolve(registry, controller(1));
+            assertEquals(
+                120,
+                registry.getPersistentData(key)
+                    .getSettings()
+                    .getStockSampleIntervalSeconds());
+            assertTrue(
+                registry.getPersistentData(key)
+                    .getSettings()
+                    .isDefault());
+            registry.getPersistentData(key)
+                .getSettings()
+                .setStockSampleIntervalSeconds(500);
+            registry.saveIfDirty();
+            ConfigSettings tightened = new ConfigSettings();
+            tightened.data.stockSampleIntervalSeconds = new ConfigSettings.Range(20, 90, 60);
+            Config.INSTANCE = tightened;
+            // A config reload does not replace the policy of an already initialized world.
+            registry.getPersistentData(key)
+                .getSettings()
+                .setStockSampleIntervalSeconds(400);
+            registry.saveIfDirty();
+            GridIdentityRegistry reopened = new GridIdentityRegistry(file);
+            assertEquals(key, reopened.findIdentity(controller(1)));
+            assertEquals(
+                90,
+                reopened.getPersistentData(key)
+                    .getSettings()
+                    .getStockSampleIntervalSeconds());
+            Config.INSTANCE = configured;
+            GridIdentityRegistry restored = new GridIdentityRegistry(file);
+            assertEquals(key, restored.findIdentity(controller(1)));
+            assertEquals(
+                90,
+                restored.getPersistentData(key)
+                    .getSettings()
+                    .getStockSampleIntervalSeconds());
+        } finally {
+            Config.INSTANCE = previous;
+        }
+    }
 
     @Test
     void defaultIdentitySurvivesRestartAndControllerChanges() throws Exception {

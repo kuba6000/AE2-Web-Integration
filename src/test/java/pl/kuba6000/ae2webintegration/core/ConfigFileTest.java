@@ -26,26 +26,55 @@ class ConfigFileTest {
     Path root;
 
     @Test
-    void minuteFlowDefaultDoesNotReplaceExplicitFiveSecondConfiguration() throws Exception {
+    void dataPolicyRangesRoundTripAndRejectInvalidDefaultWithoutReplacingActiveConfig() throws Exception {
         Config.init(root.toFile());
-        assertEquals(60, Config.INSTANCE.resourceTracking.flowFlushIntervalSeconds);
         Path file = root.resolve("ae2webintegration/config.toml");
         CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
-        document.set("resource_tracking.flow_flush_interval_seconds", 5);
+        assertEquals(300, (Integer) document.get("data.stock_sample_interval_seconds.default"));
+        assertEquals(60, (Integer) document.get("data.flow_flush_interval_seconds.default"));
+        assertEquals(7, (Integer) document.get("data.history_retention_days.default"));
+        document.set("data.stock_sample_interval_seconds.min", 10);
+        document.set("data.stock_sample_interval_seconds.max", 600);
+        document.set("data.stock_sample_interval_seconds.default", 120);
         Files.write(
             file,
             new TomlWriter().writeToString(document)
                 .getBytes(StandardCharsets.UTF_8));
         Config.reload();
         Config.init(root.toFile());
-        assertEquals(5, Config.INSTANCE.resourceTracking.flowFlushIntervalSeconds);
-        document.remove("resource_tracking.flow_flush_interval_seconds");
+        CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(120, (Integer) restored.get("data.stock_sample_interval_seconds.default"));
+        Object active = Config.INSTANCE;
+        document.set("data.stock_sample_interval_seconds.default", 5);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, Config::reload);
+        assertSame(active, Config.INSTANCE);
+    }
+
+    @Test
+    void minuteFlowDefaultDoesNotReplaceExplicitFiveSecondConfiguration() throws Exception {
+        Config.init(root.toFile());
+        assertEquals(60, Config.INSTANCE.data.flowFlushIntervalSeconds.defaultValue);
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        document.set("data.flow_flush_interval_seconds.default", 5);
         Files.write(
             file,
             new TomlWriter().writeToString(document)
                 .getBytes(StandardCharsets.UTF_8));
         Config.reload();
-        assertEquals(60, Config.INSTANCE.resourceTracking.flowFlushIntervalSeconds);
+        Config.init(root.toFile());
+        assertEquals(5, Config.INSTANCE.data.flowFlushIntervalSeconds.defaultValue);
+        document.remove("data.flow_flush_interval_seconds.default");
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        assertEquals(60, Config.INSTANCE.data.flowFlushIntervalSeconds.defaultValue);
     }
 
     @Test
@@ -53,16 +82,16 @@ class ConfigFileTest {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
         CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
-        assertTrue(document.contains("resource_tracking.flow_flush_interval_seconds"));
-        document.set("resource_tracking.flow_flush_interval_seconds", 11);
+        assertTrue(document.contains("data.flow_flush_interval_seconds.default"));
+        document.set("data.flow_flush_interval_seconds.default", 11);
         TomlWriter writer = new TomlWriter();
         Files.write(
             file,
             writer.writeToString(document)
                 .getBytes(StandardCharsets.UTF_8));
         Config.reload();
-        assertEquals(11, Config.INSTANCE.resourceTracking.flowFlushIntervalSeconds);
-        document.set("resource_tracking.flow_flush_interval_seconds", 0);
+        assertEquals(11, Config.INSTANCE.data.flowFlushIntervalSeconds.defaultValue);
+        document.set("data.flow_flush_interval_seconds.default", 0);
         Files.write(
             file,
             writer.writeToString(document)
@@ -75,20 +104,20 @@ class ConfigFileTest {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");
         CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
-        assertEquals(7, (Integer) document.get("resource_tracking.history_retention_days"));
-        assertTrue(document.contains("resource_tracking.history_max_rows_per_grid"));
-        for (String key : new String[] { "history_retention_days", "history_max_rows_per_grid" }) {
-            Object original = document.get("resource_tracking." + key);
-            document.set("resource_tracking." + key, 0);
+        assertEquals(7, (Integer) document.get("data.history_retention_days.default"));
+        assertTrue(document.contains("data.history_max_rows_per_grid"));
+        for (String key : new String[] { "history_retention_days.default", "history_max_rows_per_grid" }) {
+            Object original = document.get("data." + key);
+            document.set("data." + key, 0);
             Files.write(
                 file,
                 new TomlWriter().writeToString(document)
                     .getBytes(StandardCharsets.UTF_8));
             assertThrows(IllegalArgumentException.class, Config::reload);
-            document.set("resource_tracking." + key, original);
+            document.set("data." + key, original);
         }
-        document.set("resource_tracking.history_retention_days", 3);
-        document.set("resource_tracking.history_max_rows_per_grid", 5000);
+        document.set("data.history_retention_days.default", 3);
+        document.set("data.history_max_rows_per_grid", 5000);
         Files.write(
             file,
             new TomlWriter().writeToString(document)
@@ -96,8 +125,8 @@ class ConfigFileTest {
         Config.reload();
         Config.init(root.toFile());
         CommentedConfig reloaded = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
-        assertEquals(3, (Integer) reloaded.get("resource_tracking.history_retention_days"));
-        assertEquals(5000, (Integer) reloaded.get("resource_tracking.history_max_rows_per_grid"));
+        assertEquals(3, (Integer) reloaded.get("data.history_retention_days.default"));
+        assertEquals(5000, (Integer) reloaded.get("data.history_max_rows_per_grid"));
     }
 
     @Test
@@ -107,7 +136,7 @@ class ConfigFileTest {
         String contents = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
         CommentedConfig document = new TomlParser().parse(contents);
         assertTrue(document.contains("resource_tracking.active_interval_millis"));
-        assertTrue(document.contains("resource_tracking.history_max_rows_per_grid"));
+        assertTrue(document.contains("data.history_max_rows_per_grid"));
         Files.write(
             file,
             contents.replaceAll("active_interval_millis = [0-9]+", "active_interval_millis = 0")

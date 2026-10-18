@@ -8,6 +8,7 @@ import type {
     HistoryEntry,
     CraftingHistory,
     GridSettings,
+    GridSettingsResponse,
     ResourceHistory
 } from './api-types.js';
 import type { ResourceResponse, IconMetadata, ApplicationContext, TerminalView, TerminalDelta } from './api-types.js';
@@ -109,8 +110,8 @@ export type Api = {
         from?: number,
         icons?: boolean
     ) => Promise<ResourceResponse<ResourceHistory>>;
-    settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettings>;
-    saveSettings: (gridKey: string, body: Partial<GridSettings>) => Promise<GridSettings>;
+    settings: (gridKey: string, signal?: AbortSignal) => Promise<GridSettingsResponse>;
+    saveSettings: (gridKey: string, body: Partial<GridSettings>) => Promise<GridSettingsResponse>;
     submitPlan: (gridKey: string, planId: string | number, cpuKey?: string) => Promise<null>;
     deletePlan: (gridKey: string, planId: string | number) => Promise<null>;
     logout: () => Promise<null>;

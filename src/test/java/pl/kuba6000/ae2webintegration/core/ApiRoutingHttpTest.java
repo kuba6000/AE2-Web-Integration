@@ -36,6 +36,8 @@ import com.sun.net.httpserver.HttpServer;
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
 import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
@@ -105,6 +107,81 @@ class ApiRoutingHttpTest extends GridTestScope {
         server.stop(0);
         gameThread.shutdownNow();
         grid = null;
+    }
+
+    @Test
+    void settingsExposeActiveServerBoundsAndRejectWholeInvalidUpdates() throws Exception {
+        ConfigSettings previous = Config.INSTANCE;
+        try {
+            ConfigSettings configured = new ConfigSettings();
+            configured.data.stockSampleIntervalSeconds = new ConfigSettings.Range(10, 600, 120);
+            configured.data.flowFlushIntervalSeconds = new ConfigSettings.Range(20, 900, 180);
+            configured.data.historyRetentionDays = new ConfigSettings.Range(2, 30, 14);
+            Config.INSTANCE = configured;
+            CoreEngine.GRID_IDENTITIES.initialize(gridSave);
+            grid = TestGridFixtures.grid(1);
+            StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+            String path = "/api/grids/" + key + "/settings";
+            String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+            Config.INSTANCE = new ConfigSettings();
+            JsonObject data = request("GET", path, headers, "").json()
+                .getAsJsonObject("data");
+            assertEquals(
+                180,
+                data.get("flowFlushIntervalSeconds")
+                    .getAsInt());
+            assertEquals(
+                14,
+                data.get("historyRetentionDays")
+                    .getAsInt());
+            JsonObject limits = data.getAsJsonObject("limits");
+            assertNotNull(limits);
+            assertEquals(
+                10,
+                limits.getAsJsonObject("stockSampleIntervalSeconds")
+                    .get("min")
+                    .getAsInt());
+            assertEquals(
+                900,
+                limits.getAsJsonObject("flowFlushIntervalSeconds")
+                    .get("max")
+                    .getAsInt());
+            assertEquals(
+                14,
+                limits.getAsJsonObject("historyRetentionDays")
+                    .get("defaultValue")
+                    .getAsInt());
+            for (String invalid : new String[] { "{\"name\":\"Wrong\",\"flowFlushIntervalSeconds\":19}",
+                "{\"name\":\"Wrong\",\"historyRetentionDays\":31}",
+                "{\"name\":\"Wrong\",\"stockSampleIntervalSeconds\":9}" }) {
+                assertEquals(400, request("PATCH", path, headers, invalid).status());
+                assertEquals(
+                    "",
+                    request("GET", path, headers, "").json()
+                        .getAsJsonObject("data")
+                        .get("name")
+                        .getAsString());
+            }
+            Reply saved = request(
+                "PATCH",
+                path,
+                headers,
+                "{\"flowFlushIntervalSeconds\":240,\"stockSampleIntervalSeconds\":90}");
+            assertEquals(200, saved.status());
+            assertEquals(
+                240,
+                saved.json()
+                    .getAsJsonObject("data")
+                    .get("flowFlushIntervalSeconds")
+                    .getAsInt());
+            assertEquals(
+                limits,
+                saved.json()
+                    .getAsJsonObject("data")
+                    .getAsJsonObject("limits"));
+        } finally {
+            Config.INSTANCE = previous;
+        }
     }
 
     @Test

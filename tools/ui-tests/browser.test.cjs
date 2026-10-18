@@ -9,6 +9,12 @@ const resources = path.resolve(__dirname, '../../src/main/resources');
 const compiledResources = path.resolve(__dirname, '../../build/generated/frontend');
 const gridA = 'AAAAAAAAAAAAAAAAAAAAAA';
 const gridB = 'BBBBBBBBBBBBBBBBBBBBBA';
+const defaultSettingsLimits = {
+    historyMaxRowsPerGrid: 250000,
+    stockSampleIntervalSeconds: { min: 1, max: 86400, defaultValue: 300 },
+    flowFlushIntervalSeconds: { min: 1, max: 86400, defaultValue: 60 },
+    historyRetentionDays: { min: 1, max: 365, defaultValue: 7 }
+};
 
 test('initial document has a dark canvas before scripts load and a custom theme can override it', async (t) => {
     const { page, options, base } = await fixture(t);
@@ -597,6 +603,9 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 isStorageTracked: false,
                 isFlowTracked: false,
                 stockSampleIntervalSeconds: 300,
+                flowFlushIntervalSeconds: 60,
+                historyRetentionDays: 7,
+                limits: structuredClone(defaultSettingsLimits),
                 name: ''
             },
             [gridB]: {
@@ -604,6 +613,9 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 isStorageTracked: false,
                 isFlowTracked: false,
                 stockSampleIntervalSeconds: 300,
+                flowFlushIntervalSeconds: 60,
+                historyRetentionDays: 7,
+                limits: structuredClone(defaultSettingsLimits),
                 name: ''
             }
         },
@@ -3726,6 +3738,9 @@ test('uncertain settings saves preserve the draft and remain unconfirmed until e
     const { page, options, base } = await fixture(t);
     for (const status of ['INTERNAL_ERROR', 'TIMEOUT', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
         options.settings[gridA] = {
+            flowFlushIntervalSeconds: 60,
+            historyRetentionDays: 7,
+            limits: structuredClone(defaultSettingsLimits),
             isTracked: false,
             name: '',
             isStorageTracked: false,
@@ -3736,6 +3751,9 @@ test('uncertain settings saves preserve the draft and remain unconfirmed until e
         const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
         await tracking.check();
         options.settings[gridA] = {
+            flowFlushIntervalSeconds: 60,
+            historyRetentionDays: 7,
+            limits: structuredClone(defaultSettingsLimits),
             isTracked: true,
             name: '',
             isStorageTracked: false,
@@ -3802,6 +3820,9 @@ test('settings drafts survive transient discovery failures and pending saves rec
     await poll(page);
     await tracking.waitFor({ state: 'hidden' });
     options.settings[gridA] = {
+        flowFlushIntervalSeconds: 60,
+        historyRetentionDays: 7,
+        limits: structuredClone(defaultSettingsLimits),
         isTracked: true,
         name: '',
         isStorageTracked: false,
@@ -3814,6 +3835,9 @@ test('settings drafts survive transient discovery failures and pending saves rec
         body: JSON.stringify({
             status: 'OK',
             data: {
+                flowFlushIntervalSeconds: 60,
+                historyRetentionDays: 7,
+                limits: structuredClone(defaultSettingsLimits),
                 isTracked: true,
                 name: '',
                 isStorageTracked: false,
@@ -3898,6 +3922,9 @@ test('settings save remains single-flight across grids and uses the returned val
         body: JSON.stringify({
             status: 'OK',
             data: {
+                flowFlushIntervalSeconds: 60,
+                historyRetentionDays: 7,
+                limits: structuredClone(defaultSettingsLimits),
                 isTracked: false,
                 name: '',
                 isStorageTracked: false,
@@ -3943,6 +3970,9 @@ test('old settings reads cannot replace saved data and denied saves clear access
         body: JSON.stringify({
             status: 'OK',
             data: {
+                flowFlushIntervalSeconds: 60,
+                historyRetentionDays: 7,
+                limits: structuredClone(defaultSettingsLimits),
                 isTracked: false,
                 name: '',
                 isStorageTracked: false,
@@ -9888,6 +9918,143 @@ test('a restored cached page reloads its disposed application', async (t) => {
     await reload;
     await page.getByRole('searchbox', { name: 'Search resources', exact: true }).waitFor();
     assert.equal(options.requests.filter((request) => request.path === '/api/context').length, 2);
+});
+
+for (const width of [390, 1280])
+    test(`network history sliders use server policy and save exact independent values at ${width}px`, async (t) => {
+        const { page, options, base } = await fixture(t);
+        await page.setViewportSize({ width, height: 900 });
+        options.settings[gridA] = {
+            ...options.settings[gridA],
+            isStorageTracked: true,
+            isFlowTracked: true,
+            limits: {
+                stockSampleIntervalSeconds: { min: 5, max: 900, defaultValue: 120 },
+                historyMaxRowsPerGrid: 250000,
+                flowFlushIntervalSeconds: { min: 7, max: 120, defaultValue: 60 },
+                historyRetentionDays: { min: 2, max: 45, defaultValue: 14 }
+            }
+        };
+        await page.goto(`${base}#/grids/${gridA}/settings`);
+        await page.locator('#network-name').waitFor();
+        const sliders = page.getByRole('slider');
+        assert.equal(await sliders.count(), 3);
+        for (const [index, min, max] of [
+            [0, 5, 900],
+            [1, 7, 120],
+            [2, 2, 45]
+        ]) {
+            const slider = sliders.nth(index);
+            assert.equal(await slider.getAttribute('min'), String(min));
+            assert.equal(await slider.getAttribute('max'), String(max));
+            await slider.focus();
+            await slider.press('End');
+            assert.equal(await slider.inputValue(), String(max));
+            await slider.press('Home');
+            assert.equal(await slider.inputValue(), String(min));
+        }
+        await page.locator('#network-stock-interval').fill('123');
+        await page.locator('#network-flow-interval').fill('19');
+        await page.locator('#network-history-retention').fill('29');
+        assert.deepEqual(await sliders.evaluateAll((nodes) => nodes.map((node) => node.value)), ['123', '19', '29']);
+        assert.match(await sliders.first().getAttribute('aria-valuetext'), /2.*3/);
+        const panel = page.locator('.network-tracking-controls');
+        await panel.scrollIntoViewIfNeeded();
+        const geometry = await panel.evaluate((node) => ({ width: node.clientWidth, scroll: node.scrollWidth }));
+        assert.ok(geometry.scroll <= geometry.width + 1, 'Policy controls fit the available width');
+        if (process.env.UI_SCREENSHOT_DIR) {
+            await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
+            await panel.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, `network-policy-${width}.png`) });
+            await page.screenshot({
+                path: path.join(process.env.UI_SCREENSHOT_DIR, `network-policy-page-${width}.png`),
+                fullPage: true
+            });
+        }
+        await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+        await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+        assert.deepEqual(options.requests.filter((request) => request.method === 'PATCH').at(-1).body, {
+            stockSampleIntervalSeconds: 123,
+            flowFlushIntervalSeconds: 19,
+            historyRetentionDays: 29
+        });
+        await page.reload();
+        await page.locator('#network-name').waitFor();
+        assert.equal(await page.locator('#network-flow-interval').inputValue(), '19');
+        assert.equal(await page.locator('#network-history-retention').inputValue(), '29');
+    });
+
+test('history policy drafts survive navigation and stricter limits without leaking into another grid', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.settings[gridA].isFlowTracked = true;
+    options.settings[gridB].isFlowTracked = true;
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    const flow = page.locator('#network-flow-interval');
+    const retention = page.locator('#network-history-retention');
+    const save = page.getByRole('button', { name: 'Save settings', exact: true });
+    await flow.fill('110');
+    await page.goto(`${base}#/grids/${gridB}/settings`);
+    await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+    assert.equal(await flow.inputValue(), '60', 'A focused numeric draft belongs only to its source grid');
+    await retention.fill('12');
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+    assert.equal(await flow.inputValue(), '110');
+    assert.equal(await retention.inputValue(), '7');
+    options.settings[gridA].limits.flowFlushIntervalSeconds.max = 90;
+    options.settings[gridA].flowFlushIntervalSeconds = 70;
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/settings'));
+    await page.locator('#refresh').click();
+    await refreshed;
+    assert.equal(await flow.inputValue(), '110', 'New bounds must not silently replace an edited value');
+    assert.equal(await flow.getAttribute('aria-invalid'), 'true');
+    assert.equal(await page.locator('#network-flow-interval-range').getAttribute('max'), '90');
+    assert.equal(await save.isDisabled(), true);
+    assert.equal(options.requests.filter((request) => request.method === 'PATCH').length, 0);
+    await flow.fill('89');
+    let capture;
+    const captured = new Promise((resolve) => {
+        capture = resolve;
+    });
+    await page.route('**/settings', (route) =>
+        route.request().method() === 'PATCH' ? capture(route) : route.continue()
+    );
+    await save.click();
+    const pending = await captured;
+    await page.goto(`${base}#/grids/${gridB}/settings`);
+    await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+    assert.equal(await retention.inputValue(), '12');
+    await page.goBack();
+    assert.equal(await flow.isDisabled(), true);
+    options.settings[gridA].flowFlushIntervalSeconds = 85;
+    await pending.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'OK', data: options.settings[gridA] })
+    });
+    await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+    assert.equal(await flow.inputValue(), '85', 'The confirmed response owns the accepted value');
+    await page.unroute('**/settings');
+    await retention.fill('20');
+    options.fault = { operation: 'settings', status: 'INTERNAL_ERROR' };
+    await save.click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /not confirmed/i })
+        .waitFor();
+    await page.goto(`${base}#/grids/${gridB}/settings`);
+    await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+    await page.goBack();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /not confirmed/i })
+        .waitFor();
+    assert.equal(await retention.inputValue(), '20');
+    assert.equal(
+        options.requests.filter((request) => request.method === 'PATCH').length,
+        1,
+        'Uncertain edits are never replayed'
+    );
 });
 
 test('resource tracking is independent of CPU history and renders exact flow counts', async (t) => {

@@ -91,6 +91,7 @@ public class CoreEngine {
         stopStorageTracking();
         loadIconPack();
         ConfigSettings.ResourceTracking trackingSettings = Config.INSTANCE.resourceTracking;
+        var dataPolicy = GRID_IDENTITIES.getDataPolicy();
         TerminalRegistry terminals = new TerminalRegistry();
         terminalRegistry = terminals;
         TerminalStreams streams = new TerminalStreams(terminals, GRID_IDENTITIES, getIconPack());
@@ -99,8 +100,9 @@ public class CoreEngine {
             new HsqlStorageHistoryStore(
                 new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/history/tracking")
                     .toPath(),
-                trackingSettings.historyRetentionDays,
-                trackingSettings.historyMaxRowsPerGrid),
+                dataPolicy.historyRetentionDays(),
+                dataPolicy.historyMaxRowsPerGrid(),
+                GRID_IDENTITIES.historyRetentions()),
             trackingSettings.maxQueuedRows);
         storageCoordinator = new StorageTrackingCoordinator(service, GRID_IDENTITIES, trackingSettings, terminals);
         storageTracking = service;

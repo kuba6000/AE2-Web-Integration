@@ -2,6 +2,9 @@ package pl.kuba6000.ae2webintegration.core.http.endpoint.grid;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -18,7 +21,9 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
+import pl.kuba6000.ae2webintegration.core.http.dto.GridSettingsView;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 /**
  * Updates selected grid settings.
@@ -68,7 +73,7 @@ public final class PatchGridSettings extends IAsyncRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull GridSettingsData data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull GridSettingsView data) {}
 
     /**
      * Settings to update; omitted members remain unchanged.
@@ -76,7 +81,9 @@ public final class PatchGridSettings extends IAsyncRequest {
      * @param isTracked                  whether the grid should collect crafting history
      * @param isStorageTracked           whether the grid should collect periodic resource quantities
      * @param isFlowTracked              whether the grid should collect accepted input/output history
-     * @param stockSampleIntervalSeconds seconds between stock samples, from 1 through 86400
+     * @param stockSampleIntervalSeconds seconds between stock samples, within the active server bounds
+     * @param flowFlushIntervalSeconds   seconds covered by durable flow totals, within the active server bounds
+     * @param historyRetentionDays       detailed history days, within the active server bounds
      * @param name                       custom network name; empty clears it. Outer Unicode spaces and U+FEFF are
      *                                   trimmed,
      *                                   matching JavaScript String.trim after control characters are rejected.
@@ -90,7 +97,9 @@ public final class PatchGridSettings extends IAsyncRequest {
     @Desugar
     public record Input(@OptionalInput @Nullable Boolean isTracked, @OptionalInput @Nullable String name,
         @OptionalInput @Nullable Boolean isStorageTracked, @OptionalInput @Nullable Boolean isFlowTracked,
-        @OptionalInput @Nullable Integer stockSampleIntervalSeconds) {}
+        @OptionalInput @Nullable Integer stockSampleIntervalSeconds,
+        @OptionalInput @Nullable Integer flowFlushIntervalSeconds,
+        @OptionalInput @Nullable Integer historyRetentionDays) {}
 
     @Body
     private @NotNull Input input;
@@ -100,10 +109,13 @@ public final class PatchGridSettings extends IAsyncRequest {
         String name;
         try {
             name = input.name() == null ? null : normalizeName(input.name());
-            if (input.stockSampleIntervalSeconds() != null && (input.stockSampleIntervalSeconds() < 1
-                || input.stockSampleIntervalSeconds() > GridSettingsData.MAX_STOCK_SAMPLE_INTERVAL_SECONDS)) {
-                throw new IllegalArgumentException("Stock interval must be 1..86400 seconds");
-            }
+            var policy = CoreEngine.GRID_IDENTITIES.getDataPolicy();
+            if (input.stockSampleIntervalSeconds() != null) policy.stockSampleIntervalSeconds()
+                .validate(input.stockSampleIntervalSeconds());
+            if (input.flowFlushIntervalSeconds() != null) policy.flowFlushIntervalSeconds()
+                .validate(input.flowFlushIntervalSeconds());
+            if (input.historyRetentionDays() != null) policy.historyRetentionDays()
+                .validate(input.historyRetentionDays());
         } catch (IllegalArgumentException e) {
             deny(ApiStatus.BAD_PARAM);
             return;
@@ -113,6 +125,8 @@ public final class PatchGridSettings extends IAsyncRequest {
             return;
         }
         GridIdentityRegistry registry = CoreEngine.GRID_IDENTITIES;
+        Future<?> retentionUpdate = null;
+        GridSettingsView result;
         synchronized (registry) {
             GridPersistentData data = registry.getPersistentData(gridKey);
             if (data == null) {
@@ -120,6 +134,12 @@ public final class PatchGridSettings extends IAsyncRequest {
                 return;
             }
             GridSettingsData settings = data.getSettings();
+            boolean retentionRequested = input.historyRetentionDays() != null;
+            StorageTrackingService service = CoreEngine.getStorageTracking();
+            if (retentionRequested && service == null) {
+                deny(ApiStatus.SERVER_STOPPING);
+                return;
+            }
             try {
                 if (name != null) settings.setName(name);
                 if (input.isTracked() != null) {
@@ -129,16 +149,38 @@ public final class PatchGridSettings extends IAsyncRequest {
                 if (input.isFlowTracked() != null) settings.setFlowTracked(input.isFlowTracked());
                 if (input.stockSampleIntervalSeconds() != null)
                     settings.setStockSampleIntervalSeconds(input.stockSampleIntervalSeconds());
+                if (input.flowFlushIntervalSeconds() != null)
+                    settings.setFlowFlushIntervalSeconds(input.flowFlushIntervalSeconds());
+                if (input.historyRetentionDays() != null)
+                    settings.setHistoryRetentionDays(input.historyRetentionDays());
                 if (input.name() != null || input.isTracked() != null
                     || input.isStorageTracked() != null
                     || input.isFlowTracked() != null
-                    || input.stockSampleIntervalSeconds() != null) registry.saveIfDirty();
-                // Completion serializes under the same monitor used by settings mutations and file writes.
-                respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, settings));
+                    || input.stockSampleIntervalSeconds() != null
+                    || input.flowFlushIntervalSeconds() != null
+                    || input.historyRetentionDays() != null) registry.saveIfDirty();
+                if (retentionRequested && service != null)
+                    retentionUpdate = service.setRetention(gridKey, settings.getHistoryRetentionDays());
+                result = GridSettingsView.from(settings, registry.getDataPolicy());
             } catch (IOException e) {
                 deny(ApiStatus.INTERNAL_ERROR);
+                return;
             }
         }
+        // The writer never needs the registry monitor; waiting here cannot block its policy command.
+        try {
+            if (retentionUpdate != null) retentionUpdate.get();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread()
+                .interrupt();
+            // The accepted writer command may still commit; report an uncertain mutation result.
+            deny(ApiStatus.INTERNAL_ERROR);
+            return;
+        } catch (ExecutionException | CancellationException failed) {
+            deny(ApiStatus.INTERNAL_ERROR);
+            return;
+        }
+        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, result));
     }
 
     private static @NotNull String normalizeName(@NotNull String name) {

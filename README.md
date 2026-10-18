@@ -203,22 +203,25 @@ an `/ae2webintegration auth <token>` command. The player must run that command i
 ### Resource history
 
 Network settings have independent switches for input/output history and periodic storage quantities.
-Choose the storage sampling interval there. Input/output recording alone does not scan the inventory;
+Choose each network's storage sampling interval, input/output interval and history retention there,
+within the server's allowed ranges. Input/output recording alone does not scan the inventory;
 accepted input includes resources consumed by void storage. Select a resource in the terminal and open
 **Resource history** in its details to view measurements.
 
-Input/output history saves aggregated totals every 60 seconds by default. Set
-`resource_tracking.flow_flush_interval_seconds` in `config.toml` to choose another interval;
-existing configured values are preserved. Recent terminal summaries use five-second samples over
+Input/output history saves aggregated totals every 60 seconds by default; storage sampling defaults
+to five minutes. Recent terminal summaries use five-second samples over
 two minutes independently of saved history. Charts show each measured interval's actual span and
 retain available partial counts when collection has gaps.
 
 History is stored in an embedded HSQLDB database under the world's `ae2webintegration/history` directory.
 No database installation is needed. The defaults retain up to 7 days and 250,000 records per network;
 the oldest records are removed when either limit is reached. One older stock measurement per resource
-may remain as a dated baseline, within the same record limit. Configure these limits under
-`resource_tracking` in `config.toml` and restart the server to apply them. The record limit is not a byte
-limit. Missing measurements are shown as gaps, not zero activity.
+may remain as a dated baseline, within the same record limit. Configure minimum, maximum and default
+values, plus the record cap, under `data` in `config.toml` and restart the server to apply them.
+Existing network choices outside new bounds are adjusted to the nearest bound. The record cap can
+shorten the selected retention and is not a byte limit. Expired data is hidden from history queries;
+physical cleanup runs during database initialization and writes. Missing measurements are shown as
+gaps, not zero activity.
 
 With automatic refresh enabled, the terminal receives live changes over SSE. Live viewing does not
 require history tracking or increase the frequency of saved storage measurements. After a connection

@@ -1,7 +1,7 @@
 import type { ThemeState as TerminalState, ThemeApplication as Terminal } from '../../app/theme-api.js';
-import type { AccessSource } from '../../app/api-types.js';
+import type { AccessSource, HistorySetting } from '../../app/api-types.js';
 import type { Translator as Locale } from '../../app/i18n.js';
-import { networkNameError, stockIntervalError } from '../../app/settings.js';
+import { historySettingFields, networkNameError, settingRangeError } from '../../app/settings.js';
 import { networkIcon } from './icons/hackernoon/chart-network.js';
 import { networkLabel } from './network.js';
 
@@ -99,24 +99,59 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     const flowText = element('span');
     flowLabel.append(flowTracking, flowText);
     flowTracking.addEventListener('change', () => application.settings.edit('isFlowTracked', flowTracking.checked));
-    const intervalLabel = element('label');
-    const intervalText = element('span');
-    const interval = element('input');
-    interval.type = 'number';
-    interval.id = 'network-stock-interval';
-    interval.min = '1';
-    interval.max = '86400';
-    interval.step = '1';
-    intervalLabel.append(intervalText, interval);
-    interval.addEventListener('input', () =>
-        application.settings.edit('stockSampleIntervalSeconds', interval.valueAsNumber)
-    );
+    const intervals = element('div');
+    intervals.className = 'network-tracking-controls';
+    function intervalControl(field: HistorySetting, id: string, labelKey: string, unitMillis: number) {
+        const container = element('div');
+        container.className = 'network-policy-control';
+        const label = element('label');
+        label.htmlFor = `${id}-range`;
+        label.id = `${id}-label`;
+        const value = element('output');
+        value.htmlFor = `${id}-range ${id}`;
+        const heading = element('div');
+        heading.className = 'network-policy-heading';
+        heading.append(label, value);
+        const range = element('input');
+        range.type = 'range';
+        range.id = `${id}-range`;
+        range.step = '1';
+        range.setAttribute('aria-labelledby', label.id);
+        const number = element('input');
+        number.type = 'number';
+        number.id = id;
+        number.step = '1';
+        const unit = element('span');
+        unit.id = `${id}-unit`;
+        number.setAttribute('aria-labelledby', `${label.id} ${unit.id}`);
+        const exact = element('div');
+        exact.className = 'network-policy-exact';
+        exact.append(number, unit);
+        const controls = element('div');
+        controls.className = 'network-policy-inputs';
+        controls.append(range, exact);
+        const help = element('p');
+        help.className = 'hint';
+        help.id = `${id}-help`;
+        range.setAttribute('aria-describedby', help.id);
+        number.setAttribute('aria-describedby', help.id);
+        range.addEventListener('input', () => application.settings.edit(field, range.valueAsNumber));
+        number.addEventListener('input', () => application.settings.edit(field, number.valueAsNumber));
+        container.append(heading, controls, help);
+        intervals.append(container);
+        return { field, labelKey, unitMillis, label, value, range, number, unit, help };
+    }
+    const intervalControls = [
+        intervalControl('stockSampleIntervalSeconds', 'network-stock-interval', 'stockSampleInterval', 1000),
+        intervalControl('flowFlushIntervalSeconds', 'network-flow-interval', 'flowFlushInterval', 1000),
+        intervalControl('historyRetentionDays', 'network-history-retention', 'historyRetention', 86400000)
+    ];
     const save = element('button');
     save.type = 'submit';
     const actions = element('div');
     actions.className = 'settings-actions';
     actions.append(save);
-    form.append(settingsTitle, nameLabel, nameHelp, label, flowLabel, storageLabel, intervalLabel, actions);
+    form.append(settingsTitle, nameLabel, nameHelp, label, flowLabel, storageLabel, intervals, actions);
     name.addEventListener('input', () => application.settings.edit('name', name.value));
     tracking.addEventListener('change', () => application.settings.edit('isTracked', tracking.checked));
     form.addEventListener('submit', (event) => {
@@ -195,7 +230,6 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             labelText.textContent = t('recordHistory');
             storageText.textContent = t('recordResourceHistory');
             flowText.textContent = t('recordFlowHistory');
-            intervalText.textContent = t('stockSampleInterval');
             nameText.textContent = t('networkName');
             nameHelp.textContent = t('networkNameHelp');
             settingsTitle.textContent = t('gridSettings');
@@ -205,7 +239,7 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
                 (state.draft.isTracked !== state.current.isTracked ||
                     state.draft.isStorageTracked !== state.current.isStorageTracked ||
                     state.draft.isFlowTracked !== state.current.isFlowTracked ||
-                    state.draft.stockSampleIntervalSeconds !== state.current.stockSampleIntervalSeconds ||
+                    historySettingFields.some((field) => state.draft[field] !== state.current![field]) ||
                     state.draft.name.trim() !== state.current.name);
             status.textContent = '';
             if (state.saving) status.textContent = t('settingsSaving');
@@ -237,15 +271,45 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             storageTracking.disabled = state.saving || state.status !== 'ready';
             flowTracking.checked = state.draft.isFlowTracked;
             flowTracking.disabled = state.saving || state.status !== 'ready';
-            if (document.activeElement !== interval) interval.value = String(state.draft.stockSampleIntervalSeconds);
-            interval.disabled = state.saving || state.status !== 'ready' || !state.draft.isStorageTracked;
-            const intervalError = stockIntervalError(state.draft.stockSampleIntervalSeconds);
-            interval.setCustomValidity(intervalError ? t(intervalError) : '');
-            interval.setAttribute('aria-invalid', String(!!intervalError));
+            let invalidInterval = false;
+            for (const control of intervalControls) {
+                const { field, range, number, unitMillis } = control;
+                const limits = state.limits?.[field];
+                const value = state.draft[field];
+                control.label.textContent = t(control.labelKey);
+                control.unit.textContent = t(field === 'historyRetentionDays' ? 'historyDays' : 'historySeconds');
+                const duration = Number.isFinite(value) ? locale.duration(value * unitMillis) : '—';
+                control.value.textContent = duration;
+                range.setAttribute('aria-valuetext', duration);
+                if (limits) {
+                    for (const input of [range, number]) {
+                        input.min = String(limits.min);
+                        input.max = String(limits.max);
+                    }
+                    control.help.textContent = t('historySettingBounds', {
+                        min: locale.duration(limits.min * unitMillis),
+                        max: locale.duration(limits.max * unitMillis),
+                        default: locale.duration(limits.defaultValue * unitMillis)
+                    });
+                    if (field === 'historyRetentionDays' && state.limits)
+                        control.help.textContent += ` ${t('historyRetentionCap', { count: state.limits.historyMaxRowsPerGrid })}`;
+                }
+                if (Number.isFinite(value)) range.value = String(value);
+                if (document.activeElement !== number) number.value = Number.isFinite(value) ? String(value) : '';
+                let disabled = state.saving || state.status !== 'ready' || !limits;
+                if (field === 'stockSampleIntervalSeconds') disabled ||= !state.draft.isStorageTracked;
+                if (field === 'flowFlushIntervalSeconds') disabled ||= !state.draft.isFlowTracked;
+                range.disabled = disabled;
+                number.disabled = disabled;
+                const intervalError = limits ? settingRangeError(value, limits) : null;
+                number.setCustomValidity(intervalError ? t(intervalError) : '');
+                number.setAttribute('aria-invalid', String(!!intervalError));
+                invalidInterval ||= !!intervalError;
+            }
             tracking.checked = state.draft.isTracked;
             tracking.disabled = state.saving || state.status !== 'ready';
             save.disabled =
-                state.saving || state.status !== 'ready' || !!error || !!intervalError || (!state.uncertain && !dirty);
+                state.saving || state.status !== 'ready' || !!error || invalidInterval || (!state.uncertain && !dirty);
             accessTitle.textContent = t('explicitAccess');
             accessHelp.textContent = t('explicitAccessHelp');
             access.hidden = state.status !== 'ready';

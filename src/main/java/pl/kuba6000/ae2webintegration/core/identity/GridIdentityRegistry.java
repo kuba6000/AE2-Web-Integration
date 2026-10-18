@@ -25,12 +25,15 @@ import org.jetbrains.annotations.Nullable;
 
 import com.google.common.collect.MapMaker;
 import com.google.gson.Gson;
+import com.google.gson.InstanceCreator;
 import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
+import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
@@ -44,6 +47,7 @@ public final class GridIdentityRegistry {
 
     private @Nullable File file;
     private boolean dirty;
+    private @NotNull DataPolicy dataPolicy = DataPolicy.from(Config.INSTANCE.data);
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private final WeakHashMap<IAEGrid, StableKey> keys = new WeakHashMap<>();
     private final Map<StableKey, IAEGrid> grids = new MapMaker().weakValues()
@@ -56,6 +60,7 @@ public final class GridIdentityRegistry {
 
     public synchronized void initialize(@NotNull File saveDirectory) throws IOException {
         clear();
+        dataPolicy = DataPolicy.from(Config.INSTANCE.data);
         file = new File(saveDirectory, "ae2webintegration/grid-identities.json");
         try {
             loadOrReset();
@@ -130,7 +135,7 @@ public final class GridIdentityRegistry {
         GridPersistentData current = records.get(selected);
         GridPersistentData data;
         if (current == null) {
-            data = new GridPersistentData(controllers, new GridSettingsData());
+            data = new GridPersistentData(controllers, new GridSettingsData(dataPolicy));
             bindSettings(selected, data);
         } else {
             data = current.withControllers(controllers);
@@ -167,8 +172,9 @@ public final class GridIdentityRegistry {
     }
 
     private void loadOrReset() throws IOException {
+        boolean normalized = false;
         try {
-            load();
+            normalized = load();
         } catch (IOException failure) {
             Path source = storageFile().toPath();
             if (!Files.isRegularFile(source)) throw failure;
@@ -185,11 +191,27 @@ public final class GridIdentityRegistry {
                 backup,
                 failure);
         }
+        if (normalized) saveIfDirty();
     }
 
-    private void load() throws IOException {
+    public synchronized @NotNull DataPolicy getDataPolicy() {
+        return dataPolicy;
+    }
+
+    /** Detached policy snapshot includes retained identities whose grids are currently unloaded. */
+    public synchronized @NotNull Map<StableKey, Integer> historyRetentions() {
+        Map<StableKey, Integer> selected = new HashMap<>();
+        records.forEach(
+            (key, value) -> selected.put(
+                key,
+                value.getSettings()
+                    .getHistoryRetentionDays()));
+        return selected;
+    }
+
+    private boolean load() throws IOException {
         File file = storageFile();
-        if (Files.notExists(file.toPath())) return;
+        if (Files.notExists(file.toPath())) return false;
         try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
             Gson currentFormat = GSONUtils.GSON_BUILDER.create();
             // TODO: Remove after the transition release; published 1.2.0-pre-* saves use dimid.
@@ -203,13 +225,17 @@ public final class GridIdentityRegistry {
             };
             Map<StableKey, GridPersistentData> stored = GSONUtils.createBuilder()
                 .registerTypeAdapter(DimensionalCoords.class, coordinates)
+                .registerTypeAdapter(
+                    GridSettingsData.class,
+                    (InstanceCreator<GridSettingsData>) type -> new GridSettingsData(dataPolicy))
                 .create()
                 .fromJson(reader, new TypeToken<Map<StableKey, GridPersistentData>>() {}.getType());
             if (stored == null) throw new IOException("Empty grid identity file: " + file);
+            boolean normalized = false;
             for (Map.Entry<StableKey, GridPersistentData> entry : stored.entrySet()) {
                 GridPersistentData record = entry.getValue();
                 if (record == null) throw new IOException("Incomplete grid identity record: " + entry.getKey());
-                bindSettings(entry.getKey(), record);
+                normalized |= bindSettings(entry.getKey(), record);
                 for (DimensionalCoords position : record.getControllers()) {
                     // Persisted coordinates must contain the current dimension field before entering the index.
                     if (position == null || position.dimensionId() == null
@@ -220,18 +246,22 @@ public final class GridIdentityRegistry {
                 }
             }
             records = stored;
+            return normalized;
         } catch (RuntimeException e) {
             throw new IOException("Invalid grid identity file: " + file, e);
         }
     }
 
-    private void bindSettings(StableKey key, GridPersistentData data) {
+    private boolean bindSettings(StableKey key, GridPersistentData data) {
         GridSettingsData settings = data.getSettings();
+        boolean normalized = settings.applyPolicy(dataPolicy);
+        if (normalized) dirty = true;
         data.attach(this, () -> {
             // Runs under this registry's monitor; retired or previous-save settings must not dirty the file.
             GridPersistentData current = records.get(key);
             if (current != null && current.getSettings() == settings) dirty = true;
         });
+        return normalized;
     }
 
     private boolean preferIdentity(StableKey contender, StableKey winner) {

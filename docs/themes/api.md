@@ -42,6 +42,11 @@ the subscription.
 Themes can use it to distinguish a refreshed inventory from incremental updates. `items` always contains
 the current resources; any delayed sorting or temporary empty rows belong to the theme's own view.
 
+Network `settings.current` contains confirmed values and `settings.draft` contains editable values.
+`settings.limits` supplies the server's `min`, `max` and `defaultValue` for stock and flow intervals
+and retention days, plus the read-only `historyMaxRowsPerGrid` cap. It is null until settings load.
+Use those limits for controls and validation; pass only editable fields to `settings.edit`.
+
 | Service                                                                    | Purpose                                                   |
 | -------------------------------------------------------------------------- | --------------------------------------------------------- |
 | `refresh({ reloadDetail: true })`                                          | Explicit refresh, including an open detail view           |

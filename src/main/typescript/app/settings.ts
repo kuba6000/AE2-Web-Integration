@@ -1,4 +1,4 @@
-import type { AccessSources, GridSettings } from './api-types.js';
+import type { AccessSources, GridSettings, GridSettingsLimits, SettingRange } from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
 import type { Notify } from './notifications.js';
@@ -7,6 +7,7 @@ type Edited = Record<keyof GridSettings, boolean>;
 export type SettingsState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     current: GridSettings | null;
+    limits: GridSettingsLimits | null;
     draft: GridSettings;
     edited: Edited;
     sources: AccessSources;
@@ -20,6 +21,7 @@ type SaveOperation = {
     desired: Partial<GridSettings>;
     uncertain: boolean;
     result?: GridSettings;
+    limits?: GridSettingsLimits;
     error?: string;
 };
 export function networkNameError(name: string) {
@@ -30,8 +32,13 @@ export function networkNameError(name: string) {
     return controls || name.trim().length > 128 ? 'networkNameInvalid' : null;
 }
 
-export function stockIntervalError(seconds: number) {
-    return Number.isInteger(seconds) && seconds >= 1 && seconds <= 86400 ? null : 'stockIntervalInvalid';
+export const historySettingFields = [
+    'stockSampleIntervalSeconds',
+    'flowFlushIntervalSeconds',
+    'historyRetentionDays'
+] as const;
+export function settingRangeError(value: number, range: SettingRange) {
+    return Number.isInteger(value) && value >= range.min && value <= range.max ? null : 'historySettingInvalid';
 }
 
 /** Field drafts and in-flight saves belong to their source grid across route changes. */
@@ -46,18 +53,23 @@ export function createGridSettings(
         isTracked: false,
         isStorageTracked: false,
         isFlowTracked: false,
-        stockSampleIntervalSeconds: 300
+        stockSampleIntervalSeconds: 0,
+        flowFlushIntervalSeconds: 0,
+        historyRetentionDays: 0
     });
     const unedited = (): Edited => ({
         name: false,
         isTracked: false,
         isStorageTracked: false,
         isFlowTracked: false,
-        stockSampleIntervalSeconds: false
+        stockSampleIntervalSeconds: false,
+        flowFlushIntervalSeconds: false,
+        historyRetentionDays: false
     });
     const state: SettingsState = {
         status: 'idle',
         current: null,
+        limits: null,
         draft: empty(),
         edited: unedited(),
         sources: {},
@@ -81,6 +93,7 @@ export function createGridSettings(
         Object.assign(state, {
             status: 'error',
             current: null,
+            limits: null,
             draft: empty(),
             edited: unedited(),
             sources: {},
@@ -112,6 +125,7 @@ export function createGridSettings(
             Object.assign(state, {
                 status: next.view === 'settings' ? 'loading' : 'idle',
                 current: null,
+                limits: null,
                 draft: draft ? { ...draft.draft } : { ...empty(), ...(previous?.uncertain ? previous.desired : {}) },
                 edited: draft
                     ? { ...draft.edited }
@@ -121,7 +135,11 @@ export function createGridSettings(
                           isStorageTracked: !!previous?.uncertain && previous.desired.isStorageTracked !== undefined,
                           isFlowTracked: !!previous?.uncertain && previous.desired.isFlowTracked !== undefined,
                           stockSampleIntervalSeconds:
-                              !!previous?.uncertain && previous.desired.stockSampleIntervalSeconds !== undefined
+                              !!previous?.uncertain && previous.desired.stockSampleIntervalSeconds !== undefined,
+                          flowFlushIntervalSeconds:
+                              !!previous?.uncertain && previous.desired.flowFlushIntervalSeconds !== undefined,
+                          historyRetentionDays:
+                              !!previous?.uncertain && previous.desired.historyRetentionDays !== undefined
                       },
                 sources: {},
                 saving: !!previous?.pending,
@@ -138,15 +156,15 @@ export function createGridSettings(
             request = new AbortController();
             reading = true;
             try {
-                const data = await api.settings(route.gridKey, request.signal);
+                const { limits, ...data } = await api.settings(route.gridKey, request.signal);
                 if (version !== generation) return;
                 state.current = data;
+                state.limits = limits;
                 if (!state.edited.name) state.draft.name = data.name;
                 if (!state.edited.isTracked) state.draft.isTracked = data.isTracked;
                 if (!state.edited.isStorageTracked) state.draft.isStorageTracked = data.isStorageTracked;
                 if (!state.edited.isFlowTracked) state.draft.isFlowTracked = data.isFlowTracked;
-                if (!state.edited.stockSampleIntervalSeconds)
-                    state.draft.stockSampleIntervalSeconds = data.stockSampleIntervalSeconds;
+                for (const field of historySettingFields) if (!state.edited[field]) state.draft[field] = data[field];
                 state.sources = sourcesForRoute;
                 state.status = 'ready';
                 state.error = null;
@@ -170,9 +188,19 @@ export function createGridSettings(
             changed();
         },
         async save() {
-            if (route.view !== 'settings' || state.saving || state.status !== 'ready' || !state.current) return;
+            if (
+                route.view !== 'settings' ||
+                state.saving ||
+                state.status !== 'ready' ||
+                !state.current ||
+                !state.limits
+            )
+                return;
             const invalidSetting =
-                networkNameError(state.draft.name) || stockIntervalError(state.draft.stockSampleIntervalSeconds);
+                networkNameError(state.draft.name) ||
+                historySettingFields
+                    .map((field) => settingRangeError(state.draft[field], state.limits![field]))
+                    .find(Boolean);
             if (invalidSetting) {
                 state.error = invalidSetting;
                 changed();
@@ -192,11 +220,9 @@ export function createGridSettings(
                 desired.isStorageTracked = state.draft.isStorageTracked;
             if (state.draft.isFlowTracked !== state.current.isFlowTracked || uncertain?.isFlowTracked !== undefined)
                 desired.isFlowTracked = state.draft.isFlowTracked;
-            if (
-                state.draft.stockSampleIntervalSeconds !== state.current.stockSampleIntervalSeconds ||
-                uncertain?.stockSampleIntervalSeconds !== undefined
-            )
-                desired.stockSampleIntervalSeconds = state.draft.stockSampleIntervalSeconds;
+            for (const field of historySettingFields)
+                if (state.draft[field] !== state.current[field] || uncertain?.[field] !== undefined)
+                    desired[field] = state.draft[field];
             if (!Object.keys(desired).length) return;
             const version = ++generation;
             const operation: SaveOperation = { pending: true, desired, uncertain: state.uncertain };
@@ -208,7 +234,9 @@ export function createGridSettings(
             state.notice = null;
             changed();
             try {
-                operation.result = await api.saveSettings(key, desired);
+                const { limits, ...result } = await api.saveSettings(key, desired);
+                operation.result = result;
+                operation.limits = limits;
                 operation.uncertain = false;
             } catch (caught) {
                 const error = caught as ApiFailure;
@@ -240,6 +268,7 @@ export function createGridSettings(
                     Object.assign(state, {
                         status: 'ready',
                         current: operation.result,
+                        limits: operation.limits,
                         draft: { ...operation.result },
                         edited: unedited(),
                         sources: sourcesForRoute,
@@ -253,8 +282,8 @@ export function createGridSettings(
                     if (operation.desired.isTracked !== undefined) state.edited.isTracked = true;
                     if (operation.desired.isStorageTracked !== undefined) state.edited.isStorageTracked = true;
                     if (operation.desired.isFlowTracked !== undefined) state.edited.isFlowTracked = true;
-                    if (operation.desired.stockSampleIntervalSeconds !== undefined)
-                        state.edited.stockSampleIntervalSeconds = true;
+                    for (const field of historySettingFields)
+                        if (operation.desired[field] !== undefined) state.edited[field] = true;
                 }
             }
             changed();

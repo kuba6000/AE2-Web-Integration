@@ -133,6 +133,78 @@ class IconDeliveryHttpTest {
         config.close();
     }
 
+    @Test
+    void repeatedRetentionPatchRepairsFailedSaveAndAppliesToInactiveHistory() throws Exception {
+        CoreEngine.onServerStarted();
+        var grid = new TestGridFixtures.TestGrid(81079, false, AEControllerState.CONTROLLER_ONLINE);
+        StableKey gridKey = TestGridFixtures.resolvedKey(grid);
+        StableKey item = TestGridFixtures.key(121);
+        var service = CoreEngine.getStorageTracking();
+        assertNotNull(service);
+        long observedAt = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2);
+        service.open(gridKey, 1);
+        assertTrue(
+            service.submit(
+                gridKey,
+                1,
+                new StorageObservation(
+                    observedAt,
+                    true,
+                    true,
+                    Collections.singletonList(new StorageObservation.Row(item, 5, false)),
+                    Collections.emptyList(),
+                    Collections.singletonMap(
+                        item,
+                        new ResourceDescriptor("test", "item", 0, 0, "Item", ResourceType.ITEM, item, null)),
+                    Collections.emptyList()),
+                true,
+                false,
+                observedAt,
+                7));
+        // An ordered policy command also waits for the earlier measurement to reach durable storage.
+        service.setRetention(gridKey, 7)
+            .get(5, TimeUnit.SECONDS);
+        service.retire(gridKey, 1);
+        String path = "/api/grids/" + gridKey;
+        assertFalse(
+            json(connection(path + "/resource-history")).getAsJsonObject("data")
+                .getAsJsonArray("points")
+                .isEmpty());
+        Path blockedSave = directory.resolve("world/ae2webintegration/grid-identities.json.tmp");
+        Files.createDirectory(blockedSave);
+        assertEquals(500, patchRetention(path, 1));
+        Files.deleteIfExists(blockedSave);
+        assertEquals(200, patchRetention(path, 1));
+        assertTrue(
+            json(connection(path + "/resource-history")).getAsJsonObject("data")
+                .getAsJsonArray("points")
+                .isEmpty());
+        CoreEngine.onServerStopped();
+        CoreEngine.onServerStarted();
+        assertEquals(gridKey, TestGridFixtures.resolvedKey(grid));
+        assertTrue(
+            json(connection(path + "/resource-history")).getAsJsonObject("data")
+                .getAsJsonArray("points")
+                .isEmpty());
+    }
+
+    private int patchRetention(String path, int days) throws Exception {
+        String body = "{\"historyRetentionDays\":" + days + "}";
+        try (java.net.Socket socket = new java.net.Socket("127.0.0.1", port)) {
+            socket.setSoTimeout(5000);
+            String request = "PATCH " + path
+                + "/settings HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n"
+                + "Content-Type: application/json\r\nX-AE2-Request: true\r\nContent-Length: "
+                + body.length()
+                + "\r\n\r\n"
+                + body;
+            socket.getOutputStream()
+                .write(request.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            String response = IOUtils.toString(socket.getInputStream(), java.nio.charset.StandardCharsets.UTF_8);
+            return Integer.parseInt(response.split(" ", 3)[1]);
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = { true, false })
     void resourceHistoryResolvesRequestedIconsFromSavedKeysWithoutNativeReads(boolean installed) throws Exception {
@@ -186,7 +258,8 @@ class IconDeliveryHttpTest {
                     Collections.emptyList()),
                 true,
                 true,
-                observedAt - 60000));
+                observedAt - 60000,
+                7));
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         var snapshot = service.snapshot(gridKey);
         assertNotNull(snapshot);

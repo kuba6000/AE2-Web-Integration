@@ -27,6 +27,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
@@ -63,18 +64,23 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
     private final Semaphore readers = new Semaphore(MAX_READERS, true);
     private final Path databaseBase;
     private final HsqlHistoryRetention retention;
+    private final DataPolicy.Range retentionBounds;
+    private Map<StableKey, Integer> initialRetentions;
     private volatile @Nullable Database openedDatabase;
     private @Nullable Path ownedPath;
     private boolean closed;
 
-    public HsqlStorageHistoryStore(@NotNull Path databaseBase, int retentionDays, int maxRowsPerGrid) {
-        if (retentionDays < 1 || maxRowsPerGrid < 1)
+    public HsqlStorageHistoryStore(@NotNull Path databaseBase, @NotNull DataPolicy.Range retentionBounds,
+        int maxRowsPerGrid, @NotNull Map<StableKey, Integer> initialRetentions) {
+        if (retentionBounds.defaultValue() < 1 || maxRowsPerGrid < 1)
             throw new IllegalArgumentException("History limits must be positive");
         if (databaseBase.toString()
             .indexOf(';') >= 0)
             throw new IllegalArgumentException("History path cannot contain JDBC property separators");
         this.databaseBase = databaseBase.toAbsolutePath();
-        this.retention = new HsqlHistoryRetention(retentionDays, maxRowsPerGrid);
+        this.retention = new HsqlHistoryRetention(maxRowsPerGrid);
+        this.retentionBounds = retentionBounds;
+        this.initialRetentions = new HashMap<>(initialRetentions);
     }
 
     @Desugar
@@ -103,10 +109,12 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         try {
             initializeSchema(opened);
             opened.setAutoCommit(false);
+            initializeRetentions(opened);
             retention.enforceExistingBudgets(opened);
             retention.maintain(opened);
             opened.commit();
             Database initialized = new Database(opened, url);
+            initialRetentions = Collections.emptyMap();
             openedDatabase = initialized;
             return initialized;
         } catch (SQLException failure) {
@@ -121,6 +129,35 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                 failure.addSuppressed(failedShutdown);
             }
             throw failure;
+        }
+    }
+
+    private void initializeRetentions(Connection db) throws SQLException {
+        try (PreparedStatement clamp = db.prepareStatement("""
+            UPDATE history_grids SET retention_days = CASE
+                WHEN retention_days < ? THEN ? WHEN retention_days > ? THEN ? ELSE retention_days END
+            WHERE retention_days < ? OR retention_days > ?
+            """)) {
+            clamp.setInt(1, retentionBounds.min());
+            clamp.setInt(2, retentionBounds.min());
+            clamp.setInt(3, retentionBounds.max());
+            clamp.setInt(4, retentionBounds.max());
+            clamp.setInt(5, retentionBounds.min());
+            clamp.setInt(6, retentionBounds.max());
+            clamp.executeUpdate();
+        }
+        if (initialRetentions.isEmpty()) return;
+        try (PreparedStatement update = db
+            .prepareStatement("UPDATE history_grids SET retention_days = ? WHERE grid_key = ?")) {
+            for (Map.Entry<StableKey, Integer> entry : initialRetentions.entrySet()) {
+                update.setInt(1, retentionBounds.clamp(entry.getValue()));
+                update.setString(
+                    2,
+                    entry.getKey()
+                        .toString());
+                update.addBatch();
+            }
+            update.executeBatch();
         }
     }
 
@@ -144,7 +181,8 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                     grid_key VARCHAR(22) NOT NULL UNIQUE,
                     row_count BIGINT NOT NULL,
                     deleted_until BIGINT NOT NULL,
-                    first_observed BIGINT NOT NULL
+                    first_observed BIGINT NOT NULL,
+                    retention_days INTEGER NOT NULL
                 )
                 """);
             sql.execute("""
@@ -212,9 +250,15 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         }
     }
 
-    @Override
     public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
         @NotNull List<StorageHistoryPoint> points) throws IOException {
+        append(gridKey, descriptions, points, retentionBounds.defaultValue());
+    }
+
+    @Override
+    public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
+        @NotNull List<StorageHistoryPoint> points, int retentionDays) throws IOException {
+        retentionBounds.validate(retentionDays);
         lifecycle.readLock()
             .lock();
         try {
@@ -222,7 +266,7 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                 try {
                     Connection db = database().writer();
                     updateDescriptions(db, descriptions, points);
-                    long gridId = ensureGrid(db, gridKey);
+                    long gridId = ensureGrid(db, gridKey, retentionDays);
                     insertPoints(db, gridId, points, resourceIds(db, points));
                     retention.prune(db, gridId, false);
                     retention.maintain(db);
@@ -230,6 +274,34 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                 } catch (SQLException failure) {
                     rollback(failure);
                     throw new IOException("Cannot append storage history", failure);
+                }
+            }
+        } finally {
+            lifecycle.readLock()
+                .unlock();
+        }
+    }
+
+    /** Updates retained history policy independently of measurement recording. */
+    @Override
+    public void setRetention(@NotNull StableKey gridKey, int retentionDays) throws IOException {
+        retentionBounds.validate(retentionDays);
+        lifecycle.readLock()
+            .lock();
+        try {
+            synchronized (writerLock) {
+                try {
+                    Connection db = database().writer();
+                    try (PreparedStatement update = db
+                        .prepareStatement("UPDATE history_grids SET retention_days = ? WHERE grid_key = ?")) {
+                        update.setInt(1, retentionDays);
+                        update.setString(2, gridKey.toString());
+                        update.executeUpdate();
+                    }
+                    db.commit();
+                } catch (SQLException failure) {
+                    rollback(failure);
+                    throw new IOException("Cannot update history retention", failure);
                 }
             }
         } finally {
@@ -333,16 +405,18 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         return ids;
     }
 
-    private static long ensureGrid(@NotNull Connection db, @NotNull StableKey gridKey) throws SQLException {
+    private static long ensureGrid(@NotNull Connection db, @NotNull StableKey gridKey, int retentionDays)
+        throws SQLException {
         long existing = gridId(db, gridKey);
         if (existing != -1) return existing;
         try (PreparedStatement insert = db.prepareStatement("""
-            INSERT INTO history_grids (grid_key, row_count, deleted_until, first_observed)
-            VALUES (?, 0, ?, ?)
+            INSERT INTO history_grids (grid_key, row_count, deleted_until, first_observed, retention_days)
+            VALUES (?, 0, ?, ?, ?)
             """)) {
             insert.setString(1, gridKey.toString());
             insert.setLong(2, Long.MIN_VALUE);
             insert.setLong(3, Long.MAX_VALUE);
+            insert.setInt(4, retentionDays);
             insert.executeUpdate();
         }
         return gridId(db, gridKey);
@@ -459,7 +533,7 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                 db.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
                 db.setAutoCommit(false);
                 StorageHistory history = HsqlHistoryReader
-                    .read(db, gridKey, itemKey, fromMillis, retention.cutoff(), limit);
+                    .read(db, gridKey, itemKey, fromMillis, System.currentTimeMillis(), limit);
                 db.commit();
                 return history;
             }

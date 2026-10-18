@@ -14,6 +14,7 @@ import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.http.dto.GridSettingsView;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 
 /**
@@ -53,7 +54,7 @@ public final class GetGridSettings extends IAsyncRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull GridSettingsData data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull GridSettingsView data) {}
 
     @Override
     public void handle() {
@@ -70,7 +71,9 @@ public final class GetGridSettings extends IAsyncRequest {
             }
             GridSettingsData settings = data.getSettings();
             // Completion serializes under the same monitor used by settings mutations and file writes.
-            respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, settings));
+            respond(
+                HttpURLConnection.HTTP_OK,
+                new Response(ApiStatus.OK, GridSettingsView.from(settings, registry.getDataPolicy())));
         }
     }
 }

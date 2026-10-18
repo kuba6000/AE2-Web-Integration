@@ -44,6 +44,127 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingServic
 
 class StorageTrackingCoordinatorTest extends GridTestScope {
 
+    @Test
+    void retiredGridKeepsChosenRetentionForItsFirstPendingFlow() throws Exception {
+        var item = new ItemIdentityRequestTest.Resource("retired-policy", 20, false);
+        var grid = new ItemIdentityRequestTest.Grid(710043, item);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        var settings = CoreEngine.GRID_IDENTITIES.getPersistentData(key)
+            .getSettings();
+        settings.setFlowTracked(true);
+        long startedAt = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10);
+        var store = new pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore(
+            gridSave.toPath()
+                .resolve("history"),
+            CoreEngine.GRID_IDENTITIES.getDataPolicy()
+                .historyRetentionDays(),
+            100,
+            Collections.emptyMap());
+        try (StorageTrackingService service = new StorageTrackingService(store, 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.tick(TestGridFixtures.ae(grid), startedAt);
+            grid.web$getStorageCapture()
+                .recordFlow(item, 7, 2);
+            settings.setHistoryRetentionDays(14);
+            CoreEngine.GRID_IDENTITIES.removeController(
+                grid.web$getControllers()
+                    .iterator()
+                    .next());
+            coordinator.tick(TestGridFixtures.ae(), startedAt + 1000);
+            service.setRetention(TestGridFixtures.key(124), 7)
+                .get(5, TimeUnit.SECONDS);
+            assertTrue(
+                store.read(key, item.web$getKey(), 0, 100)
+                    .points()
+                    .stream()
+                    .anyMatch(
+                        point -> point.kind() == StorageHistoryPoint.Kind.FLOW && point.input() == 7
+                            && point.output() == 2));
+        }
+    }
+
+    @Test
+    void eachGridUsesItsFlowCadenceAndEditsKeepPendingCounters() throws Exception {
+        ItemIdentityRequestTest.Resource item = new ItemIdentityRequestTest.Resource("cadence-policy", 20, false);
+        ItemIdentityRequestTest.Grid fast = new ItemIdentityRequestTest.Grid(710041, item);
+        ItemIdentityRequestTest.Grid slow = new ItemIdentityRequestTest.Grid(710042, item);
+        StableKey fastKey = TestGridFixtures.resolvedKey(fast);
+        StableKey slowKey = TestGridFixtures.resolvedKey(slow);
+        var fastSettings = CoreEngine.GRID_IDENTITIES.getPersistentData(fastKey)
+            .getSettings();
+        var slowSettings = CoreEngine.GRID_IDENTITIES.getPersistentData(slowKey)
+            .getSettings();
+        fastSettings.setFlowTracked(true);
+        slowSettings.setFlowTracked(true);
+        fastSettings.setFlowFlushIntervalSeconds(5);
+        slowSettings.setFlowFlushIntervalSeconds(20);
+        InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
+        try (StorageTrackingService service = new StorageTrackingService(store, 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.prepareForViewer(fast, 1000);
+            coordinator.prepareForViewer(slow, 1000);
+            fast.web$getStorageCapture()
+                .recordFlow(item, 7, 2);
+            slow.web$getStorageCapture()
+                .recordFlow(item, 9, 3);
+            coordinator.prepareForViewer(fast, 6000);
+            coordinator.prepareForViewer(slow, 6000);
+            fast.web$getStorageCapture()
+                .recordFlow(item, 4, 1);
+            fastSettings.setFlowFlushIntervalSeconds(10);
+            coordinator.prepareForViewer(fast, 7000);
+            coordinator.prepareForViewer(fast, 16000);
+            coordinator.prepareForViewer(slow, 21000);
+            service.close();
+            List<StorageHistoryPoint> fastFlow = store.read(fastKey, item.web$getKey(), 0, 100)
+                .points()
+                .stream()
+                .filter(point -> point.kind() == StorageHistoryPoint.Kind.FLOW)
+                .collect(java.util.stream.Collectors.toList());
+            List<StorageHistoryPoint> slowFlow = store.read(slowKey, item.web$getKey(), 0, 100)
+                .points()
+                .stream()
+                .filter(point -> point.kind() == StorageHistoryPoint.Kind.FLOW)
+                .collect(java.util.stream.Collectors.toList());
+            assertEquals(2, fastFlow.size());
+            assertEquals(
+                6000,
+                fastFlow.get(0)
+                    .observedAt());
+            assertEquals(
+                7,
+                fastFlow.get(0)
+                    .input());
+            assertEquals(
+                6000,
+                fastFlow.get(1)
+                    .flowFrom());
+            assertEquals(
+                16000,
+                fastFlow.get(1)
+                    .observedAt());
+            assertEquals(
+                4,
+                fastFlow.get(1)
+                    .input());
+            assertEquals(1, slowFlow.size());
+            assertEquals(
+                21000,
+                slowFlow.get(0)
+                    .observedAt());
+            assertEquals(
+                9,
+                slowFlow.get(0)
+                    .input());
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = { false, true })
     void orderlyClosePersistsAcceptedFlowBeforeItsFirstDurableDeadline(boolean finalDrainFails) throws Exception {
@@ -55,7 +176,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         data.getSettings()
             .setFlowTracked(true);
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
-        settings.flowFlushIntervalSeconds = 60;
+        CoreEngine.GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setFlowFlushIntervalSeconds(60);
         InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
         long startedAt = System.currentTimeMillis() - 6000;
         long stoppedAfter;
@@ -127,7 +250,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         data.getSettings()
             .setFlowTracked(true);
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
-        settings.flowFlushIntervalSeconds = 60;
+        CoreEngine.GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setFlowFlushIntervalSeconds(60);
         TerminalRegistry terminals = new TerminalRegistry();
         InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
         try (StorageTrackingService service = new StorageTrackingService(store, 100);
@@ -484,7 +609,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             .setFlowTracked(true);
         TerminalRegistry terminals = new TerminalRegistry();
         ConfigSettings.ResourceTracking configuration = new ConfigSettings.ResourceTracking();
-        configuration.flowFlushIntervalSeconds = 30;
+        CoreEngine.GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setFlowFlushIntervalSeconds(30);
         InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
         try (StorageTrackingService service = new StorageTrackingService(store, 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
@@ -663,7 +790,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         data.getSettings()
             .setFlowTracked(true);
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
-        settings.flowFlushIntervalSeconds = 5;
+        CoreEngine.GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setFlowFlushIntervalSeconds(5);
         InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
         try (StorageTrackingService service = new StorageTrackingService(store, 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
@@ -709,8 +838,11 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         CountDownLatch release = new CountDownLatch(1);
         IStorageHistoryStore blocked = new IStorageHistoryStore() {
 
+            @Override
+            public void setRetention(@NotNull StableKey key, int retentionDays) {}
+
             public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
-                @NotNull List<StorageHistoryPoint> points) throws IOException {
+                @NotNull List<StorageHistoryPoint> points, int retentionDays) throws IOException {
                 entered.countDown();
                 try {
                     if (!release.await(3, TimeUnit.SECONDS)) throw new IOException("Test writer did not resume");
@@ -844,7 +976,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         data.getSettings()
             .setStockSampleIntervalSeconds(10);
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
-        settings.flowFlushIntervalSeconds = 5;
+        CoreEngine.GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setFlowFlushIntervalSeconds(5);
         InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
         try (StorageTrackingService service = new StorageTrackingService(store, 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
@@ -927,7 +1061,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         data.getSettings()
             .setFlowTracked(true);
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
-        settings.flowFlushIntervalSeconds = 5;
+        CoreEngine.GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setFlowFlushIntervalSeconds(5);
         InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
         try (StorageTrackingService service = new StorageTrackingService(store, 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
@@ -1041,7 +1177,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         persistentData.getSettings()
             .setFlowTracked(true);
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
-        settings.flowFlushIntervalSeconds = 5;
+        CoreEngine.GRID_IDENTITIES.getPersistentData(key)
+            .getSettings()
+            .setFlowFlushIntervalSeconds(5);
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,

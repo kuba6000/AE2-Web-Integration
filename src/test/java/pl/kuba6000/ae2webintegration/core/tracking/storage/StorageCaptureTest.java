@@ -119,11 +119,19 @@ class StorageCaptureTest {
             flow.input(),
             flow.output(),
             (now) - 1000L);
-        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(database, 30, 100)) {
+        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(
+            database,
+            new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 30),
+            100,
+            Collections.emptyMap())) {
             store.append(gridKey, observation.descriptions(), Collections.singletonList(point));
         }
         AE2Controller.itemIdentities.clear();
-        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(database, 30, 100)) {
+        try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(
+            database,
+            new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 30),
+            100,
+            Collections.emptyMap())) {
             StorageHistory history = store.read(gridKey, itemKey, now, 10);
             assertEquals(Collections.singletonList(point), history.points());
             assertEquals(
