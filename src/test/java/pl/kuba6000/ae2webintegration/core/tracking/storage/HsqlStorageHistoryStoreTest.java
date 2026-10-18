@@ -35,7 +35,6 @@ class HsqlStorageHistoryStoreTest {
             StorageHistoryPoint.Kind.GAP,
             null,
             0,
-            false,
             0,
             0,
             false);
@@ -64,7 +63,6 @@ class HsqlStorageHistoryStoreTest {
             StorageHistoryPoint.Kind.GAP,
             null,
             0,
-            false,
             0,
             0,
             false);
@@ -259,7 +257,7 @@ class HsqlStorageHistoryStoreTest {
     }
 
     private static StorageHistoryPoint stock(StableKey item, long time, long amount) {
-        return new StorageHistoryPoint(time, 7, StorageHistoryPoint.Kind.STOCK, item, amount, true, 0, 0, true);
+        return new StorageHistoryPoint(time, 7, StorageHistoryPoint.Kind.STOCK, item, amount, 0, 0, true);
     }
 
     private static ResourceDescriptor description(StableKey item, String name) {
@@ -281,23 +279,13 @@ class HsqlStorageHistoryStoreTest {
         StableKey item = StableKey.random();
         StableKey other = StableKey.random();
         long now = System.currentTimeMillis();
-        StorageHistoryPoint gap = new StorageHistoryPoint(
-            now,
-            1,
-            StorageHistoryPoint.Kind.GAP,
-            null,
-            0,
-            false,
-            0,
-            0,
-            false);
+        StorageHistoryPoint gap = new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0, false);
         StorageHistoryPoint flow = new StorageHistoryPoint(
             now + 2,
             1,
             StorageHistoryPoint.Kind.FLOW,
             item,
             0,
-            false,
             Long.MAX_VALUE,
             Long.MAX_VALUE - 1,
             true);
@@ -307,7 +295,6 @@ class HsqlStorageHistoryStoreTest {
             StorageHistoryPoint.Kind.FLOW_OBSERVATION,
             null,
             0,
-            false,
             0,
             0,
             true);
@@ -339,7 +326,6 @@ class HsqlStorageHistoryStoreTest {
             StorageHistoryPoint.Kind.OBSERVATION,
             null,
             0,
-            false,
             0,
             0,
             true);
@@ -403,7 +389,6 @@ class HsqlStorageHistoryStoreTest {
             StorageHistoryPoint.Kind.FLOW_OBSERVATION,
             null,
             0,
-            false,
             0,
             0,
             true);
@@ -435,7 +420,6 @@ class HsqlStorageHistoryStoreTest {
             StorageHistoryPoint.Kind.OBSERVATION,
             null,
             0,
-            false,
             0,
             0,
             true);

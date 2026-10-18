@@ -200,6 +200,9 @@ class IconDeliveryHttpTest {
         JsonObject plain = json(connection(path));
         for (var point : plain.getAsJsonObject("data")
             .getAsJsonArray("points")) {
+            assertFalse(
+                point.getAsJsonObject()
+                    .has("craftable"));
             var resource = point.getAsJsonObject()
                 .get("resource");
             if (!resource.isJsonNull()) assertTrue(
@@ -244,6 +247,10 @@ class IconDeliveryHttpTest {
                     .getAsInt());
         }
         JsonObject baselineResponse = json(connection(path + "?icons=true&itemKey=" + fallback + "&limit=1"));
+        assertFalse(
+            baselineResponse.getAsJsonObject("data")
+                .getAsJsonObject("baseline")
+                .has("craftable"));
         JsonObject baseline = baselineResponse.getAsJsonObject("data")
             .getAsJsonObject("baseline")
             .getAsJsonObject("resource");

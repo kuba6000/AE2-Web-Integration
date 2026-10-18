@@ -24,6 +24,178 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 class StorageTrackingServiceTest {
 
     @Test
+    void initialRecipeOnlyZeroRemainsOutsideStockHistoryAcrossGapRecovery() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
+            service.open(grid, 1);
+            List<StorageObservationFixtures.Row> recipe = Collections
+                .singletonList(new StorageObservationFixtures.Row(resource(item, 0), true));
+            assertTrue(
+                service.submit(
+                    grid,
+                    1,
+                    StorageObservationFixtures.observation(1000, true, true, recipe, Collections.emptyList()),
+                    true,
+                    false));
+            awaitRevision(service, grid, 1);
+            assertTrue(
+                snapshot(service, grid).rows()
+                    .get(0)
+                    .craftable());
+            service.invalidate(grid, 1);
+            assertTrue(
+                service.submit(
+                    grid,
+                    1,
+                    StorageObservationFixtures.observation(2000, true, true, recipe, Collections.emptyList()),
+                    true,
+                    false));
+            awaitRevision(service, grid, 2);
+            assertTrue(
+                service.submit(
+                    grid,
+                    1,
+                    StorageObservationFixtures
+                        .observation(3000, true, true, Collections.emptyList(), Collections.emptyList()),
+                    true,
+                    false));
+            awaitRevision(service, grid, 3);
+            List<StorageHistoryPoint> points = service.history(grid, item, 0, 100)
+                .points();
+            assertFalse(
+                points.stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.STOCK));
+            assertEquals(
+                3,
+                points.stream()
+                    .filter(point -> point.kind() == StorageHistoryPoint.Kind.OBSERVATION)
+                    .count());
+        }
+    }
+
+    @Test
+    void gapRecoveryReestablishesKnownZeroWithoutRecordingRecipeRemovalAgain() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
+            service.open(grid, 1);
+            assertTrue(service.submit(grid, 1, observation(item, 1000, 5), true, false));
+            awaitRevision(service, grid, 1);
+            List<StorageObservationFixtures.Row> emptyCraftable = Collections
+                .singletonList(new StorageObservationFixtures.Row(resource(item, 0), true));
+            assertTrue(
+                service.submit(
+                    grid,
+                    1,
+                    StorageObservationFixtures.observation(2000, true, true, emptyCraftable, Collections.emptyList()),
+                    true,
+                    false));
+            awaitRevision(service, grid, 2);
+            service.invalidate(grid, 1);
+            assertTrue(
+                service.submit(
+                    grid,
+                    1,
+                    StorageObservationFixtures.observation(3000, true, true, emptyCraftable, Collections.emptyList()),
+                    true,
+                    false));
+            awaitRevision(service, grid, 3);
+            List<StorageHistoryPoint> recovered = service.history(grid, item, 3000, 100)
+                .points()
+                .stream()
+                .filter(point -> point.kind() == StorageHistoryPoint.Kind.STOCK)
+                .collect(java.util.stream.Collectors.toList());
+            assertEquals(1, recovered.size());
+            assertEquals(
+                0,
+                recovered.get(0)
+                    .quantity());
+            assertTrue(
+                recovered.get(0)
+                    .complete());
+            assertTrue(
+                service.submit(
+                    grid,
+                    1,
+                    StorageObservationFixtures
+                        .observation(4000, true, true, Collections.emptyList(), Collections.emptyList()),
+                    true,
+                    false));
+            awaitRevision(service, grid, 4);
+            assertFalse(
+                service.history(grid, item, 4000, 100)
+                    .points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.STOCK));
+        }
+    }
+
+    @Test
+    void recipeChangesUpdateLiveRowsWithoutInventingStockHistory() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        StableKey recipeOnly = StableKey.random();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
+            service.open(grid, 1);
+            assertTrue(service.submit(grid, 1, observation(item, 1000, 50), true, false));
+            awaitRevision(service, grid, 1);
+            assertTrue(
+                service.submit(
+                    grid,
+                    1,
+                    StorageObservationFixtures.observation(
+                        2000,
+                        true,
+                        true,
+                        Arrays.asList(
+                            new StorageObservationFixtures.Row(resource(item, 50), true),
+                            new StorageObservationFixtures.Row(resource(recipeOnly, 0), true)),
+                        Collections.emptyList()),
+                    true,
+                    false));
+            awaitRevision(service, grid, 2);
+            assertEquals(
+                2,
+                snapshot(service, grid).rows()
+                    .size());
+            assertTrue(
+                snapshot(service, grid).rows()
+                    .stream()
+                    .allMatch(StorageObservation.Row::craftable));
+            assertTrue(service.submit(grid, 1, observation(item, 3000, 50), true, false));
+            awaitRevision(service, grid, 3);
+            List<StorageHistoryPoint> points = service.history(grid, null, 0, 100)
+                .points();
+            assertEquals(
+                1,
+                points.stream()
+                    .filter(point -> point.kind() == StorageHistoryPoint.Kind.STOCK)
+                    .count());
+            assertFalse(
+                points.stream()
+                    .anyMatch(point -> recipeOnly.equals(point.itemKey())));
+            assertTrue(
+                service.submit(
+                    grid,
+                    1,
+                    StorageObservationFixtures
+                        .observation(4000, true, true, Collections.emptyList(), Collections.emptyList()),
+                    true,
+                    false));
+            awaitRevision(service, grid, 4);
+            assertEquals(
+                Arrays.asList(50L, 0L),
+                service.history(grid, item, 0, 100)
+                    .points()
+                    .stream()
+                    .filter(point -> point.kind() == StorageHistoryPoint.Kind.STOCK)
+                    .map(StorageHistoryPoint::quantity)
+                    .collect(java.util.stream.Collectors.toList()));
+        }
+    }
+
+    @Test
     void stockSampleAfterFlowOnlyGapReestablishesUnchangedStock() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();

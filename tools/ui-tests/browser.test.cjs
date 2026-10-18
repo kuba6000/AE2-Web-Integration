@@ -9921,7 +9921,6 @@ test('resource tracking is independent of CPU history and renders exact flow cou
             generation: '1',
             kind: 'STOCK',
             resource: { ...iron, quantity: '1234567890123456789' },
-            craftable: false,
             input: '0',
             output: '0',
             complete: true

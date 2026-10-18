@@ -194,7 +194,6 @@ final class HsqlHistoryReader {
             StorageHistoryPoint.Kind.valueOf(row.getString("kind")),
             itemKey == null ? null : StableKey.parse(itemKey),
             row.getLong("quantity"),
-            row.getBoolean("craftable"),
             row.getLong("input_amount"),
             row.getLong("output_amount"),
             row.getBoolean("complete"));

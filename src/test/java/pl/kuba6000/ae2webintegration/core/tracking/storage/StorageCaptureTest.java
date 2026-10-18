@@ -116,7 +116,6 @@ class StorageCaptureTest {
             StorageHistoryPoint.Kind.FLOW,
             itemKey,
             0,
-            false,
             flow.input(),
             flow.output(),
             true);

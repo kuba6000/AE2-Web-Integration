@@ -125,7 +125,6 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                     kind VARCHAR(16) NOT NULL,
                     item_key VARCHAR(22) REFERENCES history_resources(item_key),
                     quantity BIGINT NOT NULL,
-                    craftable BOOLEAN NOT NULL,
                     input_amount BIGINT NOT NULL,
                     output_amount BIGINT NOT NULL,
                     complete BOOLEAN NOT NULL
@@ -168,9 +167,9 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         try (PreparedStatement insert = db.prepareStatement("""
             INSERT INTO history_points (
                 grid_id, observed_at, generation, kind, item_key,
-                quantity, craftable, input_amount, output_amount, complete
+                quantity, input_amount, output_amount, complete
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """)) {
             for (StorageHistoryPoint point : points) {
                 insert.setLong(1, gridId);
@@ -186,10 +185,9 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                         : point.itemKey()
                             .toString());
                 insert.setLong(6, point.quantity());
-                insert.setBoolean(7, point.craftable());
-                insert.setLong(8, point.input());
-                insert.setLong(9, point.output());
-                insert.setBoolean(10, point.complete());
+                insert.setLong(7, point.input());
+                insert.setLong(8, point.output());
+                insert.setBoolean(9, point.complete());
                 insert.addBatch();
                 inserted++;
                 firstObserved = Math.min(firstObserved, point.observedAt());

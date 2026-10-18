@@ -89,8 +89,7 @@ public final class GetResourceHistory extends IAsyncRequest {
     /** Decimal strings preserve exact 64-bit counts and generation identifiers in browser clients. */
     @Desugar
     public record Point(long observedAt, @NotNull String generation, @NotNull StorageHistoryPoint.Kind kind,
-        @Nullable TrackedResource resource, boolean craftable, @NotNull String input, @NotNull String output,
-        boolean complete) {}
+        @Nullable TrackedResource resource, @NotNull String input, @NotNull String output, boolean complete) {}
 
     @Override
     public void handle() {
@@ -160,7 +159,6 @@ public final class GetResourceHistory extends IAsyncRequest {
                         .get(point.itemKey()),
                     point.quantity(),
                     references.get(point.itemKey())),
-            point.craftable(),
             Long.toString(point.input()),
             Long.toString(point.output()),
             point.complete());

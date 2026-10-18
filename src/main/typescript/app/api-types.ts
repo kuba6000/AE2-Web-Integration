@@ -186,7 +186,6 @@ export type ResourceHistoryPoint = {
     generation: string;
     kind: 'STOCK' | 'FLOW' | 'OBSERVATION' | 'FLOW_OBSERVATION' | 'GAP';
     resource: (ResourceDescription & { quantity: string }) | null;
-    craftable: boolean;
     input: string;
     output: string;
     complete: boolean;

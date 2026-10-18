@@ -197,7 +197,14 @@ public final class StorageTrackingService implements AutoCloseable {
                 store.append(gridKey, writtenDescriptions, points);
                 // Only a successful append advances the durable baseline.
                 if (persistStock) {
-                    state.sampledRows = new HashMap<>(next);
+                    Map<StableKey, Long> sampled = new HashMap<>();
+                    for (StorageObservation.Row row : next.values()) {
+                        // Preserve a known zero only while its row remains live, for recovery after a gap.
+                        if (row.quantity() != 0
+                            || state.sampledQuantities != null && state.sampledQuantities.containsKey(row.itemKey()))
+                            sampled.put(row.itemKey(), row.quantity());
+                    }
+                    state.sampledQuantities = sampled;
                     state.needsStockBaseline = false;
                 }
                 if (persistFlow) state.flowStarted = true;
@@ -233,7 +240,7 @@ public final class StorageTrackingService implements AutoCloseable {
         private boolean flowStarted;
         private boolean needsStockBaseline;
         private boolean workerFailureLogged;
-        private @Nullable Map<StableKey, StorageObservation.Row> sampledRows;
+        private @Nullable Map<StableKey, Long> sampledQuantities;
         private List<StorageObservation.UnkeyedRow> unkeyed = Collections.emptyList();
         private Map<StableKey, StorageObservation.Row> rows = new HashMap<>();
         private volatile StorageSnapshot snapshot;
@@ -270,10 +277,10 @@ public final class StorageTrackingService implements AutoCloseable {
         private List<StorageHistoryPoint> historyPoints(StorageObservation observation,
             Map<StableKey, StorageObservation.Row> next, boolean persistStock, boolean persistFlow, boolean gap) {
             List<StorageHistoryPoint> points = new ArrayList<>();
-            boolean initialStock = persistStock && sampledRows == null;
+            boolean initialStock = persistStock && sampledQuantities == null;
             boolean initialFlow = persistFlow && !flowStarted;
             if (gap || !observation.flowComplete() || initialStock || initialFlow)
-                points.add(point(observation, StorageHistoryPoint.Kind.GAP, null, 0, false, 0, 0, false));
+                points.add(point(observation, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0, false));
             if (persistStock) appendStockPoints(points, observation, next, gap);
             if (persistFlow) appendFlowPoints(points, observation, gap);
             return points;
@@ -282,22 +289,15 @@ public final class StorageTrackingService implements AutoCloseable {
         private void appendStockPoints(List<StorageHistoryPoint> points, StorageObservation observation,
             Map<StableKey, StorageObservation.Row> next, boolean gap) {
             for (StorageObservation.Row row : next.values()) {
-                if (needsStockBaseline || sampledRows == null || !row.equals(sampledRows.get(row.itemKey())))
+                Long previous = sampledQuantities == null ? null : sampledQuantities.get(row.itemKey());
+                if (row.quantity() != (previous == null ? 0 : previous) || needsStockBaseline && previous != null)
                     points.add(
-                        point(
-                            observation,
-                            StorageHistoryPoint.Kind.STOCK,
-                            row.itemKey(),
-                            row.quantity(),
-                            row.craftable(),
-                            0,
-                            0,
-                            true));
+                        point(observation, StorageHistoryPoint.Kind.STOCK, row.itemKey(), row.quantity(), 0, 0, true));
             }
-            if (sampledRows != null) {
-                for (StableKey key : sampledRows.keySet()) {
-                    if (!next.containsKey(key))
-                        points.add(point(observation, StorageHistoryPoint.Kind.STOCK, key, 0, false, 0, 0, true));
+            if (sampledQuantities != null) {
+                for (Map.Entry<StableKey, Long> sampled : sampledQuantities.entrySet()) {
+                    if (sampled.getValue() != 0 && !next.containsKey(sampled.getKey()))
+                        points.add(point(observation, StorageHistoryPoint.Kind.STOCK, sampled.getKey(), 0, 0, 0, true));
                 }
             }
             points.add(
@@ -306,7 +306,6 @@ public final class StorageTrackingService implements AutoCloseable {
                     StorageHistoryPoint.Kind.OBSERVATION,
                     null,
                     0,
-                    false,
                     0,
                     0,
                     observation.full() || snapshot.stockComplete() && !gap));
@@ -321,12 +320,11 @@ public final class StorageTrackingService implements AutoCloseable {
                         StorageHistoryPoint.Kind.FLOW,
                         flow.itemKey(),
                         0,
-                        false,
                         flow.input(),
                         flow.output(),
                         complete));
             }
-            points.add(point(observation, StorageHistoryPoint.Kind.FLOW_OBSERVATION, null, 0, false, 0, 0, complete));
+            points.add(point(observation, StorageHistoryPoint.Kind.FLOW_OBSERVATION, null, 0, 0, 0, complete));
         }
 
         private void publish(StorageObservation observation, Map<StableKey, StorageObservation.Row> next,
@@ -338,7 +336,9 @@ public final class StorageTrackingService implements AutoCloseable {
             if (observation.stockObserved()) visible = new ArrayList<>(next.values());
             // Unsampled removals still need their description when the next durable zero sample is written.
             descriptions.keySet()
-                .removeIf(key -> !next.containsKey(key) && (sampledRows == null || !sampledRows.containsKey(key)));
+                .removeIf(
+                    key -> !next.containsKey(key)
+                        && (sampledQuantities == null || !sampledQuantities.containsKey(key)));
             snapshot = new StorageSnapshot(
                 generation,
                 previous.revision() + (observation.stockObserved() ? 1 : 0),
@@ -354,14 +354,13 @@ public final class StorageTrackingService implements AutoCloseable {
         }
 
         private StorageHistoryPoint point(StorageObservation observation, StorageHistoryPoint.Kind kind,
-            @Nullable StableKey itemKey, long quantity, boolean craftable, long input, long output, boolean complete) {
+            @Nullable StableKey itemKey, long quantity, long input, long output, boolean complete) {
             return new StorageHistoryPoint(
                 observation.observedAt(),
                 generation,
                 kind,
                 itemKey,
                 quantity,
-                craftable,
                 input,
                 output,
                 complete);
