@@ -17,6 +17,7 @@ export const translations = {
         trackingResetZoom: 'Reset zoom',
         trackingFlow: 'Flow',
         trackingTime: 'Time',
+        trackingPartial: 'partial',
         trackingNet: 'Net',
         trackingStockChange: 'Stock change',
         trackingMeasuredPeriod: '{period} observed so far',
@@ -25,7 +26,7 @@ export const translations = {
         trackingLastStockSample: 'Last stock sample',
         trackingChart: 'Stored quantity and input/output over time',
         trackingChartHelp:
-            'Gold: stored quantity (left axis). Green/red: input/output totals per {period} interval (right axis). Drag to zoom. Click or tap to pin values; repeat or press Escape to release.',
+            'Gold: stored quantity (left axis). Green/red: measured input/output totals (right axis), grouped up to {period}. Hover shows the actual interval. Drag to zoom. Click or tap to pin values; repeat or press Escape to release.',
         navigation: 'Navigation',
         mobileFilters: 'Filters and sorting',
         closePanel: 'Close panel',
@@ -91,6 +92,7 @@ export const translations = {
         trackingResetZoom: 'Resetuj przybliżenie',
         trackingFlow: 'Przepływ',
         trackingTime: 'Czas',
+        trackingPartial: 'częściowe',
         trackingNet: 'Bilans',
         trackingStockChange: 'Zmiana stanu',
         trackingMeasuredPeriod: 'Dotychczas {period} obserwacji',
@@ -99,7 +101,7 @@ export const translations = {
         trackingLastStockSample: 'Ostatnia próbka stanu',
         trackingChart: 'Stan magazynu oraz wejścia i wyjścia w czasie',
         trackingChartHelp:
-            'Złoty: stan magazynu (lewa oś). Zielony/czerwony: suma wejść/wyjść w przedziale {period} (prawa oś). Przeciągnij, aby przybliżyć. Kliknij lub dotknij, aby zatrzymać wartości; ponów lub naciśnij Escape, aby zwolnić.',
+            'Złoty: stan magazynu (lewa oś). Zielony/czerwony: zmierzone sumy wejść/wyjść (prawa oś), grupowane do {period}. Najedź, aby zobaczyć rzeczywisty przedział. Przeciągnij, aby przybliżyć. Kliknij lub dotknij, aby zatrzymać wartości; ponów lub naciśnij Escape, aby zwolnić.',
         navigation: 'Nawigacja',
         mobileFilters: 'Filtry i sortowanie',
         closePanel: 'Zamknij panel',

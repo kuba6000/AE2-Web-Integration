@@ -65,6 +65,7 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
         let connected = false;
         let previousY = 0;
         for (const sample of samples) {
+            if (net && sample.flowBreak) connected = false;
             if (net && sample.intervalFrom === undefined) continue;
             const value = net
                 ? sample.input === null || sample.output === null
@@ -160,13 +161,21 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
         intervalChanged(intervalMillis);
         const hasFlow = samples.some((sample) => sample.input !== null || sample.output !== null);
         const hasStock = samples.some((sample) => sample.stock !== null);
-        const intervalIndices = new Map<number, number>();
-        samples.forEach((sample, index) => {
-            if (sample.intervalFrom !== undefined)
-                intervalIndices.set(Math.floor(sample.intervalFrom / intervalMillis), index);
-        });
-        const flowIndex = (seconds: number) =>
-            intervalIndices.get(Math.floor(Math.min(seconds * 1000, sampleUntil - 0.001) / intervalMillis));
+        const flowIntervals = samples.flatMap((sample, index) =>
+            sample.intervalFrom === undefined ? [] : [{ from: sample.intervalFrom, until: sample.time, index }]
+        );
+        const flowIndex = (seconds: number) => {
+            const time = seconds * 1000;
+            let low = 0;
+            let high = flowIntervals.length;
+            while (low < high) {
+                const middle = (low + high) >>> 1;
+                if (flowIntervals[middle].until <= time) low = middle + 1;
+                else high = middle;
+            }
+            const interval = flowIntervals[low];
+            return interval && time >= interval.from ? interval.index : undefined;
+        };
         // Explicit interval geometry avoids narrow bars caused by nearby stock extrema. Include
         // boundary-crossing bars during zoom; Canvas clips their rectangles to the plotting area.
         const bars: uPlot.Series.PathBuilder = (chart, series) => {
@@ -305,8 +314,10 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
                             if (value == null || index === null) return '—';
                             const bucket = flowIndex(chart.posToVal(chart.cursor.left ?? -10, 'x'));
                             const sample = samples[bucket ?? index];
-                            if (sample.intervalFrom !== undefined)
-                                return `${locale.dateTime(sample.intervalFrom, sample.time)}–${locale.time(sample.time)}`;
+                            if (sample.intervalFrom !== undefined) {
+                                const partial = sample.flowPartial ? ` (${locale.t('trackingPartial')})` : '';
+                                return `${locale.dateTime(sample.intervalFrom, sample.time)}–${locale.time(sample.time)}${partial}`;
+                            }
                             return locale.dateTime(value * 1000);
                         }
                     },
@@ -412,13 +423,13 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
                 samples.map((sample) => (sample.input === null ? null : Number(sample.input))),
                 samples.map((sample) => (sample.output === null ? null : -Number(sample.output))),
                 samples.map((sample) => (sample.stock === null ? null : Number(sample.stock))),
-                samples.map((sample) =>
-                    sample.intervalFrom === undefined
-                        ? undefined
-                        : sample.input === null || sample.output === null
-                          ? null
-                          : Number(sample.input - sample.output)
-                )
+                samples.map((sample) => {
+                    if (sample.flowBreak) return null;
+                    if (sample.intervalFrom === undefined)
+                        return flowIndex(sample.time / 1000) === undefined ? null : undefined;
+                    if (sample.input === null || sample.output === null) return null;
+                    return Number(sample.input - sample.output);
+                })
             ],
             host
         );

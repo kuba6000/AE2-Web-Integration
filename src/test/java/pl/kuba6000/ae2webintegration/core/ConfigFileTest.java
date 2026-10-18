@@ -26,6 +26,29 @@ class ConfigFileTest {
     Path root;
 
     @Test
+    void minuteFlowDefaultDoesNotReplaceExplicitFiveSecondConfiguration() throws Exception {
+        Config.init(root.toFile());
+        assertEquals(60, Config.INSTANCE.resourceTracking.flowFlushIntervalSeconds);
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        document.set("resource_tracking.flow_flush_interval_seconds", 5);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        Config.init(root.toFile());
+        assertEquals(5, Config.INSTANCE.resourceTracking.flowFlushIntervalSeconds);
+        document.remove("resource_tracking.flow_flush_interval_seconds");
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        assertEquals(60, Config.INSTANCE.resourceTracking.flowFlushIntervalSeconds);
+    }
+
+    @Test
     void flowHistoryIntervalIsConfigurableAndRejectsZero() throws Exception {
         Config.init(root.toFile());
         Path file = root.resolve("ae2webintegration/config.toml");

@@ -9917,6 +9917,7 @@ test('resource tracking is independent of CPU history and renders exact flow cou
     assert.equal(await page.locator('#network-stock-interval').inputValue(), '60');
     options.resourceHistory = {
         baseline: {
+            flowFrom: null,
             observedAt: 1690000000000,
             generation: '1',
             kind: 'STOCK',
@@ -9925,8 +9926,17 @@ test('resource tracking is independent of CPU history and renders exact flow cou
             output: '0'
         },
         points: [
-            { observedAt: 1700000000000, generation: 'run', kind: 'GAP', resource: null, input: '0', output: '0' },
             {
+                flowFrom: null,
+                observedAt: 1700000000000,
+                generation: 'run',
+                kind: 'GAP',
+                resource: null,
+                input: '0',
+                output: '0'
+            },
+            {
+                flowFrom: 1700000000000 - 5000,
                 observedAt: 1700000000000,
                 generation: 'run',
                 kind: 'FLOW',
@@ -9959,6 +9969,7 @@ test('tracking cold links load their own atlas mappings and respect names-only t
     options.packDelay = 150;
     options.resourceHistory = {
         baseline: {
+            flowFrom: null,
             observedAt: Date.now() - 1000000,
             generation: '1',
             kind: 'STOCK',
@@ -10005,6 +10016,7 @@ test('late tracking icon responses cannot restore images after names-only select
     await atlasFixture(page, options);
     const history = {
         baseline: {
+            flowFrom: null,
             observedAt: Date.now() - 1000000,
             generation: '1',
             kind: 'STOCK',
@@ -10050,6 +10062,7 @@ test('tracking uses historical mappings after terminal entry and clears them on 
     options.historyIcons = { ...options.icons, pages: [{ digest: 'c'.repeat(64), width: 128, height: 64 }] };
     options.resourceHistory = {
         baseline: {
+            flowFrom: null,
             observedAt: Date.now() - 1000000,
             generation: '1',
             kind: 'STOCK',
@@ -10086,6 +10099,7 @@ for (const touch of [false, true]) {
         );
         const now = Date.now();
         const stock = (age, quantity) => ({
+            flowFrom: null,
             observedAt: now - age,
             generation: '1',
             kind: 'STOCK',
@@ -10095,7 +10109,7 @@ for (const touch of [false, true]) {
             baseline: stock(3700000, '9223372036854775807'),
             points: [
                 stock(1800000, '9223372036854775808'),
-                { observedAt: now - 900000, generation: '1', kind: 'GAP', resource: null },
+                { flowFrom: null, observedAt: now - 900000, generation: '1', kind: 'GAP', resource: null },
                 stock(300000, '42')
             ],
             enabled: true,
@@ -10180,6 +10194,7 @@ test('tracking opens from resources, retains terminal state, and survives a dire
     };
     options.resourceHistory = {
         baseline: {
+            flowFrom: null,
             observedAt: now - 1000000,
             generation: '1',
             kind: 'STOCK',
@@ -10187,6 +10202,7 @@ test('tracking opens from resources, retains terminal state, and survives a dire
         },
         points: [
             {
+                flowFrom: now - 10000 - 5000,
                 observedAt: now - 10000,
                 generation: '1',
                 kind: 'FLOW',
@@ -10234,6 +10250,7 @@ test('tracking chart keeps missing periods blank and pixel rendering survives na
     const { page, options, base } = await fixture(t);
     const now = Date.now();
     const stock = (age, quantity) => ({
+        flowFrom: null,
         observedAt: now - age,
         generation: '1',
         kind: 'STOCK',
@@ -10246,7 +10263,7 @@ test('tracking chart keeps missing periods blank and pixel rendering survives na
         points: [
             stock(750000, 20),
             stock(600000, 50),
-            { observedAt: now - 500000, generation: '1', kind: 'GAP' },
+            { flowFrom: null, observedAt: now - 500000, generation: '1', kind: 'GAP' },
             stock(250000, 60),
             stock(100000, 30)
         ]
@@ -10289,6 +10306,7 @@ test('tracking legend choices survive automatic history refresh and chart rebuil
     const now = Date.now();
     options.resourceHistory = {
         baseline: {
+            flowFrom: null,
             observedAt: now - 1000000,
             generation: '1',
             kind: 'STOCK',
@@ -10297,8 +10315,15 @@ test('tracking legend choices survive automatic history refresh and chart rebuil
         complete: true,
         truncated: false,
         points: [
-            { observedAt: now - 10000, generation: '1', kind: 'FLOW', input: '12', output: '4' },
-            { observedAt: now - 5000, generation: '1', kind: 'FLOW_OBSERVATION' }
+            {
+                flowFrom: now - 10000 - 5000,
+                observedAt: now - 10000,
+                generation: '1',
+                kind: 'FLOW',
+                input: '12',
+                output: '4'
+            },
+            { flowFrom: now - 5000 - 5000, observedAt: now - 5000, generation: '1', kind: 'FLOW_OBSERVATION' }
         ]
     };
     await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
@@ -10344,16 +10369,19 @@ test('flow grouping adapts from original counters on zoom reset and resize while
     for (let age = 900000, index = 0; age >= 0; age -= 5000, index++) {
         const common = { observedAt: now - age, generation: '1' };
         points.push({
+            flowFrom: common.observedAt - 5000,
             ...common,
             kind: 'FLOW',
             input: String(amount),
             output: String(amount - BigInt(7 * ((index % 3) + 1)))
         });
-        points.push({ ...common, kind: 'FLOW_OBSERVATION' });
-        if (age === 600000) points.push({ ...common, kind: 'STOCK', resource: { ...iron, quantity: '60' } });
+        points.push({ flowFrom: common.observedAt - 5000, ...common, kind: 'FLOW_OBSERVATION' });
+        if (age === 600000)
+            points.push({ flowFrom: null, ...common, kind: 'STOCK', resource: { ...iron, quantity: '60' } });
     }
     options.resourceHistory = {
         baseline: {
+            flowFrom: null,
             observedAt: now - 1000000,
             generation: '1',
             kind: 'STOCK',
@@ -10451,17 +10479,25 @@ test('flow grouping adapts from original counters on zoom reset and resize while
         ...options.resourceHistory,
         complete: false,
         points: [
-            { observedAt: now - 900000, generation: '1', kind: 'FLOW', input: '11', output: '0' },
-            { observedAt: now - 600000, generation: '1', kind: 'GAP' },
+            {
+                flowFrom: now - 900000 - 5000,
+                observedAt: now - 900000,
+                generation: '1',
+                kind: 'FLOW',
+                input: '11',
+                output: '0'
+            },
+            { flowFrom: null, observedAt: now - 600000, generation: '1', kind: 'GAP' },
             ...[450000, 447000].flatMap((age, index) => [
                 {
+                    flowFrom: now - age - 3000,
                     observedAt: now - age,
                     generation: '1',
                     kind: 'FLOW',
                     input: String(index ? 7 : 5),
                     output: '0'
                 },
-                { observedAt: now - age, generation: '1', kind: 'FLOW_OBSERVATION' }
+                { flowFrom: now - age - 3000, observedAt: now - age, generation: '1', kind: 'FLOW_OBSERVATION' }
             ])
         ]
     };
@@ -10502,11 +10538,17 @@ test('flow grouping adapts from original counters on zoom reset and resize while
     );
 });
 
-test('history GAPs suppress uncertain buckets while partial counters remain exact and stock recovers to zero', async (t) => {
+test('history GAPs retain partial counters while stock recovers to zero', async (t) => {
     const { page, options, base } = await fixture(t);
     const now = Date.UTC(2026, 0, 1, 12, 0, 0);
     await page.clock.setFixedTime(now);
-    const point = (age, kind, fields = {}) => ({ observedAt: now - age, generation: '1', kind, ...fields });
+    const point = (age, kind, fields = {}) => ({
+        flowFrom: kind === 'FLOW' || kind === 'FLOW_OBSERVATION' ? now - age - 5000 : null,
+        observedAt: now - age,
+        generation: '1',
+        kind,
+        ...fields
+    });
     options.resourceHistory = {
         baseline: point(1000000, 'STOCK', { resource: { ...iron, quantity: '20' } }),
         complete: false,
@@ -10521,6 +10563,7 @@ test('history GAPs suppress uncertain buckets while partial counters remain exac
     };
     await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
     await page.locator('.tracking-view canvas').waitFor();
+    await page.evaluate(() => document.fonts.ready);
     const totals = await page.locator('.tracking-view .tracking-count-full').allTextContents();
     assert.equal(
         totals[0].replace(/,/g, ''),
@@ -10537,8 +10580,8 @@ test('history GAPs suppress uncertain buckets while partial counters remain exac
     await page.mouse.up();
     bounds = await area.boundingBox();
     for (const [position, net, stored] of [
-        [0.45, '—', '20'],
-        [0.49, '—', '—'],
+        [0.45, '9223372036854775803', '20'],
+        [0.51, '-6', '—'],
         [0.6, '-6', '0'],
         [0.72, '0', '0'],
         [0.9, '—', '0']
@@ -10546,7 +10589,12 @@ test('history GAPs suppress uncertain buckets while partial counters remain exac
         await page.mouse.move(bounds.x + bounds.width * position, bounds.y + 40);
         const value = (name) =>
             page.locator('.tracking-view .u-legend tr').filter({ hasText: name }).locator('.u-value');
-        assert.equal(await value('Net').innerText(), net);
+        assert.equal(
+            (await value('Net').innerText()).replace(/,/g, ''),
+            net,
+            `${position}: ${await value('Time').innerText()}`
+        );
+        if (position === 0.45) assert.match(await value('Time').innerText(), /partial/i);
         const actualStock = await value('Stored').innerText();
         assert.ok(actualStock.startsWith(stored), `${position}: expected ${stored}, saw ${actualStock}`);
     }
@@ -10558,6 +10606,7 @@ test('sparse stock remains held between real measurements and Net keeps exact in
     const now = Date.UTC(2026, 0, 1, 12, 0, 0);
     await page.clock.setFixedTime(now);
     const point = (age, kind, fields = {}) => ({
+        flowFrom: kind === 'FLOW' || kind === 'FLOW_OBSERVATION' ? now - age - 5000 : null,
         observedAt: now - age,
         generation: '1',
         kind,
@@ -10634,11 +10683,117 @@ test('sparse stock remains held between real measurements and Net keeps exact in
     }
 });
 
+test('Net rendering leaves unobserved periods blank in pixel and smooth modes', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const now = Date.UTC(2026, 0, 1, 12, 0, 0);
+    await page.clock.setFixedTime(now);
+    options.resourceHistory = {
+        baseline: null,
+        complete: false,
+        truncated: false,
+        points: [
+            [700000, 640000, 100],
+            [640000, 580000, 200],
+            [340000, 280000, 100],
+            [280000, 220000, 200]
+        ].map(([from, until, input]) => ({
+            observedAt: now - until,
+            flowFrom: now - from,
+            generation: '1',
+            kind: 'FLOW',
+            input: String(input),
+            output: '0'
+        }))
+    };
+    await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
+    await page.locator('.tracking-view canvas').waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    for (const name of ['Input', 'Output'])
+        await page.locator('.tracking-view .u-legend tr').filter({ hasText: name }).locator('th').click();
+    for (const mode of ['pixel', 'smooth']) {
+        await page.locator('.tracking-view select').nth(1).selectOption(mode);
+        const raster = await page.locator('.tracking-view .uplot').evaluate((root) => {
+            const canvas = root.querySelector('canvas');
+            const box = canvas.getBoundingClientRect();
+            const plot = root.querySelector('.u-over').getBoundingClientRect();
+            const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+            const center = ((plot.left - box.left + plot.width * 0.5) * canvas.width) / box.width;
+            let blue = 0,
+                inGap = 0;
+            for (let y = 0; y < canvas.height; y++)
+                for (let x = 0; x < canvas.width; x++) {
+                    const i = (y * canvas.width + x) * 4;
+                    if (
+                        Math.abs(data[i] - 128) <= 2 &&
+                        Math.abs(data[i + 1] - 201) <= 2 &&
+                        Math.abs(data[i + 2] - 237) <= 2 &&
+                        data[i + 3] > 0
+                    ) {
+                        blue++;
+                        if (Math.abs(x - center) < 10) inGap++;
+                    }
+                }
+            return { blue, inGap };
+        });
+        assert.ok(raster.blue > 20, `${mode} renders measured Net segments`);
+        assert.equal(raster.inGap, 0, `${mode} must not connect across missing flow coverage`);
+    }
+});
+
+test('sparse minute and short flow intervals retain their actual spans through zoom', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const now = Date.UTC(2026, 0, 1, 12, 0, 0);
+    await page.clock.setFixedTime(now);
+    const flow = (from, until, input) => ({
+        observedAt: now - until,
+        flowFrom: now - from,
+        generation: '1',
+        kind: 'FLOW',
+        input: String(input),
+        output: '0',
+        resource: { ...iron, quantity: '0' }
+    });
+    options.resourceHistory = {
+        baseline: null,
+        complete: true,
+        truncated: false,
+        points: [
+            flow(483000, 423000, 120),
+            flow(423000, 418000, 7),
+            { observedAt: now - 358000, flowFrom: now - 418000, generation: '1', kind: 'FLOW_OBSERVATION' }
+        ]
+    };
+    await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
+    await page.locator('.tracking-view canvas').waitFor();
+    await page.locator('.tracking-view .tracking-chart').scrollIntoViewIfNeeded();
+    const area = page.locator('.tracking-view .u-over');
+    let bounds = await area.boundingBox();
+    const input = page.locator('.tracking-view .u-legend tr').filter({ hasText: 'Input' }).locator('.u-value');
+    for (const [position, expected] of [
+        [0.47, '120'],
+        [0.52, '120'],
+        [0.533, '7'],
+        [0.55, '0'],
+        [0.61, '—']
+    ]) {
+        await page.mouse.move(bounds.x + bounds.width * position, bounds.y + 40);
+        assert.equal(await input.innerText(), expected);
+    }
+    await page.mouse.move(bounds.x + bounds.width * 0.48, bounds.y + 40);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width * 0.52, bounds.y + 40);
+    await page.mouse.up();
+    bounds = await area.boundingBox();
+    await page.mouse.move(bounds.x + bounds.width * 0.5, bounds.y + 40);
+    assert.equal(await input.innerText(), '120', 'Cropping inside a minute retains its whole measured amount');
+});
+
 test('flow bars and hover span the entire aggregation interval independently of stock samples', async (t) => {
     const { page, options, base } = await fixture(t);
     const now = Math.floor(Date.now() / 30000) * 30000;
     await page.clock.setFixedTime(now);
     const stock = (age, quantity) => ({
+        flowFrom: null,
         observedAt: now - age,
         generation: '1',
         kind: 'STOCK',
@@ -10653,7 +10808,14 @@ test('flow bars and hover span the entire aggregation interval independently of 
             stock(454000, 40),
             stock(452500, 15),
             stock(450100, 60),
-            { observedAt: now - 450001, generation: '1', kind: 'FLOW', input: '123', output: '45' }
+            {
+                flowFrom: now - 450001 - 5000,
+                observedAt: now - 450001,
+                generation: '1',
+                kind: 'FLOW',
+                input: '123',
+                output: '45'
+            }
         ]
     };
     await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
@@ -10744,6 +10906,7 @@ for (const touch of [false, true]) {
         await page.clock.setFixedTime(now);
         options.resourceHistory = {
             baseline: {
+                flowFrom: null,
                 observedAt: now - 1000000,
                 generation: '1',
                 kind: 'STOCK',
@@ -10752,6 +10915,7 @@ for (const touch of [false, true]) {
             complete: true,
             truncated: false,
             points: [675001, 225001].map((age, index) => ({
+                flowFrom: now - age - 5000,
                 observedAt: now - age,
                 generation: '1',
                 kind: 'FLOW',

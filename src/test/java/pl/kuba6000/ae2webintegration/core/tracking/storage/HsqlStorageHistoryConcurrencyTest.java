@@ -289,7 +289,7 @@ class HsqlStorageHistoryConcurrencyTest {
     }
 
     private static StorageHistoryPoint stock(StableKey item, long time, long quantity) {
-        return new StorageHistoryPoint(time, 1, StorageHistoryPoint.Kind.STOCK, item, quantity, 0, 0);
+        return new StorageHistoryPoint(time, 1, StorageHistoryPoint.Kind.STOCK, item, quantity, 0, 0, null);
     }
 
     private static ResourceDescriptor description(StableKey item, String name) {

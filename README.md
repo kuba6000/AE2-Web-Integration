@@ -207,6 +207,12 @@ Choose the storage sampling interval there. Input/output recording alone does no
 accepted input includes resources consumed by void storage. Select a resource in the terminal and open
 **Resource history** in its details to view measurements.
 
+Input/output history saves aggregated totals every 60 seconds by default. Set
+`resource_tracking.flow_flush_interval_seconds` in `config.toml` to choose another interval;
+existing configured values are preserved. Recent terminal summaries use five-second samples over
+two minutes independently of saved history. Charts show each measured interval's actual span and
+retain available partial counts when collection has gaps.
+
 History is stored in an embedded HSQLDB database under the world's `ae2webintegration/history` directory.
 No database installation is needed. The defaults retain up to 7 days and 250,000 records per network;
 the oldest records are removed when either limit is reached. One older stock measurement per resource

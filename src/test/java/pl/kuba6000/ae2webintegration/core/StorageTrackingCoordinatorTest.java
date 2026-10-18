@@ -16,6 +16,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
@@ -41,6 +43,150 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 class StorageTrackingCoordinatorTest extends GridTestScope {
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void orderlyClosePersistsAcceptedFlowBeforeItsFirstDurableDeadline(boolean finalDrainFails) throws Exception {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("shutdown-flow", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710034, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        var data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        data.getSettings()
+            .setFlowTracked(true);
+        ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
+        settings.flowFlushIntervalSeconds = 60;
+        InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
+        long startedAt = System.currentTimeMillis() - 6000;
+        long stoppedAfter;
+        try (StorageTrackingService service = new StorageTrackingService(store, 100)) {
+            try (StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                settings)) {
+                coordinator.tick(TestGridFixtures.ae(grid), startedAt);
+                StorageCapture capture = grid.web$getStorageCapture();
+                assertNotNull(capture);
+                capture.recordFlow(iron, 7, 2);
+                coordinator.tick(TestGridFixtures.ae(grid), startedAt + 5000);
+                IAEKey finalResource = finalDrainFails
+                    ? new ItemIdentityRequestTest.Resource("broken-description", 0, false) {
+
+                        @Override
+                        public @NotNull IAEKey web$copyIdentity() {
+                            return this;
+                        }
+
+                        @Override
+                        public @NotNull String web$getDisplayName() {
+                            throw new IllegalStateException("Native description unavailable during shutdown");
+                        }
+                    }
+                    : iron;
+                capture.recordFlow(finalResource, 3, 1);
+                capture.markFlowGap();
+                stoppedAfter = System.currentTimeMillis();
+            }
+        }
+        List<StorageHistoryPoint> points = store.read(key, iron.web$getKey(), 0, 100)
+            .points();
+        List<StorageHistoryPoint> flows = points.stream()
+            .filter(point -> point.kind() == StorageHistoryPoint.Kind.FLOW)
+            .collect(java.util.stream.Collectors.toList());
+        assertEquals(1, flows.size());
+        assertEquals(
+            finalDrainFails ? 7 : 10,
+            flows.get(0)
+                .input());
+        assertEquals(
+            startedAt,
+            flows.get(0)
+                .flowFrom());
+        assertEquals(
+            finalDrainFails ? 2 : 3,
+            flows.get(0)
+                .output());
+        assertTrue(
+            flows.get(0)
+                .observedAt() >= stoppedAfter);
+        assertTrue(
+            flows.get(0)
+                .observedAt() <= System.currentTimeMillis());
+        assertTrue(
+            points.stream()
+                .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.GAP));
+    }
+
+    @Test
+    void recentFlowSamplesWithoutViewersBeforeOneMinuteDurableAggregation() throws Exception {
+        ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("minute-flow", 20, false);
+        ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710033, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        var data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        data.getSettings()
+            .setFlowTracked(true);
+        ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
+        settings.flowFlushIntervalSeconds = 60;
+        TerminalRegistry terminals = new TerminalRegistry();
+        InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
+        try (StorageTrackingService service = new StorageTrackingService(store, 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                settings,
+                terminals)) {
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            StorageCapture capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            capture.recordFlow(iron, 7, 2);
+            coordinator.tick(TestGridFixtures.ae(grid), 6000);
+            capture.recordFlow(iron, 9, 3);
+            coordinator.tick(TestGridFixtures.ae(grid), 11000);
+            assertTrue(
+                store.read(key, iron.web$getKey(), 0, 100)
+                    .points()
+                    .isEmpty());
+
+            coordinator.prepareForViewer(grid, 11000);
+            var summary = awaitRecent(terminals, key, 11000);
+            var amount = summary.resources()
+                .get(iron.web$getKey());
+            assertNotNull(amount);
+            assertEquals("16", amount.input());
+            assertEquals("5", amount.output());
+            assertEquals(11000, summary.flowObservedAt());
+            assertEquals(5000, summary.bucketMillis());
+
+            capture.recordFlow(iron, 3, 1);
+            coordinator.prepareForViewer(grid, 12000);
+            coordinator.tick(TestGridFixtures.ae(grid), 16000);
+            coordinator.tick(TestGridFixtures.ae(grid), 61000);
+            service.close();
+            List<StorageHistoryPoint> flows = store.read(key, iron.web$getKey(), 0, 100)
+                .points()
+                .stream()
+                .filter(point -> point.kind() == StorageHistoryPoint.Kind.FLOW)
+                .collect(java.util.stream.Collectors.toList());
+            assertEquals(1, flows.size());
+            assertEquals(
+                1000,
+                flows.get(0)
+                    .flowFrom());
+            assertEquals(
+                61000,
+                flows.get(0)
+                    .observedAt());
+            assertEquals(
+                19,
+                flows.get(0)
+                    .input());
+            assertEquals(
+                6,
+                flows.get(0)
+                    .output());
+        }
+    }
 
     @Test
     void recentPublicationDoesNotRunOnTheNativeCaptureThread() throws Exception {
@@ -355,8 +501,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             assertNotNull(summary);
             var amount = summary.resources()
                 .get(iron.web$getKey());
-            assertEquals("0", amount.input());
-            assertEquals("0", amount.output());
+            assertEquals("100", amount.input());
+            assertEquals("100", amount.output());
             assertNull(amount.stockChange());
             assertEquals(1000, summary.flowSince());
             assertTrue(
@@ -516,12 +662,14 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         assertNotNull(data);
         data.getSettings()
             .setFlowTracked(true);
+        ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
+        settings.flowFlushIntervalSeconds = 5;
         InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
         try (StorageTrackingService service = new StorageTrackingService(store, 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
                 CoreEngine.GRID_IDENTITIES,
-                new ConfigSettings.ResourceTracking())) {
+                settings)) {
             coordinator.tick(TestGridFixtures.ae(grid), 1000);
             StorageCapture capture = grid.web$getStorageCapture();
             assertNotNull(capture);
@@ -696,6 +844,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         data.getSettings()
             .setStockSampleIntervalSeconds(10);
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
+        settings.flowFlushIntervalSeconds = 5;
         InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
         try (StorageTrackingService service = new StorageTrackingService(store, 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
@@ -778,6 +927,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         data.getSettings()
             .setFlowTracked(true);
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
+        settings.flowFlushIntervalSeconds = 5;
         InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
         try (StorageTrackingService service = new StorageTrackingService(store, 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
@@ -891,6 +1041,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         persistentData.getSettings()
             .setFlowTracked(true);
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
+        settings.flowFlushIntervalSeconds = 5;
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,

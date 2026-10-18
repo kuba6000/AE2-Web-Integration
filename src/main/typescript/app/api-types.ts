@@ -182,6 +182,7 @@ export type CraftingHistory = {
 
 /** Tracking counters use decimal strings so long values are never rounded by JSON parsing. */
 export type ResourceHistoryPoint = {
+    flowFrom: number | null;
     observedAt: number;
     generation: string;
     kind: 'STOCK' | 'FLOW' | 'OBSERVATION' | 'FLOW_OBSERVATION' | 'GAP';

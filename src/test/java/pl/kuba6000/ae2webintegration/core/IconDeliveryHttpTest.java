@@ -181,11 +181,12 @@ class IconDeliveryHttpTest {
                         new StorageObservation.Row(exact, 5, false),
                         new StorageObservation.Row(fallback, Long.MAX_VALUE, false),
                         new StorageObservation.Row(missing, 7, false)),
-                    Collections.emptyList(),
+                    Collections.singletonList(new StorageObservation.Flow(exact, 19, 6)),
                     descriptions,
                     Collections.emptyList()),
                 true,
-                false));
+                true,
+                observedAt - 60000));
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         var snapshot = service.snapshot(gridKey);
         assertNotNull(snapshot);
@@ -200,6 +201,16 @@ class IconDeliveryHttpTest {
         JsonObject plain = json(connection(path));
         for (var point : plain.getAsJsonObject("data")
             .getAsJsonArray("points")) {
+            JsonObject measured = point.getAsJsonObject();
+            String kind = measured.get("kind")
+                .getAsString();
+            if (kind.equals("FLOW") || kind.equals("FLOW_OBSERVATION")) assertEquals(
+                observedAt - 60000,
+                measured.get("flowFrom")
+                    .getAsLong());
+            else assertTrue(
+                measured.get("flowFrom")
+                    .isJsonNull());
             assertFalse(
                 point.getAsJsonObject()
                     .has("craftable"));

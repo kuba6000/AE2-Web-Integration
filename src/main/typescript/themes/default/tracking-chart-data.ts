@@ -6,21 +6,25 @@ export type ChartSample = {
     input: bigint | null;
     output: bigint | null;
     intervalFrom?: number;
+    flowPartial?: boolean;
+    flowBreak?: boolean;
     stockObservedAt?: number;
     stockMeasured?: boolean;
 };
 
-/** Use recorded flush cadence, not the spacing between individual resource changes. */
+/** Whole measured intervals remain the minimum display unit, including sparse and short final records. */
 export function flowResolution(history: ThemeState['resourceHistory']): number {
-    let previous: number | undefined;
-    let shortest = Infinity;
+    let resolution = 1000;
     for (const point of history.points) {
-        if (point.kind !== 'FLOW_OBSERVATION') continue;
-        if (previous !== undefined && point.observedAt > previous)
-            shortest = Math.min(shortest, point.observedAt - previous);
-        previous = point.observedAt;
+        if (
+            point.flowFrom !== null &&
+            point.observedAt > history.from &&
+            point.flowFrom < history.until &&
+            (point.kind === 'FLOW' || point.kind === 'FLOW_OBSERVATION')
+        )
+            resolution = Math.max(resolution, point.observedAt - point.flowFrom);
     }
-    return Number.isFinite(shortest) ? shortest : 5000;
+    return resolution;
 }
 
 export function flowDisplayInterval(span: number, pixels: number, resolution: number): number {
@@ -76,12 +80,8 @@ export function chartSamples(
     for (let start = from; start < until;) {
         const end = Math.min(until, (Math.floor(start / width) + 1) * width);
         const changes: { time: number; stock: bigint }[] = [];
-        let input = 0n;
-        let output = 0n;
-        let flowObserved = false;
         let gap = false;
         let gapAt = start;
-        let flowGap = false;
         while (index < points.length && points[index].observedAt <= end) {
             const point = points[index++];
             const reset = point.kind === 'GAP' || (generation && generation !== point.generation);
@@ -92,7 +92,6 @@ export function chartSamples(
                 stockObservedAt = undefined;
                 changes.length = 0;
             }
-            if (reset) flowGap = true;
             generation = point.generation;
             if (point.kind === 'STOCK' && point.resource) {
                 stock = BigInt(point.resource.quantity);
@@ -101,12 +100,6 @@ export function chartSamples(
                 stockObservedAt = point.observedAt;
                 changes.push({ time: point.observedAt, stock });
             }
-            if (point.kind === 'FLOW' && point.observedAt > from) {
-                input += BigInt(point.input);
-                output += BigInt(point.output);
-                flowObserved = true;
-            }
-            if (point.kind === 'FLOW_OBSERVATION' && point.observedAt > from) flowObserved = true;
         }
         if (gap) samples.push({ time: gapAt - 0.001, stock: null, input: null, output: null });
         if (changes.length) {
@@ -123,13 +116,105 @@ export function chartSamples(
         }
         samples.push({
             time: end,
-            intervalFrom: start,
             stock,
             stockObservedAt,
-            input: flowObserved && !flowGap ? input : null,
-            output: flowObserved && !flowGap ? output : null
+            input: null,
+            output: null
         });
         start = end;
+    }
+    const lastGap = new Map<string, number>();
+    const intervals = new Map<
+        string,
+        { from: number; until: number; generation: string; input: bigint; output: bigint; gap: boolean }
+    >();
+    for (const point of history.points) {
+        if (point.kind === 'GAP') lastGap.set(point.generation, point.observedAt);
+        if (
+            (point.kind !== 'FLOW' && point.kind !== 'FLOW_OBSERVATION') ||
+            point.flowFrom === null ||
+            point.observedAt <= from ||
+            point.flowFrom >= until
+        )
+            continue;
+        const key = `${point.generation}:${point.flowFrom}:${point.observedAt}`;
+        let interval = intervals.get(key);
+        if (!interval) {
+            interval = {
+                from: point.flowFrom,
+                until: point.observedAt,
+                generation: point.generation,
+                input: 0n,
+                output: 0n,
+                gap: (lastGap.get(point.generation) ?? -Infinity) > point.flowFrom
+            };
+            intervals.set(key, interval);
+        }
+        if (point.kind === 'FLOW') {
+            interval.input += BigInt(point.input);
+            interval.output += BigInt(point.output);
+        }
+    }
+    const groups: Array<{
+        from: number;
+        until: number;
+        generation: string;
+        input: bigint;
+        output: bigint;
+        gap: boolean;
+    }> = [];
+    for (const interval of [...intervals.values()].sort((a, b) => a.until - b.until)) {
+        const previous = groups[groups.length - 1];
+        if (
+            previous &&
+            previous.generation === interval.generation &&
+            previous.until === interval.from &&
+            interval.until - previous.from <= width
+        ) {
+            previous.until = interval.until;
+            previous.input += interval.input;
+            previous.output += interval.output;
+            previous.gap ||= interval.gap;
+        } else groups.push({ ...interval });
+    }
+    const stockSamples = [...samples].sort((a, b) => a.time - b.time);
+    let stockIndex = 0;
+    let previousFlowEnd: number | undefined;
+    for (const group of groups) {
+        if (previousFlowEnd !== undefined && group.from > previousFlowEnd) {
+            const beforeGap = stockSamples[stockIndex];
+            samples.push({
+                time: previousFlowEnd + 0.001,
+                stock: beforeGap.stock,
+                stockObservedAt: beforeGap.stockObservedAt,
+                input: null,
+                output: null,
+                flowBreak: true
+            });
+            while (stockIndex + 1 < stockSamples.length && stockSamples[stockIndex + 1].time <= group.from)
+                stockIndex++;
+            const held = stockSamples[stockIndex];
+            samples.push({
+                time: group.from,
+                stock: held.stock,
+                stockObservedAt: held.stockObservedAt,
+                input: null,
+                output: null,
+                flowBreak: true
+            });
+        }
+        while (stockIndex + 1 < stockSamples.length && stockSamples[stockIndex + 1].time <= group.until) stockIndex++;
+        const held = stockSamples[stockIndex];
+        samples.push({
+            time: group.until,
+            intervalFrom: group.from,
+            stock: held.stock,
+            stockObservedAt: held.stockObservedAt,
+            input: group.input,
+            output: group.output,
+            flowPartial: group.gap
+        });
+        previousFlowEnd = group.until;
     }
     // uPlot requires strictly increasing timestamps; observations may share a bucket boundary.
     const unique = new Map<number, ChartSample>();

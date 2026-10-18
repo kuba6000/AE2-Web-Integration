@@ -77,6 +77,7 @@ test('selected resource history preserves exact quantities and coverage', async 
     const { createResourceHistory } = await import(moduleUrl);
     const points = [
         {
+            flowFrom: 1000 - 5000,
             observedAt: 1000,
             generation: 'generation',
             kind: 'FLOW',
@@ -84,7 +85,15 @@ test('selected resource history preserves exact quantities and coverage', async 
             input: '9223372036854775807',
             output: '0'
         },
-        { observedAt: 1000, generation: 'generation', kind: 'GAP', resource: null, input: '0', output: '0' }
+        {
+            flowFrom: null,
+            observedAt: 1000,
+            generation: 'generation',
+            kind: 'GAP',
+            resource: null,
+            input: '0',
+            output: '0'
+        }
     ];
     const history = createResourceHistory(
         {

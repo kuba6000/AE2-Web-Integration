@@ -228,7 +228,10 @@ final class HsqlHistoryReader {
             itemKey == null ? null : StableKey.parse(itemKey),
             table == Table.STOCK ? row.getLong("quantity") : 0,
             table == Table.FLOW ? row.getLong("input_amount") : 0,
-            table == Table.FLOW ? row.getLong("output_amount") : 0);
+            table == Table.FLOW ? row.getLong("output_amount") : 0,
+            kind == StorageHistoryPoint.Kind.FLOW || kind == StorageHistoryPoint.Kind.FLOW_OBSERVATION
+                ? row.getLong("flow_from")
+                : null);
     }
 
     private static @NotNull Map<StableKey, ResourceDescriptor> readDescriptions(@NotNull Connection db,

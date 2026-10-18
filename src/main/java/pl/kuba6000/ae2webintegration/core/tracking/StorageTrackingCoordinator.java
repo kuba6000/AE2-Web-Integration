@@ -141,7 +141,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         while (iterator.hasNext()) {
             Map.Entry<StableKey, Binding> entry = iterator.next();
             if (!present.contains(entry.getKey())) {
-                detach(entry.getValue());
+                detach(entry.getValue(), nowMillis);
                 iterator.remove();
             }
         }
@@ -163,7 +163,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         if (binding == null || binding.grid.get() != grid || binding.stock != stock || binding.flow != flow) {
             long activeUntil = binding == null ? 0 : binding.activeUntil;
             if (binding != null) {
-                detach(binding);
+                detach(binding, nowMillis);
                 scheduled.remove(binding);
             }
             binding = new Binding(
@@ -175,6 +175,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             binding.stock = stock;
             binding.flow = flow;
             binding.nextFlowFlush = nowMillis + TimeUnit.SECONDS.toMillis(settings.flowFlushIntervalSeconds);
+            binding.nextFlowSample = nowMillis + RecentResourceActivity.BUCKET_MILLIS;
+            binding.flowFrom = nowMillis;
             bindings.put(key, binding);
             scheduled.add(binding);
             grid.web$getStorageGrid()
@@ -195,6 +197,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         if (binding.lastFailure != null && nowMillis < binding.retryAfter) return false;
         return binding.stock && nowMillis >= binding.nextStockSample
             || binding.flow && nowMillis >= binding.nextFlowFlush
+            || binding.flow && nowMillis >= binding.nextFlowSample
             || binding.activeUntil > nowMillis && nowMillis >= binding.nextViewerRead
             || binding.flow && binding.activeUntil > nowMillis && nowMillis >= binding.nextRecentPublication;
     }
@@ -203,10 +206,11 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         long started = System.nanoTime();
         boolean stockSample = binding.stock && nowMillis >= binding.nextStockSample;
         boolean flowFlush = binding.flow && nowMillis >= binding.nextFlowFlush;
+        boolean flowSample = binding.flow && (flowFlush || nowMillis >= binding.nextFlowSample);
         boolean liveRead = binding.activeUntil > nowMillis && nowMillis >= binding.nextViewerRead;
         long interval = binding.activeUntil > nowMillis ? settings.activeIntervalMillis
             : binding.flow ? TimeUnit.SECONDS.toMillis(settings.flowFlushIntervalSeconds) : binding.stockInterval;
-        if (!stockSample && !flowFlush && !liveRead) {
+        if (!stockSample && !flowSample && !liveRead) {
             publishRecent(binding, nowMillis);
             return;
         }
@@ -218,7 +222,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 recent.invalidate(binding.key, binding.generation, nowMillis);
             }
             StorageObservation observation = stockSample || liveRead
-                ? binding.capture.observe(grid, nowMillis, stockSample || nowMillis >= binding.nextFull, binding.flow)
+                ? binding.capture.observe(grid, nowMillis, stockSample || nowMillis >= binding.nextFull, flowSample)
                 : binding.capture.flushFlow(nowMillis);
             if (observation.full())
                 binding.nextFull = nowMillis + TimeUnit.SECONDS.toMillis(settings.reconciliationIntervalSeconds);
@@ -248,14 +252,16 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             }
             binding.accumulateFlow(observation);
             if (binding.activeUntil > nowMillis) terminals.observed(binding.key, binding.generation, observation);
+            if (stockSample || flowSample)
+                recent.submit(binding.key, binding.generation, observation, stockSample, flowSample);
             if (stockSample || flowFlush) {
                 StorageObservation history = flowFlush ? binding.flushHistory(observation) : observation;
-                recent.submit(binding.key, binding.generation, history, stockSample, flowFlush);
                 // Persistence failure does not discard measurements already captured by tracking.
-                service.submit(binding.key, binding.generation, history, stockSample, flowFlush);
+                service.submit(binding.key, binding.generation, history, stockSample, flowFlush, binding.flowFrom);
+                if (flowFlush) binding.flowFrom = nowMillis;
             }
             if (binding.activeUntil > nowMillis) {
-                if (stockSample || flowFlush)
+                if (stockSample || flowSample)
                     binding.nextRecentPublication = nowMillis + RecentResourceActivity.BUCKET_MILLIS;
                 else if (nowMillis >= binding.nextRecentPublication || terminals.recent(binding.key) == null)
                     publishRecent(binding, nowMillis);
@@ -263,6 +269,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             if (stockSample) binding.nextStockSample = nowMillis + binding.stockInterval;
             if (flowFlush)
                 binding.nextFlowFlush = nowMillis + TimeUnit.SECONDS.toMillis(settings.flowFlushIntervalSeconds);
+            if (flowSample) binding.nextFlowSample = nowMillis + RecentResourceActivity.BUCKET_MILLIS;
             if (observation.stockObserved()) binding.nextViewerRead = nowMillis + settings.activeIntervalMillis;
             binding.lastFailure = null;
         } catch (RuntimeException failure) {
@@ -289,7 +296,33 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         return nowMillis + elapsed + Math.max(interval, FAILURE_RETRY_MILLIS);
     }
 
-    private void detach(Binding binding) {
+    private void detach(Binding binding, long nowMillis) {
+        if (binding.flow && binding.capture.isProducerThread()) {
+            StorageObservation observation;
+            try {
+                observation = binding.capture.flushFlow(nowMillis);
+            } catch (RuntimeException failure) {
+                LOG.warn("Pending flow could not be captured for network {}", binding.key, failure);
+                // Already detached amounts survive even when final native metadata cannot be read.
+                observation = new StorageObservation(
+                    nowMillis,
+                    false,
+                    false,
+                    false,
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyMap(),
+                    Collections.emptyList());
+            }
+            binding.accumulateFlow(observation);
+            service.submit(
+                binding.key,
+                binding.generation,
+                binding.flushHistory(observation),
+                false,
+                true,
+                binding.flowFrom);
+        }
         IAEGrid grid = binding.grid.get();
         if (grid != null && grid.web$getStorageGrid()
             .web$getStorageCapture() == binding.capture) {
@@ -306,7 +339,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
 
     @Override
     public void close() {
-        for (Binding binding : bindings.values()) detach(binding);
+        long nowMillis = System.currentTimeMillis();
+        for (Binding binding : bindings.values()) detach(binding, nowMillis);
         bindings.clear();
         scheduled.clear();
         recent.close();
@@ -326,6 +360,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private long stockInterval;
         private long nextStockSample;
         private long nextFlowFlush;
+        private long nextFlowSample;
+        private long flowFrom;
         private long nextViewerRead;
         private long retryAfter;
         private long terminalEpoch;

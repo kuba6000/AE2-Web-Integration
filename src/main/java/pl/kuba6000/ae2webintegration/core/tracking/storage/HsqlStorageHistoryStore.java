@@ -179,7 +179,8 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                     generation BIGINT NOT NULL,
                     resource_id BIGINT NOT NULL REFERENCES history_resources(id),
                     input_amount BIGINT NOT NULL,
-                    output_amount BIGINT NOT NULL
+                    output_amount BIGINT NOT NULL,
+                    flow_from BIGINT NOT NULL
                 )
                 """);
             sql.execute("""
@@ -188,7 +189,8 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                     grid_id BIGINT NOT NULL REFERENCES history_grids(id),
                     observed_at BIGINT NOT NULL,
                     generation BIGINT NOT NULL,
-                    kind VARCHAR(16) NOT NULL CHECK (kind IN ('GAP', 'OBSERVATION', 'FLOW_OBSERVATION'))
+                    kind VARCHAR(16) NOT NULL CHECK (kind IN ('GAP', 'OBSERVATION', 'FLOW_OBSERVATION')),
+                    flow_from BIGINT
                 )
                 """);
             for (Table table : Table.values()) {
@@ -243,13 +245,16 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         try (PreparedStatement stock = db.prepareStatement("""
             INSERT INTO history_stock (id, grid_id, observed_at, generation, resource_id, quantity)
             VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?, ?)
-            """); PreparedStatement flow = db.prepareStatement("""
-            INSERT INTO history_flow (id, grid_id, observed_at, generation, resource_id, input_amount, output_amount)
-            VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?, ?, ?)
-            """); PreparedStatement coverage = db.prepareStatement("""
-            INSERT INTO history_coverage (id, grid_id, observed_at, generation, kind)
-            VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?)
-            """)) {
+            """);
+            PreparedStatement flow = db.prepareStatement(
+                """
+                    INSERT INTO history_flow (id, grid_id, observed_at, generation, resource_id, input_amount, output_amount, flow_from)
+                    VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?, ?, ?, ?)
+                    """);
+            PreparedStatement coverage = db.prepareStatement("""
+                INSERT INTO history_coverage (id, grid_id, observed_at, generation, kind, flow_from)
+                VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?, ?)
+                """)) {
             PreparedStatement pending = null;
             for (StorageHistoryPoint point : points) {
                 Table table = Table.forKind(point.kind());
@@ -266,16 +271,21 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                 insert.setLong(1, gridId);
                 insert.setLong(2, point.observedAt());
                 insert.setLong(3, point.generation());
-                if (table == Table.COVERAGE) insert.setString(
-                    4,
-                    point.kind()
-                        .name());
-                else {
+                if (table == Table.COVERAGE) {
+                    insert.setString(
+                        4,
+                        point.kind()
+                            .name());
+                    insert.setObject(5, point.flowFrom(), Types.BIGINT);
+                } else {
                     Long resourceId = resourceIds.get(point.itemKey());
                     if (resourceId == null) insert.setNull(4, Types.BIGINT);
                     else insert.setLong(4, resourceId);
                     insert.setLong(5, table == Table.STOCK ? point.quantity() : point.input());
-                    if (table == Table.FLOW) insert.setLong(6, point.output());
+                    if (table == Table.FLOW) {
+                        insert.setLong(6, point.output());
+                        insert.setObject(7, point.flowFrom(), Types.BIGINT);
+                    }
                 }
                 insert.addBatch();
                 pending = insert;

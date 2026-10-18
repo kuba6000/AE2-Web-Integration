@@ -70,15 +70,9 @@ public final class StorageTrackingService implements AutoCloseable {
         states.put(gridKey, new State(generation));
     }
 
-    /** Never waits for disk or queue capacity. Rejection marks history coverage incomplete. */
-    public boolean submit(@NotNull StableKey gridKey, long generation, @NotNull StorageObservation observation,
-        boolean persist) {
-        return submit(gridKey, generation, observation, persist, persist);
-    }
-
     /** Live publication, durable stock sampling and flow buckets have independent schedules. */
     public boolean submit(@NotNull StableKey gridKey, long generation, @NotNull StorageObservation observation,
-        boolean persistStock, boolean persistFlow) {
+        boolean persistStock, boolean persistFlow, long flowFrom) {
         if (persistStock && !observation.stockObserved())
             throw new IllegalArgumentException("A stock sample requires observed stock");
         State state = states.get(gridKey);
@@ -97,7 +91,7 @@ public final class StorageTrackingService implements AutoCloseable {
             long lossEpoch = state.lossEpoch.get();
             worker.execute(() -> {
                 try {
-                    if (!closed) apply(gridKey, state, observation, persistStock, persistFlow, lossEpoch);
+                    if (!closed) apply(gridKey, state, observation, persistStock, persistFlow, flowFrom, lossEpoch);
                 } catch (RuntimeException failed) {
                     if (!state.workerFailureLogged) {
                         state.workerFailureLogged = true;
@@ -182,7 +176,7 @@ public final class StorageTrackingService implements AutoCloseable {
     }
 
     private void apply(StableKey gridKey, State state, StorageObservation observation, boolean persistStock,
-        boolean persistFlow, long lossEpoch) {
+        boolean persistFlow, long flowFrom, long lossEpoch) {
         boolean gap = lossEpoch != state.handledLossEpoch;
         if (gap || !observation.flowComplete() || persistFlow && !state.flowStarted) state.needsStockBaseline = true;
         Map<StableKey, StorageObservation.Row> next = state.mergeStock(observation);
@@ -191,7 +185,8 @@ public final class StorageTrackingService implements AutoCloseable {
 
         boolean persistence = state.snapshot.persistenceComplete();
         if (persistence && (persistStock || persistFlow)) {
-            List<StorageHistoryPoint> points = state.historyPoints(observation, next, persistStock, persistFlow, gap);
+            List<StorageHistoryPoint> points = state
+                .historyPoints(observation, next, persistStock, persistFlow, flowFrom, gap);
             Map<StableKey, ResourceDescriptor> writtenDescriptions = descriptionsFor(points, observation, descriptions);
             try {
                 store.append(gridKey, writtenDescriptions, points);
@@ -275,7 +270,8 @@ public final class StorageTrackingService implements AutoCloseable {
         }
 
         private List<StorageHistoryPoint> historyPoints(StorageObservation observation,
-            Map<StableKey, StorageObservation.Row> next, boolean persistStock, boolean persistFlow, boolean gap) {
+            Map<StableKey, StorageObservation.Row> next, boolean persistStock, boolean persistFlow, long flowFrom,
+            boolean gap) {
             List<StorageHistoryPoint> points = new ArrayList<>();
             boolean initialStock = persistStock && sampledQuantities == null;
             boolean initialFlow = persistFlow && !flowStarted;
@@ -283,7 +279,7 @@ public final class StorageTrackingService implements AutoCloseable {
             if (gap || !observation.flowComplete() || initialStock || initialFlow || persistStock && !completeStock)
                 points.add(point(observation, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0));
             if (persistStock) appendStockPoints(points, observation, next, gap);
-            if (persistFlow) appendFlowPoints(points, observation, gap);
+            if (persistFlow) appendFlowPoints(points, observation, flowFrom, gap);
             return points;
         }
 
@@ -305,13 +301,31 @@ public final class StorageTrackingService implements AutoCloseable {
                 points.add(point(observation, StorageHistoryPoint.Kind.OBSERVATION, null, 0, 0, 0));
         }
 
-        private void appendFlowPoints(List<StorageHistoryPoint> points, StorageObservation observation, boolean gap) {
+        private void appendFlowPoints(List<StorageHistoryPoint> points, StorageObservation observation, long flowFrom,
+            boolean gap) {
             boolean complete = observation.flowComplete() && !gap;
             for (StorageObservation.Flow flow : observation.flows()) {
                 points.add(
-                    point(observation, StorageHistoryPoint.Kind.FLOW, flow.itemKey(), 0, flow.input(), flow.output()));
+                    new StorageHistoryPoint(
+                        observation.observedAt(),
+                        generation,
+                        StorageHistoryPoint.Kind.FLOW,
+                        flow.itemKey(),
+                        0,
+                        flow.input(),
+                        flow.output(),
+                        flowFrom));
             }
-            if (complete) points.add(point(observation, StorageHistoryPoint.Kind.FLOW_OBSERVATION, null, 0, 0, 0));
+            if (complete) points.add(
+                new StorageHistoryPoint(
+                    observation.observedAt(),
+                    generation,
+                    StorageHistoryPoint.Kind.FLOW_OBSERVATION,
+                    null,
+                    0,
+                    0,
+                    0,
+                    flowFrom));
         }
 
         private void publish(StorageObservation observation, Map<StableKey, StorageObservation.Row> next,
@@ -349,7 +363,8 @@ public final class StorageTrackingService implements AutoCloseable {
                 itemKey,
                 quantity,
                 input,
-                output);
+                output,
+                null);
         }
     }
 }

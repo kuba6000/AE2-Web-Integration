@@ -107,7 +107,7 @@ public final class ConfigSettings {
 
         @Path("flow_flush_interval_seconds")
         @Comment("Interval between saved network input/output totals, in seconds (1-86400).")
-        public int flowFlushIntervalSeconds = 5;
+        public int flowFlushIntervalSeconds = 60;
 
         @Path("active_interval_millis")
         @Comment("Minimum storage observation interval while the web terminal is in use, in milliseconds.")

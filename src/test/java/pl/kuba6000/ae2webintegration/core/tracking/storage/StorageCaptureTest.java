@@ -117,7 +117,8 @@ class StorageCaptureTest {
             itemKey,
             0,
             flow.input(),
-            flow.output());
+            flow.output(),
+            (now) - 1000L);
         try (HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(database, 30, 100)) {
             store.append(gridKey, observation.descriptions(), Collections.singletonList(point));
         }
