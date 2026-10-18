@@ -1,15 +1,21 @@
 import uPlot from './uplot.js';
 import { element } from './dom.js';
-import type { ThemeState, Translator } from '../../app/theme-api.js';
+import type { ThemeState, Translator, PinHomeConfig } from '../../app/theme-api.js';
 import { chartSamples, flowDisplayInterval, flowResolution, type ChartSample } from './tracking-chart-data.js';
 
 /** Theme-owned renderer. Exact counters stay in samples; Canvas coordinates are approximate. */
-export function createTrackingChart(host: HTMLElement, compact: boolean, intervalChanged: (millis: number) => void) {
+export function createTrackingChart(
+    host: HTMLElement,
+    compact: boolean,
+    intervalChanged: (millis: number) => void,
+    height?: number
+) {
     const readout = compact ? element('div', '', 'tracking-sparkline-readout') : null;
     if (readout) {
         readout.hidden = true;
         host.append(readout);
     }
+    let selectedSeries: Pick<PinHomeConfig, 'stock' | 'input' | 'output' | 'net'> | undefined;
     let plot: uPlot | undefined;
     let samples: ChartSample[] = [];
     let pixel = true;
@@ -48,7 +54,7 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
         if (event.key === 'Escape' && pinned && host.getClientRects().length) clearPin();
     };
     window.addEventListener('keydown', releaseOnEscape);
-    const chartHeight = () => (compact ? 110 : mobile ? 280 : 380);
+    const chartHeight = () => height ?? (compact ? 110 : mobile ? 280 : 380);
     const pixelCanvas = document.createElement('canvas');
     const pixelContext = pixelCanvas.getContext('2d')!;
     const amount = (value: bigint | null) =>
@@ -239,7 +245,7 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
                         return flowIndex(time) ?? null;
                     }
                 },
-                legend: { show: !compact, live: true },
+                legend: { show: !compact && !selectedSeries, live: true },
                 scales: {
                     x: { time: true },
                     stock: { auto: true },
@@ -328,7 +334,7 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
                         fill: '#58a66b77',
                         paths: bars,
                         width: 0,
-                        show: !compact && (visibleSeries?.[1] ?? true),
+                        show: selectedSeries?.input ?? (!compact && (visibleSeries?.[1] ?? true)),
                         points: { show: false },
                         value: (_u, _v, _s, index) => amount(index === null ? null : (samples[index]?.input ?? null))
                     },
@@ -339,13 +345,13 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
                         fill: '#cf646477',
                         paths: bars,
                         width: 0,
-                        show: !compact && (visibleSeries?.[2] ?? true),
+                        show: selectedSeries?.output ?? (!compact && (visibleSeries?.[2] ?? true)),
                         points: { show: false },
                         value: (_u, _v, _s, index) => amount(index === null ? null : (samples[index]?.output ?? null))
                     },
                     {
                         label: locale.common('stored'),
-                        show: visibleSeries?.[3] ?? true,
+                        show: selectedSeries?.stock ?? visibleSeries?.[3] ?? true,
                         scale: 'stock',
                         stroke: '#d69b28',
                         paths: pixel ? () => null : uPlot.paths.stepped!({ align: 1 }),
@@ -366,7 +372,7 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
                         stroke: '#80c9ed',
                         paths: pixel ? () => null : undefined,
                         width: 1,
-                        show: !compact && (visibleSeries?.[4] ?? true),
+                        show: selectedSeries?.net ?? (!compact && (visibleSeries?.[4] ?? true)),
                         points: { show: false },
                         spanGaps: false,
                         value: (_u, _v, _s, index) => {
@@ -511,7 +517,13 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
     });
     resize.observe(host);
     return {
-        render(next: ThemeState['resourceHistory'], translator: Translator, pixelated: boolean, resourceKey: string) {
+        render(
+            next: ThemeState['resourceHistory'],
+            translator: Translator,
+            pixelated: boolean,
+            resourceKey: string,
+            series?: Pick<PinHomeConfig, 'stock' | 'input' | 'output' | 'net'>
+        ) {
             if (identity !== resourceKey || rangeMillis !== next.rangeMillis) {
                 preserveZoom = false;
                 clearPin();
@@ -519,7 +531,8 @@ export function createTrackingChart(host: HTMLElement, compact: boolean, interva
             if (pinned && (pinned.time * 1000 < next.from || pinned.time * 1000 > next.until)) clearPin();
             identity = resourceKey;
             rangeMillis = next.rangeMillis;
-            const nextSignature = `${next.from}/${next.until}/${translator.t('trackingFlow')}/${pixelated}`;
+            selectedSeries = series;
+            const nextSignature = `${next.from}/${next.until}/${translator.t('trackingFlow')}/${pixelated}/${series ? `${series.stock}/${series.input}/${series.output}/${series.net}` : ''}`;
             const changed = next.points !== previousPoints || nextSignature !== signature;
             previousPoints = next.points;
             history = next;

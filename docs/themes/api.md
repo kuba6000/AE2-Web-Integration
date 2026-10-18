@@ -59,6 +59,8 @@ Use those limits for controls and validation; pass only editable fields to `sett
 | `crafting.search(value)`, `sort(value)`, `reverse()`                       | Set standard plan presentation preferences                |
 | `cpus.pause(key, paused)`, `cpus.cancel(key)`                              | Operate on CPU work                                       |
 | `settings.edit(field, value)`, `settings.save()`                           | Edit and save network settings                            |
+| `pins.add(gridKey, itemKey, placement)`                                    | Pin a resource in the terminal or on Home                  |
+| `pins.update(pinKey, update)`, `pins.remove(pinKey)`                       | Change placement, order or Home display; remove a pin      |
 
 Actions retain the shared validation, capability checks, pending state and API error handling.
 Render the appropriate state error fields and pending indicators. Automatic polling must not disable
@@ -68,6 +70,24 @@ Navigation uses the application's existing hash routes, for example `#/`,
 `#/grids/<encoded-key>/items` and `#/web-settings`. `Route` and `ThemeView` expose the supported route
 union. URL-encode keys. A theme's declared views affect its navigation; they do not disable server
 authorization or eliminate all background data requests.
+
+### Account pins
+
+`state.pins.items` contains the current account's saved resource pins. `terminalOrder` is scoped to
+the pin's network; `homeOrder` spans all networks independently of the selected network. A null order
+means that placement is disabled. Adding one placement preserves the other. Use
+`pins.update(pinKey, { move: { placement: 'terminal', direction: 'earlier' } })` to change one order.
+Home display options are replaced together through `homeConfig`; copy the current configuration
+before changing selected fields.
+
+`state.pins.icons` supplies the atlas metadata for pin descriptions. Unavailable pins retain their
+identifier and settings but have null resource/network metadata. Render an unavailable entry and
+allow removal; do not keep displaying previously cached metadata after access is lost.
+
+On Home, `state.pins.histories[pinKey]` supplies recorded history for accessible Home pins. Stock
+values are samples with timestamps, not live inventory counts. Pinning does not enable tracking.
+The application owns request cancellation, bounded history reads and automatic refresh; themes
+choose the presentation and must preserve the distinction between missing measurements and zero.
 
 ## Optional helpers
 

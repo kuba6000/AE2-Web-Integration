@@ -240,6 +240,13 @@ public final class TerminalRegistry {
         if (subscriber != null && !subscriber.attached) release(subscriber);
     }
 
+    /** Detached current membership for pin admission, without copying the entire inventory or reading native state. */
+    public synchronized @Nullable ResourceDescriptor description(@NotNull StableKey key, @NotNull StableKey item) {
+        expire(System.currentTimeMillis());
+        Grid grid = grids.get(key);
+        return closed || grid == null || !grid.initialized ? null : grid.descriptions.get(item);
+    }
+
     public synchronized @Nullable StorageSnapshot snapshot(@NotNull StableKey key) {
         Grid grid = grids.get(key);
         if (grid == null || !grid.initialized) return null;

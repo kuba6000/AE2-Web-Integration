@@ -73,6 +73,12 @@ export function mountTheme(
         search: application.search,
         select: application.select,
         resourceHistory: { range: application.resourceHistory.range },
+        pins: {
+            add: application.pins.add,
+            update: application.pins.update,
+            remove: application.pins.remove,
+            refresh: application.pins.refresh
+        },
         preference: application.preference,
         displayIcons: application.displayIcons,
         crafting: {

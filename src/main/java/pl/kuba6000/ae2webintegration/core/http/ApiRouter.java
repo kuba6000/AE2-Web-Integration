@@ -246,31 +246,39 @@ public final class ApiRouter implements HttpHandler {
         } catch (CharacterCodingException exception) {
             throw new InvalidInput(ApiStatus.BAD_PARAM);
         }
-        // The current input DTOs contain scalar members only. Read strict JSON directly: old Gson's
+        // Read scalar inputs and bounded nested configuration objects strictly: old Gson's
         // convenience parsers turn leniency on and otherwise accept forms such as {count:7}.
         try (JsonReader reader = new JsonReader(new StringReader(json))) {
-            JsonObject object = new JsonObject();
-            reader.beginObject();
-            while (reader.hasNext()) {
-                String name = reader.nextName();
-                if (object.has(name)) throw new InvalidInput(ApiStatus.BAD_PARAM);
-                switch (reader.peek()) {
-                    case STRING -> object.addProperty(name, reader.nextString());
-                    case BOOLEAN -> object.addProperty(name, reader.nextBoolean());
-                    case NUMBER -> object.addProperty(name, new BigDecimal(reader.nextString()));
-                    case NULL -> {
-                        reader.nextNull();
-                        object.add(name, JsonNull.INSTANCE);
-                    }
-                    default -> throw new InvalidInput(ApiStatus.BAD_PARAM);
-                }
-            }
-            reader.endObject();
+            JsonObject object = readObject(reader, 0);
             if (reader.peek() != JsonToken.END_DOCUMENT) throw new InvalidInput(ApiStatus.BAD_PARAM);
             return object;
         } catch (IOException | IllegalStateException | IllegalArgumentException exception) {
             throw new InvalidInput(ApiStatus.BAD_PARAM);
         }
+    }
+
+    /** Bounded objects retain duplicate-key rejection at every nested configuration level. */
+    private static JsonObject readObject(JsonReader reader, int depth) throws IOException, InvalidInput {
+        if (depth > 8) throw new InvalidInput(ApiStatus.BAD_PARAM);
+        JsonObject object = new JsonObject();
+        reader.beginObject();
+        while (reader.hasNext()) {
+            String name = reader.nextName();
+            if (object.has(name)) throw new InvalidInput(ApiStatus.BAD_PARAM);
+            switch (reader.peek()) {
+                case BEGIN_OBJECT -> object.add(name, readObject(reader, depth + 1));
+                case STRING -> object.addProperty(name, reader.nextString());
+                case BOOLEAN -> object.addProperty(name, reader.nextBoolean());
+                case NUMBER -> object.addProperty(name, new BigDecimal(reader.nextString()));
+                case NULL -> {
+                    reader.nextNull();
+                    object.add(name, JsonNull.INSTANCE);
+                }
+                default -> throw new InvalidInput(ApiStatus.BAD_PARAM);
+            }
+        }
+        reader.endObject();
+        return object;
     }
 
     private static final class InvalidInput extends Exception {

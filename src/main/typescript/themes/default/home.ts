@@ -1,4 +1,6 @@
 import type { ThemeState as TerminalState, ThemeApplication as Terminal } from '../../app/theme-api.js';
+import { createHomePins } from './home-pins.js';
+import type { ThemeSettings } from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
 import { homeIcon } from './icons/hackernoon/home.js';
 import { networkIcon } from './icons/hackernoon/chart-network.js';
@@ -14,13 +16,15 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className = 
 export function createHomeView(
     root: HTMLElement,
     application: Terminal,
-    beforeDialog: (source: HTMLElement) => HTMLElement
+    beforeDialog: (source: HTMLElement) => HTMLElement,
+    settings: ThemeSettings
 ) {
     const view = element('section', 'window-frame home-dashboard');
     view.id = 'home';
     view.innerHTML = `<div class="terminal-heading"><h2>${homeIcon}<span></span></h2></div>
         <div class="terminal-scroll home-scroll" tabindex="0">
         <p class="home-scope"></p><p class="home-status" role="status"></p><button type="button" class="home-retry"></button></div>`;
+    const pins = createHomePins(view.querySelector<HTMLElement>('.home-scroll')!, application, settings);
     const panel = element('aside', 'home-network-panel');
     panel.id = 'home-network-panel';
     panel.innerHTML = `<h3>${networkIcon}<span></span></h3><h4 class="home-selected-network"></h4><dl class="home-selected-identity"><dt></dt><dd><code></code></dd></dl><a class="home-network-details button-link"></a><button type="button" class="choose-network"></button>`;
@@ -73,6 +77,7 @@ export function createHomeView(
     return {
         render(state: TerminalState, locale: Translator) {
             view.hidden = state.route.view !== 'home';
+            pins.render(state, locale);
             panel.hidden = view.hidden;
             if (view.hidden) {
                 if (dialog.open) dialog.close();
@@ -132,6 +137,7 @@ export function createHomeView(
             if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
         },
         dispose() {
+            pins.dispose();
             dialog.close();
             dialog.remove();
             view.remove();

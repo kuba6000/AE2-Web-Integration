@@ -116,8 +116,9 @@ class WorldDatabaseTest {
         }
     }
 
-    @Test
-    void unsupportedSchemaCannotPublishOrEraseExistingGridData() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = { 1, 999 })
+    void unsupportedSchemaCannotPublishOrEraseExistingGridData(int version) throws Exception {
         Path path = directory.resolve("world");
         Path source = directory.resolve("legacy.json");
         var key = TestGridFixtures.key(37);
@@ -129,7 +130,7 @@ class WorldDatabaseTest {
             // Schema metadata is external persisted input, independent of the running mod's version.
             database.write(db -> {
                 try (var statement = db.createStatement()) {
-                    statement.executeUpdate("UPDATE world_schema SET version = 999");
+                    statement.executeUpdate("UPDATE world_schema SET version = " + version);
                 }
                 return null;
             });
@@ -146,9 +147,9 @@ class WorldDatabaseTest {
             ""); var statement = connection.createStatement()) {
             try (var result = statement.executeQuery("SELECT version FROM world_schema")) {
                 assertTrue(result.next());
-                assertEquals(999, result.getInt(1));
+                assertEquals(version, result.getInt(1));
             }
-            statement.executeUpdate("UPDATE world_schema SET version = 1");
+            statement.executeUpdate("UPDATE world_schema SET version = 2");
             statement.execute("SHUTDOWN");
         }
         try (WorldDatabase restored = new WorldDatabase(path, policy)) {

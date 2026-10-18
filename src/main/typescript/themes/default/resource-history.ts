@@ -1,4 +1,5 @@
 import type { ThemeApplication, ThemeSettings, ThemeState, Translator } from '../../app/theme-api.js';
+import { createPinActions } from './pin-actions.js';
 import { trackingHref } from '../../app/router.js';
 import { createTrackingChart } from './tracking-chart.js';
 import { renderMinecraftText } from './minecraft-text.js';
@@ -60,6 +61,8 @@ export function createResourceHistoryView(
     const headingBar = element('div', '', 'terminal-heading');
     headingBar.append(heading, back);
     section.append(headingBar, iconHost, toolbar, status, totals, chartHost, help, link);
+    const pins = createPinActions(application);
+    if (full) iconHost.after(pins.element);
     host.append(section);
     let displayInterval = 5000;
     const updateHelp = () => {
@@ -89,6 +92,7 @@ export function createResourceHistoryView(
         if (!active) return;
         const itemKey = state.route.view === 'tracking' ? state.route.itemKey : state.selected?.itemKey;
         const history = state.resourceHistory;
+        if (full) pins.render(state, locale, state.route.gridKey, history.error ? null : (itemKey ?? null));
         const hasStock =
             !!history.baseline?.resource || history.points.some((point) => point.kind === 'STOCK' && point.resource);
         const historicalResource =

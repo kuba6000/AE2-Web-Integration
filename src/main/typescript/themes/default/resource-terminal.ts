@@ -1,4 +1,6 @@
+import { thumbtackIcon } from './icons/hackernoon/thumbtack.js';
 import type { ThemeApplication, ThemeState, ThemeLifetime, ThemeSettings } from '../../app/theme-api.js';
+import { createPinActions } from './pin-actions.js';
 import { trackingHref } from '../../app/router.js';
 import { recentTrackingLines } from './recent-tracking.js';
 import type { Translator } from '../../app/i18n.js';
@@ -76,7 +78,7 @@ export function createResourceTerminal(
             </div>
             <div class="terminal-body">
                 <p id="item-message" role="status"></p>
-                <div id="item-scroll" role="region" data-label="resources" tabindex="0"><ul id="items"></ul></div>
+                <div id="item-scroll" role="region" data-label="resources" tabindex="0"><section id="terminal-pins" hidden><h3></h3><ul id="pinned-items" class="resource-grid"></ul></section><ul id="items"></ul></div>
                 <div id="pages">
                     <button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button>
                 </div>
@@ -93,6 +95,8 @@ export function createResourceTerminal(
         search: root.querySelector<HTMLInputElement>('#search')!,
         itemMessage: root.querySelector<HTMLParagraphElement>('#item-message')!,
         itemScroll: root.querySelector<HTMLDivElement>('#item-scroll')!,
+        pinSection: root.querySelector<HTMLElement>('#terminal-pins')!,
+        pinned: root.querySelector<HTMLUListElement>('#pinned-items')!,
         items: root.querySelector<HTMLUListElement>('#items')!,
         pages: root.querySelector<HTMLDivElement>('#pages')!,
         previousPage: root.querySelector<HTMLButtonElement>('#previous-page')!,
@@ -102,6 +106,73 @@ export function createResourceTerminal(
         details: root.querySelector<HTMLDivElement>('#details')!,
         order: root.querySelector<HTMLDivElement>('#order')!
     };
+    const pinDetails = createPinActions(application);
+    controls.details.after(pinDetails.element);
+    const pinRows = new Map<string, ReturnType<typeof createItemRow>>();
+    const pinSlots = createSlotGrid(controls.pinned, controls.itemScroll, controls.terminal, false, thumbtackIcon);
+    const pinIcons = application.icons.observe(controls.pinned, paintResourceIcon);
+    const terminalPins = () =>
+        state.pins.items
+            .filter(
+                (pin) =>
+                    pin.available &&
+                    pin.gridKey === state.route.gridKey &&
+                    pin.terminalOrder !== null &&
+                    pin.resource &&
+                    pin.itemKey
+            )
+            .sort((a, b) => a.terminalOrder! - b.terminalOrder!);
+    function renderPins() {
+        const pins = terminalPins();
+        controls.pinSection.hidden = !pins.length;
+        controls.pinSection.querySelector('h3')!.textContent = locale.common('pinnedResources');
+        controls.pinned.dataset.display = effectiveDisplay;
+        controls.pinned.classList.toggle('resource-icons-enabled', effectiveDisplay !== 'names');
+        const retained = new Set(pins.map((pin) => pin.pinKey));
+        for (const [key, row] of pinRows)
+            if (!retained.has(key)) {
+                row.li.remove();
+                pinRows.delete(key);
+            }
+        const savedTargets: Parameters<typeof pinIcons.update>[0] = [];
+        const quantitiesKnown = state.itemStatus === 'ready' && !state.itemError && state.itemSnapshotRevision > 0;
+        const inventory =
+            quantitiesKnown && pins.length ? new Map(state.items.map((item) => [item.itemKey, item])) : undefined;
+        for (const [index, pin] of pins.entries()) {
+            const current = inventory?.get(pin.itemKey);
+            const item = current ?? { ...pin.resource!, quantity: 0, craftable: false };
+            const row = pinRows.get(pin.pinKey) ?? createItemRow(item);
+            pinRows.set(pin.pinKey, row);
+            if (row.item.displayName !== item.displayName || !row.language)
+                row.name.replaceChildren(renderMinecraftText(item.displayName));
+            row.item = item;
+            row.unknown = !quantitiesKnown;
+            if (!row.pinned) {
+                const mark = document.createElement('span');
+                mark.className = 'pinned-mark';
+                mark.innerHTML = thumbtackIcon;
+                row.button.append(mark);
+            }
+            row.pinned = true;
+            row.language = language;
+            row.quantity.textContent = quantitiesKnown ? slotQuantity(item.quantity, locale) : '—';
+            row.craftable.hidden = !item.craftable;
+            row.craftable.setAttribute('aria-label', locale.common('craftableYes'));
+            row.button.setAttribute(
+                'aria-label',
+                `${plainMinecraftText(item.displayName)}, ${locale.common('stored')}: ${quantitiesKnown ? locale.number(item.quantity) : '—'}`
+            );
+            updateSelection(row);
+            if (controls.pinned.children[index] !== row.li) {
+                const focused = document.activeElement === row.button;
+                controls.pinned.insertBefore(row.li, controls.pinned.children[index] ?? null);
+                if (focused) row.button.focus({ preventScroll: true });
+            }
+            if (effectiveDisplay !== 'names') savedTargets.push({ element: row.button, icon: pin.resource!.icon });
+        }
+        pinIcons.update(savedTargets, state.pins.icons);
+        pinSlots.update(pins.length);
+    }
     const historyView = createResourceHistoryView(controls.resourcePanel, application, settings);
     const toolButtons: NodeListOf<
         HTMLButtonElement & {
@@ -177,6 +248,7 @@ export function createResourceTerminal(
 
     function showItemTooltip(row: ReturnType<typeof createItemRow>, x: number, y: number, pointer: boolean) {
         hideTooltip();
+        if (row.unknown) return;
         toolTooltip = null;
         itemTooltip = { row, x, y, pointer };
         showTooltip(row.button, row.item, x, y);
@@ -185,6 +257,7 @@ export function createResourceTerminal(
         if (!itemTooltip || !tooltips.isActive(itemTooltip.row.button)) return;
         const { row, x, y, pointer } = itemTooltip;
         if (
+            row.unknown ||
             !row.button.isConnected ||
             (pointer ? !row.button.contains(document.elementFromPoint(x, y)) : document.activeElement !== row.button)
         ) {
@@ -219,7 +292,11 @@ export function createResourceTerminal(
             state.preferences.autoRefresh,
             language,
             state.route.gridKey,
-            terminalPageSize(settings)
+            terminalPageSize(settings),
+            terminalPins()
+                .map((pin) => pin.itemKey)
+                .sort()
+                .join(',')
         ].join('\0');
         const resetOrder =
             reorder ||
@@ -228,6 +305,10 @@ export function createResourceTerminal(
             listInput.snapshot !== state.itemSnapshotRevision ||
             state.itemStatus !== 'ready';
         const changed = resetOrder || listInput?.items !== state.items;
+        const pinnedKeys = new Set(terminalPins().map((pin) => pin.itemKey));
+        const ordinaryItems = pinnedKeys.size
+            ? state.items.filter((item) => !item.itemKey || !pinnedKeys.has(item.itemKey))
+            : state.items;
         if (changed) {
             if (listInput?.signature !== signature) {
                 page = 0;
@@ -243,13 +324,13 @@ export function createResourceTerminal(
                 sortOrder: state.preferences.sortOrder
             };
             if (resetOrder) {
-                allFiltered = selectResources(state.items, options);
+                allFiltered = selectResources(ordinaryItems, options);
                 scheduleOrdering();
             } else {
                 const current = new Map(state.items.map((item) => [item.itemKey ?? item, item]));
                 const existing = new Set(allFiltered.map((item) => item.itemKey ?? item));
                 const added = filterResources(
-                    state.items.filter((item) => !existing.has(item.itemKey ?? item)),
+                    ordinaryItems.filter((item) => !existing.has(item.itemKey ?? item)),
                     options
                 );
                 const anonymous = sortResources(
@@ -282,12 +363,14 @@ export function createResourceTerminal(
             renderPage();
             if (resetOrder) changedOrderKeys.clear();
         }
+        renderPins();
         updateIcons();
         for (const row of rows) updateSelection(row);
         if (menuItem) {
             const current = currentResource(menuItem);
             if (current) menuItem = current;
             menuCraft.disabled = !current?.craftable || !current.itemKey;
+            menuPins.render(state, locale, menuGrid, menuItem.itemKey);
         }
         let message = '';
         if (state.gridStatus === 'ready') {
@@ -311,6 +394,8 @@ export function createResourceTerminal(
     menuTracking.type = 'button';
     menuTracking.role = 'menuitem';
     resourceMenu.append(menuTracking);
+    const menuPins = createPinActions(application, true, () => closeResourceMenu(true));
+    resourceMenu.append(menuPins.element);
     menuTracking.addEventListener('click', () => {
         if (!menuItem?.itemKey || !menuGrid) return;
         const href = trackingHref(menuGrid, menuItem.itemKey);
@@ -344,6 +429,7 @@ export function createResourceTerminal(
         menuCraft.disabled = !current?.craftable || !current.itemKey;
         menuTracking.textContent = locale.t('viewTracking');
         menuTracking.disabled = !item.itemKey;
+        menuPins.render(state, locale, menuGrid, item.itemKey);
         resourceMenu.hidden = false;
         resourceMenu.style.left = `${Math.max(8, Math.min(x, innerWidth - resourceMenu.offsetWidth - 8))}px`;
         resourceMenu.style.top = `${Math.max(8, Math.min(y, innerHeight - resourceMenu.offsetHeight - 8))}px`;
@@ -356,7 +442,9 @@ export function createResourceTerminal(
         if (item?.craftable && item.itemKey && source) craftingView.open(item, source);
     });
     resourceMenu.addEventListener('keydown', (event) => {
-        const actions = [menuCraft, menuTracking].filter((button) => !button.disabled);
+        const actions = [menuCraft, menuTracking, ...menuPins.buttons].filter(
+            (button) => !button.disabled && !button.hidden && !button.parentElement?.hidden
+        );
         const current = actions.indexOf(document.activeElement as HTMLButtonElement);
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
@@ -377,6 +465,8 @@ export function createResourceTerminal(
         const row = {
             item,
             language: '',
+            unknown: false,
+            pinned: false,
             display: '',
             li: element('li'),
             button: element('button', '', 'item slot-frame'),
@@ -394,7 +484,11 @@ export function createResourceTerminal(
         row.li.append(button);
         button.addEventListener('click', () => {
             const item = currentResource(row.item);
-            if (!item) return;
+            if (!item) {
+                if (row.pinned && row.item.itemKey && state.route.gridKey)
+                    location.hash = trackingHref(state.route.gridKey, row.item.itemKey);
+                return;
+            }
             application.select(item, 3600000);
             hideTooltip();
             mobile.open(controls.resourcePanel, locale.common('details'), button);
@@ -523,6 +617,7 @@ export function createResourceTerminal(
         const details = controls.details;
         const item = state.selected;
         historyView.render(state, locale);
+        pinDetails.render(state, locale, state.route.gridKey, item?.itemKey ?? null);
         controls.order.hidden = !item?.craftable || !item.itemKey;
         if (!item) {
             detailsInput = undefined;
@@ -732,6 +827,8 @@ export function createResourceTerminal(
             stopOrdering();
             historyView.dispose();
             itemIcons.dispose();
+            pinIcons.dispose();
+            pinSlots.dispose();
             slots.dispose();
             resourceMenu.remove();
             hideTooltip();

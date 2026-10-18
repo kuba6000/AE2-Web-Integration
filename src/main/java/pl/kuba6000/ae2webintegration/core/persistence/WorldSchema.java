@@ -27,7 +27,7 @@ final class WorldSchema {
         if (schema) {
             try (Statement sql = db.createStatement();
                 ResultSet rows = sql.executeQuery("SELECT version FROM world_schema WHERE singleton = 1")) {
-                if (!rows.next() || rows.getInt(1) != 1)
+                if (!rows.next() || rows.getInt(1) != 2)
                     throw new IOException("Unsupported world database schema version");
             }
             return;
@@ -110,6 +110,23 @@ final class WorldSchema {
                     flow_from BIGINT
                 )
                 """);
+            sql.execute("""
+                CREATE CACHED TABLE resource_pins (
+                    pin_key VARCHAR(22) PRIMARY KEY,
+                    owner VARCHAR(36) NOT NULL,
+                    grid_id BIGINT NOT NULL REFERENCES grids(id),
+                    resource_id BIGINT NOT NULL REFERENCES history_resources(id),
+                    terminal_order INTEGER CHECK (terminal_order >= 0),
+                    home_order INTEGER CHECK (home_order >= 0),
+                    show_stock BOOLEAN NOT NULL, show_flow BOOLEAN NOT NULL, show_chart BOOLEAN NOT NULL,
+                    series_stock BOOLEAN NOT NULL, series_input BOOLEAN NOT NULL,
+                    series_output BOOLEAN NOT NULL, series_net BOOLEAN NOT NULL,
+                    range_millis BIGINT NOT NULL,
+                    UNIQUE (owner, grid_id, resource_id),
+                    CHECK (terminal_order IS NOT NULL OR home_order IS NOT NULL)
+                )
+                """);
+            sql.execute("CREATE INDEX resource_pins_resource ON resource_pins(resource_id)");
             for (String name : new String[] { "history_stock", "history_flow", "history_coverage" }) {
                 sql.execute("CREATE INDEX " + name + "_grid_time ON " + name + "(grid_id, observed_at, id)");
                 sql.execute("CREATE INDEX " + name + "_expiry ON " + name + "(observed_at, id)");
@@ -127,7 +144,7 @@ final class WorldSchema {
                     identities_imported BOOLEAN NOT NULL
                 )
                 """);
-            sql.execute("INSERT INTO world_schema VALUES (1, 1, FALSE)");
+            sql.execute("INSERT INTO world_schema VALUES (1, 2, FALSE)");
         }
     }
 }

@@ -1,3 +1,4 @@
+import type { PinsState } from './pins.js';
 import type { TerminalStreamState } from './terminal.js';
 import type { CraftingState } from './crafting.js';
 import type { CpuState } from './cpus.js';
@@ -10,7 +11,9 @@ import type {
     IconMetadata,
     ApplicationContext,
     GridSettings,
-    AvailableUpdate
+    AvailableUpdate,
+    PinPlacement,
+    ResourcePinUpdate
 } from './api-types.js';
 import type { RecentTracking } from './api-types.js';
 import type { Preferences } from './preferences.js';
@@ -51,6 +54,7 @@ export type ThemeState = ReadonlyData<{
     resourceHistory: ResourceHistoryState;
     recent: RecentTracking | null;
     settings: SettingsState;
+    pins: PinsState;
 }>;
 export type ThemeView = Exclude<Route['view'], 'missing'>;
 export type ThemeLifetime = {
@@ -76,6 +80,12 @@ export type ThemeApplication = {
     /** Optionally choose the selected resource's history period without changing the full tracking view's range. */
     select(resource: ReadonlyData<StoredResource> | null, historyRangeMillis?: number): void;
     resourceHistory: { range(millis: number): Promise<void> };
+    pins: {
+        add(gridKey: string, itemKey: string, placement: PinPlacement): Promise<void>;
+        update(pinKey: string, update: ResourcePinUpdate): Promise<void>;
+        remove(pinKey: string): Promise<void>;
+        refresh(): Promise<void>;
+    };
     preference<K extends keyof Preferences>(name: K, value: Preferences[K]): void;
     displayIcons(enabled: boolean): void;
     readonly crafting: {

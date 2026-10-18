@@ -9,7 +9,10 @@ import type {
     CraftingHistory,
     GridSettings,
     GridSettingsResponse,
-    ResourceHistory
+    ResourceHistory,
+    ResourcePin,
+    ResourcePinUpdate,
+    PinPlacement
 } from './api-types.js';
 import type { ResourceResponse, IconMetadata, ApplicationContext, TerminalView, TerminalDelta } from './api-types.js';
 
@@ -49,6 +52,19 @@ const responseStatuses = new Set([
 
 export type ApiFailure = Error & { status?: string; data?: unknown };
 export type Api = {
+    resourcePins(signal?: AbortSignal, icons?: boolean): Promise<ResourceResponse<ResourcePin[]>>;
+    addResourcePin(
+        gridKey: string,
+        itemKey: string,
+        placement: PinPlacement,
+        icons?: boolean
+    ): Promise<ResourceResponse<ResourcePin[]>>;
+    updateResourcePin(
+        pinKey: string,
+        update: ResourcePinUpdate,
+        icons?: boolean
+    ): Promise<ResourceResponse<ResourcePin[]>>;
+    deleteResourcePin(pinKey: string, icons?: boolean): Promise<ResourceResponse<ResourcePin[]>>;
     themes: (signal?: AbortSignal) => Promise<{ defaultTheme: string; themes: ThemeManifest[] }>;
     context: (signal?: AbortSignal) => Promise<ApplicationContext>;
     skipUpdate: (tag: string) => Promise<null>;
@@ -173,7 +189,9 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
                 | { cpuKey?: string }
                 | Partial<GridSettings>
                 | { paused: boolean }
-                | { tag: string };
+                | { tag: string }
+                | { itemKey: string; placement: PinPlacement }
+                | ResourcePinUpdate;
         } = {}
     ): Promise<ResourceResponse<T>> {
         let response;
@@ -242,6 +260,16 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
         themes: (signal) => request('api/themes', { signal }),
         skipUpdate: (tag) => request('api/updates/skip', { method: 'POST', body: { tag } }),
         iconPack: (signal) => request('api/icon-pack', { signal }),
+        resourcePins: (signal, icons = false) => read(`api/resource-pins?icons=${icons}`, { signal }),
+        addResourcePin: (gridKey, itemKey, placement, icons = false) =>
+            read(`api/grids/${encodeURIComponent(gridKey)}/resource-pins?icons=${icons}`, {
+                method: 'POST',
+                body: { itemKey, placement }
+            }),
+        updateResourcePin: (pinKey, update, icons = false) =>
+            read(`api/resource-pins/${encodeURIComponent(pinKey)}?icons=${icons}`, { method: 'PATCH', body: update }),
+        deleteResourcePin: (pinKey, icons = false) =>
+            read(`api/resource-pins/${encodeURIComponent(pinKey)}?icons=${icons}`, { method: 'DELETE' }),
         grids: (signal) => request('api/grids', { signal }),
         items: async (gridKey, signal, icons = false, live = false) => {
             const query = new URLSearchParams();

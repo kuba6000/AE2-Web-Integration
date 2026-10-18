@@ -1,3 +1,4 @@
+import { createPins, type PinsState } from './pins.js';
 import type { Route } from './router.js';
 import type {
     Grid,
@@ -53,6 +54,7 @@ export type TerminalState = TerminalData & {
     resourceHistory: ResourceHistoryState;
     recent: RecentTracking | null;
     settings: SettingsState;
+    pins: PinsState;
 };
 
 /** Shared state/actions for terminal renderers; a theme does not own requests or refresh timers. */
@@ -120,6 +122,12 @@ export function createTerminal(
         () => iconsEnabled && state.iconPack.available === true
     );
     const resourceHistory = createResourceHistory(api, notify, () => iconsEnabled && state.iconPack.available === true);
+    const pins = createPins(
+        api,
+        notify,
+        () => iconsEnabled && state.iconPack.available === true,
+        notifications.publish
+    );
     const settings = createGridSettings(
         api,
         () => {
@@ -165,6 +173,7 @@ export function createTerminal(
         history: history.state,
         resourceHistory: resourceHistory.state,
         recent: null,
+        pins: pins.state,
         settings: settings.state
     };
 
@@ -375,7 +384,10 @@ export function createTerminal(
             state.updatedAt = null;
             state.itemStatus = 'error';
             state.itemError = error.status || 'NETWORK_ERROR';
-            if (['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.itemError)) crafting.block(state.itemError);
+            if (['NO_PERMISSIONS', 'GRID_NOT_FOUND'].includes(state.itemError)) {
+                crafting.block(state.itemError);
+                pins.block(state.itemError);
+            }
         } finally {
             if (!disposed && version === serial) {
                 state.refreshing = false;
@@ -403,6 +415,7 @@ export function createTerminal(
                 crafting.invalidateIcons();
                 history.invalidateIcons();
                 resourceHistory.invalidateIcons();
+                pins.invalidateIcons();
             }
             notify();
             if (changed) {
@@ -411,6 +424,7 @@ export function createTerminal(
                 void loadCrafting();
                 if (state.route.view === 'history') void loadHistory();
                 void resourceHistory.refresh();
+                void pins.refresh();
             }
         } catch (caught) {
             if (disposed || request !== iconRequest || (caught as ApiFailure).name === 'AbortError') return;
@@ -497,6 +511,7 @@ export function createTerminal(
                 await loadHistory(reloadDetail);
                 await loadSettings();
                 if (state.route.view === 'tracking') await resourceHistory.refresh(automatic);
+                await pins.refresh(automatic);
             } catch (caught) {
                 const error = caught as ApiFailure;
                 if (disposed || error.name === 'AbortError') return;
@@ -520,6 +535,7 @@ export function createTerminal(
                 cpus.block(state.gridError);
                 history.block(state.gridError);
                 settings.block(state.gridError);
+                pins.block(state.gridError);
                 notify();
             } finally {
                 discoveryUpdates.clear();
@@ -539,6 +555,7 @@ export function createTerminal(
         cpus,
         history,
         settings,
+        pins,
         resourceHistory,
         icons,
         displayIcons(enabled: boolean) {
@@ -549,6 +566,8 @@ export function createTerminal(
             crafting.invalidateIcons();
             history.invalidateIcons();
             resourceHistory.invalidateIcons();
+            pins.invalidateIcons();
+            void pins.refresh();
             icons.enabled(enabled && state.iconPack.available === true);
             void loadItems();
             void loadCpus();
@@ -576,6 +595,7 @@ export function createTerminal(
                 state.refreshing = false;
             } else invalidateItems();
             state.route = route;
+            pins.route(route);
             if (route.view === 'tracking') void resourceHistory.select(route.gridKey, route.itemKey);
             else if (related) resourceHistory.clear();
             if (route.gridKey) {
@@ -592,6 +612,7 @@ export function createTerminal(
             loadCpus();
             loadHistory();
             loadSettings();
+            if (state.gridStatus === 'ready') void pins.refresh();
             schedule();
         },
         search(value: string) {
@@ -626,6 +647,7 @@ export function createTerminal(
             history.dispose();
             resourceHistory.dispose();
             settings.dispose();
+            pins.dispose();
             icons.dispose();
             listeners.clear();
         }

@@ -14,6 +14,7 @@ test('recent-only events keep the inventory snapshot reusable by themes while pu
     const anonymous = { itemKey: null, displayName: 'Unknown', quantity: 5, craftable: false };
     const terminal = createTerminal(
         {
+            resourcePins: async () => ({ data: [], icons: null }),
             grids: async () => [{ key: 'grid', name: 'Grid' }],
             iconPack: async () => ({ available: false, packId: null }),
             items: async () => ({
@@ -110,6 +111,7 @@ test('terminal live status rejects closed stream callbacks and disabling automat
     };
     const terminal = createTerminal(
         {
+            resourcePins: async () => ({ data: [], icons: null }),
             grids: async () => {
                 gridReads++;
                 return pendingGrids ?? [{ key: 'grid', name: 'Grid' }];
@@ -246,6 +248,7 @@ test('terminal reconnect retains its snapshot and reports only failed recovery u
         reads = 0;
     const terminal = createTerminal(
         {
+            resourcePins: async () => ({ data: [], icons: null }),
             grids: async () => {
                 if (gridFailure) throw { status: gridFailure };
                 return [{ key: 'grid', name: 'Grid' }];

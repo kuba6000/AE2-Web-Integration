@@ -164,6 +164,7 @@ test {
             includeTestsMatching '*ItemIdentityRequestTest'
             includeTestsMatching '*GridIdentityRegistryTest'
             includeTestsMatching '*WorldDatabaseTest'
+            includeTestsMatching '*ResourcePinStoreTest'
             includeTestsMatching '*DimensionalCoordsTest'
             includeTestsMatching '*GridAccessSourceTest'
             includeTestsMatching '*CraftingPlanRequestLifecycleTest'

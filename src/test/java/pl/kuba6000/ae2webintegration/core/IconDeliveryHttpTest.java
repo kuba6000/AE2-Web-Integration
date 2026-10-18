@@ -134,6 +134,225 @@ class IconDeliveryHttpTest {
     }
 
     @Test
+    void playerPermissionRevocationRedactsPinsButOwnershipStillAllowsRemoval() throws Exception {
+        CoreEngine.onServerStarted();
+        AtomicBoolean permitted = new AtomicBoolean(true);
+        var grid = new TestGridFixtures.TestGrid(88403, false, AEControllerState.CONTROLLER_ONLINE) {
+
+            @Override
+            public boolean web$hasAccess(@NotNull UUID player) {
+                return permitted.get() && super.web$hasAccess(player);
+            }
+        };
+        StableKey gridKey = TestGridFixtures.resolvedKey(grid);
+        StableKey item = TestGridFixtures.key(82);
+        long now = System.currentTimeMillis();
+        var terminals = CoreEngine.getTerminalRegistry();
+        assertNotNull(terminals);
+        terminals.activate(gridKey, 1, now);
+        terminals.observed(
+            gridKey,
+            1,
+            new StorageObservation(
+                now,
+                true,
+                true,
+                Collections.singletonList(new StorageObservation.Row(item, 9, false)),
+                Collections.emptyList(),
+                Collections.singletonMap(
+                    item,
+                    new ResourceDescriptor("test", "gold", 0, 0, "Gold", ResourceType.ITEM, item, item)),
+                Collections.emptyList()));
+        var principal = new AtomicReference<>(TestGridFixtures.principal(TestGridFixtures.OWNER_ID));
+        var router = new pl.kuba6000.ae2webintegration.core.http.ApiRouter(
+            exchange -> new AE2Controller.RequestContext(exchange, principal.get()),
+            exchange -> false,
+            request -> fail("Pins must not dispatch native game work"));
+        router.register(pl.kuba6000.ae2webintegration.core.http.endpoint.pins.GetResourcePins.class);
+        router.register(pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PostResourcePin.class);
+        router.register(pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PatchResourcePin.class);
+        router.register(pl.kuba6000.ae2webintegration.core.http.endpoint.pins.DeleteResourcePin.class);
+        var endpoint = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        endpoint.createContext("/api", router);
+        endpoint.start();
+        int originalPort = port;
+        port = endpoint.getAddress()
+            .getPort();
+        try {
+            var reply = pinRequest(
+                "POST",
+                "/api/grids/" + gridKey + "/resource-pins",
+                "{\"itemKey\":\"" + item + "\",\"placement\":\"home\"}",
+                true);
+            assertEquals(200, reply.code());
+            String pinKey = reply.body()
+                .getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject()
+                .get("pinKey")
+                .getAsString();
+            principal.set(TestGridFixtures.principal(42));
+            assertEquals(
+                0,
+                json(connection("/api/resource-pins")).getAsJsonArray("data")
+                    .size());
+            assertEquals(404, pinRequest("PATCH", "/api/resource-pins/" + pinKey, "{\"home\":false}", true).code());
+            assertEquals(200, pinRequest("DELETE", "/api/resource-pins/" + pinKey, "", true).code());
+            principal.set(TestGridFixtures.principal(TestGridFixtures.OWNER_ID));
+            permitted.set(false);
+            assertSame(grid, CoreEngine.GRID_IDENTITIES.getGrid(gridKey));
+            var unavailable = json(connection("/api/resource-pins?icons=true")).getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject();
+            assertFalse(
+                unavailable.get("available")
+                    .getAsBoolean());
+            for (String field : Arrays.asList("gridKey", "itemKey", "gridName", "resource")) assertTrue(
+                unavailable.get(field)
+                    .isJsonNull());
+            assertEquals(403, pinRequest("PATCH", "/api/resource-pins/" + pinKey, "{\"terminal\":true}", true).code());
+            assertEquals(200, pinRequest("DELETE", "/api/resource-pins/" + pinKey, "", true).code());
+            assertEquals(
+                0,
+                json(connection("/api/resource-pins")).getAsJsonArray("data")
+                    .size());
+        } finally {
+            port = originalPort;
+            endpoint.stop(0);
+        }
+    }
+
+    @Test
+    void resourcePinsUseDetachedMembershipAndRemainRemovableAfterGridRetirement() throws Exception {
+        CoreEngine.onServerStarted();
+        var grid = new TestGridFixtures.TestGrid(88401, false, AEControllerState.CONTROLLER_ONLINE);
+        var other = new TestGridFixtures.TestGrid(88402, false, AEControllerState.CONTROLLER_ONLINE);
+        StableKey gridKey = TestGridFixtures.resolvedKey(grid);
+        StableKey otherKey = TestGridFixtures.resolvedKey(other);
+        StableKey item = TestGridFixtures.key(81);
+        var terminals = CoreEngine.getTerminalRegistry();
+        assertNotNull(terminals);
+        long now = System.currentTimeMillis();
+        terminals.activate(gridKey, 1, now);
+        terminals.observed(
+            gridKey,
+            1,
+            new StorageObservation(
+                now,
+                true,
+                true,
+                Collections.singletonList(new StorageObservation.Row(item, 12, false)),
+                Collections.emptyList(),
+                Collections.singletonMap(
+                    item,
+                    new ResourceDescriptor("test", "iron", 0, 0, "Iron", ResourceType.ITEM, item, item)),
+                Collections.emptyList()));
+        String body = "{\"itemKey\":\"" + item + "\",\"placement\":\"terminal\"}";
+        String path = "/api/grids/" + gridKey + "/resource-pins";
+        assertEquals(403, pinRequest("POST", path, body, false).code());
+        var created = pinRequest("POST", path, body, true);
+        assertEquals(200, created.code());
+        var pin = created.body()
+            .getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            "Iron",
+            pin.getAsJsonObject("resource")
+                .get("displayName")
+                .getAsString());
+        String pinKey = pin.get("pinKey")
+            .getAsString();
+        assertEquals(404, pinRequest("POST", "/api/grids/" + otherKey + "/resource-pins", body, true).code());
+        terminals.retire(gridKey, 1);
+        assertEquals(200, pinRequest("POST", path, body.replace("terminal", "home"), true).code());
+        assertEquals(
+            400,
+            pinRequest(
+                "PATCH",
+                "/api/resource-pins/" + pinKey,
+                "{\"terminal\":false,\"homeConfig\":{\"showStock\":true}}",
+                true).code());
+        assertEquals(
+            0,
+            json(connection("/api/resource-pins")).getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject()
+                .get("terminalOrder")
+                .getAsInt());
+        var configured = pinRequest(
+            "PATCH",
+            "/api/resource-pins/" + pinKey,
+            "{\"homeConfig\":{\"showStock\":false,\"showFlow\":true,\"showChart\":true,\"stock\":false,\"input\":true,\"output\":false,\"net\":true,\"rangeMillis\":900000},"
+                + "\"move\":{\"placement\":\"home\",\"direction\":\"later\"}}",
+            true);
+        assertEquals(200, configured.code());
+        assertEquals(
+            900000,
+            configured.body()
+                .getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject()
+                .getAsJsonObject("homeConfig")
+                .get("rangeMillis")
+                .getAsLong());
+        JsonObject beforeInvalid = configured.body();
+        String validConfig = "\"showStock\":false,\"showFlow\":true,\"showChart\":true,\"stock\":false,\"input\":true,\"output\":false,\"net\":true,\"rangeMillis\":900000";
+        String excessiveDepth = "{}";
+        for (int level = 0; level < 12; level++) excessiveDepth = "{\"nested\":" + excessiveDepth + "}";
+        for (String malformed : Arrays.asList(
+            "{\"terminal\":false,\"homeConfig\":{" + validConfig + ",\"net\":false}}",
+            "{\"terminal\":false,\"move\":{\"placement\":\"home\",\"direction\":\"earlier\",\"direction\":\"later\"}}",
+            "{\"terminal\":false,\"homeConfig\":[]}",
+            "{\"terminal\":false,\"homeConfig\":" + excessiveDepth + "}")) {
+            assertEquals(400, pinRequest("PATCH", "/api/resource-pins/" + pinKey, malformed, true).code());
+            assertEquals(beforeInvalid, json(connection("/api/resource-pins")));
+        }
+        CoreEngine.GRID_IDENTITIES.removeController(
+            grid.web$getControllers()
+                .iterator()
+                .next());
+        var unavailable = json(connection("/api/resource-pins?icons=true")).getAsJsonArray("data")
+            .get(0)
+            .getAsJsonObject();
+        assertFalse(
+            unavailable.get("available")
+                .getAsBoolean());
+        for (String field : Arrays.asList("gridKey", "itemKey", "gridName", "resource")) assertTrue(
+            unavailable.get(field)
+                .isJsonNull());
+        assertEquals(200, pinRequest("DELETE", "/api/resource-pins/" + pinKey, "", true).code());
+        assertEquals(
+            0,
+            json(connection("/api/resource-pins")).getAsJsonArray("data")
+                .size());
+    }
+
+    @com.github.bsideup.jabel.Desugar
+    private record PinReply(int code, JsonObject body) {}
+
+    private PinReply pinRequest(String method, String path, String body, boolean csrf) throws Exception {
+        try (java.net.Socket socket = new java.net.Socket("127.0.0.1", port)) {
+            socket.setSoTimeout(5000);
+            String request = method + " "
+                + path
+                + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n"
+                + "Content-Type: application/json\r\n"
+                + (csrf ? "X-AE2-Request: true\r\n" : "")
+                + "Content-Length: "
+                + body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length
+                + "\r\n\r\n"
+                + body;
+            socket.getOutputStream()
+                .write(request.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            String response = IOUtils.toString(socket.getInputStream(), java.nio.charset.StandardCharsets.UTF_8);
+            return new PinReply(
+                Integer.parseInt(response.split(" ", 3)[1]),
+                new Gson().fromJson(response.substring(response.indexOf("\r\n\r\n") + 4), JsonObject.class));
+        }
+    }
+
+    @Test
     void retentionPatchAppliesToInactiveHistoryAndSurvivesRestart() throws Exception {
         CoreEngine.onServerStarted();
         var grid = new TestGridFixtures.TestGrid(81079, false, AEControllerState.CONTROLLER_ONLINE);

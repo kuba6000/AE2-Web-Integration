@@ -26,6 +26,7 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
+import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
@@ -63,6 +64,7 @@ public class CoreEngine {
     private static volatile @Nullable VersionChecker versionChecker;
     private static boolean serverRunning;
     private static @Nullable WorldDatabase worldDatabase;
+    private static volatile @Nullable ResourcePinStore resourcePins;
     private static volatile @Nullable IconPack iconPack;
     private static volatile ThemeCatalog themes = new ThemeCatalog();
     private static volatile @Nullable StorageTrackingService storageTracking;
@@ -110,6 +112,7 @@ public class CoreEngine {
         }
         try {
             worldDatabase = database;
+            resourcePins = new ResourcePinStore(database);
             serverRunning = true;
             loadIconPack();
             ConfigSettings.ResourceTracking trackingSettings = Config.INSTANCE.resourceTracking;
@@ -281,6 +284,10 @@ public class CoreEngine {
     }
 
     /** Detached data and history access for HTTP workers. Null outside an active server lifecycle. */
+    public static @Nullable ResourcePinStore getResourcePins() {
+        return resourcePins;
+    }
+
     public static @Nullable StorageTrackingService getStorageTracking() {
         return storageTracking;
     }
@@ -312,6 +319,7 @@ public class CoreEngine {
     }
 
     private static void stopStorageTracking() {
+        resourcePins = null;
         stopTerminalStreams();
         if (storageCoordinator != null) {
             storageCoordinator.close();

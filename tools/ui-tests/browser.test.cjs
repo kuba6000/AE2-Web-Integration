@@ -565,6 +565,7 @@ test('history prioritizes only the measured final resource identity and keeps se
 
 async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } = {}) {
     const options = {
+        pins: [],
         delayA: 0,
         status: 200,
         requests: [],
@@ -757,6 +758,65 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 }
                 options.loggedOut = true;
                 response.end(JSON.stringify({ status: 'OK', data: null }));
+            } else if (resource.includes('/resource-pins')) {
+                const input = options.requests.at(-1).body;
+                if (request.method === 'POST') {
+                    const gridKey = resource.split('/')[3];
+                    let pin = options.pins.find((pin) => pin.gridKey === gridKey && pin.itemKey === input.itemKey);
+                    if (!pin) {
+                        pin = {
+                            pinKey: `pin-${options.pins.length}`,
+                            available: true,
+                            gridKey,
+                            itemKey: input.itemKey,
+                            gridName: '',
+                            resource: options.itemsA.find((item) => item.itemKey === input.itemKey) ?? iron,
+                            terminalOrder: null,
+                            homeOrder: null,
+                            homeConfig: {
+                                showStock: true,
+                                showFlow: true,
+                                showChart: true,
+                                stock: true,
+                                input: true,
+                                output: true,
+                                net: false,
+                                rangeMillis: 86400000
+                            }
+                        };
+                        options.pins.push(pin);
+                    }
+                    if (pin[`${input.placement}Order`] === null)
+                        pin[`${input.placement}Order`] = options.pins.filter(
+                            (value) => value[`${input.placement}Order`] !== null
+                        ).length;
+                } else if (request.method === 'PATCH') {
+                    const key = resource.split('/').at(-1);
+                    const pin = options.pins.find((pin) => pin.pinKey === key);
+                    for (const placement of ['home', 'terminal'])
+                        if (input[placement] !== undefined)
+                            pin[`${placement}Order`] = input[placement]
+                                ? (pin[`${placement}Order`] ??
+                                  options.pins.filter((value) => value[`${placement}Order`] !== null).length)
+                                : null;
+                    if (input.homeConfig) pin.homeConfig = input.homeConfig;
+                    if (input.move) {
+                        const property = `${input.move.placement}Order`;
+                        const ordered = options.pins
+                            .filter(
+                                (value) =>
+                                    value[property] !== null &&
+                                    (input.move.placement === 'home' || value.gridKey === pin.gridKey)
+                            )
+                            .sort((a, b) => a[property] - b[property]);
+                        const index = ordered.indexOf(pin),
+                            other = ordered[index + (input.move.direction === 'earlier' ? -1 : 1)];
+                        if (other) [pin[property], other[property]] = [other[property], pin[property]];
+                    }
+                    options.pins = options.pins.filter((pin) => pin.homeOrder !== null || pin.terminalOrder !== null);
+                } else if (request.method === 'DELETE')
+                    options.pins = options.pins.filter((pin) => pin.pinKey !== resource.split('/').at(-1));
+                response.end(JSON.stringify({ status: 'OK', data: options.pins, icons: options.icons ?? null }));
             } else if (resource === '/api/grids') {
                 if (options.gridDelay) await new Promise((resolve) => setTimeout(resolve, options.gridDelay));
                 if (options.gridError === 'NETWORK_ERROR') {
@@ -12080,4 +12140,288 @@ test('terminal keeps its layout through a dropped stream and retains recovery er
     assert.equal(await message.innerText(), '');
     assert.equal(await page.locator('#items button[aria-pressed="true"]').innerText(), selected);
     assert.deepEqual(await items.boundingBox(), bounds);
+});
+
+for (const width of [390, 1280])
+    test(`resource pins occupy separate terminal rows and Home cards at ${width}px`, async (t) => {
+        const { page, options, base } = await fixture(t, '', { viewport: { width, height: 900 } });
+        await seedAutomaticRefresh(page, base, false);
+        await page.goto(`${base}#/grids/${gridA}/items`);
+        const ironButton = page.locator('#items .item').filter({ hasText: 'Iron' }).first();
+        await ironButton.click({ button: 'right' });
+        await page.getByRole('menuitem', { name: 'Pin in terminal', exact: true }).click();
+        await page.locator('#pinned-items .item').waitFor();
+        assert.equal(await page.locator('#items .item').filter({ hasText: 'Iron' }).count(), 0);
+        await page.locator('#search').fill('never matches');
+        assert.equal(await page.locator('#pinned-items .item').count(), 1);
+        assert.equal(await page.locator('#items .item').count(), 0);
+        await page.locator('#pinned-items .item').click({ button: 'right' });
+        await page.getByRole('menuitem', { name: 'Pin on Home', exact: true }).click();
+        assert.equal(options.pins[0].terminalOrder, 0);
+        assert.equal(options.pins[0].homeOrder, 0);
+        await page.goto(`${base}#/`);
+        await page.locator('.home-pin-card').waitFor();
+        assert.match(await page.locator('.home-pin-card').textContent(), /Iron/);
+        await page.locator('.home-pin-card').getByRole('button', { name: 'Unpin from Home', exact: true }).click();
+        assert.equal(options.pins[0].terminalOrder, 0);
+        assert.equal(options.pins[0].homeOrder, null);
+    });
+
+test('terminal pins respect Auto and preferred columns while keeping ordinary rows below the pin row', async (t) => {
+    const { page, options, base } = await fixture(t, '', { viewport: { width: 1280, height: 900 } });
+    options.pins = [
+        {
+            pinKey: 'one',
+            available: true,
+            gridKey: gridA,
+            itemKey: iron.itemKey,
+            gridName: '',
+            resource: iron,
+            terminalOrder: 0,
+            homeOrder: null,
+            homeConfig: {
+                showStock: true,
+                showFlow: true,
+                showChart: true,
+                stock: true,
+                input: true,
+                output: true,
+                net: false,
+                rangeMillis: 86400000
+            }
+        }
+    ];
+    await seedAutomaticRefresh(page, base, false);
+    for (const columns of ['auto', '3']) {
+        await page.goto(`${base}#/web-settings`);
+        await page.getByRole('combobox', { name: /Resource columns/ }).selectOption(columns);
+        for (const width of [1280, 390]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.goto(`${base}#/grids/${gridA}/items`);
+            await page.locator('#pinned-items .item').waitFor();
+            await page.locator('#items .item').waitFor();
+            await page.evaluate(
+                () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+            );
+            const bounds = await page.evaluate(() => {
+                const pin = document.querySelector('#pinned-items'),
+                    normal = document.querySelector('#items'),
+                    view = document.querySelector('#item-scroll');
+                return {
+                    pin: pin.getBoundingClientRect().toJSON(),
+                    normal: normal.getBoundingClientRect().toJSON(),
+                    view: view.getBoundingClientRect().toJSON(),
+                    pinColumns: getComputedStyle(pin).gridTemplateColumns,
+                    columns: getComputedStyle(normal).gridTemplateColumns,
+                    overflow: view.scrollHeight - view.clientHeight
+                };
+            });
+            const pinColumns = bounds.pinColumns.split(' ').map(parseFloat),
+                normalColumns = bounds.columns.split(' ').map(parseFloat);
+            assert.equal(await page.locator('#pinned-items .empty-slot').count(), pinColumns.length - 1);
+            assert.equal(await page.locator('#pinned-items .empty-slot:not([aria-hidden="true"])').count(), 0);
+            assert.equal(pinColumns.length, normalColumns.length);
+            assert.ok(pinColumns.every((value, index) => Math.abs(value - normalColumns[index]) < 0.1));
+            assert.ok(bounds.normal.top >= bounds.pin.bottom - 0.5, 'ordinary resources start on a fresh row');
+            assert.ok(bounds.normal.right <= bounds.view.right + 0.5, 'mobile grid fits');
+            assert.ok(
+                bounds.overflow < 20,
+                `small inventories should not gain an empty extra scroll page: ${JSON.stringify(bounds)}`
+            );
+        }
+    }
+});
+
+test('absent terminal pins show zero only after accepted inventory and remain tappable for history', async (t) => {
+    const { page, options, base } = await fixture(t, '', { viewport: { width: 390, height: 900 } });
+    options.itemsA = [quartz];
+    options.delayA = 300;
+    options.pins = [
+        {
+            pinKey: 'one',
+            available: true,
+            gridKey: gridA,
+            itemKey: iron.itemKey,
+            gridName: '',
+            resource: iron,
+            terminalOrder: 0,
+            homeOrder: null,
+            homeConfig: {
+                showStock: true,
+                showFlow: true,
+                showChart: true,
+                stock: true,
+                input: true,
+                output: true,
+                net: false,
+                rangeMillis: 86400000
+            }
+        }
+    ];
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/grids/${gridA}/items`);
+    await page.locator('#pinned-items .item').waitFor();
+    await page.waitForFunction(() => document.querySelector('#pinned-items .quantity')?.textContent === '0');
+    options.status = 500;
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#pinned-items .quantity')?.textContent === '—');
+    options.status = 200;
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#pinned-items .quantity')?.textContent === '0');
+    await page.locator('#pinned-items .item').click();
+    await page.waitForURL(/tracking/);
+    await page.locator('.tracking-view').getByRole('button', { name: 'Unpin from terminal', exact: true }).click();
+    assert.equal(options.pins.length, 0);
+});
+
+test('Home hides revoked metadata and removes each placement independently including terminal-only unavailable pins', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const homeConfig = {
+        showStock: true,
+        showFlow: true,
+        showChart: true,
+        stock: true,
+        input: true,
+        output: true,
+        net: false,
+        rangeMillis: 86400000
+    };
+    options.pins = [
+        {
+            pinKey: 'one',
+            available: true,
+            gridKey: gridA,
+            itemKey: iron.itemKey,
+            gridName: 'Secret network',
+            resource: iron,
+            terminalOrder: 0,
+            homeOrder: 0,
+            homeConfig
+        }
+    ];
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(base);
+    await page.locator('.home-pin-card').waitFor();
+    assert.match(await page.locator('.home-pin-card').textContent(), /Secret network/);
+    options.pins = [
+        { ...options.pins[0], available: false, gridKey: null, itemKey: null, gridName: null, resource: null }
+    ];
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('.home-pin-card')?.textContent.includes('Secret network'));
+    assert.doesNotMatch(await page.locator('.home-pin-card').textContent(), /Iron/);
+    assert.equal(await page.locator('.home-pin-card canvas').count(), 0);
+    await page.locator('.home-pin-card').getByRole('button', { name: 'Unpin from Home', exact: true }).click();
+    assert.equal(options.pins[0].terminalOrder, 0);
+    assert.equal(options.pins[0].homeOrder, null);
+    await page.locator('.home-unavailable-pins').getByRole('button', { name: 'Remove pin', exact: true }).click();
+    assert.equal(options.pins.length, 0);
+});
+
+test('Home pin cards preserve exact sampled values and independent settings while avoiding unrelated reads', async (t) => {
+    const { page, options, base } = await fixture(t);
+    const config = {
+        showStock: true,
+        showFlow: true,
+        showChart: true,
+        stock: true,
+        input: true,
+        output: true,
+        net: false,
+        rangeMillis: 86400000
+    };
+    options.pins = [
+        {
+            pinKey: 'one',
+            available: true,
+            gridKey: gridA,
+            itemKey: iron.itemKey,
+            gridName: 'Alpha source',
+            resource: iron,
+            terminalOrder: 0,
+            homeOrder: 0,
+            homeConfig: { ...config }
+        },
+        {
+            pinKey: 'two',
+            available: true,
+            gridKey: gridB,
+            itemKey: quartz.itemKey,
+            gridName: 'Beta source',
+            resource: quartz,
+            terminalOrder: null,
+            homeOrder: 1,
+            homeConfig: { ...config }
+        }
+    ];
+    const now = Date.now();
+    options.resourceHistory = {
+        baseline: null,
+        complete: false,
+        truncated: false,
+        points: [
+            {
+                kind: 'STOCK',
+                observedAt: now - 120000,
+                generation: 1,
+                flowFrom: null,
+                resource: { ...iron, quantity: '0' },
+                input: '0',
+                output: '0'
+            },
+            {
+                kind: 'FLOW',
+                observedAt: now - 60000,
+                generation: 1,
+                flowFrom: now - 120000,
+                resource: { ...iron, quantity: '0' },
+                input: '9007199254740993',
+                output: '2'
+            },
+            {
+                kind: 'GAP',
+                observedAt: now - 90000,
+                generation: 1,
+                flowFrom: null,
+                resource: null,
+                input: '0',
+                output: '0'
+            }
+        ]
+    };
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(base);
+    const first = page.locator('.home-pin-card').filter({ hasText: 'Alpha source' });
+    await first.locator('canvas').waitFor();
+    assert.match(await first.textContent(), /9,007,199,254,740,993/);
+    assert.equal(await first.locator('dd').first().textContent(), '0');
+    assert.equal(await page.locator('.home-pin-card').count(), 2);
+    assert.equal(options.requests.filter((request) => /\/(items|cpus)$/.test(request.path)).length, 0);
+    const reads = () => options.requests.filter((request) => request.path.endsWith('/resource-history')).length;
+    const before = reads();
+    await first.locator('summary').click();
+    await first.getByRole('checkbox', { name: 'Show chart', exact: true }).uncheck();
+    await first.getByRole('checkbox', { name: 'Show chart', exact: true }).waitFor();
+    await page.waitForFunction(() => document.querySelector('.home-pin-settings fieldset')?.disabled === false);
+    assert.equal(await first.locator('canvas').count(), 0);
+    assert.equal(reads(), before);
+    await first.getByRole('combobox', { name: 'Period', exact: true }).selectOption('3600000');
+    await page.waitForFunction(() => document.querySelector('.home-pin-settings fieldset')?.disabled === false);
+    assert.equal(options.pins[0].homeConfig.rangeMillis, 3600000);
+    assert.equal(reads(), before + 1);
+    await page
+        .locator('.home-pin-card')
+        .filter({ hasText: 'Beta source' })
+        .getByRole('button', { name: 'Move earlier', exact: true })
+        .click();
+    await page.waitForFunction(() => document.querySelector('.home-pin-source')?.textContent === 'Beta source');
+    assert.equal(options.pins.find((pin) => pin.pinKey === 'one').terminalOrder, 0);
+    await page.reload();
+    await first.locator('summary').waitFor();
+    await first.locator('summary').click();
+    assert.equal(await first.getByRole('checkbox', { name: 'Show chart', exact: true }).isChecked(), false);
+    assert.equal(await first.getByRole('combobox', { name: 'Period', exact: true }).inputValue(), '3600000');
+    const finalReads = reads();
+    await page.goto(`${base}#/web-settings`);
+    await page.clock.fastForward(35000);
+    assert.equal(reads(), finalReads);
 });

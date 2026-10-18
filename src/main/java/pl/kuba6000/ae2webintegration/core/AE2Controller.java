@@ -52,6 +52,10 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.RenewItemEvents;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPack;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.DeleteResourcePin;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.GetResourcePins;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PatchResourcePin;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.pins.PostResourcePin;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.themes.GetThemes;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetResourceHistory;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
@@ -227,6 +231,10 @@ public class AE2Controller {
                     AuthService::isRateLimited,
                     AE2Controller::sendRequest);
                 api.register(GetGrids.class);
+                api.register(GetResourcePins.class);
+                api.register(PostResourcePin.class);
+                api.register(PatchResourcePin.class);
+                api.register(DeleteResourcePin.class);
                 api.register(GetIconPack.class);
                 api.register(GetThemes.class);
                 api.registerIconPages();

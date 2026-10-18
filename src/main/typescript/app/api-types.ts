@@ -203,3 +203,32 @@ export type ResourceHistory = {
     truncated: boolean;
     enabled: boolean;
 };
+
+export type PinPlacement = 'terminal' | 'home';
+export type PinHomeConfig = {
+    showStock: boolean;
+    showFlow: boolean;
+    showChart: boolean;
+    stock: boolean;
+    input: boolean;
+    output: boolean;
+    net: boolean;
+    rangeMillis: number;
+};
+export type ResourcePin = {
+    pinKey: string;
+    available: boolean;
+    gridKey: string | null;
+    itemKey: string | null;
+    gridName: string | null;
+    resource: ResourceDescription | null;
+    terminalOrder: number | null;
+    homeOrder: number | null;
+    homeConfig: PinHomeConfig;
+};
+export type ResourcePinUpdate = {
+    terminal?: boolean;
+    home?: boolean;
+    move?: { placement: PinPlacement; direction: 'earlier' | 'later' };
+    homeConfig?: PinHomeConfig;
+};

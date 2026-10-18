@@ -110,6 +110,17 @@ public final class RequestInputs {
         for (Field field : fields.values()) {
             JsonElement value = body.get(field.getName());
             if (value == null && field.isAnnotationPresent(OptionalInput.class)) continue;
+            Class<?> inputType = field.getType();
+            if (!inputType.isPrimitive() && inputType != String.class
+                && inputType != StableKey.class
+                && inputType != Boolean.class
+                && inputType != Integer.class
+                && inputType != Long.class) {
+                if (value == null || !value.isJsonObject())
+                    throw new IllegalArgumentException("Missing or invalid JSON object: " + field.getName());
+                validate(value.getAsJsonObject(), inputType);
+                continue;
+            }
             if (value == null || !value.isJsonPrimitive())
                 throw new IllegalArgumentException("Missing or invalid JSON member: " + field.getName());
             JsonPrimitive scalar = value.getAsJsonPrimitive();

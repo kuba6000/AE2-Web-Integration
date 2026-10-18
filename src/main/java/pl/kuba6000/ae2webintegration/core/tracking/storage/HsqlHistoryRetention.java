@@ -149,28 +149,7 @@ final class HsqlHistoryRetention {
                 if (pending) delete.executeBatch();
             }
         }
-        try (PreparedStatement delete = db.prepareStatement("""
-            DELETE FROM history_resources
-            WHERE id = ?
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM history_stock
-                    WHERE resource_id = ?
-                )
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM history_flow
-                    WHERE resource_id = ?
-                )
-            """)) {
-            for (Long resourceId : batch.resources) {
-                delete.setLong(1, resourceId);
-                delete.setLong(2, resourceId);
-                delete.setLong(3, resourceId);
-                delete.addBatch();
-            }
-            if (!batch.resources.isEmpty()) delete.executeBatch();
-        }
+        pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue.removeUnreferenced(db, batch.resources);
     }
 
     private static void updateCoverage(@NotNull Connection db, long gridId, long count, long deletedUntil)
