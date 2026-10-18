@@ -82,9 +82,9 @@ test('selected resource history preserves exact quantities and coverage', async 
             kind: 'FLOW',
             resource: null,
             input: '9223372036854775807',
-            output: '0',
-            complete: false
-        }
+            output: '0'
+        },
+        { observedAt: 1000, generation: 'generation', kind: 'GAP', resource: null, input: '0', output: '0' }
     ];
     const history = createResourceHistory(
         {
@@ -99,6 +99,7 @@ test('selected resource history preserves exact quantities and coverage', async 
     await history.select('grid', 'item');
     assert.equal(history.state.status, 'ready');
     assert.equal(history.state.points[0].input, '9223372036854775807');
+    assert.equal(history.state.points[1].kind, 'GAP');
     assert.equal(history.state.complete, false);
     assert.equal(history.state.truncated, true);
     assert.equal(history.state.enabled, true);

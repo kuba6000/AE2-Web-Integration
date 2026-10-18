@@ -20,6 +20,7 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore.Table;
 
 /** Bounded history queries; connection and transaction belong to the store. */
 final class HsqlHistoryReader {
@@ -49,63 +50,88 @@ final class HsqlHistoryReader {
             }
         }
         long start = Math.max(fromMillis, expiry);
-        boolean complete = !retired && !hasIncomplete(db, gridId, itemKey, start);
-        List<QueryPoint> selected = selectPoints(db, gridId, itemKey, start, limit);
+        boolean complete = !retired && !hasGap(db, gridId, start);
+        Long resourceId = itemKey == null ? null : resourceId(db, itemKey);
+        List<QueryPoint> selected = selectPoints(db, gridId, resourceId, start, limit);
         boolean truncated = retired || selected.size() > limit;
         List<StorageHistoryPoint> points = new ArrayList<>();
         int count = Math.min(limit, selected.size());
         for (int index = 0; index < count; index++) points.add(selected.get(index).point);
         Collections.reverse(points);
-        StorageHistoryPoint baseline = findBaseline(db, gridId, itemKey, start, selected.subList(0, count));
+        StorageHistoryPoint baseline = findBaseline(db, gridId, resourceId, start, selected.subList(0, count));
+        includeBoundaryGap(db, gridId, points);
         Map<StableKey, ResourceDescriptor> descriptions = readDescriptions(db, points, baseline);
         return new StorageHistory(points, descriptions, complete, truncated, baseline);
     }
 
-    private static @NotNull List<QueryPoint> selectPoints(@NotNull Connection db, long gridId,
-        @Nullable StableKey itemKey, long fromMillis, int limit) throws SQLException {
-        List<QueryPoint> selected = queryPoints(db, gridId, itemKey, false, fromMillis, limit);
-        if (itemKey != null) {
-            selected.addAll(queryPoints(db, gridId, null, true, fromMillis, limit));
-            selected.sort((left, right) -> {
-                int time = Long.compare(right.point.observedAt(), left.point.observedAt());
-                return time == 0 ? Long.compare(right.id, left.id) : time;
-            });
+    /** A result limit must not detach partial measurements from their same-time coverage barrier. */
+    private static void includeBoundaryGap(Connection db, long gridId, List<StorageHistoryPoint> points)
+        throws SQLException {
+        if (points.isEmpty()) return;
+        long boundary = points.get(0)
+            .observedAt();
+        if (points.stream()
+            .anyMatch(point -> point.observedAt() == boundary && point.kind() == StorageHistoryPoint.Kind.GAP)) return;
+        try (PreparedStatement query = db.prepareStatement("""
+            SELECT * FROM history_coverage
+            WHERE grid_id = ? AND observed_at = ? AND kind = 'GAP'
+            ORDER BY id DESC
+            """)) {
+            query.setLong(1, gridId);
+            query.setLong(2, boundary);
+            query.setMaxRows(1);
+            try (ResultSet rows = query.executeQuery()) {
+                if (rows.next()) points.add(0, readPoint(rows, Table.COVERAGE));
+            }
         }
+    }
+
+    private static @NotNull List<QueryPoint> selectPoints(@NotNull Connection db, long gridId,
+        @Nullable Long resourceId, long fromMillis, int limit) throws SQLException {
+        List<QueryPoint> selected = new ArrayList<>();
+        for (Table table : Table.values())
+            selected.addAll(queryPoints(db, gridId, resourceId, table, fromMillis, limit));
+        selected.sort((left, right) -> {
+            int time = Long.compare(right.point.observedAt(), left.point.observedAt());
+            return time == 0 ? Long.compare(right.id, left.id) : time;
+        });
         return selected;
     }
 
     private static @Nullable StorageHistoryPoint findBaseline(@NotNull Connection db, long gridId,
-        @Nullable StableKey itemKey, long fromMillis, @NotNull List<QueryPoint> selected) throws SQLException {
-        if (itemKey == null) return null;
+        @Nullable Long resourceId, long fromMillis, @NotNull List<QueryPoint> selected) throws SQLException {
+        if (resourceId == null) return null;
         long boundary = selected.isEmpty() ? fromMillis : selected.get(selected.size() - 1).point.observedAt();
-        QueryPoint anchor = queryBaseline(db, gridId, itemKey, boundary);
-        if (anchor == null || !anchor.point.complete() || crossesGap(db, gridId, itemKey, anchor, boundary))
-            return null;
+        QueryPoint anchor = queryBaseline(db, gridId, resourceId, boundary);
+        if (anchor == null || crossesGap(db, gridId, anchor, boundary)) return null;
         for (QueryPoint point : selected) {
             if (point.id == anchor.id) return null;
         }
         return anchor.point;
     }
 
-    private static @NotNull List<QueryPoint> queryPoints(@NotNull Connection db, long gridId,
-        @Nullable StableKey itemKey, boolean markersOnly, long fromMillis, int limit) throws SQLException {
+    private static @NotNull List<QueryPoint> queryPoints(@NotNull Connection db, long gridId, @Nullable Long resourceId,
+        Table table, long fromMillis, int limit) throws SQLException {
         List<QueryPoint> result = new ArrayList<>();
-        String filter = "";
-        if (itemKey != null) filter = "AND p.item_key = ?\n";
-        else if (markersOnly) filter = "AND p.item_key IS NULL\n";
-        try (PreparedStatement query = db.prepareStatement("""
-            SELECT p.*
-            FROM history_points p
-            WHERE p.grid_id = ?
-                AND p.observed_at >= ?
-            """ + filter + "ORDER BY p.observed_at DESC, p.id DESC")) {
+        boolean filtered = resourceId != null && table != Table.COVERAGE;
+        String filter = filtered ? "AND p.resource_id = ?\n" : "";
+        try (PreparedStatement query = db.prepareStatement(
+            (table == Table.COVERAGE ? "SELECT p.* FROM " + table.sqlName + " p\n"
+                : "SELECT p.*, r.item_key FROM " + table.sqlName
+                    + " p JOIN history_resources r ON r.id = p.resource_id\n")
+                + """
+                    WHERE p.grid_id = ?
+                        AND p.observed_at >= ?
+                    """
+                + filter
+                + "ORDER BY p.observed_at DESC, p.id DESC")) {
             query.setLong(1, gridId);
             query.setLong(2, fromMillis);
-            if (itemKey != null) query.setString(3, itemKey.toString());
+            if (filtered) query.setLong(3, resourceId);
             query.setMaxRows(limit + 1);
             try (ResultSet rows = query.executeQuery()) {
                 while (rows.next()) {
-                    StorageHistoryPoint point = readPoint(rows);
+                    StorageHistoryPoint point = readPoint(rows, table);
                     result.add(new QueryPoint(rows.getLong("id"), point));
                 }
             }
@@ -113,19 +139,25 @@ final class HsqlHistoryReader {
         return result;
     }
 
-    private static boolean hasIncomplete(@NotNull Connection db, long gridId, @Nullable StableKey itemKey,
-        long fromMillis) throws SQLException {
-        String filter = itemKey == null ? "" : "AND (item_key = ? OR item_key IS NULL)";
+    private static long resourceId(@NotNull Connection db, @NotNull StableKey key) throws SQLException {
+        try (PreparedStatement query = db.prepareStatement("SELECT id FROM history_resources WHERE item_key = ?")) {
+            query.setString(1, key.toString());
+            try (ResultSet rows = query.executeQuery()) {
+                return rows.next() ? rows.getLong(1) : -1;
+            }
+        }
+    }
+
+    private static boolean hasGap(@NotNull Connection db, long gridId, long fromMillis) throws SQLException {
         try (PreparedStatement query = db.prepareStatement("""
             SELECT id
-            FROM history_points
+            FROM history_coverage
             WHERE grid_id = ?
-                AND complete = FALSE
+                AND kind = 'GAP'
                 AND observed_at >= ?
-            """ + filter)) {
+            """)) {
             query.setLong(1, gridId);
             query.setLong(2, fromMillis);
-            if (itemKey != null) query.setString(3, itemKey.toString());
             query.setMaxRows(1);
             try (ResultSet rows = query.executeQuery()) {
                 return rows.next();
@@ -133,70 +165,70 @@ final class HsqlHistoryReader {
         }
     }
 
-    private static @Nullable QueryPoint queryBaseline(@NotNull Connection db, long gridId, @NotNull StableKey itemKey,
+    private static @Nullable QueryPoint queryBaseline(@NotNull Connection db, long gridId, long resourceId,
         long boundary) throws SQLException {
         try (PreparedStatement query = db.prepareStatement("""
-            SELECT p.*
-            FROM history_points p
+            SELECT p.*, r.item_key
+            FROM history_stock p JOIN history_resources r ON r.id = p.resource_id
             WHERE p.grid_id = ?
-                AND p.item_key = ?
-                AND p.kind = 'STOCK'
+                AND p.resource_id = ?
                 AND p.observed_at <= ?
             ORDER BY p.observed_at DESC, p.id DESC
             """)) {
             query.setLong(1, gridId);
-            query.setString(2, itemKey.toString());
+            query.setLong(2, resourceId);
             query.setLong(3, boundary);
             query.setMaxRows(1);
             try (ResultSet rows = query.executeQuery()) {
                 if (!rows.next()) return null;
-                return new QueryPoint(rows.getLong("id"), readPoint(rows));
+                return new QueryPoint(rows.getLong("id"), readPoint(rows, Table.STOCK));
             }
         }
     }
 
-    private static boolean crossesGap(Connection db, long gridId, StableKey itemKey, QueryPoint anchor, long boundary)
+    private static boolean crossesGap(Connection db, long gridId, QueryPoint anchor, long boundary)
         throws SQLException {
-        try (PreparedStatement query = db.prepareStatement("""
-            SELECT id
-            FROM history_points
-            WHERE grid_id = ?
-                AND (observed_at > ? OR observed_at = ? AND id > ?)
-                AND observed_at <= ?
-                AND (
-                    kind = 'GAP'
-                    OR generation <> ?
-                    OR complete = FALSE AND (kind = 'OBSERVATION' OR item_key = ? AND kind = 'STOCK')
-                )
-            """)) {
-            query.setLong(1, gridId);
-            query.setLong(2, anchor.point.observedAt());
-            query.setLong(3, anchor.point.observedAt());
-            query.setLong(4, anchor.id);
-            query.setLong(5, boundary);
-            query.setLong(6, anchor.point.generation());
-            query.setString(7, itemKey.toString());
-            query.setMaxRows(1);
-            try (ResultSet rows = query.executeQuery()) {
-                return rows.next();
+        for (Table table : Table.values()) {
+            String barrier = table == Table.COVERAGE ? "(kind = 'GAP' OR generation <> ?)" : "generation <> ?";
+            try (PreparedStatement query = db.prepareStatement("SELECT id FROM " + table.sqlName + "\n" + """
+                WHERE grid_id = ?
+                    AND (observed_at > ? OR observed_at = ? AND id > ?)
+                    AND observed_at <= ?
+                    AND
+                """ + barrier)) {
+                query.setLong(1, gridId);
+                query.setLong(2, anchor.point.observedAt());
+                query.setLong(3, anchor.point.observedAt());
+                query.setLong(4, anchor.id);
+                query.setLong(5, boundary);
+                query.setLong(6, anchor.point.generation());
+                query.setMaxRows(1);
+                try (ResultSet rows = query.executeQuery()) {
+                    if (rows.next()) return true;
+                }
             }
         }
+        return false;
     }
 
     @Desugar
     private record QueryPoint(long id, @NotNull StorageHistoryPoint point) {}
 
-    private static @NotNull StorageHistoryPoint readPoint(@NotNull ResultSet row) throws SQLException {
-        String itemKey = row.getString("item_key");
+    private static @NotNull StorageHistoryPoint readPoint(@NotNull ResultSet row, Table table) throws SQLException {
+        String itemKey = table == Table.COVERAGE ? null : row.getString("item_key");
+        StorageHistoryPoint.Kind kind = switch (table) {
+            case STOCK -> StorageHistoryPoint.Kind.STOCK;
+            case FLOW -> StorageHistoryPoint.Kind.FLOW;
+            case COVERAGE -> StorageHistoryPoint.Kind.valueOf(row.getString("kind"));
+        };
         return new StorageHistoryPoint(
             row.getLong("observed_at"),
             row.getLong("generation"),
-            StorageHistoryPoint.Kind.valueOf(row.getString("kind")),
+            kind,
             itemKey == null ? null : StableKey.parse(itemKey),
-            row.getLong("quantity"),
-            row.getLong("input_amount"),
-            row.getLong("output_amount"),
-            row.getBoolean("complete"));
+            table == Table.STOCK ? row.getLong("quantity") : 0,
+            table == Table.FLOW ? row.getLong("input_amount") : 0,
+            table == Table.FLOW ? row.getLong("output_amount") : 0);
     }
 
     private static @NotNull Map<StableKey, ResourceDescriptor> readDescriptions(@NotNull Connection db,

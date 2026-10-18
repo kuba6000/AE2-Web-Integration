@@ -145,18 +145,12 @@ export function createResourceHistoryView(
                 output = 0n;
             const flowObserved = history.points.some(
                 (point) =>
-                    point.complete &&
                     point.observedAt > history.from &&
                     point.observedAt <= history.until &&
                     (point.kind === 'FLOW' || point.kind === 'FLOW_OBSERVATION')
             );
             for (const point of history.points)
-                if (
-                    point.kind === 'FLOW' &&
-                    point.complete &&
-                    point.observedAt > history.from &&
-                    point.observedAt <= history.until
-                ) {
+                if (point.kind === 'FLOW' && point.observedAt > history.from && point.observedAt <= history.until) {
                     input += BigInt(point.input);
                     output += BigInt(point.output);
                 }

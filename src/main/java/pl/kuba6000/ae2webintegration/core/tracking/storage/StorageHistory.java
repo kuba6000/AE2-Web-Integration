@@ -14,7 +14,10 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
-/** Baseline is last-known stock context outside the point limit; null means no retained observation, not zero. */
+/**
+ * Baseline is last-known stock context outside the point limit; null means no retained observation, not zero.
+ * Points may contain one additional boundary GAP to preserve coverage when the limit cuts a same-time group.
+ */
 @Desugar
 public record StorageHistory(@NotNull List<StorageHistoryPoint> points,
     @NotNull Map<StableKey, ResourceDescriptor> descriptions, boolean complete, boolean truncated,

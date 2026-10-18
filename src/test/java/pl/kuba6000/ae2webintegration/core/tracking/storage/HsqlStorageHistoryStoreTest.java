@@ -20,6 +20,60 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 class HsqlStorageHistoryStoreTest {
 
+    @Test
+    void boundedPartialFlowIncludesItsGapAsOneExtraBoundaryMarker() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        long now = System.currentTimeMillis();
+        StorageHistoryPoint gap = new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0);
+        StorageHistoryPoint flow = new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.FLOW, item, 0, 7, 3);
+        try (HsqlStorageHistoryStore store = store(100)) {
+            append(store, grid, Arrays.asList(gap, flow));
+            StorageHistory history = store.read(grid, item, now, 1);
+            assertEquals(Arrays.asList(gap, flow), history.points());
+            assertTrue(history.truncated());
+            assertFalse(history.complete());
+            assertEquals(
+                Arrays.asList(gap, flow),
+                store.read(grid, null, now, 1)
+                    .points());
+            assertTrue(
+                store.read(grid, item, now + 1, 1)
+                    .points()
+                    .isEmpty());
+        }
+    }
+
+    @Test
+    void mixedMeasurementsKeepAppendOrderAndResourceIdentityAcrossReopen() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        long now = System.currentTimeMillis();
+        java.util.List<StorageHistoryPoint> points = Arrays.asList(
+            new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0),
+            stock(item, now, 12),
+            new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.FLOW, item, 0, Long.MAX_VALUE, 3),
+            new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.OBSERVATION, null, 0, 0, 0),
+            stock(item, now, 9),
+            new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.FLOW_OBSERVATION, null, 0, 0, 0));
+        try (HsqlStorageHistoryStore store = store(100)) {
+            append(store, grid, points);
+        }
+        try (HsqlStorageHistoryStore store = store(100)) {
+            StorageHistory history = store.read(grid, item, now, 20);
+            assertEquals(points, history.points());
+            assertEquals(
+                Collections.singleton(item),
+                history.descriptions()
+                    .keySet());
+            assertFalse(history.complete());
+            assertEquals(
+                points.get(4),
+                store.read(grid, item, now + 1, 20)
+                    .baseline());
+        }
+    }
+
     @TempDir
     Path directory;
 
@@ -29,15 +83,7 @@ class HsqlStorageHistoryStoreTest {
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
         long old = now - TimeUnit.DAYS.toMillis(8);
-        StorageHistoryPoint gap = new StorageHistoryPoint(
-            old + 100,
-            7,
-            StorageHistoryPoint.Kind.GAP,
-            null,
-            0,
-            0,
-            0,
-            false);
+        StorageHistoryPoint gap = new StorageHistoryPoint(old + 100, 7, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0);
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(stock(item, old, 10), gap));
             assertNull(
@@ -57,15 +103,7 @@ class HsqlStorageHistoryStoreTest {
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
         StorageHistoryPoint initial = stock(item, now, 10);
-        StorageHistoryPoint gap = new StorageHistoryPoint(
-            now + 100,
-            7,
-            StorageHistoryPoint.Kind.GAP,
-            null,
-            0,
-            0,
-            0,
-            false);
+        StorageHistoryPoint gap = new StorageHistoryPoint(now + 100, 7, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0);
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(initial, gap));
             assertNull(
@@ -143,6 +181,38 @@ class HsqlStorageHistoryStoreTest {
                 store.read(secondGrid, item, now, 10)
                     .descriptions()
                     .get(item));
+        }
+    }
+
+    @Test
+    void flowReferenceKeepsDescriptionUntilBothMeasurementKindsArePruned() throws Exception {
+        StableKey stockGrid = StableKey.random();
+        StableKey flowGrid = StableKey.random();
+        StableKey item = StableKey.random();
+        StableKey other = StableKey.random();
+        long now = System.currentTimeMillis();
+        StorageHistoryPoint flow = new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.FLOW, item, 0, 4, 2);
+        try (HsqlStorageHistoryStore store = store(1)) {
+            append(store, stockGrid, Collections.singletonList(stock(item, now, 8)));
+            append(store, flowGrid, Collections.singletonList(flow));
+            append(store, stockGrid, Collections.singletonList(stock(other, now + 1, 1)));
+            assertEquals(
+                Collections.singleton(item),
+                store.read(flowGrid, item, now, 10)
+                    .descriptions()
+                    .keySet());
+            append(store, flowGrid, Collections.singletonList(stock(other, now + 1, 1)));
+            assertThrows(
+                IOException.class,
+                () -> store
+                    .append(stockGrid, Collections.emptyMap(), Collections.singletonList(stock(item, now + 2, 9))));
+            append(store, stockGrid, Collections.singletonList(stock(item, now + 2, 9)));
+            assertEquals(
+                9,
+                store.read(stockGrid, item, now + 2, 10)
+                    .points()
+                    .get(0)
+                    .quantity());
         }
     }
 
@@ -257,7 +327,7 @@ class HsqlStorageHistoryStoreTest {
     }
 
     private static StorageHistoryPoint stock(StableKey item, long time, long amount) {
-        return new StorageHistoryPoint(time, 7, StorageHistoryPoint.Kind.STOCK, item, amount, 0, 0, true);
+        return new StorageHistoryPoint(time, 7, StorageHistoryPoint.Kind.STOCK, item, amount, 0, 0);
     }
 
     private static ResourceDescriptor description(StableKey item, String name) {
@@ -279,7 +349,7 @@ class HsqlStorageHistoryStoreTest {
         StableKey item = StableKey.random();
         StableKey other = StableKey.random();
         long now = System.currentTimeMillis();
-        StorageHistoryPoint gap = new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0, false);
+        StorageHistoryPoint gap = new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0);
         StorageHistoryPoint flow = new StorageHistoryPoint(
             now + 2,
             1,
@@ -287,8 +357,7 @@ class HsqlStorageHistoryStoreTest {
             item,
             0,
             Long.MAX_VALUE,
-            Long.MAX_VALUE - 1,
-            true);
+            Long.MAX_VALUE - 1);
         StorageHistoryPoint observation = new StorageHistoryPoint(
             now + 3,
             1,
@@ -296,13 +365,18 @@ class HsqlStorageHistoryStoreTest {
             null,
             0,
             0,
-            0,
-            true);
+            0);
         try (HsqlStorageHistoryStore store = store(100)) {
             append(
                 store,
                 grid,
                 Arrays.asList(gap, stock(item, now + 1, 1), stock(other, now + 1, 99), flow, observation));
+            StorageHistory unknown = store.read(grid, StableKey.random(), now, 10);
+            assertEquals(Arrays.asList(gap, observation), unknown.points());
+            assertTrue(
+                unknown.descriptions()
+                    .isEmpty());
+            assertNull(unknown.baseline());
             StorageHistory history = store.read(grid, item, now, 2);
             assertEquals(Arrays.asList(flow, observation), history.points());
             assertFalse(history.complete(), "A gap outside the latest result limit must still describe query coverage");
@@ -327,8 +401,7 @@ class HsqlStorageHistoryStoreTest {
             null,
             0,
             0,
-            0,
-            true);
+            0);
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(first, latest, marker));
 
@@ -390,8 +463,7 @@ class HsqlStorageHistoryStoreTest {
             null,
             0,
             0,
-            0,
-            true);
+            0);
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(anchor, marker, marker, marker));
             StorageHistory history = store.read(grid, item, now - 1000, 2);
@@ -421,8 +493,7 @@ class HsqlStorageHistoryStoreTest {
             null,
             0,
             0,
-            0,
-            true);
+            0);
         try (HsqlStorageHistoryStore store = store(2)) {
             append(store, grid, Arrays.asList(old, marker, marker));
             StorageHistory lost = store.read(grid, item, 0, 10);

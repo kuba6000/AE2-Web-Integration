@@ -43,7 +43,7 @@ export function chartSamples(
 ): ChartSample[] {
     const samples: ChartSample[] = [];
     let stock =
-        history.baseline?.complete && history.baseline.resource && history.baseline.observedAt <= from
+        history.baseline?.kind === 'STOCK' && history.baseline.resource && history.baseline.observedAt <= from
             ? BigInt(history.baseline.resource.quantity)
             : null;
     let generation = history.baseline?.generation;
@@ -54,17 +54,13 @@ export function chartSamples(
     ];
     for (const point of allPoints) {
         if (point.observedAt >= from) break;
-        if (
-            point.kind === 'GAP' ||
-            (generation && generation !== point.generation) ||
-            (!point.complete && (point.kind === 'STOCK' || point.kind === 'OBSERVATION'))
-        ) {
+        if (point.kind === 'GAP' || (generation && generation !== point.generation)) {
             stock = null;
             stockObservedAt = undefined;
         }
         generation = point.generation;
-        if (point.kind === 'STOCK' && point.complete && point.resource) stock = BigInt(point.resource.quantity);
-        if ((point.kind === 'STOCK' || point.kind === 'OBSERVATION') && point.complete && stock !== null)
+        if (point.kind === 'STOCK' && point.resource) stock = BigInt(point.resource.quantity);
+        if ((point.kind === 'STOCK' || point.kind === 'OBSERVATION') && stock !== null)
             stockObservedAt = point.observedAt;
     }
     const points = allPoints.filter((point) => point.observedAt >= from && point.observedAt <= until);
@@ -89,29 +85,28 @@ export function chartSamples(
         while (index < points.length && points[index].observedAt <= end) {
             const point = points[index++];
             const reset = point.kind === 'GAP' || (generation && generation !== point.generation);
-            if (reset || (!point.complete && (point.kind === 'STOCK' || point.kind === 'OBSERVATION'))) {
+            if (reset) {
                 gap = true;
                 gapAt = point.observedAt;
                 stock = null;
                 stockObservedAt = undefined;
                 changes.length = 0;
             }
-            if (reset || (!point.complete && (point.kind === 'FLOW' || point.kind === 'FLOW_OBSERVATION')))
-                flowGap = true;
+            if (reset) flowGap = true;
             generation = point.generation;
-            if (point.kind === 'STOCK' && point.resource && point.complete) {
+            if (point.kind === 'STOCK' && point.resource) {
                 stock = BigInt(point.resource.quantity);
             }
-            if ((point.kind === 'STOCK' || point.kind === 'OBSERVATION') && point.complete && stock !== null) {
+            if ((point.kind === 'STOCK' || point.kind === 'OBSERVATION') && stock !== null) {
                 stockObservedAt = point.observedAt;
                 changes.push({ time: point.observedAt, stock });
             }
-            if (point.kind === 'FLOW' && point.complete && point.observedAt > from) {
+            if (point.kind === 'FLOW' && point.observedAt > from) {
                 input += BigInt(point.input);
                 output += BigInt(point.output);
                 flowObserved = true;
             }
-            if (point.kind === 'FLOW_OBSERVATION' && point.complete && point.observedAt > from) flowObserved = true;
+            if (point.kind === 'FLOW_OBSERVATION' && point.observedAt > from) flowObserved = true;
         }
         if (gap) samples.push({ time: gapAt - 0.001, stock: null, input: null, output: null });
         if (changes.length) {

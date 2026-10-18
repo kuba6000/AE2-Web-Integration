@@ -188,7 +188,6 @@ export type ResourceHistoryPoint = {
     resource: (ResourceDescription & { quantity: string }) | null;
     input: string;
     output: string;
-    complete: boolean;
 };
 export type ResourceHistory = {
     baseline: ResourceHistoryPoint | null;

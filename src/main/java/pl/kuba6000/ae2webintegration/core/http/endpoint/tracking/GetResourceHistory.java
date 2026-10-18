@@ -32,7 +32,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 /**
- * Reads sampled stock and completed input/output intervals. Missing observations are not zero activity.
+ * Reads sampled stock and input/output counts. GAP markers identify incomplete coverage; partial counts are retained.
  *
  * @pathParam gridKey Persistent grid identifier.
  * @response 200 {@link Response} Bounded history query result.
@@ -67,7 +67,7 @@ public final class GetResourceHistory extends IAsyncRequest {
     /** Earliest observation time in Unix epoch milliseconds, inclusive; defaults to zero. */
     @QueryParam("from")
     private long from;
-    /** Maximum points returned, from 1 through 10000; defaults to 200. */
+    /** Maximum points selected, from 1 through 10000; defaults to 200. One boundary GAP may be added. */
     @QueryParam("limit")
     private int limit = DEFAULT_QUERY_LIMIT;
 
@@ -80,7 +80,8 @@ public final class GetResourceHistory extends IAsyncRequest {
 
     /**
      * Baseline is the last retained stock measurement preceding the returned window, or null when unknown.
-     * It keeps its original timestamp and is not counted against limit.
+     * It keeps its original timestamp and is not counted against limit. A same-time boundary GAP may also exceed limit
+     * by one point so partial measurements retain their coverage context.
      */
     @Desugar
     public record History(@NotNull List<Point> points, boolean complete, boolean truncated, boolean enabled,
@@ -89,7 +90,7 @@ public final class GetResourceHistory extends IAsyncRequest {
     /** Decimal strings preserve exact 64-bit counts and generation identifiers in browser clients. */
     @Desugar
     public record Point(long observedAt, @NotNull String generation, @NotNull StorageHistoryPoint.Kind kind,
-        @Nullable TrackedResource resource, @NotNull String input, @NotNull String output, boolean complete) {}
+        @Nullable TrackedResource resource, @NotNull String input, @NotNull String output) {}
 
     @Override
     public void handle() {
@@ -160,8 +161,7 @@ public final class GetResourceHistory extends IAsyncRequest {
                     point.quantity(),
                     references.get(point.itemKey())),
             Long.toString(point.input()),
-            Long.toString(point.output()),
-            point.complete());
+            Long.toString(point.output()));
     }
 
 }

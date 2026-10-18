@@ -24,6 +24,92 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 class StorageTrackingServiceTest {
 
     @Test
+    void incompleteStockAttemptsRemainGapsUntilFullObservationReestablishesBaseline() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
+            service.open(grid, 1);
+            assertTrue(service.submit(grid, 1, observation(item, 1000, 5), true, false));
+            awaitRevision(service, grid, 1);
+            service.invalidate(grid, 1);
+            for (int index = 2; index <= 3; index++) {
+                assertTrue(
+                    service.submit(
+                        grid,
+                        1,
+                        StorageObservationFixtures
+                            .observation(index * 1000, false, true, Collections.emptyList(), Collections.emptyList()),
+                        true,
+                        false));
+                awaitRevision(service, grid, index);
+                StorageHistory incomplete = service.history(grid, item, index * 1000, 100);
+                assertFalse(incomplete.complete());
+                assertEquals(
+                    Collections.singletonList(StorageHistoryPoint.Kind.GAP),
+                    incomplete.points()
+                        .stream()
+                        .map(StorageHistoryPoint::kind)
+                        .collect(java.util.stream.Collectors.toList()));
+            }
+            assertTrue(service.submit(grid, 1, observation(item, 4000, 5), true, false));
+            awaitRevision(service, grid, 4);
+            StorageHistory recovered = service.history(grid, item, 4000, 100);
+            assertTrue(recovered.complete());
+            assertTrue(
+                recovered.points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.STOCK && point.quantity() == 5));
+            assertTrue(
+                recovered.points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.OBSERVATION));
+        }
+    }
+
+    @Test
+    void partialFlowKeepsCountersWithGapInsteadOfSuccessfulObservationMarker() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
+        try (StorageTrackingService service = new StorageTrackingService(store, 100)) {
+            service.open(grid, 1);
+            assertTrue(
+                service.submit(
+                    grid,
+                    1,
+                    new StorageObservation(
+                        1000,
+                        false,
+                        false,
+                        false,
+                        Collections.emptyList(),
+                        Collections.singletonList(new StorageObservation.Flow(item, 7, 3)),
+                        Collections.singletonMap(item, resource(item, 0).description()),
+                        Collections.emptyList()),
+                    false,
+                    true));
+            service.close();
+            StorageHistory history = store.read(grid, item, 1000, 100);
+            assertFalse(history.complete());
+            assertTrue(
+                history.points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.GAP));
+            assertFalse(
+                history.points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.FLOW_OBSERVATION));
+            StorageHistoryPoint flow = history.points()
+                .stream()
+                .filter(point -> point.kind() == StorageHistoryPoint.Kind.FLOW)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Partial flow counters were discarded"));
+            assertEquals(7, flow.input());
+            assertEquals(3, flow.output());
+        }
+    }
+
+    @Test
     void initialRecipeOnlyZeroRemainsOutsideStockHistoryAcrossGapRecovery() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
@@ -111,9 +197,6 @@ class StorageTrackingServiceTest {
                 0,
                 recovered.get(0)
                     .quantity());
-            assertTrue(
-                recovered.get(0)
-                    .complete());
             assertTrue(
                 service.submit(
                     grid,

@@ -97,7 +97,7 @@ public class CoreEngine {
         terminalStreams = streams;
         StorageTrackingService service = new StorageTrackingService(
             new HsqlStorageHistoryStore(
-                new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/history/resources")
+                new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/history/tracking")
                     .toPath(),
                 trackingSettings.historyRetentionDays,
                 trackingSettings.historyMaxRowsPerGrid),

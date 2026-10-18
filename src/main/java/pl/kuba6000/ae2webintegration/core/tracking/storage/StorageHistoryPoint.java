@@ -10,7 +10,7 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 /** Stock is an observed absolute amount; flow counts accepted operations between observations. */
 @Desugar
 public record StorageHistoryPoint(long observedAt, long generation, @NotNull Kind kind, @Nullable StableKey itemKey,
-    long quantity, long input, long output, boolean complete) {
+    long quantity, long input, long output) {
 
     public enum Kind {
         STOCK,

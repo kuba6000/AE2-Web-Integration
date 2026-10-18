@@ -203,6 +203,9 @@ class IconDeliveryHttpTest {
             assertFalse(
                 point.getAsJsonObject()
                     .has("craftable"));
+            assertFalse(
+                point.getAsJsonObject()
+                    .has("complete"));
             var resource = point.getAsJsonObject()
                 .get("resource");
             if (!resource.isJsonNull()) assertTrue(
@@ -251,6 +254,10 @@ class IconDeliveryHttpTest {
             baselineResponse.getAsJsonObject("data")
                 .getAsJsonObject("baseline")
                 .has("craftable"));
+        assertFalse(
+            baselineResponse.getAsJsonObject("data")
+                .getAsJsonObject("baseline")
+                .has("complete"));
         JsonObject baseline = baselineResponse.getAsJsonObject("data")
             .getAsJsonObject("baseline")
             .getAsJsonObject("resource");
