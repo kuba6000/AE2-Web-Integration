@@ -65,6 +65,11 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         recent = new RecentTrackingService(terminals, settings.maxQueuedRows);
     }
 
+    /** Off-thread read of an immutable worker publication; never touches native bindings or schedules work. */
+    public @Nullable RecentResourceActivity.Summary recent(@NotNull StableKey key) {
+        return recent.snapshot(key);
+    }
+
     /** Native reads are shared across viewers; at most one scheduled grid observation runs per tick. */
     public void tick(@NotNull IAE ae, long nowMillis) {
         if (nowMillis >= nextDiscovery) {

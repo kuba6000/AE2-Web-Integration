@@ -7,7 +7,7 @@ import type { Notify } from './notifications.js';
 export type PinsState = {
     items: ResourcePin[];
     icons: IconMetadata | null;
-    histories: Record<string, ResourceHistoryState>;
+    histories: Record<string, Record<number, ResourceHistoryState>>;
     status: 'idle' | 'loading' | 'ready' | 'error';
     pending: boolean;
     error: string | null;
@@ -27,6 +27,13 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
         request?.abort();
         reading = undefined;
     }
+    function historyRanges(pin: ResourcePin) {
+        const ranges = new Set<number>();
+        if (pin.homeConfig.showChart) ranges.add(pin.homeConfig.rangeMillis);
+        if (pin.homeConfig.showFlow) ranges.add(pin.homeConfig.flowRangeMillis);
+        if (pin.homeConfig.showStock && !ranges.size) ranges.add(pin.homeConfig.rangeMillis);
+        return ranges;
+    }
     function accept(result: ResourceResponse<ResourcePin[]>) {
         state.items = result.data;
         state.icons = result.icons;
@@ -35,36 +42,38 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
         for (const key of Object.keys(state.histories)) {
             const pin = state.items.find((pin) => pin.pinKey === key);
             if (!pin?.available || pin.homeOrder === null) delete state.histories[key];
+            else {
+                const needed = historyRanges(pin);
+                for (const range of Object.keys(state.histories[key]))
+                    if (!needed.has(Number(range))) delete state.histories[key][Number(range)];
+            }
         }
         changed();
     }
     async function histories(version: number, signal: AbortSignal, automatic: boolean) {
         if (route.view !== 'home') return;
-        const queue = state.items.filter(
-            (pin) =>
-                pin.available &&
-                pin.homeOrder !== null &&
-                pin.gridKey &&
-                pin.itemKey &&
-                (pin.homeConfig.showStock || pin.homeConfig.showFlow || pin.homeConfig.showChart)
-        );
+        const until = Date.now();
+        const queue = state.items
+            .filter(
+                (pin) =>
+                    pin.available &&
+                    pin.homeOrder !== null &&
+                    pin.gridKey &&
+                    pin.itemKey &&
+                    (pin.homeConfig.showStock || pin.homeConfig.showFlow || pin.homeConfig.showChart)
+            )
+            .flatMap((pin) => [...historyRanges(pin)].map((rangeMillis) => ({ pin, rangeMillis })));
         async function worker() {
             while (queue.length && version === generation && !signal.aborted) {
-                const pin = queue.shift()!;
+                const { pin, rangeMillis } = queue.shift()!;
                 if (!state.items.some((current) => current.pinKey === pin.pinKey && current.available)) continue;
-                const previous = state.histories[pin.pinKey];
-                if (
-                    automatic &&
-                    previous?.status === 'ready' &&
-                    previous.rangeMillis === pin.homeConfig.rangeMillis &&
-                    Date.now() - previous.until < 30000
-                )
-                    continue;
-                const until = Date.now(),
-                    from = Math.max(0, until - pin.homeConfig.rangeMillis);
-                if (!previous || previous.rangeMillis !== pin.homeConfig.rangeMillis || previous.status !== 'ready')
-                    state.histories[pin.pinKey] = {
-                        rangeMillis: pin.homeConfig.rangeMillis,
+                const cache = (state.histories[pin.pinKey] ??= {});
+                const previous = cache[rangeMillis];
+                if (automatic && previous?.status === 'ready' && Date.now() - previous.until < 30000) continue;
+                const from = Math.max(0, until - rangeMillis);
+                if (!previous || previous.status !== 'ready')
+                    cache[rangeMillis] = {
+                        rangeMillis,
                         from,
                         until,
                         status: 'loading',
@@ -81,9 +90,9 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
                     const result = await api.resourceHistory(pin.gridKey!, pin.itemKey!, signal, from, iconsEnabled());
                     if (version !== generation || signal.aborted) return;
                     if (!state.items.some((current) => current.pinKey === pin.pinKey && current.available)) continue;
-                    state.histories[pin.pinKey] = {
+                    cache[rangeMillis] = {
                         ...result.data,
-                        rangeMillis: pin.homeConfig.rangeMillis,
+                        rangeMillis,
                         from,
                         until,
                         status: 'ready',
@@ -95,7 +104,7 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
                     if (version !== generation || error.name === 'AbortError') return;
                     if (
                         !state.items.some((current) => current.pinKey === pin.pinKey && current.available) ||
-                        !state.histories[pin.pinKey]
+                        !state.histories[pin.pinKey]?.[rangeMillis]
                     )
                         continue;
                     const status = error.status || 'NETWORK_ERROR';
@@ -109,10 +118,11 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
                                 gridKey: null,
                                 itemKey: null,
                                 gridName: null,
-                                resource: null
+                                resource: null,
+                                recent: null
                             };
                         });
-                    } else Object.assign(state.histories[pin.pinKey], { status: 'error', error: status });
+                    } else Object.assign(cache[rangeMillis], { status: 'error', error: status });
                 }
                 changed();
             }
@@ -209,7 +219,8 @@ export function createPins(api: Api, changed: () => void, iconsEnabled: () => bo
         invalidateIcons() {
             cancel();
             state.icons = null;
-            for (const history of Object.values(state.histories)) history.icons = null;
+            for (const ranges of Object.values(state.histories))
+                for (const history of Object.values(ranges)) history.icons = null;
         },
         dispose() {
             disposed = true;

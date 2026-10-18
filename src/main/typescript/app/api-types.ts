@@ -206,6 +206,8 @@ export type ResourceHistory = {
 
 export type PinPlacement = 'terminal' | 'home';
 export type PinHomeConfig = {
+    showRecentFlow: boolean;
+    flowRangeMillis: number;
     showStock: boolean;
     showFlow: boolean;
     showChart: boolean;
@@ -216,6 +218,7 @@ export type PinHomeConfig = {
     rangeMillis: number;
 };
 export type ResourcePin = {
+    recent: RecentTracking | null;
     pinKey: string;
     available: boolean;
     gridKey: string | null;

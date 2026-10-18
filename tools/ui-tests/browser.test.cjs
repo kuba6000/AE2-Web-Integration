@@ -776,6 +776,8 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                             homeConfig: {
                                 showStock: true,
                                 showFlow: true,
+                                showRecentFlow: true,
+                                flowRangeMillis: 86400000,
                                 showChart: true,
                                 stock: true,
                                 input: true,
@@ -1105,7 +1107,9 @@ async function settleResponse(page, request) {
 
 // Advance the browser's real polling timers; API traffic and UI updates still run normally.
 async function poll(page) {
-    const requested = page.waitForRequest((request) => request.url().endsWith('/api/grids'));
+    const home = ['', '#', '#/'].includes(new URL(page.url()).hash);
+    const endpoint = home ? '/api/resource-pins' : '/api/grids';
+    const requested = page.waitForRequest((request) => new URL(request.url()).pathname.endsWith(endpoint));
     await page.clock.fastForward(6000);
     await requested;
 }
@@ -2628,9 +2632,11 @@ test('Home retains the selected network and owns switching while Web settings ow
     const scopedReads = options.requests.filter(
         (request) => request.path.endsWith('/items') || /\/cpus\/[^/]+$/.test(request.path)
     ).length;
-    const discovery = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'));
+    const gridReads = options.requests.filter((request) => request.path.endsWith('/api/grids')).length;
+    const cards = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/resource-pins'));
     await poll(page);
-    await settleResponse(page, (await discovery).request());
+    await settleResponse(page, (await cards).request());
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/api/grids')).length, gridReads);
     assert.equal(
         options.requests.filter((request) => request.path.endsWith('/items') || /\/cpus\/[^/]+$/.test(request.path))
             .length,
@@ -7650,22 +7656,23 @@ test('empty discovery and unavailable bookmarked networks stay usable', async (t
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
 });
 
-test('home network links keep keyboard focus when polling refreshes the list', async (t) => {
+test('home network links keep keyboard focus when a manual refresh updates the list', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(base);
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
     const network = page.getByRole('link', { name: new RegExp(gridA) });
     await network.focus();
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'));
+    await page.getByRole('button', { name: 'Refresh', exact: true }).dispatchEvent('click');
     await (await refreshed).finished();
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await network.evaluate((link) => link === document.activeElement), true);
     const secondNetwork = page.getByRole('link', { name: new RegExp(gridB) });
     await secondNetwork.focus();
     options.reverseGrids = true;
-    await (
-        await page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'))
-    ).finished();
+    const reordered = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'));
+    await page.getByRole('button', { name: 'Refresh', exact: true }).dispatchEvent('click');
+    await (await reordered).finished();
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await secondNetwork.evaluate((link) => link === document.activeElement), true);
     await page.keyboard.press('Enter');
@@ -8541,7 +8548,7 @@ test('Home keeps denied discovery explicit in the chooser and supports retry', a
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('link', { name: new RegExp(gridA) }).waitFor();
     options.gridError = 'NO_PERMISSIONS';
-    await poll(page);
+    await page.getByRole('button', { name: 'Refresh', exact: true }).dispatchEvent('click');
     await dialog.getByRole('status').waitFor();
     assert.equal(await dialog.getByRole('link').count(), 0);
     options.gridError = null;
@@ -8598,7 +8605,11 @@ test('Home and its chooser contain long identities on mobile in light and dark a
         const network = dialog.locator(`a[href="#/grids/${gridB}/items"]`);
         await network.focus();
         options.grids = options.grids.toReversed();
-        await poll(page);
+        const changedDiscovery = page.waitForResponse((response) =>
+            new URL(response.url()).pathname.endsWith('/api/grids')
+        );
+        await page.getByRole('button', { name: 'Refresh', exact: true }).dispatchEvent('click');
+        await (await changedDiscovery).finished();
         assert.equal(await network.evaluate((node) => node === document.activeElement), true);
         assert.equal(await dialog.getByText(gridA, { exact: true }).isVisible(), true);
         assert.ok(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth));
@@ -12182,6 +12193,8 @@ test('terminal pins respect Auto and preferred columns while keeping ordinary ro
             homeConfig: {
                 showStock: true,
                 showFlow: true,
+                showRecentFlow: true,
+                flowRangeMillis: 86400000,
                 showChart: true,
                 stock: true,
                 input: true,
@@ -12249,6 +12262,8 @@ test('absent terminal pins show zero only after accepted inventory and remain ta
             homeConfig: {
                 showStock: true,
                 showFlow: true,
+                showRecentFlow: true,
+                flowRangeMillis: 86400000,
                 showChart: true,
                 stock: true,
                 input: true,
@@ -12279,6 +12294,8 @@ test('Home hides revoked metadata and removes each placement independently inclu
     const homeConfig = {
         showStock: true,
         showFlow: true,
+        showRecentFlow: true,
+        flowRangeMillis: 86400000,
         showChart: true,
         stock: true,
         input: true,
@@ -12322,6 +12339,8 @@ test('Home pin cards preserve exact sampled values and independent settings whil
     const config = {
         showStock: true,
         showFlow: true,
+        showRecentFlow: true,
+        flowRangeMillis: 86400000,
         showChart: true,
         stock: true,
         input: true,
@@ -12354,6 +12373,19 @@ test('Home pin cards preserve exact sampled values and independent settings whil
         }
     ];
     const now = Date.now();
+    options.pins[0].recent = {
+        flowWindowMillis: 120000,
+        stockWindowMillis: 3600000,
+        bucketMillis: 5000,
+        observedAt: now,
+        flowObservedAt: now,
+        stockObservedAt: null,
+        flowSince: now - 45000,
+        stockSince: null,
+        flowComplete: false,
+        stockComplete: false,
+        resources: { [iron.itemKey]: { input: '9007199254740993', output: '9007199254740994', stockChange: null } }
+    };
     options.resourceHistory = {
         baseline: null,
         complete: false,
@@ -12392,22 +12424,47 @@ test('Home pin cards preserve exact sampled values and independent settings whil
     await page.goto(base);
     const first = page.locator('.home-pin-card').filter({ hasText: 'Alpha source' });
     await first.locator('canvas').waitFor();
-    assert.match(await first.textContent(), /9,007,199,254,740,993/);
+    assert.ok(await first.locator('[title*="9,007,199,254,740,993"]').count());
     assert.equal(await first.locator('dd').first().textContent(), '0');
+    const recentValues = first.locator('.home-pin-recent [data-flow]');
+    const exact = await recentValues.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')));
+    assert.match(exact[0], /9,007,199,254,740,993/);
+    assert.match(exact[1], /9,007,199,254,740,994/);
+    assert.match(exact[2], /[−-]1/);
+    const positions = await recentValues.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().top));
+    assert.equal(new Set(positions).size, 1, 'flow counters share a compact line');
+    const colors = await recentValues.evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).color));
+    assert.notEqual(colors[0], colors[1]);
+    assert.equal(colors[1], colors[2], 'negative net uses output color');
+    assert.ok(await first.locator('.home-pin-recent .recent-note').textContent(), 'warmup/gap remains explicit');
+    assert.deepEqual(
+        await page.locator('.home-pin-card').nth(1).locator('.home-pin-recent [data-flow]').allTextContents(),
+        ['—', '—', '—']
+    );
     assert.equal(await page.locator('.home-pin-card').count(), 2);
     assert.equal(options.requests.filter((request) => /\/(items|cpus)$/.test(request.path)).length, 0);
     const reads = () => options.requests.filter((request) => request.path.endsWith('/resource-history')).length;
     const before = reads();
     await first.locator('summary').click();
+    const historicalSettings = first.getByRole('group', { name: 'Historical flow', exact: true });
+    const chartSettings = first.getByRole('group', { name: 'Chart', exact: true });
+    assert.equal(
+        await historicalSettings.getByRole('combobox', { name: 'Historical flow period', exact: true }).count(),
+        1
+    );
+    assert.equal(await chartSettings.getByRole('combobox', { name: 'Chart period', exact: true }).count(), 1);
+    assert.equal(await chartSettings.getByRole('checkbox', { name: 'Input', exact: true }).count(), 1);
+    assert.equal(await historicalSettings.getByRole('checkbox', { name: 'Input', exact: true }).count(), 0);
     await first.getByRole('checkbox', { name: 'Show chart', exact: true }).uncheck();
     await first.getByRole('checkbox', { name: 'Show chart', exact: true }).waitFor();
     await page.waitForFunction(() => document.querySelector('.home-pin-settings fieldset')?.disabled === false);
     assert.equal(await first.locator('canvas').count(), 0);
     assert.equal(reads(), before);
-    await first.getByRole('combobox', { name: 'Period', exact: true }).selectOption('3600000');
+    await first.getByRole('combobox', { name: 'Historical flow period', exact: true }).selectOption('3600000');
     await page.waitForFunction(() => document.querySelector('.home-pin-settings fieldset')?.disabled === false);
-    assert.equal(options.pins[0].homeConfig.rangeMillis, 3600000);
+    assert.equal(options.pins[0].homeConfig.flowRangeMillis, 3600000);
     assert.equal(reads(), before + 1);
+    assert.equal(options.pins[0].homeConfig.rangeMillis, 86400000, 'chart range is independent');
     await page
         .locator('.home-pin-card')
         .filter({ hasText: 'Beta source' })
@@ -12419,9 +12476,111 @@ test('Home pin cards preserve exact sampled values and independent settings whil
     await first.locator('summary').waitFor();
     await first.locator('summary').click();
     assert.equal(await first.getByRole('checkbox', { name: 'Show chart', exact: true }).isChecked(), false);
-    assert.equal(await first.getByRole('combobox', { name: 'Period', exact: true }).inputValue(), '3600000');
+    assert.equal(
+        await first.getByRole('combobox', { name: 'Historical flow period', exact: true }).inputValue(),
+        '3600000'
+    );
+    const pinned = options.pins.find((pin) => pin.pinKey === 'one');
+    pinned.recent.resources[iron.itemKey] = { input: '0', output: '0', stockChange: null };
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.waitForFunction(() =>
+        [...document.querySelectorAll('.home-pin-recent [data-flow]')].some((node) => node.textContent === '0')
+    );
+    assert.deepEqual(await recentValues.allTextContents(), ['0', '0', '0']);
+    const zeroColors = await recentValues.evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).color));
+    assert.equal(new Set(zeroColors).size, 1, 'measured zero has neutral color in all columns');
+    pinned.recent = null;
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.waitForFunction(
+        () => ![...document.querySelectorAll('.home-pin-recent [data-flow]')].some((node) => node.textContent === '0')
+    );
+    assert.deepEqual(await recentValues.allTextContents(), ['—', '—', '—']);
     const finalReads = reads();
     await page.goto(`${base}#/web-settings`);
     await page.clock.fastForward(35000);
     assert.equal(reads(), finalReads);
+});
+
+test('Home sampled stock uses the latest accepted range and survives an independent chart failure', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.pins = [
+        {
+            pinKey: 'stock',
+            available: true,
+            gridKey: gridA,
+            itemKey: iron.itemKey,
+            gridName: 'Source',
+            resource: iron,
+            recent: null,
+            homeOrder: 0,
+            terminalOrder: null,
+            homeConfig: {
+                showStock: true,
+                showRecentFlow: true,
+                showFlow: true,
+                showChart: true,
+                stock: true,
+                input: true,
+                output: true,
+                net: false,
+                rangeMillis: 86400000,
+                flowRangeMillis: 3600000
+            }
+        }
+    ];
+    const now = Date.now();
+    let pending;
+    await page.route('**/resource-history?**', async (route) => {
+        const duration = now - Number(new URL(route.request().url()).searchParams.get('from'));
+        if (duration > 86401000) {
+            await new Promise((resolve) => {
+                pending = resolve;
+            });
+            await route.fulfill({
+                status: 500,
+                contentType: 'application/json',
+                body: JSON.stringify({ status: 'INTERNAL_ERROR', data: null })
+            });
+            return;
+        }
+        const recentRange = duration < 4000000;
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                status: 'OK',
+                icons: null,
+                data: {
+                    enabled: true,
+                    complete: true,
+                    truncated: false,
+                    baseline: null,
+                    points: [
+                        {
+                            kind: 'STOCK',
+                            observedAt: now - (recentRange ? 1000 : 60000),
+                            generation: 1,
+                            flowFrom: null,
+                            input: '0',
+                            output: '0',
+                            resource: { ...iron, quantity: recentRange ? '7' : '0' }
+                        }
+                    ]
+                }
+            })
+        });
+    });
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(base);
+    const card = page.locator('.home-pin-card');
+    await card.locator('canvas').waitFor();
+    await page.waitForFunction(() => document.querySelector('.home-pin-historical .recent-note')?.textContent === '');
+    assert.equal(await card.locator(':scope > .home-pin-summary dd').first().textContent(), '7');
+    await card.locator('summary').click();
+    await card.getByRole('combobox', { name: 'Chart period', exact: true }).selectOption('604800000');
+    while (!pending) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(await card.locator(':scope > .home-pin-summary dd').first().textContent(), '7');
+    pending();
+    await page.waitForFunction(() => document.querySelector('.home-pin-settings fieldset')?.disabled === false);
+    assert.equal(await card.locator(':scope > .home-pin-summary dd').first().textContent(), '7');
 });

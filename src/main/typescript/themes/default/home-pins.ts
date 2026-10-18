@@ -1,3 +1,4 @@
+import { createHomePinFlow } from './home-pin-flow.js';
 import { thumbtackIcon } from './icons/hackernoon/thumbtack.js';
 import type { ThemeApplication, ThemeSettings, ThemeState, Translator, PinHomeConfig } from '../../app/theme-api.js';
 import { element } from './dom.js';
@@ -29,6 +30,8 @@ export function createHomePins(host: HTMLElement, application: ThemeApplication,
         pinMark.innerHTML = thumbtackIcon;
         identity.append(icon, labels, pinMark);
         const summary = element('dl', '', 'home-pin-summary');
+        const flowHost = element('div');
+        const flow = createHomePinFlow(flowHost);
         const message = element('p', '', 'hint');
         message.role = 'status';
         const period = element('p', '', 'home-pin-period');
@@ -51,13 +54,17 @@ export function createHomePins(host: HTMLElement, application: ThemeApplication,
             fields = element('fieldset');
         disclosure.append(settingsLabel, fields);
         const inputs = new Map<keyof PinHomeConfig, HTMLInputElement>();
-        for (const property of ['showStock', 'showFlow', 'showChart', 'stock', 'input', 'output', 'net'] as const) {
+        const groups = new Map<
+            'showStock' | 'showRecentFlow' | 'showFlow' | 'showChart',
+            { root: HTMLFieldSetElement; controls: HTMLDivElement }
+        >();
+        function checkbox(property: keyof PinHomeConfig, host: HTMLElement) {
             const label = element('label'),
                 input = element('input');
             input.type = 'checkbox';
             input.name = property;
             label.append(input, element('span'));
-            fields.append(label);
+            host.append(label);
             inputs.set(property, input);
             input.onchange = () => {
                 const pin = current();
@@ -65,25 +72,44 @@ export function createHomePins(host: HTMLElement, application: ThemeApplication,
                     void application.pins.update(key, { homeConfig: { ...pin.homeConfig, [property]: input.checked } });
             };
         }
-        const rangeLabel = element('label'),
-            rangeText = element('span'),
-            range = element('select');
-        for (const value of [60000, 900000, 3600000, 86400000, 604800000, 2592000000, 31536000000]) {
-            const option = element('option');
-            option.value = String(value);
-            range.append(option);
+        for (const property of ['showStock', 'showRecentFlow', 'showFlow', 'showChart'] as const) {
+            const root = element('fieldset', '', 'home-pin-settings-group'),
+                legend = element('legend'),
+                controls = element('div', '', 'home-pin-section-controls');
+            checkbox(property, legend);
+            root.append(legend, controls);
+            fields.append(root);
+            groups.set(property, { root, controls });
         }
-        rangeLabel.append(rangeText, range);
-        fields.append(rangeLabel);
-        range.onchange = () => {
-            const pin = current();
-            if (pin)
-                void application.pins.update(key, {
-                    homeConfig: { ...pin.homeConfig, rangeMillis: Number(range.value) }
-                });
-        };
+        const series = element('div', '', 'home-pin-series');
+        for (const property of ['stock', 'input', 'output', 'net'] as const) checkbox(property, series);
+        const ranges = new Map<
+            'rangeMillis' | 'flowRangeMillis',
+            { input: HTMLSelectElement; text: HTMLSpanElement }
+        >();
+        for (const property of ['flowRangeMillis', 'rangeMillis'] as const) {
+            const label = element('label'),
+                text = element('span'),
+                input = element('select');
+            for (const value of [60000, 900000, 3600000, 86400000, 604800000, 2592000000, 31536000000]) {
+                const option = element('option');
+                option.value = String(value);
+                input.append(option);
+            }
+            label.append(text, input);
+            groups.get(property === 'rangeMillis' ? 'showChart' : 'showFlow')!.controls.append(label);
+            ranges.set(property, { input, text });
+            input.onchange = () => {
+                const pin = current();
+                if (pin)
+                    void application.pins.update(key, {
+                        homeConfig: { ...pin.homeConfig, [property]: Number(input.value) }
+                    });
+            };
+        }
+        groups.get('showChart')!.controls.append(series);
         toolbar.append(earlier, later, remove);
-        card.append(identity, summary, period, message, legend, chartHost, toolbar, disclosure);
+        card.append(identity, summary, flowHost, period, message, legend, chartHost, toolbar, disclosure);
         let chart: ReturnType<typeof createTrackingChart> | undefined;
         function clearChart() {
             chart?.dispose();
@@ -115,82 +141,85 @@ export function createHomePins(host: HTMLElement, application: ThemeApplication,
             const labels = {
                 showStock: 'pinShowStock',
                 showFlow: 'pinShowFlow',
+                showRecentFlow: 'pinShowRecentFlow',
                 showChart: 'pinShowChart',
-                stock: 'pinSampledStock',
+                stock: 'stored',
                 input: 'resourceHistoryInput',
                 output: 'resourceHistoryOutput',
                 net: 'trackingNet'
             };
             for (const [property, input] of inputs) {
                 if (!state.pins.pending) input.checked = Boolean(pin.homeConfig[property]);
-                input.nextElementSibling!.textContent =
+                const label =
                     property === 'net'
                         ? locale.t('trackingNet')
                         : locale.common(labels[property as keyof typeof labels]);
+                input.setAttribute('aria-label', label);
+                input.nextElementSibling!.textContent = label;
             }
-            rangeText.textContent = locale.t('trackingRange');
-            if (![...range.options].some((option) => option.value === String(pin.homeConfig.rangeMillis))) {
-                const option = element('option');
-                option.value = String(pin.homeConfig.rangeMillis);
-                range.append(option);
+            const groupLabels = {
+                showStock: 'stored',
+                showRecentFlow: 'pinRecentFlow',
+                showFlow: 'pinHistoricalSection',
+                showChart: 'pinChart'
+            };
+            for (const [property, group] of groups) {
+                inputs.get(property)!.nextElementSibling!.textContent = locale.common(groupLabels[property]);
+                group.root.setAttribute('aria-label', locale.common(groupLabels[property]));
+                group.controls.hidden = !pin.homeConfig[property];
             }
-            for (const option of range.options) option.textContent = locale.duration(Number(option.value));
-            if (!state.pins.pending) range.value = String(pin.homeConfig.rangeMillis);
-            period.textContent = `${locale.t('trackingRange')}: ${locale.duration(pin.homeConfig.rangeMillis)}`;
-            period.hidden = !available || (!pin.homeConfig.showFlow && !pin.homeConfig.showChart);
+            for (const [property, { input, text }] of ranges) {
+                text.textContent = locale.common(property === 'rangeMillis' ? 'pinChartPeriod' : 'pinFlowPeriod');
+                if (![...input.options].some((option) => option.value === String(pin.homeConfig[property]))) {
+                    const option = element('option');
+                    option.value = String(pin.homeConfig[property]);
+                    input.append(option);
+                }
+                for (const option of input.options) option.textContent = locale.duration(Number(option.value));
+                if (!state.pins.pending) input.value = String(pin.homeConfig[property]);
+            }
+            period.textContent = `${locale.common('pinChartPeriod')}: ${locale.duration(pin.homeConfig.rangeMillis)}`;
+            period.hidden = !available || !pin.homeConfig.showChart;
             legend.replaceChildren();
             legend.hidden = true;
             summary.replaceChildren();
             message.textContent = '';
             chartHost.hidden = true;
-            const history = available ? state.pins.histories[pin.pinKey] : undefined;
+            const histories = available ? state.pins.histories[pin.pinKey] : undefined;
+            const history = histories?.[pin.homeConfig.rangeMillis];
+            const flowHistory = histories?.[pin.homeConfig.flowRangeMillis];
+            flow.render(pin, flowHistory, locale);
             if (!available) {
                 clearChart();
                 return;
             }
             const number = new Intl.NumberFormat(state.preferences.language);
             const stat = (label: string, value: string) => summary.append(element('dt', label), element('dd', value));
-            if (history?.status === 'ready') {
-                const stock = [...(history.baseline ? [history.baseline] : []), ...history.points]
-                    .filter(
-                        (point) =>
-                            point.kind === 'STOCK' &&
-                            point.resource?.itemKey === pin.itemKey &&
-                            point.observedAt <= history.until
-                    )
-                    .reduce<ThemeState['resourceHistory']['baseline']>(
-                        (last, point) => (!last || point.observedAt > last.observedAt ? point : last),
-                        null
-                    );
-                if (pin.homeConfig.showStock) {
-                    stat(
-                        locale.common('pinSampledStock'),
-                        stock?.resource ? number.format(BigInt(stock.resource.quantity)) : '—'
-                    );
-                    stat(
-                        locale.common('pinSampleTime'),
-                        stock ? locale.dateTime(stock.observedAt, history.until) : '—'
-                    );
-                }
-                if (pin.homeConfig.showFlow) {
-                    let input = 0n,
-                        output = 0n,
-                        observed = false;
-                    for (const point of history.points)
-                        if (point.observedAt > history.from && point.observedAt <= history.until) {
-                            if (point.kind === 'FLOW' || point.kind === 'FLOW_OBSERVATION') observed = true;
-                            if (point.kind === 'FLOW') {
-                                input += BigInt(point.input);
-                                output += BigInt(point.output);
-                            }
+            if (pin.homeConfig.showStock) {
+                let stock: ThemeState['resourceHistory']['baseline'] = null;
+                let stockUntil = 0;
+                for (const source of new Set([history, flowHistory])) {
+                    if (source?.status !== 'ready') continue;
+                    for (const point of [source.baseline, ...source.points]) {
+                        if (
+                            point?.kind !== 'STOCK' ||
+                            point.resource?.itemKey !== pin.itemKey ||
+                            point.observedAt > source.until
+                        )
+                            continue;
+                        if (!stock || point.observedAt > stock.observedAt) {
+                            stock = point;
+                            stockUntil = source.until;
                         }
-                    for (const [label, value] of [
-                        [locale.common('resourceHistoryInput'), input],
-                        [locale.common('resourceHistoryOutput'), output],
-                        [locale.t('trackingNet'), input - output]
-                    ] as const)
-                        stat(label, observed ? number.format(value) : '—');
+                    }
                 }
+                stat(
+                    locale.common('pinSampledStock'),
+                    stock?.resource ? number.format(BigInt(stock.resource.quantity)) : '—'
+                );
+                stat(locale.common('pinSampleTime'), stock ? locale.dateTime(stock.observedAt, stockUntil) : '—');
+            }
+            if (pin.homeConfig.showChart && history?.status === 'ready') {
                 const messages = [];
                 if (!history.enabled) messages.push(locale.common('resourceHistoryDisabled'));
                 if (history.truncated) messages.push(locale.common('resourceHistoryTruncated'));
@@ -219,7 +248,6 @@ export function createHomePins(host: HTMLElement, application: ThemeApplication,
                     );
                 } else clearChart();
             } else {
-                if (pin.homeConfig.showStock) stat(locale.common('pinSampledStock'), '—');
                 message.textContent = history?.error
                     ? locale.common(history.error)
                     : history?.status === 'loading'

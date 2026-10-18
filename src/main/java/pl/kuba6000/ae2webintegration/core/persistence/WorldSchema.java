@@ -122,6 +122,8 @@ final class WorldSchema {
                     series_stock BOOLEAN NOT NULL, series_input BOOLEAN NOT NULL,
                     series_output BOOLEAN NOT NULL, series_net BOOLEAN NOT NULL,
                     range_millis BIGINT NOT NULL,
+                    show_recent_flow BOOLEAN NOT NULL,
+                    flow_range_millis BIGINT NOT NULL,
                     UNIQUE (owner, grid_id, resource_id),
                     CHECK (terminal_order IS NOT NULL OR home_order IS NOT NULL)
                 )

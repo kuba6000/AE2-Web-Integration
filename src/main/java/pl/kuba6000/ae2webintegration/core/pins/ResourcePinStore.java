@@ -54,13 +54,17 @@ public final class ResourcePinStore {
     @Desugar
     public record Move(@NotNull Placement placement, @NotNull Direction direction) {}
 
+    /**
+     * Independent chart and historical-flow ranges are exact milliseconds; recent flow uses the fixed hot-cache window.
+     */
     @Desugar
     public record HomeConfig(boolean showStock, boolean showFlow, boolean showChart, boolean stock, boolean input,
-        boolean output, boolean net, long rangeMillis) {
+        boolean output, boolean net, long rangeMillis, boolean showRecentFlow, long flowRangeMillis) {
 
         public void validate() {
-            if (rangeMillis < 60000 || rangeMillis > 31536000000L)
-                throw new IllegalArgumentException("Invalid pin history range");
+            if (rangeMillis < 60000 || rangeMillis > 31536000000L
+                || flowRangeMillis < 60000
+                || flowRangeMillis > 31536000000L) throw new IllegalArgumentException("Invalid pin history range");
         }
     }
 
@@ -127,7 +131,9 @@ public final class ResourcePinStore {
                                 rows.getBoolean("series_input"),
                                 rows.getBoolean("series_output"),
                                 rows.getBoolean("series_net"),
-                                rows.getLong("range_millis"))));
+                                rows.getLong("range_millis"),
+                                rows.getBoolean("show_recent_flow"),
+                                rows.getLong("flow_range_millis"))));
                 }
             }
         }
@@ -164,8 +170,9 @@ public final class ResourcePinStore {
                 """
                     INSERT INTO resource_pins (
                         pin_key, owner, grid_id, resource_id, terminal_order, home_order,
-                        show_stock, show_flow, show_chart, series_stock, series_input, series_output, series_net, range_millis
-                    ) VALUES (?, ?, ?, ?, ?, ?, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, 86400000)
+                        show_stock, show_flow, show_chart, series_stock, series_input, series_output, series_net, range_millis,
+                        show_recent_flow, flow_range_millis
+                    ) VALUES (?, ?, ?, ?, ?, ?, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, 86400000, TRUE, 86400000)
                     """)) {
                 insert.setString(
                     1,
@@ -226,7 +233,8 @@ public final class ResourcePinStore {
             try (PreparedStatement update = db.prepareStatement("""
                 UPDATE resource_pins
                 SET terminal_order = ?, home_order = ?, show_stock = ?, show_flow = ?, show_chart = ?,
-                    series_stock = ?, series_input = ?, series_output = ?, series_net = ?, range_millis = ?
+                    series_stock = ?, series_input = ?, series_output = ?, series_net = ?, range_millis = ?,
+                    show_recent_flow = ?, flow_range_millis = ?
                 WHERE pin_key = ? AND owner = ?
                 """)) {
                 update.setObject(1, terminalOrder, Types.INTEGER);
@@ -239,8 +247,10 @@ public final class ResourcePinStore {
                 update.setBoolean(8, config.output());
                 update.setBoolean(9, config.net());
                 update.setLong(10, config.rangeMillis());
-                update.setString(11, pinKey.toString());
-                update.setString(12, owner);
+                update.setBoolean(11, config.showRecentFlow());
+                update.setLong(12, config.flowRangeMillis());
+                update.setString(13, pinKey.toString());
+                update.setString(14, owner);
                 update.executeUpdate();
             }
             if (terminal != null || home != null) compact(db, owner, pin.gridKey());

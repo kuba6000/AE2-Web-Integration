@@ -66,7 +66,17 @@ class ResourcePinStoreTest extends GridTestScope {
                 null,
                 new ResourcePinStore.Move(Placement.HOME, ResourcePinStore.Direction.EARLIER),
                 null));
-        var config = new ResourcePinStore.HomeConfig(false, true, true, false, false, false, true, 604800000);
+        var config = new ResourcePinStore.HomeConfig(
+            false,
+            true,
+            true,
+            false,
+            false,
+            false,
+            true,
+            604800000,
+            false,
+            900000);
         assertTrue(pins.update(owner, firstPin.pinKey(), null, null, null, config));
         var changed = pins.list(owner);
         for (var pin : changed) {
@@ -95,7 +105,7 @@ class ResourcePinStoreTest extends GridTestScope {
                 false,
                 null,
                 null,
-                new ResourcePinStore.HomeConfig(true, true, true, true, true, true, true, 0)));
+                new ResourcePinStore.HomeConfig(true, true, true, true, true, true, true, 0, true, 86400000)));
         assertEquals(changed, pins.list(owner));
         assertThrows(
             IllegalArgumentException.class,
@@ -107,8 +117,21 @@ class ResourcePinStoreTest extends GridTestScope {
                 new ResourcePinStore.Move(Placement.HOME, ResourcePinStore.Direction.EARLIER),
                 null));
         assertEquals(changed, pins.list(owner));
-        pins.remove(owner, secondPin.pinKey());
-        for (var pin : pins.list(owner)) {
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> pins.update(
+                owner,
+                firstPin.pinKey(),
+                false,
+                null,
+                null,
+                new ResourcePinStore.HomeConfig(true, true, true, true, true, true, true, 86400000, true, 0)));
+        assertEquals(changed, pins.list(owner));
+        worlds.close(TestGridFixtures.Worlds.source(gridSave));
+        var reopened = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
+        assertEquals(changed, reopened.list(owner));
+        reopened.remove(owner, secondPin.pinKey());
+        for (var pin : reopened.list(owner)) {
             assertEquals(0, pin.terminalOrder());
             assertEquals(
                 pin.itemKey()
@@ -243,6 +266,15 @@ class ResourcePinStoreTest extends GridTestScope {
         assertTrue(pins.add(WebPrincipal.admin(), key, item, null, Placement.TERMINAL));
         var selected = pins.list(WebPrincipal.admin());
         assertEquals(1, selected.size());
+        assertTrue(
+            selected.get(0)
+                .homeConfig()
+                .showRecentFlow());
+        assertEquals(
+            86400000,
+            selected.get(0)
+                .homeConfig()
+                .flowRangeMillis());
         assertEquals(
             0,
             selected.get(0)

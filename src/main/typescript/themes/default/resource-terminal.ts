@@ -78,7 +78,7 @@ export function createResourceTerminal(
             </div>
             <div class="terminal-body">
                 <p id="item-message" role="status"></p>
-                <div id="item-scroll" role="region" data-label="resources" tabindex="0"><section id="terminal-pins" hidden><h3></h3><ul id="pinned-items" class="resource-grid"></ul></section><ul id="items"></ul></div>
+                <div id="item-scroll" role="region" data-label="resources" tabindex="0"><section id="terminal-pins" hidden><ul id="pinned-items" class="resource-grid"></ul></section><ul id="items"></ul></div>
                 <div id="pages">
                     <button id="previous-page">←</button><span id="page-count"></span><button id="next-page">→</button>
                 </div>
@@ -125,7 +125,6 @@ export function createResourceTerminal(
     function renderPins() {
         const pins = terminalPins();
         controls.pinSection.hidden = !pins.length;
-        controls.pinSection.querySelector('h3')!.textContent = locale.common('pinnedResources');
         controls.pinned.dataset.display = effectiveDisplay;
         controls.pinned.classList.toggle('resource-icons-enabled', effectiveDisplay !== 'names');
         const retained = new Set(pins.map((pin) => pin.pinKey));

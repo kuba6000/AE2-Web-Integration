@@ -7,7 +7,9 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 
 /**
- * Lists this account's resource pins. Unavailable grids expose only pin management fields.
+ * Lists this account's resource pins. Unavailable grids expose only pin management fields. Home recent flow comes from
+ * detached tracking RAM,
+ * including resources absent from storage; missing cache is null and never starts native observation.
  * 
  * @response 200 {@link Response} Current owner pins and optional response-local icons.
  */

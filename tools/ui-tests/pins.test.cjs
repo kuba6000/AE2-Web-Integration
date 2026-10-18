@@ -6,6 +6,8 @@ const moduleUrl = pathToFileURL(path.resolve(__dirname, '../../build/generated/f
 const config = {
     showStock: true,
     showFlow: true,
+    showRecentFlow: true,
+    flowRangeMillis: 86400000,
     showChart: true,
     stock: true,
     input: true,
@@ -15,6 +17,7 @@ const config = {
 };
 const pin = (id, gridKey = 'a') => ({
     pinKey: id,
+    recent: null,
     available: true,
     gridKey,
     itemKey: id,
@@ -95,9 +98,9 @@ test('Home reads only pinned history across networks with bounded concurrency an
         ['b', 'water']
     ]);
     assert.equal(max, 2);
-    assert.equal(terminal.state.pins.histories.iron.points[0].input, '9007199254740993');
-    assert.equal(terminal.state.pins.histories.iron.enabled, false);
-    assert.equal(terminal.state.pins.histories.iron.complete, false);
+    assert.equal(terminal.state.pins.histories.iron[86400000].points[0].input, '9007199254740993');
+    assert.equal(terminal.state.pins.histories.iron[86400000].enabled, false);
+    assert.equal(terminal.state.pins.histories.iron[86400000].complete, false);
 });
 
 test('navigation cancels Home reads and revoked pins discard cached metadata and history', async (t) => {
@@ -229,7 +232,9 @@ test('a revoked grid discards peer history failures without resurrecting metadat
     assert.equal(terminal.state.pins.status, 'ready');
     assert.equal(terminal.state.pins.items.length, 2);
     assert.ok(
-        terminal.state.pins.items.every((pin) => !pin.available && pin.resource === null && pin.gridKey === null)
+        terminal.state.pins.items.every(
+            (pin) => !pin.available && pin.resource === null && pin.gridKey === null && pin.recent === null
+        )
     );
     assert.deepEqual(terminal.state.pins.histories, {});
 });
@@ -288,8 +293,16 @@ test('author preview supports independent resource pin placements through the pu
         placement: 'terminal'
     });
     const key = reply.data[0].pinKey;
+    assert.equal(reply.data[0].homeConfig.showRecentFlow, true);
+    assert.equal(reply.data[0].recent, null);
+    assert.equal(reply.data[0].homeConfig.flowRangeMillis, 86400000);
     assert.equal(reply.data[0].homeOrder, null);
-    reply = await read('api/resource-pins/' + key, 'PATCH', { home: true });
+    reply = await read('api/resource-pins/' + key, 'PATCH', {
+        home: true,
+        homeConfig: { ...reply.data[0].homeConfig, flowRangeMillis: 3600000 }
+    });
+    assert.equal(reply.data[0].homeConfig.rangeMillis, 86400000);
+    assert.equal(reply.data[0].homeConfig.flowRangeMillis, 3600000);
     assert.equal(reply.data[0].terminalOrder, 0);
     assert.equal(reply.data[0].homeOrder, 0);
     reply = await read('api/resource-pins/' + key, 'PATCH', { home: false });
@@ -323,5 +336,158 @@ test('late icon discovery reloads pin icons without clearing accepted Home measu
     discover({ available: true, packId: 'new' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(reads, 2);
-    assert.equal(terminal.state.pins.histories.iron.points[0].quantity, '42');
+    assert.equal(terminal.state.pins.histories.iron[86400000].points[0].quantity, '42');
+});
+
+test('Home shares equal history ranges and bounds independent chart and flow reads without native requests', async (t) => {
+    const rows = [pin('iron'), pin('gold', 'b')];
+    rows[0].homeConfig.flowRangeMillis = 3600000;
+    let active = 0,
+        maximum = 0;
+    const reads = [];
+    const terminal = await app(t, {
+        resourcePins: async () => ({ data: rows, icons: null }),
+        updateResourcePin: async (_key, patch) => {
+            rows[0] = { ...rows[0], ...patch };
+            return { data: rows, icons: null };
+        },
+        resourceHistory: async (_grid, item, _signal, from) => {
+            reads.push({ item, duration: Date.now() - from });
+            maximum = Math.max(maximum, ++active);
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            active--;
+            return {
+                icons: null,
+                data: { points: [], baseline: null, enabled: true, complete: true, truncated: false }
+            };
+        },
+        items: async () => {
+            throw new Error('No inventory reads from Home');
+        },
+        cpus: async () => {
+            throw new Error('No CPU reads from Home');
+        }
+    });
+    await terminal.refresh();
+    assert.equal(reads.length, 3);
+    assert.equal(maximum, 2);
+    assert.equal(reads.filter((read) => Math.abs(read.duration - 3600000) < 1000).length, 1);
+    await terminal.pins.update('iron', { homeConfig: { ...rows[0].homeConfig, flowRangeMillis: 86400000 } });
+    assert.equal(reads.length, 3, 'matching existing chart range reuses its accepted data');
+    await terminal.pins.update('iron', {
+        homeConfig: { ...rows[0].homeConfig, showStock: false, showFlow: false, showChart: false, showRecentFlow: true }
+    });
+    assert.equal(reads.length, 3, 'recent-only card needs no history query');
+});
+
+test('Home keeps accepted same-range history while changed range waits and rejects obsolete completions', async (t) => {
+    let rows = [pin('iron')];
+    let delayed = false;
+    const waiting = [];
+    const terminal = await app(t, {
+        resourcePins: async () => ({ data: rows, icons: null }),
+        updateResourcePin: async (_key, patch) => {
+            rows = [{ ...rows[0], ...patch }];
+            return { data: rows, icons: null };
+        },
+        resourceHistory: async (_grid, _item, signal, from) => {
+            if (delayed) await new Promise((resolve) => waiting.push({ resolve, signal }));
+            return {
+                icons: null,
+                data: {
+                    points: [{ kind: 'FLOW', observedAt: from + 1, input: '17', output: '2' }],
+                    baseline: null,
+                    enabled: true,
+                    complete: false,
+                    truncated: true
+                }
+            };
+        }
+    });
+    await terminal.refresh();
+    const accepted = terminal.state.pins.histories.iron[86400000];
+    delayed = true;
+    const refresh = terminal.refresh();
+    while (!waiting.length) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(terminal.state.pins.histories.iron[86400000], accepted);
+    const save = terminal.pins.update('iron', { homeConfig: { ...config, flowRangeMillis: 3600000 } });
+    while (waiting.length < 2) await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(waiting[0].signal.aborted);
+    assert.equal(terminal.state.pins.histories.iron[86400000], accepted);
+    assert.equal(terminal.state.pins.histories.iron[3600000].status, 'loading');
+    assert.deepEqual(terminal.state.pins.histories.iron[3600000].points, []);
+    waiting[1].resolve();
+    await save;
+    waiting[0].resolve();
+    await refresh;
+    assert.equal(terminal.state.pins.histories.iron[3600000].points[0].input, '17');
+    assert.equal(terminal.state.pins.histories.iron[86400000], accepted);
+});
+
+test('Home card reads do not wait for discovery and automatic refresh never scans networks', async (t) => {
+    let rejectDiscovery,
+        grids = 0,
+        pins = 0;
+    const terminal = await app(t, {
+        grids: () => {
+            grids++;
+            return new Promise((_resolve, reject) => {
+                rejectDiscovery = reject;
+            });
+        },
+        resourcePins: async () => {
+            pins++;
+            return { data: [pin('iron')], icons: null };
+        },
+        resourceHistory: async () => ({
+            icons: null,
+            data: { points: [], baseline: null, enabled: true, complete: true, truncated: false }
+        }),
+        items: async () => {
+            throw new Error('No Home inventory request');
+        },
+        cpus: async () => {
+            throw new Error('No Home CPU request');
+        }
+    });
+    const initial = terminal.refresh();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(terminal.state.pins.status, 'ready', 'cards load while chooser discovery is still pending');
+    assert.equal(terminal.state.gridStatus, 'loading');
+    await terminal.refresh({ automatic: true });
+    assert.equal(grids, 1);
+    assert.equal(pins, 2);
+    rejectDiscovery(Object.assign(new Error('chooser unavailable'), { status: 'NETWORK_ERROR' }));
+    await initial;
+    assert.equal(terminal.state.gridStatus, 'error');
+    assert.equal(terminal.state.pins.items[0].itemKey, 'iron');
+    await terminal.refresh({ automatic: true });
+    assert.equal(grids, 1);
+    assert.equal(pins, 3);
+});
+
+test('explicit navigation from a Home pin discovers an uncached network with automatic updates off', async (t) => {
+    let grids = 0,
+        inventories = 0;
+    const terminal = await app(t, {
+        grids: async () => (++grids === 1 ? [{ key: 'a' }] : [{ key: 'a' }, { key: 'new' }]),
+        resourcePins: async () => ({ data: [pin('iron', 'new')], icons: null }),
+        resourceHistory: async () => ({
+            icons: null,
+            data: { points: [], baseline: null, enabled: true, complete: true, truncated: false }
+        }),
+        items: async (grid) => {
+            assert.equal(grid, 'new');
+            inventories++;
+            return { data: [], icons: null };
+        }
+    });
+    await terminal.refresh();
+    assert.equal(grids, 1);
+    terminal.route({ view: 'items', gridKey: 'new' });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(grids, 2, 'explicit grid navigation refreshes missing discovery');
+    assert.equal(inventories, 1);
+    assert.equal(terminal.state.itemStatus, 'ready');
+    assert.equal(terminal.state.selectedGridKey, 'new');
 });

@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.http.endpoint.pins;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 
 /** Common owner-list response; visibility checks happen after SQL releases its writer gate. */
 public abstract class ResourcePinRequest extends IAsyncRequest {
@@ -35,8 +37,8 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
     @Desugar
     public record View(@NotNull StableKey pinKey, boolean available, @Nullable StableKey gridKey,
         @Nullable StableKey itemKey, @Nullable String gridName, @Nullable ResourceDescription resource,
-        @Nullable Integer terminalOrder, @Nullable Integer homeOrder,
-        @NotNull ResourcePinStore.HomeConfig homeConfig) {}
+        @Nullable Integer terminalOrder, @Nullable Integer homeOrder, @NotNull ResourcePinStore.HomeConfig homeConfig,
+        @Nullable RecentResourceActivity.Summary recent) {}
 
     private static final class PinResource extends ResourceDescription {
 
@@ -61,6 +63,36 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
 
     protected final boolean available(@NotNull StableKey key) {
         return GridAccess.allows(CoreEngine.GRID_IDENTITIES.getGrid(key), context.getPrincipal());
+    }
+
+    private static @Nullable RecentResourceActivity.Summary recent(@NotNull ResourcePinStore.Pin pin) {
+        if (pin.homeOrder() == null || !pin.homeConfig()
+            .showRecentFlow()) return null;
+        var data = CoreEngine.GRID_IDENTITIES.getPersistentData(pin.gridKey());
+        if (data == null || !data.getSettings()
+            .isFlowTracked()) return null;
+        var summary = CoreEngine.recentActivity(pin.gridKey());
+        if (summary == null) return null;
+        var amount = summary.resources()
+            .get(pin.itemKey());
+        String zero = summary.flowSince() != null && summary.flowComplete() ? "0" : null;
+        return new RecentResourceActivity.Summary(
+            summary.flowWindowMillis(),
+            summary.stockWindowMillis(),
+            summary.bucketMillis(),
+            summary.observedAt(),
+            summary.flowObservedAt(),
+            null,
+            summary.flowSince(),
+            null,
+            summary.flowComplete(),
+            false,
+            Collections.singletonMap(
+                pin.itemKey(),
+                new RecentResourceActivity.Amount(
+                    amount == null ? zero : amount.input(),
+                    amount == null ? zero : amount.output(),
+                    null)));
     }
 
     protected final void reply(@NotNull ResourcePinStore store) throws IOException {
@@ -89,7 +121,8 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
                             : null,
                         pin.terminalOrder(),
                         pin.homeOrder(),
-                        pin.homeConfig()));
+                        pin.homeConfig(),
+                        allowed ? recent(pin) : null));
         }
         respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, result, mappings));
     }

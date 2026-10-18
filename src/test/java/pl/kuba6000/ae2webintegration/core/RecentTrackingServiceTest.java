@@ -112,6 +112,52 @@ class RecentTrackingServiceTest extends GridTestScope {
         }
     }
 
+    @Test
+    void detachedSnapshotIncludesAbsentResourcesWithoutTerminalAndRejectsStaleCoverage() throws Exception {
+        TerminalRegistry terminals = new TerminalRegistry();
+        try (RecentTrackingService service = new RecentTrackingService(terminals, 100)) {
+            service.open(grid, 1, false, true, 100, 1000);
+            assertNull(service.snapshot(grid));
+            assertTrue(service.submit(grid, 1, flow(6000, 17), false, true));
+            var summary = awaitSnapshot(service, 6000);
+            assertEquals(
+                "17",
+                summary.resources()
+                    .get(iron)
+                    .input());
+            assertNull(terminals.recent(grid), "No terminal state or subscription is needed");
+            synchronized (terminals) {
+                assertTrue(service.submit(grid, 1, flow(11000, 99), false, true));
+                service.invalidate(grid, 1, 12000);
+                var invalidated = service.snapshot(grid);
+                assertTrue(invalidated == null || !invalidated.flowComplete());
+                service.retire(grid, 1);
+                assertNull(service.snapshot(grid));
+                service.open(grid, 2, true, false, 100, 13000);
+                assertTrue(service.refresh(grid, 2, 13000));
+            }
+            var disabled = awaitSnapshot(service, 13000);
+            assertNull(disabled.flowSince());
+            assertFalse(disabled.flowComplete());
+            assertFalse(
+                disabled.resources()
+                    .containsKey(iron));
+            service.close();
+            assertNull(service.snapshot(grid));
+        }
+    }
+
+    private RecentResourceActivity.Summary awaitSnapshot(RecentTrackingService service, long at)
+        throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        while (System.nanoTime() < deadline) {
+            var summary = service.snapshot(grid);
+            if (summary != null && summary.observedAt() >= at) return summary;
+            Thread.sleep(1);
+        }
+        throw new AssertionError("Detached recent measurements were not published");
+    }
+
     private TerminalRegistry terminal(long generation) {
         TerminalRegistry terminals = new TerminalRegistry();
         terminals.activate(grid, generation, 1000);

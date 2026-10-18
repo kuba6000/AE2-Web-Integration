@@ -134,6 +134,179 @@ class IconDeliveryHttpTest {
     }
 
     @Test
+    void homeRecentFlowUsesDetachedTrackingWithoutInventoryOrGameDispatch() throws Exception {
+        CoreEngine.onServerStarted();
+        AtomicBoolean permitted = new AtomicBoolean(true);
+        var iron = new ItemIdentityRequestTest.Resource("home-absent", 0, false);
+        var storage = new ItemIdentityRequestTest.Grid(88501);
+        var grid = new TestGridFixtures.TestGrid(88502, false, AEControllerState.CONTROLLER_ONLINE) {
+
+            @Override
+            public IAEStorageGrid web$getStorageGrid() {
+                return storage;
+            }
+
+            @Override
+            public boolean web$hasAccess(@NotNull UUID player) {
+                return permitted.get() && super.web$hasAccess(player);
+            }
+        };
+        StableKey gridKey = TestGridFixtures.resolvedKey(grid);
+        StableKey item = iron.web$getKey();
+        var settings = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey)
+            .getSettings();
+        settings.setFlowTracked(true);
+        AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
+        CoreEngine.onServerTick();
+        var capture = storage.web$getStorageCapture();
+        assertNotNull(capture);
+        capture.recordFlow(iron, 17, 5);
+        var principal = TestGridFixtures.principal(TestGridFixtures.OWNER_ID);
+        var pins = CoreEngine.getResourcePins();
+        assertNotNull(pins);
+        assertTrue(
+            pins.add(
+                principal,
+                gridKey,
+                item,
+                new ResourceDescriptor("test", "home-absent", 0, 0, "Absent", ResourceType.ITEM, item, item),
+                pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Placement.HOME));
+        var router = new pl.kuba6000.ae2webintegration.core.http.ApiRouter(
+            exchange -> new AE2Controller.RequestContext(exchange, principal),
+            exchange -> false,
+            request -> fail("Home must never dispatch game-thread work"));
+        router.register(pl.kuba6000.ae2webintegration.core.http.endpoint.pins.GetResourcePins.class);
+        var endpoint = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        endpoint.createContext("/api", router);
+        endpoint.start();
+        int originalPort = port;
+        port = endpoint.getAddress()
+            .getPort();
+        try {
+            JsonObject entry = null;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
+            while (System.nanoTime() < deadline) {
+                CoreEngine.onServerTick();
+                entry = json(connection("/api/resource-pins")).getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject();
+                assertTrue(entry.has("recent"));
+                if (!entry.get("recent")
+                    .isJsonNull()) {
+                    var amount = entry.getAsJsonObject("recent")
+                        .getAsJsonObject("resources")
+                        .getAsJsonObject(item.toString());
+                    if (!amount.get("input")
+                        .isJsonNull() && amount.get("input")
+                            .getAsString()
+                            .equals("17"))
+                        break;
+                }
+                Thread.sleep(10);
+            }
+            assertNotNull(entry);
+            var recent = entry.getAsJsonObject("recent");
+            assertNotNull(recent);
+            assertEquals(
+                "17",
+                recent.getAsJsonObject("resources")
+                    .getAsJsonObject(item.toString())
+                    .get("input")
+                    .getAsString());
+            assertEquals(
+                "5",
+                recent.getAsJsonObject("resources")
+                    .getAsJsonObject(item.toString())
+                    .get("output")
+                    .getAsString());
+            assertTrue(
+                recent.get("stockSince")
+                    .isJsonNull());
+            assertTrue(
+                recent.get("stockObservedAt")
+                    .isJsonNull());
+            assertTrue(
+                recent.getAsJsonObject("resources")
+                    .getAsJsonObject(item.toString())
+                    .get("stockChange")
+                    .isJsonNull());
+            assertNull(
+                CoreEngine.getTerminalRegistry()
+                    .snapshot(gridKey));
+            int reads = storage.storageReads;
+            assertEquals(
+                entry,
+                json(connection("/api/resource-pins")).getAsJsonArray("data")
+                    .get(0));
+            assertEquals(reads, storage.storageReads, "HTTP only reads detached RAM and persisted pin metadata");
+            var savedPin = pins.list(principal)
+                .get(0);
+            var current = savedPin.homeConfig();
+            var muted = new pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.HomeConfig(
+                current.showStock(),
+                current.showFlow(),
+                current.showChart(),
+                current.stock(),
+                current.input(),
+                current.output(),
+                current.net(),
+                current.rangeMillis(),
+                false,
+                current.flowRangeMillis());
+            assertTrue(pins.update(principal, savedPin.pinKey(), null, null, null, muted));
+            assertTrue(
+                json(connection("/api/resource-pins")).getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("recent")
+                    .isJsonNull());
+            assertTrue(pins.update(principal, savedPin.pinKey(), true, false, null, current));
+            assertTrue(
+                json(connection("/api/resource-pins")).getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("recent")
+                    .isJsonNull());
+            assertTrue(pins.update(principal, savedPin.pinKey(), false, true, null, null));
+            permitted.set(false);
+            var hidden = json(connection("/api/resource-pins")).getAsJsonArray("data")
+                .get(0)
+                .getAsJsonObject();
+            assertTrue(
+                hidden.get("recent")
+                    .isJsonNull());
+            assertTrue(
+                hidden.get("resource")
+                    .isJsonNull());
+            permitted.set(true);
+            settings.setFlowTracked(false);
+            assertTrue(
+                json(connection("/api/resource-pins")).getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject()
+                    .get("recent")
+                    .isJsonNull(),
+                "Disabling flow hides old publication before discovery");
+            long stopped = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+            do {
+                CoreEngine.onServerTick();
+                entry = json(connection("/api/resource-pins")).getAsJsonArray("data")
+                    .get(0)
+                    .getAsJsonObject();
+                if (entry.get("recent")
+                    .isJsonNull()) break;
+                Thread.sleep(10);
+            } while (System.nanoTime() < stopped);
+            assertTrue(
+                entry.get("recent")
+                    .isJsonNull());
+        } finally {
+            port = originalPort;
+            endpoint.stop(0);
+        }
+    }
+
+    @Test
     void playerPermissionRevocationRedactsPinsButOwnershipStillAllowsRemoval() throws Exception {
         CoreEngine.onServerStarted();
         AtomicBoolean permitted = new AtomicBoolean(true);
@@ -283,7 +456,7 @@ class IconDeliveryHttpTest {
         var configured = pinRequest(
             "PATCH",
             "/api/resource-pins/" + pinKey,
-            "{\"homeConfig\":{\"showStock\":false,\"showFlow\":true,\"showChart\":true,\"stock\":false,\"input\":true,\"output\":false,\"net\":true,\"rangeMillis\":900000},"
+            "{\"homeConfig\":{\"showStock\":false,\"showFlow\":true,\"showChart\":true,\"stock\":false,\"input\":true,\"output\":false,\"net\":true,\"rangeMillis\":900000,\"showRecentFlow\":true,\"flowRangeMillis\":3600000},"
                 + "\"move\":{\"placement\":\"home\",\"direction\":\"later\"}}",
             true);
         assertEquals(200, configured.code());
@@ -297,7 +470,7 @@ class IconDeliveryHttpTest {
                 .get("rangeMillis")
                 .getAsLong());
         JsonObject beforeInvalid = configured.body();
-        String validConfig = "\"showStock\":false,\"showFlow\":true,\"showChart\":true,\"stock\":false,\"input\":true,\"output\":false,\"net\":true,\"rangeMillis\":900000";
+        String validConfig = "\"showStock\":false,\"showFlow\":true,\"showChart\":true,\"stock\":false,\"input\":true,\"output\":false,\"net\":true,\"rangeMillis\":900000,\"showRecentFlow\":true,\"flowRangeMillis\":3600000";
         String excessiveDepth = "{}";
         for (int level = 0; level < 12; level++) excessiveDepth = "{\"nested\":" + excessiveDepth + "}";
         for (String malformed : Arrays.asList(

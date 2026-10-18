@@ -467,7 +467,19 @@ export function createTerminal(
     }
     async function refresh({ reloadDetail = false, automatic = false } = {}): Promise<void> {
         if (disposed) return;
+        if (automatic && state.route.view === 'home') {
+            clearTimeout(timer);
+            await pins.refresh(true);
+            schedule();
+            return;
+        }
+        const homeRefresh = state.route.view === 'home' ? pins.refresh() : undefined;
+        if (homeRefresh) void homeRefresh.then(schedule);
         if (refreshingGrids) {
+            if (homeRefresh) {
+                await Promise.all([homeRefresh, refreshingGrids]);
+                return;
+            }
             if (!automatic && state.route.view === 'items') {
                 if (!refreshingAutomatically) return refreshingGrids;
                 const route = state.route;
@@ -511,7 +523,7 @@ export function createTerminal(
                 await loadHistory(reloadDetail);
                 await loadSettings();
                 if (state.route.view === 'tracking') await resourceHistory.refresh(automatic);
-                await pins.refresh(automatic);
+                if (!homeRefresh || state.route.view !== 'home') await pins.refresh(automatic);
             } catch (caught) {
                 const error = caught as ApiFailure;
                 if (disposed || error.name === 'AbortError') return;
@@ -535,7 +547,7 @@ export function createTerminal(
                 cpus.block(state.gridError);
                 history.block(state.gridError);
                 settings.block(state.gridError);
-                pins.block(state.gridError);
+                if (state.route.view !== 'home' || status === 'UNAUTHORIZED') pins.block(state.gridError);
                 notify();
             } finally {
                 discoveryUpdates.clear();
@@ -546,7 +558,7 @@ export function createTerminal(
             }
         })();
         notify();
-        return refreshingGrids;
+        await Promise.all([refreshingGrids, homeRefresh]);
     }
     return {
         state,
@@ -598,21 +610,27 @@ export function createTerminal(
             pins.route(route);
             if (route.view === 'tracking') void resourceHistory.select(route.gridKey, route.itemKey);
             else if (related) resourceHistory.clear();
+            const needsDiscovery =
+                !!route.gridKey &&
+                (state.gridStatus !== 'ready' || !state.grids.some((grid) => grid.key === route.gridKey));
             if (route.gridKey) {
                 state.selectedGridKey = route.gridKey;
-                if (state.gridStatus === 'ready') restoreSelectedGrid();
+                if (!needsDiscovery) restoreSelectedGrid();
             }
             crafting.route(route);
             cpus.route(route);
             history.route(route);
             settings.route(route);
             notify();
-            void loadItems();
-            loadCrafting();
-            loadCpus();
-            loadHistory();
-            loadSettings();
-            if (state.gridStatus === 'ready') void pins.refresh();
+            if (needsDiscovery) void refresh();
+            else {
+                void loadItems();
+                loadCrafting();
+                loadCpus();
+                loadHistory();
+                loadSettings();
+            }
+            void pins.refresh();
             schedule();
         },
         search(value: string) {

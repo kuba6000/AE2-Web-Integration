@@ -3479,10 +3479,6 @@ button.toast:hover {
 #pinned-items {
     min-height: 0;
 }
-#terminal-pins > h3 {
-    margin: 8px 10px 4px;
-    font-size: 12px;
-}
 .resource-pin-actions {
     display: flex;
     flex-wrap: wrap;
@@ -3555,21 +3551,59 @@ button.toast:hover {
 .home-pin-settings {
     margin-top: 8px;
 }
-.home-pin-settings fieldset {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+.home-pin-settings > fieldset {
     border: 0;
-    padding: 10px 0;
+    padding: 6px 0 0;
+    margin: 0;
+    min-width: 0;
+}
+.home-pin-settings .home-pin-settings-group {
+    border: 1px solid var(--muted);
+    margin: 8px 0;
+    padding: 6px 8px;
+    min-width: 0;
+}
+.home-pin-settings legend {
+    padding-inline: 4px;
 }
 .home-pin-settings label {
     display: flex;
+    flex-direction: row;
     align-items: center;
-    gap: 6px;
+    justify-content: space-between;
+    gap: 8px;
     font-size: 12px;
 }
-.home-pin-settings label:last-child {
-    grid-column: 1 / -1;
+.home-pin-settings legend label {
+    justify-content: flex-start;
+}
+.home-pin-settings select {
+    min-width: 80px;
+}
+.home-pin-series {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+.home-pin-series label {
+    justify-content: flex-start;
+}
+.home-pin-flow-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px 6px;
+    font-size: 12px;
+    margin-block: 10px;
+}
+.home-pin-flow-label,
+.home-pin-flow-values {
+    white-space: nowrap;
+}
+.home-pin-flow-values {
+    font-variant-numeric: tabular-nums;
 }
 .home-pin-chart {
     overflow: hidden;

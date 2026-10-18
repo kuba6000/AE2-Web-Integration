@@ -83,6 +83,7 @@ export function startServer({ port = 8770, themeDirectory = path.join(project, '
                     if (!pin) {
                         pin = {
                             pinKey: String(++nextPin),
+                            recent: null,
                             available: true,
                             gridKey,
                             itemKey: item.itemKey,
@@ -102,6 +103,8 @@ export function startServer({ port = 8770, themeDirectory = path.join(project, '
                             homeConfig: {
                                 showStock: true,
                                 showFlow: true,
+                                showRecentFlow: true,
+                                flowRangeMillis: 86400000,
                                 showChart: true,
                                 stock: true,
                                 input: true,

@@ -75,6 +75,15 @@ public final class RecentTrackingService implements AutoCloseable {
         return state != null && offer(key, state, null, false, false, now, 1);
     }
 
+    /** Last immutable worker publication, independent of terminal rows, viewers and database availability. */
+    public @Nullable RecentResourceActivity.Summary snapshot(@NotNull StableKey key) {
+        State state = states.get(key);
+        if (closed || state == null) return null;
+        Published published = state.published;
+        return published != null && published.lossEpoch() == state.lossEpoch.get()
+            && current(key, state.generation) == state ? published.summary() : null;
+    }
+
     private boolean offer(StableKey key, State state, @Nullable StorageObservation observation, boolean stock,
         boolean flow, long now, int cost) {
         if (!capacity.tryAcquire(cost)) return false;
@@ -98,8 +107,8 @@ public final class RecentTrackingService implements AutoCloseable {
         State state = current(key, generation);
         if (state == null) return;
         state.lostAt = now;
-        terminals.invalidateRecent(key, generation);
         state.lossEpoch.incrementAndGet();
+        terminals.invalidateRecent(key, generation);
         resetsPending.set(true);
     }
 
@@ -169,12 +178,13 @@ public final class RecentTrackingService implements AutoCloseable {
     }
 
     private void publish(StableKey key, State state, long lossEpoch, long publicationToken) {
-        if (publicationToken == 0) return;
         RecentResourceActivity activity = state.activity;
         if (activity == null) return;
         RecentResourceActivity.Summary summary = activity.snapshot();
-        if (current(key, state.generation) == state && state.lossEpoch.get() == lossEpoch)
-            terminals.recent(key, state.generation, publicationToken, summary);
+        if (current(key, state.generation) == state && state.lossEpoch.get() == lossEpoch) {
+            state.published = new Published(lossEpoch, summary);
+            if (publicationToken != 0) terminals.recent(key, state.generation, publicationToken, summary);
+        }
     }
 
     @Override
@@ -197,6 +207,9 @@ public final class RecentTrackingService implements AutoCloseable {
     private record Command(StableKey key, State state, long lossEpoch, long publicationToken,
         @Nullable StorageObservation observation, boolean stock, boolean flow, long now, int cost) {}
 
+    @Desugar
+    private record Published(long lossEpoch, @NotNull RecentResourceActivity.Summary summary) {}
+
     /** Producer controls are primitives; all activity/summary creation belongs to the worker. */
     private static final class State {
 
@@ -209,6 +222,7 @@ public final class RecentTrackingService implements AutoCloseable {
         private volatile long lostAt;
         private long handledLossEpoch;
         private @Nullable RecentResourceActivity activity;
+        private volatile @Nullable Published published;
 
         private State(long generation, boolean stock, boolean flow, int maximumResources, long startedAt) {
             this.generation = generation;

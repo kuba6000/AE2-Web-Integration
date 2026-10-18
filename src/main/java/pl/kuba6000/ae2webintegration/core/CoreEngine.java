@@ -23,6 +23,7 @@ import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
@@ -33,6 +34,7 @@ import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
@@ -68,7 +70,7 @@ public class CoreEngine {
     private static volatile @Nullable IconPack iconPack;
     private static volatile ThemeCatalog themes = new ThemeCatalog();
     private static volatile @Nullable StorageTrackingService storageTracking;
-    private static @Nullable StorageTrackingCoordinator storageCoordinator;
+    private static volatile @Nullable StorageTrackingCoordinator storageCoordinator;
     private static volatile @Nullable TerminalStreams terminalStreams;
     private static volatile @Nullable TerminalRegistry terminalRegistry;
 
@@ -292,10 +294,16 @@ public class CoreEngine {
         return storageTracking;
     }
 
+    /** Detached recent tracking only; HTTP readers neither capture native state nor query durable history. */
+    public static @Nullable RecentResourceActivity.Summary recentActivity(@NotNull StableKey key) {
+        StorageTrackingCoordinator coordinator = storageCoordinator;
+        return coordinator == null ? null : coordinator.recent(key);
+    }
+
     /** Authorized terminal reads renew the shared native observation lease on the game thread. */
     public static @Nullable StorageSnapshot observeStorage(@NotNull IAEGrid grid) {
-        return storageCoordinator == null ? null
-            : storageCoordinator.observeForViewer(grid, System.currentTimeMillis());
+        StorageTrackingCoordinator coordinator = storageCoordinator;
+        return coordinator == null ? null : coordinator.observeForViewer(grid, System.currentTimeMillis());
     }
 
     public static void prepareTerminal(@NotNull IAEGrid grid) {
@@ -321,8 +329,9 @@ public class CoreEngine {
     private static void stopStorageTracking() {
         resourcePins = null;
         stopTerminalStreams();
-        if (storageCoordinator != null) {
-            storageCoordinator.close();
+        StorageTrackingCoordinator coordinator = storageCoordinator;
+        if (coordinator != null) {
+            coordinator.close();
             storageCoordinator = null;
         }
         // Captured tails already refer to retained SQL grid rows; retire RAM admission before worker closure.

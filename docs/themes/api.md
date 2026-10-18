@@ -84,8 +84,13 @@ before changing selected fields.
 identifier and settings but have null resource/network metadata. Render an unavailable entry and
 allow removal; do not keep displaying previously cached metadata after access is lost.
 
-On Home, `state.pins.histories[pinKey]` supplies recorded history for accessible Home pins. Stock
-values are samples with timestamps, not live inventory counts. Pinning does not enable tracking.
+On Home, `state.pins.histories[pinKey][rangeMillis]` supplies recorded history for the required
+ranges. `homeConfig.flowRangeMillis` selects historical flow totals independently of the chart's
+`rangeMillis`; equal ranges share one result. `showRecentFlow` controls the separate recent flow
+summary from `pin.recent`, which contains only that resource's detached tracking measurements.
+A null recent summary or null counters mean unknown, not zero. Recent flow never starts inventory
+reads or a terminal subscription. Stock values are samples with timestamps, not live inventory
+counts. Pinning does not enable tracking.
 The application owns request cancellation, bounded history reads and automatic refresh; themes
 choose the presentation and must preserve the distinction between missing measurements and zero.
 
