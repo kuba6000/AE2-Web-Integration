@@ -527,14 +527,16 @@ header {
     text-decoration: none;
     font-size: 11px;
 }
-.product-icons-enabled .cpu-selector-link:has(.resource-icon:not([hidden])) {
+.product-icons-enabled :is(.cpu-selector-link, .plan-cpu):has(.resource-icon:not([hidden])) {
     grid-template-columns: 20px minmax(0, 1fr);
 }
-.cpu-selector-link .resource-icon {
+:is(.cpu-selector-link, .plan-cpu) .resource-icon {
     grid-row: 1 / 3;
 }
 .cpu-selector-link .cpu-selector-name,
-.cpu-selector-link .cpu-card-state {
+.cpu-selector-link .cpu-card-state,
+.plan-cpu .cpu-selector-name,
+.plan-cpu-details {
     grid-column: -2 / -1;
 }
 .cpu-selector-link:hover,
@@ -1882,6 +1884,7 @@ label {
         .cpu-card-output-value,
         .cpu-detail-output,
         .cpu-selector-link,
+        .plan-cpu,
         .history-product,
         .history-summary-icon,
         .tracking-resource,
@@ -1906,6 +1909,7 @@ label {
         .cpu-card-output-value,
         .cpu-detail-output,
         .cpu-selector-link,
+        .plan-cpu,
         .history-product,
         .history-summary-icon,
         .tracking-resource,

@@ -814,7 +814,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 const result = JSON.stringify({
                     status: cpuError || 'OK',
                     data: cpuError ? null : options.cpusByGrid?.[gridKey] || options.cpus,
-                    icons: url.searchParams.get('icons') === 'true' ? options.icons : null
+                    icons: url.searchParams.get('icons') === 'true' ? (options.cpuIcons ?? options.icons) : null
                 });
                 if (options.cpuDelay) await new Promise((resolve) => setTimeout(resolve, options.cpuDelay));
                 response.statusCode = cpuError ? 403 : 200;
@@ -6314,6 +6314,54 @@ test('crafting popup and plan share optional atlas icons and honor native CPU ad
             (request) => request.path.endsWith('/crafting-plans/7') && request.query === '?icons=true'
         )
     );
+});
+
+test('plan CPU choices display live product icons only for busy processors using their own atlas metadata', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await atlasFixture(page, options);
+    options.cpuIcons = options.icons;
+    options.icons = { ...options.icons, pages: [] };
+    const output = { ...iron, quantity: 12, icon: { page: 0, x: 0, y: 0 } };
+    options.cpus = {
+        'cpu-a': { ...cpu, isBusy: true, finalOutput: output },
+        'cpu-b': { ...cpu, isBusy: true, isPaused: true, finalOutput: output },
+        'cpu-idle': { ...cpu, finalOutput: output },
+        'cpu-unknown': { ...cpu, isBusy: true, finalOutput: null }
+    };
+    await page.goto(`${base}#/web-settings`);
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('both');
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    const choices = page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true });
+    const choice = (key) =>
+        choices.locator('label').filter({ has: page.getByRole('radio', { name: new RegExp(key) }) });
+    await choice('cpu-a').locator('.resource-icon-ready').waitFor({ timeout: 2000 });
+    await choice('cpu-b').locator('.resource-icon-ready').waitFor();
+    assert.equal(await choice('cpu-idle').locator('.resource-icon').isVisible(), false);
+    assert.equal(await choice('cpu-unknown').locator('.resource-icon').isVisible(), false);
+    const initialHeight = (await choice('cpu-a').boundingBox()).height;
+    options.cpus['cpu-a'].finalOutput = { ...output, icon: { page: 0, x: 64, y: 0 } };
+    options.cpus['cpu-b'].isBusy = false;
+    await poll(page);
+    await page.waitForFunction(() => {
+        const icon = document.querySelector('input[value="cpu-a"]').parentElement.querySelector('.resource-icon');
+        return parseFloat(getComputedStyle(icon).backgroundPositionX) === -icon.getBoundingClientRect().width;
+    });
+    assert.equal(await choice('cpu-b').locator('.resource-icon').isVisible(), false);
+    assert.equal((await choice('cpu-a').boundingBox()).height, initialHeight);
+    assert.equal(
+        options.requests.some((request) => /\/cpus\/[^/]+$/.test(request.path)),
+        false
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openMobilePane(page, 'CPUs');
+    assert.ok(await choice('cpu-a').evaluate((node) => node.scrollWidth <= node.clientWidth));
+    await page.goto(`${base}#/web-settings`);
+    await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('names');
+    await page.goto(`${base}#/grids/${gridA}/plans/7`);
+    await openMobilePane(page, 'CPUs');
+    await choices.getByRole('radio').first().waitFor();
+    assert.equal(await choice('cpu-a').locator('.resource-icon').isVisible(), false);
+    assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).at(-1).query, '');
 });
 
 test('plan icon pack replacement supersedes a delayed completed-plan mapping', async (t) => {
