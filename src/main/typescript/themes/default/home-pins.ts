@@ -6,9 +6,15 @@ import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { createTrackingChart } from './tracking-chart.js';
 import { trackingHref } from '../../app/router.js';
+import type { Tooltips } from './tooltips.js';
 
 /** Personal cards consume recorded history supplied by the application, never live inventory. */
-export function createHomePins(host: HTMLElement, application: ThemeApplication, settings: ThemeSettings) {
+export function createHomePins(
+    host: HTMLElement,
+    application: ThemeApplication,
+    settings: ThemeSettings,
+    bindTooltip: Tooltips['bind']
+) {
     const list = element('div', '', 'home-pins');
     const status = element('p', '', 'hint');
     status.role = 'status';
@@ -31,7 +37,7 @@ export function createHomePins(host: HTMLElement, application: ThemeApplication,
         identity.append(icon, labels, pinMark);
         const summary = element('dl', '', 'home-pin-summary');
         const flowHost = element('div');
-        const flow = createHomePinFlow(flowHost);
+        const flow = createHomePinFlow(flowHost, bindTooltip);
         const message = element('p', '', 'hint');
         message.role = 'status';
         const period = element('p', '', 'home-pin-period');

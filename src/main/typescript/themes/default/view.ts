@@ -68,7 +68,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     });
     const mobile = createMobilePanels(root, workspace, header.navigation, tooltips.hide);
     lifetime.onCleanup(() => mobile.dispose());
-    const homeView = createHomeView(workspace, application, mobile.beforeDialog, context.settings);
+    const homeView = createHomeView(workspace, application, mobile.beforeDialog, context.settings, tooltips.bind);
     lifetime.onCleanup(() => homeView.dispose());
     const craftingView = createCraftingView(
         windowFrame,

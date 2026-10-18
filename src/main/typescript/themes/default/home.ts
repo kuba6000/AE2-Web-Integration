@@ -5,6 +5,7 @@ import type { Translator } from '../../app/i18n.js';
 import { homeIcon } from './icons/hackernoon/home.js';
 import { networkIcon } from './icons/hackernoon/chart-network.js';
 import { networkLabel as gridLabel } from './network.js';
+import type { Tooltips } from './tooltips.js';
 
 function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className = '') {
     const node = document.createElement(tag);
@@ -17,14 +18,15 @@ export function createHomeView(
     root: HTMLElement,
     application: Terminal,
     beforeDialog: (source: HTMLElement) => HTMLElement,
-    settings: ThemeSettings
+    settings: ThemeSettings,
+    bindTooltip: Tooltips['bind']
 ) {
     const view = element('section', 'window-frame home-dashboard');
     view.id = 'home';
     view.innerHTML = `<div class="terminal-heading"><h2>${homeIcon}<span></span></h2></div>
         <div class="terminal-scroll home-scroll" tabindex="0">
         <p class="home-scope"></p><p class="home-status" role="status"></p><button type="button" class="home-retry"></button></div>`;
-    const pins = createHomePins(view.querySelector<HTMLElement>('.home-scroll')!, application, settings);
+    const pins = createHomePins(view.querySelector<HTMLElement>('.home-scroll')!, application, settings, bindTooltip);
     const panel = element('aside', 'home-network-panel');
     panel.id = 'home-network-panel';
     panel.innerHTML = `<h3>${networkIcon}<span></span></h3><h4 class="home-selected-network"></h4><dl class="home-selected-identity"><dt></dt><dd><code></code></dd></dl><a class="home-network-details button-link"></a><button type="button" class="choose-network"></button>`;

@@ -1,21 +1,25 @@
 import type { ThemeState, Translator } from '../../app/theme-api.js';
 import { element } from './dom.js';
+import type { Tooltips } from './tooltips.js';
 
 type Pin = ThemeState['pins']['items'][number];
 type History = ThemeState['resourceHistory'];
 
 /** Exact counts and coverage for the two independently configured Home flow summaries. */
-export function createHomePinFlow(host: HTMLElement) {
+export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind']) {
     function section(className: string) {
         const root = element('section', '', className);
         const line = element('div', '', 'home-pin-flow-line');
         const heading = element('span', '', 'home-pin-flow-label');
         const values = element('span', '', 'home-pin-flow-values');
         const note = element('p', '', 'hint recent-note');
+        const tooltipContent: Node[] = [];
+        line.tabIndex = 0;
+        bindTooltip(line, () => [element('strong', heading.textContent ?? ''), ...tooltipContent]);
         line.append(heading, values);
         root.append(line, note);
         host.append(root);
-        return { root, line, heading, values, note };
+        return { root, line, heading, values, note, tooltipContent };
     }
     const recent = section('home-pin-recent'),
         historical = section('home-pin-historical');
@@ -26,6 +30,7 @@ export function createHomePinFlow(host: HTMLElement) {
         locale: Translator
     ) {
         target.values.replaceChildren();
+        target.tooltipContent.length = 0;
         const number = new Intl.NumberFormat(document.documentElement.lang);
         const compact = new Intl.NumberFormat(document.documentElement.lang, {
             notation: 'compact',
@@ -52,7 +57,7 @@ export function createHomePinFlow(host: HTMLElement) {
             const count = element('span', shown, color);
             count.dataset.flow = kind;
             count.setAttribute('aria-label', `${label}: ${exact}`);
-            count.title = `${label}: ${exact}`;
+            target.tooltipContent.push(element('span', `${label}: ${exact}`, color));
             if (target.values.childNodes.length) target.values.append(document.createTextNode(' / '));
             target.values.append(count);
         }
@@ -65,7 +70,7 @@ export function createHomePinFlow(host: HTMLElement) {
                 if (section.root.hidden) {
                     section.values.replaceChildren();
                     section.note.textContent = '';
-                    section.line.title = '';
+                    section.tooltipContent.length = 0;
                 }
             if (!recent.root.hidden) {
                 const sample = pin.recent;
@@ -78,10 +83,13 @@ export function createHomePinFlow(host: HTMLElement) {
                     locale
                 );
                 const notes = [];
-                recent.line.title =
-                    sample && sample.flowObservedAt !== null
-                        ? `${locale.common('pinSampleTime')}: ${locale.dateTime(sample.flowObservedAt, sample.observedAt)}`
-                        : '';
+                if (sample && sample.flowObservedAt !== null) {
+                    const measuredAt = element('span', `${locale.common('pinSampleTime')}: `);
+                    const time = element('time', locale.dateTime(sample.flowObservedAt, sample.observedAt));
+                    time.dateTime = new Date(sample.flowObservedAt).toISOString();
+                    measuredAt.append(time);
+                    recent.tooltipContent.push(measuredAt);
+                }
                 if (sample && sample.flowSince !== null && sample.flowObservedAt !== null) {
                     const duration = Math.min(
                         sample.flowWindowMillis,
