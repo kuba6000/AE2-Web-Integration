@@ -149,6 +149,13 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, 
     }
 
     @Override
+    public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored) {
+        web$populateList(active, CraftingItemList.ACTIVE);
+        web$populateList(pending, CraftingItemList.PENDING);
+        web$populateList(stored, CraftingItemList.STORAGE);
+    }
+
+    @Override
     public IStackList web$getWaitingFor() {
         return (IStackList) (Object) waitingFor;
     }

@@ -12,12 +12,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.ICraftingMedium;
 import appeng.api.networking.crafting.ICraftingPatternDetails;
+import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 
@@ -33,6 +35,12 @@ public class CraftingCPUClusterMixin {
     void ae2webintegration$postCraftingStatusChange(IAEItemStack diff, CallbackInfo ci) {
         IAEMixinCallbacks.getInstance()
             .craftingStatusPostedUpdate((ICraftingCPUCluster) this, diff);
+    }
+
+    @Inject(method = "postChange", at = @At("HEAD"))
+    void ae2webintegration$postChange(IAEItemStack diff, IActionSource src, CallbackInfo ci) {
+        IAEMixinCallbacks.getInstance()
+            .cpuInventoryChanged((ICraftingCPUCluster) this, (IAEKey) diff);
     }
 
     @Inject(method = "completeJob", at = @At("HEAD"))
