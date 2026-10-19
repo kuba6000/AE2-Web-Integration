@@ -161,7 +161,7 @@ for (const width of [390, 1280]) {
         const { page, base } = await fixture(t, '', { viewport: { width, height: 844 } });
         await page.goto(`${base}#/web-settings`);
         const font = page.getByRole('combobox', { name: 'Font', exact: true });
-        await font.waitFor({ timeout: 1500 });
+        await font.waitFor();
         assert.equal(await font.inputValue(), 'monocraft');
         assert.deepEqual(await font.locator('option').allTextContents(), ['Monocraft', 'Lato']);
         const fontResponse = page.waitForResponse((r) => r.url().endsWith('/fonts/lato/Lato-Regular.woff2'));
@@ -245,9 +245,7 @@ test('server themes support relative modules and stylesheet assets, and safe mod
     await page.goto(base);
     await page.getByRole('heading', { name: 'Server layout' }).waitFor();
     await page.waitForFunction(
-        () => getComputedStyle(document.querySelector('.portable-title')).color === 'rgb(15, 80, 125)',
-        {},
-        { timeout: 3000 }
+        () => getComputedStyle(document.querySelector('.portable-title')).color === 'rgb(15, 80, 125)'
     );
     await page.waitForFunction(() => document.querySelector('img[alt="Package asset"]').naturalWidth === 2);
     assert.ok(options.requests.some((r) => r.path === '/themes/portable/styles/colors.css'));
@@ -434,7 +432,7 @@ test('history resource provider links reveal the exact group across sorting and 
     await search.fill('Iron');
     await resource.locator('summary').click();
     const names = resource.getByRole('list', { name: 'Crafted by', exact: true });
-    await names.waitFor({ timeout: 2000 });
+    await names.waitFor();
     assert.equal(await names.getByRole('button').count(), 2);
     assert.equal(await names.getByText('Unavailable', { exact: true }).count(), 1);
     const initialRequests = options.requests.filter((request) => request.path.endsWith('/crafting-history/1')).length;
@@ -443,7 +441,7 @@ test('history resource provider links reveal the exact group across sorting and 
     await page.getByRole('list', { name: 'Pattern providers', exact: true }).waitFor();
     assert.equal(await search.inputValue(), '');
     const target = page.getByRole('region', { name: 'Shared machine', exact: true });
-    await target.getByText(/test:blue.*4.*5.*6/).waitFor({ timeout: 2000 });
+    await target.getByText(/test:blue.*4.*5.*6/).waitFor();
     assert.equal(await target.locator('summary').evaluate((node) => node === document.activeElement), true);
     const pager = page.getByRole('navigation', { name: 'History pages', exact: true });
     assert.equal(await pager.getByRole('button', { name: 'Previous page', exact: true }).isEnabled(), true);
@@ -474,7 +472,7 @@ test('history resource provider links reveal the exact group across sorting and 
     await targets
         .first()
         .getByText(/test:green.*1.*2.*3/)
-        .waitFor({ timeout: 2000 });
+        .waitFor();
     assert.equal(
         await targets
             .first()
@@ -543,7 +541,7 @@ test('history prioritizes only the measured final resource identity and keeps se
     for (const sort of ['time', 'quantity', 'name']) {
         await page.getByRole('combobox', { name: 'Sort by', exact: true }).selectOption(sort);
         const first = resources.getByRole('listitem').first();
-        await first.getByRole('img', { name: 'Final product', exact: true }).waitFor({ timeout: 2000 });
+        await first.getByRole('img', { name: 'Final product', exact: true }).waitFor();
         assert.match(await first.locator('summary').innerText(), /0 s/);
         assert.equal(await resources.getByRole('img', { name: 'Final product', exact: true }).count(), 1);
     }
@@ -551,7 +549,7 @@ test('history prioritizes only the measured final resource identity and keeps se
     await marker.scrollIntoViewIfNeeded();
     await settleFrames(page);
     await marker.hover();
-    await page.getByRole('tooltip').filter({ hasText: 'Final product' }).waitFor({ timeout: 2000 });
+    await page.getByRole('tooltip').filter({ hasText: 'Final product' }).waitFor();
     await page.getByRole('searchbox', { name: 'Search history', exact: true }).fill('Alpha');
     assert.equal(await resources.getByRole('listitem').count(), 1);
     assert.equal(await resources.getByRole('img', { name: 'Final product', exact: true }).count(), 0);
@@ -1271,7 +1269,7 @@ test('autostart shows calculation before returning to the terminal after one nat
     await dialog.getByRole('textbox').fill('23');
     await dialog.getByRole('checkbox', { name: 'Start automatically', exact: true }).check();
     await dialog.getByRole('button', { name: 'Calculate plan', exact: true }).click();
-    await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor({ timeout: 5000 });
+    await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor();
     assert.match(page.url(), /\/plans\/7$/);
     assert.equal(options.requests.filter((r) => r.path.endsWith('/submit')).length, 0);
     await page.clock.fastForward(1200);
@@ -1280,7 +1278,7 @@ test('autostart shows calculation before returning to the terminal after one nat
     assert.equal(await dialog.isVisible(), false);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     const notifications = page.getByRole('region', { name: 'Notifications', exact: true });
-    await notifications.getByText('Crafting started', { exact: true }).waitFor({ timeout: 3000 });
+    await notifications.getByText('Crafting started', { exact: true }).waitFor();
     assert.match(await notifications.innerText(), /Iron Ingot/);
     await notifications.hover();
     await page.clock.fastForward(6000);
@@ -1481,7 +1479,7 @@ test('crafting lite mode follows authenticated server capability and only sends 
         await page.goto(`${base}#/grids/${gridA}/items`);
         await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
         const lightMode = page.getByRole('checkbox', { name: 'Lite mode', exact: true });
-        if (supported) await lightMode.check({ timeout: 3000 });
+        if (supported) await lightMode.check();
         else assert.equal(await lightMode.isVisible(), false);
         await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
         await page.getByRole('heading', { name: 'Crafting plan', exact: true }).waitFor();
@@ -1558,7 +1556,7 @@ test('unavailable icons override the saved mode and recover without losing it', 
     await mode.selectOption('icons');
     options.pack = { available: false, packId: null, width: 0, height: 0 };
     await page.reload();
-    await page.getByText(/server.*not.*icon pack/i).waitFor({ timeout: 3000 });
+    await page.getByText(/server.*not.*icon pack/i).waitFor();
     assert.equal(await mode.inputValue(), 'names');
     assert.equal(
         await mode.getByRole('option', { name: 'Icons only', exact: true }).evaluate((option) => option.disabled),
@@ -1574,15 +1572,11 @@ test('unavailable icons override the saved mode and recover without losing it', 
     assert.equal(await item.getByText(iron.displayName, { exact: true }).isVisible(), true);
     options.pack = { available: true, packId: 'a'.repeat(64), width: 64, height: 64 };
     await poll(page);
-    await page.waitForFunction(
-        () => {
-            const item = document.querySelector('#items button');
-            const rect = item.getBoundingClientRect();
-            return Math.abs(rect.width - rect.height) < 1;
-        },
-        null,
-        { timeout: 3000 }
-    );
+    await page.waitForFunction(() => {
+        const item = document.querySelector('#items button');
+        const rect = item.getBoundingClientRect();
+        return Math.abs(rect.width - rect.height) < 1;
+    });
     await clickTab(page, 'Web settings');
     assert.equal(await mode.inputValue(), 'icons');
     await page.reload();
@@ -1594,19 +1588,24 @@ test('pending icon discovery leaves inventory usable and failures preserve confi
     const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
-    options.packDelay = 2000;
+    let release;
+    const held = new Promise((resolve) => {
+        release = resolve;
+    });
+    await page.route('**/api/icon-pack', async (route) => {
+        await held;
+        await route.continue();
+    });
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
-    await item.waitFor({ timeout: 1000 });
+    await item.waitFor();
     assert.equal(await item.getByText(iron.displayName, { exact: true }).isVisible(), true);
     assert.equal(
         new URLSearchParams(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query).has('icons'),
         false
     );
-    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage, null, {
-        timeout: 4000
-    });
-    options.packDelay = 0;
+    release();
+    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage);
     options.packError = true;
     await poll(page);
     await clickTab(page, 'Web settings');
@@ -1640,15 +1639,13 @@ test('initial icon discovery error stays distinct from absence and recovers', as
     assert.equal(await mode.inputValue(), 'names');
     options.packError = false;
     await poll(page);
-    await page.waitForFunction(() => document.querySelector('#terminal-display')?.value === 'both', null, {
-        timeout: 3000
-    });
+    await page.waitForFunction(() => document.querySelector('#terminal-display')?.value === 'both');
     options.pack = { available: false, packId: null, width: 0, height: 0 };
     await poll(page);
     await page.getByText(/server.*not.*icon pack/i).waitFor();
     options.packError = true;
     await poll(page);
-    await page.getByText(/could not check.*icon/i).waitFor({ timeout: 3000 });
+    await page.getByText(/could not check.*icon/i).waitFor();
     assert.equal(await page.getByText(/server.*not.*icon pack/i).isVisible(), false);
     assert.equal(await mode.inputValue(), 'names');
 });
@@ -1667,9 +1664,7 @@ test('superseded slow discovery cannot overwrite recovered availability after a 
     options.packDelay = 0;
     options.pack = { available: true, packId: 'a'.repeat(64), width: 64, height: 64 };
     await poll(page);
-    await page.waitForFunction(() => document.querySelector('#terminal-display')?.value === 'both', null, {
-        timeout: 3000
-    });
+    await page.waitForFunction(() => document.querySelector('#terminal-display')?.value === 'both');
     await settleResponse(page, oldRequest);
     assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'both');
     assert.equal(await page.getByText(/server.*not.*icon pack/i).isVisible(), false);
@@ -1692,8 +1687,7 @@ for (const saved of [
         await mode.waitFor();
         await page.waitForFunction(
             (expected) => document.querySelector('#terminal-display')?.value === expected,
-            saved.expected,
-            { timeout: 3000 }
+            saved.expected
         );
         await mode.selectOption('names');
         await page.reload();
@@ -1711,11 +1705,13 @@ test('saved names choice receives a dismissible icon notice outside the terminal
     });
     await page.goto(`${base}#/grids/${gridA}/items`);
     const enable = page.getByRole('button', { name: 'Enable icons', exact: true });
-    await enable.waitFor({ timeout: 3000 });
+    await enable.waitFor();
     assert.equal(
         new URLSearchParams(options.requests.filter((r) => r.path.endsWith('/items')).at(-1).query).has('icons'),
         false
     );
+    await page.evaluate(() => document.fonts.ready);
+    await settleFrames(page);
     const panel = await page.getByRole('navigation').boundingBox();
     const notice = await enable.boundingBox();
     const terminal = await page.getByRole('searchbox').boundingBox();
@@ -1738,7 +1734,7 @@ test('enabling suggested icons persists and a later names choice does not nag', 
     });
     await page.goto(`${base}#/grids/${gridA}/items`);
     const enable = page.getByRole('button', { name: 'Enable icons', exact: true });
-    await enable.click({ timeout: 3000 });
+    await enable.click();
     await page.reload();
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     assert.equal(await enable.isVisible(), false);
@@ -1797,7 +1793,7 @@ test('compact terminal mode persists and preserves accessible selection and craf
     assert.ok(original.width > original.height);
     await clickTab(page, 'Web settings');
     const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
-    await mode.waitFor({ timeout: 3000 });
+    await mode.waitFor();
     assert.equal(await mode.inputValue(), 'both');
     await mode.selectOption('icons');
     await page.reload();
@@ -2005,13 +2001,10 @@ test('CPU overview and history products share atlas pages and respect the displa
     await page.goto(`${base}#/grids/${gridA}/cpus`);
     const busy = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: /Busy processor/ }) });
     await busy.waitFor();
-    await page.waitForFunction(
-        () =>
-            [...document.querySelectorAll('.cpu-card .resource-icon')].some(
-                (icon) => getComputedStyle(icon).backgroundImage !== 'none'
-            ),
-        null,
-        { timeout: 3000 }
+    await page.waitForFunction(() =>
+        [...document.querySelectorAll('.cpu-card .resource-icon')].some(
+            (icon) => getComputedStyle(icon).backgroundImage !== 'none'
+        )
     );
     assert.equal(await page.locator('.cpu-card .resource-icon:visible').count(), 1);
     assert.ok((await busy.innerText()).includes('Iron Ingot'));
@@ -2023,13 +2016,10 @@ test('CPU overview and history products share atlas pages and respect the displa
     await clickTab(page, 'History');
     const first = page.getByRole('link', { name: /Iron Ingot.*#1$/ });
     const missing = page.getByRole('link', { name: /Iron Ingot.*#2$/ });
-    await page.waitForFunction(
-        () =>
-            [...document.querySelectorAll('.history-list .resource-icon')].some(
-                (icon) => getComputedStyle(icon).backgroundImage !== 'none'
-            ),
-        null,
-        { timeout: 3000 }
+    await page.waitForFunction(() =>
+        [...document.querySelectorAll('.history-list .resource-icon')].some(
+            (icon) => getComputedStyle(icon).backgroundImage !== 'none'
+        )
     );
     assert.equal(
         await missing.locator('.resource-icon').evaluate((node) => getComputedStyle(node, '::before').content),
@@ -2095,14 +2085,12 @@ test('history details display product and paged resource icons only when enabled
         (node) =>
             !!node.querySelector('.resource-icon') &&
             getComputedStyle(node.querySelector('.resource-icon')).backgroundImage !== 'none',
-        await product.elementHandle(),
-        { timeout: 3000 }
+        await product.elementHandle()
     );
     await ready.scrollIntoViewIfNeeded();
     await page.waitForFunction(
         (node) => getComputedStyle(node.querySelector('.resource-icon')).backgroundImage !== 'none',
-        await ready.elementHandle(),
-        { timeout: 3000 }
+        await ready.elementHandle()
     );
     assert.equal(
         await first.locator('.resource-icon').evaluate((node) => getComputedStyle(node, '::before').content),
@@ -2145,14 +2133,10 @@ test('history detail icons refresh after late pack discovery and pack replacemen
     await row.waitFor();
     // The row is re-rendered when late icon discovery refetches the detail, so look it up on every check.
     const iconPainted = () =>
-        page.waitForFunction(
-            () => {
-                const icon = document.querySelector('section[aria-label="Iron Ingot"] .resource-icon');
-                return !!icon && getComputedStyle(icon).backgroundImage !== 'none';
-            },
-            undefined,
-            { timeout: 3000 }
-        );
+        page.waitForFunction(() => {
+            const icon = document.querySelector('section[aria-label="Iron Ingot"] .resource-icon');
+            return !!icon && getComputedStyle(icon).backgroundImage !== 'none';
+        });
     await iconPainted();
     const detailReads = () => options.requests.filter((r) => r.path.endsWith('/crafting-history/1'));
     assert.equal(detailReads()[0].query, '', 'the snapshot may arrive before icon availability');
@@ -2193,11 +2177,7 @@ for (const view of ['cpus', 'history']) {
             }
         });
         await page.goto(`${base}#/grids/${gridA}/${view}`);
-        await page.waitForFunction(
-            (selector) => document.querySelector(selector)?.style.backgroundImage,
-            iconSelector,
-            { timeout: 3000 }
-        );
+        await page.waitForFunction((selector) => document.querySelector(selector)?.style.backgroundImage, iconSelector);
         const pages = options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
         assert.equal(pages.length, 2);
         assert.ok(pages.at(-1).path.includes('c'.repeat(64)));
@@ -2210,11 +2190,7 @@ for (const view of ['cpus', 'history']) {
         assert.equal(await page.locator(`${iconSelector}:visible`).count(), 0);
         options.pack = { available: true, packId: 'c'.repeat(64), width: 64, height: 64 };
         await poll(page);
-        await page.waitForFunction(
-            (selector) => document.querySelector(selector)?.style.backgroundImage,
-            iconSelector,
-            { timeout: 3000 }
-        );
+        await page.waitForFunction((selector) => document.querySelector(selector)?.style.backgroundImage, iconSelector);
         if (view === 'cpus') options.cpuError = 'NO_PERMISSIONS';
         else options.historyError = 'NO_PERMISSIONS';
         await poll(page);
@@ -2283,9 +2259,7 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
         () =>
             [...document.querySelectorAll('#items .resource-icon')].filter(
                 (icon) => getComputedStyle(icon).backgroundImage !== 'none'
-            ).length === 2,
-        null,
-        { timeout: 3000 }
+            ).length === 2
     );
     assert.equal(
         await page
@@ -2316,23 +2290,16 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
     await page.getByRole('button', { name: /Certus Quartz/ }).waitFor();
     assert.equal(pages().length, 1);
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
-    await page.waitForFunction(
-        () =>
-            [...document.querySelectorAll('.cpu-item .resource-icon')].some(
-                (icon) => getComputedStyle(icon).backgroundImage !== 'none'
-            ),
-        null,
-        { timeout: 3000 }
+    await page.waitForFunction(() =>
+        [...document.querySelectorAll('.cpu-item .resource-icon')].some(
+            (icon) => getComputedStyle(icon).backgroundImage !== 'none'
+        )
     );
     assert.equal(pages().length, 1);
     const product = page.getByRole('region', { name: 'Current job', exact: true }).locator('.resource-icon');
     await product.scrollIntoViewIfNeeded();
     await page.waitForFunction(
-        () => document.querySelector('.cpu-detail-output .resource-icon')?.style.backgroundImage,
-        null,
-        {
-            timeout: 3000
-        }
+        () => document.querySelector('.cpu-detail-output .resource-icon')?.style.backgroundImage
     );
     const productCrop = await product.evaluate((icon) => ({
         x: parseFloat(getComputedStyle(icon).backgroundPositionX),
@@ -2391,9 +2358,7 @@ test('atlas pages are limited to nearby rows and malformed mappings never become
     }));
     const pages = () => options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage, null, {
-        timeout: 3000
-    });
+    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage);
     assert.ok(pages().length > 0 && pages().length < 50);
     assert.equal(
         await page
@@ -2406,9 +2371,7 @@ test('atlas pages are limited to nearby rows and malformed mappings never become
         scroll.scrollTop = scroll.scrollHeight;
     });
     await page.waitForFunction(
-        () => [...document.querySelectorAll('#items .resource-icon')].at(-1)?.style.backgroundImage,
-        null,
-        { timeout: 3000 }
+        () => [...document.querySelectorAll('#items .resource-icon')].at(-1)?.style.backgroundImage
     );
     assert.equal(
         await page
@@ -2437,17 +2400,17 @@ test('a stale atlas discovers the replacement pack and reloads resource mappings
     await atlasFixture(page, options);
     options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
     options.pageStatus = 404;
-    page.on('response', (response) => {
-        if (new URL(response.url()).pathname.includes('/api/icon-packs/') && response.status() === 404) {
+    await page.route('**/api/icon-packs/**', async (route) => {
+        const response = await route.fetch();
+        if (response.status() === 404) {
             options.pack = { available: true, packId: 'c'.repeat(64), width: 64, height: 64 };
             options.icons = { ...options.icons, packId: 'c'.repeat(64) };
             options.pageStatus = 200;
         }
+        await route.fulfill({ response });
     });
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage, null, {
-        timeout: 3000
-    });
+    await page.waitForFunction(() => document.querySelector('#items .resource-icon')?.style.backgroundImage);
     const requests = options.requests.filter((request) => request.path.startsWith('/api/icon-packs/'));
     assert.equal(requests.length, 2);
     assert.ok(requests[1].path.includes('c'.repeat(64)));
@@ -2515,9 +2478,7 @@ test('visible atlas requests have bounded concurrency', async (t) => {
     await page.waitForFunction(
         () =>
             [...document.querySelectorAll('#items .resource-icon')].filter((icon) => icon.style.backgroundImage)
-                .length > 4,
-        null,
-        { timeout: 3000 }
+                .length > 4
     );
     assert.ok(options.maxActivePages > 1 && options.maxActivePages <= 4);
 });
@@ -2528,7 +2489,7 @@ test('global settings tabs preserve grid navigation and browser preferences', as
     const { page, options, base } = await fixture(t, '/ae2');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-    await page.getByRole('link', { name: 'Web settings', exact: true }).click({ timeout: 3000 });
+    await page.getByRole('link', { name: 'Web settings', exact: true }).click();
     assert.match(page.url(), /#\/web-settings$/);
     const header = page.locator('#app header');
     await header.getByText(options.username, { exact: true }).waitFor();
@@ -2572,7 +2533,7 @@ test('global settings direct routes work without an available grid', async (t) =
         ['server-settings', 'Server settings']
     ]) {
         await page.goto(`${base}#/${route}`);
-        await page.getByRole('heading', { name: heading, exact: true }).waitFor({ timeout: 3000 });
+        await page.getByRole('heading', { name: heading, exact: true }).waitFor();
         assert.match(page.url(), new RegExp(`#/${route}$`));
     }
     assert.equal(options.requests.filter((request) => request.path.startsWith('/api/grids/')).length, 0);
@@ -2588,7 +2549,7 @@ test('About shows runtime metadata and resource links while retaining the select
     const { page, options, base } = await fixture(t, '/ae2');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
-    await page.getByRole('link', { name: 'About', exact: true }).click({ timeout: 3000 });
+    await page.getByRole('link', { name: 'About', exact: true }).click();
     assert.match(page.url(), /#\/about$/);
     const about = page.getByRole('heading', { name: 'About', exact: true }).locator('..');
     await about.getByText(options.modVersion).waitFor();
@@ -2608,7 +2569,7 @@ test('About shows runtime metadata and resource links while retaining the select
         .getByRole('row')
         .filter({ hasText: 'HackerNoon Pixel Icon Library' })
         .getByText('MIT', { exact: true })
-        .waitFor({ timeout: 3000 });
+        .waitFor();
     for (const href of [
         'https://github.com/kuba6000/AE2-Web-Integration',
         'https://github.com/kuba6000/AE2-Web-Integration/issues',
@@ -2631,7 +2592,7 @@ test('About opens without a grid and remains usable in a translated narrow viewp
     options.empty = true;
     await page.setViewportSize({ width: 375, height: 740 });
     await page.goto(`${base}#/about`);
-    await page.getByRole('heading', { name: 'About', exact: true }).waitFor({ timeout: 3000 });
+    await page.getByRole('heading', { name: 'About', exact: true }).waitFor();
     await page.getByText(options.modVersion).waitFor();
     assert.equal(options.requests.filter((request) => request.path.startsWith('/api/grids/')).length, 0);
     await clickTab(page, 'Web settings');
@@ -2718,16 +2679,16 @@ test('selected network survives global page reloads and direct routes take prece
     const terminal = page.getByRole('link', { name: 'Terminal', exact: true });
     for (const route of ['/', '/web-settings', '/server-settings', '/about']) {
         await page.goto(`${base}#${route}`);
-        await terminal.waitFor({ timeout: 2000 });
+        await terminal.waitFor();
         assert.equal(await terminal.getAttribute('href'), `#/grids/${gridA}/items`);
         await page.reload();
-        await terminal.waitFor({ timeout: 2000 });
+        await terminal.waitFor();
         assert.equal(await terminal.getAttribute('href'), `#/grids/${gridA}/items`);
     }
     await page.goto(`${base}#/grids/${gridB}/cpus`);
     await page.getByRole('heading', { name: 'CPUs', exact: true }).waitFor();
     await page.goto(`${base}#/web-settings`);
-    await terminal.waitFor({ timeout: 2000 });
+    await terminal.waitFor();
     assert.equal(await terminal.getAttribute('href'), `#/grids/${gridB}/items`);
     options.grids = [];
     await page.reload();
@@ -2735,7 +2696,7 @@ test('selected network survives global page reloads and direct routes take prece
     assert.equal(await terminal.isVisible(), false, 'Remembered identity does not grant network access');
     options.grids = undefined;
     await page.reload();
-    await terminal.waitFor({ timeout: 2000 });
+    await terminal.waitFor();
     assert.equal(await terminal.getAttribute('href'), `#/grids/${gridB}/items`);
 });
 
@@ -2795,7 +2756,7 @@ test('Minecraft item formatting renders readable names and resets decorations on
     const item = page.getByRole('button', {
         name: /^Base Green Bold Italic Underlined Struck ColorCleared Heavy Restored §qUnknown tail§/
     });
-    await item.waitFor({ timeout: 3000 });
+    await item.waitFor();
     const normal = await textStyle(item, 'Base');
     assert.equal((await textStyle(item, 'Green')).color, 'rgb(85, 255, 85)');
     assert.ok(Number((await textStyle(item, 'Bold')).weight) >= 700);
@@ -2837,7 +2798,7 @@ test('Minecraft names retain formatting across crafting plans, CPU work and hist
     const resource = page
         .getByRole('list', { name: 'Plan resources', exact: true })
         .getByRole('button', { name: /Cobalt Ingot/ });
-    await resource.waitFor({ timeout: 3000 });
+    await resource.waitFor();
     async function assertFormatted(locator) {
         assert.doesNotMatch(await locator.innerText(), /§[0-9a-fk-or]/i);
         assert.equal((await textStyle(locator, 'Cobalt')).color, 'rgb(85, 255, 85)');
@@ -2983,7 +2944,7 @@ test('search explains its rules and combines mod identifiers with item text', as
     await page
         .getByRole('tooltip')
         .getByText(/@minecraft iron/)
-        .waitFor({ timeout: 3000 });
+        .waitFor();
     await search.fill('@MINECRAFT iron');
     const resources = page.getByRole('region', { name: 'Resources', exact: true });
     assert.equal(await resources.getByRole('button').count(), 1);
@@ -3002,7 +2963,7 @@ test('craftable resources show an accessible crafting marker that follows refres
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     const marker = item.getByRole('img', { name: 'Crafting available', exact: true });
-    await marker.waitFor({ state: 'visible', timeout: 3000 });
+    await marker.waitFor({ state: 'visible' });
     assert.equal(
         await page
             .getByRole('button', { name: /Certus Quartz Crystal/ })
@@ -3064,7 +3025,7 @@ test('terminal availability cycles through all stored and craftable with current
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     const availability = page.getByRole('button', { name: /^Availability:/ });
     const tooltip = page.getByRole('tooltip');
-    await availability.waitFor({ timeout: 1500 });
+    await availability.waitFor();
     assert.equal(await availability.count(), 1);
     assert.equal(await availability.getAttribute('aria-pressed'), null);
     await availability.focus();
@@ -3135,7 +3096,7 @@ test('terminal displays structured registry and optional resource metadata witho
     ];
     await page.goto(`${base}#/grids/${gridA}/items`);
     const tool = page.getByRole('button', { name: /Damaged Tool/ });
-    await tool.waitFor({ timeout: 3000 });
+    await tool.waitFor();
     await tool.hover();
     const tooltip = page.getByRole('tooltip');
     assert.equal(await tooltip.getByText('example:tool', { exact: true }).isVisible(), true);
@@ -3240,7 +3201,7 @@ test('terminal sort criterion cycles independently of order and persists both', 
     const order = page.getByRole('button', { name: /^Sort order:/ });
     assert.equal(await sort.count(), 1);
     assert.deepEqual(await names(), ['Alpha', 'Beta', 'Gamma']);
-    await order.waitFor({ timeout: 1500 });
+    await order.waitFor();
     await sort.focus();
     await page.keyboard.press('Enter');
     assert.match(await sort.getAttribute('aria-label'), /Quantity/);
@@ -3297,7 +3258,7 @@ test('terminal item and fluid switches intersect filters and preserve other reso
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     const items = page.getByRole('button', { name: /^Items:/ });
     const fluids = page.getByRole('button', { name: /^Fluids:/ });
-    await items.waitFor({ timeout: 1500 });
+    await items.waitFor();
     assert.equal(await items.getAttribute('aria-pressed'), 'true');
     assert.equal(await fluids.getAttribute('aria-pressed'), 'true');
     await items.click();
@@ -3401,7 +3362,7 @@ test('crafting calculates a quantity, polls, preserves CPU identity and submits 
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
     await page.getByRole('textbox', { name: 'Craft quantity' }).fill('12');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
-    await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor({ timeout: 5000 });
+    await page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true }).waitFor();
     assert.match(page.url(), /\/plans\/7$/);
     await clickTab(page, 'Web settings');
     await page.getByRole('checkbox', { name: 'Automatic updates' }).check();
@@ -3741,7 +3702,7 @@ test('grid settings preserve the draft and save explicitly while safely showing 
         ]
     };
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.getByRole('link', { name: 'Network', exact: true }).click({ timeout: 3000 });
+    await page.getByRole('link', { name: 'Network', exact: true }).click();
     const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
     const networkName = page.getByRole('textbox', { name: 'Network name', exact: true });
     await networkName.waitFor();
@@ -3842,7 +3803,7 @@ test('uncertain settings saves preserve the draft and remain unconfirmed until e
         await page
             .getByRole('status')
             .filter({ hasText: /save.*not confirmed/i })
-            .waitFor({ timeout: 3000 });
+            .waitFor();
         const count = options.requests.filter((request) => request.method === 'PATCH').length;
         await poll(page);
         await clickTab(page, 'Terminal');
@@ -3954,7 +3915,7 @@ test('history reentry during grid discovery clears unavailable snapshots', async
     await page
         .getByRole('status')
         .filter({ hasText: /history entry.*available/i })
-        .waitFor({ timeout: 3000 });
+        .waitFor();
     assert.equal(await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).count(), 0);
     assert.equal(options.requests.filter((request) => request.method !== 'GET').length, 0);
 });
@@ -4015,7 +3976,7 @@ test('settings save remains single-flight across grids and uses the returned val
         .filter({ hasText: /Settings saved/i })
         .waitFor();
     assert.equal(await tracking.isChecked(), false);
-    await page.getByText('Alex', { exact: true }).waitFor({ timeout: 3000 });
+    await page.getByText('Alex', { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Save settings', exact: true }).isDisabled(), true);
 });
 
@@ -4137,7 +4098,7 @@ for (const selected of [true, false])
         assert.equal(await pause.isDisabled(), true);
         assert.deepEqual(await geometry(), before, 'Pending work must not insert a footer or card status line');
         const activity = page.getByRole('status', { name: 'Activity', exact: true });
-        await activity.waitFor({ timeout: 2000 });
+        await activity.waitFor();
         if (selected && process.env.UI_SCREENSHOT_DIR) {
             await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
             await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'cpu-action-progress.png') });
@@ -4192,7 +4153,7 @@ test('header icon controls refresh the current history entry and retain dirty se
     await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
     const header = page.locator('#app header');
     const refresh = header.getByRole('button', { name: 'Refresh', exact: true });
-    await refresh.waitFor({ timeout: 2000 });
+    await refresh.waitFor();
     assert.equal(await header.getByRole('button', { name: 'Log out', exact: true }).innerText(), '');
     const before = options.requests.filter((request) => request.path.endsWith('/crafting-history/1')).length;
     options.historyDetail = { ...historyDetail, finalOutput: quartz };
@@ -4291,7 +4252,7 @@ test('CPU background refresh signals activity without disabling or dimming exist
     await poll(page);
     const read = await readRequest;
     const activity = page.getByRole('status', { name: 'Activity', exact: true });
-    await activity.waitFor({ timeout: 2000 });
+    await activity.waitFor();
     assert.equal(await activity.getAttribute('aria-live'), 'off');
     assert.deepEqual(await appearance(), before, 'Automatic refresh must keep the ready UI fully interactive');
     const requestsBefore = options.requests.length;
@@ -4445,7 +4406,7 @@ test('direct plan entry only reads, and explicit cancellation stops calculation 
     const { page, options, base } = await fixture(t);
     options.pendingReads = 100;
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
-    await page.getByRole('button', { name: 'Cancel', exact: true }).click({ timeout: 3000 });
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.waitForURL(new RegExp(`/grids/${gridA}/items$`));
     const reads = options.requests.filter(
         (request) => request.path.endsWith('/crafting-plans/7') && request.method === 'GET'
@@ -4555,9 +4516,7 @@ test('CPU lists show native selection modes and hide indicators when unsupported
             if (width === 390 && route !== 'cpus')
                 await page.getByRole('button', { name: 'CPUs', exact: true }).click();
             for (const name of ['Players only', 'Automation only', 'Players and automation']) {
-                await page
-                    .getByRole('img', { name: `Automatic selection: ${name}`, exact: true })
-                    .waitFor({ timeout: 2000 });
+                await page.getByRole('img', { name: `Automatic selection: ${name}`, exact: true }).waitFor();
             }
             assert.equal(await page.getByRole('img', { name: /Automatic selection:/ }).count(), 3);
             if (process.env.UI_SCREENSHOT_DIR) {
@@ -4603,7 +4562,7 @@ test('CPU automation sorting uses native modes, keeps unknown last, and preserve
     const order = () => links.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href').split('/').at(-1)));
     for (const criterion of ['Name', 'Capacity', 'Coprocessors', 'Busy state'])
         await panel.getByRole('button', { name: `Sort CPUs: ${criterion}`, exact: true }).click();
-    await panel.getByRole('button', { name: 'Sort CPUs: Automation', exact: true }).waitFor({ timeout: 2000 });
+    await panel.getByRole('button', { name: 'Sort CPUs: Automation', exact: true }).waitFor();
     assert.deepEqual(await order(), ['cpu-a', 'cpu-b', 'cpu-d', 'cpu-c', 'cpu-z', 'cpu-y']);
     await panel.getByRole('button', { name: 'CPU sort order: Ascending', exact: true }).click();
     assert.deepEqual(await order(), ['cpu-c', 'cpu-b', 'cpu-d', 'cpu-a', 'cpu-z', 'cpu-y']);
@@ -4668,7 +4627,7 @@ test('CPU selector cycles summary sorting with stable ties and remembers criteri
     const links = panel.getByRole('region', { name: 'CPU selector', exact: true }).getByRole('link');
     const order = () => links.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href').split('/').at(-1)));
     const initialRequests = options.requests.length;
-    await panel.getByRole('button', { name: 'Sort CPUs: Name', exact: true }).waitFor({ timeout: 2000 });
+    await panel.getByRole('button', { name: 'Sort CPUs: Name', exact: true }).waitFor();
     assert.deepEqual(await order(), ['cpu-a', 'cpu-b', 'cpu-c', 'cpu-d']);
     await panel.getByRole('button', { name: 'Sort CPUs: Name', exact: true }).click();
     assert.deepEqual(await order(), ['cpu-d', 'cpu-a', 'cpu-c', 'cpu-b']);
@@ -4726,7 +4685,7 @@ test('CPU search opens from the magnifier, focuses the field and clears its filt
         const panel = page.getByRole('complementary', { name: 'CPUs', exact: true });
         const search = panel.getByRole('searchbox', { name: 'Search CPUs', exact: true });
         const toggle = panel.getByRole('button', { name: 'Search CPUs', exact: true });
-        await toggle.waitFor({ timeout: 2000 });
+        await toggle.waitFor();
         assert.equal(await search.isVisible(), false);
         const before = await toggle.boundingBox();
         await toggle.click();
@@ -4808,7 +4767,7 @@ test('CPU selector searches forty processors and preserves reading position acro
     await page.goto(`${base}#/grids/${gridA}/cpus/processor-0`);
     const selector = page.getByRole('region', { name: 'CPU selector', exact: true });
     const search = page.getByRole('searchbox', { name: 'Search CPUs', exact: true });
-    await selector.getByRole('link', { name: /Production 00/ }).waitFor({ timeout: 2000 });
+    await selector.getByRole('link', { name: /Production 00/ }).waitFor();
     assert.equal(await selector.getByRole('link').count(), 40);
     assert.ok(await selector.evaluate((node) => node.scrollHeight > node.clientHeight));
     await page.getByRole('button', { name: 'Search CPUs', exact: true }).click();
@@ -4873,7 +4832,7 @@ test('CPU list fills its attachment and current job stays in a low footer even w
     const details = page.getByRole('region', { name: 'Current job', exact: true });
     const selector = page.getByRole('region', { name: 'CPU selector', exact: true });
     const output = details.getByText(/^Iron Ingot/);
-    await output.waitFor({ timeout: 2000 });
+    await output.waitFor();
     const detailsBounds = await details.boundingBox();
     const outputBounds = await output.boundingBox();
     assert.ok(
@@ -5527,7 +5486,7 @@ test('CPU list and detail pause controls use capability, busy state and stable C
     options.cpuDetails.unsupported = cpuWork;
     await page.goto(`${base}#/grids/${gridA}/cpus`);
     const row = (key) => page.getByRole('listitem').filter({ has: page.getByRole('link', { name: new RegExp(key) }) });
-    await row('cpu-b').getByRole('button', { name: /Pause/ }).waitFor({ timeout: 3000 });
+    await row('cpu-b').getByRole('button', { name: /Pause/ }).waitFor();
     assert.equal(
         await row('unsupported')
             .getByRole('button', { name: /Pause|Resume/ })
@@ -5760,7 +5719,7 @@ test('CPU list reports a removed action target without substituting another CPU'
     await page
         .getByRole('status')
         .filter({ hasText: /CPU.*available/i })
-        .waitFor({ timeout: 3000 });
+        .waitFor();
     assert.equal(await row.count(), 0);
     assert.equal(await page.getByRole('link', { name: /cpu-b/ }).count(), 1);
     assert.deepEqual(
@@ -5814,7 +5773,7 @@ test('a removed CPU mutation target cannot strand another CPU detail load', asyn
     await page
         .getByRole('region', { name: 'CPU resources', exact: true })
         .getByRole('button', { name: /Iron Ingot/ })
-        .waitFor({ timeout: 3000 });
+        .waitFor();
     assert.equal(await page.getByRole('button', { name: 'Pause current work', exact: true }).isEnabled(), true);
     assert.match(page.url(), /cpus\/cpu-b$/);
 });
@@ -5826,7 +5785,7 @@ test('CPU monitoring opens stable current work and explicitly cancels it without
         'cpu-b': { ...cpu, isBusy: true, finalOutput: { ...iron, quantity: 12 } }
     };
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.getByRole('link', { name: 'CPUs', exact: true }).click({ timeout: 3000 });
+    await page.getByRole('link', { name: 'CPUs', exact: true }).click();
     await page.getByRole('link', { name: /Assembler.*cpu-b/ }).click();
     await page
         .getByRole('region', { name: 'CPU resources', exact: true })
@@ -5880,7 +5839,7 @@ test('CPU removal and denied reads clear current work without selecting a replac
     await page
         .getByRole('status')
         .filter({ hasText: /CPU.*available/i })
-        .waitFor({ timeout: 3000 });
+        .waitFor();
     assert.match(page.url(), /\/cpus\/cpu-b$/);
     assert.equal(
         await page
@@ -5942,7 +5901,7 @@ test('known CPU cancellation rejections refresh stale work or clear unavailable 
     await page
         .getByRole('status')
         .filter({ hasText: /^Idle$/i })
-        .waitFor({ timeout: 3000 });
+        .waitFor();
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).count(), 0);
     for (const status of ['CPU_NOT_FOUND', 'NO_PERMISSIONS', 'GRID_NOT_FOUND']) {
         options.cancelStatus = status;
@@ -6018,7 +5977,7 @@ test('uncertain CPU cancellation never replays after refresh or route reentry', 
         await page
             .getByRole('status')
             .filter({ hasText: /outcome.*unknown/i })
-            .waitFor({ timeout: 3000 });
+            .waitFor();
         const count = options.requests.filter((request) => request.path.endsWith('/cancel')).length;
         await poll(page);
         await clickTab(page, 'CPUs');
@@ -6044,7 +6003,7 @@ test('known submission rejection retains the plan and permits deliberate correct
     options.submitReason = '<img src=x onerror=alert(1)> Native ingredients disappeared';
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     await page.getByRole('button', { name: 'Start', exact: true }).click();
-    await page.getByText(options.submitReason, { exact: true }).waitFor({ timeout: 3000 });
+    await page.getByText(options.submitReason, { exact: true }).waitFor();
     assert.equal(
         await page
             .getByRole('list', { name: 'Plan resources', exact: true })
@@ -6087,7 +6046,7 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
     await page
         .getByRole('status')
         .filter({ hasText: /plan.*unavailable/i })
-        .waitFor({ timeout: 3000 });
+        .waitFor();
     assert.equal(await page.getByRole('button', { name: 'Cancel', exact: true }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
     options.planStatus = 'OK';
@@ -6149,7 +6108,7 @@ test('uncertain submission outcomes cannot be retried by polling or route reentr
         await page
             .getByRole('status')
             .filter({ hasText: /outcome.*unknown/i })
-            .waitFor({ timeout: 3000 });
+            .waitFor();
         const count = options.requests.filter((request) => request.path.endsWith('/submit')).length;
         await poll(page);
         await clickTab(page, 'Terminal');
@@ -6174,7 +6133,7 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
     await page
         .getByRole('status')
         .filter({ hasText: /outcome.*unknown/i })
-        .waitFor({ timeout: 3000 });
+        .waitFor();
     assert.equal(await page.getByRole('button', { name: 'Calculate plan', exact: true }).isDisabled(), true);
     await poll(page);
     await page.goto(`${base}#/grids/${gridB}/items`);
@@ -6224,7 +6183,7 @@ test('plan resources share custom formatted tooltips with exact values and dismi
         .getByRole('button', { name: /Iron Ingot/ });
     await resource.hover();
     const tooltip = page.getByRole('tooltip');
-    await tooltip.getByText('Iron Ingot', { exact: true }).waitFor({ timeout: 3000 });
+    await tooltip.getByText('Iron Ingot', { exact: true }).waitFor();
     assert.equal(await resource.getAttribute('title'), null);
     assert.match(await tooltip.innerText(), /minecraft:iron_ingot\s+Damage: 4\s+Components: 2/);
     for (const value of ['123,456', '234,567', '34,567', '17', '25%'])
@@ -6257,7 +6216,7 @@ test('plan tools search and CPU identifiers use current custom tooltips and clea
     const sort = page.getByRole('button', { name: 'Sort by: Name', exact: true });
     await sort.hover();
     const tooltip = page.getByRole('tooltip');
-    await tooltip.getByText(/Sort by.*Name/).waitFor({ timeout: 3000 });
+    await tooltip.getByText(/Sort by.*Name/).waitFor();
     assert.equal(await sort.getAttribute('title'), null);
     await sort.click();
     await tooltip.getByText(/Sort by.*Quantity/).waitFor();
@@ -6320,7 +6279,7 @@ test('plan CPU tooltip shows live capacity work and state after polling', async 
     await settleFrames(page);
     await choice.locator('..').hover();
     const tooltip = page.getByRole('tooltip');
-    await tooltip.getByText('Assembly', { exact: true }).waitFor({ timeout: 3000 });
+    await tooltip.getByText('Assembly', { exact: true }).waitFor();
     assert.equal((await textStyle(tooltip, 'Assembly')).color, 'rgb(85, 255, 85)');
     assert.match(await tooltip.innerText(), /Paused/);
     assert.match(await tooltip.innerText(), /64 KB/);
@@ -6393,7 +6352,7 @@ test('crafting popup and plan share optional atlas icons and honor native CPU ad
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('both');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
-    await page.getByRole('dialog').locator('.resource-icon-ready').waitFor({ timeout: 3000 });
+    await page.getByRole('dialog').locator('.resource-icon-ready').waitFor();
     await page.getByRole('dialog').getByRole('textbox', { name: 'Craft quantity' }).fill('64');
     options.itemsA = [{ ...iron, icon: { page: 0, x: 64, y: 0 } }];
     await poll(page);
@@ -6404,7 +6363,7 @@ test('crafting popup and plan share optional atlas icons and honor native CPU ad
     assert.equal(await page.getByRole('dialog').getByRole('textbox', { name: 'Craft quantity' }).inputValue(), '64');
     await page.getByRole('button', { name: 'Calculate plan', exact: true }).click();
     const resources = page.getByRole('list', { name: 'Plan resources', exact: true });
-    await resources.locator('.resource-icon-ready').waitFor({ timeout: 3000 });
+    await resources.locator('.resource-icon-ready').waitFor();
     const cpus = page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true });
     assert.equal(await cpus.getByRole('radio', { name: /cpu-a/ }).isDisabled(), true);
     assert.equal(await cpus.getByRole('radio', { name: /cpu-b/ }).isChecked(), true);
@@ -6433,7 +6392,7 @@ test('plan CPU choices display live product icons only for busy processors using
     const choices = page.getByRole('radiogroup', { name: 'Crafting CPU', exact: true });
     const choice = (key) =>
         choices.locator('label').filter({ has: page.getByRole('radio', { name: new RegExp(key) }) });
-    await choice('cpu-a').locator('.resource-icon-ready').waitFor({ timeout: 2000 });
+    await choice('cpu-a').locator('.resource-icon-ready').waitFor();
     await choice('cpu-b').locator('.resource-icon-ready').waitFor();
     assert.equal(await choice('cpu-idle').locator('.resource-icon').isVisible(), false);
     assert.equal(await choice('cpu-unknown').locator('.resource-icon').isVisible(), false);
@@ -6488,10 +6447,7 @@ test('plan icon pack replacement supersedes a delayed completed-plan mapping', a
     await poll(page);
     await (await discovery).finished();
     await finish();
-    await page
-        .getByRole('list', { name: 'Plan resources', exact: true })
-        .locator('.resource-icon-ready')
-        .waitFor({ timeout: 3000 });
+    await page.getByRole('list', { name: 'Plan resources', exact: true }).locator('.resource-icon-ready').waitFor();
     assert.ok(options.requests.some((request) => request.path.includes(`/icon-packs/${'c'.repeat(64)}/`)));
 });
 
@@ -6529,7 +6485,7 @@ for (const [width, height] of [
             .locator('aside p')
             .filter({ hasText: /Iron Ingot assembly component/ })
             .focus();
-        await page.getByRole('tooltip').waitFor({ timeout: 2000 });
+        await page.getByRole('tooltip').waitFor();
         assert.ok((await page.getByRole('tooltip').innerText()).includes(options.itemsA[0].displayName));
         assert.ok(Math.abs(planSlot.width - cpuSlot.width) < 2, 'plan and three-row CPU slots share width');
         assert.ok(Math.abs(planSlot.height - cpuSlot.height) < 2, 'plan and three-row CPU slots share height');
@@ -6661,7 +6617,7 @@ test('crafting plan persists independent name total quantity and steps sorting w
         await page.getByRole('button', { name: 'Sort order: Ascending', exact: true }).click();
         assert.deepEqual(await names(), descending, `${criterion} descending within fixed groups`);
         await page.reload();
-        await page.getByRole('button', { name: `Sort by: ${criterion}`, exact: true }).waitFor({ timeout: 3000 });
+        await page.getByRole('button', { name: `Sort by: ${criterion}`, exact: true }).waitFor();
         await resources.getByRole('button', { name: /^Alpha ·/ }).waitFor();
         assert.deepEqual(await names(), descending, `${criterion} and direction survive reload`);
         await page.getByRole('button', { name: 'Sort order: Descending', exact: true }).click();
@@ -6687,7 +6643,7 @@ test('direct pending plan and reload restore the original order and options with
     options.pendingReads = 1;
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     const output = page.getByText(/Certus Quartz Crystal × 37/);
-    await output.waitFor({ timeout: 3000 });
+    await output.waitFor();
     const more = page.getByRole('button', { name: 'Recalculate options', exact: true });
     assert.ok(await more.isDisabled());
     await poll(page);
@@ -7034,7 +6990,7 @@ test('deletion rejection makes unavailable or denied plans non-actionable', asyn
         await page
             .getByRole('list', { name: 'Plan resources', exact: true })
             .getByRole('button', { name: /Iron Ingot/ })
-            .waitFor({ state: 'hidden', timeout: 3000 });
+            .waitFor({ state: 'hidden' });
         assert.equal(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), true);
     }
 });
@@ -7114,7 +7070,7 @@ test('mobile login shows one usable form at a time and submits the existing regi
     await page.getByRole('button', { name: 'Show password', exact: true }).filter({ visible: true }).click();
     assert.equal(await password.getAttribute('type'), 'text');
     await page.setViewportSize({ width: 320, height: 360 });
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth);
     await page.route(base, async (route) => {
         if (route.request().method() !== 'POST') return route.continue();
         const body = new URLSearchParams(route.request().postData());
@@ -7254,7 +7210,7 @@ async function themeFixture(t, script, markup = '') {
     const open = async () => {
         if (current.page.url() === url) await current.page.reload();
         else await current.page.goto(url);
-        await current.page.locator('body[data-ready]').waitFor({ timeout: 3000 });
+        await current.page.locator('body[data-ready]').waitFor();
         assert.equal(
             await current.page.locator('body').getAttribute('data-ready'),
             'true',
@@ -7806,7 +7762,7 @@ for (const width of [390, 1280]) {
         await page.waitForFunction(() => document.querySelectorAll('#items button').length === 275);
         await clickTab(page, 'Web settings');
         const pageSize = page.getByRole('combobox', { name: 'Resources per page', exact: true });
-        await pageSize.waitFor({ timeout: 3000 });
+        await pageSize.waitFor();
         assert.equal(await pageSize.inputValue(), '500');
         await pageSize.selectOption('50');
         await page.reload();
@@ -7904,7 +7860,7 @@ test('bootstrap failure keeps the terminal unmounted and retry loads current ser
     const { page, options, base } = await fixture(t, '/ae2');
     options.bootstrapStatus = 503;
     await page.goto(`${base}#/about`);
-    await page.getByRole('button', { name: 'Try again', exact: true }).waitFor({ timeout: 3000 });
+    await page.getByRole('button', { name: 'Try again', exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Choose a network', exact: true }).count(), 0);
     assert.equal(
         options.requests.some((request) => request.path === '/api/grids'),
@@ -7914,8 +7870,8 @@ test('bootstrap failure keeps the terminal unmounted and retry loads current ser
     options.username = 'AfterRetry';
     options.modVersion = 'server-after-retry';
     await page.getByRole('button', { name: 'Try again', exact: true }).click();
-    await page.getByText('AfterRetry', { exact: true }).waitFor({ timeout: 3000 });
-    await page.getByText(/Version: server-after-retry/).waitFor({ timeout: 3000 });
+    await page.getByText('AfterRetry', { exact: true }).waitFor();
+    await page.getByText(/Version: server-after-retry/).waitFor();
     assert.equal(new URL(page.url()).hash, '#/about');
     assert.equal(options.requests.filter((request) => request.path === '/api/context').length, 2);
 });
@@ -7926,12 +7882,12 @@ test('login waits for bootstrap and offers private mode only after retry succeed
     options.bootstrapStatus = 503;
     options.publicMode = false;
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.getByRole('button', { name: 'Retry', exact: true }).waitFor({ timeout: 3000 });
+    await page.getByRole('button', { name: 'Retry', exact: true }).waitFor();
     assert.equal(await page.getByLabel('Username', { exact: true }).isVisible(), false);
     assert.equal(await page.getByPlaceholder('Enter password', { exact: true }).first().isVisible(), false);
     options.bootstrapStatus = 200;
     await page.getByRole('button', { name: 'Retry', exact: true }).click();
-    await page.getByPlaceholder('Enter password', { exact: true }).first().waitFor({ timeout: 3000 });
+    await page.getByPlaceholder('Enter password', { exact: true }).first().waitFor();
     assert.equal(await page.getByLabel('Username', { exact: true }).inputValue(), 'Admin');
     assert.equal(await page.getByLabel('Username', { exact: true }).getAttribute('readonly'), '');
     assert.equal(await page.getByRole('button', { name: 'Continue', exact: true }).isVisible(), false);
@@ -7953,11 +7909,11 @@ test('login bootstrap keeps public forms hidden until the server mode arrives', 
     assert.equal(await page.getByLabel('Username', { exact: true }).isVisible(), false);
     assert.equal(await page.getByRole('button', { name: 'Continue', exact: true }).isVisible(), false);
     release();
-    await page.getByLabel('Username', { exact: true }).waitFor({ timeout: 3000 });
+    await page.getByLabel('Username', { exact: true }).waitFor();
     assert.equal(await page.getByLabel('Username', { exact: true }).getAttribute('readonly'), null);
     assert.equal(await page.getByRole('button', { name: 'Continue', exact: true }).isVisible(), false);
     await page.getByRole('button', { name: 'Register', exact: true }).click();
-    await page.getByRole('button', { name: 'Continue', exact: true }).waitFor({ timeout: 3000 });
+    await page.getByRole('button', { name: 'Continue', exact: true }).waitFor();
 });
 
 test('a session lost before bootstrap returns to login with the destination intact', async (t) => {
@@ -7967,7 +7923,7 @@ test('a session lost before bootstrap returns to login with the destination inta
         await route.continue();
     });
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.getByLabel('Username', { exact: true }).waitFor({ timeout: 3000 });
+    await page.getByLabel('Username', { exact: true }).waitFor();
     assert.equal(new URL(page.url()).search, '');
     assert.equal(new URL(page.url()).hash, `#/grids/${gridA}/items`);
     assert.equal(
@@ -8202,7 +8158,7 @@ test('CPU overview opens from product, metrics and summary padding while identif
         () => card.click({ position: { x: 6, y: 6 } })
     ]) {
         await open();
-        await page.waitForURL(`**#/grids/${gridA}/cpus/cpu-a`, { timeout: 3000 });
+        await page.waitForURL(`**#/grids/${gridA}/cpus/cpu-a`);
         await page.getByRole('region', { name: 'CPU resources', exact: true }).waitFor();
         await clickTab(page, 'CPUs');
         await link.waitFor();
@@ -8617,7 +8573,7 @@ test('Home keeps failed logout visible and allows an explicit retry', async (t) 
     await page.goto(base);
     options.logoutError = 'INTERNAL_ERROR';
     await page.getByRole('button', { name: 'Log out', exact: true }).click();
-    await page.getByRole('alert').waitFor({ timeout: 2000 });
+    await page.getByRole('alert').waitFor();
     assert.equal(options.requests.filter((request) => request.path === '/api/auth/logout').length, 1);
     options.logoutError = null;
     await page.getByRole('button', { name: 'Log out', exact: true }).click();
@@ -8637,6 +8593,8 @@ test('current network preserves desktop alignment and shares the second phone ro
             await page.reload();
             const network = page.locator('#app header').getByText(name, { exact: true });
             await network.waitFor();
+            await page.evaluate(() => document.fonts.ready);
+            await settleFrames(page);
             const brand = await page.getByRole('heading', { name: 'AE2 Web Integration' }).boundingBox();
             const account = await page.getByRole('button', { name: 'Log out', exact: true }).boundingBox();
             const label = await network.boundingBox();
@@ -8690,7 +8648,7 @@ test('network identity uses its name or full identifier, with scoped header and 
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     const header = page.locator('#app header');
     const current = header.getByText(gridA, { exact: true });
-    await current.waitFor({ timeout: 2000 });
+    await current.waitFor();
     assert.doesNotMatch(await header.innerText(), /Alpha/);
     assert.equal(await current.getAttribute('title'), null);
     await current.focus();
@@ -8743,7 +8701,7 @@ test('Network details save and clear a name without resending tracking, and upda
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/settings`);
     const name = page.getByRole('textbox', { name: 'Network name', exact: true });
-    await name.fill('  Main factory  ', { timeout: 2000 });
+    await name.fill('  Main factory  ');
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     await page
         .getByRole('status')
@@ -8780,7 +8738,7 @@ test('tracking notices use the current network, update after saving, and retain 
     options.settings[gridB].isTracked = true;
     await page.goto(`${base}#/grids/${gridA}/items`);
     const enable = page.getByRole('link', { name: 'Enable tracking', exact: true });
-    await enable.waitFor({ timeout: 2000 });
+    await enable.waitFor();
     assert.equal(await enable.getAttribute('href'), `#/grids/${gridA}/settings`);
     await enable.click();
     await page.getByRole('checkbox', { name: 'Record crafting history', exact: true }).check();
@@ -9099,8 +9057,7 @@ for (const height of [844, 600]) {
                         area = region.getBoundingClientRect();
                     return box.y >= area.y && box.bottom <= area.bottom;
                 },
-                [await control.elementHandle(), await information.elementHandle()],
-                { timeout: 2000 }
+                [await control.elementHandle(), await information.elementHandle()]
             );
         }
         await page.getByRole('button', { name: 'Dismiss icon suggestion', exact: true }).click();
@@ -9229,7 +9186,7 @@ test('large history analysis paginates resources and exact intervals without dro
     };
     await page.goto(`${base}#/grids/${gridA}/history/1`);
     const resources = page.getByRole('list', { name: 'Resources', exact: true });
-    await resources.waitFor({ timeout: 3000 });
+    await resources.waitFor();
     assert.equal(await resources.getByRole('listitem').count(), 25);
     assert.equal(await resources.getByRole('heading').first().innerText(), 'Resource 60');
     assert.equal(await resources.locator('time').count(), 0, 'exact intervals stay unmounted until expansion');
@@ -9340,7 +9297,7 @@ test('history preserves subsecond timeline scale and distinguishes very slow pro
     await page.goto(`${base}#/grids/${gridA}/history/1`);
     const row = page.getByRole('region', { name: 'Iron Ingot', exact: true });
     await row.locator('summary').click();
-    await row.getByText('<0.001/s', { exact: true }).waitFor({ timeout: 3000 });
+    await row.getByText('<0.001/s', { exact: true }).waitFor();
     const axis = page.getByLabel('Elapsed time from the start of this craft', { exact: true });
     assert.deepEqual(await axis.innerText(), '0 s\n0.25 s\n0.5 s');
     options.historyDetail.items[0].craftsPerSec = 0;
@@ -9354,7 +9311,7 @@ test('preferred resource columns persist and adapt across terminal CPU and plan 
     const { page, base } = await fixture(t, '/ae2', { viewport: { width: 1600, height: 1000 } }, { mockClock: false });
     await page.goto(`${base}#/web-settings`);
     const columns = page.getByRole('combobox', { name: /Resource columns/ });
-    await columns.waitFor({ timeout: 3000 });
+    await columns.waitFor();
     assert.equal(await columns.inputValue(), 'auto');
     await columns.selectOption('3');
     await page.reload();
@@ -9366,7 +9323,7 @@ test('preferred resource columns persist and adapt across terminal CPU and plan 
     ]) {
         await page.goto(`${base}#/grids/${gridA}/${route}`);
         const grid = page.locator(selector);
-        await grid.waitFor({ timeout: 3000 });
+        await grid.waitFor();
         await page.waitForFunction(
             (selector) =>
                 getComputedStyle(document.querySelector(selector)).gridTemplateColumns.split(' ').length === 3,
@@ -9404,7 +9361,7 @@ test('outdated mod notice is admin only and supports session close and seven day
     await page.reload();
     await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
     const releases = page.getByRole('link', { name: 'View releases' });
-    await releases.waitFor({ timeout: 3000 });
+    await releases.waitFor();
     assert.equal(await releases.getAttribute('href'), options.availableUpdate.releaseUrl);
     await page.getByRole('button', { name: 'Dismiss update notice' }).click();
     assert.equal(await releases.isVisible(), false);
@@ -9538,7 +9495,9 @@ test('administrator skips the displayed update only after confirmed response and
     await page.goto(`${base}#/web-settings`);
     const skip = page.getByRole('button', { name: 'Skip this version', exact: true });
     const snooze = page.getByRole('button', { name: 'Remind me later', exact: true });
-    await skip.waitFor({ timeout: 3000 });
+    await skip.waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    await settleFrames(page);
     const notice = page.locator('#update-notice');
     const before = await notice.boundingBox();
     const request = page.waitForRequest((request) => request.url().endsWith('/api/updates/skip'));
@@ -9548,6 +9507,7 @@ test('administrator skips the displayed update only after confirmed response and
     assert.equal(await snooze.isDisabled(), true);
     assert.equal(await notice.isVisible(), true);
     assert.equal(await page.locator('#refresh').getAttribute('aria-busy'), 'true');
+    await settleFrames(page);
     assert.deepEqual(await notice.boundingBox(), before, 'Pending mutation does not insert a loading row');
     release();
     await notice.waitFor({ state: 'hidden' });
@@ -9628,7 +9588,7 @@ test('phone navigation and resource panels reuse controls with modal focus and c
     );
     await page.goto(`${base}#/grids/${gridA}/items`);
     const menu = page.getByRole('button', { name: 'Navigation', exact: true });
-    await menu.waitFor({ timeout: 3000 });
+    await menu.waitFor();
     assert.equal(await page.getByRole('link', { name: 'Web settings', exact: true }).isVisible(), false);
     await menu.click();
     await page.getByRole('dialog', { name: 'Navigation', exact: true }).waitFor();
@@ -9820,8 +9780,6 @@ test('phone panel icon buttons belong to the window heading with search below', 
 // successful server data and the application operation already started by the user's action.
 test('theme partial mount failure releases external nodes and aborts event handlers before retry', async (t) => {
     const { page, options, base } = await fixture(t);
-    page.setDefaultTimeout(3000);
-    page.setDefaultNavigationTimeout(5000);
     options.themeEntry = `
         import { boot } from './assets/web/app/boot.js';
         let mounts = 0;
@@ -9859,8 +9817,6 @@ test('theme partial mount failure releases external nodes and aborts event handl
 
 test('theme render failure preserves loaded resources and pending crafting without replay on retry', async (t) => {
     const { page, options, base } = await fixture(t);
-    page.setDefaultTimeout(3000);
-    page.setDefaultNavigationTimeout(5000);
     let release;
     const pending = new Promise((resolve) => {
         release = resolve;
@@ -9926,8 +9882,6 @@ test('theme render failure preserves loaded resources and pending crafting witho
 
 test('a restored cached page reloads its disposed application', async (t) => {
     const { page, options, base } = await fixture(t);
-    page.setDefaultTimeout(3000);
-    page.setDefaultNavigationTimeout(5000);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('searchbox', { name: 'Search resources', exact: true }).waitFor();
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
@@ -10462,6 +10416,8 @@ test('tracking chart keeps missing periods blank and pixel rendering survives na
     };
     await page.goto(`${base}#/grids/${gridA}/tracking/iron`);
     await page.locator('.tracking-view canvas').waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    await settleFrames(page);
     const raster = await page.locator('.tracking-view .uplot').evaluate((root) => {
         const canvas = root.querySelector('canvas'),
             box = canvas.getBoundingClientRect(),
@@ -10488,7 +10444,7 @@ test('tracking chart keeps missing periods blank and pixel rendering survives na
     await page.mouse.down();
     await page.mouse.move(bounds.x + bounds.width * 0.2 + 2, bounds.y + 50);
     await page.mouse.up();
-    await page.locator('.tracking-view select').nth(1).selectOption('smooth', { timeout: 3000 });
+    await page.locator('.tracking-view select').nth(1).selectOption('smooth');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth);
 });
@@ -11857,8 +11813,7 @@ test('terminal heartbeats renew a bounded lease without refreshing inventory or 
         options.requests.filter((request) => request.path.endsWith('/items/events') && request.method === 'POST');
     await page.clock.fastForward(30000);
     const renewed = page.waitForResponse(
-        (response) => response.url().includes('/items/events') && response.request().method() === 'POST',
-        { timeout: 1500 }
+        (response) => response.url().includes('/items/events') && response.request().method() === 'POST'
     );
     options.itemStreams[0].write('event: heartbeat\ndata: {}\n\n');
     const response = await renewed;
@@ -12387,7 +12342,7 @@ test('Home pin cards preserve exact sampled values and independent settings whil
     const flowLine = first.locator('.home-pin-recent .home-pin-flow-line');
     await flowLine.locator('[data-flow="input"]').hover();
     const flowTooltip = page.getByRole('tooltip');
-    await flowTooltip.waitFor({ timeout: 3000 });
+    await flowTooltip.waitFor();
     assert.match(await flowTooltip.textContent(), /9,007,199,254,740,993/);
     assert.match(await flowTooltip.textContent(), /9,007,199,254,740,994/);
     assert.ok(await flowTooltip.locator('time').count(), 'flow measurement time uses the shared tooltip');
@@ -12667,9 +12622,7 @@ test('a live CPU header takes its product icon from the page merged for its own 
     );
     const product = page.getByRole('region', { name: 'Current job', exact: true }).locator('.resource-icon');
     await page.waitForFunction(
-        () => document.querySelector('.cpu-detail-output .resource-icon')?.style.backgroundImage,
-        null,
-        { timeout: 3000 }
+        () => document.querySelector('.cpu-detail-output .resource-icon')?.style.backgroundImage
     );
     const newPage = 'c'.repeat(64);
     const newPageRequests = () => options.requests.filter((request) => request.path.includes(`/pages/${newPage}`));
