@@ -128,6 +128,7 @@ export type CpuResource = ResourceDescription & {
     pending: number;
     stored: number;
     timeSpentCrafting: number;
+    crafting: boolean;
     craftedTotal: number;
     shareInCraftingTime: number;
     shareInCraftingTimeCombined: number;
@@ -145,6 +146,19 @@ export type CpuDetail = {
     timeStarted: number;
     timeElapsed: number;
 };
+/** The CPU state without its resources; a live delta replaces it whole when it changes. */
+export type CpuHeader = Omit<CpuDetail, 'items'>;
+/** Absolute measurements of one resource; `timeSpentCrafting` is as of the delta and still grows while `crafting`. */
+export type CpuResourceUpdate = {
+    itemKey: string;
+    active: number;
+    pending: number;
+    stored: number;
+    craftedTotal: number;
+    timeSpentCrafting: number;
+    crafting: boolean;
+};
+export type CpuDelta = LiveDelta<CpuResource, CpuResourceUpdate> & { cpu?: CpuHeader | null };
 export type PlanItem = ResourceDescription & {
     stored: number;
     requested: number;

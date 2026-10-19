@@ -42,6 +42,11 @@ the subscription.
 Themes can use it to distinguish a refreshed inventory from incremental updates. `items` always contains
 the current resources; any delayed sorting or temporary empty rows belong to the theme's own view.
 
+While the selected CPU follows live updates, `cpus.stream` reports the connection and is null otherwise.
+Its `detail` changes on every update, and a busy CPU's elapsed time, time spent crafting, time shares and
+rates advance about once a second without network requests, so render them from `cpus.detail` on each
+state notification.
+
 Network `settings.current` contains confirmed values and `settings.draft` contains editable values.
 `settings.limits` supplies the server's `min`, `max` and `defaultValue` for stock and flow intervals
 and retention days, plus the read-only `historyMaxRowsPerGrid` cap. It is null until settings load.

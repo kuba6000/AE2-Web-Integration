@@ -24,7 +24,7 @@ export type LiveStreamHost<Row, Update, Delta> = {
     status: (next: LiveStreamState | null) => void;
     apply: (change: LiveChange<Row>) => void;
     /** An open connection failed; `confirmed` tells whether it had ever delivered an event. */
-    failed: (confirmed: boolean) => void;
+    failed?: (confirmed: boolean) => void;
     changed: () => void;
     /** The stream is stopped and the owner must take a fresh snapshot. */
     resync: () => void;
@@ -144,7 +144,7 @@ export function createLiveStream<
             },
             error() {
                 if (!current()) return;
-                host.failed(confirmed);
+                host.failed?.(confirmed);
                 stop();
                 host.status({ status: 'connecting', lastEventAt: null });
                 host.changed();

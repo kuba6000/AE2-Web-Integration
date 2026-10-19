@@ -107,7 +107,8 @@ export function createTerminal(
             schedule();
         },
         () => iconsEnabled && state.iconPack.available === true,
-        notifications.publish
+        notifications.publish,
+        { enabled: () => state.preferences.autoRefresh, updated: notify }
     );
     const history = createHistory(
         api,
@@ -374,10 +375,10 @@ export function createTerminal(
         if (!state.grids.some((grid) => grid.key === state.route.gridKey)) crafting.block('GRID_NOT_FOUND');
         else return crafting.refresh();
     }
-    function loadCpus() {
+    function loadCpus(automatic = false) {
         if (state.route.view !== 'cpus' || state.gridStatus !== 'ready') return;
         if (!state.grids.some((grid) => grid.key === state.route.gridKey)) cpus.block('GRID_NOT_FOUND');
-        else return cpus.refresh();
+        else return cpus.refresh(automatic);
     }
     function loadHistory(reloadDetail = false) {
         if (state.route.view !== 'history' || state.gridStatus !== 'ready') return;
@@ -449,7 +450,7 @@ export function createTerminal(
                 else if (!state.grids.some((grid) => grid.key === state.route.gridKey)) invalidateItems();
                 else if (state.selected) await resourceHistory.refresh(automatic);
                 await loadCrafting();
-                await loadCpus();
+                await loadCpus(automatic);
                 await loadHistory(reloadDetail);
                 await loadSettings();
                 if (state.route.view === 'tracking') await resourceHistory.refresh(automatic);
@@ -576,8 +577,13 @@ export function createTerminal(
         preference<K extends keyof Preferences>(name: K, value: Preferences[K]) {
             preferences.set(name, value);
             if (name === 'autoRefresh') {
-                if (value) void loadItems();
-                else live.stop();
+                if (value) {
+                    void loadItems();
+                    void loadCpus();
+                } else {
+                    live.stop();
+                    cpus.stopLive();
+                }
                 schedule();
             }
             notify();

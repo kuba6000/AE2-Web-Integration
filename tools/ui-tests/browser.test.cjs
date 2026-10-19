@@ -956,6 +956,17 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                 }
                 response.statusCode = options.cancelStatus === 'OK' ? 200 : 409;
                 response.end(JSON.stringify({ status: options.cancelStatus, data: null }));
+            } else if (/\/cpus\/[^/]+\/events$/.test(resource) && request.method === 'POST') {
+                response.end(JSON.stringify({ status: 'OK', data: null }));
+            } else if (/\/cpus\/[^/]+\/events$/.test(resource)) {
+                response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+                response.flushHeaders();
+                response.write('event: ready\ndata: {}\n\n');
+                options.cpuStreams ??= [];
+                options.cpuStreams.push(response);
+                response.on('close', () => {
+                    options.cpuStreams = options.cpuStreams.filter((stream) => stream !== response);
+                });
             } else if (/\/cpus\/[^/]+$/.test(resource)) {
                 const key = decodeURIComponent(resource.split('/').at(-1));
                 const status = options.detailError || (options.cpuDetails[key] ? 'OK' : 'CPU_NOT_FOUND');
@@ -964,7 +975,13 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
                     JSON.stringify({
                         status,
                         data: status === 'OK' ? options.cpuDetails[key] : null,
-                        icons: url.searchParams.get('icons') === 'true' ? options.icons : null
+                        icons: url.searchParams.get('icons') === 'true' ? options.icons : null,
+                        ...(status === 'OK' && options.cpuLiveView && url.searchParams.get('live') === 'true'
+                            ? {
+                                  view: options.cpuLiveView,
+                                  subscription: `cpu-subscription-${options.cpuLiveView.revision}`
+                              }
+                            : {})
                     })
                 );
             } else if (resource.endsWith('/items/events') && request.method === 'POST') {
@@ -1725,7 +1742,8 @@ test('missing resource sprites share a question mark in detailed inventory and C
         .getByRole('button', { name: /Iron Ingot/ });
     await cpuItem.waitFor();
     assert.equal(await cpuItem.locator('.resource-icon').isVisible(), false);
-    assert.equal(options.requests.filter((r) => r.path.endsWith('/cpus/cpu-a')).at(-1).query, '');
+    const detailQuery = options.requests.filter((r) => r.path.endsWith('/cpus/cpu-a')).at(-1).query;
+    assert.equal(new URLSearchParams(detailQuery).has('icons'), false);
     await clickTab(page, 'Web settings');
     await page.getByRole('combobox', { name: 'Terminal display', exact: true }).selectOption('both');
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
@@ -1734,7 +1752,8 @@ test('missing resource sprites share a question mark in detailed inventory and C
         await cpuItem.locator('.resource-icon').evaluate((icon) => getComputedStyle(icon, '::before').content),
         '"?"'
     );
-    assert.equal(options.requests.filter((r) => r.path.endsWith('/cpus/cpu-a')).at(-1).query, '?icons=true');
+    const iconQuery = options.requests.filter((r) => r.path.endsWith('/cpus/cpu-a')).at(-1).query;
+    assert.equal(new URLSearchParams(iconQuery).get('icons'), 'true');
 });
 
 test('compact terminal mode persists and preserves accessible selection and crafting', async (t) => {
@@ -12616,4 +12635,197 @@ test('Home sampled stock uses the latest accepted range and survives an independ
     pending();
     await page.waitForFunction(() => document.querySelector('.home-pin-settings fieldset')?.disabled === false);
     assert.equal(await card.locator(':scope > .home-pin-summary dd').first().textContent(), '7');
+});
+
+const liveCpuRow = (itemKey, displayName, extra = {}) => ({
+    ...cpuWork.items[0],
+    itemKey,
+    displayName,
+    registryPath: itemKey,
+    crafting: false,
+    ...extra
+});
+
+// Opens a busy CPU whose detail follows the simulated live stream; `send` writes a delta to the newest stream.
+async function openLiveCpu(t, work = {}) {
+    const context = await fixture(t);
+    const { page, options, base } = context;
+    options.cpuLiveView = { generation: '1', revision: '1' };
+    options.cpus['cpu-a'] = { ...cpu, isBusy: true, supportsPause: true };
+    options.cpuDetails['cpu-a'] = {
+        ...cpuWork,
+        supportsPause: true,
+        items: [
+            liveCpuRow('iron', 'Iron Ingot'),
+            liveCpuRow('gold', 'Gold Ingot', { active: 0, pending: 0, stored: 3 })
+        ],
+        ...work
+    };
+    const opened = page.waitForResponse((response) => response.url().includes('/cpus/cpu-a/events'));
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await opened;
+    await page.locator('#refresh .live-icon').waitFor();
+    return {
+        ...context,
+        resources: page.getByRole('region', { name: 'CPU resources', exact: true }),
+        detailReads: () => options.requests.filter((request) => request.path.endsWith('/cpus/cpu-a')),
+        send(revision, content = {}) {
+            const view = { generation: options.cpuLiveView.generation, revision: String(revision) };
+            options.cpuStreams
+                .at(-1)
+                .write(
+                    `event: delta\ndata: ${JSON.stringify({ view, updates: [], definitions: [], removed: [], icons: null, ...content })}\n\n`
+                );
+        }
+    };
+}
+
+const liveUpdate = (itemKey, extra) => ({
+    itemKey,
+    active: 0,
+    pending: 0,
+    stored: 0,
+    craftedTotal: 10,
+    timeSpentCrafting: 5000,
+    crafting: false,
+    ...extra
+});
+
+test('live CPU detail applies absolute updates, new and removed resources and unkeyed replacement without rereading', async (t) => {
+    const { page, options, resources, detailReads, send } = await openLiveCpu(t);
+    assert.equal(detailReads().length, 1);
+    assert.equal(detailReads()[0].query, '?live=true');
+    const iron = resources.getByRole('button', { name: /^Iron Ingot/ });
+    assert.match(await iron.getAttribute('aria-label'), /Active: 4 · Pending: 6 · Stored: 2/);
+    send(2, { updates: [liveUpdate('iron', { active: 9, stored: 5 })] });
+    await resources.getByRole('button', { name: /^Iron Ingot.*Active: 9 · Stored: 5/ }).waitFor();
+    send(3, {
+        definitions: [liveCpuRow('silver', 'Silver Ingot', { active: 2, pending: 0, stored: 0 })],
+        removed: ['gold']
+    });
+    await resources.getByRole('button', { name: /^Silver Ingot.*Active: 2/ }).waitFor();
+    await resources.getByRole('button', { name: /^Gold Ingot/ }).waitFor({ state: 'detached' });
+    send(4, { unkeyed: [liveCpuRow(null, 'Mystery Resource', { active: 1, pending: 0, stored: 0 })] });
+    await resources.getByRole('button', { name: /^Mystery Resource/ }).waitFor();
+    assert.equal(await resources.getByRole('button', { name: /^Iron Ingot/ }).count(), 1);
+    send(5, { unkeyed: [] });
+    await resources.getByRole('button', { name: /^Mystery Resource/ }).waitFor({ state: 'detached' });
+    options.cpus['cpu-b'] = { ...cpu, name: 'Renamed assembler' };
+    const listed = page.waitForResponse((response) => new URL(response.url()).pathname === `/api/grids/${gridA}/cpus`);
+    await poll(page);
+    await settleResponse(page, (await listed).request());
+    await page.getByRole('link', { name: /Renamed assembler/ }).waitFor();
+    assert.equal(detailReads().length, 1, 'Polling the CPU list must not reread a CPU that follows live updates');
+    assert.equal(options.cpuStreams.length, 1);
+});
+
+test('a live CPU header section replaces the CPU state and keeps its resources', async (t) => {
+    const { page, options, resources, send } = await openLiveCpu(t);
+    await page.getByRole('button', { name: 'Pause current work', exact: true }).waitFor();
+    const header = { ...options.cpuDetails['cpu-a'], isPaused: true, timeElapsed: 20000, items: null };
+    send(2, { cpu: header });
+    await page.getByRole('button', { name: 'Resume current work', exact: true }).waitFor();
+    await page
+        .getByRole('region', { name: 'Current job', exact: true })
+        .getByText(/Elapsed: 20 s/)
+        .waitFor();
+    assert.equal(await resources.getByRole('button', { name: /^Iron Ingot/ }).count(), 1);
+    send(3, { cpu: { ...header, isPaused: false } });
+    await page.getByRole('button', { name: 'Pause current work', exact: true }).waitFor();
+    assert.equal(await resources.getByRole('button', { name: /^Gold Ingot/ }).count(), 1);
+});
+
+test('an invalidated live CPU takes a fresh snapshot that replaces its subscription and recovers from a lost stream', async (t) => {
+    const { page, options, resources, detailReads, send } = await openLiveCpu(t);
+    options.cpuDetails['cpu-a'] = {
+        ...options.cpuDetails['cpu-a'],
+        items: [liveCpuRow('copper', 'Copper Ingot', { active: 8, pending: 0, stored: 0 })]
+    };
+    options.cpuLiveView = { generation: '2', revision: '7' };
+    const snapshot = page.waitForRequest(
+        (request) => new URL(request.url()).pathname.endsWith('/cpus/cpu-a') && request.url().includes('replace=')
+    );
+    options.cpuStreams[0].write('event: invalidate\ndata: {}\n\n');
+    const request = await snapshot;
+    assert.equal(new URL(request.url()).searchParams.get('replace'), 'cpu-subscription-1');
+    assert.equal(new URL(request.url()).searchParams.get('live'), 'true');
+    await resources.getByRole('button', { name: /^Copper Ingot.*Active: 8/ }).waitFor();
+    await resources.getByRole('button', { name: /^Iron Ingot/ }).waitFor({ state: 'detached' });
+    await serverState(() => options.cpuStreams.length, 1);
+    assert.equal(detailReads().length, 2);
+    send(8, { updates: [liveUpdate('copper', { active: 3, stored: 9 })] });
+    await resources.getByRole('button', { name: /^Copper Ingot.*Active: 3/ }).waitFor();
+    options.cpuStreams[0].end();
+    const reconnected = page.waitForResponse((response) => response.url().includes('/cpus/cpu-a/events'));
+    await page.clock.fastForward(2000);
+    await reconnected;
+    assert.equal(detailReads().length, 3, 'A lost connection recovers through a new snapshot');
+    await page.locator('#refresh .live-icon').waitFor();
+});
+
+test('running CPU measurements advance on the local clock without network traffic', async (t) => {
+    const { page, options, resources } = await openLiveCpu(t, {
+        timeElapsed: 10000,
+        items: [
+            liveCpuRow('iron', 'Iron Ingot', { crafting: true, timeSpentCrafting: 5000, craftedTotal: 10 }),
+            liveCpuRow('gold', 'Gold Ingot', { crafting: false, timeSpentCrafting: 2000, craftedTotal: 4 })
+        ]
+    });
+    const traffic = () => options.requests.filter((request) => /\/cpus\/cpu-a(\/events)?$/.test(request.path)).length;
+    const before = traffic();
+    const job = page.getByRole('region', { name: 'Current job', exact: true });
+    const tooltip = page.getByRole('tooltip');
+    await job.getByText(/Elapsed: 1\d(\.\d+)? s/).waitFor();
+    await resources.getByRole('button', { name: /^Iron Ingot/ }).hover();
+    await tooltip.filter({ hasText: /Processing time: [56](\.\d+)? s/ }).waitFor();
+    await page.clock.fastForward(3000);
+    await job.getByText(/Elapsed: 1[3-5](\.\d+)? s/).waitFor();
+    await tooltip.filter({ hasText: /Processing time: (8|9|10)(\.\d+)? s/ }).waitFor();
+    await resources.getByRole('button', { name: /^Gold Ingot/ }).hover();
+    await tooltip.filter({ hasText: /Processing time: 2 s/ }).waitFor();
+    assert.equal(traffic(), before, 'Clock progress is derived locally and never requested');
+});
+
+test('leaving the live CPU detail closes its stream and returning opens a new one', async (t) => {
+    const { page, options, resources, detailReads } = await openLiveCpu(t);
+    await clickTab(page, 'CPUs');
+    await serverState(() => options.cpuStreams.length, 0);
+    assert.equal(await page.locator('#refresh .live-icon').isVisible(), false);
+    assert.equal(await resources.isVisible(), false);
+    await page.getByRole('link', { name: /Assembler.*cpu-a/ }).click();
+    await page.locator('#refresh .live-icon').waitFor();
+    await serverState(() => options.cpuStreams.length, 1);
+    assert.equal(detailReads().length, 2);
+    await page.locator('a[data-view="web-settings"]').click();
+    await serverState(() => options.cpuStreams.length, 0);
+});
+
+test('CPU actions on a live detail confirm first and then restart its live view', async (t) => {
+    const { page, options, resources, detailReads, send } = await openLiveCpu(t);
+    await page.getByRole('button', { name: 'Pause current work', exact: true }).click();
+    await page.getByRole('button', { name: 'Resume current work', exact: true }).waitFor();
+    assert.equal(detailReads().length, 2);
+    assert.equal(new URLSearchParams(detailReads()[1].query).get('replace'), 'cpu-subscription-1');
+    await serverState(() => options.cpuStreams.length, 1);
+    await page.locator('#refresh .live-icon').waitFor();
+    send(2, { updates: [liveUpdate('iron', { active: 11 })] });
+    await resources.getByRole('button', { name: /^Iron Ingot.*Active: 11/ }).waitFor();
+});
+
+test('a CPU detail is read by snapshots only while automatic refresh is off', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpuLiveView = { generation: '1', revision: '1' };
+    await seedAutomaticRefresh(page, base, false);
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await page
+        .getByRole('region', { name: 'CPU resources', exact: true })
+        .getByRole('button', { name: /Iron Ingot/ })
+        .waitFor();
+    const reads = options.requests.filter((request) => request.path.endsWith('/cpus/cpu-a'));
+    assert.deepEqual(
+        reads.map((request) => request.query),
+        ['']
+    );
+    assert.equal(options.cpuStreams?.length ?? 0, 0);
+    assert.equal(await page.locator('#refresh .live-icon').isVisible(), false);
 });

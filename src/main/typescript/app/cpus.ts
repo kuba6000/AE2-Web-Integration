@@ -1,5 +1,15 @@
-import type { CpuInfo, CpuDetail, IconMetadata } from './api-types.js';
+import type {
+    CpuInfo,
+    CpuDetail,
+    CpuHeader,
+    CpuResource,
+    CpuResourceUpdate,
+    CpuDelta,
+    IconMetadata
+} from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
+import { deriveCpuDetail, type CpuMeasured } from './cpu-timing.js';
+import { createLiveStream, type LiveStreamState } from './live-stream.js';
 import type { Route } from './router.js';
 import type { Notify } from './notifications.js';
 
@@ -13,9 +23,20 @@ export type CpuState = {
     overviewIcons: IconMetadata | null;
     error: string | null;
     outcomes: Record<string, CpuOutcome>;
+    /** Connection of the selected CPU's live updates; null while its detail is read by snapshots only. */
+    stream: LiveStreamState | null;
 };
-/** Grid CPU summaries and selected current work. The application owns refresh scheduling. */
-export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: () => boolean, notify: Notify) {
+/**
+ * Grid CPU summaries and selected current work. The application owns refresh scheduling. While the selected CPU
+ * follows a live stream, `live.updated` reports its changes without rescheduling the polling of the summaries.
+ */
+export function createCpuMonitor(
+    api: Api,
+    changed: () => void,
+    iconsEnabled: () => boolean,
+    notify: Notify,
+    live: { enabled: () => boolean; updated: () => void }
+) {
     const state: CpuState = {
         status: 'idle',
         reading: false,
@@ -24,7 +45,8 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
         icons: null,
         overviewIcons: null,
         error: null,
-        outcomes: {}
+        outcomes: {},
+        stream: null
     };
     /** Outcomes belong to a grid/CPU, regardless of which screen initiated the mutation. */
     const outcomes = new Map<string, Record<string, CpuOutcome>>();
@@ -32,11 +54,67 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
     let generation = 0;
     let request: AbortController | undefined;
     let disposed = false;
+    /** What a live snapshot and its deltas delivered; the detail themes see is derived from it for the present. */
+    let source: { header: CpuHeader; headerAt: number; rows: CpuMeasured[] | null } | null = null;
+    let clock: ReturnType<typeof setInterval> | undefined;
+
+    const stream = createLiveStream<CpuResource, CpuResourceUpdate, CpuDelta>({
+        enabled: live.enabled,
+        rows: () => source?.rows?.map(({ resource }) => resource) ?? [],
+        icons: () => state.icons,
+        rowKey: (resource) => resource.itemKey,
+        updateKey: (update) => update.itemKey,
+        merge: (resource, update) => ({ ...resource, ...update }),
+        section(delta) {
+            if (delta.cpu && source)
+                source = { ...source, header: { ...source.header, ...delta.cpu }, headerAt: Date.now() };
+        },
+        status(next) {
+            state.stream = next;
+        },
+        apply({ rows, icons }) {
+            if (rows && source) {
+                const arrivals = new Map(source.rows?.map(({ resource, receivedAt }) => [resource, receivedAt]));
+                const now = Date.now();
+                source.rows = rows.all.map((resource) => ({ resource, receivedAt: arrivals.get(resource) ?? now }));
+            }
+            if (icons) state.icons = icons;
+            showSource();
+        },
+        changed: live.updated,
+        resync() {
+            invalidateRead();
+            void refresh();
+        }
+    });
+
+    /** Themes see running measurements advance, so the detail is derived again while the CPU works. */
+    function showSource() {
+        if (source) state.detail = deriveCpuDetail(source.header, source.headerAt, source.rows, Date.now());
+        const ticking = !!source?.header.isBusy && route.view === 'cpus' && !!route.cpuKey;
+        if (ticking && !clock) {
+            clock = setInterval(() => {
+                if (document.hidden) return;
+                showSource();
+                live.updated();
+            }, 1000);
+        } else if (!ticking && clock) {
+            clearInterval(clock);
+            clock = undefined;
+        }
+    }
+
+    function stopLive() {
+        stream.stop();
+        source = null;
+        showSource();
+    }
 
     function invalidateRead() {
         generation++;
         request?.abort();
         state.reading = false;
+        stopLive();
     }
 
     function fail(
@@ -47,6 +125,7 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
             state.cpus = state.cpus.filter((cpu) => cpu.key !== cpuKey);
             if (route.view === 'cpus' && route.cpuKey && route.cpuKey !== cpuKey) return;
         } else state.cpus = [];
+        stopLive();
         state.error = status;
         state.detail = null;
         state.icons = null;
@@ -54,7 +133,28 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
         state.status = 'error';
     }
 
-    async function refresh() {
+    /** Takes the selected CPU's snapshot and follows it with live updates when they are wanted. */
+    async function loadDetail(gridKey: string, cpuKey: string, signal: AbortSignal, version: number) {
+        stopLive();
+        const detail = await api.cpu(gridKey, cpuKey, signal, iconsEnabled(), live.enabled());
+        if (version !== generation) return;
+        const { items, ...header } = detail.data;
+        const at = Date.now();
+        source = { header, headerAt: at, rows: items?.map((resource) => ({ resource, receivedAt: at })) ?? null };
+        stream.start(
+            detail,
+            (subscription, handlers) => api.cpuEvents(gridKey, cpuKey, subscription, iconsEnabled(), handlers),
+            () => !disposed && version === generation
+        );
+        // A snapshot that is not followed keeps the values the server derived for it.
+        if (!stream.active || !live.enabled()) source = null;
+        state.detail = detail.data;
+        state.icons = detail.icons;
+        showSource();
+    }
+
+    /** A selected CPU that is followed live is only read again by an explicit refresh, not by polling. */
+    async function refresh(automatic = false) {
         if (route.view !== 'cpus' || state.reading) return;
         const version = generation;
         const current = route;
@@ -72,10 +172,10 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
                     fail('CPU_NOT_FOUND');
                     return;
                 }
-                const detail = await api.cpu(current.gridKey, current.cpuKey, request.signal, iconsEnabled());
-                if (version !== generation) return;
-                state.detail = detail.data;
-                state.icons = detail.icons;
+                if (!automatic || !(stream.active || stream.reconnecting)) {
+                    await loadDetail(current.gridKey, current.cpuKey, request.signal, version);
+                    if (version !== generation) return;
+                }
             }
             state.status = 'ready';
         } catch (caught) {
@@ -139,6 +239,7 @@ export function createCpuMonitor(api: Api, changed: () => void, iconsEnabled: ()
     return {
         state,
         refresh,
+        stopLive,
         invalidateIcons() {
             invalidateRead();
             state.icons = null;

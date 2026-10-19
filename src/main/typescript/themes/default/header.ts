@@ -71,6 +71,8 @@ export function createHeader(
     controls.username.textContent = user.username;
     let state: ThemeState;
     let locale: Translator;
+    /** The live connection of what the current view shows. */
+    const currentStream = () => (state.route.view === 'cpus' ? state.cpus.stream : state.stream);
     bindTooltip(controls.selectedNetwork, () => {
         const grid = state.grids.find((grid) => grid.key === state.route.gridKey);
         const lines = [element('strong', locale.common('currentNetwork'))];
@@ -81,9 +83,10 @@ export function createHeader(
 
     bindTooltip(controls.logout, () => [element('span', locale.common('logout'))]);
     bindTooltip(controls.refresh, () => {
-        if (state.stream?.status === 'live' && state.stream.lastEventAt !== null) {
-            const timestamp = element('time', locale.time(state.stream.lastEventAt));
-            timestamp.dateTime = new Date(state.stream.lastEventAt).toISOString();
+        const stream = currentStream();
+        if (stream?.status === 'live' && stream.lastEventAt !== null) {
+            const timestamp = element('time', locale.time(stream.lastEventAt));
+            timestamp.dateTime = new Date(stream.lastEventAt).toISOString();
             const event = element('span', `${locale.t('liveLastEvent')}: `);
             event.append(timestamp);
             return [element('strong', locale.t('liveUpdates')), event, element('span', locale.t('liveResync'))];
@@ -154,11 +157,12 @@ export function createHeader(
             (state.route.view === 'settings' && state.settings.status === 'loading');
         const active =
             state.refreshingView || state.refreshing || state.gridStatus === 'loading' || viewLoading || actionPending;
-        const live = state.stream?.status === 'live';
+        const stream = currentStream();
+        const live = stream?.status === 'live';
         controls.liveIcon.hidden = !live;
         controls.refreshIcon.style.display = live ? 'none' : '';
         controls.refresh.setAttribute('aria-label', live ? locale.t('liveUpdates') : locale.common('refresh'));
-        controls.refresh.setAttribute('aria-busy', String(!live && (active || state.stream?.status === 'connecting')));
+        controls.refresh.setAttribute('aria-busy', String(!live && (active || stream?.status === 'connecting')));
         controls.activity.hidden = !active;
         controls.activity.setAttribute('aria-label', locale.common('activity'));
         controls.activity.setAttribute('aria-live', actionPending ? 'polite' : 'off');

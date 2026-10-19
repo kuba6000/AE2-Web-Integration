@@ -5,6 +5,7 @@ import type {
     Plan,
     CpuInfo,
     CpuDetail,
+    CpuDelta,
     HistoryEntry,
     CraftingHistory,
     GridSettings,
@@ -109,8 +110,16 @@ export type Api = {
         gridKey: string,
         cpuKey: string,
         signal?: AbortSignal,
-        icons?: boolean
+        icons?: boolean,
+        live?: boolean
     ) => Promise<ResourceResponse<CpuDetail>>;
+    cpuEvents: (
+        gridKey: string,
+        cpuKey: string,
+        subscription: string,
+        icons: boolean,
+        handlers: EventHandlers<CpuDelta>
+    ) => () => void;
     cancelCpu: (gridKey: string, cpuKey: string) => Promise<null>;
     pauseCpu: (gridKey: string, cpuKey: string, paused: boolean) => Promise<null>;
     history: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<HistoryEntry[]>>;
@@ -162,8 +171,10 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
     } catch {
         // A blocked or corrupt browser store still permits in-document resync.
     }
-    function rememberSubscription(gridKey: string, token: string) {
-        subscriptions.set(gridKey, token);
+    /** A grid key never contains a slash, so a CPU's subscription cannot collide with its grid's. */
+    const cpuSubscriptionKey = (gridKey: string, cpuKey: string) => `${gridKey}/cpus/${cpuKey}`;
+    function rememberSubscription(key: string, token: string) {
+        subscriptions.set(key, token);
         try {
             sessionStorage.setItem(subscriptionStorageKey, JSON.stringify(Object.fromEntries(subscriptions)));
         } catch {
@@ -344,10 +355,28 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             }),
         cpus: (gridKey, signal, icons = false) =>
             read(`api/grids/${encodeURIComponent(gridKey)}/cpus${icons ? '?icons=true' : ''}`, { signal }),
-        cpu: (gridKey, cpuKey, signal, icons = false) =>
-            read(
-                `api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}${icons ? '?icons=true' : ''}`,
+        cpu: async (gridKey, cpuKey, signal, icons = false, live = false) => {
+            const query = new URLSearchParams();
+            if (icons) query.set('icons', 'true');
+            const key = cpuSubscriptionKey(gridKey, cpuKey);
+            if (live) {
+                query.set('live', 'true');
+                const previous = subscriptions.get(key);
+                if (previous) query.set('replace', previous);
+            }
+            const result = await read<CpuDetail>(
+                `api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}${query.size ? `?${query}` : ''}`,
                 { signal }
+            );
+            if (live && result.subscription && !signal?.aborted) rememberSubscription(key, result.subscription);
+            return result;
+        },
+        cpuEvents: (gridKey, cpuKey, subscription, icons, handlers) =>
+            events(
+                `api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}/events`,
+                subscription,
+                icons,
+                handlers
             ),
         cancelCpu: (gridKey, cpuKey) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}/cancel`, {
