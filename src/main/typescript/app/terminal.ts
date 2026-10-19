@@ -6,8 +6,8 @@ import type {
     IconMetadata,
     GridSettings,
     ApplicationContext,
-    TerminalView,
-    TerminalDelta
+    TerminalDelta,
+    StoredResourceUpdate
 } from './api-types.js';
 import type { RecentTracking } from './api-types.js';
 import type { createIconLoader } from './icons.js';
@@ -21,10 +21,11 @@ import { createCrafting } from './crafting.js';
 import { createCpuMonitor } from './cpus.js';
 import { createHistory } from './history.js';
 import { createResourceHistory, type ResourceHistoryState } from './resource-history.js';
+import { createLiveStream, type LiveStreamState } from './live-stream.js';
 import { createGridSettings } from './settings.js';
 import { createNotifications } from './notifications.js';
 
-export type TerminalStreamState = { status: 'connecting'; lastEventAt: null } | { status: 'live'; lastEventAt: number };
+export type TerminalStreamState = LiveStreamState;
 
 export type TerminalData = {
     capabilities: ApplicationContext['capabilities'];
@@ -72,12 +73,7 @@ export function createTerminal(
     let itemRequest: AbortController | undefined;
     let iconRequest: AbortController | undefined;
     let iconPackId: string | null = null;
-    let liveView: TerminalView | undefined;
-    let subscription: string | undefined;
-    let closeStream: (() => void) | undefined;
-    let reconnect: ReturnType<typeof setTimeout> | undefined;
     let serial = 0;
-    let streamSerial = 0;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let refreshingGrids: Promise<void> | null = null;
@@ -177,6 +173,44 @@ export function createTerminal(
         settings: settings.state
     };
 
+    const live = createLiveStream<StoredResource, StoredResourceUpdate, TerminalDelta>({
+        enabled: () => state.preferences.autoRefresh,
+        rows: () => state.items,
+        icons: () => state.itemIcons,
+        rowKey: (item) => item.itemKey,
+        updateKey: (update) => update.itemKey,
+        merge: (item, update) => ({ ...item, quantity: update.quantity, craftable: update.craftable }),
+        section(delta) {
+            if (delta.recent) {
+                state.recent = {
+                    ...delta.recent,
+                    resources: { ...state.recent?.resources, ...delta.recent.resources }
+                };
+            }
+            if (state.recent) for (const removed of delta.removed) delete state.recent.resources[removed];
+        },
+        status(next) {
+            state.stream = next;
+            if (next?.status === 'live') state.itemError = null;
+        },
+        apply({ rows, icons }) {
+            if (rows) {
+                state.items = rows.all;
+                state.selected = state.selected?.itemKey ? (rows.keyed.get(state.selected.itemKey) ?? null) : null;
+                if (!state.selected) resourceHistory.clear();
+            }
+            if (icons) state.itemIcons = icons;
+            state.updatedAt = Date.now();
+        },
+        failed(confirmed) {
+            if (!confirmed) state.itemError = 'NETWORK_ERROR';
+        },
+        changed: notify,
+        resync() {
+            void loadItems();
+        }
+    });
+
     function restoreSelectedGrid() {
         const key = state.route.gridKey || state.selectedGridKey || preferences.values.selectedGridKey;
         state.selectedGridKey = state.grids.some((grid) => grid.key === key) ? key : null;
@@ -195,115 +229,8 @@ export function createTerminal(
         ].includes(status);
     }
 
-    function stopStream() {
-        streamSerial++;
-        state.stream = null;
-        closeStream?.();
-        closeStream = undefined;
-        clearTimeout(reconnect);
-        reconnect = undefined;
-        liveView = undefined;
-        subscription = undefined;
-    }
-    function startStream(key: string, version: number) {
-        if (!liveView || !subscription || !state.preferences.autoRefresh || disposed || version !== serial) return;
-        const connection = ++streamSerial;
-        closeStream?.();
-        state.stream = { status: 'connecting', lastEventAt: null };
-        const current = () =>
-            !disposed && version === serial && connection === streamSerial && state.preferences.autoRefresh;
-        closeStream = api.itemEvents(key, subscription, iconsEnabled && state.iconPack.available === true, {
-            ready() {
-                if (!current() || !liveView) return;
-                state.stream = { status: 'live', lastEventAt: Date.now() };
-                state.itemError = null;
-                notify();
-            },
-            delta(delta: TerminalDelta) {
-                if (!current() || !liveView) return;
-                if (delta.view.generation !== liveView.generation) {
-                    stopStream();
-                    void loadItems();
-                    return;
-                }
-                state.stream = { status: 'live', lastEventAt: Date.now() };
-                state.itemError = null;
-                if (BigInt(delta.view.revision) <= BigInt(liveView.revision)) {
-                    notify();
-                    return;
-                }
-                const previous = state.itemIcons;
-                if (previous && delta.icons && previous.packId !== delta.icons.packId) {
-                    stopStream();
-                    void loadItems();
-                    return;
-                }
-                const pages = [...(previous?.pages ?? [])];
-                const indices = (delta.icons?.pages ?? []).map((page) => {
-                    let index = pages.findIndex((existing) => existing.digest === page.digest);
-                    if (index < 0) {
-                        index = pages.length;
-                        pages.push(page);
-                    }
-                    return index;
-                });
-                const remap = (item: StoredResource): StoredResource => ({
-                    ...item,
-                    icon: item.icon && delta.icons ? { ...item.icon, page: indices[item.icon.page] } : null
-                });
-                if (delta.recent) {
-                    state.recent = {
-                        ...delta.recent,
-                        resources: { ...state.recent?.resources, ...delta.recent.resources }
-                    };
-                }
-                if (state.recent) for (const removed of delta.removed) delete state.recent.resources[removed];
-                if (delta.definitions.length || delta.updates.length || delta.removed.length || delta.unkeyed) {
-                    const keyed = new Map(
-                        state.items.filter((item) => item.itemKey).map((item) => [item.itemKey!, item])
-                    );
-                    for (const removed of delta.removed) keyed.delete(removed);
-                    for (const item of delta.definitions) if (item.itemKey) keyed.set(item.itemKey, remap(item));
-                    for (const update of delta.updates) {
-                        const item = keyed.get(update.itemKey);
-                        if (!item) {
-                            stopStream();
-                            void loadItems();
-                            return;
-                        }
-                        keyed.set(update.itemKey, { ...item, quantity: update.quantity, craftable: update.craftable });
-                    }
-                    const unkeyed = delta.unkeyed?.map(remap) ?? state.items.filter((item) => !item.itemKey);
-                    state.items = [...keyed.values(), ...unkeyed];
-                    state.selected = state.selected?.itemKey ? (keyed.get(state.selected.itemKey) ?? null) : null;
-                    if (!state.selected) resourceHistory.clear();
-                }
-                if (delta.icons) state.itemIcons = { ...delta.icons, pages };
-                state.updatedAt = Date.now();
-                state.itemError = null;
-                liveView = delta.view;
-                notify();
-            },
-            reset() {
-                if (!current()) return;
-                stopStream();
-                void loadItems();
-            },
-            error() {
-                if (!current()) return;
-                if (state.stream?.status !== 'live') state.itemError = 'NETWORK_ERROR';
-                stopStream();
-                state.stream = { status: 'connecting', lastEventAt: null };
-                notify();
-                reconnect = setTimeout(() => {
-                    reconnect = undefined;
-                    if (!disposed && version === serial) void loadItems();
-                }, 2000);
-            }
-        });
-    }
     function invalidateItems() {
-        stopStream();
+        live.stop();
         resourceHistory.clear();
         serial++;
         itemRequest?.abort();
@@ -328,7 +255,7 @@ export function createTerminal(
             return;
         }
         const recovering = state.stream?.status === 'connecting' && state.itemStatus === 'ready';
-        stopStream();
+        live.stop();
         if (recovering) state.stream = { status: 'connecting', lastEventAt: null };
         itemRequest?.abort();
         const request = new AbortController();
@@ -356,10 +283,13 @@ export function createTerminal(
                 : null;
             state.itemStatus = 'ready';
             state.updatedAt = Date.now();
-            liveView = result.view;
-            subscription = result.subscription;
-            startStream(key, version);
-            if (!liveView || !subscription || !state.preferences.autoRefresh) {
+            live.start(
+                result,
+                (subscription, handlers) =>
+                    api.itemEvents(key, subscription, iconsEnabled && state.iconPack.available === true, handlers),
+                () => !disposed && version === serial
+            );
+            if (!live.active || !state.preferences.autoRefresh) {
                 state.stream = null;
                 state.itemError = null;
             }
@@ -375,7 +305,7 @@ export function createTerminal(
                 state.itemError = status;
                 return;
             }
-            stopStream();
+            live.stop();
             resourceHistory.clear();
             state.items = [];
             state.recent = null;
@@ -490,7 +420,7 @@ export function createTerminal(
             return reloadDetail ? refreshingGrids.then(() => loadHistory(true)) : refreshingGrids;
         }
         if (!automatic && state.stream) {
-            stopStream();
+            live.stop();
             state.stream = { status: 'connecting', lastEventAt: null };
         }
         clearTimeout(timer);
@@ -515,7 +445,7 @@ export function createTerminal(
                 state.gridStatus = 'ready';
                 state.gridError = null;
                 notify();
-                if (!automatic || (!liveView && !reconnect && !state.refreshing)) await loadItems(automatic);
+                if (!automatic || (!live.active && !live.reconnecting && !state.refreshing)) await loadItems(automatic);
                 else if (!state.grids.some((grid) => grid.key === state.route.gridKey)) invalidateItems();
                 else if (state.selected) await resourceHistory.refresh(automatic);
                 await loadCrafting();
@@ -534,7 +464,7 @@ export function createTerminal(
                     state.stream?.status === 'connecting' &&
                     isTransientFailure(status)
                 ) {
-                    if (!reconnect && !state.refreshing) state.itemError = status;
+                    if (!live.reconnecting && !state.refreshing) state.itemError = status;
                     notify();
                     return;
                 }
@@ -601,7 +531,7 @@ export function createTerminal(
                 ['items', 'tracking'].includes(route.view) &&
                 ['items', 'tracking'].includes(state.route.view);
             if (related) {
-                stopStream();
+                live.stop();
                 serial++;
                 itemRequest?.abort();
                 state.refreshing = false;
@@ -647,14 +577,14 @@ export function createTerminal(
             preferences.set(name, value);
             if (name === 'autoRefresh') {
                 if (value) void loadItems();
-                else stopStream();
+                else live.stop();
                 schedule();
             }
             notify();
         },
         dispose() {
             disposed = true;
-            stopStream();
+            live.stop();
             notifications.dispose();
             clearTimeout(timer);
             gridRequest?.abort();

@@ -50,6 +50,12 @@ const responseStatuses = new Set([
     'TIMEOUT'
 ]);
 
+export type EventHandlers<Delta> = {
+    ready: () => void;
+    delta: (delta: Delta) => void;
+    reset: () => void;
+    error: () => void;
+};
 export type ApiFailure = Error & { status?: string; data?: unknown };
 export type Api = {
     resourcePins(signal?: AbortSignal, icons?: boolean): Promise<ResourceResponse<ResourcePin[]>>;
@@ -82,12 +88,7 @@ export type Api = {
         gridKey: string,
         subscription: string,
         icons: boolean,
-        handlers: {
-            ready: () => void;
-            delta: (delta: TerminalDelta) => void;
-            reset: () => void;
-            error: () => void;
-        }
+        handlers: EventHandlers<TerminalDelta>
     ) => () => void;
     createPlan: (
         gridKey: string,
@@ -255,6 +256,53 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
     function request<T>(path: string, options?: Parameters<typeof read>[1]): Promise<T> {
         return read<T>(path, options).then((result) => result.data);
     }
+    /** One server-sent stream of a live subscription; the lease is renewed from its heartbeats. */
+    function events<Delta>(path: string, subscription: string, icons: boolean, handlers: EventHandlers<Delta>) {
+        const query = new URLSearchParams({ subscription });
+        if (icons) query.set('icons', 'true');
+        const source = new EventSource(new URL(`${path}?${query}`, base));
+        const renewal = new AbortController();
+        let renewedAt = performance.now();
+        let renewing = false;
+        const close = () => {
+            source.close();
+            renewal.abort();
+        };
+        const failed = () => {
+            if (renewal.signal.aborted) return;
+            close();
+            handlers.error();
+        };
+        source.addEventListener('heartbeat', () => {
+            if (renewal.signal.aborted || renewing || performance.now() - renewedAt < 30000) return;
+            renewing = true;
+            renewedAt = performance.now();
+            void request<null>(`${path}?subscription=${encodeURIComponent(subscription)}`, {
+                method: 'POST',
+                signal: renewal.signal
+            })
+                .catch(failed)
+                .finally(() => {
+                    renewing = false;
+                });
+        });
+        source.addEventListener('ready', handlers.ready);
+        source.addEventListener('delta', (event) => {
+            try {
+                handlers.delta(JSON.parse(event.data) as Delta);
+            } catch {
+                close();
+                handlers.reset();
+            }
+        });
+        for (const event of ['reset', 'invalidate', 'revoked'])
+            source.addEventListener(event, () => {
+                close();
+                handlers.reset();
+            });
+        source.onerror = failed;
+        return close;
+    }
     return {
         context: (signal) => request('api/context', { signal }),
         themes: (signal) => request('api/themes', { signal }),
@@ -286,54 +334,8 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             if (live && result.subscription && !signal?.aborted) rememberSubscription(gridKey, result.subscription);
             return result;
         },
-        itemEvents(gridKey, subscription, icons, handlers) {
-            const query = new URLSearchParams({ subscription });
-            if (icons) query.set('icons', 'true');
-            const source = new EventSource(
-                new URL(`api/grids/${encodeURIComponent(gridKey)}/items/events?${query}`, base)
-            );
-            const renewal = new AbortController();
-            let renewedAt = performance.now();
-            let renewing = false;
-            const close = () => {
-                source.close();
-                renewal.abort();
-            };
-            const failed = () => {
-                if (renewal.signal.aborted) return;
-                close();
-                handlers.error();
-            };
-            source.addEventListener('heartbeat', () => {
-                if (renewal.signal.aborted || renewing || performance.now() - renewedAt < 30000) return;
-                renewing = true;
-                renewedAt = performance.now();
-                void request<null>(
-                    `api/grids/${encodeURIComponent(gridKey)}/items/events?subscription=${encodeURIComponent(subscription)}`,
-                    { method: 'POST', signal: renewal.signal }
-                )
-                    .catch(failed)
-                    .finally(() => {
-                        renewing = false;
-                    });
-            });
-            source.addEventListener('ready', handlers.ready);
-            source.addEventListener('delta', (event) => {
-                try {
-                    handlers.delta(JSON.parse(event.data) as TerminalDelta);
-                } catch {
-                    close();
-                    handlers.reset();
-                }
-            });
-            for (const event of ['reset', 'invalidate', 'revoked'])
-                source.addEventListener(event, () => {
-                    close();
-                    handlers.reset();
-                });
-            source.onerror = failed;
-            return close;
-        },
+        itemEvents: (gridKey, subscription, icons, handlers) =>
+            events(`api/grids/${encodeURIComponent(gridKey)}/items/events`, subscription, icons, handlers),
         createPlan: (gridKey, body) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans`, { method: 'POST', body }),
         plan: (gridKey, planId, signal, icons) =>

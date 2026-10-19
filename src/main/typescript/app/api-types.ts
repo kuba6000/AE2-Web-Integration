@@ -56,15 +56,17 @@ export type RecentTracking = {
     stockComplete: boolean;
     resources: Record<string, RecentResource>;
 };
-export type TerminalDelta = {
-    recent?: RecentTracking;
+/** Changes to one live keyed list; updates carry absolute values for rows that already exist. */
+export type LiveDelta<Row, Update> = {
     view: TerminalView;
-    updates: { itemKey: string; quantity: number; craftable: boolean }[];
-    definitions: StoredResource[];
+    updates: Update[];
+    definitions: Row[];
     removed: string[];
-    unkeyed?: StoredResource[] | null;
+    unkeyed?: Row[] | null;
     icons: IconMetadata | null;
 };
+export type StoredResourceUpdate = { itemKey: string; quantity: number; craftable: boolean };
+export type TerminalDelta = LiveDelta<StoredResource, StoredResourceUpdate> & { recent?: RecentTracking };
 export type ResourceResponse<T> = {
     data: T;
     icons: IconMetadata | null;
