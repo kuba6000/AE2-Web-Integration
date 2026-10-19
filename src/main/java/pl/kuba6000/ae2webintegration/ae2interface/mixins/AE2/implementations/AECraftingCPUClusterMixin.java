@@ -152,6 +152,13 @@ public abstract class AECraftingCPUClusterMixin implements IPausableCraftingCPU,
     }
 
     @Override
+    public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored) {
+        populateList(active, CraftingItemList.ACTIVE);
+        populateList(pending, CraftingItemList.PENDING);
+        populateList(stored, CraftingItemList.STORAGE);
+    }
+
+    @Override
     public IStackList web$getWaitingFor() {
         return (IStackList) (Object) waitingFor;
     }
