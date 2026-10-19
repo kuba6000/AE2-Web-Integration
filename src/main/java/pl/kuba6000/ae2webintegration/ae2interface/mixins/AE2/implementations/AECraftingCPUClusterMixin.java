@@ -9,7 +9,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
 import appeng.api.networking.crafting.ICraftingCPU;
-import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
@@ -18,7 +17,6 @@ import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
@@ -108,11 +106,6 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICrafting
     }
 
     @Override
-    public void web$getAllItems(IStackList list) {
-        ((CraftingCPUCluster) (Object) this).craftingLogic.getAllItems((KeyCounter) (Object) list);
-    }
-
-    @Override
     public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored) {
         KeyCounter activeItems = (KeyCounter) (Object) active;
         KeyCounter pendingItems = (KeyCounter) (Object) pending;
@@ -121,28 +114,13 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICrafting
         var job = ((ICraftingCPULogicAccessor) logic).web$getJob();
         if (job != null) activeItems.addAll(job.web$getWaitingFor().list);
         storedItems.addAll(logic.getInventory().list);
-        web$getAllItems(pending);
+        logic.getAllItems(pendingItems);
         // Native getAllItems is active + pending + stored; subtract the copied counters to isolate pending.
         pendingItems.removeAll(activeItems);
         pendingItems.removeAll(storedItems);
         activeItems.removeZeros();
         pendingItems.removeZeros();
         storedItems.removeZeros();
-    }
-
-    @Override
-    public long web$getActiveItems(IAEKey key) {
-        return ((CraftingCPUCluster) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
-    }
-
-    @Override
-    public long web$getPendingItems(IAEKey key) {
-        return ((CraftingCPUCluster) (Object) this).craftingLogic.getPendingOutputs((AEKey) key);
-    }
-
-    @Override
-    public long web$getStorageItems(IAEKey key) {
-        return ((CraftingCPUCluster) (Object) this).craftingLogic.getStored((AEKey) key);
     }
 
     @Override
