@@ -159,7 +159,6 @@ for (const width of [390, 1280]) {
 for (const width of [390, 1280]) {
     test(`default theme font choice persists and keeps resources usable at ${width}px`, async (t) => {
         const { page, base } = await fixture(t, '', { viewport: { width, height: 844 } });
-        await seedAutomaticRefresh(page, base, false);
         await page.goto(`${base}#/web-settings`);
         const font = page.getByRole('combobox', { name: 'Font', exact: true });
         await font.waitFor({ timeout: 1500 });
@@ -404,7 +403,7 @@ const historyDetail = {
 // Public browser/HTTP seam: resource-to-provider relationships navigate the existing history,
 // including later pages and names whose rendered text matches while their raw identity differs.
 test('history resource provider links reveal the exact group across sorting and pagination without refetching', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     const provider = historyDetail.interfaceShare[0];
     options.historyDetail = {
         ...historyDetail,
@@ -550,7 +549,7 @@ test('history prioritizes only the measured final resource identity and keeps se
     }
     const marker = resources.getByRole('img', { name: 'Final product', exact: true });
     await marker.scrollIntoViewIfNeeded();
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settleFrames(page);
     await marker.hover();
     await page.getByRole('tooltip').filter({ hasText: 'Final product' }).waitFor({ timeout: 2000 });
     await page.getByRole('searchbox', { name: 'Search history', exact: true }).fill('Alpha');
@@ -585,7 +584,12 @@ after(async () => {
     await browser?.close();
 });
 
-async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } = {}) {
+// The default theme refreshes every 5 s while automatic updates are on; only tests of that behaviour enable it.
+function refreshingFixture(t, mount, contextOptions, flags) {
+    return fixture(t, mount, contextOptions, { ...flags, autoRefresh: true });
+}
+
+async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, autoRefresh = false } = {}) {
     const options = {
         pins: [],
         delayA: 0,
@@ -1112,6 +1116,12 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
     });
     const page = await context.newPage();
     page.on('dialog', (dialog) => dialog.accept());
+    await page.addInitScript(
+        ({ key, autoRefresh }) => {
+            if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify({ autoRefresh }));
+        },
+        { key: `ae2web:${mount}/:ui`, autoRefresh }
+    );
     if (mockClock) await page.clock.install();
     const errors = [];
     page.on('pageerror', (error) => errors.push(String(error)));
@@ -1135,19 +1145,37 @@ async function closeMobilePane(page) {
     if (await close.isVisible()) await close.click();
 }
 
-async function settleResponse(page, request) {
-    const response = await request.response();
-    if (response) await response.finished();
+async function settleFrames(page) {
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
-// Advance the browser's real polling timers; API traffic and UI updates still run normally.
+async function settleResponse(page, request) {
+    const response = await request.response();
+    if (response) await response.finished();
+    await settleFrames(page);
+}
+
+// Advance the browser's polling timers until the next refresh request arrives. A refresh that is still in flight
+// has not re-armed its timer yet, so the clock is advanced again instead of waiting for real time.
 async function poll(page) {
     const home = ['', '#', '#/'].includes(new URL(page.url()).hash);
     const endpoint = home ? '/api/resource-pins' : '/api/grids';
-    const requested = page.waitForRequest((request) => new URL(request.url()).pathname.endsWith(endpoint));
-    await page.clock.fastForward(6000);
-    await requested;
+    let arrived;
+    const requested = page
+        .waitForRequest((request) => new URL(request.url()).pathname.endsWith(endpoint))
+        .then(
+            (request) => {
+                arrived = request;
+            },
+            () => {}
+        );
+    const deadline = Date.now() + 10000;
+    while (!arrived) {
+        assert.ok(Date.now() < deadline, `No ${endpoint} refresh was requested`);
+        await page.clock.fastForward(6000);
+        await Promise.race([requested, new Promise((resolve) => setTimeout(resolve, 25))]);
+    }
+    return arrived;
 }
 
 // Wait for simulated server state changed by a UI request; the click resolves before the request lands.
@@ -1170,15 +1198,6 @@ async function seedTerminalPageSize(page, base, size) {
             }
         },
         { key: `ae2web:${new URL(base).pathname}:theme:default`, size }
-    );
-}
-
-async function seedAutomaticRefresh(page, base, autoRefresh) {
-    await page.addInitScript(
-        ({ key, autoRefresh }) => {
-            if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify({ autoRefresh }));
-        },
-        { key: `ae2web:${new URL(base).pathname}:ui`, autoRefresh }
     );
 }
 
@@ -1206,7 +1225,7 @@ async function atlasFixture(page, options) {
 
 // Public UI/HTTP seam: server capability overrides presentation without overwriting user intent.
 test('resource crafting opens one accessible dialog from details, middle click and context menu', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     const resource = page.getByRole('button', { name: /Iron Ingot/ });
     await resource.click();
@@ -1243,7 +1262,6 @@ test('resource crafting opens one accessible dialog from details, middle click a
 
 test('autostart shows calculation before returning to the terminal after one native submission', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
-    await seedAutomaticRefresh(page, base, false);
     options.pendingReads = 1;
     options.cpus = {};
     await page.goto(`${base}#/grids/${gridA}/items`);
@@ -1283,7 +1301,6 @@ test('autostart shows calculation before returning to the terminal after one nat
 for (const width of [390, 1280, 1920]) {
     test(`CPU action notifications survive navigation without shifting the view at ${width}px`, async (t) => {
         const { page, options, base } = await fixture(t);
-        await seedAutomaticRefresh(page, base, false);
         await page.setViewportSize({ width, height: 844 });
         options.cpus['cpu-a'] = { ...cpu, isBusy: true, supportsPause: true };
         options.cpuDetails['cpu-a'] = { ...cpuWork, supportsPause: true };
@@ -1339,7 +1356,6 @@ for (const width of [390, 1280, 1920]) {
 
 test('manual starts keep a bounded notification queue and polling never recreates expired confirmations', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     for (let attempt = 0; attempt < 4; attempt++) {
         if (attempt)
@@ -1366,7 +1382,7 @@ test('manual starts keep a bounded notification queue and polling never recreate
 
 test('autostart failures open the plan without repeating mutations or losing the native reason', async (t) => {
     for (const failure of ['missing', 'FAIL', 'TIMEOUT', 'NO_PERMISSIONS']) {
-        const { page, options, base } = await fixture(t);
+        const { page, options, base } = await refreshingFixture(t);
         if (failure === 'missing') options.plan = { ...readyPlan, isSimulating: true };
         else if (failure === 'TIMEOUT') options.fault = { operation: 'submit', status: failure };
         else {
@@ -1500,7 +1516,6 @@ test('a new calculation rejection after successful autostart preserves its dialo
 
 test('denied crafting creation closes the private resource dialog and clears the selected resource', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     options.fault = { operation: 'create', status: 'NO_PERMISSIONS' };
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click({ button: 'middle' });
@@ -1535,8 +1550,7 @@ test('craft dialog and contextual menu fit a narrow viewport and close through o
 });
 
 test('unavailable icons override the saved mode and recover without losing it', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, true);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     await page.goto(`${base}#/web-settings`);
     const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
@@ -1576,8 +1590,7 @@ test('unavailable icons override the saved mode and recover without losing it', 
 });
 
 test('pending icon discovery leaves inventory usable and failures preserve confirmed availability', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, true);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
     options.packDelay = 2000;
@@ -1615,8 +1628,7 @@ for (const view of ['items', 'cpus/cpu-a']) {
 }
 
 test('initial icon discovery error stays distinct from absence and recovers', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, true);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     options.packError = true;
     await page.goto(`${base}#/web-settings`);
@@ -1640,8 +1652,7 @@ test('initial icon discovery error stays distinct from absence and recovers', as
 });
 
 test('superseded slow discovery cannot overwrite recovered availability after a grid failure', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, true);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     options.pack = { available: false, packId: null, width: 0, height: 0 };
     options.packDelay = 2000;
@@ -1658,7 +1669,6 @@ test('superseded slow discovery cannot overwrite recovered availability after a 
         timeout: 3000
     });
     await settleResponse(page, oldRequest);
-    await new Promise((resolve) => setTimeout(resolve, 2100));
     assert.equal(await page.getByRole('combobox', { name: 'Terminal display', exact: true }).inputValue(), 'both');
     assert.equal(await page.getByText(/server.*not.*icon pack/i).isVisible(), false);
 });
@@ -1871,9 +1881,7 @@ for (const deviceScaleFactor of [1, 1.25, 1.5, 1.75, 2]) {
         for (const width of [997, 1031, 1003, 391]) {
             await page.setViewportSize({ width, height: 844 });
             await items.first().scrollIntoViewIfNeeded();
-            await page.evaluate(
-                () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-            );
+            await settleFrames(page);
             const bounds = await items.first().evaluate((button) => {
                 const slot = button.getBoundingClientRect();
                 const list = button.closest('ul').getBoundingClientRect();
@@ -2065,7 +2073,7 @@ test('CPU overview and history products share atlas pages and respect the displa
 
 // Public UI/HTTP seam: history details use optional server mappings, never inferred icons.
 test('history details display product and paged resource icons only when enabled', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     const icon = { page: 0, x: 0, y: 0 };
     options.historyDetail = {
@@ -2123,7 +2131,7 @@ test('history details display product and paged resource icons only when enabled
 });
 
 test('history detail icons refresh after late pack discovery and pack replacement without polling the snapshot', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     options.packDelay = 150;
     options.historyDetail = {
@@ -2168,7 +2176,7 @@ test('history detail icons refresh after late pack discovery and pack replacemen
 
 for (const view of ['cpus', 'history']) {
     test(`${view} product mappings recover from pack replacement and clear on unavailable or denied reads`, async (t) => {
-        const { page, options, base } = await fixture(t);
+        const { page, options, base } = await refreshingFixture(t);
         await atlasFixture(page, options);
         const icon = { page: 0, x: 0, y: 0 };
         options.cpus = { busy: { ...cpu, name: 'Busy processor', isBusy: true, finalOutput: { ...iron, icon } } };
@@ -2217,7 +2225,7 @@ for (const view of ['cpus', 'history']) {
     });
 
     test(`${view} late icon-enabled response cannot restore images after choosing names`, async (t) => {
-        const { page, options, base } = await fixture(t);
+        const { page, options, base } = await refreshingFixture(t);
         await atlasFixture(page, options);
         const icon = { page: 0, x: 0, y: 0 };
         options.cpus = { busy: { ...cpu, name: 'Busy processor', isBusy: true, finalOutput: { ...iron, icon } } };
@@ -2254,8 +2262,7 @@ for (const view of ['cpus', 'history']) {
 }
 
 test('resource atlas is shared across visible items and CPU rows and can be disabled persistently', async (t) => {
-    const { page, options, base } = await fixture(t, '/ae2');
-    await seedAutomaticRefresh(page, base, true);
+    const { page, options, base } = await refreshingFixture(t, '/ae2');
     await atlasFixture(page, options);
     options.itemsA = [
         { ...iron, icon: { page: 0, x: 0, y: 0 } },
@@ -2368,7 +2375,6 @@ test('resource atlas is shared across visible items and CPU rows and can be disa
 // Public seam: global settings are navigable without a grid, preserve the selected grid's
 test('atlas pages are limited to nearby rows and malformed mappings never become image URLs', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     await atlasFixture(page, options);
     await page.setViewportSize({ width: 1000, height: 650 });
     options.icons.pages = Array.from({ length: 90 }, (_, i) => ({
@@ -2414,7 +2420,7 @@ test('atlas pages are limited to nearby rows and malformed mappings never become
     options.icons = { ...options.icons, packId: '../evil.example' };
     await page.reload();
     await page.getByRole('button', { name: /Resource 00/ }).waitFor();
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settleFrames(page);
     assert.equal(pages().length, before);
     assert.equal(
         await page
@@ -2427,7 +2433,6 @@ test('atlas pages are limited to nearby rows and malformed mappings never become
 
 test('a stale atlas discovers the replacement pack and reloads resource mappings', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     await atlasFixture(page, options);
     options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
     options.pageStatus = 404;
@@ -2449,8 +2454,7 @@ test('a stale atlas discovers the replacement pack and reloads resource mappings
 });
 
 test('failed atlas pages keep resources usable without repeated requests during polling', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, true);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
     options.pageStatus = 503;
@@ -2474,7 +2478,6 @@ test('failed atlas pages keep resources usable without repeated requests during 
 
 test('late atlas responses cannot repaint another grid after navigation', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     await atlasFixture(page, options);
     options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
     options.pageDelay = 300;
@@ -2483,7 +2486,7 @@ test('late atlas responses cannot repaint another grid after navigation', async 
     await started;
     await page.goto(`${base}#/grids/${gridB}/items`);
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
-    await page.waitForTimeout(400);
+    await settleResponse(page, await started);
     assert.equal(
         await page.locator('#items .resource-icon').evaluate((icon) => getComputedStyle(icon).backgroundImage),
         'none'
@@ -2493,7 +2496,6 @@ test('late atlas responses cannot repaint another grid after navigation', async 
 
 test('visible atlas requests have bounded concurrency', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     await atlasFixture(page, options);
     await page.setViewportSize({ width: 1200, height: 1000 });
     options.pageDelay = 150;
@@ -2652,7 +2654,7 @@ test('About opens without a grid and remains usable in a translated narrow viewp
 });
 
 test('Home retains the selected network and owns switching while Web settings owns automatic refresh', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     await clickTab(page, 'Home');
@@ -2710,7 +2712,6 @@ test('Home retains the selected network and owns switching while Web settings ow
 
 test('selected network survives global page reloads and direct routes take precedence', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/settings`);
     await page.getByRole('textbox', { name: 'Network name', exact: true }).waitFor();
     const terminal = page.getByRole('link', { name: 'Terminal', exact: true });
@@ -2813,7 +2814,6 @@ test('Minecraft item formatting renders readable names and resets decorations on
 
 test('Minecraft names retain formatting across crafting plans, CPU work and history', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     const displayName = '§aCobalt §lIngot';
     const metadata = {
         displayName,
@@ -2920,7 +2920,7 @@ test('Minecraft classic palette, obfuscation and literal HTML remain safe and re
 });
 
 test('Minecraft names search and sort as continuous plain text and keep tooltip formatting through polling', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.itemsA = [
         { ...iron, displayName: '§fAl§apha' },
         { ...quartz, displayName: '§0Beta §qliteral' }
@@ -2950,6 +2950,7 @@ test('Minecraft names search and sort as continuous plain text and keep tooltip 
     await tooltip.waitFor({ state: 'visible' });
     assert.equal((await textStyle(tooltip, 'pha')).color, 'rgb(85, 255, 85)');
     options.itemsA = [{ ...iron, displayName: '§cAlpha', quantity: 8765 }, options.itemsA[1]];
+    await poll(page);
     await page.getByRole('button', { name: /^Alpha.*8,765/ }).waitFor();
     assert.equal(await tooltip.isVisible(), true);
     assert.match(await tooltip.innerText(), /8,765/);
@@ -2996,7 +2997,7 @@ test('search explains its rules and combines mod identifiers with item text', as
 });
 
 test('craftable resources show an accessible crafting marker that follows refreshed availability', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     const marker = item.getByRole('img', { name: 'Crafting available', exact: true });
@@ -3011,13 +3012,13 @@ test('craftable resources show an accessible crafting marker that follows refres
     await item.hover();
     await page.getByRole('tooltip').getByText('Crafting available', { exact: true }).waitFor();
     options.itemsA = [{ ...iron, craftable: false }, quartz];
-    await marker.waitFor({ state: 'hidden', timeout: 10000 });
+    await poll(page);
+    await marker.waitFor({ state: 'hidden' });
     await page.getByRole('tooltip').getByText('Not craftable', { exact: true }).waitFor();
 });
 
 test('resource quantities abbreviate from ten thousand and retain exact tooltip amounts', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     const samples = [
         [9999, '9,999'],
         [10000, '10k'],
@@ -3063,7 +3064,6 @@ test('resource quantities abbreviate from ten thousand and retain exact tooltip 
 // Public browser seam: one availability control cycles locally and retains keyboard focus.
 test('terminal availability cycles through all stored and craftable with current tooltips', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     options.itemsA = [iron, quartz, { ...iron, displayName: 'Gold Ingot', itemKey: 'gold', quantity: 0 }];
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -3092,7 +3092,6 @@ test('terminal availability cycles through all stored and craftable with current
 
 test('terminal displays structured registry and optional resource metadata without inventing values', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     options.itemsA = [
         {
             displayName: 'Damaged Tool',
@@ -3189,7 +3188,6 @@ test('terminal displays structured registry and optional resource metadata witho
 
 test('CPU work, plans and history retain resources with unavailable registry metadata', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     const metadata = {
         displayName: 'Essentia',
         registryNamespace: null,
@@ -3235,7 +3233,6 @@ test('CPU work, plans and history retain resources with unavailable registry met
 
 test('terminal sort criterion cycles independently of order and persists both', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
-    await seedAutomaticRefresh(page, base, false);
     options.itemsA = [
         { ...iron, displayName: 'Alpha', registryNamespace: 'test', registryPath: 'z', itemKey: 'a', quantity: 20 },
         { ...iron, displayName: 'Beta', registryNamespace: 'test', registryPath: 'y', itemKey: 'b', quantity: 30 },
@@ -3268,7 +3265,6 @@ test('terminal sort criterion cycles independently of order and persists both', 
 
 test('terminal item and fluid switches intersect filters and preserve other resource kinds', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
-    await seedAutomaticRefresh(page, base, false);
     options.itemsA = [
         iron,
         quartz,
@@ -3350,8 +3346,9 @@ for (const saved of [
         options.itemsA = [iron, { ...quartz, craftable: true }];
         await page.addInitScript(({ sort, filter, sortOrder }) => {
             const key = 'ae2web:/ae2/:ui';
-            if (!localStorage.getItem(key))
-                localStorage.setItem(key, JSON.stringify({ sort, filter, sortOrder, autoRefresh: false }));
+            const stored = JSON.parse(localStorage.getItem(key));
+            if (stored.sort === undefined)
+                localStorage.setItem(key, JSON.stringify({ ...stored, sort, filter, sortOrder }));
         }, saved);
         await page.goto(`${base}#/grids/${gridA}/items`);
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -3372,7 +3369,7 @@ for (const saved of [
 }
 
 test('terminal control focus and dismissed tooltips survive polling and filtering resets pagination', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await seedTerminalPageSize(page, base, 100);
     options.itemsA = Array.from({ length: 102 }, (_, index) => ({
         ...iron,
@@ -3403,7 +3400,6 @@ test('terminal control focus and dismissed tooltips survive polling and filterin
 // quantity/identity, finish without inventory auto-refresh, and submit the chosen stable CPU key.
 test('crafting calculates a quantity, polls, preserves CPU identity and submits explicitly', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
-    await seedAutomaticRefresh(page, base, false);
     options.pendingReads = 1;
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
@@ -3589,10 +3585,10 @@ for (const language of ['en', 'pl']) {
 }
 
 test('history preserves entry identity and opens measured cancelled work through direct routes', async (t) => {
-    const { page, options, base } = await fixture(t, '/ae2');
+    const { page, options, base } = await refreshingFixture(t, '/ae2');
     options.history = [{ ...historyEntry, id: 2 }, historyEntry];
     await page.goto(`${base}#/grids/${gridA}/items`);
-    await page.getByRole('link', { name: 'History', exact: true }).click({ timeout: 3000 });
+    await page.getByRole('link', { name: 'History', exact: true }).click();
     await page.getByRole('link', { name: /Iron Ingot.*#2/ }).click();
     await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
     assert.match(page.url(), /\/history\/2$/);
@@ -3604,9 +3600,9 @@ test('history preserves entry identity and opens measured cancelled work through
         await page.getByRole('region', { name: 'Iron Ingot', exact: true }).getByText('10', { exact: true }).count(),
         1
     );
-    await (
-        await page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'))
-    ).finished();
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'));
+    await poll(page);
+    await (await refreshed).finished();
     assert.equal(options.requests.filter((request) => request.path.endsWith('/crafting-history/2')).length, 1);
     await page.reload();
     await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
@@ -3615,7 +3611,7 @@ test('history preserves entry identity and opens measured cancelled work through
 });
 
 test('history opens a deeply scrolled job at the start of its detail and preserves ordinary reading position', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.history = Array.from({ length: 30 }, (_, index) => ({ ...historyEntry, id: index + 1 }));
     options.historyDetail = { ...historyDetail, items: Array.from({ length: 20 }, () => historyDetail.items[0]) };
     await page.goto(`${base}#/grids/${gridA}/history`);
@@ -3642,7 +3638,7 @@ test('history opens a deeply scrolled job at the start of its detail and preserv
 
 for (const appearance of ['light', 'dark']) {
     test(`history list keeps its terminal alignment and readable rows on mobile in ${appearance} mode`, async (t) => {
-        const { page, options, base } = await fixture(t);
+        const { page, options, base } = await refreshingFixture(t);
         options.settings[gridA].isTracked = true;
         options.history = Array.from({ length: 12 }, (_, index) => ({
             ...historyEntry,
@@ -3763,7 +3759,7 @@ for (const appearance of ['light', 'dark']) {
 // Public seam: an authorized grid user edits a draft and saves one explicit PATCH. Access
 // sources are grouped informational server text, never markup or an ownership gate.
 test('grid settings preserve the draft and save explicitly while safely showing grouped access sources', async (t) => {
-    const { page, options, base } = await fixture(t, '/ae2');
+    const { page, options, base } = await refreshingFixture(t, '/ae2');
     const player = { name: '<img src=x onerror=alert(1)> Alex', uuid: '11111111-1111-1111-1111-111111111111' };
     options.accessSources = {
         [player.uuid]: [
@@ -3848,7 +3844,7 @@ test('history exposes resource and provider intervals with their correct locatio
 // A failed persistence response can leave the in-memory value changed. GET agreement must
 // not be labelled a saved result; only a deliberate successful PATCH confirms saving.
 test('uncertain settings saves preserve the draft and remain unconfirmed until explicit retry succeeds', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     for (const status of ['INTERNAL_ERROR', 'TIMEOUT', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
         options.settings[gridA] = {
             flowFlushIntervalSeconds: 60,
@@ -3902,7 +3898,7 @@ test('uncertain settings saves preserve the draft and remain unconfirmed until e
 });
 
 test('settings drafts survive transient discovery failures and pending saves recover after access loss', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/settings`);
     const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
     await tracking.check();
@@ -3967,7 +3963,7 @@ test('settings drafts survive transient discovery failures and pending saves rec
 });
 
 test('history reentry during grid discovery clears unavailable snapshots', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/history/1`);
     await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
     let release;
@@ -4056,7 +4052,7 @@ test('settings save remains single-flight across grids and uses the returned val
 });
 
 test('old settings reads cannot replace saved data and denied saves clear access sources', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/settings`);
     const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
     await tracking.check();
@@ -4224,7 +4220,6 @@ test('CPU cancellation waits for the authoritative read before showing completio
 
 test('header icon controls refresh the current history entry and retain dirty settings drafts', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/history/1`);
     await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
     const header = page.locator('#app header');
@@ -4249,7 +4244,7 @@ test('header icon controls refresh the current history entry and retain dirty se
 });
 
 test('header refresh stays active through a history detail read queued behind automatic discovery', async (t) => {
-    const { page, base } = await fixture(t);
+    const { page, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/history/1`);
     await page.getByRole('heading', { name: 'Iron Ingot', level: 3, exact: true }).waitFor();
     let discoveryRequests = 0;
@@ -4290,7 +4285,7 @@ test('header refresh stays active through a history detail read queued behind au
 });
 
 test('CPU background refresh signals activity without disabling or dimming existing controls', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.cpus['cpu-a'] = { ...cpu, isBusy: true, supportsPause: true };
     options.cpuDetails['cpu-a'] = { ...cpuWork, supportsPause: true };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
@@ -4344,7 +4339,6 @@ for (const width of [390, 1280])
     test(`header refresh keeps icon controls stable at ${width}px and honors reduced motion`, async (t) => {
         const { page, options, base } = await fixture(t);
         await page.setViewportSize({ width, height: 844 });
-        await seedAutomaticRefresh(page, base, false);
         await page.goto(`${base}#/grids/${gridA}/items`);
         await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
         const header = page.locator('#app header');
@@ -4397,7 +4391,7 @@ for (const width of [390, 1280])
     });
 
 test('pending CPU cancellation settles on the revisited CPU and older reads cannot override it', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     let complete;
     await page.route('**/cancel', (route) => {
         complete = (status) =>
@@ -4479,7 +4473,6 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
 // explicit DELETE and navigation never repeats either mutation.
 test('direct plan entry only reads, and explicit cancellation stops calculation polling', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     options.pendingReads = 100;
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     await page.getByRole('button', { name: 'Cancel', exact: true }).click({ timeout: 3000 });
@@ -4487,7 +4480,8 @@ test('direct plan entry only reads, and explicit cancellation stops calculation 
     const reads = options.requests.filter(
         (request) => request.path.endsWith('/crafting-plans/7') && request.method === 'GET'
     ).length;
-    await page.waitForTimeout(1200);
+    await page.clock.fastForward(5000);
+    await settleFrames(page);
     assert.equal(
         options.requests.filter((request) => request.path.endsWith('/crafting-plans/7') && request.method === 'GET')
             .length,
@@ -4505,7 +4499,7 @@ test('direct plan entry only reads, and explicit cancellation stops calculation 
 // Public seam: CPU option availability and selection across live data and full reload. Variant
 // identity and capacity determine merging; a name or ordinal cannot identify a selected CPU.
 test('busy CPU eligibility uses known output identity and missing selections require a new choice', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.cpus = {
         'cpu-a': cpu,
         'cpu-b': { ...cpu, isBusy: true, usedStorage: 2048, finalOutput: { ...iron, itemKey: 'iron' } },
@@ -4585,7 +4579,7 @@ test('CPU memory uses binary units through exabytes in overview and current work
 
 for (const width of [390, 1280]) {
     test(`CPU lists show native selection modes and hide indicators when unsupported at ${width}px`, async (t) => {
-        const { page, options, base } = await fixture(t, '', { viewport: { width, height: 844 } });
+        const { page, options, base } = await refreshingFixture(t, '', { viewport: { width, height: 844 } });
         options.capabilities.cpuSelectionMode = true;
         options.cpus = {
             'cpu-player': { ...cpu, selectionMode: 'PLAYER_ONLY' },
@@ -4630,7 +4624,7 @@ for (const width of [390, 1280]) {
 
 // Public browser/HTTP seam: navigation keeps a bounded selector and never mutates CPU work.
 test('CPU automation sorting uses native modes, keeps unknown last, and preserves saved intent without capability', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.capabilities.cpuSelectionMode = true;
     options.cpus = {
         'cpu-c': { ...cpu, name: 'Alpha', selectionMode: 'AUTOMATION_ONLY', acceptsPlayerJobs: true },
@@ -4653,7 +4647,7 @@ test('CPU automation sorting uses native modes, keeps unknown last, and preserve
     assert.deepEqual(await order(), ['cpu-c', 'cpu-b', 'cpu-d', 'cpu-a', 'cpu-z', 'cpu-y']);
     await page.mouse.move(0, 0);
     await panel.getByRole('link', { name: /cpu-c/ }).scrollIntoViewIfNeeded();
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settleFrames(page);
     await panel.getByRole('link', { name: /cpu-c/ }).focus();
     await page
         .getByRole('tooltip')
@@ -4661,7 +4655,7 @@ test('CPU automation sorting uses native modes, keeps unknown last, and preserve
         .waitFor();
     assert.match(await page.getByRole('tooltip').innerText(), /not permission to submit work/);
     await panel.getByRole('link', { name: /cpu-z/ }).scrollIntoViewIfNeeded();
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settleFrames(page);
     await panel.getByRole('link', { name: /cpu-z/ }).focus();
     await page
         .getByRole('tooltip')
@@ -4696,7 +4690,7 @@ test('CPU automation sorting uses native modes, keeps unknown last, and preserve
 });
 
 test('CPU selector cycles summary sorting with stable ties and remembers criterion and direction', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.cpus = {
         'cpu-c': { ...cpu, name: 'Beta', availableStorage: 8192, coProcessors: 1 },
         'cpu-b': { ...cpu, name: 'Alpha', availableStorage: 16384, coProcessors: 2, isBusy: true },
@@ -4800,7 +4794,7 @@ test('CPU search opens from the magnifier, focuses the field and clears its filt
 });
 
 test('CPU sorting preserves keyboard focus and reading position when polling moves the focused CPU', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.setViewportSize({ width: 1280, height: 650 });
     options.cpus = {
         'cpu-a': { ...cpu, name: 'Alpha', isBusy: true },
@@ -4833,7 +4827,7 @@ test('CPU sorting preserves keyboard focus and reading position when polling mov
 });
 
 test('CPU selector searches forty processors and preserves reading position across selection and polling', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.setViewportSize({ width: 1280, height: 800 });
     options.cpus = Object.fromEntries(
         Array.from({ length: 40 }, (_, index) => [
@@ -4904,7 +4898,7 @@ test('CPU selector searches forty processors and preserves reading position acro
 });
 
 test('CPU list fills its attachment and current job stays in a low footer even with long output', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.setViewportSize({ width: 1280, height: 720 });
     options.cpus = Object.fromEntries(
         Array.from({ length: 40 }, (_, index) => [
@@ -4977,7 +4971,7 @@ test('CPU list fills its attachment and current job stays in a low footer even w
 });
 
 test('CPU oversized tooltip stays inside the viewport and exposes its end through keyboard scrolling', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.setViewportSize({ width: 800, height: 650 });
     options.cpuDetails['cpu-a'] = {
         ...cpuWork,
@@ -5044,7 +5038,7 @@ test('CPU selector keeps paused localized state and capacity inside intermediate
 });
 
 test('CPU tooltips expose live hardware and recorded start without extra detail reads and clear on filter or access loss', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.cpus['cpu-b'] = {
         ...cpu,
         name: 'Molecular processor',
@@ -5152,7 +5146,6 @@ test('CPU terminal shows selected resources beside CPU navigation and returns to
 // Public seam: controls select and order the current job's actual categories without server mutations.
 test('CPU terminal hides stored-only resources, sorts explicit quantities and prioritizes crafting states', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     options.cpuDetails['cpu-a'] = {
         ...cpuWork,
         items: [
@@ -5251,7 +5244,7 @@ test('CPU terminal hides stored-only resources, sorts explicit quantities and pr
 });
 
 test('CPU tiles show processing shares and sort by precise shares through refresh and tracking changes', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     const items = [
         {
             ...cpuWork.items[0],
@@ -5328,7 +5321,7 @@ test('CPU tiles show processing shares and sort by precise shares through refres
 });
 
 test('CPU resources omit zero counts and update visible categories during polling', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     const item = { ...cpuWork.items[0], active: 0, pending: 12, stored: 0 };
     options.cpuDetails['cpu-a'] = { ...cpuWork, hasTrackingInfo: false, items: [item] };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
@@ -5360,7 +5353,7 @@ test('CPU resources omit zero counts and update visible categories during pollin
 });
 
 test('CPU resource tooltip preserves exact counts and tracking through polling and clears on route or access changes', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     const item = { ...cpuWork.items[0], active: 12345, pending: 23456, stored: 34567 };
     options.cpuDetails['cpu-a'] = { ...cpuWork, items: [item] };
     options.cpuDetails['cpu-b'] = {
@@ -5414,7 +5407,6 @@ test('CPU resource tooltip preserves exact counts and tracking through polling a
 
 test('CPU terminal scrolls resources within desktop and mobile viewports while controls remain usable', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     options.cpus['cpu-a'] = { ...cpu, isBusy: true, supportsPause: true };
     options.cpuDetails['cpu-a'] = {
         ...cpuWork,
@@ -5500,7 +5492,7 @@ test('CPU terminal scrolls resources within desktop and mobile viewports while c
 });
 
 test('CPU resource reordering does not leave a stale hover tooltip or reopen keyboard-dismissed metrics', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     const second = {
         ...cpuWork.items[0],
         registryNamespace: 'example',
@@ -5562,7 +5554,7 @@ test('CPU resource reordering does not leave a stale hover tooltip or reopen key
 // Public seam: CPU links and current-work controls plus HTTP. Display names may duplicate;
 // navigation and cancellation must continue to address the selected stable CPU key.
 test('CPU list and detail pause controls use capability, busy state and stable CPU identity', async (t) => {
-    const { page, options, base } = await fixture(t, '/ae2');
+    const { page, options, base } = await refreshingFixture(t, '/ae2');
     options.cpus = {
         'cpu-a': { ...cpu, isBusy: true, supportsPause: true },
         'cpu-b': { ...cpu, isBusy: true, supportsPause: true },
@@ -5642,7 +5634,7 @@ test('CPU cancellation requires confirmation from both list rows and detail', as
 // Public seam: a pending or uncertain operation follows its grid/CPU across views. Neither
 // a refreshed snapshot nor visiting another network authorizes a duplicate mutation.
 test('pending and uncertain CPU pause stays locked across list, detail and grid navigation', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.cpus = {
         'cpu-a': { ...cpu, isBusy: true, supportsPause: true },
         'cpu-b': { ...cpu, isBusy: true, supportsPause: true }
@@ -5736,7 +5728,6 @@ test('concurrent CPU pause results remain non-actionable until fresh CPU data ar
         'cpu-a': { ...cpu, isBusy: true, supportsPause: true },
         'cpu-b': { ...cpu, isBusy: true, supportsPause: true }
     };
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/cpus`);
     const row = (key) => page.getByRole('listitem').filter({ has: page.getByRole('link', { name: new RegExp(key) }) });
     const operations = {};
@@ -5823,7 +5814,6 @@ test('a removed CPU mutation target cannot strand another CPU detail load', asyn
         'cpu-b': { ...cpu, isBusy: true, supportsPause: true }
     };
     options.cpuDetails['cpu-b'] = { ...cpuWork, supportsPause: true };
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/cpus`);
     let captureMutation;
     const mutation = new Promise((resolve) => {
@@ -5868,7 +5858,7 @@ test('a removed CPU mutation target cannot strand another CPU detail load', asyn
 });
 
 test('CPU monitoring opens stable current work and explicitly cancels it without unrelated requests', async (t) => {
-    const { page, options, base } = await fixture(t, '/ae2');
+    const { page, options, base } = await refreshingFixture(t, '/ae2');
     options.cpus = {
         'cpu-a': { ...cpu, isBusy: true, finalOutput: { ...iron, quantity: 12 } },
         'cpu-b': { ...cpu, isBusy: true, finalOutput: { ...iron, quantity: 12 } }
@@ -5917,7 +5907,7 @@ test('CPU monitoring opens stable current work and explicitly cancels it without
 // Public seam: a missing selected key cannot become another CPU, and access/read failures
 // must remove current-work data and the ability to cancel from stale observations.
 test('CPU removal and denied reads clear current work without selecting a replacement', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-b`);
     await page
         .getByRole('region', { name: 'CPU resources', exact: true })
@@ -5978,7 +5968,7 @@ test('CPU removal and denied reads clear current work without selecting a replac
 });
 
 test('known CPU cancellation rejections refresh stale work or clear unavailable private data', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     await page
         .getByRole('region', { name: 'CPU resources', exact: true })
@@ -6007,7 +5997,7 @@ test('known CPU cancellation rejections refresh stale work or clear unavailable 
 });
 
 test('late CPU reads cannot leak across selection or grid changes and busy state does not need output metadata', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.cpuDetails['cpu-b'] = { ...cpuWork, finalOutput: null, items: [], hasTrackingInfo: false };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     await page
@@ -6058,7 +6048,7 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
 // No expected-job token exists: a retry could cancel newer work on this same CPU. Unknown
 // outcomes retain a local lock across reads/navigation and never issue another cancel request.
 test('uncertain CPU cancellation never replays after refresh or route reentry', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     for (const status of ['TIMEOUT', 'INTERNAL_ERROR', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
         await page.goto(`${base}?case=${status}#/grids/${gridA}/cpus/cpu-a`);
         options.fault = { operation: 'cancel', status };
@@ -6129,7 +6119,7 @@ test('known submission rejection retains the plan and permits deliberate correct
 // Public seam: unusable plans and access failures must remove mutation authority, not merely
 // add an error next to stale actionable private data.
 test('unavailable and incomplete plans cannot submit, and denied refresh clears private plan data', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.planStatus = 'INVALID_ID';
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     await page
@@ -6188,7 +6178,7 @@ test('unavailable and incomplete plans cannot submit, and denied refresh clears 
 // The API has no idempotency receipt. Transport failures must never trigger mutation replay,
 // including automatic polling and ordinary navigation back to the same runtime plan.
 test('uncertain submission outcomes cannot be retried by polling or route reentry', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     let planId = 7;
     for (const status of ['error', 500, 'OK', 'TIMEOUT', 'INTERNAL_ERROR', 'INVALID_RESPONSE', 'NETWORK_ERROR']) {
         await page.goto(`${base}#/grids/${gridA}/plans/${planId++}`);
@@ -6213,7 +6203,7 @@ test('uncertain submission outcomes cannot be retried by polling or route reentr
 });
 
 test('uncertain creation and deletion remain explicit and are never replayed', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.fault = { operation: 'create', status: 'TIMEOUT' };
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
@@ -6248,7 +6238,7 @@ test('uncertain creation and deletion remain explicit and are never replayed', a
 });
 
 test('plan resources share custom formatted tooltips with exact values and dismiss without polling reopen', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.capabilities.craftingPlanSteps = true;
     options.plan = {
         ...readyPlan,
@@ -6299,7 +6289,7 @@ test('plan resources share custom formatted tooltips with exact values and dismi
 });
 
 test('plan tools search and CPU identifiers use current custom tooltips and clear removed or dismissed targets', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.cpus = { 'cpu-a': cpu, 'cpu-b': { ...cpu, acceptsPlayerJobs: false } };
     await page.goto(`${base}#/grids/${gridA}/plans/7`);
     const sort = page.getByRole('button', { name: 'Sort by: Name', exact: true });
@@ -6348,7 +6338,7 @@ test('plan tools search and CPU identifiers use current custom tooltips and clea
 });
 
 test('plan CPU tooltip shows live capacity work and state after polling', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.cpus = {
         'cpu-a': {
             ...cpu,
@@ -6365,7 +6355,7 @@ test('plan CPU tooltip shows live capacity work and state after polling', async 
     await page.getByText('Plan ready', { exact: true }).waitFor();
     const choice = page.getByRole('radio', { name: /cpu-a/ });
     await choice.scrollIntoViewIfNeeded();
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settleFrames(page);
     await choice.locator('..').hover();
     const tooltip = page.getByRole('tooltip');
     await tooltip.getByText('Assembly', { exact: true }).waitFor({ timeout: 3000 });
@@ -6382,7 +6372,7 @@ test('plan CPU tooltip shows live capacity work and state after polling', async 
     await page.getByRole('radio', { name: /Updated CPU/ }).waitFor();
     await page.mouse.move(0, 0);
     await choice.scrollIntoViewIfNeeded();
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settleFrames(page);
     await choice.locator('..').hover();
     await tooltip.getByText('Updated CPU', { exact: true }).waitFor();
     assert.match(await tooltip.innerText(), /Idle/);
@@ -6393,7 +6383,7 @@ test('plan CPU tooltip shows live capacity work and state after polling', async 
 });
 
 test('plan tooltips clear on scroll resize navigation and access denial', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.plan = {
         ...readyPlan,
         plan: Array.from({ length: 80 }, (_, index) => ({ ...readyPlan.plan[0], displayName: `Ingredient ${index}` }))
@@ -6432,7 +6422,7 @@ test('plan tooltips clear on scroll resize navigation and access denial', async 
 });
 
 test('crafting popup and plan share optional atlas icons and honor native CPU admission', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     options.itemsA = [{ ...iron, icon: { page: 0, x: 0, y: 0 } }];
     options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], itemKey: 'iron', icon: options.itemsA[0].icon }] };
@@ -6464,7 +6454,7 @@ test('crafting popup and plan share optional atlas icons and honor native CPU ad
 });
 
 test('plan CPU choices display live product icons only for busy processors using their own atlas metadata', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     options.cpuIcons = options.icons;
     options.icons = { ...options.icons, pages: [] };
@@ -6512,7 +6502,7 @@ test('plan CPU choices display live product icons only for busy processors using
 });
 
 test('plan icon pack replacement supersedes a delayed completed-plan mapping', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     options.plan = { ...readyPlan, plan: [{ ...readyPlan.plan[0], itemKey: 'iron', icon: { page: 0, x: 0, y: 0 } }] };
     await page.goto(`${base}#/web-settings`);
@@ -6549,7 +6539,7 @@ for (const [width, height] of [
     [390, 720]
 ]) {
     test(`plan grid matches CPU slots and forty CPU choices scroll independently at ${width}x${height}`, async (t) => {
-        const { page, options, base } = await fixture(t, '', { viewport: { width, height } });
+        const { page, options, base } = await refreshingFixture(t, '', { viewport: { width, height } });
         options.cpuDetails['cpu-a'] = { ...cpuWork, hasTrackingInfo: false };
         await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
         const cpuResource = page
@@ -6723,7 +6713,7 @@ test('crafting plan persists independent name total quantity and steps sorting w
 });
 
 test('direct pending plan and reload restore the original order and options without replaying autostart', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.capabilities = { craftingLightMode: true, craftingIgnoreMissing: true };
     options.plan = {
         ...readyPlan,
@@ -6773,7 +6763,7 @@ test('direct pending plan and reload restore the original order and options with
 });
 
 test('delayed plan metadata cannot restore another grid order or automatic intent', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     let complete;
     const requested = new Promise((resolve) => {
         complete = resolve;
@@ -6800,7 +6790,7 @@ test('delayed plan metadata cannot restore another grid order or automatic inten
 });
 
 test('plan recalculation preserves the order and lite mode, supports autostart and locks uncertain replacement', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.capabilities.craftingLightMode = true;
     options.plan = { ...readyPlan, isSimulating: true };
     await page.goto(`${base}#/grids/${gridA}/items`);
@@ -6854,7 +6844,7 @@ test('plan recalculation preserves the order and lite mode, supports autostart a
 });
 
 test('ignore-missing recalculation keeps original options first and never retries uncertain creation', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.capabilities.craftingLightMode = true;
     options.capabilities.craftingIgnoreMissing = true;
     options.submitStatus = 'FAIL';
@@ -7042,7 +7032,7 @@ test('quantity expressions and adjustments send exact positive integers through 
 });
 
 test('quantity editing survives refresh and only positive safe integer quantities reach HTTP', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     await page.getByRole('button', { name: 'Craft', exact: true }).click();
@@ -7051,7 +7041,7 @@ test('quantity editing survives refresh and only positive safe integer quantitie
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/items'));
     await poll(page);
     await (await refreshed).finished();
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settleFrames(page);
     assert.equal(await quantity.evaluate((input) => input === document.activeElement), true);
     assert.equal(await quantity.inputValue(), '37');
     for (const invalid of ['0', '-1', '1.5', '9007199254740992']) {
@@ -7088,7 +7078,7 @@ test('deletion rejection makes unavailable or denied plans non-actionable', asyn
 });
 
 test('pending submission resolves after route reentry and older CPU reads cannot overwrite its result', async (t) => {
-    const { page, base } = await fixture(t);
+    const { page, base } = await refreshingFixture(t);
     let completeSubmit;
     await page.route('**/submit', (route) => {
         completeSubmit = (status) =>
@@ -7136,7 +7126,7 @@ test('pending submission resolves after route reentry and older CPU reads cannot
         contentType: 'application/json',
         body: JSON.stringify({ status: 'NO_PERMISSIONS', data: null })
     });
-    await page.waitForTimeout(100);
+    await settleResponse(page, cpuRequest.request());
     assert.match(page.url(), new RegExp(`/grids/${gridA}/items$`));
 });
 
@@ -7257,7 +7247,7 @@ test('changing networks cannot publish a delayed response from the previous netw
     await page.goto(`${base}#/grids/${gridB}/items`);
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
     // Let the deliberately delayed old response reach the browser before observing the final view.
-    await page.waitForTimeout(550);
+    await settleResponse(page, await requested);
     assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
     assert.match(page.url(), new RegExp(gridB));
     await page.goBack();
@@ -7472,7 +7462,7 @@ test('a theme can persist its own supported language in shared preferences', asy
 });
 
 test('appearance, language and terminal preferences survive reload and direct links', async (t) => {
-    const { page, base } = await fixture(t, '/ae2');
+    const { page, base } = await refreshingFixture(t, '/ae2');
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     await page.getByRole('button', { name: /^Sort by:/ }).click();
@@ -7508,9 +7498,9 @@ test('the default theme ignores obsolete shared appearance and preserves current
     // Appearance is owned by the theme; old shared values must not affect current defaults.
     await page.addInitScript(() => {
         const key = 'ae2web:/ae2/:ui';
-        if (localStorage.getItem(key) === null) {
-            localStorage.setItem(key, JSON.stringify({ appearance: 'dark', language: 'en', autoRefresh: false }));
-        }
+        const stored = JSON.parse(localStorage.getItem(key));
+        if (stored.appearance === undefined)
+            localStorage.setItem(key, JSON.stringify({ ...stored, appearance: 'dark', language: 'en' }));
     });
     await page.goto(`${base}#/web-settings`);
     const appearance = page.getByRole('combobox', { name: 'Appearance' });
@@ -7550,7 +7540,7 @@ test('current theme appearance survives a storage write failure without adopting
 });
 
 test('lost access clears resource data and subsequent polling recovers', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     options.status = 403;
@@ -7564,7 +7554,7 @@ test('lost access clears resource data and subsequent polling recovers', async (
 });
 
 test('hovered resource tooltip stays current through polling and closes when the resource disappears', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     const tooltip = page.getByRole('tooltip');
@@ -7597,10 +7587,12 @@ test('hovered resource tooltip stays current through polling and closes when the
             })
     );
     options.itemsA = [{ ...iron, quantity: 8765 }, quartz];
+    await poll(page);
     const refreshed = await updatedTooltip;
     assert.equal(refreshed.visible, true, 'Polling must not dismiss a stationary pointer tooltip');
     assert.match(refreshed.content, /8,765/);
     options.itemsA = [{ ...iron, quantity: 1 }, quartz];
+    await poll(page);
     await page.getByRole('button', { name: /Iron Ingot.*\b1\b/ }).waitFor();
     assert.ok(
         !(await tooltip.isVisible()) || !(await tooltip.textContent()).includes('Iron Ingot'),
@@ -7609,12 +7601,13 @@ test('hovered resource tooltip stays current through polling and closes when the
     await item.hover();
     await tooltip.waitFor({ state: 'visible' });
     options.itemsA = [quartz];
+    await poll(page);
     await item.waitFor({ state: 'detached' });
     assert.equal(await tooltip.isVisible(), false, 'A removed resource must not leave its tooltip behind');
 });
 
 test('resource tooltips appear on the first hover frame and respect keyboard dismissal across refresh', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     const tooltip = page.getByRole('tooltip');
@@ -7644,6 +7637,7 @@ test('resource tooltips appear on the first hover frame and respect keyboard dis
     await page.keyboard.press('Escape');
     await tooltip.waitFor({ state: 'hidden' });
     options.itemsA = [{ ...iron, displayName: 'A Iron Ingot', quantity: 3456 }, quartz];
+    await poll(page);
     await page.getByRole('button', { name: /Iron Ingot.*3,456/ }).waitFor();
     assert.equal(await item.evaluate((button) => button === document.activeElement), true);
     assert.equal(await tooltip.isVisible(), false, 'Reordering must not reopen a dismissed tooltip');
@@ -7652,12 +7646,13 @@ test('resource tooltips appear on the first hover frame and respect keyboard dis
     await tooltip.waitFor({ state: 'visible' });
     assert.match(await tooltip.textContent(), /3,456/);
     options.gridError = 'NO_PERMISSIONS';
+    await poll(page);
     await item.waitFor({ state: 'detached' });
     assert.equal(await tooltip.isVisible(), false, 'Access loss must remove private tooltip contents');
 });
 
 test('hovered tool keeps its tooltip when a keyboard-focused resource refreshes', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     const item = page.getByRole('button', { name: /Iron Ingot/ });
     const tooltip = page.getByRole('tooltip');
@@ -7667,6 +7662,7 @@ test('hovered tool keeps its tooltip when a keyboard-focused resource refreshes'
     const label = await tooltip.textContent();
     assert.ok(label.includes(await tool.getAttribute('aria-label')));
     options.itemsA = [{ ...iron, quantity: 2345 }, quartz];
+    await poll(page);
     await page.getByRole('button', { name: /Iron Ingot.*2,345/ }).waitFor();
     assert.equal(await item.evaluate((button) => button === document.activeElement), true);
     assert.equal(await tooltip.isVisible(), true);
@@ -7676,6 +7672,7 @@ test('hovered tool keeps its tooltip when a keyboard-focused resource refreshes'
         'Polling must not replace the hovered tool tooltip with resource details'
     );
     options.itemsA = [{ ...iron, displayName: 'A Iron Ingot', quantity: 1234 }, quartz];
+    await poll(page);
     await page.getByRole('button', { name: /Iron Ingot.*1,234/ }).waitFor();
     assert.equal(await item.evaluate((button) => button === document.activeElement), true);
     assert.equal(await tooltip.isVisible(), true);
@@ -7719,7 +7716,7 @@ test('home network links keep keyboard focus when a manual refresh updates the l
     const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'));
     await page.getByRole('button', { name: 'Refresh', exact: true }).dispatchEvent('click');
     await (await refreshed).finished();
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settleFrames(page);
     assert.equal(await network.evaluate((link) => link === document.activeElement), true);
     const secondNetwork = page.getByRole('link', { name: new RegExp(gridB) });
     await secondNetwork.focus();
@@ -7727,7 +7724,7 @@ test('home network links keep keyboard focus when a manual refresh updates the l
     const reordered = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'));
     await page.getByRole('button', { name: 'Refresh', exact: true }).dispatchEvent('click');
     await (await reordered).finished();
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settleFrames(page);
     assert.equal(await secondNetwork.evaluate((link) => link === document.activeElement), true);
     await page.keyboard.press('Enter');
     await page.getByRole('button', { name: /Gold Ingot/ }).waitFor();
@@ -7778,7 +7775,6 @@ test('resource grid stays centered and stationary when scrolling becomes unneces
 test('terminal scrolls resources inside the viewport while search and navigation remain reachable', async (t) => {
     const { page, options, base } = await fixture(t);
     await seedTerminalPageSize(page, base, 100);
-    await seedAutomaticRefresh(page, base, false);
     options.itemsA = Array.from({ length: 105 }, (_, index) => ({
         ...iron,
         displayName: `Resource ${String(index).padStart(3, '0')}`,
@@ -7833,7 +7829,7 @@ test('terminal scrolls resources inside the viewport while search and navigation
 
 for (const width of [390, 1280]) {
     test(`terminal page size persists and all mode follows filtering and live updates at ${width}px`, async (t) => {
-        const { page, options, base } = await fixture(t, '', { viewport: { width, height: 844 } });
+        const { page, options, base } = await refreshingFixture(t, '', { viewport: { width, height: 844 } });
         options.liveView = { generation: '1', revision: '1' };
         options.itemsA = Array.from({ length: 275 }, (_, index) => ({
             ...iron,
@@ -8034,9 +8030,7 @@ for (const deviceScaleFactor of [1.25, 1.5]) {
             await grid.getByRole('button', { name: /Iron Ingot/ }).waitFor();
             for (const width of [997, 1031, 391]) {
                 await page.setViewportSize({ width, height: 844 });
-                await page.evaluate(
-                    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-                );
+                await settleFrames(page);
                 const geometry = await grid.evaluate((list) => {
                     const bounds = list.getBoundingClientRect();
                     const viewport = list.parentElement;
@@ -8108,9 +8102,7 @@ for (const deviceScaleFactor of [1.25, 1.5]) {
                     count: list.children.length,
                     height: list.parentElement.scrollHeight
                 }));
-                await page.evaluate(
-                    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-                );
+                await settleFrames(page);
                 assert.deepEqual(
                     await grid.evaluate((list) => ({
                         count: list.children.length,
@@ -8125,7 +8117,7 @@ for (const deviceScaleFactor of [1.25, 1.5]) {
 }
 
 test('empty slots remain decorative through selection, zero matches and CPU row-height changes', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/items`);
     const grid = page.locator('#items');
     const ironButton = grid.getByRole('button', { name: /Iron Ingot/ });
@@ -8141,7 +8133,7 @@ test('empty slots remain decorative through selection, zero matches and CPU row-
     await search.fill('no matches');
     assert.equal(await grid.getByRole('button').count(), 0);
     await page.setViewportSize({ width: 1031, height: 844 });
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settleFrames(page);
     assert.ok((await grid.locator('li[aria-hidden="true"]').count()) > 0, 'an empty result still has decorative rows');
     assert.equal(await grid.getByRole('listitem').count(), 0);
     assert.equal(
@@ -8188,7 +8180,7 @@ test('empty slots remain decorative through selection, zero matches and CPU row-
 });
 
 test('CPU overview keeps names primary and exposes identity without extra detail reads', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.cpus = {
         'cpu-a': {
             ...cpu,
@@ -8345,7 +8337,7 @@ for (const appearance of ['light', 'dark']) {
 
 // Public geometry seam: the CPU overview shares terminal alignment and keeps scrolling inside its viewport.
 test('CPU overview aligns with the terminal and scrolls only real processor panels', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     const many = Object.fromEntries(
         Array.from({ length: 18 }, (_, index) => [`cpu-${index}`, { ...cpu, name: `Processor ${index}` }])
     );
@@ -8510,10 +8502,9 @@ test('selected CPU aligns its heading search and resource viewport with the main
 // Home discovery must not enumerate crafting CPUs until the user opens a network's CPU view.
 test('Home initial discovery does not request CPU lists', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(base);
     await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
-    await page.waitForLoadState('networkidle');
+    await settleFrames(page);
     if (process.env.UI_SCREENSHOT_DIR) {
         await fs.mkdir(process.env.UI_SCREENSHOT_DIR, { recursive: true });
         await page.screenshot({ path: path.join(process.env.UI_SCREENSHOT_DIR, 'home-network-only.png') });
@@ -8523,26 +8514,23 @@ test('Home initial discovery does not request CPU lists', async (t) => {
 
 // Refreshing discovery or opening the chooser must never fan out to per-network CPU reads.
 test('Home manual automatic and icon preference refreshes do not request CPU lists', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, true);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     await page.goto(base);
     await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
-    await page.waitForLoadState('networkidle');
+    await settleFrames(page);
     options.requests.length = 0;
     const manual = page.waitForResponse((response) => response.url().endsWith('/api/grids'));
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
     await settleResponse(page, (await manual).request());
-    await poll(page);
-    await page.waitForLoadState('networkidle');
+    await settleResponse(page, await poll(page));
     assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
     await page
         .getByRole('dialog')
         .getByRole('link', { name: new RegExp(gridB) })
         .waitFor();
-    await poll(page);
-    await page.waitForLoadState('networkidle');
+    await settleResponse(page, await poll(page));
     assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
     await page.keyboard.press('Escape');
     for (const preference of ['both', 'names']) {
@@ -8555,15 +8543,15 @@ test('Home manual automatic and icon preference refreshes do not request CPU lis
         await display.selectOption(preference);
         await clickTab(page, 'Home');
         await page.getByRole('button', { name: 'Choose a network', exact: true }).waitFor();
+        const refreshed = page.waitForResponse((response) => response.url().endsWith('/api/grids'));
         await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-        await page.waitForLoadState('networkidle');
+        await settleResponse(page, (await refreshed).request());
         assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
     }
 });
 
 test('Home keyboard chooser selects a network and CPUs only load for the selected network', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     options.cpusByGrid = {
         [gridA]: { 'cpu-a': { ...cpu, name: 'Alpha processor' } },
         [gridB]: { 'cpu-b': { ...cpu, name: 'Beta processor' } }
@@ -8590,13 +8578,12 @@ test('Home keyboard chooser selects a network and CPUs only load for the selecte
     assert.ok(cpuRequests.every((request) => request.path === `/api/grids/${gridB}/cpus`));
     await clickTab(page, 'Home');
     await choose.waitFor();
-    await page.waitForLoadState('networkidle');
+    await settleFrames(page);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, cpuRequests.length);
 });
 
 test('Home keeps denied discovery explicit in the chooser and supports retry', async (t) => {
-    const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, true);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(base);
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
     const dialog = page.getByRole('dialog');
@@ -8608,14 +8595,13 @@ test('Home keeps denied discovery explicit in the chooser and supports retry', a
     options.gridError = null;
     await dialog.getByRole('button', { name: 'Try again', exact: true }).click();
     await dialog.getByRole('link', { name: new RegExp(gridA) }).waitFor();
-    await page.waitForLoadState('networkidle');
+    await settleFrames(page);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/cpus')).length, 0);
 });
 
 // An empty successful discovery still needs an explicit recovery action with polling disabled.
 test('Home can retry empty discovery without automatic refresh', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     options.empty = true;
     await page.goto(base);
     await page
@@ -8698,7 +8684,6 @@ test('Home keeps failed logout visible and allows an explicit retry', async (t) 
 // Public settings/HTTP seam: the server-backed name is shared presentation, independent of tracking.
 test('current network preserves desktop alignment and shares the second phone row with account actions', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     for (const width of [1280, 800, 560, 390]) {
         await page.setViewportSize({ width, height: 844 });
         let previous;
@@ -8756,7 +8741,6 @@ test('current network preserves desktop alignment and shares the second phone ro
 
 test('network identity uses its name or full identifier, with scoped header and shared tooltip', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     options.settings[gridB].name = 'Remote factory';
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
@@ -8813,7 +8797,6 @@ test('network identity uses its name or full identifier, with scoped header and 
 
 test('Network details save and clear a name without resending tracking, and update Home immediately', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/settings`);
     const name = page.getByRole('textbox', { name: 'Network name', exact: true });
     await name.fill('  Main factory  ', { timeout: 2000 });
@@ -8849,7 +8832,6 @@ test('Network details save and clear a name without resending tracking, and upda
 
 test('tracking notices use the current network, update after saving, and retain previously recorded history', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     options.settings[gridA].isTracked = false;
     options.settings[gridB].isTracked = true;
     await page.goto(`${base}#/grids/${gridA}/items`);
@@ -8895,7 +8877,7 @@ test('tracking notices use the current network, update after saving, and retain 
 
 // A discovery snapshot predating a PATCH cannot undo the confirmed metadata in another view.
 test('late discovery cannot undo a confirmed name or tracking save', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/settings`);
     const name = page.getByRole('textbox', { name: 'Network name', exact: true });
     await name.fill('Factory');
@@ -8933,7 +8915,7 @@ test('late discovery cannot undo a confirmed name or tracking save', async (t) =
 });
 
 test('Network keeps field drafts across grids, refreshes unedited fields, and rejects invalid names before HTTP', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.goto(`${base}#/grids/${gridA}/settings`);
     const name = page.getByRole('textbox', { name: 'Network name', exact: true });
     const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
@@ -8969,7 +8951,6 @@ test('Network keeps field drafts across grids, refreshes unedited fields, and re
 
 test('Network pending and uncertain name saves retain source identity and notify Home after navigation', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/settings`);
     const name = page.getByRole('textbox', { name: 'Network name', exact: true });
     await name.fill('Requested');
@@ -9026,7 +9007,7 @@ test('Network pending and uncertain name saves retain source identity and notify
 });
 
 test('Network groups explicit people with collapsed source lists and keeps disclosure and focus during polling', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     const first = { uuid: 'person-a', name: 'Alice' };
     const second = { uuid: 'person-b', name: 'Bob' };
     const source = (player, x) => ({
@@ -9098,9 +9079,7 @@ test('Network details scroll long access lists under a fixed heading and keep mo
         await heading.waitFor();
         const current = page.locator('#app header').getByText(options.settings[gridA].name, { exact: true });
         await page.getByRole('textbox', { name: 'Network name', exact: true }).waitFor();
-        await page.evaluate(
-            () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-        );
+        await settleFrames(page);
         await current.focus();
         const tooltip = page.getByRole('tooltip');
         await tooltip.waitFor();
@@ -9199,7 +9178,6 @@ for (const height of [844, 600]) {
 
 test('Network refetch publishes remote name and tracking changes with polling disabled', async (t) => {
     const { page, options, base } = await fixture(t);
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.getByRole('link', { name: 'Enable tracking', exact: true }).waitFor();
     options.settings[gridA] = { ...options.settings[gridA], name: 'Remote factory', isTracked: true };
@@ -9217,7 +9195,6 @@ test('Network refetch publishes remote name and tracking changes with polling di
 for (const deviceScaleFactor of [1, 1.25, 1.5]) {
     test(`main terminal centers independently of its attachments at DPR ${deviceScaleFactor}`, async (t) => {
         const { page, base } = await fixture(t, '', { deviceScaleFactor }, { mockClock: false });
-        await seedAutomaticRefresh(page, base, false);
         for (const width of [1920, 1600, 1500, 1400, 1184, 800, 600, 390]) {
             await page.setViewportSize({ width, height: 900 });
             await page.goto(`${base}#/grids/${gridA}/items`);
@@ -9483,7 +9460,6 @@ test('preferred resource columns persist and adapt across terminal CPU and plan 
 
 test('outdated mod notice is admin only and supports session close and seven day snooze', async (t) => {
     const { page, options, base } = await fixture(t, '/ae2');
-    await seedAutomaticRefresh(page, base, false);
     options.isOutdated = true;
     await page.goto(`${base}#/web-settings`);
     await page.getByRole('heading', { name: 'Web settings', exact: true }).waitFor();
@@ -9574,7 +9550,6 @@ test('update notice keeps close top right and adjacent actions bottom right acro
     );
     options.isOutdated = true;
     options.isAdmin = true;
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/web-settings`);
     const close = page.getByRole('button', { name: 'Dismiss update notice' });
     await close.waitFor();
@@ -9616,7 +9591,6 @@ test('administrator skips the displayed update only after confirmed response and
     const { page, options, base } = await fixture(t, '/ae2');
     options.isOutdated = true;
     options.isAdmin = true;
-    await seedAutomaticRefresh(page, base, false);
     let release;
     const held = new Promise((resolve) => {
         release = resolve;
@@ -9660,7 +9634,6 @@ test('failed and stale update skip keep notice usable and never retry the mutati
     const { page, options, base } = await fixture(t);
     options.isOutdated = true;
     options.isAdmin = true;
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/web-settings`);
     const notice = page.locator('#update-notice');
     const skip = page.getByRole('button', { name: 'Skip this version', exact: true });
@@ -9686,7 +9659,6 @@ test('update notice needs release metadata and an unconfirmed skip is reconciled
     options.isAdmin = true;
     const update = options.availableUpdate;
     options.availableUpdate = null;
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/web-settings`);
     await page.getByRole('link', { name: 'Home', exact: true }).waitFor();
     const notice = page.locator('#update-notice');
@@ -9857,7 +9829,7 @@ test('phone icon slots use available width and account identity stays readable',
 });
 
 test('phone panels survive polling and dismiss current navigation and backdrop without background actions', async (t) => {
-    const { page, options, base } = await fixture(t, '', { viewport: { width: 390, height: 844 } });
+    const { page, options, base } = await refreshingFixture(t, '', { viewport: { width: 390, height: 844 } });
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.locator('#items .item').first().waitFor();
     const menu = page.getByRole('button', { name: 'Navigation', exact: true });
@@ -9869,7 +9841,9 @@ test('phone panels survive polling and dismiss current navigation and backdrop w
     const panel = page.getByRole('dialog', { name: 'Filters and sorting', exact: true });
     const sort = panel.getByRole('button', { name: 'Sort by: Name', exact: true });
     await sort.focus();
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/items'));
     await poll(page);
+    await settleResponse(page, (await refreshed).request());
     assert.equal(await panel.isVisible(), true);
     assert.equal(await sort.evaluate((node) => document.activeElement === node), true);
     const requests = options.requests.length;
@@ -10112,7 +10086,6 @@ test('history policy drafts survive navigation and stricter limits without leaki
     const { page, options, base } = await fixture(t);
     options.settings[gridA].isFlowTracked = true;
     options.settings[gridB].isFlowTracked = true;
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/settings`);
     const flow = page.locator('#network-flow-interval');
     const retention = page.locator('#network-history-retention');
@@ -10255,7 +10228,7 @@ test('resource tracking is independent of CPU history and renders exact flow cou
 });
 
 test('tracking cold links load their own atlas mappings and respect names-only through reload and pack replacement', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await atlasFixture(page, options);
     options.historyIcons = { ...options.icons, pages: [{ digest: 'c'.repeat(64), width: 128, height: 64 }] };
     options.packDelay = 150;
@@ -10341,7 +10314,7 @@ test('late tracking icon responses cannot restore images after names-only select
         contentType: 'application/json',
         body: JSON.stringify({ status: 'OK', data: history, icons: options.icons })
     });
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settleFrames(page);
     assert.equal(await page.locator('.tracking-view .resource-icon:visible').count(), 0);
     assert.equal(options.requests.filter((request) => request.path.includes('/icon-packs/')).length, 0);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/items')).length, 0);
@@ -10594,7 +10567,7 @@ test('tracking chart keeps missing periods blank and pixel rendering survives na
 });
 
 test('tracking legend choices survive automatic history refresh and chart rebuilds', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     const now = Date.now();
     options.resourceHistory = {
         baseline: {
@@ -11249,9 +11222,7 @@ for (const touch of [false, true]) {
         const time = page.locator('.tracking-view .u-legend tr').filter({ hasText: 'Time' }).locator('.u-value');
         const pinnedTime = await time.innerText();
         await page.setViewportSize({ ...originalViewport, width: originalViewport.width + 40 });
-        await page.evaluate(
-            () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-        );
+        await settleFrames(page);
         assert.equal(await input.innerText(), '222');
         assert.equal(
             await time.innerText(),
@@ -11324,7 +11295,7 @@ for (const touch of [false, true]) {
 }
 
 test('recent tracking shows independent measured periods and does not advance stock time with flow updates', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     const now = Date.now();
     options.liveView = { generation: '1', revision: '1' };
     options.recent = {
@@ -11368,7 +11339,7 @@ test('recent tracking shows independent measured periods and does not advance st
 });
 
 test('live quantities update immediately while terminal order uses a fixed thirty-second window and snapshots sort immediately', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     await page.addInitScript(() => {
         window.deltaDurations = [];
         const add = EventSource.prototype.addEventListener;
@@ -11454,7 +11425,7 @@ test('live quantities update immediately while terminal order uses a fixed thirt
 });
 
 test('live additions append and removed resources remain inert zero slots until reordering or return', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.liveView = { generation: '1', revision: '1' };
     options.itemsA = ['Alpha', 'Bravo', 'Charlie'].map((displayName, index) => ({
         ...iron,
@@ -11518,7 +11489,7 @@ test('live additions append and removed resources remain inert zero slots until 
 });
 
 test('explicit null unkeyed payloads retain initial anonymous rows through keyed recent and ordering updates', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.liveView = { generation: '1', revision: '1' };
     options.itemsA = [
         ...Array.from({ length: 600 }, (_, index) => ({
@@ -11587,7 +11558,7 @@ test('explicit null unkeyed payloads retain initial anonymous rows through keyed
 });
 
 test('replacement unkeyed payloads keep occupied anonymous positions on a paginated live inventory', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.liveView = { generation: '1', revision: '1' };
     const unknown = (displayName, quantity) => ({ ...iron, itemKey: null, displayName, quantity, craftable: false });
     options.itemsA = [
@@ -11718,7 +11689,7 @@ for (const { sort, direction, expected } of [
     { sort: 'name', direction: 'descending', expected: ['Z low', 'Y lowest', 'M middle', 'B highest', 'A high'] }
 ]) {
     test(`anonymous replacements and surplus use current ${sort} ${direction} order before refilling slots`, async (t) => {
-        const { page, options, base } = await fixture(t);
+        const { page, options, base } = await refreshingFixture(t);
         options.liveView = { generation: '1', revision: '1' };
         const anonymous = (displayName, quantity) => ({
             ...iron,
@@ -11780,7 +11751,7 @@ for (const { sort, direction, expected } of [
 }
 
 test('unkeyed rows retain only object identity while explicit controls immediately recompute the held view', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.liveView = { generation: '1', revision: '1' };
     options.itemsA = [
         { ...iron, itemKey: 'alpha', displayName: 'Alpha', quantity: 10 },
@@ -11837,7 +11808,7 @@ test('unkeyed rows retain only object identity while explicit controls immediate
 });
 
 test('ghost expiry reveals the empty state and denied reads clear ghosts immediately', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.liveView = { generation: '1', revision: '1' };
     options.itemsA = [iron];
     await page.goto(`${base}#/grids/${gridA}/items`);
@@ -11884,7 +11855,7 @@ test('ghost expiry reveals the empty state and denied reads clear ghosts immedia
 });
 
 test('flow-only SSE updates and expiry refresh hovered summaries without history reads', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     const now = Date.now();
     options.liveView = { generation: '1', revision: '1' };
     options.recent = {
@@ -11914,7 +11885,7 @@ test('flow-only SSE updates and expiry refresh hovered summaries without history
 });
 
 test('live resync replaces only this tab and grid subscription through reload and navigation', async (t) => {
-    const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
+    const { page, options, base } = await refreshingFixture(t, '', {}, { mockClock: false });
     options.liveView = { generation: '1', revision: '1' };
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.locator('#refresh .live-icon').waitFor();
@@ -11947,7 +11918,7 @@ test('live resync replaces only this tab and grid subscription through reload an
 });
 
 test('terminal heartbeats renew a bounded lease without refreshing inventory or data time and failures recover', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.liveView = { generation: '1', revision: '1' };
     await page.goto(`${base}#/grids/${gridA}/items`);
     const live = page.locator('#refresh .live-icon');
@@ -12000,7 +11971,7 @@ test('terminal heartbeats renew a bounded lease without refreshing inventory or 
 });
 
 test('header confirms live events and manual resync waits for a new stream before showing live', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.liveView = { generation: '1', revision: '1' };
     options.delayStreamReady = true;
     const opened = page.waitForResponse((response) => response.url().includes('/items/events'));
@@ -12060,7 +12031,10 @@ test('header confirms live events and manual resync waits for a new stream befor
 });
 
 test('live status can be focused and resynced by touch without changing header geometry', async (t) => {
-    const { page, options, base } = await fixture(t, '', { viewport: { width: 390, height: 844 }, hasTouch: true });
+    const { page, options, base } = await refreshingFixture(t, '', {
+        viewport: { width: 390, height: 844 },
+        hasTouch: true
+    });
     options.liveView = { generation: '1', revision: '1' };
     options.delayStreamReady = true;
     const opened = page.waitForResponse((response) => response.url().includes('/items/events'));
@@ -12081,7 +12055,7 @@ test('live status can be focused and resynced by touch without changing header g
 });
 
 test('terminal applies compact updates, fetches a fresh snapshot on reconnect and stops outside terminal', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.liveView = { generation: '9223372036854775000', revision: '1' };
     const opened = page.waitForResponse((response) => response.url().includes('/items/events'));
     await page.goto(`${base}#/grids/${gridA}/items`);
@@ -12153,7 +12127,7 @@ test('terminal applies compact updates, fetches a fresh snapshot on reconnect an
 });
 
 test('terminal keeps its layout through a dropped stream and retains recovery errors until SSE is ready', async (t) => {
-    const { page, options, base } = await fixture(t);
+    const { page, options, base } = await refreshingFixture(t);
     options.liveView = { generation: '1', revision: '1' };
     await page.goto(`${base}#/grids/${gridA}/items`);
     const live = page.locator('#refresh .live-icon');
@@ -12210,7 +12184,6 @@ test('terminal keeps its layout through a dropped stream and retains recovery er
 for (const width of [390, 1280])
     test(`resource pins occupy separate terminal rows and Home cards at ${width}px`, async (t) => {
         const { page, options, base } = await fixture(t, '', { viewport: { width, height: 900 } });
-        await seedAutomaticRefresh(page, base, false);
         await page.goto(`${base}#/grids/${gridA}/items`);
         const ironButton = page.locator('#items .item').filter({ hasText: 'Iron' }).first();
         await ironButton.click({ button: 'right' });
@@ -12258,7 +12231,6 @@ test('terminal pins respect Auto and preferred columns while keeping ordinary ro
             }
         }
     ];
-    await seedAutomaticRefresh(page, base, false);
     for (const columns of ['auto', '3']) {
         await page.goto(`${base}#/web-settings`);
         await page.getByRole('combobox', { name: /Resource columns/ }).selectOption(columns);
@@ -12267,9 +12239,7 @@ test('terminal pins respect Auto and preferred columns while keeping ordinary ro
             await page.goto(`${base}#/grids/${gridA}/items`);
             await page.locator('#pinned-items .item').waitFor();
             await page.locator('#items .item').waitFor();
-            await page.evaluate(
-                () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-            );
+            await settleFrames(page);
             // Filler slots are added by the grid after it measures its columns.
             await page.waitForFunction(() => {
                 const pin = document.querySelector('#pinned-items');
@@ -12335,7 +12305,6 @@ test('absent terminal pins show zero only after accepted inventory and remain ta
             }
         }
     ];
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.locator('#pinned-items .item').waitFor();
     await page.waitForFunction(() => document.querySelector('#pinned-items .quantity')?.textContent === '0');
@@ -12378,7 +12347,6 @@ test('Home hides revoked metadata and removes each placement independently inclu
             homeConfig
         }
     ];
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(base);
     await page.locator('.home-pin-card').waitFor();
     assert.match(await page.locator('.home-pin-card').textContent(), /Secret network/);
@@ -12482,7 +12450,6 @@ test('Home pin cards preserve exact sampled values and independent settings whil
             }
         ]
     };
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(base);
     const first = page.locator('.home-pin-card').filter({ hasText: 'Alpha source' });
     await first.locator('canvas').waitFor();
@@ -12645,7 +12612,6 @@ test('Home sampled stock uses the latest accepted range and survives an independ
             })
         });
     });
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(base);
     const card = page.locator('.home-pin-card');
     await card.locator('canvas').waitFor();
@@ -12671,7 +12637,7 @@ const liveCpuRow = (itemKey, displayName, extra = {}) => ({
 
 // Opens a busy CPU whose detail follows the simulated live stream; `send` writes a delta to the newest stream.
 async function openLiveCpu(t, work = {}, prepare = async () => {}) {
-    const context = await fixture(t);
+    const context = await refreshingFixture(t);
     const { page, options, base } = context;
     await prepare(context);
     options.cpuLiveView = { generation: '1', revision: '1' };
@@ -12902,7 +12868,6 @@ test('CPU actions on a live detail confirm first and then restart its live view'
 test('a CPU detail is read by snapshots only while automatic refresh is off', async (t) => {
     const { page, options, base } = await fixture(t);
     options.cpuLiveView = { generation: '1', revision: '1' };
-    await seedAutomaticRefresh(page, base, false);
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     await page
         .getByRole('region', { name: 'CPU resources', exact: true })
