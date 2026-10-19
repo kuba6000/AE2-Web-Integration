@@ -193,7 +193,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 case "web$getSelectionMode" -> null;
                 case "web$acceptsPlayerJobs" -> false;
                 case "web$getAvailableStorage" -> 64L;
-                case "web$getAllItems" -> null;
+                case "web$getItemLists" -> null;
                 default -> throw new AssertionError("Unexpected CPU call: " + method.getName());
             });
         IAECraftingGrid crafting = (IAECraftingGrid) Proxy.newProxyInstance(

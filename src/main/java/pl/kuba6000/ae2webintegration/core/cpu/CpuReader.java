@@ -45,15 +45,19 @@ public final class CpuReader {
         if (busy) {
             finalOutput = ResourceSnapshot.capture(grid, cpu.web$getFinalOutput());
             tracking = AE2JobTracker.findActiveJob(cpu);
-            IStackList allItems = AE2Controller.AE2Interface.web$createStackList();
-            cpu.web$getAllItems(allItems);
-            for (IAEGenericStack stack : allItems.web$stacks()) {
-                IAEKey key = stack.web$what();
-                Draft draft = drafts.computeIfAbsent(key, resource -> draft(resource, listing, baseKeys));
-                draft.active += cpu.web$getActiveItems(key);
-                draft.pending += cpu.web$getPendingItems(key);
-                draft.stored += cpu.web$getStorageItems(key);
-            }
+            IStackList active = AE2Controller.AE2Interface.web$createStackList();
+            IStackList pending = AE2Controller.AE2Interface.web$createStackList();
+            IStackList stored = AE2Controller.AE2Interface.web$createStackList();
+            cpu.web$getItemLists(active, pending, stored);
+            for (IAEGenericStack stack : active.web$stacks())
+                drafts.computeIfAbsent(stack.web$what(), resource -> draft(resource, listing, baseKeys)).active += stack
+                    .web$amount();
+            for (IAEGenericStack stack : pending.web$stacks()) drafts
+                .computeIfAbsent(stack.web$what(), resource -> draft(resource, listing, baseKeys)).pending += stack
+                    .web$amount();
+            for (IAEGenericStack stack : stored.web$stacks())
+                drafts.computeIfAbsent(stack.web$what(), resource -> draft(resource, listing, baseKeys)).stored += stack
+                    .web$amount();
             if (tracking != null) {
                 for (IAEKey key : tracking.timeSpentOn.keySet()) {
                     drafts.computeIfAbsent(key, resource -> draft(resource, listing, baseKeys)).tracking = tracking(
@@ -62,15 +66,7 @@ public final class CpuReader {
                 }
             }
         }
-        CpuObservation.Header header = new CpuObservation.Header(
-            cpu.web$getAvailableStorage(),
-            busy,
-            cpu.web$getSelectionMode(),
-            cpu instanceof IPausableCraftingCPU,
-            busy && cpu instanceof IPausableCraftingCPU pausable && pausable.web$isPaused(),
-            finalOutput,
-            tracking != null,
-            tracking == null ? 0 : tracking.timeStarted);
+        CpuObservation.Header header = header(cpu, busy, finalOutput, tracking);
         List<CpuObservation.Row> rows = new ArrayList<>();
         Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
         List<CpuObservation.UnkeyedRow> unkeyed = new ArrayList<>();
@@ -87,7 +83,7 @@ public final class CpuReader {
     }
 
     /**
-     * Reads only the given resources, which is all a native change notification can have affected. A resource
+     * Reads the header and the given resources from bulk native lists. A resource
      * without a stable identity can only be replaced together with its siblings, and an idle CPU has no resources,
      * so those cases return the full observation instead.
      */
@@ -95,6 +91,10 @@ public final class CpuReader {
         @NotNull Collection<IAEKey> keys, long observedAt) {
         if (!cpu.web$isBusy()) return read(grid, cpu, observedAt, true);
         AE2JobTracker.JobTrackingInfo tracking = AE2JobTracker.findActiveJob(cpu);
+        IStackList active = AE2Controller.AE2Interface.web$createStackList();
+        IStackList pending = AE2Controller.AE2Interface.web$createStackList();
+        IStackList stored = AE2Controller.AE2Interface.web$createStackList();
+        cpu.web$getItemLists(active, pending, stored);
         List<CpuObservation.Row> rows = new ArrayList<>();
         Set<StableKey> missing = new HashSet<>();
         Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
@@ -107,9 +107,9 @@ public final class CpuReader {
             }
             if (itemKey == null) return read(grid, cpu, observedAt, true);
             CpuObservation.Amounts amounts = new CpuObservation.Amounts(
-                cpu.web$getActiveItems(key),
-                cpu.web$getPendingItems(key),
-                cpu.web$getStorageItems(key),
+                active.web$getAmount(key),
+                pending.web$getAmount(key),
+                stored.web$getAmount(key),
                 tracking == null ? null : tracking(tracking, key));
             if (amounts.active() == 0 && amounts.pending() == 0 && amounts.stored() == 0 && amounts.tracking() == null)
                 missing.add(itemKey);
@@ -118,7 +118,27 @@ public final class CpuReader {
                 descriptions.put(itemKey, ResourceSnapshot.describe(key, itemKey));
             }
         }
-        return new CpuObservation(observedAt, false, null, rows, missing, descriptions, Collections.emptyList());
+        return new CpuObservation(
+            observedAt,
+            false,
+            header(cpu, true, ResourceSnapshot.capture(grid, cpu.web$getFinalOutput()), tracking),
+            rows,
+            missing,
+            descriptions,
+            Collections.emptyList());
+    }
+
+    private static CpuObservation.Header header(ICraftingCPUCluster cpu, boolean busy,
+        @Nullable ResourceSnapshot finalOutput, @Nullable AE2JobTracker.JobTrackingInfo tracking) {
+        return new CpuObservation.Header(
+            cpu.web$getAvailableStorage(),
+            busy,
+            cpu.web$getSelectionMode(),
+            cpu instanceof IPausableCraftingCPU,
+            busy && cpu instanceof IPausableCraftingCPU pausable && pausable.web$isPaused(),
+            finalOutput,
+            tracking != null,
+            tracking == null ? 0 : tracking.timeStarted);
     }
 
     private static @Nullable CpuObservation.Tracking tracking(AE2JobTracker.JobTrackingInfo info, IAEKey key) {

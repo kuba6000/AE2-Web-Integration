@@ -1273,6 +1273,16 @@ class IconDeliveryHttpTest {
                 case "web$getActiveItems" -> 6L;
                 case "web$getPendingItems" -> 2L;
                 case "web$getStorageItems" -> 3L;
+                case "web$getItemLists" -> {
+                    for (IAEGenericStack stack : resources.get()
+                        .web$stacks()) {
+                        IAEKey key = stack.web$what();
+                        ((CpuFixtures.StackList) args[0]).amounts.merge(key, 6L, Long::sum);
+                        ((CpuFixtures.StackList) args[1]).amounts.merge(key, 2L, Long::sum);
+                        ((CpuFixtures.StackList) args[2]).amounts.merge(key, 3L, Long::sum);
+                    }
+                    yield null;
+                }
                 case "hashCode" -> System.identityHashCode(proxy);
                 case "equals" -> proxy == args[0];
                 default -> null;
@@ -1312,7 +1322,7 @@ class IconDeliveryHttpTest {
         AE2Controller.AE2Interface = new TestGridFixtures.TestAE(grid) {
 
             public IStackList web$createStackList() {
-                return resources.get();
+                return new CpuFixtures.StackList();
             }
         };
         String gridPath = "/api/grids/" + TestGridFixtures.resolvedKey(grid);

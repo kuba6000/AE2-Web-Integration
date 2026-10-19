@@ -288,7 +288,7 @@ class OutputSnapshotTest extends GridTestScope {
                 case "web$getAvailableStorage" -> 64L;
                 case "web$getUsedStorage" -> 16L;
                 case "web$getCoProcessors" -> 1L;
-                case "web$getAllItems" -> null;
+                case "web$getItemLists" -> null;
                 default -> throw new AssertionError("Unexpected CPU operation: " + method.getName());
             });
         IAECraftingGrid crafting = (IAECraftingGrid) Proxy.newProxyInstance(

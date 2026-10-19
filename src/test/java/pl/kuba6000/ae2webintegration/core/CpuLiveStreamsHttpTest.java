@@ -425,6 +425,46 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     }
 
     @Test
+    void dirtyReadPublishesRemainingOutputAndBusyChangesWithoutWaitingForReconciliation() throws Exception {
+        cpu.set(iron, 4, 0, 0);
+        cpu.outputAmount = 8;
+        try (Connection stream = open(view(cpu), cpu)) {
+            cpu.outputAmount = 6;
+            coordinator.dirty(cpu, gear);
+            tick(100);
+            JsonObject changed = delta(stream);
+            assertEquals(
+                6,
+                changed.getAsJsonObject("cpu")
+                    .getAsJsonObject("finalOutput")
+                    .get("quantity")
+                    .getAsLong());
+            assertEquals(
+                0,
+                changed.getAsJsonArray("updates")
+                    .size());
+
+            cpu.set(iron, 3, 0, 0);
+            coordinator.dirty(cpu, iron);
+            tick(100);
+            assertTrue(
+                delta(stream).get("cpu")
+                    .isJsonNull(),
+                "An unchanged header is omitted from a row delta");
+
+            cpu.busy = false;
+            coordinator.dirty(cpu, gear);
+            tick(100);
+            JsonObject idle = delta(stream);
+            assertFalse(
+                idle.getAsJsonObject("cpu")
+                    .get("isBusy")
+                    .getAsBoolean());
+            assertKeys(idle.getAsJsonArray("removed"), iron);
+        }
+    }
+
+    @Test
     void pauseIsFoundByReconciliationAsAHeaderChange() throws Exception {
         cpu.set(iron, 4, 0, 0);
         try (Connection stream = open(view(cpu), cpu)) {
@@ -448,6 +488,37 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
                     && !delta.getAsJsonObject("cpu")
                         .get("items")
                         .isJsonNull());
+        }
+    }
+
+    @Test
+    void requestedFullReadRunsOnTheNextTickAndIsConsumedOnce() throws Exception {
+        cpu.set(iron, 4, 0, 0);
+        coordinator.requestFullRead(other);
+        try (Connection stream = open(view(cpu), cpu)) {
+            int reads = cpu.bulkReads;
+            cpu.paused = true;
+            cpu.set(tin, 0, 0, 9);
+            coordinator.requestFullRead(cpu);
+            tick(1);
+            JsonObject paused = delta(stream);
+            assertTrue(
+                paused.getAsJsonObject("cpu")
+                    .get("isPaused")
+                    .getAsBoolean());
+            assertKeys(paused.getAsJsonArray("definitions"), tin);
+            assertEquals(reads + 1, cpu.bulkReads);
+            tick(1);
+            assertEquals(reads + 1, cpu.bulkReads);
+            assertEquals(0, other.bulkReads);
+
+            cpu.paused = false;
+            coordinator.requestFullRead(cpu);
+            tick(1);
+            assertFalse(
+                delta(stream).getAsJsonObject("cpu")
+                    .get("isPaused")
+                    .getAsBoolean());
         }
     }
 
@@ -527,10 +598,10 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
                     .name());
         }
         tick(100);
-        int reads = cpu.resourceReads;
+        int reads = cpu.bulkReads;
         coordinator.dirty(cpu, iron);
         tick(RECONCILIATION_MILLIS + 100);
-        assertEquals(reads, cpu.resourceReads);
+        assertEquals(reads, cpu.bulkReads);
     }
 
     @Test
@@ -555,7 +626,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     void viewersShareOneNativeReadAndEachReceivesTheUpdate() throws Exception {
         cpu.set(iron, 4, 0, 0);
         try (Connection first = open(view(cpu), cpu); Connection second = open(view(cpu), cpu)) {
-            int reads = cpu.resourceReads;
+            int reads = cpu.bulkReads;
             cpu.set(iron, 3, 0, 0);
             coordinator.dirty(cpu, iron);
             tick(100);
@@ -568,7 +639,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
                 3,
                 update(delta(second), iron).get("active")
                     .getAsLong());
-            assertEquals(reads + 1, cpu.resourceReads, "One restricted read serves every viewer");
+            assertEquals(reads + 1, cpu.bulkReads, "One restricted read serves every viewer");
         }
     }
 
@@ -611,16 +682,16 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
         coordinator.dirty(cpu, iron);
         tick(100);
         tick(RECONCILIATION_MILLIS + 100);
-        assertEquals(0, cpu.resourceReads, "A CPU nobody views is never read");
+        assertEquals(0, cpu.bulkReads, "A CPU nobody views is never read");
 
         CpuRegistry.Bootstrap bootstrap = view(cpu);
         registry.cancel(bootstrap.subscription());
         tick(100);
-        int reads = cpu.resourceReads;
+        int reads = cpu.bulkReads;
         coordinator.dirty(cpu, iron);
         tick(100);
         tick(RECONCILIATION_MILLIS + 100);
-        assertEquals(reads, cpu.resourceReads);
+        assertEquals(reads, cpu.bulkReads);
         assertNull(registry.reserve(gridKey, cpu.key, session, false, null, null, System.currentTimeMillis()));
     }
 

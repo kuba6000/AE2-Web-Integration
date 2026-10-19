@@ -166,10 +166,12 @@ final class CpuFixtures {
         boolean busy;
         @Nullable
         Resource output;
+        long outputAmount = 1;
         @Nullable
         CpuSelectionMode selectionMode;
         int resourceReads;
         int fullListings;
+        int bulkReads;
 
         Cpu(long id) {
             key = TestGridFixtures.key(id);
@@ -219,7 +221,7 @@ final class CpuFixtures {
         }
 
         public IAEGenericStack web$getFinalOutput() {
-            return output == null ? null : new Stack(output, 1);
+            return output == null ? null : new Stack(output, outputAmount);
         }
 
         public long web$getActiveItems(IAEKey resource) {
@@ -229,11 +231,13 @@ final class CpuFixtures {
         }
 
         public long web$getPendingItems(IAEKey resource) {
+            resourceReads++;
             long[] units = work.get(resource);
             return units == null ? 0 : units[1];
         }
 
         public long web$getStorageItems(IAEKey resource) {
+            resourceReads++;
             long[] units = work.get(resource);
             return units == null ? 0 : units[2];
         }
@@ -243,6 +247,17 @@ final class CpuFixtures {
             for (Map.Entry<IAEKey, long[]> entry : work.entrySet()) {
                 long[] units = entry.getValue();
                 ((StackList) list).amounts.put(entry.getKey(), units[0] + units[1] + units[2]);
+            }
+        }
+
+        public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending,
+            @NotNull IStackList stored) {
+            bulkReads++;
+            for (Map.Entry<IAEKey, long[]> entry : work.entrySet()) {
+                long[] units = entry.getValue();
+                if (units[0] != 0) ((StackList) active).amounts.put(entry.getKey(), units[0]);
+                if (units[1] != 0) ((StackList) pending).amounts.put(entry.getKey(), units[1]);
+                if (units[2] != 0) ((StackList) stored).amounts.put(entry.getKey(), units[2]);
             }
         }
 

@@ -217,7 +217,6 @@ public final class GetCPU extends LiveSnapshotRequest {
         long now = System.currentTimeMillis();
         CpuObservation observation = CpuReader.read(grid, cpu, now, mappings != null);
         CpuObservation.Header header = observation.header();
-        assert header != null : "A full observation always has a header";
         respond(
             HttpURLConnection.HTTP_OK,
             new Response(

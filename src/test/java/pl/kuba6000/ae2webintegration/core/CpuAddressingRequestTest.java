@@ -457,6 +457,9 @@ class CpuAddressingRequestTest extends GridTestScope {
 
         public void web$getAllItems(IStackList list) {}
 
+        public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending,
+            @NotNull IStackList stored) {}
+
         public IStackList web$getWaitingFor() {
             throw new AssertionError("Unexpected waiting inventory");
         }

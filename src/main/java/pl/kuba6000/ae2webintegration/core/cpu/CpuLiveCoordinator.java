@@ -76,6 +76,15 @@ public final class CpuLiveCoordinator {
         if (binding != null) binding.dirty.add(resource);
     }
 
+    /**
+     * A web mutation makes a full observation due on the next tick. The one-CPU-per-tick bound still applies.
+     * Unviewed CPUs cost nothing.
+     */
+    public void requestFullRead(@NotNull ICraftingCPUCluster cpu) {
+        Binding binding = byCpu.get(cpu);
+        if (binding != null) binding.nextFull = 0;
+    }
+
     /** Native hook: a job started, merged, completed or was cancelled. Viewers fetch a fresh snapshot. */
     public void jobChanged(@NotNull ICraftingCPUCluster cpu) {
         Binding binding = byCpu.get(cpu);

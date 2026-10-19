@@ -111,6 +111,40 @@ class CpuReaderTest extends GridTestScope {
     }
 
     @Test
+    void fullAndRestrictedReadsUseOneBulkReadRegardlessOfResourceCount() {
+        cpu.set(iron, 4, 2, 1)
+            .set(gear, 0, 3, 0);
+        CpuFixtures.Resource storedOnly = new CpuFixtures.Resource("stored-only");
+        cpu.set(storedOnly, 0, 0, 9);
+        CpuObservation full = CpuReader.read(grid, cpu, 5000, true);
+
+        assertEquals(1, cpu.bulkReads);
+        assertEquals(0, cpu.resourceReads);
+        assertEquals(0, cpu.fullListings);
+        assertEquals(
+            3,
+            full.rows()
+                .size());
+        assertEquals(new CpuObservation.Amounts(4, 2, 1, null), row(full, iron).amounts());
+        assertEquals(new CpuObservation.Amounts(0, 3, 0, null), row(full, gear).amounts());
+        assertEquals(new CpuObservation.Amounts(0, 0, 9, null), row(full, storedOnly).amounts());
+
+        for (int i = 0; i < 100; i++) cpu.set(new CpuFixtures.Resource("extra-" + i), 1, 2, 3);
+        CpuObservation restricted = CpuReader.read(grid, cpu, Arrays.asList(iron, storedOnly), 5100);
+
+        assertFalse(restricted.full());
+        assertEquals(
+            2,
+            restricted.rows()
+                .size());
+        assertEquals(new CpuObservation.Amounts(4, 2, 1, null), row(restricted, iron).amounts());
+        assertEquals(new CpuObservation.Amounts(0, 0, 9, null), row(restricted, storedOnly).amounts());
+        assertEquals(2, cpu.bulkReads);
+        assertEquals(0, cpu.resourceReads);
+        assertEquals(0, cpu.fullListings);
+    }
+
+    @Test
     void baseVariantsAreOnlyNormalizedWhenRequested() {
         // The identity registry is shared by the whole test run; a unique name keeps its cache out of the count.
         CpuFixtures.Resource iron = new CpuFixtures.Resource("iron-" + System.nanoTime());
@@ -243,7 +277,7 @@ class CpuReaderTest extends GridTestScope {
             .read(grid, cpu, Arrays.asList(iron, new CpuFixtures.Resource("tin")), 5000);
 
         assertFalse(observation.full());
-        assertNull(observation.header());
+        assertTrue(header(observation).busy());
         assertEquals(
             1,
             observation.rows()
@@ -253,7 +287,7 @@ class CpuReaderTest extends GridTestScope {
             row(observation, iron).amounts()
                 .active());
         assertEquals(Collections.singleton(new CpuFixtures.Resource("tin").key()), observation.missing());
-        assertEquals(0, cpu.fullListings, "A restricted read must not enumerate every resource");
+        assertEquals(0, cpu.fullListings, "A restricted read uses the bulk lists instead of the combined listing");
         assertTrue(
             observation.descriptions()
                 .containsKey(iron.key()));

@@ -17,11 +17,11 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /**
  * One detached, completed server-thread read of a crafting CPU. A full observation holds the header and every
- * resource; a restricted one holds only the requested resources, with those that no longer have any work in
- * {@code missing}, and no header.
+ * resource; a restricted one holds the header and only the requested resources, with those that no longer have any
+ * work in {@code missing}.
  */
 @Desugar
-public record CpuObservation(long observedAt, boolean full, @Nullable Header header, @NotNull List<Row> rows,
+public record CpuObservation(long observedAt, boolean full, @NotNull Header header, @NotNull List<Row> rows,
     @NotNull Set<StableKey> missing, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
     @NotNull List<UnkeyedRow> unkeyed) {
 

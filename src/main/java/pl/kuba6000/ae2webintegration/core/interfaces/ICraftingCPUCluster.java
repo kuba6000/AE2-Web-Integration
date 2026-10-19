@@ -44,6 +44,9 @@ public interface ICraftingCPUCluster extends IIdentityHolder {
 
     void web$getAllItems(IStackList list);
 
+    /** Fills empty lists with absolute counts, in one native pass per list. Server thread; zero entries omitted. */
+    void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored);
+
     IStackList web$getWaitingFor();
 
 }

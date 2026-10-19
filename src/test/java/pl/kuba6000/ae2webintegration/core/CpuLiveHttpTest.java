@@ -46,7 +46,7 @@ class CpuLiveHttpTest {
 
     private final CpuFixtures.Resource iron = new CpuFixtures.Resource("iron");
     private final CpuFixtures.Resource gear = new CpuFixtures.Resource("gear");
-    private final CpuFixtures.Cpu cpu = new CpuFixtures.Cpu(1);
+    private final CpuFixtures.PausableCpu cpu = new CpuFixtures.PausableCpu(1);
     private final CpuFixtures.Grid grid = new CpuFixtures.Grid(9301, cpu);
     private final ScheduledExecutorService game = Executors.newSingleThreadScheduledExecutor();
     private IAE previousAe;
@@ -170,6 +170,89 @@ class CpuLiveHttpTest {
                 3,
                 update.get("stored")
                     .getAsLong());
+        } finally {
+            stream.disconnect();
+        }
+    }
+
+    @Test
+    void inventoryNotificationUpdatesStoredCountsWithoutAdvancingCraftingMeasurements() throws Exception {
+        onGame(() -> {
+            TestGridFixtures.track(grid);
+            AE2JobTracker.addJob(cpu, grid, false);
+            cpu.waiting.amounts.put(iron, 5L);
+            AEMixinCallbacks.INSTANCE.craftingStatusPostedUpdate(cpu, iron);
+        });
+        String token = json(base + "?live=true").get("subscription")
+            .getAsString();
+        HttpURLConnection stream = connection(base + "/events?subscription=" + token);
+        try (BufferedReader input = new BufferedReader(
+            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+            assertEquals(
+                "ready",
+                CpuFixtures.readEvent(input)
+                    .name());
+            onGame(() -> {
+                cpu.set(iron, 4, 2, 0);
+                cpu.waiting.amounts.put(iron, 3L);
+                AEMixinCallbacks.INSTANCE.cpuInventoryChanged(cpu, iron);
+            });
+            JsonObject row = CpuFixtures.readEvent(input)
+                .data()
+                .getAsJsonArray("updates")
+                .get(0)
+                .getAsJsonObject();
+            assertEquals(
+                0,
+                row.get("stored")
+                    .getAsLong());
+            assertEquals(
+                0,
+                row.get("craftedTotal")
+                    .getAsLong());
+            assertTrue(
+                row.get("crafting")
+                    .getAsBoolean());
+        } finally {
+            stream.disconnect();
+        }
+    }
+
+    @Test
+    void webPauseAndResumeRefreshTheHeaderForAnExistingViewer() throws Exception {
+        String token = json(base + "?live=true").get("subscription")
+            .getAsString();
+        HttpURLConnection stream = connection(base + "/events?subscription=" + token);
+        stream.setReadTimeout(1000);
+        try (BufferedReader input = new BufferedReader(
+            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+            assertEquals(
+                "ready",
+                CpuFixtures.readEvent(input)
+                    .name());
+            for (boolean paused : new boolean[] { true, false }) {
+                HttpURLConnection mutation = connection(base + "/pause");
+                mutation.setRequestMethod("POST");
+                mutation.setRequestProperty("X-AE2-Request", "true");
+                mutation.setRequestProperty("Content-Type", "application/json");
+                mutation.setDoOutput(true);
+                try {
+                    try (java.io.OutputStream body = mutation.getOutputStream()) {
+                        body.write(("{\"paused\":" + paused + "}").getBytes(StandardCharsets.UTF_8));
+                    }
+                    assertEquals(200, mutation.getResponseCode());
+                } finally {
+                    mutation.disconnect();
+                }
+                CpuFixtures.Event event = CpuFixtures.readEvent(input);
+                assertEquals("delta", event.name());
+                assertEquals(
+                    paused,
+                    event.data()
+                        .getAsJsonObject("cpu")
+                        .get("isPaused")
+                        .getAsBoolean());
+            }
         } finally {
             stream.disconnect();
         }

@@ -280,6 +280,9 @@ class CoreEngineLifecycleTest extends GridTestScope {
         @Override
         public void web$getAllItems(IStackList list) {}
 
+        public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending,
+            @NotNull IStackList stored) {}
+
         @Override
         public IStackList web$getWaitingFor() {
             return null;

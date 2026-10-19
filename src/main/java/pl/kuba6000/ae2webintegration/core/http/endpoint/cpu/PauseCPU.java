@@ -8,7 +8,9 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
@@ -108,6 +110,8 @@ public final class PauseCPU extends ISyncedRequest {
             return;
         }
         pausable.web$setPaused(input.paused());
+        CpuLiveCoordinator live = CoreEngine.getCpuLive();
+        if (live != null) live.requestFullRead(cluster);
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
     }
 }

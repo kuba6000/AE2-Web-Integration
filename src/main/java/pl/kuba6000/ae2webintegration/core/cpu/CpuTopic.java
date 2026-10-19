@@ -177,8 +177,8 @@ public final class CpuTopic extends LiveTopic {
             .equals(unkeyed);
         if (observation.full()) unkeyed = observation.unkeyed();
         CpuObservation.Header observed = observation.header();
-        boolean headerChanged = observed != null && !observed.equals(header);
-        if (observed != null) header = observed;
+        boolean headerChanged = !observed.equals(header);
+        header = observed;
         boolean updated = !initialized() || !changed.isEmpty() || unkeyedChanged || headerChanged;
         markInitialized();
         if (!updated) return;

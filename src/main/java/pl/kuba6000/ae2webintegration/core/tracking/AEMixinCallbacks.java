@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.tracking;
 
+import org.jetbrains.annotations.NotNull;
+
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.config.Config;
@@ -26,8 +28,13 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
     @Override
     public void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, Object diff) {
         AE2JobTracker.updateCraftingStatus(cpu, diff);
+        if (diff instanceof IAEKey resource) cpuInventoryChanged(cpu, resource);
+    }
+
+    @Override
+    public void cpuInventoryChanged(@NotNull ICraftingCPUCluster cpu, @NotNull IAEKey resource) {
         CpuLiveCoordinator live = CoreEngine.getCpuLive();
-        if (live != null && diff instanceof IAEKey resource) live.dirty(cpu, resource);
+        if (live != null) live.dirty(cpu, resource);
     }
 
     @Override
