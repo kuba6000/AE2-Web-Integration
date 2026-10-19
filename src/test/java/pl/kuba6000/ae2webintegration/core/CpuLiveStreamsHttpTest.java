@@ -588,6 +588,31 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     }
 
     @Test
+    void retiringTheOldBindingOfASurvivingCpuKeepsTheNewBindingsNotifications() throws Exception {
+        cpu.set(iron, 4, 0, 0);
+        CpuFixtures.Grid movedGrid = new CpuFixtures.Grid(9202, cpu);
+        StableKey movedKey = TestGridFixtures.resolvedKey(movedGrid);
+        CpuRegistry.Bootstrap old = view(cpu);
+        coordinator.prepareForViewer(movedKey, movedGrid, cpu.key, cpu, clock);
+        CpuRegistry.Bootstrap moved = registry
+            .reserve(movedKey, cpu.key, session, false, null, null, System.currentTimeMillis());
+        assertNotNull(moved);
+        registry.cancel(old.subscription());
+        tick(100);
+        gridKey = movedKey;
+        try (Connection stream = open(moved, cpu)) {
+            cpu.set(iron, 3, 0, 0);
+            coordinator.dirty(cpu, iron);
+            tick(100);
+
+            assertEquals(
+                3,
+                update(delta(stream), iron).get("active")
+                    .getAsLong());
+        }
+    }
+
+    @Test
     void goneGridEndsTheViewAndReleasesTheCpu() throws Exception {
         cpu.set(iron, 4, 0, 0);
         try (Connection stream = open(view(cpu), cpu)) {

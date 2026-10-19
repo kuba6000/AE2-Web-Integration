@@ -21,7 +21,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
  * work in {@code missing}.
  */
 @Desugar
-public record CpuObservation(long observedAt, boolean full, @NotNull Header header, @NotNull List<Row> rows,
+public record CpuObservation(boolean full, @NotNull Header header, @NotNull List<Row> rows,
     @NotNull Set<StableKey> missing, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
     @NotNull List<UnkeyedRow> unkeyed) {
 

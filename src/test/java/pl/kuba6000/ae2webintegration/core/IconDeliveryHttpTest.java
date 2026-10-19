@@ -1270,9 +1270,6 @@ class IconDeliveryHttpTest {
                 case "web$getAvailableStorage" -> 1024L;
                 case "web$getUsedStorage", "web$getCoProcessors" -> 0L;
                 case "web$getFinalOutput" -> output.get();
-                case "web$getActiveItems" -> 6L;
-                case "web$getPendingItems" -> 2L;
-                case "web$getStorageItems" -> 3L;
                 case "web$getItemLists" -> {
                     for (IAEGenericStack stack : resources.get()
                         .web$stacks()) {

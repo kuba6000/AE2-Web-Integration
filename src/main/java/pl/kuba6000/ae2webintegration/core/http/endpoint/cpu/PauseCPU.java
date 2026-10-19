@@ -11,6 +11,7 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
@@ -95,7 +96,7 @@ public final class PauseCPU extends ISyncedRequest {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        Map<StableKey, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(grid.web$getCraftingGrid());
+        Map<StableKey, ICraftingCPUCluster> cpus = CpuReader.list(grid.web$getCraftingGrid());
         ICraftingCPUCluster cluster = cpus.get(cpuId);
         if (cluster == null) {
             deny(ApiStatus.CPU_NOT_FOUND);

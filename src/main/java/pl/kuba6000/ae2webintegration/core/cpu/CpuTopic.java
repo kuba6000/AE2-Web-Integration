@@ -15,7 +15,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.http.dto.CpuResource;
-import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
+import pl.kuba6000.ae2webintegration.core.http.dto.GetCPUClusterData;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.live.LiveSubscription;
@@ -51,7 +51,7 @@ public final class CpuTopic extends LiveTopic {
 
     @Desugar
     private record Delta(@NotNull LiveView view, @NotNull List<Value> updates, @NotNull List<CpuResource> definitions,
-        @NotNull List<StableKey> removed, @Nullable List<CpuResource> unkeyed, @Nullable GetCPU.ClusterData cpu,
+        @NotNull List<StableKey> removed, @Nullable List<CpuResource> unkeyed, @Nullable GetCPUClusterData cpu,
         @Nullable IconMappings icons) {}
 
     @Desugar
@@ -75,7 +75,7 @@ public final class CpuTopic extends LiveTopic {
                 removed,
                 unkeyed == null ? null
                     : resources(Collections.emptyList(), Collections.emptyMap(), unkeyed, at, mappings),
-                header == null ? null : new GetCPU.ClusterData(header, at, mappings),
+                header == null ? null : new GetCPUClusterData(header, at, mappings),
                 mappings);
         }
     }

@@ -5,10 +5,13 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -21,21 +24,44 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
+import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
-/** The single native read of one crafting CPU, shared by the detail response and the live view. Server thread only. */
+/**
+ * The native reads of crafting CPUs shared by the endpoints and the live view: the CPUs of a grid by address, and the
+ * single read of one CPU. Server thread only.
+ */
 public final class CpuReader {
 
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
+
     private CpuReader() {}
+
+    /** Duplicate addresses are logged; the last CPU for an address is retained. */
+    public static @NotNull Map<StableKey, ICraftingCPUCluster> list(@NotNull IAECraftingGrid craftingGrid) {
+        Map<StableKey, ICraftingCPUCluster> orderedMap = new LinkedHashMap<>();
+        for (ICraftingCPUCluster cpu : craftingGrid.web$getCPUs()) {
+            StableKey id = cpu.web$getKey();
+            ICraftingCPUCluster previous = orderedMap.put(id, cpu);
+            if (previous != null) {
+                LOG.error(
+                    "Duplicate crafting CPU ID '{}' for '{}' and '{}'; retaining the last CPU",
+                    id,
+                    previous.web$getName(),
+                    cpu.web$getName());
+            }
+        }
+        return orderedMap;
+    }
 
     /**
      * Reads the header and every resource of the CPU, and replaces the identities the CPU retains. The optional base
      * variant of a resource, only needed for icon fallback, is materialized by the shared description cache when
      * {@code baseKeys} is set; otherwise descriptions are captured without it.
      */
-    public static @NotNull CpuObservation read(@NotNull IAEGrid grid, @NotNull ICraftingCPUCluster cpu, long observedAt,
+    public static @NotNull CpuObservation read(@NotNull IAEGrid grid, @NotNull ICraftingCPUCluster cpu,
         boolean baseKeys) {
         ItemIdentityRegistry.Listing listing = AE2Controller.itemIdentities.beginListing(cpu);
         boolean busy = cpu.web$isBusy();
@@ -79,7 +105,7 @@ public final class CpuReader {
             }
         }
         listing.commit();
-        return new CpuObservation(observedAt, true, header, rows, Collections.emptySet(), descriptions, unkeyed);
+        return new CpuObservation(true, header, rows, Collections.emptySet(), descriptions, unkeyed);
     }
 
     /**
@@ -88,8 +114,19 @@ public final class CpuReader {
      * so those cases return the full observation instead.
      */
     public static @NotNull CpuObservation read(@NotNull IAEGrid grid, @NotNull ICraftingCPUCluster cpu,
-        @NotNull Collection<IAEKey> keys, long observedAt) {
-        if (!cpu.web$isBusy()) return read(grid, cpu, observedAt, true);
+        @NotNull Collection<IAEKey> keys) {
+        if (!cpu.web$isBusy()) return read(grid, cpu, true);
+        Map<IAEKey, StableKey> itemKeys = new LinkedHashMap<>();
+        for (IAEKey key : keys) {
+            StableKey itemKey;
+            try {
+                itemKey = AE2Controller.itemIdentities.remember(cpu, key);
+            } catch (RuntimeException conflicted) {
+                return read(grid, cpu, true);
+            }
+            if (itemKey == null) return read(grid, cpu, true);
+            itemKeys.put(key, itemKey);
+        }
         AE2JobTracker.JobTrackingInfo tracking = AE2JobTracker.findActiveJob(cpu);
         IStackList active = AE2Controller.AE2Interface.web$createStackList();
         IStackList pending = AE2Controller.AE2Interface.web$createStackList();
@@ -98,14 +135,9 @@ public final class CpuReader {
         List<CpuObservation.Row> rows = new ArrayList<>();
         Set<StableKey> missing = new HashSet<>();
         Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
-        for (IAEKey key : keys) {
-            StableKey itemKey;
-            try {
-                itemKey = AE2Controller.itemIdentities.remember(cpu, key);
-            } catch (RuntimeException conflicted) {
-                return read(grid, cpu, observedAt, true);
-            }
-            if (itemKey == null) return read(grid, cpu, observedAt, true);
+        for (Map.Entry<IAEKey, StableKey> entry : itemKeys.entrySet()) {
+            IAEKey key = entry.getKey();
+            StableKey itemKey = entry.getValue();
             CpuObservation.Amounts amounts = new CpuObservation.Amounts(
                 active.web$getAmount(key),
                 pending.web$getAmount(key),
@@ -119,7 +151,6 @@ public final class CpuReader {
             }
         }
         return new CpuObservation(
-            observedAt,
             false,
             header(cpu, true, ResourceSnapshot.capture(grid, cpu.web$getFinalOutput()), tracking),
             rows,

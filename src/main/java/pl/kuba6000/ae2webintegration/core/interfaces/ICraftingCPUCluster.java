@@ -36,14 +36,6 @@ public interface ICraftingCPUCluster extends IIdentityHolder {
 
     IAEGenericStack web$getFinalOutput();
 
-    long web$getActiveItems(IAEKey key);
-
-    long web$getPendingItems(IAEKey key);
-
-    long web$getStorageItems(IAEKey key);
-
-    void web$getAllItems(IStackList list);
-
     /** Fills empty lists with absolute counts, in one native pass per list. Server thread; zero entries omitted. */
     void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored);
 

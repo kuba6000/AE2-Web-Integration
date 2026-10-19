@@ -418,20 +418,6 @@ class CpuPauseHttpTest extends GridTestScope {
             return null;
         }
 
-        public long web$getActiveItems(IAEKey key) {
-            return 0;
-        }
-
-        public long web$getPendingItems(IAEKey key) {
-            return 0;
-        }
-
-        public long web$getStorageItems(IAEKey key) {
-            return 0;
-        }
-
-        public void web$getAllItems(IStackList list) {}
-
         public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending,
             @NotNull IStackList stored) {}
 

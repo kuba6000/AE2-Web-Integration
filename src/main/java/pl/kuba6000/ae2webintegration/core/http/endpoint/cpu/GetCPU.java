@@ -1,7 +1,6 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.cpu;
 
 import java.net.HttpURLConnection;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -11,7 +10,6 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
-import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuObservation;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
@@ -23,8 +21,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
-import pl.kuba6000.ae2webintegration.core.http.dto.CpuResource;
-import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
+import pl.kuba6000.ae2webintegration.core.http.dto.GetCPUClusterData;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -79,10 +76,10 @@ public final class GetCPU extends LiveSnapshotRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull ClusterData data, @Nullable IconMappings icons,
+    public record Response(@NotNull ApiStatus status, @NotNull GetCPUClusterData data, @Nullable IconMappings icons,
         @Nullable LiveView view, @Nullable String subscription) {
 
-        public Response(ApiStatus status, ClusterData data, IconMappings icons) {
+        public Response(ApiStatus status, GetCPUClusterData data, IconMappings icons) {
             this(status, data, icons, null, null);
         }
     }
@@ -90,63 +87,6 @@ public final class GetCPU extends LiveSnapshotRequest {
     /** Include icon atlas references and page metadata in the response. */
     @QueryParam("icons")
     private boolean icons;
-
-    @SuppressWarnings("unused") // Gson reads the fields reflectively.
-    public static class ClusterData {
-
-        public ClusterData(@NotNull CpuObservation.Header header, long at, @Nullable IconMappings mappings) {
-            size = header.size();
-            isBusy = header.busy();
-            selectionMode = header.selectionMode();
-            supportsPause = header.supportsPause();
-            isPaused = header.paused();
-            finalOutput = header.finalOutput() == null ? null : new ResourceStack(header.finalOutput(), mappings);
-            hasTrackingInfo = header.hasTrackingInfo();
-            timeStarted = header.timeStarted();
-            timeElapsed = header.timeElapsed(at);
-        }
-
-        /**
-         * Total storage capacity of this CPU in bytes.
-         *
-         * @example 16384
-         */
-        public final long size;
-        /**
-         * Whether the CPU is currently crafting.
-         *
-         * @example true
-         */
-        public final boolean isBusy;
-        /** Native automatic-selection policy; null when unsupported or unknown. Not a submission permission. */
-        public final @Nullable CpuSelectionMode selectionMode;
-        /** Whether this CPU supports pausing the scheduling of its current job. */
-        public final boolean supportsPause;
-        /** Whether the active job is paused; false for idle or unsupported CPUs. */
-        public final boolean isPaused;
-        /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
-        public final @Nullable ResourceStack finalOutput;
-        /** Resource details for current work; null when the CPU is idle. */
-        public @Nullable ArrayList<CpuResource> items;
-        /**
-         * Whether measurements are available for the active job.
-         *
-         * @example true
-         */
-        public final boolean hasTrackingInfo;
-        /**
-         * Crafting start time in Unix epoch milliseconds; zero when unavailable.
-         *
-         * @example 1700000000000
-         */
-        public final long timeStarted;
-        /**
-         * Elapsed crafting time in milliseconds; zero when tracking is unavailable.
-         *
-         * @example 10000
-         */
-        public final long timeElapsed;
-    }
 
     @PathParam("cpuKey")
     private @NotNull StableKey cpuId;
@@ -167,7 +107,7 @@ public final class GetCPU extends LiveSnapshotRequest {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        ICraftingCPUCluster cpu = GetCPUList.getCPUList(grid.web$getCraftingGrid())
+        ICraftingCPUCluster cpu = CpuReader.list(grid.web$getCraftingGrid())
             .get(cpuId);
         if (cpu == null) {
             deny(ApiStatus.CPU_NOT_FOUND);
@@ -215,7 +155,7 @@ public final class GetCPU extends LiveSnapshotRequest {
             return;
         }
         long now = System.currentTimeMillis();
-        CpuObservation observation = CpuReader.read(grid, cpu, now, mappings != null);
+        CpuObservation observation = CpuReader.read(grid, cpu, mappings != null);
         CpuObservation.Header header = observation.header();
         respond(
             HttpURLConnection.HTTP_OK,
@@ -231,10 +171,10 @@ public final class GetCPU extends LiveSnapshotRequest {
                 mappings));
     }
 
-    private static @NotNull ClusterData clusterData(@NotNull CpuObservation.Header header,
+    private static @NotNull GetCPUClusterData clusterData(@NotNull CpuObservation.Header header,
         @NotNull List<CpuObservation.Row> rows, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
         @NotNull List<CpuObservation.UnkeyedRow> unkeyed, long at, @Nullable IconMappings mappings) {
-        ClusterData data = new ClusterData(header, at, mappings);
+        GetCPUClusterData data = new GetCPUClusterData(header, at, mappings);
         if (header.busy()) data.items = CpuTopic.items(rows, descriptions, unkeyed, header, at, mappings);
         return data;
     }

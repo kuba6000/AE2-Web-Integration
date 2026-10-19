@@ -15,7 +15,6 @@ import org.jetbrains.annotations.NotNull;
 
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridFilter;
-import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPUList;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
@@ -67,7 +66,7 @@ public final class CpuLiveCoordinator {
             byCpu.put(cpu, binding);
         }
         cpus.activate(gridKey, cpuKey, binding.generation, nowMillis);
-        publish(binding, CpuReader.read(grid, cpu, nowMillis, true), nowMillis);
+        publish(binding, CpuReader.read(grid, cpu, true), nowMillis);
     }
 
     /** Native hook: a resource of this CPU changed. Costs one identity lookup, and nothing for unviewed CPUs. */
@@ -116,11 +115,11 @@ public final class CpuLiveCoordinator {
         binding.lastRead = nowMillis;
         try {
             if (nowMillis < binding.nextFull) {
-                CpuObservation observation = CpuReader.read(grid, binding.cpu, binding.dirty, nowMillis);
+                CpuObservation observation = CpuReader.read(grid, binding.cpu, binding.dirty);
                 binding.dirty.clear();
                 publish(binding, observation, nowMillis);
             } else if (present(grid, binding)) {
-                publish(binding, CpuReader.read(grid, binding.cpu, nowMillis, true), nowMillis);
+                publish(binding, CpuReader.read(grid, binding.cpu, true), nowMillis);
             } else retire(binding);
         } catch (RuntimeException failure) {
             LOG.warn("Crafting CPU {} could not be observed", binding.cpuKey, failure);
@@ -139,7 +138,7 @@ public final class CpuLiveCoordinator {
 
     /** The CPU object listed under its address is still the one that was viewed, not removed or rebuilt. */
     private static boolean present(IAEGrid grid, Binding binding) {
-        return GridFilter.isUsable(grid) && GetCPUList.getCPUList(grid.web$getCraftingGrid())
+        return GridFilter.isUsable(grid) && CpuReader.list(grid.web$getCraftingGrid())
             .get(binding.cpuKey) == binding.cpu;
     }
 
@@ -149,7 +148,8 @@ public final class CpuLiveCoordinator {
     }
 
     private void release(Binding binding) {
-        byCpu.remove(binding.cpu);
+        // A surviving CPU may already be indexed by a newer binding; only remove this binding's own entry.
+        byCpu.remove(binding.cpu, binding);
         cpus.retire(binding.gridKey, binding.cpuKey, binding.generation);
     }
 

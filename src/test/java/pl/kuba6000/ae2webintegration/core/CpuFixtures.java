@@ -169,8 +169,6 @@ final class CpuFixtures {
         long outputAmount = 1;
         @Nullable
         CpuSelectionMode selectionMode;
-        int resourceReads;
-        int fullListings;
         int bulkReads;
 
         Cpu(long id) {
@@ -222,32 +220,6 @@ final class CpuFixtures {
 
         public IAEGenericStack web$getFinalOutput() {
             return output == null ? null : new Stack(output, outputAmount);
-        }
-
-        public long web$getActiveItems(IAEKey resource) {
-            resourceReads++;
-            long[] units = work.get(resource);
-            return units == null ? 0 : units[0];
-        }
-
-        public long web$getPendingItems(IAEKey resource) {
-            resourceReads++;
-            long[] units = work.get(resource);
-            return units == null ? 0 : units[1];
-        }
-
-        public long web$getStorageItems(IAEKey resource) {
-            resourceReads++;
-            long[] units = work.get(resource);
-            return units == null ? 0 : units[2];
-        }
-
-        public void web$getAllItems(IStackList list) {
-            fullListings++;
-            for (Map.Entry<IAEKey, long[]> entry : work.entrySet()) {
-                long[] units = entry.getValue();
-                ((StackList) list).amounts.put(entry.getKey(), units[0] + units[1] + units[2]);
-            }
         }
 
         public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending,

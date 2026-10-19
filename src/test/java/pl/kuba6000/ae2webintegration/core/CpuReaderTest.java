@@ -67,10 +67,9 @@ class CpuReaderTest extends GridTestScope {
         cpu.set(iron, 4, 2, 1)
             .set(gear, 0, 3, 0);
 
-        CpuObservation observation = CpuReader.read(grid, cpu, 5000, true);
+        CpuObservation observation = CpuReader.read(grid, cpu, true);
 
         assertTrue(observation.full());
-        assertEquals(5000, observation.observedAt());
         assertTrue(
             observation.missing()
                 .isEmpty());
@@ -116,11 +115,9 @@ class CpuReaderTest extends GridTestScope {
             .set(gear, 0, 3, 0);
         CpuFixtures.Resource storedOnly = new CpuFixtures.Resource("stored-only");
         cpu.set(storedOnly, 0, 0, 9);
-        CpuObservation full = CpuReader.read(grid, cpu, 5000, true);
+        CpuObservation full = CpuReader.read(grid, cpu, true);
 
         assertEquals(1, cpu.bulkReads);
-        assertEquals(0, cpu.resourceReads);
-        assertEquals(0, cpu.fullListings);
         assertEquals(
             3,
             full.rows()
@@ -130,7 +127,7 @@ class CpuReaderTest extends GridTestScope {
         assertEquals(new CpuObservation.Amounts(0, 0, 9, null), row(full, storedOnly).amounts());
 
         for (int i = 0; i < 100; i++) cpu.set(new CpuFixtures.Resource("extra-" + i), 1, 2, 3);
-        CpuObservation restricted = CpuReader.read(grid, cpu, Arrays.asList(iron, storedOnly), 5100);
+        CpuObservation restricted = CpuReader.read(grid, cpu, Arrays.asList(iron, storedOnly));
 
         assertFalse(restricted.full());
         assertEquals(
@@ -140,8 +137,6 @@ class CpuReaderTest extends GridTestScope {
         assertEquals(new CpuObservation.Amounts(4, 2, 1, null), row(restricted, iron).amounts());
         assertEquals(new CpuObservation.Amounts(0, 0, 9, null), row(restricted, storedOnly).amounts());
         assertEquals(2, cpu.bulkReads);
-        assertEquals(0, cpu.resourceReads);
-        assertEquals(0, cpu.fullListings);
     }
 
     @Test
@@ -150,7 +145,7 @@ class CpuReaderTest extends GridTestScope {
         CpuFixtures.Resource iron = new CpuFixtures.Resource("iron-" + System.nanoTime());
         cpu.set(iron, 4, 0, 0);
 
-        CpuObservation plain = CpuReader.read(grid, cpu, 1, false);
+        CpuObservation plain = CpuReader.read(grid, cpu, false);
 
         assertEquals(0, iron.baseKeyReads.get());
         assertNull(
@@ -162,14 +157,14 @@ class CpuReaderTest extends GridTestScope {
             row(plain, iron).amounts()
                 .active());
 
-        CpuObservation withBase = CpuReader.read(grid, cpu, 2, true);
+        CpuObservation withBase = CpuReader.read(grid, cpu, true);
 
         assertEquals(1, iron.baseKeyReads.get());
         assertNotNull(
             withBase.descriptions()
                 .get(iron.key())
                 .baseKey());
-        CpuReader.read(grid, cpu, 3, true);
+        CpuReader.read(grid, cpu, true);
         assertEquals(1, iron.baseKeyReads.get(), "The retained description normalizes each identity once");
     }
 
@@ -178,11 +173,11 @@ class CpuReaderTest extends GridTestScope {
         CpuFixtures.PausableCpu pausable = new CpuFixtures.PausableCpu(2);
         pausable.busy = true;
         pausable.paused = true;
-        CpuObservation observation = CpuReader.read(grid, pausable, 1, true);
+        CpuObservation observation = CpuReader.read(grid, pausable, true);
         assertTrue(header(observation).supportsPause());
         assertTrue(header(observation).paused());
         pausable.busy = false;
-        assertFalse(header(CpuReader.read(grid, pausable, 1, true)).paused(), "An idle CPU is never paused");
+        assertFalse(header(CpuReader.read(grid, pausable, true)).paused(), "An idle CPU is never paused");
     }
 
     @Test
@@ -190,7 +185,7 @@ class CpuReaderTest extends GridTestScope {
         cpu.busy = false;
         cpu.set(iron, 1, 1, 1);
 
-        CpuObservation observation = CpuReader.read(grid, cpu, 5000, true);
+        CpuObservation observation = CpuReader.read(grid, cpu, true);
 
         assertFalse(header(observation).busy());
         assertNull(header(observation).finalOutput());
@@ -200,7 +195,7 @@ class CpuReaderTest extends GridTestScope {
         assertTrue(
             observation.unkeyed()
                 .isEmpty());
-        assertEquals(0, cpu.fullListings, "An idle CPU has no work to list");
+        assertEquals(0, cpu.bulkReads, "An idle CPU has no work to list");
     }
 
     @Test
@@ -208,7 +203,7 @@ class CpuReaderTest extends GridTestScope {
         cpu.set(iron, 1, 0, 0)
             .set(exotic, 7, 0, 0);
 
-        CpuObservation observation = CpuReader.read(grid, cpu, 5000, true);
+        CpuObservation observation = CpuReader.read(grid, cpu, true);
 
         assertEquals(
             1,
@@ -247,7 +242,7 @@ class CpuReaderTest extends GridTestScope {
         info.timeSpentOn.put(gear, 50L);
         info.craftedTotal.put(gear, 2L);
 
-        CpuObservation observation = CpuReader.read(grid, cpu, 5000, true);
+        CpuObservation observation = CpuReader.read(grid, cpu, true);
 
         CpuObservation.Header header = header(observation);
         assertTrue(header.hasTrackingInfo());
@@ -262,10 +257,10 @@ class CpuReaderTest extends GridTestScope {
         assertEquals(50, finished.timeSpent(9000));
         assertEquals(0, finished.active(), "A measured resource without work still has a row");
 
-        CpuObservation later = CpuReader.read(grid, cpu, 9000, true);
+        CpuObservation later = CpuReader.read(grid, cpu, true);
         assertEquals(running, row(later, iron).amounts(), "Clock progress alone must not change the detached row");
         info.craftedTotal.put(iron, 9L);
-        assertNotEquals(running, row(CpuReader.read(grid, cpu, 9000, true), iron).amounts());
+        assertNotEquals(running, row(CpuReader.read(grid, cpu, true), iron).amounts());
     }
 
     @Test
@@ -273,8 +268,7 @@ class CpuReaderTest extends GridTestScope {
         cpu.set(iron, 4, 0, 0)
             .set(gear, 1, 0, 0);
 
-        CpuObservation observation = CpuReader
-            .read(grid, cpu, Arrays.asList(iron, new CpuFixtures.Resource("tin")), 5000);
+        CpuObservation observation = CpuReader.read(grid, cpu, Arrays.asList(iron, new CpuFixtures.Resource("tin")));
 
         assertFalse(observation.full());
         assertTrue(header(observation).busy());
@@ -287,7 +281,7 @@ class CpuReaderTest extends GridTestScope {
             row(observation, iron).amounts()
                 .active());
         assertEquals(Collections.singleton(new CpuFixtures.Resource("tin").key()), observation.missing());
-        assertEquals(0, cpu.fullListings, "A restricted read uses the bulk lists instead of the combined listing");
+        assertEquals(1, cpu.bulkReads, "A restricted read takes the bulk lists once");
         assertTrue(
             observation.descriptions()
                 .containsKey(iron.key()));
@@ -303,7 +297,7 @@ class CpuReaderTest extends GridTestScope {
         info.timeSpentOn.put(iron, 10L);
         info.startedWaitingFor.put(iron, 4000L);
 
-        CpuObservation observation = CpuReader.read(grid, cpu, Collections.singletonList(iron), 5000);
+        CpuObservation observation = CpuReader.read(grid, cpu, Collections.singletonList(iron));
 
         assertTrue(
             observation.missing()
@@ -318,8 +312,9 @@ class CpuReaderTest extends GridTestScope {
         cpu.set(iron, 1, 0, 0)
             .set(exotic, 3, 0, 0);
 
-        CpuObservation withUnkeyed = CpuReader.read(grid, cpu, Collections.singletonList(exotic), 5000);
+        CpuObservation withUnkeyed = CpuReader.read(grid, cpu, Collections.singletonList(exotic));
         assertTrue(withUnkeyed.full());
+        assertEquals(1, cpu.bulkReads, "The fallback decision is made before any native list is read");
         assertNotNull(withUnkeyed.header());
         assertEquals(
             1,
@@ -327,7 +322,7 @@ class CpuReaderTest extends GridTestScope {
                 .size());
 
         cpu.busy = false;
-        CpuObservation idle = CpuReader.read(grid, cpu, Collections.singletonList(iron), 5000);
+        CpuObservation idle = CpuReader.read(grid, cpu, Collections.singletonList(iron));
         assertTrue(idle.full());
         assertFalse(header(idle).busy());
     }
