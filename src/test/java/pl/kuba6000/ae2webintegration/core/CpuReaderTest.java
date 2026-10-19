@@ -18,7 +18,6 @@ import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuObservation;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -56,6 +55,12 @@ class CpuReaderTest extends GridTestScope {
             .orElseThrow(AssertionError::new);
     }
 
+    private static CpuObservation.Header header(CpuObservation observation) {
+        CpuObservation.Header header = observation.header();
+        assertNotNull(header, "A full observation has a header");
+        return header;
+    }
+
     @Test
     void fullReadDescribesEveryResourceAndTheHeaderWithoutMeasurements() {
         cpu.selectionMode = CpuSelectionMode.ALL;
@@ -69,8 +74,7 @@ class CpuReaderTest extends GridTestScope {
         assertTrue(
             observation.missing()
                 .isEmpty());
-        CpuObservation.Header header = observation.header();
-        assertNotNull(header);
+        CpuObservation.Header header = header(observation);
         assertEquals(64, header.size());
         assertTrue(header.busy());
         assertEquals(CpuSelectionMode.ALL, header.selectionMode());
@@ -78,6 +82,7 @@ class CpuReaderTest extends GridTestScope {
         assertFalse(header.paused());
         assertFalse(header.hasTrackingInfo());
         assertEquals(0, header.timeStarted());
+        assertNotNull(header.finalOutput());
         assertEquals(
             gear.key(),
             header.finalOutput()
@@ -140,18 +145,10 @@ class CpuReaderTest extends GridTestScope {
         pausable.busy = true;
         pausable.paused = true;
         CpuObservation observation = CpuReader.read(grid, pausable, 1, true);
-        assertTrue(
-            observation.header()
-                .supportsPause());
-        assertTrue(
-            observation.header()
-                .paused());
+        assertTrue(header(observation).supportsPause());
+        assertTrue(header(observation).paused());
         pausable.busy = false;
-        assertFalse(
-            CpuReader.read(grid, pausable, 1, true)
-                .header()
-                .paused(),
-            "An idle CPU is never paused");
+        assertFalse(header(CpuReader.read(grid, pausable, 1, true)).paused(), "An idle CPU is never paused");
     }
 
     @Test
@@ -161,12 +158,8 @@ class CpuReaderTest extends GridTestScope {
 
         CpuObservation observation = CpuReader.read(grid, cpu, 5000, true);
 
-        assertFalse(
-            observation.header()
-                .busy());
-        assertNull(
-            observation.header()
-                .finalOutput());
+        assertFalse(header(observation).busy());
+        assertNull(header(observation).finalOutput());
         assertTrue(
             observation.rows()
                 .isEmpty());
@@ -222,7 +215,7 @@ class CpuReaderTest extends GridTestScope {
 
         CpuObservation observation = CpuReader.read(grid, cpu, 5000, true);
 
-        CpuObservation.Header header = observation.header();
+        CpuObservation.Header header = header(observation);
         assertTrue(header.hasTrackingInfo());
         assertEquals(1000, header.timeStarted());
         CpuObservation.Amounts running = row(observation, iron).amounts();
@@ -247,7 +240,7 @@ class CpuReaderTest extends GridTestScope {
             .set(gear, 1, 0, 0);
 
         CpuObservation observation = CpuReader
-            .read(grid, cpu, Arrays.<IAEKey>asList(iron, new CpuFixtures.Resource("tin")), 5000);
+            .read(grid, cpu, Arrays.asList(iron, new CpuFixtures.Resource("tin")), 5000);
 
         assertFalse(observation.full());
         assertNull(observation.header());
@@ -276,7 +269,7 @@ class CpuReaderTest extends GridTestScope {
         info.timeSpentOn.put(iron, 10L);
         info.startedWaitingFor.put(iron, 4000L);
 
-        CpuObservation observation = CpuReader.read(grid, cpu, Collections.<IAEKey>singletonList(iron), 5000);
+        CpuObservation observation = CpuReader.read(grid, cpu, Collections.singletonList(iron), 5000);
 
         assertTrue(
             observation.missing()
@@ -291,7 +284,7 @@ class CpuReaderTest extends GridTestScope {
         cpu.set(iron, 1, 0, 0)
             .set(exotic, 3, 0, 0);
 
-        CpuObservation withUnkeyed = CpuReader.read(grid, cpu, Collections.<IAEKey>singletonList(exotic), 5000);
+        CpuObservation withUnkeyed = CpuReader.read(grid, cpu, Collections.singletonList(exotic), 5000);
         assertTrue(withUnkeyed.full());
         assertNotNull(withUnkeyed.header());
         assertEquals(
@@ -300,10 +293,8 @@ class CpuReaderTest extends GridTestScope {
                 .size());
 
         cpu.busy = false;
-        CpuObservation idle = CpuReader.read(grid, cpu, Collections.<IAEKey>singletonList(iron), 5000);
+        CpuObservation idle = CpuReader.read(grid, cpu, Collections.singletonList(iron), 5000);
         assertTrue(idle.full());
-        assertFalse(
-            idle.header()
-                .busy());
+        assertFalse(header(idle).busy());
     }
 }

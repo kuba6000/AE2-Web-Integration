@@ -19,37 +19,37 @@ public class CpuResource extends ResourceDescription {
      *
      * @example 16
      */
-    public long active = 0;
+    public final long active;
     /**
      * Resource units waiting to be processed.
      *
      * @example 16
      */
-    public long pending = 0;
+    public final long pending;
     /**
      * Resource units held by the crafting CPU.
      *
      * @example 32
      */
-    public long stored = 0;
+    public final long stored;
     /**
      * Measured time spent crafting this resource, in milliseconds.
      *
      * @example 5000
      */
-    public long timeSpentCrafting = 0;
+    public final long timeSpentCrafting;
     /**
      * Whether the tracked job is waiting for this resource now, so that {@code timeSpentCrafting} is still growing.
      *
      * @example true
      */
-    public boolean crafting = false;
+    public final boolean crafting;
     /**
      * Total resource units produced during the measured work.
      *
      * @example 32
      */
-    public long craftedTotal = 0;
+    public final long craftedTotal;
     /**
      * Fraction of summed resource processing time attributed to this resource; one when a tracked job has no
      * processing time recorded, or zero when tracking is unavailable.

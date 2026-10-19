@@ -47,7 +47,7 @@ public final class GetCPUEvents extends LiveEventsRequest {
     private @NotNull StableKey cpuKey;
 
     @Override
-    protected LiveTopic.Key topicKey() {
+    protected @NotNull LiveTopic.Key topicKey() {
         return CpuTopic.keyOf(gridKey, cpuKey);
     }
 }

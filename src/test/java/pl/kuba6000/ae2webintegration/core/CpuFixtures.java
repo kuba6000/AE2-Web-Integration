@@ -78,7 +78,7 @@ final class CpuFixtures {
         }
 
         @Override
-        public @Nullable StableKey web$getBaseKey() {
+        public @NotNull StableKey web$getBaseKey() {
             baseKeyReads.incrementAndGet();
             return StableKey.create(sink -> sink.putBytes(("base:" + name).getBytes(StandardCharsets.UTF_8)));
         }
@@ -161,7 +161,7 @@ final class CpuFixtures {
     static class Cpu implements ICraftingCPUCluster {
 
         final StableKey key;
-        final Map<Resource, long[]> work = new LinkedHashMap<>();
+        final Map<IAEKey, long[]> work = new LinkedHashMap<>();
         final StackList waiting = new StackList();
         boolean busy;
         @Nullable
@@ -240,7 +240,7 @@ final class CpuFixtures {
 
         public void web$getAllItems(IStackList list) {
             fullListings++;
-            for (Map.Entry<Resource, long[]> entry : work.entrySet()) {
+            for (Map.Entry<IAEKey, long[]> entry : work.entrySet()) {
                 long[] units = entry.getValue();
                 ((StackList) list).amounts.put(entry.getKey(), units[0] + units[1] + units[2]);
             }
@@ -283,15 +283,10 @@ final class CpuFixtures {
             return (IAECraftingGrid) Proxy.newProxyInstance(
                 getClass().getClassLoader(),
                 new Class<?>[] { IAECraftingGrid.class },
-                (proxy, method, args) -> {
-                    switch (method.getName()) {
-                        case "web$getCPUs":
-                            return cpus;
-                        case "web$getCPUCount":
-                            return cpus.size();
-                        default:
-                            throw new AssertionError("Unexpected crafting operation: " + method.getName());
-                    }
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "web$getCPUs" -> cpus;
+                    case "web$getCPUCount" -> cpus.size();
+                    default -> throw new AssertionError("Unexpected crafting operation: " + method.getName());
                 });
         }
     }

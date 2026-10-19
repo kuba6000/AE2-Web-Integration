@@ -79,7 +79,7 @@ class CpuLiveHttpTest {
     @AfterEach
     void stopEngine() throws Exception {
         game.shutdownNow();
-        game.awaitTermination(3, TimeUnit.SECONDS);
+        assertTrue(game.awaitTermination(3, TimeUnit.SECONDS));
         CoreEngine.onServerStopped();
         AE2Controller.AE2Interface = previousAe;
         AE2JobTracker.clearActiveJobs();
@@ -244,12 +244,15 @@ class CpuLiveHttpTest {
                     .name());
             assertNotNull(CoreEngine.getCpuLive());
             game.shutdownNow();
-            game.awaitTermination(3, TimeUnit.SECONDS);
+            assertTrue(game.awaitTermination(3, TimeUnit.SECONDS));
             CoreEngine.onServerStopped();
             assertNull(CoreEngine.getCpuLive());
             assertNull(CoreEngine.getCpuRegistry());
             try {
-                while (input.readLine() != null) {}
+                String line;
+                do {
+                    line = input.readLine(); // Drain until the server closes the stream.
+                } while (line != null);
             } catch (java.io.IOException closedConnection) {
                 // Stopping may abort an in-flight HTTP chunk.
             }

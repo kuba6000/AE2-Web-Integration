@@ -606,7 +606,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     }
 
     @Test
-    void unviewedCpusAndReleasedViewsNeverReadAndTheirStateIsGone() throws Exception {
+    void unviewedCpusAndReleasedViewsNeverReadAndTheirStateIsGone() {
         cpu.set(iron, 4, 0, 0);
         coordinator.dirty(cpu, iron);
         tick(100);

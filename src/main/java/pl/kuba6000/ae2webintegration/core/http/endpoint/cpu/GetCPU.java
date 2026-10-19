@@ -111,21 +111,21 @@ public final class GetCPU extends LiveSnapshotRequest {
          *
          * @example 16384
          */
-        public long size;
+        public final long size;
         /**
          * Whether the CPU is currently crafting.
          *
          * @example true
          */
-        public boolean isBusy;
+        public final boolean isBusy;
         /** Native automatic-selection policy; null when unsupported or unknown. Not a submission permission. */
-        public @Nullable CpuSelectionMode selectionMode;
+        public final @Nullable CpuSelectionMode selectionMode;
         /** Whether this CPU supports pausing the scheduling of its current job. */
-        public boolean supportsPause;
+        public final boolean supportsPause;
         /** Whether the active job is paused; false for idle or unsupported CPUs. */
-        public boolean isPaused;
+        public final boolean isPaused;
         /** Detached final output snapshot; null when the CPU is idle or its output is unavailable. */
-        public @Nullable ResourceStack finalOutput;
+        public final @Nullable ResourceStack finalOutput;
         /** Resource details for current work; null when the CPU is idle. */
         public @Nullable ArrayList<CpuResource> items;
         /**
@@ -133,19 +133,19 @@ public final class GetCPU extends LiveSnapshotRequest {
          *
          * @example true
          */
-        public boolean hasTrackingInfo = false;
+        public final boolean hasTrackingInfo;
         /**
          * Crafting start time in Unix epoch milliseconds; zero when unavailable.
          *
          * @example 1700000000000
          */
-        public long timeStarted = 0L;
+        public final long timeStarted;
         /**
          * Elapsed crafting time in milliseconds; zero when tracking is unavailable.
          *
          * @example 10000
          */
-        public long timeElapsed = 0L;
+        public final long timeElapsed;
     }
 
     @PathParam("cpuKey")
@@ -216,12 +216,14 @@ public final class GetCPU extends LiveSnapshotRequest {
         }
         long now = System.currentTimeMillis();
         CpuObservation observation = CpuReader.read(grid, cpu, now, mappings != null);
+        CpuObservation.Header header = observation.header();
+        assert header != null : "A full observation always has a header";
         respond(
             HttpURLConnection.HTTP_OK,
             new Response(
                 ApiStatus.OK,
                 clusterData(
-                    observation.header(),
+                    header,
                     observation.rows(),
                     observation.descriptions(),
                     observation.unkeyed(),

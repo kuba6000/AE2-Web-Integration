@@ -1,5 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.grid;
 
+import org.jetbrains.annotations.NotNull;
+
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
@@ -34,7 +36,7 @@ import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
 public final class GetItemEvents extends LiveEventsRequest {
 
     @Override
-    protected LiveTopic.Key topicKey() {
+    protected @NotNull LiveTopic.Key topicKey() {
         return StorageTopic.keyOf(gridKey);
     }
 }
