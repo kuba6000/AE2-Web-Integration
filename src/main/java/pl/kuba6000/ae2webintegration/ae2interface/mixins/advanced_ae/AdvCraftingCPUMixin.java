@@ -142,18 +142,36 @@ public class AdvCraftingCPUMixin implements IPausableCraftingCPU, ICraftingCPUNa
     }
 
     @Override
+    public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored) {
+        KeyCounter activeItems = (KeyCounter) (Object) active;
+        KeyCounter pendingItems = (KeyCounter) (Object) pending;
+        KeyCounter storedItems = (KeyCounter) (Object) stored;
+        var logic = ((AdvCraftingCPU) (Object) this).craftingLogic;
+        var job = ((ICraftingCPULogicAccessor) logic).web$getJob();
+        if (job != null) activeItems.addAll(job.web$getWaitingFor().list);
+        storedItems.addAll(logic.getInventory().list);
+        web$getAllItems(pending);
+        // Native getAllItems is active + pending + stored; subtract the copied counters to isolate pending.
+        pendingItems.removeAll(activeItems);
+        pendingItems.removeAll(storedItems);
+        activeItems.removeZeros();
+        pendingItems.removeZeros();
+        storedItems.removeZeros();
+    }
+
+    @Override
     public long web$getActiveItems(IAEKey key) {
         return ((AdvCraftingCPU) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
     }
 
     @Override
     public long web$getPendingItems(IAEKey key) {
-        return ((AdvCraftingCPU) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
+        return ((AdvCraftingCPU) (Object) this).craftingLogic.getPendingOutputs((AEKey) key);
     }
 
     @Override
     public long web$getStorageItems(IAEKey key) {
-        return ((AdvCraftingCPU) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
+        return ((AdvCraftingCPU) (Object) this).craftingLogic.getStored((AEKey) key);
     }
 
     @Override
