@@ -1,19 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.grid;
 
-import java.io.IOException;
-import java.net.HttpURLConnection;
-
-import org.jetbrains.annotations.Nullable;
-
-import pl.kuba6000.ae2webintegration.core.CoreEngine;
-import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
-import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
-import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
-import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
-import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
+import pl.kuba6000.ae2webintegration.core.live.LiveEventsRequest;
+import pl.kuba6000.ae2webintegration.core.live.LiveTopic;
 import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
 
 /**
@@ -40,54 +31,10 @@ import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
  * @response 503 {@link ErrorResponse} Stream capacity reached or server unavailable.
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/items/events")
-public final class GetItemEvents extends IAsyncRequest {
-
-    /** Single-use token returned with the initial snapshot. Bound to the login session, grid and icon mode. */
-    @QueryParam("subscription")
-    private @Nullable String subscription;
-    /** Include icon references when new or changed resource definitions are sent. */
-    @QueryParam("icons")
-    private boolean icons;
-    private @Nullable LiveStreams streams;
+public final class GetItemEvents extends LiveEventsRequest {
 
     @Override
-    public void handle() {
-        if (gridKey == null) {
-            deny(ApiStatus.GRID_NOT_FOUND);
-            return;
-        }
-        if (subscription == null || subscription.length() != 36) {
-            deny(ApiStatus.BAD_PARAM);
-            return;
-        }
-        streams = CoreEngine.getLiveStreams();
-        if (streams == null) {
-            deny(ApiStatus.SERVER_STOPPING);
-            return;
-        }
-        done();
-    }
-
-    /** Transfers exchange ownership after the normal request's permission check and completion. */
-    public boolean startStream() throws IOException {
-        if (getResponse().httpStatus() != HttpURLConnection.HTTP_OK || streams == null || subscription == null)
-            return false;
-        if (!context.isLifecycleUnchanged()) {
-            ApiResponse.error(ApiStatus.SERVER_STOPPING)
-                .send(context.getExchange());
-            return true;
-        }
-        if (context.getExchange()
-            .getRequestMethod()
-            .equals("HEAD")) {
-            context.getExchange()
-                .getResponseHeaders()
-                .set("Content-Type", "text/event-stream; charset=UTF-8");
-            context.getExchange()
-                .sendResponseHeaders(HttpURLConnection.HTTP_OK, -1);
-            context.getExchange()
-                .close();
-        } else streams.open(context, StorageTopic.keyOf(gridKey), subscription, icons);
-        return true;
+    protected LiveTopic.Key topicKey() {
+        return StorageTopic.keyOf(gridKey);
     }
 }

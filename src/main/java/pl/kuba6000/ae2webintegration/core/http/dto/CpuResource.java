@@ -3,9 +3,9 @@ package pl.kuba6000.ae2webintegration.core.http.dto;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.cpu.CpuObservation;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
-import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /**
  * Current crafting CPU quantities and optional tracking measurements for one resource.
@@ -39,6 +39,12 @@ public class CpuResource extends ResourceDescription {
      */
     public long timeSpentCrafting = 0;
     /**
+     * Whether the tracked job is waiting for this resource now, so that {@code timeSpentCrafting} is still growing.
+     *
+     * @example true
+     */
+    public boolean crafting = false;
+    /**
      * Total resource units produced during the measured work.
      *
      * @example 32
@@ -64,16 +70,15 @@ public class CpuResource extends ResourceDescription {
      */
     public double craftsPerSec = 0d;
 
-    public CpuResource(@NotNull IAEKey key, @Nullable StableKey itemKey, @Nullable IconMappings.Reference icon) {
-        super(
-            key.web$getRegistryNamespace(),
-            key.web$getRegistryPath(),
-            key.web$getDisplayName(),
-            key.web$getComponentCount(),
-            key.web$getDamage(),
-            key.web$getResourceType(),
-            itemKey,
-            icon);
+    public CpuResource(@NotNull ResourceDescriptor description, @NotNull CpuObservation.Amounts amounts, long at,
+        @Nullable IconMappings mappings) {
+        super(description, mappings);
+        active = amounts.active();
+        pending = amounts.pending();
+        stored = amounts.stored();
+        timeSpentCrafting = amounts.timeSpent(at);
+        craftedTotal = amounts.craftedTotal();
+        crafting = amounts.crafting();
     }
 
 }

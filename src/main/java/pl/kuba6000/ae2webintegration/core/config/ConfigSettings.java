@@ -150,7 +150,7 @@ public final class ConfigSettings {
     public static final class ResourceTracking {
 
         @Path("active_interval_millis")
-        @Comment("Minimum storage observation interval while the web terminal is in use, in milliseconds.")
+        @Comment("Minimum observation interval of a storage or crafting CPU view while it is in use, in milliseconds.")
         public int activeIntervalMillis = 250;
 
         @Path("reconciliation_interval_seconds")

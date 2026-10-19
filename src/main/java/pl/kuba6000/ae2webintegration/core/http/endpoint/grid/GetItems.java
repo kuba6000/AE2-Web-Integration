@@ -13,9 +13,6 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
-import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
-import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -32,6 +29,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.live.LiveSnapshotRequest;
 import pl.kuba6000.ae2webintegration.core.live.LiveView;
 import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
@@ -69,7 +67,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
  * @responseExample 503 {"status":"SERVER_BUSY","data":null}
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/items")
-public final class GetItems extends ISyncedRequest {
+public final class GetItems extends LiveSnapshotRequest {
 
     /**
      * Successful operation result.
@@ -91,28 +89,10 @@ public final class GetItems extends ISyncedRequest {
     @QueryParam("icons")
     private boolean icons;
 
-    /** Reserve a live subscription together with the returned snapshot. */
-    @QueryParam("live")
-    private boolean live;
-    /** Replace this login's previous subscription for the same grid when reserving a new live snapshot. */
-    @QueryParam("replace")
-    private @Nullable String replace;
-    private @Nullable String subscription;
-
-    /** Called by the router after the game-thread operation; only detached state is read here. */
-    public ApiResponse finishResponse() {
-        ApiResponse response = getResponse();
-        if (!context.isLifecycleUnchanged()) return ApiResponse.error(ApiStatus.SERVER_STOPPING);
-        if (subscription == null) return response;
-        ApiStatus failure = null;
-        if (context.getSession() == null || !context.getSession()
-            .isValid(System.currentTimeMillis())) failure = ApiStatus.UNAUTHORIZED;
-        else if (CoreEngine.GRID_IDENTITIES.getGrid(gridKey) != grid) failure = ApiStatus.GRID_NOT_FOUND;
-        else if (!GridAccess.allows(grid, context.getPrincipal())) failure = ApiStatus.NO_PERMISSIONS;
-        if (failure == null) return response;
+    @Override
+    protected void cancel(String token) {
         TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
-        if (terminals != null) terminals.cancel(subscription);
-        return ApiResponse.error(failure);
+        if (terminals != null) terminals.cancel(token);
     }
 
     @Override

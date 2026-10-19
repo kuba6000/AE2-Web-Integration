@@ -32,6 +32,11 @@ public record ResourceSnapshot(@NotNull ResourceDescriptor description, long qua
     }
 
     public static @NotNull ResourceSnapshot capture(@NotNull IAEKey key, long quantity, @Nullable StableKey itemKey) {
+        return new ResourceSnapshot(describe(key, itemKey), quantity);
+    }
+
+    /** The shared retained description of a keyed resource, or a detached capture of an unkeyed or conflicted one. */
+    public static @NotNull ResourceDescriptor describe(@NotNull IAEKey key, @Nullable StableKey itemKey) {
         ResourceDescriptor description = null;
         if (itemKey != null) {
             try {
@@ -49,6 +54,6 @@ public record ResourceSnapshot(@NotNull ResourceDescriptor description, long qua
             }
             description = ResourceDescriptor.capture(key, itemKey, baseKey);
         }
-        return new ResourceSnapshot(description, quantity);
+        return description;
     }
 }

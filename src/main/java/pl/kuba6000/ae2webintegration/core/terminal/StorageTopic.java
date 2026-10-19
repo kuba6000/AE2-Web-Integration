@@ -78,7 +78,7 @@ public final class StorageTopic extends LiveTopic {
     }
 
     public static @NotNull Key keyOf(@NotNull StableKey grid) {
-        return new Key(StorageTopic.class, grid);
+        return new Key(StorageTopic.class, grid, null);
     }
 
     public static @NotNull List<StoredResource> resources(@NotNull List<StorageObservation.Row> rows,

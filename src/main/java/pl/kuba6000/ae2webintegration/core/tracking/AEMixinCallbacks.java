@@ -1,9 +1,12 @@
 package pl.kuba6000.ae2webintegration.core.tracking;
 
+import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 
@@ -13,6 +16,7 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
 
     @Override
     public void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isAuthorPlayer) {
+        jobChanged(cpuCluster);
         if (!Config.INSTANCE.tracking.trackMachineCrafting && !isAuthorPlayer) {
             return;
         }
@@ -22,6 +26,8 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
     @Override
     public void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, Object diff) {
         AE2JobTracker.updateCraftingStatus(cpu, diff);
+        CpuLiveCoordinator live = CoreEngine.getCpuLive();
+        if (live != null && diff instanceof IAEKey resource) live.dirty(cpu, resource);
     }
 
     @Override
@@ -32,11 +38,19 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
 
     @Override
     public void jobCompleted(IAEGrid grid, ICraftingCPUCluster cpu) {
+        jobChanged(cpu);
         AE2JobTracker.completeCrafting(grid, cpu);
     }
 
     @Override
     public void jobCancelled(IAEGrid grid, ICraftingCPUCluster cpu) {
+        jobChanged(cpu);
         AE2JobTracker.cancelCrafting(grid, cpu);
+    }
+
+    /** Independent of job tracking: viewers of the live CPU view must refetch even when nothing is measured. */
+    private static void jobChanged(ICraftingCPUCluster cpu) {
+        CpuLiveCoordinator live = CoreEngine.getCpuLive();
+        if (live != null) live.jobChanged(cpu);
     }
 }

@@ -2,19 +2,21 @@ package pl.kuba6000.ae2webintegration.core.http.endpoint.cpu;
 
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
-import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuObservation;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuRegistry;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuTopic;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -25,20 +27,17 @@ import pl.kuba6000.ae2webintegration.core.http.dto.CpuResource;
 import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
-import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
-import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
-import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
-import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
-import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
-import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.live.LiveSnapshotRequest;
+import pl.kuba6000.ae2webintegration.core.live.LiveView;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /**
  * Reads a crafting CPU and its current work.
+ * With live=true the response also carries a view and a single-use subscription token for the live stream at
+ * cpus/{cpuKey}/events.
  *
  * @pathParam gridKey Persistent grid identifier.
  * @pathParam cpuKey Stable crafting CPU identifier.
@@ -68,17 +67,25 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
  * @responseExample 503 {"status":"SERVER_BUSY","data":null}
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/cpus/{cpuKey}")
-public final class GetCPU extends ISyncedRequest {
+public final class GetCPU extends LiveSnapshotRequest {
 
     /**
      * Successful operation result.
      * 
-     * @param status {@code OK} for a successful request
-     * @param data   current CPU capacity, work and available tracking measurements
+     * @param status       {@code OK} for a successful request
+     * @param data         current CPU capacity, work and available tracking measurements
+     * @param view         identifies the state a live snapshot holds; null unless live was requested
+     * @param subscription single-use token for the live stream; null unless live was requested
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull ClusterData data, @Nullable IconMappings icons) {}
+    public record Response(@NotNull ApiStatus status, @NotNull ClusterData data, @Nullable IconMappings icons,
+        @Nullable LiveView view, @Nullable String subscription) {
+
+        public Response(ApiStatus status, ClusterData data, IconMappings icons) {
+            this(status, data, icons, null, null);
+        }
+    }
 
     /** Include icon atlas references and page metadata in the response. */
     @QueryParam("icons")
@@ -86,6 +93,18 @@ public final class GetCPU extends ISyncedRequest {
 
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
     public static class ClusterData {
+
+        public ClusterData(@NotNull CpuObservation.Header header, long at, @Nullable IconMappings mappings) {
+            size = header.size();
+            isBusy = header.busy();
+            selectionMode = header.selectionMode();
+            supportsPause = header.supportsPause();
+            isPaused = header.paused();
+            finalOutput = header.finalOutput() == null ? null : new ResourceStack(header.finalOutput(), mappings);
+            hasTrackingInfo = header.hasTrackingInfo();
+            timeStarted = header.timeStarted();
+            timeElapsed = header.timeElapsed(at);
+        }
 
         /**
          * Total storage capacity of this CPU in bytes.
@@ -133,95 +152,90 @@ public final class GetCPU extends ISyncedRequest {
     private @NotNull StableKey cpuId;
 
     @Override
+    protected void cancel(String token) {
+        CpuRegistry registry = CoreEngine.getCpuRegistry();
+        if (registry != null) registry.cancel(token);
+    }
+
+    @Override
     protected void handle(IAEGrid grid) {
+        if (replace != null && replace.length() != 36) {
+            deny(ApiStatus.BAD_PARAM);
+            return;
+        }
         if (grid == null) {
             deny(ApiStatus.GRID_NOT_FOUND);
             return;
         }
-        IAECraftingGrid craftingGrid = grid.web$getCraftingGrid();
-
-        Map<StableKey, ICraftingCPUCluster> cpus = GetCPUList.getCPUList(craftingGrid);
-        ICraftingCPUCluster cpu = cpus.get(cpuId);
+        ICraftingCPUCluster cpu = GetCPUList.getCPUList(grid.web$getCraftingGrid())
+            .get(cpuId);
         if (cpu == null) {
             deny(ApiStatus.CPU_NOT_FOUND);
             return;
         }
-
-        ClusterData clusterData = new ClusterData();
         IconPack pack = icons ? CoreEngine.getIconPack() : null;
         IconMappings mappings = pack == null ? null : new IconMappings(pack);
-        ItemIdentityRegistry.Listing listing = AE2Controller.itemIdentities.beginListing(cpu);
-        clusterData.size = cpu.web$getAvailableStorage();
-        clusterData.isBusy = cpu.web$isBusy();
-        clusterData.selectionMode = cpu.web$getSelectionMode();
-        clusterData.supportsPause = cpu instanceof IPausableCraftingCPU;
-        clusterData.isPaused = clusterData.isBusy && cpu instanceof IPausableCraftingCPU pausable
-            && pausable.web$isPaused();
-        if (clusterData.isBusy) {
-            ResourceSnapshot output = ResourceSnapshot.capture(grid, cpu.web$getFinalOutput());
-            clusterData.finalOutput = output == null ? null : new ResourceStack(output, mappings);
-            AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cpu);
-            clusterData.hasTrackingInfo = trackingInfo != null;
-
-            Map<IAEKey, CpuResource> prep = new HashMap<>();
-            IStackList allItems = AE2Controller.AE2Interface.web$createStackList();
-            cpu.web$getAllItems(allItems);
-            for (IAEGenericStack stack : allItems.web$stacks()) {
-                IAEKey key = stack.web$what();
-                CpuResource compactedItem = prep
-                    .computeIfAbsent(key, resource -> captureResource(resource, listing, mappings));
-                compactedItem.active += cpu.web$getActiveItems(key);
-                compactedItem.pending += cpu.web$getPendingItems(key);
-                compactedItem.stored += cpu.web$getStorageItems(key);
+        if (live && !context.getExchange()
+            .getRequestMethod()
+            .equals("HEAD")) {
+            CpuLiveCoordinator coordinator = CoreEngine.getCpuLive();
+            CpuRegistry registry = CoreEngine.getCpuRegistry();
+            if (coordinator == null || registry == null) {
+                deny(ApiStatus.SERVER_STOPPING);
+                return;
             }
-
-            if (clusterData.hasTrackingInfo) {
-                clusterData.timeStarted = trackingInfo.timeStarted;
-                clusterData.timeElapsed = (System.currentTimeMillis()) - clusterData.timeStarted;
-                for (IAEKey key : trackingInfo.timeSpentOn.keySet()) {
-                    CpuResource compactedItem = prep
-                        .computeIfAbsent(key, resource -> captureResource(resource, listing, mappings));
-                    compactedItem.timeSpentCrafting += trackingInfo.getTimeSpentOn(key);
-                    compactedItem.craftedTotal += trackingInfo.craftedTotal.getOrDefault(key, 0L);
-                    compactedItem.shareInCraftingTime += trackingInfo.getShareInCraftingTime(key);
-                    compactedItem.shareInCraftingTimeCombined = clusterData.timeElapsed > 0
-                        ? Math.min(((double) compactedItem.timeSpentCrafting) / (double) clusterData.timeElapsed, 1d)
-                        : 0d;
-                    compactedItem.craftsPerSec = compactedItem.timeSpentCrafting > 0
-                        ? (double) compactedItem.craftedTotal
-                            / (compactedItem.timeSpentCrafting / (double) TimeUnit.SECONDS.toMillis(1))
-                        : 0d;
-                }
+            coordinator.prepareForViewer(gridKey, grid, cpuId, cpu, System.currentTimeMillis());
+            CpuRegistry.Bootstrap bootstrap = registry.reserve(
+                gridKey,
+                cpuId,
+                context.getSession(),
+                icons,
+                pack == null ? null : pack.packId(),
+                replace,
+                System.currentTimeMillis());
+            if (bootstrap == null) {
+                deny(ApiStatus.SERVER_BUSY);
+                return;
             }
-
-            clusterData.items = new ArrayList<>(prep.values());
-            clusterData.items.sort((i1, i2) -> {
-                if (i1.active > 0 && i2.active > 0) return Long.compare(i2.active, i1.active);
-                else if (i1.active > 0 && i2.active == 0) return -1;
-                else if (i1.active == 0 && i2.active > 0) return 1;
-                if (i1.pending > 0 && i2.pending > 0) return Long.compare(i2.pending, i1.pending);
-                else if (i1.pending > 0 && i2.pending == 0) return -1;
-                else if (i1.pending == 0 && i2.pending > 0) return 1;
-                return Long.compare(i2.stored, i1.stored);
-            });
-
+            subscription = bootstrap.subscription();
+            respondDetached(
+                HttpURLConnection.HTTP_OK,
+                new Response(
+                    ApiStatus.OK,
+                    clusterData(
+                        bootstrap.header(),
+                        bootstrap.rows(),
+                        bootstrap.descriptions(),
+                        bootstrap.unkeyed(),
+                        bootstrap.at(),
+                        mappings),
+                    mappings,
+                    bootstrap.view(),
+                    subscription));
+            return;
         }
-
-        listing.commit();
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, clusterData, mappings));
+        long now = System.currentTimeMillis();
+        CpuObservation observation = CpuReader.read(grid, cpu, now, mappings != null);
+        respond(
+            HttpURLConnection.HTTP_OK,
+            new Response(
+                ApiStatus.OK,
+                clusterData(
+                    observation.header(),
+                    observation.rows(),
+                    observation.descriptions(),
+                    observation.unkeyed(),
+                    now,
+                    mappings),
+                mappings));
     }
 
-    private static @NotNull CpuResource captureResource(@NotNull IAEKey resource,
-        @NotNull ItemIdentityRegistry.Listing listing, @Nullable IconMappings mappings) {
-        StableKey itemKey = null;
-        IconMappings.Reference icon = null;
-        try {
-            itemKey = listing.remember(resource);
-            if (itemKey != null && mappings != null) icon = mappings.resolve(itemKey, AE2Controller.itemIdentities);
-        } catch (RuntimeException unavailable) {
-            // Optional identity or icon failures must not hide accumulated work or a successfully captured key.
-        }
-        return new CpuResource(resource, itemKey, icon);
+    private static @NotNull ClusterData clusterData(@NotNull CpuObservation.Header header,
+        @NotNull List<CpuObservation.Row> rows, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
+        @NotNull List<CpuObservation.UnkeyedRow> unkeyed, long at, @Nullable IconMappings mappings) {
+        ClusterData data = new ClusterData(header, at, mappings);
+        if (header.busy()) data.items = CpuTopic.items(rows, descriptions, unkeyed, header, at, mappings);
+        return data;
     }
 
 }

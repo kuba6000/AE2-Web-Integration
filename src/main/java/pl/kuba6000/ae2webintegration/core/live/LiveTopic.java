@@ -4,6 +4,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
@@ -17,9 +18,9 @@ public abstract class LiveTopic {
 
     private static final int MAX_PENDING_KEYS = 16_384;
 
-    /** Identity of a topic: its kind and the grid it observes. */
+    /** Identity of a topic: its kind, the grid it observes and, for kinds that observe part of a grid, the subject. */
     @Desugar
-    public record Key(@NotNull Class<? extends LiveTopic> kind, @NotNull StableKey grid) {}
+    public record Key(@NotNull Class<? extends LiveTopic> kind, @NotNull StableKey grid, @Nullable StableKey subject) {}
 
     final Set<LiveSubscription> subscribers = new HashSet<>();
     long activeUntil;

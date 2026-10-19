@@ -19,6 +19,8 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuRegistry;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
@@ -74,6 +76,8 @@ public class CoreEngine {
     private static volatile @Nullable StorageTrackingCoordinator storageCoordinator;
     private static volatile @Nullable LiveStreams liveStreams;
     private static volatile @Nullable TerminalRegistry terminalRegistry;
+    private static volatile @Nullable CpuRegistry cpuRegistry;
+    private static volatile @Nullable CpuLiveCoordinator cpuLive;
 
     public static void init(@NotNull IServerPlatform serverPlatform) {
         serverRunning = false;
@@ -122,6 +126,9 @@ public class CoreEngine {
             LiveHub hub = new LiveHub();
             TerminalRegistry terminals = new TerminalRegistry(hub);
             terminalRegistry = terminals;
+            CpuRegistry cpus = new CpuRegistry(hub);
+            cpuRegistry = cpus;
+            cpuLive = new CpuLiveCoordinator(cpus, GRID_IDENTITIES, trackingSettings);
             liveStreams = new LiveStreams(hub, GRID_IDENTITIES, getIconPack());
             StorageTrackingService service = new StorageTrackingService(history, trackingSettings.maxQueuedRows);
             storageTracking = service;
@@ -155,6 +162,8 @@ public class CoreEngine {
             long now = System.currentTimeMillis();
             coordinator.tick(ae, now);
         }
+        CpuLiveCoordinator cpus = cpuLive;
+        if (cpus != null) cpus.tick(System.currentTimeMillis());
         maintainVersionChecker();
     }
 
@@ -316,6 +325,15 @@ public class CoreEngine {
         return terminalRegistry;
     }
 
+    public static @Nullable CpuRegistry getCpuRegistry() {
+        return cpuRegistry;
+    }
+
+    /** Server-thread observation of viewed crafting CPUs, also fed by the native change notifications. */
+    public static @Nullable CpuLiveCoordinator getCpuLive() {
+        return cpuLive;
+    }
+
     public static @Nullable LiveStreams getLiveStreams() {
         return liveStreams;
     }
@@ -324,6 +342,8 @@ public class CoreEngine {
         LiveStreams previousStreams = liveStreams;
         liveStreams = null;
         terminalRegistry = null;
+        cpuRegistry = null;
+        cpuLive = null;
         if (previousStreams != null) previousStreams.close();
     }
 

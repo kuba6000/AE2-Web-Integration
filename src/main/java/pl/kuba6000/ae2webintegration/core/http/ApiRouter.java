@@ -36,9 +36,9 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
-import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItemEvents;
-import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.icons.GetIconPage;
+import pl.kuba6000.ae2webintegration.core.live.LiveEventsRequest;
+import pl.kuba6000.ae2webintegration.core.live.LiveSnapshotRequest;
 
 /** Complete method/path dispatch with bounded JSON input and explicit request execution threads. */
 public final class ApiRouter implements HttpHandler {
@@ -198,8 +198,9 @@ public final class ApiRouter implements HttpHandler {
                 if (request instanceof ISyncedRequest synced) dispatch.accept(synced);
                 else((IAsyncRequest) request).handle();
             }
-            if (request instanceof GetItemEvents events && events.startStream()) return;
-            response = request instanceof GetItems items ? items.finishResponse() : request.getResponse();
+            if (request instanceof LiveEventsRequest events && events.startStream()) return;
+            response = request instanceof LiveSnapshotRequest snapshot ? snapshot.finishResponse()
+                : request.getResponse();
         } catch (InvalidInput exception) {
             response = ApiResponse.error(exception.error);
         } catch (ReflectiveOperationException | RuntimeException exception) {
