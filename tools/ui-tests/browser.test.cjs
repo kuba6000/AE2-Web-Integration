@@ -1114,6 +1114,16 @@ async function poll(page) {
     await requested;
 }
 
+// Wait for simulated server state changed by a UI request; the click resolves before the request lands.
+async function serverState(read, expected) {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+        if (read() === expected) return;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.equal(read(), expected);
+}
+
 async function seedTerminalPageSize(page, base, size) {
     await page.addInitScript(
         ({ key, size }) => {
@@ -2086,14 +2096,17 @@ test('history detail icons refresh after late pack discovery and pack replacemen
     await page.goto(`${base}#/grids/${gridA}/history/1`);
     const row = page.getByRole('region', { name: 'Iron Ingot', exact: true });
     await row.waitFor();
-    await row.scrollIntoViewIfNeeded();
-    await page.waitForFunction(
-        (node) =>
-            !!node.querySelector('.resource-icon') &&
-            getComputedStyle(node.querySelector('.resource-icon')).backgroundImage !== 'none',
-        await row.elementHandle(),
-        { timeout: 3000 }
-    );
+    // The row is re-rendered when late icon discovery refetches the detail, so look it up on every check.
+    const iconPainted = () =>
+        page.waitForFunction(
+            () => {
+                const icon = document.querySelector('section[aria-label="Iron Ingot"] .resource-icon');
+                return !!icon && getComputedStyle(icon).backgroundImage !== 'none';
+            },
+            undefined,
+            { timeout: 3000 }
+        );
+    await iconPainted();
     const detailReads = () => options.requests.filter((r) => r.path.endsWith('/crafting-history/1'));
     assert.equal(detailReads()[0].query, '', 'the snapshot may arrive before icon availability');
     assert.equal(detailReads().at(-1).query, '?icons=true', 'late discovery fetches optional mappings');
@@ -2108,11 +2121,7 @@ test('history detail icons refresh after late pack discovery and pack replacemen
     const refreshed = page.waitForResponse((response) => response.url().includes('/crafting-history/1?icons=true'));
     await poll(page);
     await (await refreshed).finished();
-    await row.scrollIntoViewIfNeeded();
-    await page.waitForFunction(
-        (node) => getComputedStyle(node.querySelector('.resource-icon')).backgroundImage !== 'none',
-        await row.elementHandle()
-    );
+    await iconPainted();
     assert.ok(
         options.requests.some((r) => r.path.includes(`/icon-packs/${'c'.repeat(64)}/pages/`)),
         'replacement uses its new atlas URL'
@@ -5674,7 +5683,7 @@ test('CPU pause rejection refreshes capability and hides stale controls', async 
         .getByRole('status')
         .filter({ hasText: /does not support pausing/i })
         .waitFor();
-    assert.equal(await page.getByRole('button', { name: /Pause|Resume/ }).count(), 0);
+    await page.getByRole('button', { name: /Pause|Resume/ }).waitFor({ state: 'detached' });
     assert.equal(await page.getByRole('button', { name: 'Cancel current work', exact: true }).isEnabled(), true);
     assert.equal(options.requests.filter((request) => request.path.endsWith('/pause')).length, 1);
 });
@@ -7504,7 +7513,7 @@ test('lost access clears resource data and subsequent polling recovers', async (
     await page.getByRole('button', { name: /Iron Ingot/ }).click();
     options.status = 403;
     await poll(page);
-    await page.getByText('You no longer have access to this network.').waitFor();
+    await page.locator('#item-message').getByText('You no longer have access to this network.').waitFor();
     assert.equal(await page.getByRole('button', { name: /Iron Ingot/ }).count(), 0);
     assert.equal(await page.getByRole('heading', { name: 'Iron Ingot' }).count(), 0);
     options.status = 200;
@@ -7647,7 +7656,10 @@ test('empty discovery and unavailable bookmarked networks stay usable', async (t
         .filter({ hasText: /No accessible networks/ })
         .waitFor();
     options.empty = false;
-    await poll(page);
+    // Automatic Home refresh skips network discovery by design; a manual refresh performs it.
+    const discovered = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/grids'));
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await (await discovered).finished();
     await page.getByRole('button', { name: 'Choose a network', exact: true }).click();
     await page
         .getByRole('dialog')
@@ -12169,13 +12181,13 @@ for (const width of [390, 1280])
         await page.locator('#pinned-items .item').click({ button: 'right' });
         await page.getByRole('menuitem', { name: 'Pin on Home', exact: true }).click();
         assert.equal(options.pins[0].terminalOrder, 0);
-        assert.equal(options.pins[0].homeOrder, 0);
+        await serverState(() => options.pins[0].homeOrder, 0);
         await page.goto(`${base}#/`);
         await page.locator('.home-pin-card').waitFor();
         assert.match(await page.locator('.home-pin-card').textContent(), /Iron/);
         await page.locator('.home-pin-card').getByRole('button', { name: 'Unpin from Home', exact: true }).click();
         assert.equal(options.pins[0].terminalOrder, 0);
-        assert.equal(options.pins[0].homeOrder, null);
+        await serverState(() => options.pins[0].homeOrder, null);
     });
 
 test('terminal pins respect Auto and preferred columns while keeping ordinary rows below the pin row', async (t) => {
@@ -12216,6 +12228,14 @@ test('terminal pins respect Auto and preferred columns while keeping ordinary ro
             await page.evaluate(
                 () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
             );
+            // Filler slots are added by the grid after it measures its columns.
+            await page.waitForFunction(() => {
+                const pin = document.querySelector('#pinned-items');
+                return (
+                    pin.querySelectorAll('.empty-slot').length ===
+                    getComputedStyle(pin).gridTemplateColumns.split(' ').length - 1
+                );
+            });
             const bounds = await page.evaluate(() => {
                 const pin = document.querySelector('#pinned-items'),
                     normal = document.querySelector('#items'),
@@ -12286,7 +12306,7 @@ test('absent terminal pins show zero only after accepted inventory and remain ta
     await page.locator('#pinned-items .item').click();
     await page.waitForURL(/tracking/);
     await page.locator('.tracking-view').getByRole('button', { name: 'Unpin from terminal', exact: true }).click();
-    assert.equal(options.pins.length, 0);
+    await serverState(() => options.pins.length, 0);
 });
 
 test('Home hides revoked metadata and removes each placement independently including terminal-only unavailable pins', async (t) => {
@@ -12329,7 +12349,7 @@ test('Home hides revoked metadata and removes each placement independently inclu
     assert.equal(await page.locator('.home-pin-card canvas').count(), 0);
     await page.locator('.home-pin-card').getByRole('button', { name: 'Unpin from Home', exact: true }).click();
     assert.equal(options.pins[0].terminalOrder, 0);
-    assert.equal(options.pins[0].homeOrder, null);
+    await serverState(() => options.pins[0].homeOrder, null);
     await page.locator('.home-unavailable-pins').getByRole('button', { name: 'Remove pin', exact: true }).click();
     assert.equal(options.pins.length, 0);
 });
