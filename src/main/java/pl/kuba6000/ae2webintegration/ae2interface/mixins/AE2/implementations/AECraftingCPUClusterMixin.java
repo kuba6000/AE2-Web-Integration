@@ -12,9 +12,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
-import appeng.api.AEApi;
 import appeng.api.networking.crafting.CraftingItemList;
-import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
 import appeng.api.util.WorldCoord;
@@ -23,7 +21,6 @@ import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameInde
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
@@ -142,13 +139,6 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, 
     }
 
     @Override
-    public void web$getAllItems(IStackList list) {
-        web$populateList(list, CraftingItemList.ACTIVE);
-        web$populateList(list, CraftingItemList.PENDING);
-        web$populateList(list, CraftingItemList.STORAGE);
-    }
-
-    @Override
     public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored) {
         web$populateList(active, CraftingItemList.ACTIVE);
         web$populateList(pending, CraftingItemList.PENDING);
@@ -160,38 +150,8 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, 
         return (IStackList) (Object) waitingFor;
     }
 
-    @Override
-    public long web$getActiveItems(IAEKey key) {
-        return web$findAmount(key, CraftingItemList.ACTIVE);
-    }
-
-    @Override
-    public long web$getPendingItems(IAEKey key) {
-        return web$findAmount(key, CraftingItemList.PENDING);
-    }
-
-    @Override
-    public long web$getStorageItems(IAEKey key) {
-        return web$findAmount(key, CraftingItemList.STORAGE);
-    }
-
-    @Unique
-    private long web$findAmount(IAEKey key, CraftingItemList which) {
-        IStackList list = web$createList();
-        web$populateList(list, which);
-        return list.web$getAmount(key);
-    }
-
     @Unique
     private void web$populateList(IStackList list, CraftingItemList which) {
         ((CraftingCPUCluster) (Object) this).getListOfItem((IItemList<IAEItemStack>) (Object) list, which);
-    }
-
-    @Unique
-    private IStackList web$createList() {
-        return (IStackList) (Object) AEApi.instance()
-            .storage()
-            .getStorageChannel(IItemStorageChannel.class)
-            .createList();
     }
 }
