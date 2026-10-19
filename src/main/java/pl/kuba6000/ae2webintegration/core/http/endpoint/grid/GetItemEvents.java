@@ -13,7 +13,8 @@ import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
-import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
+import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
+import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
 
 /**
  * Opens a single-use live subscription returned by GET items?live=true.
@@ -47,7 +48,7 @@ public final class GetItemEvents extends IAsyncRequest {
     /** Include icon references when new or changed resource definitions are sent. */
     @QueryParam("icons")
     private boolean icons;
-    private @Nullable TerminalStreams streams;
+    private @Nullable LiveStreams streams;
 
     @Override
     public void handle() {
@@ -59,7 +60,7 @@ public final class GetItemEvents extends IAsyncRequest {
             deny(ApiStatus.BAD_PARAM);
             return;
         }
-        streams = CoreEngine.getTerminalStreams();
+        streams = CoreEngine.getLiveStreams();
         if (streams == null) {
             deny(ApiStatus.SERVER_STOPPING);
             return;
@@ -86,7 +87,7 @@ public final class GetItemEvents extends IAsyncRequest {
                 .sendResponseHeaders(HttpURLConnection.HTTP_OK, -1);
             context.getExchange()
                 .close();
-        } else streams.open(context, gridKey, subscription, icons);
+        } else streams.open(context, StorageTopic.keyOf(gridKey), subscription, icons);
         return true;
     }
 }

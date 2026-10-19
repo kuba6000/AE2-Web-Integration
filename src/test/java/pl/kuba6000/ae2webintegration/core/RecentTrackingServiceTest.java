@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
@@ -20,6 +21,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFix
 
 class RecentTrackingServiceTest extends GridTestScope {
 
+    private final LiveHub hub = new LiveHub();
     private final StableKey grid = TestGridFixtures.key(91);
     private final StableKey iron = TestGridFixtures.key(92);
 
@@ -28,7 +30,7 @@ class RecentTrackingServiceTest extends GridTestScope {
         TerminalRegistry terminals = terminal(1);
         try (RecentTrackingService service = new RecentTrackingService(terminals, 2)) {
             service.open(grid, 1, false, true, 100, 1000);
-            synchronized (terminals) {
+            synchronized (hub) {
                 assertTrue(service.submit(grid, 1, flow(6000, 17), false, true));
                 assertFalse(
                     service.submit(grid, 1, flow(11000, 99), false, true),
@@ -57,7 +59,7 @@ class RecentTrackingServiceTest extends GridTestScope {
         TerminalRegistry terminals = terminal(1);
         try (RecentTrackingService service = new RecentTrackingService(terminals, 100)) {
             service.open(grid, 1, true, true, 100, 1000);
-            synchronized (terminals) {
+            synchronized (hub) {
                 assertTrue(service.submit(grid, 1, stock(1000), true, false));
                 assertTrue(service.submit(grid, 1, flow(6000, 17), false, true));
                 service.invalidate(grid, 1, 7000);
@@ -85,7 +87,7 @@ class RecentTrackingServiceTest extends GridTestScope {
         RecentTrackingService service = new RecentTrackingService(terminals, 100);
         try {
             service.open(grid, 1, false, true, 100, 1000);
-            synchronized (terminals) {
+            synchronized (hub) {
                 assertTrue(service.submit(grid, 1, flow(6000, 17), false, true));
                 service.retire(grid, 1);
                 assertFalse(service.refresh(grid, 1, 7000));
@@ -114,7 +116,7 @@ class RecentTrackingServiceTest extends GridTestScope {
 
     @Test
     void detachedSnapshotIncludesAbsentResourcesWithoutTerminalAndRejectsStaleCoverage() throws Exception {
-        TerminalRegistry terminals = new TerminalRegistry();
+        TerminalRegistry terminals = new TerminalRegistry(hub);
         try (RecentTrackingService service = new RecentTrackingService(terminals, 100)) {
             service.open(grid, 1, false, true, 100, 1000);
             assertNull(service.snapshot(grid));
@@ -126,7 +128,7 @@ class RecentTrackingServiceTest extends GridTestScope {
                     .get(iron)
                     .input());
             assertNull(terminals.recent(grid), "No terminal state or subscription is needed");
-            synchronized (terminals) {
+            synchronized (hub) {
                 assertTrue(service.submit(grid, 1, flow(11000, 99), false, true));
                 service.invalidate(grid, 1, 12000);
                 var invalidated = service.snapshot(grid);
@@ -159,7 +161,7 @@ class RecentTrackingServiceTest extends GridTestScope {
     }
 
     private TerminalRegistry terminal(long generation) {
-        TerminalRegistry terminals = new TerminalRegistry();
+        TerminalRegistry terminals = new TerminalRegistry(hub);
         terminals.activate(grid, generation, 1000);
         terminals.observed(grid, generation, stock(1000));
         return terminals;

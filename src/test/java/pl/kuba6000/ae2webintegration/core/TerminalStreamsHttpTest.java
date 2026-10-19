@@ -38,8 +38,10 @@ import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.live.LiveHub;
+import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
+import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
-import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
@@ -295,7 +297,8 @@ class TerminalStreamsHttpTest extends GridTestScope {
         StableKey grid = TestGridFixtures.resolvedKey(nativeGrid);
         AuthSession session = new AuthSession(WebPrincipal.admin(), Long.MAX_VALUE);
         StableKey iron = TestGridFixtures.key(51);
-        TerminalRegistry state = new TerminalRegistry();
+        LiveHub hub = new LiveHub();
+        TerminalRegistry state = new TerminalRegistry(hub);
         state.activate(grid, 5, System.currentTimeMillis());
         state.observed(grid, 5, observation(1, Collections.singletonList(row(iron, "Iron", 1))));
         TerminalRegistry.Bootstrap bootstrap = state
@@ -340,8 +343,12 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 return output;
             }
         };
-        try (TerminalStreams streams = new TerminalStreams(state, CoreEngine.GRID_IDENTITIES, null)) {
-            streams.open(new AE2Controller.RequestContext(exchange, session), grid, bootstrap.subscription(), false);
+        try (LiveStreams streams = new LiveStreams(hub, CoreEngine.GRID_IDENTITIES, null)) {
+            streams.open(
+                new AE2Controller.RequestContext(exchange, session),
+                StorageTopic.keyOf(grid),
+                bootstrap.subscription(),
+                false);
             state.observed(grid, 5, observation(2, Collections.singletonList(row(iron, "Iron", 10))));
             assertTrue(writing.await(2, TimeUnit.SECONDS));
             state.observed(grid, 5, observation(3, Collections.singletonList(row(iron, "Iron", 20))));
@@ -922,8 +929,9 @@ class TerminalStreamsHttpTest extends GridTestScope {
         private final AtomicBoolean requestIcons = new AtomicBoolean();
         private final ExecutorService ordinary = Executors.newSingleThreadExecutor();
         private final HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        private final TerminalRegistry state = new TerminalRegistry();
-        private final TerminalStreams streams = new TerminalStreams(state, CoreEngine.GRID_IDENTITIES, null);
+        private final LiveHub hub = new LiveHub();
+        private final TerminalRegistry state = new TerminalRegistry(hub);
+        private final LiveStreams streams = new LiveStreams(hub, CoreEngine.GRID_IDENTITIES, null);
 
         private Fixture(List<StorageObservationFixtures.Row> rows) throws Exception {
             this(TestGridFixtures.resolvedKey(TestGridFixtures.grid(32)), WebPrincipal.admin(), rows);
@@ -944,7 +952,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 "/events",
                 exchange -> streams.open(
                     new AE2Controller.RequestContext(exchange, requestSession.get()),
-                    this.grid,
+                    StorageTopic.keyOf(this.grid),
                     exchange.getRequestURI()
                         .getRawQuery(),
                     requestIcons.get()));

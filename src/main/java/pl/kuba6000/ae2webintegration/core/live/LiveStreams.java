@@ -1,11 +1,9 @@
-package pl.kuba6000.ae2webintegration.core.terminal;
+package pl.kuba6000.ae2webintegration.core.live;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
@@ -20,7 +18,6 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import com.github.bsideup.jabel.Desugar;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -28,19 +25,14 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
-import pl.kuba6000.ae2webintegration.core.http.dto.StoredResource;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
-import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
-import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
-/** Bounded HTTP writers for live subscriptions. Storage state is independent of transport and persistence. */
-public final class TerminalStreams implements AutoCloseable {
+/** Bounded HTTP writers for live subscriptions. Topic state is independent of transport and persistence. */
+public final class LiveStreams implements AutoCloseable {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private static final Gson JSON = GSONUtils.GSON_BUILDER.create();
@@ -48,7 +40,7 @@ public final class TerminalStreams implements AutoCloseable {
     private static final long MAINTENANCE_MILLIS = 100;
     private static final long HEARTBEAT_MILLIS = 10_000;
     private static final long WRITE_TIMEOUT_MILLIS = 10_000;
-    private final TerminalRegistry state;
+    private final LiveHub hub;
     private final @Nullable IconPack icons;
     private final GridIdentityRegistry identities;
     private final List<Session> sessions = new ArrayList<>();
@@ -58,20 +50,13 @@ public final class TerminalStreams implements AutoCloseable {
         0,
         TimeUnit.MILLISECONDS,
         new ArrayBlockingQueue<>(64),
-        task -> daemon(task, "AE2Web-TerminalWriter"));
+        task -> daemon(task, "AE2Web-LiveWriter"));
     private final ScheduledExecutorService timer = Executors
-        .newSingleThreadScheduledExecutor(task -> daemon(task, "AE2Web-TerminalTimer"));
+        .newSingleThreadScheduledExecutor(task -> daemon(task, "AE2Web-LiveTimer"));
     private volatile boolean closed;
 
-    @Desugar
-    public record Delta(@NotNull TerminalRegistry.View view, @NotNull List<TerminalRegistry.Amount> updates,
-        @NotNull List<StoredResource> definitions, @NotNull List<StableKey> removed,
-        @Nullable List<StoredResource> unkeyed, @Nullable IconMappings icons,
-        @Nullable RecentResourceActivity.Summary recent) {}
-
-    public TerminalStreams(@NotNull TerminalRegistry state, @NotNull GridIdentityRegistry identities,
-        @Nullable IconPack icons) {
-        this.state = state;
+    public LiveStreams(@NotNull LiveHub hub, @NotNull GridIdentityRegistry identities, @Nullable IconPack icons) {
+        this.hub = hub;
         this.icons = icons;
         this.identities = identities;
         timer.scheduleWithFixedDelay(this::pump, MAINTENANCE_MILLIS, MAINTENANCE_MILLIS, TimeUnit.MILLISECONDS);
@@ -84,12 +69,12 @@ public final class TerminalStreams implements AutoCloseable {
     }
 
     /** Claims a single-use reservation created together with the initial snapshot. */
-    public void open(@NotNull RequestContext context, @NotNull StableKey key, @NotNull String token, boolean withIcons)
-        throws IOException {
+    public void open(@NotNull RequestContext context, @NotNull LiveTopic.Key key, @NotNull String token,
+        boolean withIcons) throws IOException {
         context.getExchange()
             .getRequestBody()
             .close();
-        TerminalRegistry.Subscription subscription = state
+        LiveSubscription subscription = hub
             .attach(token, key, context.getSession(), withIcons, System.currentTimeMillis());
         if (subscription == null) {
             ApiResponse.error(ApiStatus.BAD_PARAM)
@@ -106,7 +91,7 @@ public final class TerminalStreams implements AutoCloseable {
             if (accepted) sessions.add(session);
         }
         if (!accepted) {
-            state.release(subscription);
+            hub.release(subscription);
             ApiResponse.error(ApiStatus.SERVER_STOPPING)
                 .send(context.getExchange());
             return;
@@ -117,7 +102,7 @@ public final class TerminalStreams implements AutoCloseable {
     private void pump() {
         if (closed) return;
         long now = System.currentTimeMillis();
-        state.expire(now);
+        hub.expire(now);
         List<Session> active;
         synchronized (this) {
             active = new ArrayList<>(sessions);
@@ -126,12 +111,12 @@ public final class TerminalStreams implements AutoCloseable {
             authorize(session);
             if (session.hasTask()) {
                 if (session
-                    .writeTimedOut(now, session.subscriber.end == null ? WRITE_TIMEOUT_MILLIS : MAINTENANCE_MILLIS))
+                    .writeTimedOut(now, session.subscription.end == null ? WRITE_TIMEOUT_MILLIS : MAINTENANCE_MILLIS))
                     finish(session);
                 continue;
             }
-            if (session.subscriber.end != null || !session.ready
-                || state.hasPending(session.subscriber)
+            if (session.subscription.end != null || !session.ready
+                || hub.hasPending(session.subscription)
                 || now - session.lastWrite >= HEARTBEAT_MILLIS) schedule(session);
         }
     }
@@ -165,37 +150,25 @@ public final class TerminalStreams implements AutoCloseable {
                 session.ready = true;
                 send(session, "ready", new JsonObject());
             }
-            TerminalRegistry.Update update = state.drain(session.subscriber);
+            LiveUpdate update = hub.drain(session.subscription);
             if (update != null) {
-                boolean describe = !update.definitions()
-                    .isEmpty() || update.unkeyed() != null
-                        && !update.unkeyed()
-                            .isEmpty();
-                IconMappings mappings = session.pack == null || !describe ? null : new IconMappings(session.pack);
-                Delta delta = new Delta(
-                    update.view(),
-                    update.updates(),
-                    resources(update.definitions(), update.descriptions(), Collections.emptyList(), mappings),
-                    update.removed(),
-                    update.unkeyed() == null ? null
-                        : resources(Collections.emptyList(), Collections.emptyMap(), update.unkeyed(), mappings),
-                    mappings,
-                    update.recent());
-                byte[] bytes = encode("delta", delta);
+                IconMappings mappings = session.pack == null || !update.describes() ? null
+                    : new IconMappings(session.pack);
+                byte[] bytes = encode("delta", update.body(mappings));
                 authorize(session);
-                if (bytes.length > MAX_EVENT_BYTES) session.subscriber.end = "reset";
-                else if (session.subscriber.end == null) output(session, bytes);
+                if (bytes.length > MAX_EVENT_BYTES) session.subscription.end = "reset";
+                else if (session.subscription.end == null) output(session, bytes);
             }
-            if (session.subscriber.end != null) {
-                send(session, session.subscriber.end, new JsonObject());
+            if (session.subscription.end != null) {
+                send(session, session.subscription.end, new JsonObject());
                 session.finished = true;
             } else send(session, "heartbeat", new JsonObject());
             session.lastWrite = System.currentTimeMillis();
         } catch (IOException failure) {
-            LOG.debug("Terminal connection closed", failure);
+            LOG.debug("Live connection closed", failure);
             session.finished = true;
         } catch (RuntimeException failure) {
-            LOG.warn("Terminal stream failed", failure);
+            LOG.warn("Live stream failed", failure);
             session.finished = true;
         } finally {
             if (Thread.currentThread()
@@ -208,13 +181,16 @@ public final class TerminalStreams implements AutoCloseable {
     }
 
     private void authorize(Session session) {
-        if (session.subscriber.end != null) return;
-        if (!session.context.isLifecycleUnchanged()) session.subscriber.end = "invalidate";
-        else if (!session.subscriber.session.isValid(System.currentTimeMillis())) session.subscriber.end = "revoked";
+        LiveSubscription subscription = session.subscription;
+        if (subscription.end != null) return;
+        if (!session.context.isLifecycleUnchanged()) subscription.end = "invalidate";
+        else if (!subscription.session.isValid(System.currentTimeMillis())) subscription.end = "revoked";
         else {
-            IAEGrid grid = identities.getGrid(session.subscriber.key);
-            if (grid == null) session.subscriber.end = "invalidate";
-            else if (!GridAccess.allows(grid, session.subscriber.principal)) session.subscriber.end = "revoked";
+            IAEGrid grid = identities.getGrid(
+                subscription.topic.key()
+                    .grid());
+            if (grid == null) subscription.end = "invalidate";
+            else if (!GridAccess.allows(grid, subscription.principal)) subscription.end = "revoked";
         }
     }
 
@@ -222,7 +198,7 @@ public final class TerminalStreams implements AutoCloseable {
         session.cancelTask();
         session.context.getExchange()
             .close();
-        state.release(session.subscriber);
+        hub.release(session.subscription);
         synchronized (this) {
             sessions.remove(session);
         }
@@ -245,48 +221,12 @@ public final class TerminalStreams implements AutoCloseable {
             .flush();
     }
 
-    public static @NotNull List<StoredResource> resources(@NotNull List<StorageObservation.Row> rows,
-        @NotNull Map<StableKey, ResourceDescriptor> descriptions, @NotNull List<StorageObservation.UnkeyedRow> unkeyed,
-        @Nullable IconMappings mappings) {
-        List<StoredResource> result = new ArrayList<>(rows.size() + unkeyed.size());
-        for (StorageObservation.Row row : rows) {
-            result.add(resource(descriptions.get(row.itemKey()), row.quantity(), row.craftable(), mappings));
-        }
-        for (StorageObservation.UnkeyedRow row : unkeyed) {
-            result.add(
-                resource(
-                    row.resource()
-                        .description(),
-                    row.resource()
-                        .quantity(),
-                    row.craftable(),
-                    mappings));
-        }
-        return result;
-    }
-
-    private static StoredResource resource(ResourceDescriptor resource, long quantity, boolean craftable,
-        @Nullable IconMappings mappings) {
-        return new StoredResource(
-            resource.registryNamespace(),
-            resource.registryPath(),
-            resource.displayName(),
-            resource.componentCount(),
-            resource.damage(),
-            resource.resourceType(),
-            quantity,
-            craftable,
-            resource.itemKey(),
-            mappings == null || resource.itemKey() == null ? null
-                : mappings.resolve(resource.itemKey(), resource.baseKey()));
-    }
-
     /** HTTP restart retires connections and handoff tokens while keeping the world-owned transport usable. */
     public void reset() {
         List<Session> active;
         synchronized (this) {
             active = new ArrayList<>(sessions);
-            state.reset();
+            hub.reset();
         }
         for (Session session : active) finish(session);
     }
@@ -298,7 +238,7 @@ public final class TerminalStreams implements AutoCloseable {
             closed = true;
         }
         reset();
-        state.close();
+        hub.close();
         timer.shutdownNow();
         writers.shutdownNow();
     }
@@ -306,7 +246,7 @@ public final class TerminalStreams implements AutoCloseable {
     private static final class Session {
 
         private final RequestContext context;
-        private final TerminalRegistry.Subscription subscriber;
+        private final LiveSubscription subscription;
         private final @Nullable IconPack pack;
         private volatile boolean ready;
         private volatile boolean finished;
@@ -350,9 +290,9 @@ public final class TerminalStreams implements AutoCloseable {
             if (pending != null) pending.cancel(true);
         }
 
-        private Session(RequestContext context, TerminalRegistry.Subscription subscriber, @Nullable IconPack pack) {
+        private Session(RequestContext context, LiveSubscription subscription, @Nullable IconPack pack) {
             this.context = context;
-            this.subscriber = subscriber;
+            this.subscription = subscription;
             this.pack = pack;
         }
     }

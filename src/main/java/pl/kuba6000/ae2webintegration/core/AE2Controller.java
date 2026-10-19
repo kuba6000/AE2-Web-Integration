@@ -63,7 +63,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTrackingHist
 import pl.kuba6000.ae2webintegration.core.http.endpoint.updates.SkipUpdate;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
-import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
+import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
 
 public class AE2Controller {
 
@@ -282,7 +282,7 @@ public class AE2Controller {
         synchronized (serverLifecycleLock) {
             acceptingHTTPRequests = false;
             httpLifecycleGeneration.incrementAndGet();
-            TerminalStreams streams = CoreEngine.getTerminalStreams();
+            LiveStreams streams = CoreEngine.getLiveStreams();
             if (streams != null) streams.reset();
             if (server != null) {
                 server.stop(0);

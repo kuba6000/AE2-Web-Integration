@@ -33,6 +33,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
@@ -277,7 +278,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         CoreEngine.GRID_IDENTITIES.getPersistentData(key)
             .getSettings()
             .setFlowFlushIntervalSeconds(60);
-        TerminalRegistry terminals = new TerminalRegistry();
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
         InMemoryStorageHistoryStore store = new InMemoryStorageHistoryStore();
         try (StorageTrackingService service = new StorageTrackingService(store, 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
@@ -346,14 +347,15 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         assertNotNull(data);
         data.getSettings()
             .setStorageTracked(true);
-        TerminalRegistry terminals = new TerminalRegistry();
+        LiveHub hub = new LiveHub();
+        TerminalRegistry terminals = new TerminalRegistry(hub);
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
                 CoreEngine.GRID_IDENTITIES,
                 new ConfigSettings.ResourceTracking(),
                 terminals)) {
-            synchronized (terminals) {
+            synchronized (hub) {
                 coordinator.prepareForViewer(grid, 1000);
                 assertNotNull(terminals.snapshot(key));
                 assertNull(terminals.recent(key), "Capture may enqueue recent work, but cannot execute it inline");
@@ -373,7 +375,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             .setStorageTracked(true);
         data.getSettings()
             .setFlowTracked(true);
-        TerminalRegistry terminals = new TerminalRegistry();
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
@@ -474,7 +476,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         assertNotNull(data);
         data.getSettings()
             .setStorageTracked(true);
-        TerminalRegistry terminals = new TerminalRegistry();
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
@@ -532,7 +534,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         assertNotNull(configuration);
         configuration.getSettings()
             .setFlowTracked(true);
-        TerminalRegistry terminals = new TerminalRegistry();
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 1);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
@@ -588,7 +590,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         assertNotNull(configuration);
         configuration.getSettings()
             .setStorageTracked(true);
-        TerminalRegistry terminals = new TerminalRegistry();
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
@@ -631,7 +633,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             .setStorageTracked(true);
         data.getSettings()
             .setFlowTracked(true);
-        TerminalRegistry terminals = new TerminalRegistry();
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
         ConfigSettings.ResourceTracking configuration = new ConfigSettings.ResourceTracking();
         CoreEngine.GRID_IDENTITIES.getPersistentData(key)
             .getSettings()
@@ -696,7 +698,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         ItemIdentityRequestTest.Resource iron = new ItemIdentityRequestTest.Resource("viewer-demand", 10, false);
         ItemIdentityRequestTest.Grid grid = new ItemIdentityRequestTest.Grid(710019, iron);
         StableKey key = TestGridFixtures.resolvedKey(grid);
-        TerminalRegistry terminals = new TerminalRegistry();
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
@@ -880,7 +882,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 return new StorageHistory(Collections.emptyList(), Collections.emptyMap(), true, false);
             }
         };
-        TerminalRegistry terminals = new TerminalRegistry();
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
         try (StorageTrackingService service = new StorageTrackingService(blocked, 2);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,

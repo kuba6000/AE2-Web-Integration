@@ -26,10 +26,11 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.live.LiveHub;
+import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
-import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
@@ -71,7 +72,7 @@ public class CoreEngine {
     private static volatile ThemeCatalog themes = new ThemeCatalog();
     private static volatile @Nullable StorageTrackingService storageTracking;
     private static volatile @Nullable StorageTrackingCoordinator storageCoordinator;
-    private static volatile @Nullable TerminalStreams terminalStreams;
+    private static volatile @Nullable LiveStreams liveStreams;
     private static volatile @Nullable TerminalRegistry terminalRegistry;
 
     public static void init(@NotNull IServerPlatform serverPlatform) {
@@ -118,10 +119,10 @@ public class CoreEngine {
             serverRunning = true;
             loadIconPack();
             ConfigSettings.ResourceTracking trackingSettings = Config.INSTANCE.resourceTracking;
-            TerminalRegistry terminals = new TerminalRegistry();
+            LiveHub hub = new LiveHub();
+            TerminalRegistry terminals = new TerminalRegistry(hub);
             terminalRegistry = terminals;
-            TerminalStreams streams = new TerminalStreams(terminals, GRID_IDENTITIES, getIconPack());
-            terminalStreams = streams;
+            liveStreams = new LiveStreams(hub, GRID_IDENTITIES, getIconPack());
             StorageTrackingService service = new StorageTrackingService(history, trackingSettings.maxQueuedRows);
             storageTracking = service;
             storageCoordinator = new StorageTrackingCoordinator(service, GRID_IDENTITIES, trackingSettings, terminals);
@@ -256,7 +257,7 @@ public class CoreEngine {
     public static void onServerStopping() {
         serverRunning = false;
         stopVersionChecker();
-        stopTerminalStreams();
+        stopLiveStreams();
         AE2Controller.stopHTTPServer();
         stopStorageTracking();
         closeIconPack();
@@ -269,7 +270,7 @@ public class CoreEngine {
         serverRunning = false;
         stopVersionChecker();
         // Defensive when startup failed partway or a platform omits the earlier stopping callback.
-        stopTerminalStreams();
+        stopLiveStreams();
         AE2Controller.stopHTTPServer();
         stopStorageTracking();
         closeIconPack();
@@ -315,20 +316,20 @@ public class CoreEngine {
         return terminalRegistry;
     }
 
-    public static @Nullable TerminalStreams getTerminalStreams() {
-        return terminalStreams;
+    public static @Nullable LiveStreams getLiveStreams() {
+        return liveStreams;
     }
 
-    private static void stopTerminalStreams() {
-        TerminalStreams previousStreams = terminalStreams;
-        terminalStreams = null;
+    private static void stopLiveStreams() {
+        LiveStreams previousStreams = liveStreams;
+        liveStreams = null;
         terminalRegistry = null;
         if (previousStreams != null) previousStreams.close();
     }
 
     private static void stopStorageTracking() {
         resourcePins = null;
-        stopTerminalStreams();
+        stopLiveStreams();
         StorageTrackingCoordinator coordinator = storageCoordinator;
         if (coordinator != null) {
             coordinator.close();

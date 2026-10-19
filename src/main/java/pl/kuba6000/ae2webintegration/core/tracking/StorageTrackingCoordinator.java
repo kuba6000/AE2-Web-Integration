@@ -25,6 +25,7 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentTrackingService;
@@ -53,7 +54,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
 
     public StorageTrackingCoordinator(@NotNull StorageTrackingService service, @NotNull GridIdentityRegistry identities,
         @NotNull ConfigSettings.ResourceTracking settings) {
-        this(service, identities, settings, new TerminalRegistry());
+        this(service, identities, settings, new TerminalRegistry(new LiveHub()));
     }
 
     public StorageTrackingCoordinator(@NotNull StorageTrackingService service, @NotNull GridIdentityRegistry identities,

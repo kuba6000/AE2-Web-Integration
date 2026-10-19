@@ -32,8 +32,9 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.live.LiveView;
+import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
-import pl.kuba6000.ae2webintegration.core.terminal.TerminalStreams;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
@@ -79,8 +80,7 @@ public final class GetItems extends ISyncedRequest {
      */
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull List<StoredResource> data, @Nullable IconMappings icons,
-        @Nullable TerminalRegistry.View view, @Nullable String subscription,
-        @Nullable RecentResourceActivity.Summary recent) {
+        @Nullable LiveView view, @Nullable String subscription, @Nullable RecentResourceActivity.Summary recent) {
 
         public Response(ApiStatus status, List<StoredResource> data, IconMappings icons) {
             this(status, data, icons, null, null, null);
@@ -158,7 +158,7 @@ public final class GetItems extends ISyncedRequest {
                     HttpURLConnection.HTTP_OK,
                     new Response(
                         ApiStatus.OK,
-                        TerminalStreams
+                        StorageTopic
                             .resources(bootstrap.rows(), bootstrap.descriptions(), bootstrap.unkeyed(), mappings),
                         mappings,
                         bootstrap.view(),
@@ -170,7 +170,7 @@ public final class GetItems extends ISyncedRequest {
         if (shared != null) {
             IconPack pack = icons ? CoreEngine.getIconPack() : null;
             IconMappings mappings = pack == null ? null : new IconMappings(pack);
-            List<StoredResource> items = TerminalStreams
+            List<StoredResource> items = StorageTopic
                 .resources(shared.rows(), shared.descriptions(), shared.unkeyed(), mappings);
             TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
             respondDetached(
