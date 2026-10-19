@@ -1,4 +1,4 @@
-const test = require('node:test');
+const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs/promises');
@@ -563,6 +563,28 @@ test('history prioritizes only the measured final resource identity and keeps se
     assert.equal(await resources.getByRole('img', { name: 'Final product', exact: true }).count(), 0);
 });
 
+let browserLaunch;
+
+// One browser serves every test of this process; each test gets its own context. A lost browser is relaunched.
+async function sharedBrowser() {
+    const launch = (browserLaunch ??= chromium.launch({
+        headless: true,
+        ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {})
+    }));
+    const browser = await launch.catch((error) => {
+        if (browserLaunch === launch) browserLaunch = undefined;
+        throw error;
+    });
+    if (browser.isConnected()) return browser;
+    if (browserLaunch === launch) browserLaunch = undefined;
+    return sharedBrowser();
+}
+
+after(async () => {
+    const browser = await browserLaunch?.catch(() => null);
+    await browser?.close();
+});
+
 async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } = {}) {
     const options = {
         pins: [],
@@ -1078,20 +1100,17 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true } 
     });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const closeServer = () => new Promise((resolve) => server.close(resolve));
-    const browser = await chromium
-        .launch({
-            headless: true,
-            ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {})
-        })
+    const context = await sharedBrowser()
+        .then((browser) => browser.newContext({ locale: 'en-US', ...contextOptions }))
         .catch(async (error) => {
             await closeServer();
             throw error;
         });
     t.after(async () => {
-        await browser.close();
+        await context.close();
         await closeServer();
     });
-    const page = await browser.newPage({ locale: 'en-US', ...contextOptions });
+    const page = await context.newPage();
     page.on('dialog', (dialog) => dialog.accept());
     if (mockClock) await page.clock.install();
     const errors = [];
