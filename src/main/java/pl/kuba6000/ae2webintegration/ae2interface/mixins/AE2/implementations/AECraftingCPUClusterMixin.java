@@ -113,6 +113,24 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICrafting
     }
 
     @Override
+    public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored) {
+        KeyCounter activeItems = (KeyCounter) (Object) active;
+        KeyCounter pendingItems = (KeyCounter) (Object) pending;
+        KeyCounter storedItems = (KeyCounter) (Object) stored;
+        var logic = ((CraftingCPUCluster) (Object) this).craftingLogic;
+        var job = ((ICraftingCPULogicAccessor) logic).web$getJob();
+        if (job != null) activeItems.addAll(job.web$getWaitingFor().list);
+        storedItems.addAll(logic.getInventory().list);
+        web$getAllItems(pending);
+        // Native getAllItems is active + pending + stored; subtract the copied counters to isolate pending.
+        pendingItems.removeAll(activeItems);
+        pendingItems.removeAll(storedItems);
+        activeItems.removeZeros();
+        pendingItems.removeZeros();
+        storedItems.removeZeros();
+    }
+
+    @Override
     public long web$getActiveItems(IAEKey key) {
         return ((CraftingCPUCluster) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
     }
