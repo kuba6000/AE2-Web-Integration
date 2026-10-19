@@ -62,12 +62,14 @@ export function createCpuMonitor(
         enabled: live.enabled,
         rows: () => source?.rows?.map(({ resource }) => resource) ?? [],
         icons: () => state.icons,
-        rowKey: (resource) => resource.itemKey,
-        updateKey: (update) => update.itemKey,
-        merge: (resource, update) => ({ ...resource, ...update }),
-        section(delta) {
-            if (delta.cpu && source)
-                source = { ...source, header: { ...source.header, ...delta.cpu }, headerAt: Date.now() };
+        section(delta, remap) {
+            if (!delta.cpu || !source) return;
+            const { finalOutput, ...cpu } = delta.cpu;
+            source = {
+                ...source,
+                header: { ...source.header, ...cpu, finalOutput: finalOutput && remap(finalOutput) },
+                headerAt: Date.now()
+            };
         },
         status(next) {
             state.stream = next;

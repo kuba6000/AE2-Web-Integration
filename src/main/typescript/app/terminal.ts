@@ -178,9 +178,6 @@ export function createTerminal(
         enabled: () => state.preferences.autoRefresh,
         rows: () => state.items,
         icons: () => state.itemIcons,
-        rowKey: (item) => item.itemKey,
-        updateKey: (update) => update.itemKey,
-        merge: (item, update) => ({ ...item, quantity: update.quantity, craftable: update.craftable }),
         section(delta) {
             if (delta.recent) {
                 state.recent = {
@@ -411,7 +408,7 @@ export function createTerminal(
                 await Promise.all([homeRefresh, refreshingGrids]);
                 return;
             }
-            if (!automatic && state.route.view === 'items') {
+            if (!automatic && ['items', 'cpus'].includes(state.route.view)) {
                 if (!refreshingAutomatically) return refreshingGrids;
                 const route = state.route;
                 return refreshingGrids.then(() => {

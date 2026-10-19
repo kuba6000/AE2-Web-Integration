@@ -9,17 +9,20 @@ export type LiveChange<Row> = {
     icons: IconMetadata | null;
 };
 
-/** The owner keeps the rows and decides how an update changes one; the stream only keeps them current. */
-export type LiveStreamHost<Row, Update, Delta> = {
+/** Maps the delta-local icon page of a value to the page of the owner's merged icon metadata. */
+export type IconRemap = <Value extends { icon: IconReference | null }>(value: Value) => Value;
+
+/**
+ * The owner keeps the rows; the stream only keeps them current. Rows are keyed by `itemKey` and an update
+ * replaces its row's fields with its own.
+ */
+export type LiveStreamHost<Row, Delta> = {
     /** Whether live updates are wanted at all. */
     enabled: () => boolean;
     rows: () => Row[];
     icons: () => IconMetadata | null;
-    rowKey: (row: Row) => string | null;
-    updateKey: (update: Update) => string;
-    merge: (row: Row, update: Update) => Row;
     /** Receives every accepted newer delta before its rows, for sections beyond the keyed list. */
-    section?: (delta: Delta) => void;
+    section?: (delta: Delta, remap: IconRemap) => void;
     /** Mirrors the connection state; `null` once the stream is stopped. */
     status: (next: LiveStreamState | null) => void;
     apply: (change: LiveChange<Row>) => void;
@@ -34,10 +37,10 @@ const reconnectDelayMillis = 2000;
 
 /** One live subscription of a keyed list: events, icon pages, revision checks and keyed apply. */
 export function createLiveStream<
-    Row extends { icon: IconReference | null },
-    Update,
+    Row extends { itemKey: string | null; icon: IconReference | null },
+    Update extends { itemKey: string },
     Delta extends LiveDelta<Row, Update>
->(host: LiveStreamHost<Row, Update, Delta>) {
+>(host: LiveStreamHost<Row, Delta>) {
     let view: TerminalView | undefined;
     let subscription: string | undefined;
     let close: (() => void) | undefined;
@@ -105,34 +108,31 @@ export function createLiveStream<
                     }
                     return index;
                 });
-                const remap = (row: Row): Row => ({
-                    ...row,
-                    icon: row.icon && delta.icons ? { ...row.icon, page: indices[row.icon.page] } : null
+                const remap: IconRemap = (value) => ({
+                    ...value,
+                    icon: value.icon && delta.icons ? { ...value.icon, page: indices[value.icon.page] } : null
                 });
-                host.section?.(delta);
+                host.section?.(delta, remap);
                 let rows: LiveChange<Row>['rows'] = null;
                 if (delta.definitions.length || delta.updates.length || delta.removed.length || delta.unkeyed) {
                     const existing = host.rows();
                     const keyed = new Map<string, Row>();
                     for (const row of existing) {
-                        const key = host.rowKey(row);
-                        if (key) keyed.set(key, row);
+                        if (row.itemKey) keyed.set(row.itemKey, row);
                     }
                     for (const removed of delta.removed) keyed.delete(removed);
                     for (const row of delta.definitions) {
-                        const key = host.rowKey(row);
-                        if (key) keyed.set(key, remap(row));
+                        if (row.itemKey) keyed.set(row.itemKey, remap(row));
                     }
                     for (const update of delta.updates) {
-                        const key = host.updateKey(update);
-                        const row = keyed.get(key);
+                        const row = keyed.get(update.itemKey);
                         if (!row) {
                             resync();
                             return;
                         }
-                        keyed.set(key, host.merge(row, update));
+                        keyed.set(update.itemKey, { ...row, ...update });
                     }
-                    const unkeyed = delta.unkeyed?.map(remap) ?? existing.filter((row) => !host.rowKey(row));
+                    const unkeyed = delta.unkeyed?.map(remap) ?? existing.filter((row) => !row.itemKey);
                     rows = { all: [...keyed.values(), ...unkeyed], keyed };
                 }
                 host.apply({ rows, icons: delta.icons ? { ...delta.icons, pages } : null });

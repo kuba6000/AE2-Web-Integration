@@ -7,7 +7,7 @@ const moduleUrl = pathToFileURL(
     path.resolve(__dirname, '../../build/generated/frontend/assets/web/app/live-stream.js')
 );
 
-/** A keyed list whose rows differ from the terminal's: another key field, other numbers and a header section. */
+/** A keyed list whose rows differ from the terminal's: other numbers and a header section. */
 async function setup(t, { enabled = true } = {}) {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const { createLiveStream } = await import(moduleUrl);
@@ -26,11 +26,8 @@ async function setup(t, { enabled = true } = {}) {
         enabled: () => enabled,
         rows: () => owner.rows,
         icons: () => owner.icons,
-        rowKey: (row) => row.key,
-        updateKey: (update) => update.key,
-        merge: (row, update) => ({ ...row, active: update.active, stored: update.stored }),
-        section(delta) {
-            if (delta.header) owner.header = delta.header;
+        section(delta, remap) {
+            if (delta.header) owner.header = { ...delta.header, product: remap(delta.header.product) };
         },
         status: (next) => owner.statuses.push(next),
         apply(change) {
@@ -57,7 +54,7 @@ async function setup(t, { enabled = true } = {}) {
         );
     return { stream, owner, connections, start };
 }
-const row = (key, extra = {}) => ({ key, icon: null, active: 0, stored: 0, ...extra });
+const row = (itemKey, extra = {}) => ({ itemKey, icon: null, active: 0, stored: 0, ...extra });
 const delta = (revision, content = {}) => ({
     view: { generation: '1', revision: String(revision) },
     definitions: [],
@@ -107,14 +104,14 @@ test('deltas apply definitions, absolute updates and removals to a keyed list an
     const { handlers } = connections[0];
     handlers.delta(
         delta(2, {
-            header: { busy: true },
+            header: { busy: true, product: { icon: null } },
             definitions: [row('c')],
-            updates: [{ key: 'a', active: 5, stored: 9 }],
+            updates: [{ itemKey: 'a', active: 5, stored: 9 }],
             removed: ['b']
         })
     );
     assert.deepEqual(
-        owner.rows.map((entry) => [entry.key, entry.active, entry.stored]),
+        owner.rows.map((entry) => [entry.itemKey, entry.active, entry.stored]),
         [
             ['a', 5, 9],
             ['c', 0, 0],
@@ -122,18 +119,18 @@ test('deltas apply definitions, absolute updates and removals to a keyed list an
         ]
     );
     assert.equal(owner.rows[2], anonymous, 'An omitted unkeyed list keeps the anonymous rows');
-    assert.deepEqual(owner.header, { busy: true });
+    assert.deepEqual(owner.header, { busy: true, product: { icon: null } });
     assert.equal([...owner.applied.at(-1).rows.keyed.keys()].join(), 'a,c');
     handlers.delta(delta(3, { unkeyed: [] }));
     assert.deepEqual(
-        owner.rows.map((entry) => entry.key),
+        owner.rows.map((entry) => entry.itemKey),
         ['a', 'c']
     );
     const rows = owner.rows;
-    handlers.delta(delta(4, { header: { busy: false } }));
+    handlers.delta(delta(4, { header: { busy: false, product: { icon: null } } }));
     assert.equal(owner.rows, rows, 'A section-only delta leaves the rows untouched');
     assert.equal(owner.applied.at(-1).rows, null);
-    assert.deepEqual(owner.header, { busy: false });
+    assert.deepEqual(owner.header, { busy: false, product: { icon: null } });
 });
 
 test('stale revisions are skipped, newer generations and unknown updates request a fresh snapshot', async (t) => {
@@ -142,10 +139,10 @@ test('stale revisions are skipped, newer generations and unknown updates request
     start({ view: { generation: '1', revision: '9' }, subscription: 'token' });
     const { handlers } = connections[0];
     const changes = owner.changes;
-    handlers.delta(delta(9, { updates: [{ key: 'a', active: 1, stored: 1 }] }));
+    handlers.delta(delta(9, { updates: [{ itemKey: 'a', active: 1, stored: 1 }] }));
     assert.equal(owner.rows[0].active, 0, 'A revision that is not newer is not applied');
     assert.equal(owner.changes, changes + 1);
-    handlers.delta(delta(10, { updates: [{ key: 'a', active: 1, stored: 1 }] }));
+    handlers.delta(delta(10, { updates: [{ itemKey: 'a', active: 1, stored: 1 }] }));
     assert.equal(owner.rows[0].active, 1);
     handlers.delta(delta('900000000000000000000'));
     assert.equal(owner.resyncs, 0, 'Revisions compare numerically beyond the safe integer range');
@@ -154,7 +151,7 @@ test('stale revisions are skipped, newer generations and unknown updates request
     assert.equal(stream.active, false);
     assert.equal(connections[0].closed, true);
     start();
-    connections[1].handlers.delta(delta(2, { updates: [{ key: 'missing', active: 1, stored: 1 }] }));
+    connections[1].handlers.delta(delta(2, { updates: [{ itemKey: 'missing', active: 1, stored: 1 }] }));
     assert.equal(owner.resyncs, 2);
     assert.equal(connections[1].closed, true);
 });
@@ -182,6 +179,29 @@ test('icon pages merge by digest, remap rows and a different pack requests a fre
     );
     handlers.delta(delta(3, { icons: { packId: 'other', pages: [] } }));
     assert.equal(owner.resyncs, 1);
+});
+
+test('a section receives the same icon page remapping as the rows of its delta', async (t) => {
+    const { owner, connections, start } = await setup(t);
+    const page = (digest) => ({ digest, width: 16, height: 16 });
+    owner.icons = { packId: 'pack', pages: [page('old')] };
+    start();
+    const { handlers } = connections[0];
+    handlers.delta(
+        delta(2, {
+            icons: { packId: 'pack', pages: [page('new'), page('old')] },
+            header: { busy: true, product: { icon: { page: 0, x: 5, y: 6 } } },
+            definitions: [row('a', { icon: { page: 0, x: 1, y: 2 } })]
+        })
+    );
+    assert.deepEqual(
+        owner.icons.pages.map((entry) => entry.digest),
+        ['old', 'new']
+    );
+    assert.deepEqual(owner.header.product.icon, { page: 1, x: 5, y: 6 });
+    assert.equal(owner.rows[0].icon.page, owner.header.product.icon.page, 'Both use the page merged for the delta');
+    handlers.delta(delta(3, { header: { busy: false, product: { icon: { page: 0, x: 7, y: 8 } } } }));
+    assert.equal(owner.header.product.icon, null, 'Without icon metadata in the delta no icon is kept');
 });
 
 test('reset resynchronizes, a failed connection reports confirmation and retries after the backoff', async (t) => {

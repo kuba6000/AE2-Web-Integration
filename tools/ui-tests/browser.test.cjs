@@ -1553,7 +1553,7 @@ test('unavailable icons override the saved mode and recover without losing it', 
     assert.equal(await mode.inputValue(), 'icons');
     await page.reload();
     await mode.waitFor();
-    await page.waitForFunction(() => document.querySelector('#terminal-display').value === 'icons');
+    await page.waitForFunction(() => document.querySelector('#terminal-display')?.value === 'icons');
 });
 
 test('pending icon discovery leaves inventory usable and failures preserve confirmed availability', async (t) => {
@@ -1607,7 +1607,7 @@ test('initial icon discovery error stays distinct from absence and recovers', as
     assert.equal(await mode.inputValue(), 'names');
     options.packError = false;
     await poll(page);
-    await page.waitForFunction(() => document.querySelector('#terminal-display').value === 'both', null, {
+    await page.waitForFunction(() => document.querySelector('#terminal-display')?.value === 'both', null, {
         timeout: 3000
     });
     options.pack = { available: false, packId: null, width: 0, height: 0 };
@@ -1630,12 +1630,12 @@ test('superseded slow discovery cannot overwrite recovered availability after a 
     const firstDiscovery = page.waitForRequest((r) => r.url().endsWith('/api/icon-pack'));
     await page.goto(`${base}#/web-settings`);
     const oldRequest = await firstDiscovery;
-    await page.waitForFunction(() => document.querySelector('#network-message').textContent.length > 0);
+    await page.waitForFunction(() => document.querySelector('#network-message')?.textContent.length > 0);
     options.gridError = null;
     options.packDelay = 0;
     options.pack = { available: true, packId: 'a'.repeat(64), width: 64, height: 64 };
     await poll(page);
-    await page.waitForFunction(() => document.querySelector('#terminal-display').value === 'both', null, {
+    await page.waitForFunction(() => document.querySelector('#terminal-display')?.value === 'both', null, {
         timeout: 3000
     });
     await settleResponse(page, oldRequest);
@@ -1661,7 +1661,7 @@ for (const saved of [
         const mode = page.getByRole('combobox', { name: 'Terminal display', exact: true });
         await mode.waitFor();
         await page.waitForFunction(
-            (expected) => document.querySelector('#terminal-display').value === expected,
+            (expected) => document.querySelector('#terminal-display')?.value === expected,
             saved.expected,
             { timeout: 3000 }
         );
@@ -4298,9 +4298,13 @@ test('CPU background refresh signals activity without disabling or dimming exist
     const readRequest = new Promise((resolve) => {
         captureRead = resolve;
     });
+    let reads = 0;
     await page.route(
         (url) => url.pathname.endsWith('/cpus'),
-        (route) => captureRead(route)
+        (route) => {
+            if (reads++ === 0) captureRead(route);
+            else return route.continue();
+        }
     );
     await poll(page);
     const read = await readRequest;
@@ -4311,7 +4315,7 @@ test('CPU background refresh signals activity without disabling or dimming exist
     const requestsBefore = options.requests.length;
     await refresh.click();
     await refresh.click();
-    assert.equal(options.requests.length, requestsBefore, 'Repeated refresh uses the in-flight application refresh');
+    assert.equal(options.requests.length, requestsBefore, 'Repeated refresh waits for the in-flight refresh');
     await read.continue();
     await activity.waitFor({ state: 'hidden' });
     assert.deepEqual(await appearance(), before);
@@ -10073,7 +10077,7 @@ for (const width of [390, 1280])
             });
         }
         await page.getByRole('button', { name: 'Save settings', exact: true }).click();
-        await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+        await page.waitForFunction(() => document.querySelector('#network-flow-interval')?.disabled === false);
         assert.deepEqual(options.requests.filter((request) => request.method === 'PATCH').at(-1).body, {
             stockSampleIntervalSeconds: 123,
             flowFlushIntervalSeconds: 19,
@@ -10096,11 +10100,11 @@ test('history policy drafts survive navigation and stricter limits without leaki
     const save = page.getByRole('button', { name: 'Save settings', exact: true });
     await flow.fill('110');
     await page.goto(`${base}#/grids/${gridB}/settings`);
-    await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+    await page.waitForFunction(() => document.querySelector('#network-flow-interval')?.disabled === false);
     assert.equal(await flow.inputValue(), '60', 'A focused numeric draft belongs only to its source grid');
     await retention.fill('12');
     await page.goto(`${base}#/grids/${gridA}/settings`);
-    await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+    await page.waitForFunction(() => document.querySelector('#network-flow-interval')?.disabled === false);
     assert.equal(await flow.inputValue(), '110');
     assert.equal(await retention.inputValue(), '7');
     options.settings[gridA].limits.flowFlushIntervalSeconds.max = 90;
@@ -10124,7 +10128,7 @@ test('history policy drafts survive navigation and stricter limits without leaki
     await save.click();
     const pending = await captured;
     await page.goto(`${base}#/grids/${gridB}/settings`);
-    await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+    await page.waitForFunction(() => document.querySelector('#network-flow-interval')?.disabled === false);
     assert.equal(await retention.inputValue(), '12');
     await page.goBack();
     assert.equal(await flow.isDisabled(), true);
@@ -10134,7 +10138,7 @@ test('history policy drafts survive navigation and stricter limits without leaki
         contentType: 'application/json',
         body: JSON.stringify({ status: 'OK', data: options.settings[gridA] })
     });
-    await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+    await page.waitForFunction(() => document.querySelector('#network-flow-interval')?.disabled === false);
     assert.equal(await flow.inputValue(), '85', 'The confirmed response owns the accepted value');
     await page.unroute('**/settings');
     await retention.fill('20');
@@ -10145,7 +10149,7 @@ test('history policy drafts survive navigation and stricter limits without leaki
         .filter({ hasText: /not confirmed/i })
         .waitFor();
     await page.goto(`${base}#/grids/${gridB}/settings`);
-    await page.waitForFunction(() => !document.querySelector('#network-flow-interval').disabled);
+    await page.waitForFunction(() => document.querySelector('#network-flow-interval')?.disabled === false);
     await page.goBack();
     await page
         .getByRole('status')
@@ -10164,13 +10168,13 @@ test('resource tracking is independent of CPU history and renders exact flow cou
     await page.goto(`${base}#/grids/${gridA}/settings`);
     await page.locator('#network-flow-tracking').check();
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
-    await page.waitForFunction(() => !document.querySelector('#network-flow-tracking').disabled);
+    await page.waitForFunction(() => document.querySelector('#network-flow-tracking')?.disabled === false);
     assert.equal(options.settings[gridA].isFlowTracked, true);
     assert.equal(options.settings[gridA].isStorageTracked, false);
     await page.locator('#network-storage-tracking').check();
     await page.locator('#network-stock-interval').fill('60');
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
-    await page.waitForFunction(() => !document.querySelector('#network-storage-tracking').disabled);
+    await page.waitForFunction(() => document.querySelector('#network-storage-tracking')?.disabled === false);
     assert.equal(options.settings[gridA].isStorageTracked, true);
     assert.equal(options.settings[gridA].isTracked, false);
     assert.equal(options.settings[gridA].stockSampleIntervalSeconds, 60);
@@ -10178,11 +10182,11 @@ test('resource tracking is independent of CPU history and renders exact flow cou
     assert.equal(await page.getByRole('button', { name: 'Save settings', exact: true }).isDisabled(), true);
     await page.goto(`${base}#/grids/${gridA}/items`);
     await page.goto(`${base}#/grids/${gridA}/settings`);
-    await page.waitForFunction(() => !document.querySelector('#network-flow-tracking').disabled);
+    await page.waitForFunction(() => document.querySelector('#network-flow-tracking')?.disabled === false);
     assert.equal(await page.locator('#network-flow-tracking').isChecked(), true);
     assert.equal(await page.locator('#network-stock-interval').inputValue(), '0');
     await page.reload();
-    await page.waitForFunction(() => !document.querySelector('#network-flow-tracking').disabled);
+    await page.waitForFunction(() => document.querySelector('#network-flow-tracking')?.disabled === false);
     assert.equal(await page.locator('#network-stock-interval').inputValue(), '60');
     options.resourceHistory = {
         baseline: {
@@ -10609,7 +10613,7 @@ test('tracking legend choices survive automatic history refresh and chart rebuil
     const refreshed = page.waitForResponse((response) => response.url().includes('/resource-history?'));
     await page.clock.fastForward(31000);
     await (await refreshed).finished();
-    await page.waitForFunction(() => document.querySelector('#refresh').getAttribute('aria-busy') === 'false');
+    await page.waitForFunction(() => document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false');
     assert.deepEqual(await choices(), [false, true, false, true], 'Automatic refresh preserves each legend choice');
     await page.locator('.tracking-view select').nth(1).selectOption('smooth');
     assert.deepEqual(await choices(), [false, true, false, true], 'Stroke changes preserve visibility');
@@ -10664,7 +10668,7 @@ test('flow grouping adapts from original counters on zoom reset and resize while
     await page.waitForFunction(
         () =>
             document.querySelector('.tracking-view .uplot') &&
-            document.querySelector('#refresh').getAttribute('aria-busy') === 'false'
+            document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false'
     );
     await page.evaluate(() => document.fonts.ready);
     const area = page.locator('.tracking-view .u-over');
@@ -10716,7 +10720,7 @@ test('flow grouping adapts from original counters on zoom reset and resize while
         )
     };
     await page.locator('#refresh').click();
-    await page.waitForFunction(() => document.querySelector('#refresh').getAttribute('aria-busy') === 'false');
+    await page.waitForFunction(() => document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false');
     for (const name of ['Input', 'Output'])
         await page.locator('.tracking-view .u-legend tr').filter({ hasText: name }).locator('th').click();
     const raster = async () =>
@@ -10771,7 +10775,7 @@ test('flow grouping adapts from original counters on zoom reset and resize while
         ]
     };
     await page.locator('#refresh').click();
-    await page.waitForFunction(() => document.querySelector('#refresh').getAttribute('aria-busy') === 'false');
+    await page.waitForFunction(() => document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false');
     assert.equal(
         await page.locator('.tracking-view .tracking-count-full').first().innerText(),
         '12',
@@ -10897,7 +10901,7 @@ test('sparse stock remains held between real measurements and Net keeps exact in
     await page.waitForFunction(
         () =>
             document.querySelector('.tracking-view .uplot') &&
-            document.querySelector('#refresh').getAttribute('aria-busy') === 'false'
+            document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false'
     );
     await page.evaluate(() => document.fonts.ready);
     const area = page.locator('.tracking-view .u-over');
@@ -11197,7 +11201,7 @@ for (const touch of [false, true]) {
         await page.waitForFunction(
             () =>
                 document.querySelector('.tracking-view .uplot') &&
-                document.querySelector('#refresh').getAttribute('aria-busy') === 'false'
+                document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false'
         );
         await page.evaluate(() => document.fonts.ready);
         await page.locator('.tracking-view .tracking-chart').scrollIntoViewIfNeeded();
@@ -11220,7 +11224,7 @@ for (const touch of [false, true]) {
         await page.locator('.tracking-view select').nth(1).selectOption('smooth');
         assert.equal(await input.innerText(), '222', 'Changing rendering style preserves the pinned timestamp');
         await page.locator('#refresh').click();
-        await page.waitForFunction(() => document.querySelector('#refresh').getAttribute('aria-busy') === 'false');
+        await page.waitForFunction(() => document.querySelector('#refresh')?.getAttribute('aria-busy') === 'false');
         assert.equal(await input.innerText(), '222', 'Refreshing data preserves the pinned timestamp');
         const originalViewport = page.viewportSize();
         const time = page.locator('.tracking-view .u-legend tr').filter({ hasText: 'Time' }).locator('.u-value');
@@ -12647,9 +12651,10 @@ const liveCpuRow = (itemKey, displayName, extra = {}) => ({
 });
 
 // Opens a busy CPU whose detail follows the simulated live stream; `send` writes a delta to the newest stream.
-async function openLiveCpu(t, work = {}) {
+async function openLiveCpu(t, work = {}, prepare = async () => {}) {
     const context = await fixture(t);
     const { page, options, base } = context;
+    await prepare(context);
     options.cpuLiveView = { generation: '1', revision: '1' };
     options.cpus['cpu-a'] = { ...cpu, isBusy: true, supportsPause: true };
     options.cpuDetails['cpu-a'] = {
@@ -12735,6 +12740,43 @@ test('a live CPU header section replaces the CPU state and keeps its resources',
     assert.equal(await resources.getByRole('button', { name: /^Gold Ingot/ }).count(), 1);
 });
 
+test('a live CPU header takes its product icon from the page merged for its own delta', async (t) => {
+    const { page, options, resources, send } = await openLiveCpu(
+        t,
+        {
+            finalOutput: { ...quartz, icon: { page: 0, x: 0, y: 0 } },
+            items: [liveCpuRow('iron', 'Iron Ingot', { icon: { page: 0, x: 0, y: 0 } })]
+        },
+        ({ page, options }) => atlasFixture(page, options)
+    );
+    const product = page.getByRole('region', { name: 'Current job', exact: true }).locator('.resource-icon');
+    await page.waitForFunction(
+        () => document.querySelector('.cpu-detail-output .resource-icon')?.style.backgroundImage,
+        null,
+        { timeout: 3000 }
+    );
+    const newPage = 'c'.repeat(64);
+    const newPageRequests = () => options.requests.filter((request) => request.path.includes(`/pages/${newPage}`));
+    assert.equal(newPageRequests().length, 0);
+    const header = { ...options.cpuDetails['cpu-a'], isPaused: true, items: null };
+    send(2, {
+        cpu: { ...header, finalOutput: { ...quartz, icon: { page: 0, x: 64, y: 0 } } },
+        icons: { ...options.icons, pages: [{ digest: newPage, width: 128, height: 64 }] }
+    });
+    await page.getByRole('button', { name: 'Resume current work', exact: true }).waitFor();
+    await serverState(() => newPageRequests().length, 1);
+    await page.waitForFunction(
+        () =>
+            getComputedStyle(document.querySelector('.cpu-detail-output .resource-icon')).backgroundPositionX !== '0px'
+    );
+    const crop = await product.evaluate((icon) => ({
+        x: parseFloat(getComputedStyle(icon).backgroundPositionX),
+        width: icon.getBoundingClientRect().width
+    }));
+    assert.equal(crop.x, -crop.width, 'The header icon is cropped from the second cell of the delta page');
+    assert.equal(await resources.getByRole('button', { name: /^Iron Ingot/ }).count(), 1);
+});
+
 test('an invalidated live CPU takes a fresh snapshot that replaces its subscription and recovers from a lost stream', async (t) => {
     const { page, options, resources, detailReads, send } = await openLiveCpu(t);
     options.cpuDetails['cpu-a'] = {
@@ -12784,6 +12826,32 @@ test('running CPU measurements advance on the local clock without network traffi
     await resources.getByRole('button', { name: /^Gold Ingot/ }).hover();
     await tooltip.filter({ hasText: /Processing time: 2 s/ }).waitFor();
     assert.equal(traffic(), before, 'Clock progress is derived locally and never requested');
+});
+
+test('a manual refresh during an automatic one takes a new snapshot of the live CPU', async (t) => {
+    const { page, options, detailReads } = await openLiveCpu(t);
+    assert.equal(detailReads().length, 1);
+    let held;
+    const discovery = new Promise((resolve) => {
+        held = resolve;
+    });
+    let discoveries = 0;
+    await page.route(
+        (url) => url.pathname.endsWith('/api/grids'),
+        (route) => {
+            if (discoveries++ === 0) held(route);
+            else return route.continue();
+        }
+    );
+    await poll(page);
+    const automatic = await discovery;
+    await page.locator('#refresh').click();
+    await automatic.continue();
+    await serverState(() => detailReads().length, 2);
+    assert.equal(new URLSearchParams(detailReads()[1].query).get('replace'), 'cpu-subscription-1');
+    assert.equal(discoveries, 2, 'The manual refresh waits for the automatic one and then reads again');
+    await serverState(() => options.cpuStreams.length, 1);
+    await page.locator('#refresh .live-icon').waitFor();
 });
 
 test('leaving the live CPU detail closes its stream and returning opens a new one', async (t) => {
