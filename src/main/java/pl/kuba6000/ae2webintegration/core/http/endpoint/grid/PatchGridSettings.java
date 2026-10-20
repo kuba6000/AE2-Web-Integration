@@ -10,6 +10,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
@@ -105,7 +106,7 @@ public final class PatchGridSettings extends IAsyncRequest {
         String name;
         try {
             name = input.name() == null ? null : normalizeName(input.name());
-            var policy = CoreEngine.GRID_IDENTITIES.getDataPolicy();
+            DataPolicy policy = CoreEngine.GRID_IDENTITIES.getDataPolicy();
             if (input.stockSampleIntervalSeconds() != null) policy.stockSampleIntervalSeconds()
                 .validate(input.stockSampleIntervalSeconds());
             if (input.flowFlushIntervalSeconds() != null) policy.flowFlushIntervalSeconds()

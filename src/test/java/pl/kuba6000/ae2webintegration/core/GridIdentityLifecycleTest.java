@@ -3,6 +3,10 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -32,16 +36,16 @@ class GridIdentityLifecycleTest extends GridTestScope {
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
         File invalidSave = new File(gridSave, "invalid-save");
-        java.nio.file.Path invalidFile = new File(invalidSave, "ae2webintegration/grid-identities.json").toPath();
-        java.nio.file.Files.createDirectories(invalidFile.getParent());
-        byte[] invalid = "{".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        java.nio.file.Files.write(invalidFile, invalid);
+        Path invalidFile = new File(invalidSave, "ae2webintegration/grid-identities.json").toPath();
+        Files.createDirectories(invalidFile.getParent());
+        byte[] invalid = "{".getBytes(StandardCharsets.UTF_8);
+        Files.write(invalidFile, invalid);
 
-        assertThrows(java.io.IOException.class, () -> worlds.initialize(invalidSave));
+        assertThrows(IOException.class, () -> worlds.initialize(invalidSave));
         assertFalse(CoreEngine.GRID_IDENTITIES.isInitialized());
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
-        assertArrayEquals(invalid, java.nio.file.Files.readAllBytes(invalidFile));
+        assertArrayEquals(invalid, Files.readAllBytes(invalidFile));
 
         worlds.initialize(gridSave);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);

@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +27,7 @@ abstract class GridTestScope {
         try {
             worlds.close();
         } catch (IOException failure) {
-            throw new java.io.UncheckedIOException(failure);
+            throw new UncheckedIOException(failure);
         }
     }
 }

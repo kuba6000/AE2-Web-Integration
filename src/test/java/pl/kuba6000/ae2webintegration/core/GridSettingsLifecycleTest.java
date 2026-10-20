@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.File;
 import java.net.HttpURLConnection;
 import java.util.Collections;
 
@@ -71,7 +72,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
 
     @Test
     void failedPersistenceReturnsInternalErrorAndRetryAfterRestartPersists() throws Exception {
-        java.io.File file = TestGridFixtures.Worlds.source(gridSave);
+        File file = TestGridFixtures.Worlds.source(gridSave);
         worlds.close(file);
         PatchGridSettings request = new PatchGridSettings();
         request.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=1"));

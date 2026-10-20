@@ -16,10 +16,12 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.http.dto.ResourceDescription;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
+import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
@@ -68,12 +70,12 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
     private static @Nullable RecentResourceActivity.Summary recent(@NotNull ResourcePinStore.Pin pin) {
         if (pin.homeOrder() == null || !pin.homeConfig()
             .showRecentFlow()) return null;
-        var data = CoreEngine.GRID_IDENTITIES.getPersistentData(pin.gridKey());
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(pin.gridKey());
         if (data == null || !data.getSettings()
             .isFlowTracked()) return null;
-        var summary = CoreEngine.recentActivity(pin.gridKey());
+        RecentResourceActivity.Summary summary = CoreEngine.recentActivity(pin.gridKey());
         if (summary == null) return null;
-        var amount = summary.resources()
+        RecentResourceActivity.Amount amount = summary.resources()
             .get(pin.itemKey());
         String zero = summary.flowSince() != null && summary.flowComplete() ? "0" : null;
         return new RecentResourceActivity.Summary(
@@ -96,7 +98,7 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
     }
 
     protected final void reply(@NotNull ResourcePinStore store) throws IOException {
-        var pack = icons ? CoreEngine.getIconPack() : null;
+        IconPack pack = icons ? CoreEngine.getIconPack() : null;
         IconMappings mappings = pack == null ? null : new IconMappings(pack);
         Map<StableKey, Boolean> access = new HashMap<>();
         List<View> result = new ArrayList<>();

@@ -45,7 +45,7 @@ public final class PatchResourcePin extends ResourcePinRequest {
 
     @Override
     public void handle() {
-        var store = store();
+        ResourcePinStore store = store();
         if (store == null) return;
         try {
             ResourcePinStore.Move move = input.move() == null ? null
@@ -58,7 +58,7 @@ public final class PatchResourcePin extends ResourcePinRequest {
                             .direction()));
             if (input.homeConfig() != null) input.homeConfig()
                 .validate();
-            var pin = store.list(context.getPrincipal())
+            ResourcePinStore.Pin pin = store.list(context.getPrincipal())
                 .stream()
                 .filter(
                     value -> value.pinKey()

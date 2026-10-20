@@ -14,10 +14,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /** Disk-backed typed history. All JDBC work belongs to detached worker/request threads. */
@@ -44,14 +48,13 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         }
     }
 
-    private static final org.apache.logging.log4j.Logger LOG = org.apache.logging.log4j.LogManager
-        .getLogger("ae2webintegration");
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
-    private final pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase database;
+    private final WorldDatabase database;
     private final HsqlHistoryRetention retention;
     private volatile boolean initialized;
 
-    public HsqlStorageHistoryStore(@NotNull pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase database) {
+    public HsqlStorageHistoryStore(@NotNull WorldDatabase database) {
         this.database = database;
         retention = new HsqlHistoryRetention(
             database.policy()
@@ -216,7 +219,7 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         for (StorageHistoryPoint point : points) {
             if (point.itemKey() != null) referenced.add(point.itemKey());
         }
-        pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue.upsert(db, descriptions, referenced);
+        ResourceCatalogue.upsert(db, descriptions, referenced);
     }
 
     @Override

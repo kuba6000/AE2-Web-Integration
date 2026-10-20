@@ -5,6 +5,7 @@ import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
@@ -191,7 +192,7 @@ public final class RecentResourceActivity {
 
     private void prune(long now) {
         long cutoff = now - FLOW_WINDOW_MILLIS;
-        java.util.Iterator<Entry> entries = resources.values()
+        Iterator<Entry> entries = resources.values()
             .iterator();
         while (entries.hasNext()) {
             Entry entry = entries.next();

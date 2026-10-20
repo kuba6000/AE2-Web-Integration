@@ -14,7 +14,7 @@ import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity.Summary;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentTrackingService;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFixtures;
@@ -36,7 +36,7 @@ class RecentTrackingServiceTest extends GridTestScope {
                     service.submit(grid, 1, flow(11000, 99), false, true),
                     "Both queued and currently processing observations consume admission capacity");
             }
-            var unknown = awaitRecent(terminals, 11000);
+            Summary unknown = awaitRecent(terminals, 11000);
             assertFalse(unknown.flowComplete());
             assertNull(
                 unknown.resources()
@@ -44,7 +44,7 @@ class RecentTrackingServiceTest extends GridTestScope {
                     .input(),
                 "Dropped flow cannot be silently reported as zero");
             assertTrue(service.submit(grid, 1, flow(141000, 3), false, true));
-            var recovered = awaitRecent(terminals, 141000);
+            Summary recovered = awaitRecent(terminals, 141000);
             assertTrue(recovered.flowComplete());
             assertEquals(
                 "3",
@@ -64,7 +64,7 @@ class RecentTrackingServiceTest extends GridTestScope {
                 assertTrue(service.submit(grid, 1, flow(6000, 17), false, true));
                 service.invalidate(grid, 1, 7000);
             }
-            var summary = awaitRecent(terminals, 7000);
+            Summary summary = awaitRecent(terminals, 7000);
             assertNull(summary.stockSince());
             assertFalse(summary.flowComplete());
             assertNull(
@@ -96,7 +96,7 @@ class RecentTrackingServiceTest extends GridTestScope {
                 service.open(grid, 2, false, true, 100, 7000);
                 assertTrue(service.refresh(grid, 2, 7000));
             }
-            var summary = awaitRecent(terminals, 7000);
+            Summary summary = awaitRecent(terminals, 7000);
             assertEquals(7000, summary.flowSince());
             assertEquals(
                 "0",
@@ -121,7 +121,7 @@ class RecentTrackingServiceTest extends GridTestScope {
             service.open(grid, 1, false, true, 100, 1000);
             assertNull(service.snapshot(grid));
             assertTrue(service.submit(grid, 1, flow(6000, 17), false, true));
-            var summary = awaitSnapshot(service, 6000);
+            Summary summary = awaitSnapshot(service, 6000);
             assertEquals(
                 "17",
                 summary.resources()
@@ -131,14 +131,14 @@ class RecentTrackingServiceTest extends GridTestScope {
             synchronized (hub) {
                 assertTrue(service.submit(grid, 1, flow(11000, 99), false, true));
                 service.invalidate(grid, 1, 12000);
-                var invalidated = service.snapshot(grid);
+                Summary invalidated = service.snapshot(grid);
                 assertTrue(invalidated == null || !invalidated.flowComplete());
                 service.retire(grid, 1);
                 assertNull(service.snapshot(grid));
                 service.open(grid, 2, true, false, 100, 13000);
                 assertTrue(service.refresh(grid, 2, 13000));
             }
-            var disabled = awaitSnapshot(service, 13000);
+            Summary disabled = awaitSnapshot(service, 13000);
             assertNull(disabled.flowSince());
             assertFalse(disabled.flowComplete());
             assertFalse(
@@ -149,11 +149,10 @@ class RecentTrackingServiceTest extends GridTestScope {
         }
     }
 
-    private RecentResourceActivity.Summary awaitSnapshot(RecentTrackingService service, long at)
-        throws InterruptedException {
+    private Summary awaitSnapshot(RecentTrackingService service, long at) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {
-            var summary = service.snapshot(grid);
+            Summary summary = service.snapshot(grid);
             if (summary != null && summary.observedAt() >= at) return summary;
             Thread.sleep(1);
         }
@@ -193,11 +192,10 @@ class RecentTrackingServiceTest extends GridTestScope {
             Collections.emptyList());
     }
 
-    private @NotNull RecentResourceActivity.Summary awaitRecent(TerminalRegistry terminals, long at)
-        throws InterruptedException {
+    private @NotNull Summary awaitRecent(TerminalRegistry terminals, long at) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {
-            var summary = terminals.recent(grid);
+            Summary summary = terminals.recent(grid);
             if (summary != null && summary.observedAt() >= at) return summary;
             Thread.sleep(1);
         }

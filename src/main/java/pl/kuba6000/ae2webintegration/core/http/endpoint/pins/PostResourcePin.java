@@ -13,7 +13,10 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Placement;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /**
  * Enables one resource pin placement without changing its other placement or display preferences.
@@ -36,12 +39,12 @@ public final class PostResourcePin extends ResourcePinRequest {
 
     @Override
     public void handle() {
-        var store = store();
+        ResourcePinStore store = store();
         if (store == null) return;
         try {
             Placement placement = Placement.parse(input.placement());
-            var terminals = CoreEngine.getTerminalRegistry();
-            var descriptor = terminals == null ? null : terminals.description(gridKey, input.itemKey());
+            TerminalRegistry terminals = CoreEngine.getTerminalRegistry();
+            ResourceDescriptor descriptor = terminals == null ? null : terminals.description(gridKey, input.itemKey());
             if (!store.add(context.getPrincipal(), gridKey, input.itemKey(), descriptor, placement)) {
                 deny(ApiStatus.ITEM_NOT_FOUND);
                 return;

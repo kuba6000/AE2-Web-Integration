@@ -8,7 +8,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.StringReader;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -42,9 +47,11 @@ import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
 import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry.Bootstrap;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity.Summary;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentTrackingService;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFixtures;
@@ -60,7 +67,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
         try (Fixture fixture = new Fixture(rows);
             RecentTrackingService recent = new RecentTrackingService(fixture.state, 100)) {
             recent.open(fixture.grid, 5, false, true, 100, 1000);
-            var bootstrap = fixture.state
+            Bootstrap bootstrap = fixture.state
                 .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
             assertNotNull(bootstrap);
             assertNull(bootstrap.recent());
@@ -168,10 +175,10 @@ class TerminalStreamsHttpTest extends GridTestScope {
             RecentResourceActivity recent = new RecentResourceActivity(true, true, 100, 1000);
             recent.observe(observation(1000, rows), true, true);
             fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), recent.snapshot());
-            TerminalRegistry.Bootstrap bootstrap = fixture.state
+            Bootstrap bootstrap = fixture.state
                 .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
             assertNotNull(bootstrap);
-            var initialRecent = bootstrap.recent();
+            Summary initialRecent = bootstrap.recent();
             assertNotNull(initialRecent);
             assertEquals(
                 "0",
@@ -241,7 +248,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
         try (Fixture fixture = new Fixture(Collections.emptyList())) {
             AuthSession shortLogin = new AuthSession(fixture.principal, System.currentTimeMillis() + 600);
             fixture.requestSession.set(shortLogin);
-            TerminalRegistry.Bootstrap snapshot = fixture.state
+            Bootstrap snapshot = fixture.state
                 .reserve(fixture.grid, shortLogin, false, null, null, System.currentTimeMillis());
             assertNotNull(snapshot);
             try (Connection connection = fixture.open(snapshot.subscription())) {
@@ -261,7 +268,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             fixture.streams.reset();
             try {
                 while (connection.input.readLine() != null) {}
-            } catch (java.io.IOException closedConnection) {
+            } catch (IOException closedConnection) {
                 // Reset may abort an in-flight HTTP chunk.
             }
             assertEquals(400, fixture.status(unopened));
@@ -280,7 +287,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             AuthSession other = new AuthSession(fixture.principal, Long.MAX_VALUE);
             fixture.requestSession.set(other);
             assertEquals(400, fixture.status(first));
-            TerminalRegistry.Bootstrap second = fixture.state
+            Bootstrap second = fixture.state
                 .reserve(fixture.grid, other, false, null, null, System.currentTimeMillis());
             assertNotNull(second);
             fixture.session.invalidate();
@@ -301,14 +308,13 @@ class TerminalStreamsHttpTest extends GridTestScope {
         TerminalRegistry state = new TerminalRegistry(hub);
         state.activate(grid, 5, System.currentTimeMillis());
         state.observed(grid, 5, observation(1, Collections.singletonList(row(iron, "Iron", 1))));
-        TerminalRegistry.Bootstrap bootstrap = state
-            .reserve(grid, session, false, null, null, System.currentTimeMillis());
+        Bootstrap bootstrap = state.reserve(grid, session, false, null, null, System.currentTimeMillis());
         assertNotNull(bootstrap);
         CountDownLatch writing = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch sent = new CountDownLatch(2);
         List<String> deltas = Collections.synchronizedList(new ArrayList<>());
-        java.io.OutputStream output = new java.io.OutputStream() {
+        OutputStream output = new OutputStream() {
 
             @Override
             public void write(int value) {
@@ -316,15 +322,15 @@ class TerminalStreamsHttpTest extends GridTestScope {
             }
 
             @Override
-            public void write(byte @NotNull [] bytes, int offset, int length) throws java.io.IOException {
+            public void write(byte @NotNull [] bytes, int offset, int length) throws IOException {
                 String frame = new String(bytes, offset, length, StandardCharsets.UTF_8);
                 if (!frame.startsWith("event: delta")) return;
                 if (deltas.isEmpty()) {
                     writing.countDown();
                     try {
-                        if (!release.await(3, TimeUnit.SECONDS)) throw new java.io.IOException("Writer not released");
+                        if (!release.await(3, TimeUnit.SECONDS)) throw new IOException("Writer not released");
                     } catch (InterruptedException interrupted) {
-                        throw new java.io.IOException(interrupted);
+                        throw new IOException(interrupted);
                     }
                 }
                 deltas.add(frame);
@@ -334,12 +340,12 @@ class TerminalStreamsHttpTest extends GridTestScope {
         TestGridFixtures.TestExchange exchange = new TestGridFixtures.TestExchange(null) {
 
             @Override
-            public java.io.InputStream getRequestBody() {
-                return new java.io.ByteArrayInputStream(new byte[0]);
+            public InputStream getRequestBody() {
+                return new ByteArrayInputStream(new byte[0]);
             }
 
             @Override
-            public java.io.OutputStream getResponseBody() {
+            public OutputStream getResponseBody() {
                 return output;
             }
         };
@@ -355,8 +361,8 @@ class TerminalStreamsHttpTest extends GridTestScope {
             state.observed(grid, 5, observation(4, Collections.emptyList()));
             release.countDown();
             assertTrue(sent.await(2, TimeUnit.SECONDS));
-            Event first = readEvent(new BufferedReader(new java.io.StringReader(deltas.get(0))));
-            Event second = readEvent(new BufferedReader(new java.io.StringReader(deltas.get(1))));
+            Event first = readEvent(new BufferedReader(new StringReader(deltas.get(0))));
+            Event second = readEvent(new BufferedReader(new StringReader(deltas.get(1))));
             assertEquals(
                 10,
                 first.data()
@@ -565,7 +571,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
     @Test
     void expiredUnopenedReservationCannotOpenOrConsumeAdmissionForever() throws Exception {
         try (Fixture fixture = new Fixture(Collections.emptyList())) {
-            TerminalRegistry.Bootstrap expired = fixture.state
+            Bootstrap expired = fixture.state
                 .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis() - 20_000);
             assertNotNull(expired);
             assertEquals(400, fixture.status(expired.subscription()));
@@ -766,7 +772,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     assertEquals("ready", readEvent(input).name());
                 }
             }
-            TerminalRegistry.Bootstrap replacement = null;
+            Bootstrap replacement = null;
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(25);
             while (replacement == null && System.nanoTime() < deadline) {
                 fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
@@ -821,7 +827,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     String name = (revision & 1) == 0 ? firstLabel : secondLabel;
                     fixture.publish(revision++, Collections.singletonList(row(TestGridFixtures.key(99), name, 1)));
                     fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
-                    TerminalRegistry.Bootstrap reservation = fixture.state
+                    Bootstrap reservation = fixture.state
                         .reserve(fixture.grid, fixture.session, false, null, null, System.currentTimeMillis());
                     if (reservation == null) {
                         Thread.sleep(100);
@@ -968,8 +974,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
         }
 
         private String reserve(AuthSession login) {
-            TerminalRegistry.Bootstrap snapshot = state
-                .reserve(grid, login, false, null, null, System.currentTimeMillis());
+            Bootstrap snapshot = state.reserve(grid, login, false, null, null, System.currentTimeMillis());
             assertNotNull(snapshot);
             return snapshot.subscription();
         }

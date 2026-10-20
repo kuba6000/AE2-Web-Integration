@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.jetbrains.annotations.NotNull;
@@ -31,6 +32,7 @@ import com.google.gson.JsonParser;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 
@@ -61,7 +63,7 @@ class LiveTerminalHttpTest {
                 return TestGridFixtures.resolvedKey(grid);
             })
                 .get(3, TimeUnit.SECONDS);
-            var ticks = game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
+            ScheduledFuture<?> ticks = game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
             String path = "/api/grids/" + key + "/items";
             String base = "http://127.0.0.1:" + Config.INSTANCE.general.port + path;
             String previousSubscription = null;
@@ -156,15 +158,14 @@ class LiveTerminalHttpTest {
             StableKey key = game.submit(() -> {
                 AE2Controller.AE2Interface = TestGridFixtures.ae(grid);
                 StableKey gridKey = TestGridFixtures.resolvedKey(grid);
-                var data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
+                GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
                 assertNotNull(data);
                 data.getSettings()
                     .setFlowTracked(true);
                 return gridKey;
             })
                 .get(3, TimeUnit.SECONDS);
-            java.util.concurrent.ScheduledFuture<?> ticks = game
-                .scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
+            ScheduledFuture<?> ticks = game.scheduleAtFixedRate(CoreEngine::onServerTick, 0, 20, TimeUnit.MILLISECONDS);
             String base = "http://127.0.0.1:" + Config.INSTANCE.general.port + "/api/grids/" + key + "/items";
             for (int i = 0; i < 6; i++) {
                 HttpURLConnection head = connection(base + "?live=true");

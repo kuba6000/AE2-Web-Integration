@@ -5,6 +5,7 @@ import java.io.UncheckedIOException;
 
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 
 /**
  * Lists this account's resource pins. Unavailable grids expose only pin management fields. Home recent flow comes from
@@ -18,7 +19,7 @@ public final class GetResourcePins extends ResourcePinRequest {
 
     @Override
     public void handle() {
-        var store = store();
+        ResourcePinStore store = store();
         if (store == null) return;
         try {
             reply(store);

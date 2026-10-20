@@ -12,6 +12,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -34,7 +35,7 @@ class GridIdentityRegistryTest {
 
     private final TestGridFixtures.Worlds worlds = new TestGridFixtures.Worlds();
 
-    @org.junit.jupiter.api.AfterEach
+    @AfterEach
     void closeWorlds() throws IOException {
         worlds.close();
     }

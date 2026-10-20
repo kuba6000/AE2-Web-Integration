@@ -11,6 +11,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -50,7 +51,7 @@ class StorageTrackingServiceTest {
                     incomplete.points()
                         .stream()
                         .map(StorageHistoryPoint::kind)
-                        .collect(java.util.stream.Collectors.toList()));
+                        .collect(Collectors.toList()));
             }
             assertTrue(service.submit(grid, 1, observation(item, 4000, 5), true, false, 0L));
             awaitRevision(service, grid, 4);
@@ -198,7 +199,7 @@ class StorageTrackingServiceTest {
                 .points()
                 .stream()
                 .filter(point -> point.kind() == StorageHistoryPoint.Kind.STOCK)
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
             assertEquals(1, recovered.size());
             assertEquals(
                 0,
@@ -284,7 +285,7 @@ class StorageTrackingServiceTest {
                     .stream()
                     .filter(point -> point.kind() == StorageHistoryPoint.Kind.STOCK)
                     .map(StorageHistoryPoint::quantity)
-                    .collect(java.util.stream.Collectors.toList()));
+                    .collect(Collectors.toList()));
         }
     }
 

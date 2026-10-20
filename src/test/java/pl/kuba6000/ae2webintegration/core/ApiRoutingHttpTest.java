@@ -37,6 +37,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
 import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
@@ -565,7 +566,7 @@ class ApiRoutingHttpTest extends GridTestScope {
                 .getAsBoolean());
         Path file = gridSave.toPath()
             .resolve("ae2webintegration/grid-identities.json");
-        var restored = worlds.registry(file.toFile())
+        GridPersistentData restored = worlds.registry(file.toFile())
             .getPersistentData(key);
         assertNotNull(restored);
         JsonObject loaded = new Gson().toJsonTree(restored.getSettings())
@@ -643,7 +644,7 @@ class ApiRoutingHttpTest extends GridTestScope {
                 .getAsInt());
         Path file = gridSave.toPath()
             .resolve("ae2webintegration/grid-identities.json");
-        var restored = worlds.registry(file.toFile())
+        GridPersistentData restored = worlds.registry(file.toFile())
             .getPersistentData(key);
         assertNotNull(restored);
         JsonObject loaded = new Gson().toJsonTree(restored.getSettings())
@@ -726,7 +727,7 @@ class ApiRoutingHttpTest extends GridTestScope {
         worlds.close(file.toFile());
         String body = "{\"name\":\"Factory\"}";
         assertEquals(HttpURLConnection.HTTP_INTERNAL_ERROR, request("PATCH", path, headers, body).status());
-        var unsaved = worlds.registry(file.toFile())
+        GridPersistentData unsaved = worlds.registry(file.toFile())
             .getPersistentData(key);
         assertNotNull(unsaved);
         assertEquals(

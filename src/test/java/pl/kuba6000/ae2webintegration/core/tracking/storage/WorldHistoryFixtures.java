@@ -2,13 +2,19 @@ package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.config.*;
-import pl.kuba6000.ae2webintegration.core.grid.*;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
-import pl.kuba6000.ae2webintegration.core.persistence.*;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 
 /** Real world owners for isolated history tests; identities are created through the shared persistence seam. */
 final class WorldHistoryFixtures {
@@ -21,26 +27,26 @@ final class WorldHistoryFixtures {
 
     static HsqlStorageHistoryStore create(Path path, DataPolicy.Range retention, int maxRows) {
         if (maxRows < 1) throw new IllegalArgumentException("Row limit must be positive");
-        var defaults = DataPolicy.from(new ConfigSettings.Data());
-        var database = new WorldDatabase(
+        DataPolicy defaults = DataPolicy.from(new ConfigSettings.Data());
+        WorldDatabase database = new WorldDatabase(
             path,
             new DataPolicy(
                 defaults.stockSampleIntervalSeconds(),
                 defaults.flowFlushIntervalSeconds(),
                 retention,
                 maxRows));
-        var store = new HsqlStorageHistoryStore(database);
+        HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(database);
         OWNERS.put(store, database);
         IMPORTS.put(store, path.resolveSibling("absent-import.json"));
         return store;
     }
 
     static void register(HsqlStorageHistoryStore store, StableKey key) throws IOException {
-        var owner = OWNERS.get(store);
-        var persistence = new WorldGridStore(owner);
-        var previous = persistence.load(IMPORTS.get(store));
+        WorldDatabase owner = OWNERS.get(store);
+        WorldGridStore persistence = new WorldGridStore(owner);
+        Map<StableKey, GridPersistentData> previous = persistence.load(IMPORTS.get(store));
         if (previous.containsKey(key)) return;
-        var next = new HashMap<>(previous);
+        HashMap<StableKey, GridPersistentData> next = new HashMap<>(previous);
         next.put(
             key,
             new GridPersistentData(
@@ -50,8 +56,8 @@ final class WorldHistoryFixtures {
     }
 
     static void retention(HsqlStorageHistoryStore store, StableKey key, int days) throws IOException {
-        var persistence = new WorldGridStore(OWNERS.get(store));
-        var records = persistence.load(IMPORTS.get(store));
+        WorldGridStore persistence = new WorldGridStore(OWNERS.get(store));
+        Map<StableKey, GridPersistentData> records = persistence.load(IMPORTS.get(store));
         records.get(key)
             .getSettings()
             .setHistoryRetentionDays(days);

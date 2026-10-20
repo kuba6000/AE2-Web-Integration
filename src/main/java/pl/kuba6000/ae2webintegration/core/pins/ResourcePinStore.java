@@ -18,6 +18,7 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue;
@@ -81,7 +82,7 @@ public final class ResourcePinStore {
 
     private static @NotNull String owner(@NotNull WebPrincipal principal) {
         if (principal.isAdmin()) return "admin";
-        var player = principal.getPlayerIdentity();
+        PlayerIdentity player = principal.getPlayerIdentity();
         if (player == null) throw new IllegalArgumentException("Pins require an authenticated account");
         return player.uuid.toString();
     }

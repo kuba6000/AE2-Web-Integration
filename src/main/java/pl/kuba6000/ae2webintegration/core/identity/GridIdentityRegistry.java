@@ -50,7 +50,7 @@ public final class GridIdentityRegistry {
         throws IOException {
         clear();
         dataPolicy = database.policy();
-        var persistence = new WorldGridStore(database);
+        WorldGridStore persistence = new WorldGridStore(database);
         Map<StableKey, GridPersistentData> loaded = persistence.load(importSource);
         store = persistence;
         records = loaded;

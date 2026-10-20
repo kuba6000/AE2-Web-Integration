@@ -15,6 +15,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore.Table;
 
 /** Retention and row budgets, executed inside the owning store transaction. */
@@ -149,7 +150,7 @@ final class HsqlHistoryRetention {
                 if (pending) delete.executeBatch();
             }
         }
-        pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue.removeUnreferenced(db, batch.resources);
+        ResourceCatalogue.removeUnreferenced(db, batch.resources);
     }
 
     private static void updateCoverage(@NotNull Connection db, long gridId, long count, long deletedUntil)

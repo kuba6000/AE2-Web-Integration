@@ -33,6 +33,8 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.*;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.*;
+import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 
 @SuppressWarnings({ "UnstableApiUsage", "PMD.AvoidMagicNumbers" })
 class ItemIdentityRequestTest extends GridTestScope {
@@ -82,7 +84,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         assertTrue(
             row.get("icon")
                 .isJsonNull());
-        var captured = pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot.capture(grid, resource, 21);
+        ResourceSnapshot captured = ResourceSnapshot.capture(grid, resource, 21);
         assertNull(
             captured.description()
                 .itemKey());
@@ -705,13 +707,13 @@ class ItemIdentityRequestTest extends GridTestScope {
 
     static final class Grid extends TestGridFixtures.TestGrid implements IAECraftingGrid, IAEStorageGrid {
 
-        private pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture storageCapture;
+        private StorageCapture storageCapture;
 
-        public pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture web$getStorageCapture() {
+        public StorageCapture web$getStorageCapture() {
             return storageCapture;
         }
 
-        public void web$setStorageCapture(pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture capture) {
+        public void web$setStorageCapture(StorageCapture capture) {
             storageCapture = capture;
         }
 

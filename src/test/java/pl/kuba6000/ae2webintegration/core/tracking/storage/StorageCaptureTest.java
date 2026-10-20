@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -33,7 +35,7 @@ class StorageCaptureTest {
     void unsupportedVariantAtCapacityStaysUnkeyedWithoutLosingKnownFlow() {
         IAEKey known = resource(new AtomicInteger());
         IAEKey variant = unsupported(true);
-        IAEGrid grid = grid(java.util.Arrays.asList(known, variant));
+        IAEGrid grid = grid(Arrays.asList(known, variant));
         StorageCapture capture = new StorageCapture(grid, 1);
         capture.recordFlow(known, 4, 0);
         capture.recordFlow(variant, 10, 0);
@@ -119,14 +121,12 @@ class StorageCaptureTest {
             flow.input(),
             flow.output(),
             (now) - 1000L);
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures
-            .create(database, new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 30), 100)) {
+        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(database, new Range(1, 365, 30), 100)) {
             WorldHistoryFixtures.register(store, gridKey);
             store.append(gridKey, observation.descriptions(), Collections.singletonList(point));
         }
         AE2Controller.itemIdentities.clear();
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures
-            .create(database, new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 30), 100)) {
+        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(database, new Range(1, 365, 30), 100)) {
             StorageHistory history = store.read(gridKey, itemKey, now, 10);
             assertEquals(Collections.singletonList(point), history.points());
             assertEquals(

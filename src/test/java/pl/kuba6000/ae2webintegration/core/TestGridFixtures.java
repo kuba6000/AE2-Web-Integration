@@ -69,7 +69,7 @@ final class TestGridFixtures {
             Path path = source.toPath()
                 .toAbsolutePath()
                 .normalize();
-            var database = databases.get(path);
+            WorldDatabase database = databases.get(path);
             if (database == null) {
                 database = new WorldDatabase(
                     path.resolveSibling(path.getFileName() + ".world"),
@@ -81,7 +81,7 @@ final class TestGridFixtures {
         }
 
         GridIdentityRegistry registry(File source) throws IOException {
-            var registry = new GridIdentityRegistry();
+            GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database(source), source.toPath());
             return registry;
         }
@@ -92,7 +92,7 @@ final class TestGridFixtures {
         }
 
         void close(File source) throws IOException {
-            var database = databases.remove(
+            WorldDatabase database = databases.remove(
                 source.toPath()
                     .toAbsolutePath()
                     .normalize());
@@ -106,7 +106,7 @@ final class TestGridFixtures {
         @Override
         public void close() throws IOException {
             try {
-                for (var database : databases.values()) database.close();
+                for (WorldDatabase database : databases.values()) database.close();
             } finally {
                 databases.clear();
             }

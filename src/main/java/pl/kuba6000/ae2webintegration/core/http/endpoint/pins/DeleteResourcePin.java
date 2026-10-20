@@ -9,6 +9,7 @@ import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 
 /**
  * Removes an owned pin even when grid access has ended; absent or other-owner tokens are idempotent no-ops.
@@ -24,7 +25,7 @@ public final class DeleteResourcePin extends ResourcePinRequest {
 
     @Override
     public void handle() {
-        var store = store();
+        ResourcePinStore store = store();
         if (store == null) return;
         try {
             store.remove(context.getPrincipal(), pinKey);

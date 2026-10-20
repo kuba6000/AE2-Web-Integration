@@ -33,6 +33,7 @@ import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.CraftingOptions;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry.Entry;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
@@ -239,7 +240,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         GridAccess.list(TestGridFixtures.ae(merged));
         assertEquals(gridKey, CoreEngine.GRID_IDENTITIES.getKey(merged));
         assertTrue(losingPlan.isCancelled());
-        var retainedPlan = GridData.getOrCreate(gridKey)
+        Entry retainedPlan = GridData.getOrCreate(gridKey)
             .getJob(winningId);
         assertNotNull(retainedPlan);
         assertSame(winningPlan, retainedPlan.plan);

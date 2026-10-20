@@ -25,6 +25,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpServer;
 
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
@@ -284,7 +285,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     void snapshotHasAViewAndTheSharedBaselineOfRowsDescriptionsAndHeader() {
         cpu.set(iron, 4, 2, 1)
             .set(exotic, 7, 0, 0);
-        cpu.selectionMode = pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode.ALL;
+        cpu.selectionMode = CpuSelectionMode.ALL;
 
         CpuRegistry.Bootstrap bootstrap = view(cpu);
 

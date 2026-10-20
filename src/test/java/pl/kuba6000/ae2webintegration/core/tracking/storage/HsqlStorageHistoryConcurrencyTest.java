@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
@@ -41,10 +42,8 @@ class HsqlStorageHistoryConcurrencyTest {
         CountDownLatch writing = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(3);
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(
-            directory.resolve("history"),
-            new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
-            100)) {
+        try (HsqlStorageHistoryStore store = WorldHistoryFixtures
+            .create(directory.resolve("history"), new Range(1, 365, 7), 100)) {
             WorldHistoryFixtures.register(store, grid);
             store.append(
                 grid,
@@ -98,10 +97,8 @@ class HsqlStorageHistoryConcurrencyTest {
         long now = System.currentTimeMillis();
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(4);
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(
-            directory.resolve("history"),
-            new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
-            items.size())) {
+        try (HsqlStorageHistoryStore store = WorldHistoryFixtures
+            .create(directory.resolve("history"), new Range(1, 365, 7), items.size())) {
             appendRevision(store, grid, items, now, 0);
             Future<?> writer = tasks.submit(() -> {
                 assertTrue(start.await(5, TimeUnit.SECONDS));
@@ -156,11 +153,8 @@ class HsqlStorageHistoryConcurrencyTest {
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(2);
         Path path = directory.resolve("history");
-        try (
-            HsqlStorageHistoryStore store = WorldHistoryFixtures
-                .create(path, new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7), 100);
-            HsqlStorageHistoryStore next = WorldHistoryFixtures
-                .create(path, new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7), 100)) {
+        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100);
+            HsqlStorageHistoryStore next = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
             WorldHistoryFixtures.register(store, grid);
             Future<?> writer = tasks.submit(() -> {
                 store.append(
@@ -205,8 +199,7 @@ class HsqlStorageHistoryConcurrencyTest {
         Path path = directory.resolve("history");
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(6);
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures
-            .create(path, new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7), 100)) {
+        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
             List<Future<?>> operations = new ArrayList<>();
             WorldHistoryFixtures.register(store, grid);
             operations.add(tasks.submit(() -> {
@@ -233,8 +226,7 @@ class HsqlStorageHistoryConcurrencyTest {
             start.countDown();
             tasks.shutdownNow();
         }
-        try (HsqlStorageHistoryStore reopened = WorldHistoryFixtures
-            .create(path, new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7), 100)) {
+        try (HsqlStorageHistoryStore reopened = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
             assertEquals(
                 1,
                 reopened.read(grid, item, now, 10)
@@ -248,8 +240,7 @@ class HsqlStorageHistoryConcurrencyTest {
     void interruptedReadDoesNotInitializeOrConsumeReaderCapacity() throws Exception {
         Path path = directory.resolve("database/history");
         StableKey grid = StableKey.random();
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures
-            .create(path, new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7), 100)) {
+        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
             for (int attempt = 0; attempt < 10; attempt++) {
                 Thread.currentThread()
                     .interrupt();

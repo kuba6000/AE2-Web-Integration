@@ -9,7 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.URL;
@@ -241,7 +243,7 @@ class CpuLiveHttpTest {
                 mutation.setRequestProperty("Content-Type", "application/json");
                 mutation.setDoOutput(true);
                 try {
-                    try (java.io.OutputStream body = mutation.getOutputStream()) {
+                    try (OutputStream body = mutation.getOutputStream()) {
                         body.write(("{\"paused\":" + paused + "}").getBytes(StandardCharsets.UTF_8));
                     }
                     assertEquals(200, mutation.getResponseCode());
@@ -498,7 +500,7 @@ class CpuLiveHttpTest {
                 do {
                     line = input.readLine(); // Drain until the server closes the stream.
                 } while (line != null);
-            } catch (java.io.IOException closedConnection) {
+            } catch (IOException closedConnection) {
                 // Stopping may abort an in-flight HTTP chunk.
             }
         } finally {

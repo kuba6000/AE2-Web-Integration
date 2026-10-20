@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -14,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
+import pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
@@ -41,7 +42,7 @@ class HsqlStorageHistoryStoreTest {
             WorldHistoryFixtures.retention(store, shortGrid, 1);
         }
         try (HsqlStorageHistoryStore reopened = WorldHistoryFixtures
-            .create(directory.resolve("database/history"), new DataPolicy.Range(1, 365, 7), 100)) {
+            .create(directory.resolve("database/history"), new Range(1, 365, 7), 100)) {
             assertTrue(
                 reopened.read(shortGrid, item, 0, 100)
                     .points()
@@ -131,7 +132,7 @@ class HsqlStorageHistoryStoreTest {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
-        java.util.List<StorageHistoryPoint> points = Arrays.asList(
+        List<StorageHistoryPoint> points = Arrays.asList(
             new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0, null),
             stock(item, now, 12),
             new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.FLOW, item, 0, Long.MAX_VALUE, 3, (now) - 1000L),
@@ -375,10 +376,7 @@ class HsqlStorageHistoryStoreTest {
     }
 
     private HsqlStorageHistoryStore store(int rows) {
-        return WorldHistoryFixtures.create(
-            directory.resolve("database/history"),
-            new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
-            rows);
+        return WorldHistoryFixtures.create(directory.resolve("database/history"), new Range(1, 365, 7), rows);
     }
 
     @Test
@@ -445,8 +443,8 @@ class HsqlStorageHistoryStoreTest {
         return new ResourceDescriptor("test", "item", 2, 3, name, ResourceType.ITEM, item, item);
     }
 
-    private static void append(HsqlStorageHistoryStore store, StableKey grid,
-        java.util.List<StorageHistoryPoint> points) throws IOException {
+    private static void append(HsqlStorageHistoryStore store, StableKey grid, List<StorageHistoryPoint> points)
+        throws IOException {
         Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
         for (StorageHistoryPoint point : points) {
             if (point.itemKey() != null) descriptions.put(point.itemKey(), description(point.itemKey(), "Item"));
@@ -544,7 +542,7 @@ class HsqlStorageHistoryStoreTest {
             append(store, grid, Arrays.asList(old, recent));
         }
         try (HsqlStorageHistoryStore store = WorldHistoryFixtures
-            .create(directory.resolve("database/history"), new DataPolicy.Range(1, 1, 1), 100)) {
+            .create(directory.resolve("database/history"), new Range(1, 1, 1), 100)) {
             StorageHistory history = store.read(grid, item, 0, 10);
             assertEquals(Collections.singletonList(recent), history.points());
             assertTrue(history.truncated());
@@ -646,10 +644,8 @@ class HsqlStorageHistoryStoreTest {
         long now = System.currentTimeMillis();
         StorageHistoryPoint point = stock(item, now, 42);
         try (HsqlStorageHistoryStore first = store(100);
-            HsqlStorageHistoryStore second = WorldHistoryFixtures.create(
-                directory.resolve("database/./history"),
-                new pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range(1, 365, 7),
-                100)) {
+            HsqlStorageHistoryStore second = WorldHistoryFixtures
+                .create(directory.resolve("database/./history"), new Range(1, 365, 7), 100)) {
             append(first, grid, Collections.singletonList(point));
             for (int attempt = 0; attempt < 10; attempt++)
                 assertThrows(IOException.class, () -> second.read(grid, item, now, 10));

@@ -31,6 +31,7 @@ import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 
@@ -207,7 +208,7 @@ public final class ThemeCatalog implements Closeable {
                         while (reader.hasNext()) {
                             if (reader.peek() != JsonToken.STRING)
                                 throw new IOException("Expected manifest string array");
-                            values.add(new com.google.gson.JsonPrimitive(reader.nextString()));
+                            values.add(new JsonPrimitive(reader.nextString()));
                         }
                         reader.endArray();
                         object.add(field, values);

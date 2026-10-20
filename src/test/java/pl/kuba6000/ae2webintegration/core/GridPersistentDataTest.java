@@ -9,6 +9,7 @@ import java.util.Set;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
+import pl.kuba6000.ae2webintegration.core.TestGridFixtures.TestGrid;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -57,20 +58,20 @@ class GridPersistentDataTest extends GridTestScope {
 
     @Test
     void namePersistsWithoutTrackingAndClearingRestoresDefaults() throws Exception {
-        var grid = TestGridFixtures.grid(1);
-        var key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        TestGrid grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
-        var data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
         assertNotNull(data);
-        var settings = data.getSettings();
+        GridSettingsData settings = data.getSettings();
         assertEquals("", settings.getName());
         settings.setName("Factory");
         CoreEngine.GRID_IDENTITIES.saveIfDirty();
         settings.setName("Factory");
         CoreEngine.GRID_IDENTITIES.saveIfDirty();
         File file = new File(gridSave, "ae2webintegration/grid-identities.json");
-        var restarted = worlds.registry(file);
-        var loaded = restarted.getPersistentData(key);
+        GridIdentityRegistry restarted = worlds.registry(file);
+        GridPersistentData loaded = restarted.getPersistentData(key);
         assertNotNull(loaded);
         assertEquals(
             "Factory",
@@ -85,7 +86,7 @@ class GridPersistentDataTest extends GridTestScope {
         loaded.getSettings()
             .setName("");
         restarted.saveIfDirty();
-        var cleared = worlds.registry(file)
+        GridPersistentData cleared = worlds.registry(file)
             .getPersistentData(key);
         assertNotNull(cleared);
         assertEquals(
@@ -99,7 +100,7 @@ class GridPersistentDataTest extends GridTestScope {
 
     @Test
     void settingsRemainTheSameObjectWhenEdited() throws Exception {
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1);
+        TestGrid grid = TestGridFixtures.grid(1);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         assertNotNull(key);
         GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
@@ -123,7 +124,7 @@ class GridPersistentDataTest extends GridTestScope {
         DimensionalCoords first = new DimensionalCoords("world", 0, 0, 0);
         DimensionalCoords added = new DimensionalCoords("world", 1, 0, 0);
         controllers.add(first);
-        TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(0, false, AEControllerState.CONTROLLER_ONLINE) {
+        TestGrid grid = new TestGrid(0, false, AEControllerState.CONTROLLER_ONLINE) {
 
             @Override
             public @NotNull Set<DimensionalCoords> web$getControllers() {
@@ -161,7 +162,7 @@ class GridPersistentDataTest extends GridTestScope {
     @Test
     void editingRetiredSettingsCannotRestoreTheGrid() throws Exception {
         GridIdentityRegistry registry = CoreEngine.GRID_IDENTITIES;
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1);
+        TestGrid grid = TestGridFixtures.grid(1);
         StableKey key = registry.getKey(grid);
         assertNotNull(key);
         GridPersistentData data = registry.getPersistentData(key);
@@ -178,7 +179,7 @@ class GridPersistentDataTest extends GridTestScope {
     @Test
     void oldSettingsCannotTriggerWritesAfterReopeningTheSave() throws Exception {
         GridIdentityRegistry registry = CoreEngine.GRID_IDENTITIES;
-        TestGridFixtures.TestGrid grid = TestGridFixtures.grid(1);
+        TestGrid grid = TestGridFixtures.grid(1);
         StableKey key = registry.getKey(grid);
         assertNotNull(key);
         GridPersistentData previous = registry.getPersistentData(key);

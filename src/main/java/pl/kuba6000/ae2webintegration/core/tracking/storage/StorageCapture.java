@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -140,7 +141,7 @@ public final class StorageCapture {
         }
     }
 
-    private final java.util.concurrent.atomic.AtomicLong terminalEpoch = new java.util.concurrent.atomic.AtomicLong();
+    private final AtomicLong terminalEpoch = new AtomicLong();
 
     /** Native full-list/topology reset, distinct from a refresh of changed craftability. */
     public void invalidateTerminal() {
