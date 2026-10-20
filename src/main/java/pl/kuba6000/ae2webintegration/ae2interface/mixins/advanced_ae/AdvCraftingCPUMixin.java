@@ -16,12 +16,14 @@ import org.spongepowered.asm.mixin.Unique;
 
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.stacks.KeyCounter;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IAdvCraftingCPUClusterOwnership;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
@@ -40,6 +42,12 @@ public class AdvCraftingCPUMixin implements IPausableCraftingCPU, ICraftingCPUNa
 
     @Unique
     private @Nullable StableKey web$stableKey;
+
+    @Override
+    public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+        return !cluster.isDestroyed() && cluster.getGrid() == (Object) grid
+            && ((IAdvCraftingCPUClusterOwnership) cluster).web$ownsCpu(uniqueId, (AdvCraftingCPU) (Object) this);
+    }
 
     @Override
     public @NotNull StableKey web$getKey() {
