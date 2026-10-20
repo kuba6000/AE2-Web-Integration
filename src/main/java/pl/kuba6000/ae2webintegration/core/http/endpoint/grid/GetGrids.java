@@ -20,6 +20,7 @@ import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -63,7 +64,7 @@ public final class GetGrids extends ISyncedRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull List<GridInfo> data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull List<GridInfo> data) implements IResponseBody {}
 
     /**
      * Current state and access information for a grid.

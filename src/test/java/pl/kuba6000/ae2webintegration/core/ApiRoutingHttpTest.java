@@ -39,6 +39,7 @@ import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.ApiRouter;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Authentication;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
@@ -260,7 +261,7 @@ class ApiRoutingHttpTest extends GridTestScope {
         }
     }
 
-    private static final class DetachedBody extends AbstractCollection<String> {
+    private static final class DetachedBody extends AbstractCollection<String> implements IResponseBody {
 
         private final Thread producer = Thread.currentThread();
         private final boolean fail;

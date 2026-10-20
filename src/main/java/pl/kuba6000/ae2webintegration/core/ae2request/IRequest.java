@@ -8,12 +8,14 @@ import java.util.concurrent.TimeoutException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.github.bsideup.jabel.Desugar;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.RequestInputs;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
@@ -34,17 +36,8 @@ public abstract class IRequest {
 
     protected static GsonBuilder JSONBuilder = GSONUtils.GSON_BUILDER;
 
-    @SuppressWarnings({ "unused", "FieldCanBeLocal" }) // Gson reads the fields reflectively.
-    private static final class RequestResult {
-
-        private final ApiStatus status;
-        private final Object data;
-
-        private RequestResult(ApiStatus status, Object data) {
-            this.status = status;
-            this.data = data;
-        }
-    }
+    @Desugar
+    private record RequestResult<T>(@NotNull ApiStatus status, @Nullable T data) implements IResponseBody {}
 
     private static final ApiResponse PENDING_RESULT = ApiResponse.error(ApiStatus.TIMEOUT);
     private final CompletableFuture<ResponseResult> completion = new CompletableFuture<>();
@@ -53,7 +46,7 @@ public abstract class IRequest {
 
         private final int httpStatus;
         private final @Nullable RequestContext context;
-        private @Nullable Object body;
+        private @Nullable IResponseBody body;
         private @Nullable ApiResponse response;
 
         private ResponseResult(@NotNull ApiResponse response) {
@@ -62,7 +55,7 @@ public abstract class IRequest {
             this.response = response;
         }
 
-        private ResponseResult(int httpStatus, @NotNull Object body, @Nullable RequestContext context) {
+        private ResponseResult(int httpStatus, @NotNull IResponseBody body, @Nullable RequestContext context) {
             this.httpStatus = httpStatus;
             this.body = body;
             this.context = context;
@@ -103,7 +96,7 @@ public abstract class IRequest {
         }
     }
 
-    protected final void succeed(Object data) {
+    protected final <T> void succeed(@Nullable T data) {
         complete(ApiStatus.OK, data);
     }
 
@@ -115,18 +108,18 @@ public abstract class IRequest {
         deny(status, null);
     }
 
-    protected final void deny(ApiStatus status, Object data) {
+    protected final <T> void deny(ApiStatus status, @Nullable T data) {
         complete(status, data);
     }
 
     /** Serialize on the handler's thread before publishing; no payload reference reaches the HTTP worker. */
-    private void complete(ApiStatus status, Object data) {
+    private <T> void complete(ApiStatus status, @Nullable T data) {
         int httpStatus = status.httpStatus();
-        respond(httpStatus, new RequestResult(status, data));
+        respond(httpStatus, new RequestResult<>(status, data));
     }
 
     /** Serializes a declared API response on the handler thread, then publishes status and body together. */
-    protected final void respond(int httpStatus, Object body) {
+    protected final void respond(int httpStatus, @NotNull IResponseBody body) {
         if (completion.isDone()) return;
         String json = JSONBuilder.create()
             .toJson(body);
@@ -137,7 +130,7 @@ public abstract class IRequest {
      * Transfers exclusive ownership of a complete, detached response to its consumer. No native objects,
      * live collections or later mutations are allowed; JSON is produced when the HTTP worker reads it.
      */
-    protected final void respondDetached(int httpStatus, @NotNull Object body) {
+    protected final void respondDetached(int httpStatus, @NotNull IResponseBody body) {
         if (completion.isDone()) return;
         completion.complete(new ResponseResult(httpStatus, body, context));
     }

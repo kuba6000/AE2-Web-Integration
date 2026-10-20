@@ -30,6 +30,8 @@ import com.google.gson.JsonObject;
 import pl.kuba6000.ae2webintegration.core.ae2request.sync.ISyncedRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
+import pl.kuba6000.ae2webintegration.core.http.endpoint.auth.Logout;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class RequestCompletionTest {
@@ -67,7 +69,7 @@ class RequestCompletionTest {
             succeed(data);
         }
 
-        void respondDetachedBody(Object body) {
+        void respondDetachedBody(IResponseBody body) {
             respondDetached(200, body);
         }
 
@@ -91,7 +93,7 @@ class RequestCompletionTest {
         }
     }
 
-    private static final class ConsumerOwnedData extends AbstractCollection<String> {
+    private static final class ConsumerOwnedData extends AbstractCollection<String> implements IResponseBody {
 
         private final Thread producer = Thread.currentThread();
         private final AtomicInteger reads = new AtomicInteger();
@@ -170,9 +172,9 @@ class RequestCompletionTest {
     @Test
     void detachedCompletionWinsAgainstALaterFailure() {
         TestRequest request = new TestRequest();
-        request.respondDetachedBody(Collections.singletonList("ready"));
+        request.respondDetachedBody(new Logout.Response(ApiStatus.OK, null));
         request.failIfPending(ApiStatus.TIMEOUT);
-        assertEquals("[\"ready\"]", request.getJSON());
+        assertEquals("{\"status\":\"OK\",\"data\":null}", request.getJSON());
     }
 
     @Test
@@ -198,7 +200,7 @@ class RequestCompletionTest {
         }
     }
 
-    private static final class BlockingData extends AbstractCollection<String> {
+    private static final class BlockingData extends AbstractCollection<String> implements IResponseBody {
 
         private final CountDownLatch entered = new CountDownLatch(1);
         private final CountDownLatch release = new CountDownLatch(1);
@@ -239,7 +241,7 @@ class RequestCompletionTest {
                 .getAsString());
     }
 
-    private static final class UnserializableData extends AbstractCollection<String> {
+    private static final class UnserializableData extends AbstractCollection<String> implements IResponseBody {
 
         @Override
         public @NotNull Iterator<String> iterator() {

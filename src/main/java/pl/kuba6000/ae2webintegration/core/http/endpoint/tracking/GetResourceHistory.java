@@ -19,6 +19,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
@@ -76,7 +77,8 @@ public final class GetResourceHistory extends IAsyncRequest {
     private boolean icons;
 
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull History data, @Nullable IconMappings icons) {}
+    public record Response(@NotNull ApiStatus status, @NotNull History data, @Nullable IconMappings icons)
+        implements IResponseBody {}
 
     /**
      * Baseline is the last retained stock measurement preceding the returned window, or null when unknown.

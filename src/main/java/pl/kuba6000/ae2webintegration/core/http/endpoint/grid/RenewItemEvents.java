@@ -11,6 +11,7 @@ import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
@@ -38,7 +39,7 @@ import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 public final class RenewItemEvents extends IAsyncRequest {
 
     @Desugar
-    public record Response(@NotNull ApiStatus status, @Nullable Void data) {}
+    public record Response(@NotNull ApiStatus status, @Nullable Void data) implements IResponseBody {}
 
     /** Token belonging to the attached stream being acknowledged. */
     @QueryParam("subscription")

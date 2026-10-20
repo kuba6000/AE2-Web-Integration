@@ -17,6 +17,7 @@ import pl.kuba6000.ae2webintegration.core.cpu.CpuRegistry;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuTopic;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
@@ -77,7 +78,7 @@ public final class GetCPU extends LiveSnapshotRequest {
      */
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull GetCPUClusterData data, @Nullable IconMappings icons,
-        @Nullable LiveView view, @Nullable String subscription) {
+        @Nullable LiveView view, @Nullable String subscription) implements IResponseBody {
 
         public Response(ApiStatus status, GetCPUClusterData data, IconMappings icons) {
             this(status, data, icons, null, null);

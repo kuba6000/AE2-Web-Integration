@@ -12,6 +12,7 @@ import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
@@ -43,7 +44,7 @@ public final class GetIconPack extends IAsyncRequest {
     public record Availability(boolean available, @Nullable String packId, int width, int height) {}
 
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull Availability data) {}
+    public record Response(@NotNull ApiStatus status, @NotNull Availability data) implements IResponseBody {}
 
     @Override
     public void handle() {

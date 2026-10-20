@@ -20,7 +20,7 @@ public record ApiResponse(int httpStatus, @NotNull String json) {
         return of(status.httpStatus(), new ErrorResponse(status, null));
     }
 
-    public static ApiResponse of(int status, Object body) {
+    public static ApiResponse of(int status, @NotNull IResponseBody body) {
         return new ApiResponse(
             status,
             GSONUtils.GSON_BUILDER.create()

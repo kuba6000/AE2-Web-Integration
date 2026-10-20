@@ -15,6 +15,7 @@ import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
@@ -75,7 +76,7 @@ public final class GetCPUList extends ISyncedRequest {
      */
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull Map<StableKey, CpuInfo> data,
-        @Nullable IconMappings icons) {}
+        @Nullable IconMappings icons) implements IResponseBody {}
 
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
     public static class CpuInfo {

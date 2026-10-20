@@ -11,6 +11,7 @@ import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
@@ -63,7 +64,8 @@ public final class GetTracking extends IAsyncRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull CraftingHistory data, @Nullable IconMappings icons) {}
+    public record Response(@NotNull ApiStatus status, @NotNull CraftingHistory data, @Nullable IconMappings icons)
+        implements IResponseBody {}
 
     @PathParam("entryId")
     private int id;

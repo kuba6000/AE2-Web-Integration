@@ -17,6 +17,7 @@ import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
@@ -79,7 +80,7 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
      * @example data null
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @Nullable Void data) {}
+    public record Response(@NotNull ApiStatus status, @Nullable Void data) implements IResponseBody {}
 
     /**
      * Submission failure; a native crafting service may provide the reason.
@@ -92,7 +93,7 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
      * @example data CPU is busy with another job.
      */
     @Desugar
-    public record FailureResponse(@NotNull ApiStatus status, @Nullable String data) {}
+    public record FailureResponse(@NotNull ApiStatus status, @Nullable String data) implements IResponseBody {}
 
     /**
      * Optional CPU selection for submission.

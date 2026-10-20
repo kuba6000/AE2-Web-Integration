@@ -18,6 +18,7 @@ import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.http.dto.ResourceDescription;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
@@ -34,7 +35,8 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
     private boolean icons;
 
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull List<View> data, @Nullable IconMappings icons) {}
+    public record Response(@NotNull ApiStatus status, @NotNull List<View> data, @Nullable IconMappings icons)
+        implements IResponseBody {}
 
     @Desugar
     public record View(@NotNull StableKey pinKey, boolean available, @Nullable StableKey gridKey,

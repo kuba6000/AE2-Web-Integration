@@ -15,6 +15,7 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
@@ -78,7 +79,8 @@ public final class GetItems extends LiveSnapshotRequest {
      */
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull List<StoredResource> data, @Nullable IconMappings icons,
-        @Nullable LiveView view, @Nullable String subscription, @Nullable RecentResourceActivity.Summary recent) {
+        @Nullable LiveView view, @Nullable String subscription, @Nullable RecentResourceActivity.Summary recent)
+        implements IResponseBody {
 
         public Response(ApiStatus status, List<StoredResource> data, IconMappings icons) {
             this(status, data, icons, null, null, null);

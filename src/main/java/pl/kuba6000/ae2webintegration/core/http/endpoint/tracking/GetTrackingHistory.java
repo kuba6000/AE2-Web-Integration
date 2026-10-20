@@ -14,6 +14,7 @@ import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
@@ -64,7 +65,8 @@ public final class GetTrackingHistory extends IAsyncRequest {
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull List<HistoryEntry> data, @Nullable IconMappings icons) {}
+    public record Response(@NotNull ApiStatus status, @NotNull List<HistoryEntry> data, @Nullable IconMappings icons)
+        implements IResponseBody {}
 
     /**
      * One completed or cancelled crafting job.
