@@ -35,7 +35,15 @@ public final class ResourceCatalogue {
                 display_name, resource_type, base_key, referenced
             )
             ON r.item_key = incoming.item_key
-            WHEN MATCHED THEN UPDATE SET
+            WHEN MATCHED AND (
+                r.registry_namespace IS DISTINCT FROM incoming.registry_namespace
+                OR r.registry_path IS DISTINCT FROM incoming.registry_path
+                OR r.components IS DISTINCT FROM incoming.components
+                OR r.damage IS DISTINCT FROM incoming.damage
+                OR r.display_name IS DISTINCT FROM incoming.display_name
+                OR r.resource_type IS DISTINCT FROM incoming.resource_type
+                OR r.base_key IS DISTINCT FROM COALESCE(incoming.base_key, r.base_key)
+            ) THEN UPDATE SET
                 registry_namespace = incoming.registry_namespace,
                 registry_path = incoming.registry_path,
                 components = incoming.components,

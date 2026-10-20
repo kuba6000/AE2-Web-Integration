@@ -32,6 +32,122 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.K
 class ResourcePinStoreTest extends GridTestScope {
 
     @Test
+    void unchangedDescriptionsDoNotRewriteCatalogueAndMissingBaseKeepsKnownIcon() throws Exception {
+        StableKey grid = TestGridFixtures.resolvedKey(new TestGrid(88401, false, AEControllerState.CONTROLLER_ONLINE));
+        StableKey item = TestGridFixtures.key(71);
+        StableKey base = TestGridFixtures.key(72);
+        WorldDatabase database = worlds.database(TestGridFixtures.Worlds.source(gridSave));
+        ResourcePinStore pins = new ResourcePinStore(database);
+        ResourceDescriptor unknown = new ResourceDescriptor(
+            null,
+            null,
+            0,
+            0,
+            "Unknown",
+            ResourceType.OTHER,
+            item,
+            null);
+        assertTrue(pins.add(WebPrincipal.admin(), grid, item, unknown, Placement.HOME));
+        database.write(db -> {
+            try (Statement sql = db.createStatement()) {
+                sql.execute("""
+                    CREATE TRIGGER reject_resource_update BEFORE UPDATE ON history_resources
+                    FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unexpected catalogue update'
+                    """);
+            }
+            return null;
+        });
+        assertTrue(pins.add(WebPrincipal.admin(), grid, item, unknown, Placement.TERMINAL));
+        assertEquals(
+            unknown,
+            pins.list(WebPrincipal.admin())
+                .get(0)
+                .resource());
+        database.write(db -> {
+            try (Statement sql = db.createStatement()) {
+                sql.execute("DROP TRIGGER reject_resource_update");
+            }
+            return null;
+        });
+        ResourceDescriptor known = new ResourceDescriptor(
+            "test",
+            "known",
+            2,
+            3,
+            "Known",
+            ResourceType.ITEM,
+            item,
+            base);
+        assertTrue(pins.add(WebPrincipal.admin(), grid, item, known, Placement.HOME));
+        assertEquals(
+            known,
+            pins.list(WebPrincipal.admin())
+                .get(0)
+                .resource());
+        database.write(db -> {
+            try (Statement sql = db.createStatement()) {
+                sql.execute("""
+                    CREATE TRIGGER reject_resource_update BEFORE UPDATE ON history_resources
+                    FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unexpected catalogue update'
+                    """);
+            }
+            return null;
+        });
+        ResourceDescriptor withoutBase = new ResourceDescriptor(
+            "test",
+            "known",
+            2,
+            3,
+            "Known",
+            ResourceType.ITEM,
+            item,
+            null);
+        assertTrue(pins.add(WebPrincipal.admin(), grid, item, withoutBase, Placement.HOME));
+        try (HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
+            history.append(grid, Collections.singletonMap(item, withoutBase), Collections.emptyList());
+            assertEquals(
+                known,
+                pins.list(WebPrincipal.admin())
+                    .get(0)
+                    .resource());
+        }
+    }
+
+    @Test
+    void catalogueRefreshesEachMetadataFieldIncludingNullableRegistryValues() throws Exception {
+        StableKey grid = TestGridFixtures.resolvedKey(new TestGrid(88402, false, AEControllerState.CONTROLLER_ONLINE));
+        StableKey item = TestGridFixtures.key(73);
+        StableKey base = TestGridFixtures.key(74);
+        ResourcePinStore pins = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
+        ResourceDescriptor[] revisions = {
+            new ResourceDescriptor(null, null, 0, 0, "Unknown", ResourceType.OTHER, item, null),
+            new ResourceDescriptor("test", null, 0, 0, "Unknown", ResourceType.OTHER, item, null),
+            new ResourceDescriptor("test", "known", 0, 0, "Unknown", ResourceType.OTHER, item, null),
+            new ResourceDescriptor("test", "known", 2, 0, "Unknown", ResourceType.OTHER, item, null),
+            new ResourceDescriptor("test", "known", 2, 3, "Unknown", ResourceType.OTHER, item, null),
+            new ResourceDescriptor("test", "known", 2, 3, "Known", ResourceType.OTHER, item, null),
+            new ResourceDescriptor("test", "known", 2, 3, "Known", ResourceType.ITEM, item, null),
+            new ResourceDescriptor("test", "known", 2, 3, "Known", ResourceType.ITEM, item, base),
+            new ResourceDescriptor(null, "known", 2, 3, "Known", ResourceType.ITEM, item, base),
+            new ResourceDescriptor(null, null, 2, 3, "Known", ResourceType.ITEM, item, base) };
+        for (ResourceDescriptor revision : revisions) {
+            assertTrue(pins.add(WebPrincipal.admin(), grid, item, revision, Placement.HOME));
+            assertEquals(
+                revision,
+                pins.list(WebPrincipal.admin())
+                    .get(0)
+                    .resource());
+        }
+        worlds.close(TestGridFixtures.Worlds.source(gridSave));
+        ResourcePinStore reopened = new ResourcePinStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)));
+        assertEquals(
+            revisions[revisions.length - 1],
+            reopened.list(WebPrincipal.admin())
+                .get(0)
+                .resource());
+    }
+
+    @Test
     void capturedHistoryPersistsAnIdentityRetiredBeforeItsFirstFlush() throws Exception {
         TestGrid grid = new TestGrid(88400, false, AEControllerState.CONTROLLER_ONLINE);
         StableKey key = TestGridFixtures.resolvedKey(grid);
