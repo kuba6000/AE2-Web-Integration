@@ -26,9 +26,9 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
     }
 
     @Override
-    public void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, Object diff) {
+    public void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, @NotNull IAEKey diff) {
         AE2JobTracker.updateCraftingStatus(cpu, diff);
-        if (diff instanceof IAEKey resource) cpuInventoryChanged(cpu, resource);
+        cpuInventoryChanged(cpu, diff);
     }
 
     @Override

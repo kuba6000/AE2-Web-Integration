@@ -145,9 +145,9 @@ public class AE2JobTracker {
         }
     }
 
-    public static void updateCraftingStatus(ICraftingCPUCluster cpu, Object diff) {
+    public static void updateCraftingStatus(ICraftingCPUCluster cpu, @NotNull IAEKey keyDiff) {
         JobTrackingInfo info = trackingInfoMap.get(cpu);
-        if (info == null || !(diff instanceof IAEKey keyDiff)) return;
+        if (info == null) return;
         IStackList waitingFor = cpu.web$getWaitingFor();
         long waitingAmount = waitingFor.web$getAmount(keyDiff);
         if (waitingAmount > 0L) {

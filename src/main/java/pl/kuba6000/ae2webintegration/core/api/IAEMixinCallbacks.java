@@ -17,7 +17,7 @@ public interface IAEMixinCallbacks {
 
     void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isAuthorPlayer);
 
-    void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, Object diff);
+    void craftingStatusPostedUpdate(ICraftingCPUCluster cpu, @NotNull IAEKey diff);
 
     /** CPU inventory notification; refreshes viewed resources without changing crafting measurements. */
     void cpuInventoryChanged(@NotNull ICraftingCPUCluster cpu, @NotNull IAEKey resource);
