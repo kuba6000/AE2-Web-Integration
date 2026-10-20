@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
+import appeng.api.networking.IGrid;
 import appeng.api.networking.crafting.CraftingItemList;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IItemList;
@@ -21,6 +22,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameInde
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
@@ -34,6 +36,11 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, 
 
     @Shadow
     private World getWorld() {
+        throw new IllegalStateException("Mixin failed to apply");
+    }
+
+    @Shadow
+    private IGrid getGrid() {
         throw new IllegalStateException("Mixin failed to apply");
     }
 
@@ -126,6 +133,12 @@ public abstract class AECraftingCPUClusterMixin implements ICraftingCPUCluster, 
     @Override
     public boolean web$isBusy() {
         return ((CraftingCPUCluster) (Object) this).isBusy();
+    }
+
+    @Override
+    public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return !cpu.isDestroyed() && cpu.isActive() && (Object) getGrid() == grid;
     }
 
     @Override
