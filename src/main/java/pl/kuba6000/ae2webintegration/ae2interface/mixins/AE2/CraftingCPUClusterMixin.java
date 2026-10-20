@@ -39,7 +39,7 @@ public class CraftingCPUClusterMixin {
     @WrapMethod(method = "postCraftingStatusChange")
     private void ae2webintegration$postCraftingStatusChange(IAEStack<?> diff, Operation<Void> original) {
         IAEMixinCallbacks.getInstance()
-            .craftingStatusPostedUpdate((ICraftingCPUCluster) this, diff);
+            .craftingStatusPostedUpdate((ICraftingCPUCluster) this, (IAEKey) diff);
         original.call(diff);
     }
 
