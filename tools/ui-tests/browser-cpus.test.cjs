@@ -516,7 +516,7 @@ test('CPU tiles show processing shares and sort by precise shares through refres
 
 test('CPU resources omit zero counts and update visible categories during polling', async (t) => {
     const { page, options, base } = await refreshingFixture(t);
-    const item = { ...cpuWork.items[0], active: 0, pending: 12, stored: 0 };
+    const item = { ...cpuWork.items[0], itemKey: 'iron', active: 0, pending: 12, stored: 0 };
     options.cpuDetails['cpu-a'] = { ...cpuWork, hasTrackingInfo: false, items: [item] };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     const resource = page
@@ -687,8 +687,10 @@ test('CPU terminal scrolls resources within desktop and mobile viewports while c
 
 test('CPU resource reordering does not leave a stale hover tooltip or reopen keyboard-dismissed metrics', async (t) => {
     const { page, options, base } = await refreshingFixture(t);
+    const first = { ...cpuWork.items[0], itemKey: 'iron' };
     const second = {
         ...cpuWork.items[0],
+        itemKey: 'copper',
         registryNamespace: 'example',
         registryPath: 'copper',
         displayName: 'Copper',
@@ -696,7 +698,7 @@ test('CPU resource reordering does not leave a stale hover tooltip or reopen key
         pending: 0,
         stored: 0
     };
-    options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...cpuWork.items[0], active: 100 }, second] };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...first, active: 100 }, second] };
     await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
     await page.getByRole('button', { name: 'Sort by: Active quantity', exact: true }).click();
     const item = page
@@ -726,7 +728,7 @@ test('CPU resource reordering does not leave a stale hover tooltip or reopen key
                 });
             })
     );
-    options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...cpuWork.items[0], active: 1 }, second] };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...first, active: 1 }, second] };
     await poll(page);
     const refreshed = await refreshedTooltip;
     assert.ok(
@@ -737,7 +739,7 @@ test('CPU resource reordering does not leave a stale hover tooltip or reopen key
     await item.focus();
     await tooltip.waitFor({ state: 'visible' });
     await page.keyboard.press('Escape');
-    options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...cpuWork.items[0], active: 200 }, second] };
+    options.cpuDetails['cpu-a'] = { ...cpuWork, items: [{ ...first, active: 200 }, second] };
     const read = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/cpus/cpu-a'));
     await poll(page);
     await settleResponse(page, (await read).request());

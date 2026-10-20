@@ -2155,11 +2155,13 @@ test('CPU live counts preserve tile positions until five seconds and explicit so
 });
 
 test('replacing anonymous CPU resources keeps slots but never adopts the old focused resource', async (t) => {
-    const { resources, send } = await openLiveCpu(t, {
+    const { page, resources, send } = await openLiveCpu(t, {
         items: [liveCpuRow(null, 'Anonymous', { active: 1 }), liveCpuRow('iron', 'Iron Ingot')]
     });
     const anonymous = resources.getByRole('button', { name: /^Anonymous/ });
     await anonymous.focus();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.waitFor({ state: 'visible' });
     const old = await anonymous.elementHandle();
     const iron = resources.getByRole('button', { name: /^Iron Ingot/ });
     const position = await iron.evaluate((node) => [...node.closest('ul').children].indexOf(node.parentElement));
@@ -2167,5 +2169,6 @@ test('replacing anonymous CPU resources keeps slots but never adopts the old foc
     await resources.getByRole('button', { name: /^Anonymous.*Active: 8/ }).waitFor();
     assert.equal(await old.evaluate((node) => node.isConnected), false);
     assert.equal(await anonymous.evaluate((node) => node === document.activeElement), false);
+    assert.equal(await tooltip.isVisible(), false, 'Replacement must dismiss the previous anonymous resource tooltip');
     assert.equal(await iron.evaluate((node) => [...node.closest('ul').children].indexOf(node.parentElement)), position);
 });
