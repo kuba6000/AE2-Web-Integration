@@ -117,7 +117,7 @@ public final class LiveStreams implements AutoCloseable {
             }
             if (session.subscription.end != null || !session.ready
                 || hub.hasPending(session.subscription)
-                || now - session.lastWrite >= HEARTBEAT_MILLIS) schedule(session);
+                || now - session.lastHeartbeat >= HEARTBEAT_MILLIS) schedule(session);
         }
     }
 
@@ -162,8 +162,11 @@ public final class LiveStreams implements AutoCloseable {
             if (session.subscription.end != null) {
                 sendControl(session, session.subscription.end);
                 session.finished = true;
-            } else sendControl(session, "heartbeat");
-            session.lastWrite = System.currentTimeMillis();
+            } else if (System.currentTimeMillis() - session.lastHeartbeat >= HEARTBEAT_MILLIS) {
+                // Delta traffic must not postpone heartbeat-driven lease renewal.
+                sendControl(session, "heartbeat");
+                session.lastHeartbeat = System.currentTimeMillis();
+            }
         } catch (IOException failure) {
             LOG.debug("Live connection closed", failure);
             session.finished = true;
@@ -250,7 +253,7 @@ public final class LiveStreams implements AutoCloseable {
         private final @Nullable IconPack pack;
         private volatile boolean ready;
         private volatile boolean finished;
-        private volatile long lastWrite;
+        private volatile long lastHeartbeat;
         private @Nullable FutureTask<Void> task;
         private long started;
         private boolean writing;

@@ -61,6 +61,67 @@ class TerminalStreamsHttpTest extends GridTestScope {
     private TestGridFixtures.TestGrid nativeGrid;
 
     @Test
+    void heartbeatsKeepTheirCadenceDuringActiveAndIdleStreams() throws Exception {
+        StableKey iron = TestGridFixtures.key(51);
+        try (Fixture fixture = new Fixture(Collections.singletonList(row(iron, "Iron", 1)))) {
+            HttpURLConnection request = fixture.connection(fixture.reserve());
+            // Heartbeats are due every ten seconds; allow transport and scheduler headroom for this connection.
+            request.setReadTimeout(15_000);
+            try (Connection connection = new Connection(request)) {
+                assertEquals("ready", readAnyEvent(connection.input).name());
+                Event initial = readAnyEvent(connection.input);
+                assertEquals("heartbeat", initial.name());
+                assertEquals(
+                    "{}",
+                    initial.data()
+                        .toString());
+                long initialHeartbeat = System.nanoTime();
+                for (int quantity = 2; quantity <= 3; quantity++) {
+                    fixture.publish(quantity, Collections.singletonList(row(iron, "Iron", quantity)));
+                    assertEquals("delta", readAnyEvent(connection.input).name());
+                }
+
+                boolean activeHeartbeat = false;
+                long deadline = initialHeartbeat + TimeUnit.SECONDS.toNanos(15);
+                for (int quantity = 4; System.nanoTime() < deadline; quantity++) {
+                    fixture.publish(quantity, Collections.singletonList(row(iron, "Iron", quantity)));
+                    Event event = readAnyEvent(connection.input);
+                    if (event.name()
+                        .equals("heartbeat")) {
+                        assertEquals(
+                            "{}",
+                            event.data()
+                                .toString());
+                        activeHeartbeat = true;
+                        break;
+                    }
+                    assertEquals("delta", event.name());
+                }
+                assertTrue(activeHeartbeat, "Continuous deltas must not postpone the heartbeat");
+                assertTrue(
+                    System.nanoTime() - initialHeartbeat >= TimeUnit.SECONDS.toNanos(8),
+                    "Deltas must not generate extra heartbeats between scheduled keepalives");
+
+                long lastHeartbeat = System.nanoTime();
+                Event idle;
+                do {
+                    idle = readAnyEvent(connection.input);
+                    // A delta published just before the active heartbeat may still be in flight.
+                } while (idle.name()
+                    .equals("delta"));
+                assertEquals("heartbeat", idle.name());
+                assertEquals(
+                    "{}",
+                    idle.data()
+                        .toString());
+                assertTrue(
+                    System.nanoTime() - lastHeartbeat >= TimeUnit.SECONDS.toNanos(8),
+                    "Idle keepalives retain the heartbeat interval");
+            }
+        }
+    }
+
+    @Test
     void reservedTerminalReceivesAsynchronousRecentDataAfterAnEmptyBootstrap() throws Exception {
         StableKey iron = TestGridFixtures.key(51);
         List<StorageObservationFixtures.Row> rows = Collections.singletonList(row(iron, "Iron", 1));
@@ -886,6 +947,15 @@ class TerminalStreamsHttpTest extends GridTestScope {
     private record Event(String name, String id, JsonObject data) {}
 
     private static @NotNull Event readEvent(BufferedReader input) throws Exception {
+        Event event;
+        do {
+            event = readAnyEvent(input);
+        } while (event.name()
+            .equals("heartbeat"));
+        return event;
+    }
+
+    private static @NotNull Event readAnyEvent(BufferedReader input) throws Exception {
         String name = null;
         String id = null;
         JsonObject data = null;
@@ -895,9 +965,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             if (line.startsWith("data: ")) data = new JsonParser().parse(line.substring(6))
                 .getAsJsonObject();
             if (line.isEmpty() && name != null) {
-                if (!name.equals("heartbeat")) return new Event(name, id, data);
-                name = null;
-                data = null;
+                return new Event(name, id, data);
             }
         }
         return fail("Stream ended before its next event");
