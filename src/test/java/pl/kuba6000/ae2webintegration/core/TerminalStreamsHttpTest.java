@@ -1209,14 +1209,19 @@ class TerminalStreamsHttpTest extends GridTestScope {
         private final LiveStreams streams = new LiveStreams(hub, CoreEngine.GRID_IDENTITIES, null);
 
         private Fixture(List<StorageObservationFixtures.Row> rows) throws Exception {
-            this(TestGridFixtures.resolvedKey(TestGridFixtures.grid(32)), WebPrincipal.admin(), rows);
+            this(TestGridFixtures.grid(32), WebPrincipal.admin(), rows);
         }
 
         private Fixture(StableKey grid, WebPrincipal principal, List<StorageObservationFixtures.Row> rows)
             throws Exception {
-            this.grid = grid;
-            nativeGrid = CoreEngine.GRID_IDENTITIES.getGrid(grid);
+            this(CoreEngine.GRID_IDENTITIES.getGrid(grid), principal, rows);
+        }
+
+        private Fixture(IAEGrid nativeGrid, WebPrincipal principal, List<StorageObservationFixtures.Row> rows)
+            throws Exception {
             assertNotNull(nativeGrid);
+            this.nativeGrid = nativeGrid;
+            grid = TestGridFixtures.resolvedKey(nativeGrid);
             this.principal = principal;
             session = new AuthSession(principal, Long.MAX_VALUE);
             requestSession.set(session);
