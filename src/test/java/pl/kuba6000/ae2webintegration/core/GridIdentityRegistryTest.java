@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -28,6 +29,8 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 import pl.kuba6000.ae2webintegration.core.utils.GSONUtils;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -42,6 +45,42 @@ class GridIdentityRegistryTest {
 
     @TempDir
     Path directory;
+
+    @Test
+    void nativeMembershipPublishesImmediatelyAndPersistsOnlyWhenFlushed() throws Exception {
+        File source = directory.resolve("deferred.json")
+            .toFile();
+        GridIdentityRegistry registry = worlds.registry(source);
+        WorldDatabase database = worlds.database(source);
+        WorldGridStore durable = new WorldGridStore(database);
+        StableKey key = resolve(registry, controller(1));
+        assertNotNull(key);
+        assertTrue(
+            durable.load(source.toPath())
+                .isEmpty());
+        assertEquals(key, resolve(registry, controller(1), controller(2)));
+        registry.controllerRemoved(controller(1));
+        assertNull(registry.findIdentity(controller(1)));
+        assertEquals(key, registry.findIdentity(controller(2)));
+        assertTrue(
+            durable.load(source.toPath())
+                .isEmpty());
+        registry.saveIfDirty();
+        assertEquals(
+            Collections.singleton(controller(2)),
+            durable.load(source.toPath())
+                .get(key)
+                .getControllers());
+        registry.controllerRemoved(controller(2));
+        assertFalse(registry.containsIdentity(key));
+        assertTrue(
+            durable.load(source.toPath())
+                .containsKey(key));
+        registry.saveIfDirty();
+        assertTrue(
+            durable.load(source.toPath())
+                .isEmpty());
+    }
 
     @Test
     void configuredDefaultsAndTighterBoundsPreserveSavedIdentities() throws Exception {
@@ -106,9 +145,11 @@ class GridIdentityRegistryTest {
 
         assertFalse(TestGridFixtures.isTracked(registry, key));
         registry.removeController(controller(1));
+        registry.saveIfDirty();
         worlds.close(file);
         GridIdentityRegistry restarted = worlds.registry(file);
         assertEquals(key, resolve(restarted, controller(3), controller(2)));
+        restarted.saveIfDirty();
         assertEquals(
             key,
             worlds.registry(file)
@@ -147,6 +188,7 @@ class GridIdentityRegistryTest {
         assertNotEquals(original, fresh);
         assertTrue(TestGridFixtures.isTracked(registry, original));
         assertFalse(TestGridFixtures.isTracked(registry, fresh));
+        registry.saveIfDirty();
         GridIdentityRegistry restarted = worlds.registry(file);
         restarted.controllerValidated(later);
         restarted.controllerValidated(first);
@@ -164,6 +206,7 @@ class GridIdentityRegistryTest {
         TestGridFixtures.setTracked(registry, tracked, true);
         assertEquals(tracked, resolve(registry, controller(1), controller(2)));
         assertFalse(registry.containsIdentity(untracked));
+        registry.saveIfDirty();
         GridIdentityRegistry restarted = worlds.registry(file);
         assertEquals(tracked, restarted.findIdentity(controller(1)));
         assertTrue(TestGridFixtures.isTracked(restarted, tracked));
@@ -273,6 +316,7 @@ class GridIdentityRegistryTest {
         registry.controllerRemoved(controller(2));
         assertFalse(registry.containsIdentity(key));
         assertNull(registry.getKey(grid));
+        registry.saveIfDirty();
         assertNotEquals(key, resolve(worlds.registry(file), controller(1)));
     }
 
@@ -316,19 +360,21 @@ class GridIdentityRegistryTest {
     }
 
     @Test
-    void failedCommitDoesNotPublishMembershipOrRemoval() throws Exception {
+    void failedCommitDoesNotPreventNativeMembershipPublication() throws Exception {
         File source = directory.resolve("failure.json")
             .toFile();
         GridIdentityRegistry registry = worlds.registry(source);
         StableKey key = resolve(registry, controller(1));
+        registry.saveIfDirty();
         worlds.close(source);
         assertThrows(IOException.class, () -> TestGridFixtures.setTracked(registry, key, true));
         ControllerGrid changed = new ControllerGrid(controller(1), controller(2));
         registry.controllerValidated(changed);
-        assertNull(registry.getKey(changed));
-        assertThrows(IOException.class, () -> registry.removeController(controller(1)));
-        assertEquals(key, registry.findIdentity(controller(1)));
-        assertNull(registry.findIdentity(controller(2)));
+        assertEquals(key, registry.getKey(changed));
+        registry.removeController(controller(1));
+        assertNull(registry.findIdentity(controller(1)));
+        assertEquals(key, registry.findIdentity(controller(2)));
+        assertThrows(IOException.class, registry::saveIfDirty);
         GridIdentityRegistry saved = worlds.registry(source);
         assertEquals(key, saved.findIdentity(controller(1)));
         assertFalse(TestGridFixtures.isTracked(saved, key));
@@ -344,6 +390,7 @@ class GridIdentityRegistryTest {
         DimensionalCoords first = new DimensionalCoords("world", Integer.MIN_VALUE, Integer.MAX_VALUE, -1);
         DimensionalCoords second = new DimensionalCoords("other-world", -1, 0, 1);
         StableKey key = resolve(registry, first, second);
+        registry.saveIfDirty();
         GridIdentityRegistry restarted = worlds.registry(file);
         assertEquals(key, restarted.findIdentity(first));
         assertEquals(key, restarted.findIdentity(second));

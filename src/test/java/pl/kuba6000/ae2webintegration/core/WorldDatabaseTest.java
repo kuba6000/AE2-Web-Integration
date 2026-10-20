@@ -10,12 +10,18 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
@@ -24,11 +30,208 @@ import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 
 class WorldDatabaseTest {
 
     @TempDir
     Path directory;
+
+    @Test
+    void failedDependencyFlushBlocksTheMutationAndPeriodicRetryKeepsPendingIdentity() throws Exception {
+        Path path = directory.resolve("retry");
+        Path source = directory.resolve("retry.json");
+        try (WorldDatabase database = new WorldDatabase(path, DataPolicy.from(new ConfigSettings.Data()))) {
+            GridIdentityRegistry registry = new GridIdentityRegistry();
+            registry.initialize(database, source);
+            database.write(db -> {
+                try (Statement statement = db.createStatement()) {
+                    statement
+                        .execute("ALTER TABLE grids ADD CONSTRAINT temporary_write_failure CHECK (name <> 'Retry')");
+                }
+                return null;
+            });
+            TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
+                89102,
+                false,
+                AEControllerState.CONTROLLER_ONLINE);
+            registry.controllerValidated(grid);
+            StableKey key = registry.getKey(grid);
+            assertNotNull(key);
+            GridPersistentData data = registry.getPersistentData(key);
+            assertNotNull(data);
+            data.getSettings()
+                .setName("Retry");
+            AtomicInteger mutations = new AtomicInteger();
+            assertThrows(IOException.class, () -> database.write(db -> mutations.incrementAndGet()));
+            assertEquals(0, mutations.get());
+            assertEquals(key, registry.getKey(grid));
+            assertTrue(
+                new WorldGridStore(database).load(source)
+                    .isEmpty());
+            ManualScheduler clock = new ManualScheduler();
+            try {
+                database.startGridFlush(clock);
+                clock.advance(TimeUnit.MINUTES.toMillis(5));
+                assertTrue(
+                    new WorldGridStore(database).load(source)
+                        .isEmpty());
+                // Repair through a separate JDBC connection, as an operator would; dependent writes remain guarded.
+                try (Connection repair = DriverManager.getConnection(
+                    "jdbc:hsqldb:file:" + path.toString()
+                        .replace('\\', '/'),
+                    "SA",
+                    ""); Statement statement = repair.createStatement()) {
+                    statement.execute("ALTER TABLE grids DROP CONSTRAINT temporary_write_failure");
+                }
+                clock.advance(TimeUnit.MINUTES.toMillis(5));
+                assertEquals(
+                    "Retry",
+                    new WorldGridStore(database).load(source)
+                        .get(key)
+                        .getSettings()
+                        .getName());
+                assertEquals(
+                    1,
+                    database.write(db -> mutations.incrementAndGet())
+                        .intValue());
+            } finally {
+                clock.shutdownNow();
+            }
+        }
+    }
+
+    @Test
+    void periodicFlushSavesWithoutConsumersAndStoppedWorldCannotFlushItsReplacement() throws Exception {
+        Path source = directory.resolve("periodic.json");
+        GridIdentityRegistry registry = new GridIdentityRegistry();
+        try (
+            WorldDatabase first = new WorldDatabase(
+                directory.resolve("first"),
+                DataPolicy.from(new ConfigSettings.Data()));
+            WorldDatabase second = new WorldDatabase(
+                directory.resolve("second"),
+                DataPolicy.from(new ConfigSettings.Data()))) {
+            ManualScheduler clock = new ManualScheduler();
+            try {
+                registry.initialize(first, source);
+                first.startGridFlush(clock);
+                TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
+                    89101,
+                    false,
+                    AEControllerState.CONTROLLER_ONLINE);
+                registry.controllerValidated(grid);
+                StableKey key = registry.getKey(grid);
+                WorldGridStore saved = new WorldGridStore(first);
+                clock.advance(TimeUnit.MINUTES.toMillis(5) - 1);
+                assertTrue(
+                    saved.load(source)
+                        .isEmpty());
+                clock.advance(1);
+                assertTrue(
+                    saved.load(source)
+                        .containsKey(key));
+                Runnable alreadyDispatched = clock.dispatch();
+                first.stopGridFlush();
+                first.finishGridIdentities();
+                registry.clear();
+                registry.initialize(second, source);
+                registry.controllerValidated(grid);
+                alreadyDispatched.run();
+                clock.advance(TimeUnit.MINUTES.toMillis(10));
+                assertTrue(
+                    first.write(db -> true)
+                        .booleanValue());
+                assertTrue(
+                    new WorldGridStore(second).load(source)
+                        .isEmpty());
+            } finally {
+                clock.shutdownNow();
+            }
+        }
+    }
+
+    /** Drives the real scheduler boundary without waiting five wall-clock minutes. */
+    private static final class ManualScheduler extends ScheduledThreadPoolExecutor {
+
+        private Runnable action;
+        private ScheduledFuture<?> future;
+        private long now;
+        private long next;
+        private long interval;
+
+        private ManualScheduler() {
+            super(1);
+        }
+
+        @Override
+        public @NotNull ScheduledFuture<?> scheduleWithFixedDelay(@NotNull Runnable command, long initialDelay,
+            long delay, TimeUnit unit) {
+            action = command;
+            next = unit.toMillis(initialDelay);
+            interval = unit.toMillis(delay);
+            future = super.scheduleWithFixedDelay(() -> {}, 1, 1, TimeUnit.DAYS);
+            return future;
+        }
+
+        private void advance(long millis) {
+            now += millis;
+            while (!future.isCancelled() && now >= next) {
+                action.run();
+                next += interval;
+            }
+        }
+
+        private Runnable dispatch() {
+            return action;
+        }
+    }
+
+    @Test
+    void failedFinalFlushRejectsOldDependentWritesAfterTheRegistryMovesToAnotherWorld() throws Exception {
+        Path source = directory.resolve("fenced.json");
+        GridIdentityRegistry registry = new GridIdentityRegistry();
+        try (
+            WorldDatabase first = new WorldDatabase(
+                directory.resolve("old"),
+                DataPolicy.from(new ConfigSettings.Data()));
+            WorldDatabase second = new WorldDatabase(
+                directory.resolve("new"),
+                DataPolicy.from(new ConfigSettings.Data()))) {
+            registry.initialize(first, source);
+            first.write(db -> {
+                try (Statement statement = db.createStatement()) {
+                    statement.execute("ALTER TABLE grids ADD CONSTRAINT fail_final_flush CHECK (name <> 'Unsaved')");
+                }
+                return null;
+            });
+            TestGridFixtures.TestGrid grid = new TestGridFixtures.TestGrid(
+                89103,
+                false,
+                AEControllerState.CONTROLLER_ONLINE);
+            registry.controllerValidated(grid);
+            StableKey key = registry.getKey(grid);
+            assertNotNull(key);
+            GridPersistentData data = registry.getPersistentData(key);
+            assertNotNull(data);
+            data.getSettings()
+                .setName("Unsaved");
+            assertThrows(IOException.class, first::finishGridIdentities);
+            registry.clear();
+            registry.initialize(second, source);
+            registry.controllerValidated(grid);
+            AtomicInteger mutations = new AtomicInteger();
+            assertThrows(IOException.class, () -> first.write(db -> mutations.incrementAndGet()));
+            assertEquals(0, mutations.get());
+            assertTrue(
+                new WorldGridStore(second).load(source)
+                    .isEmpty());
+            second.flushGridIdentities();
+            assertTrue(
+                new WorldGridStore(second).load(source)
+                    .containsKey(registry.getKey(grid)));
+        }
+    }
 
     @ParameterizedTest
     @ValueSource(booleans = { false, true })

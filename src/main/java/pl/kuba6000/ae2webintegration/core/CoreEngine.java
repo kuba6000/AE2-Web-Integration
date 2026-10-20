@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
@@ -69,6 +71,7 @@ public class CoreEngine {
     private static volatile @Nullable VersionChecker versionChecker;
     private static boolean serverRunning;
     private static @Nullable WorldDatabase worldDatabase;
+    private static @Nullable ScheduledExecutorService gridFlushScheduler;
     private static volatile @Nullable ResourcePinStore resourcePins;
     private static volatile @Nullable IconPack iconPack;
     private static volatile ThemeCatalog themes = new ThemeCatalog();
@@ -119,6 +122,13 @@ public class CoreEngine {
         }
         try {
             worldDatabase = database;
+            ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(task -> {
+                Thread thread = new Thread(task, "AE2Web-GridPersistence");
+                thread.setDaemon(true);
+                return thread;
+            });
+            gridFlushScheduler = scheduler;
+            database.startGridFlush(scheduler);
             resourcePins = new ResourcePinStore(database);
             serverRunning = true;
             loadIconPack();
@@ -348,6 +358,11 @@ public class CoreEngine {
     }
 
     private static void stopStorageTracking() {
+        WorldDatabase database = worldDatabase;
+        if (database != null) database.stopGridFlush();
+        ScheduledExecutorService scheduler = gridFlushScheduler;
+        gridFlushScheduler = null;
+        if (scheduler != null) scheduler.shutdown();
         resourcePins = null;
         stopLiveStreams();
         StorageTrackingCoordinator coordinator = storageCoordinator;
@@ -355,11 +370,17 @@ public class CoreEngine {
             coordinator.close();
             storageCoordinator = null;
         }
-        // Captured tails already refer to retained SQL grid rows; retire RAM admission before worker closure.
+        if (database != null) {
+            try {
+                database.finishGridIdentities();
+            } catch (IOException failure) {
+                LOG.error("Final grid identity flush failed; queued dependent writes will be rejected", failure);
+            }
+        }
+        // Flush even newly retired identities before clearing admission and draining captured tails.
         GRID_IDENTITIES.clear();
         StorageTrackingService previous = storageTracking;
         storageTracking = null;
-        WorldDatabase database = worldDatabase;
         worldDatabase = null;
         if (previous != null) previous.close();
         else if (database != null) {

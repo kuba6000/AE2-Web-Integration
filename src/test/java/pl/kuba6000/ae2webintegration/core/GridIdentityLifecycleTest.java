@@ -103,6 +103,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         controllers.remove(removed);
         CoreEngine.GRID_IDENTITIES.controllerRemoved(removed);
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
+        CoreEngine.GRID_IDENTITIES.saveIfDirty();
         worlds.initialize(gridSave);
         assertNull(CoreEngine.GRID_IDENTITIES.getKey(grid));
         CoreEngine.GRID_IDENTITIES.controllerValidated(grid);
@@ -227,6 +228,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertNotNull(entry);
         assertSame(plan, entry.plan);
         assertFalse(plan.isCancelled());
+        CoreEngine.GRID_IDENTITIES.saveIfDirty();
         assertNotNull(
             worlds.registry(TestGridFixtures.Worlds.source(gridSave))
                 .findIdentity(grid.position()));
@@ -253,6 +255,7 @@ class GridIdentityLifecycleTest extends GridTestScope {
         assertTrue(view.allows(TestGridFixtures.principal(42)));
         assertTrue(view.allows(TestGridFixtures.principal(TestGridFixtures.OWNER_ID)));
         assertFalse(view.allows(TestGridFixtures.principal(99)));
+        CoreEngine.GRID_IDENTITIES.saveIfDirty();
         assertNotNull(
             worlds.registry(TestGridFixtures.Worlds.source(gridSave))
                 .findIdentity(grid.position()));

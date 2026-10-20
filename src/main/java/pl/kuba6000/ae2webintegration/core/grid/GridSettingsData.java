@@ -47,6 +47,21 @@ public final class GridSettingsData {
             .defaultValue();
     }
 
+    /** Detached settings retained for a retired identity awaiting its final database write. */
+    public @NotNull GridSettingsData copy() {
+        synchronized (lock) {
+            GridSettingsData result = new GridSettingsData(policy);
+            result.isTracked = isTracked;
+            result.isStorageTracked = isStorageTracked;
+            result.isFlowTracked = isFlowTracked;
+            result.stockSampleIntervalSeconds = stockSampleIntervalSeconds;
+            result.flowFlushIntervalSeconds = flowFlushIntervalSeconds;
+            result.historyRetentionDays = historyRetentionDays;
+            result.name = name;
+            return result;
+        }
+    }
+
     /** Normalize restored values before publication, preserving identity when server bounds tighten. */
     public boolean applyPolicy(@NotNull DataPolicy policy) {
         this.policy = policy;

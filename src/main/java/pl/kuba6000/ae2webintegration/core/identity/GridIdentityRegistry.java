@@ -4,6 +4,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -11,8 +12,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -34,13 +33,16 @@ import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 public final class GridIdentityRegistry {
 
     private @Nullable WorldGridStore store;
+    private @Nullable WorldDatabase database;
     private final Set<StableKey> dirtyKeys = new HashSet<>();
     private @NotNull DataPolicy dataPolicy = DataPolicy.from(Config.INSTANCE.data);
-    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private final WeakHashMap<IAEGrid, StableKey> keys = new WeakHashMap<>();
     private final Map<StableKey, IAEGrid> grids = new MapMaker().weakValues()
         .makeMap();
     private Map<StableKey, GridPersistentData> records = new HashMap<>();
+    private Map<StableKey, GridPersistentData> persisted = new HashMap<>();
+    private final Map<StableKey, GridPersistentData> retired = new HashMap<>();
+    private boolean membershipDirty;
     private final Map<DimensionalCoords, StableKey> knownPositions = new HashMap<>();
 
     /** Inactive until the server opens a save. */
@@ -53,18 +55,25 @@ public final class GridIdentityRegistry {
         WorldGridStore persistence = new WorldGridStore(database);
         Map<StableKey, GridPersistentData> loaded = persistence.load(importSource);
         store = persistence;
+        this.database = database;
         records = loaded;
+        persisted = new HashMap<>(loaded);
         records.forEach((key, data) -> {
             bindSettings(key, data);
             data.getControllers()
                 .forEach(position -> knownPositions.put(position, key));
         });
+        database.bindGridIdentities(this);
     }
 
     public synchronized void clear() {
         store = null;
+        database = null;
+        membershipDirty = false;
         dirtyKeys.clear();
         records.clear();
+        persisted.clear();
+        retired.clear();
         knownPositions.clear();
         keys.clear();
         grids.clear();
@@ -121,20 +130,15 @@ public final class GridIdentityRegistry {
             data = current.withControllers(controllers);
         }
         next.put(selected, data);
-        try {
-            publish(next);
-            StableKey oldKey = keys.put(grid, selected);
-            if (oldKey != null && !oldKey.equals(selected) && grids.get(oldKey) == grid) grids.remove(oldKey);
-            grids.put(selected, grid);
-            for (StableKey key : previous) {
-                if (!key.equals(selected)) {
-                    grids.remove(key);
-                    GridData.retire(key);
-                }
+        publish(next);
+        StableKey oldKey = keys.put(grid, selected);
+        if (oldKey != null && !oldKey.equals(selected) && grids.get(oldKey) == grid) grids.remove(oldKey);
+        grids.put(selected, grid);
+        for (StableKey key : previous) {
+            if (!key.equals(selected)) {
+                grids.remove(key);
+                GridData.retire(key);
             }
-
-        } catch (IOException e) {
-            LOG.error("Failed to persist validated grid identity", e);
         }
     }
 
@@ -143,12 +147,8 @@ public final class GridIdentityRegistry {
         if (!isInitialized()) return;
         StableKey affected = findIdentity(position);
         if (affected == null) return;
-        try {
-            removeController(position);
-            if (!containsIdentity(affected)) GridData.retire(affected);
-        } catch (IOException e) {
-            LOG.error("Failed to persist removed controller", e);
-        }
+        removeController(position);
+        if (!containsIdentity(affected)) GridData.retire(affected);
     }
 
     public synchronized @NotNull DataPolicy getDataPolicy() {
@@ -185,10 +185,16 @@ public final class GridIdentityRegistry {
         return records.get(key);
     }
 
-    /** Commits changed settings without rebuilding controller indexes. */
+    /** Commits pending membership and settings, retaining dirty state when persistence fails. */
     public synchronized void saveIfDirty() throws IOException {
         checkState(isInitialized(), "Grid identities are not initialized for this save");
-        if (!dirtyKeys.isEmpty()) writeRecords(records);
+        if (!dirtyKeys.isEmpty() || membershipDirty) writeRecords();
+    }
+
+    /** World-owned workers must never flush a replacement world's registry. */
+    public synchronized void saveIfDirty(@NotNull WorldDatabase owner) throws IOException {
+        if (database != owner) throw new IOException("Grid identities no longer belong to this world database");
+        saveIfDirty();
     }
 
     /** Resolves only a retained association, without discovering native grids. */
@@ -202,7 +208,7 @@ public final class GridIdentityRegistry {
     }
 
     /** Positive block destruction only; unload and missing observations must not call this method. */
-    public synchronized void removeController(@NotNull DimensionalCoords position) throws IOException {
+    public synchronized void removeController(@NotNull DimensionalCoords position) {
         StableKey key = knownPositions.get(position);
         if (key == null) return;
         Map<StableKey, GridPersistentData> next = new HashMap<>(records);
@@ -214,12 +220,17 @@ public final class GridIdentityRegistry {
         publish(next);
     }
 
-    private void publish(Map<StableKey, GridPersistentData> next) throws IOException {
-        if (next.equals(records)) {
-            saveIfDirty();
-            return;
-        }
-        writeRecords(next);
+    private void publish(Map<StableKey, GridPersistentData> next) {
+        if (next.equals(records)) return;
+        membershipDirty = true;
+        records.forEach((key, data) -> {
+            if (!next.containsKey(key)) retired.put(
+                key,
+                new GridPersistentData(
+                    Collections.emptySet(),
+                    data.getSettings()
+                        .copy()));
+        });
         records = next;
         knownPositions.clear();
         records.forEach(
@@ -227,10 +238,17 @@ public final class GridIdentityRegistry {
                 .forEach(position -> knownPositions.put(position, key)));
     }
 
-    private void writeRecords(Map<StableKey, GridPersistentData> data) throws IOException {
+    private void writeRecords() throws IOException {
         WorldGridStore persistence = store;
         if (persistence == null) throw new IOException("Grid identities are not initialized for this save");
-        persistence.save(records, data, dirtyKeys);
+        Map<StableKey, GridPersistentData> pending = new HashMap<>(retired);
+        pending.putAll(records);
+        Set<StableKey> dirty = new HashSet<>(dirtyKeys);
+        dirty.addAll(retired.keySet());
+        persistence.save(persisted, pending, dirty);
+        persisted = new HashMap<>(records);
+        retired.clear();
+        membershipDirty = false;
         dirtyKeys.clear();
     }
 }

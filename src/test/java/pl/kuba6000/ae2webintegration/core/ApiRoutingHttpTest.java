@@ -720,6 +720,7 @@ class ApiRoutingHttpTest extends GridTestScope {
     void failedNameSaveReturnsErrorAndRetryAfterRestartPersists() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        CoreEngine.GRID_IDENTITIES.saveIfDirty();
         String path = "/api/grids/" + key + "/settings";
         String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
         Path file = gridSave.toPath()

@@ -34,7 +34,7 @@ public final class WorldGridStore {
     }
 
     public @NotNull Map<StableKey, GridPersistentData> load(@NotNull Path importSource) throws IOException {
-        LoadedGrids loaded = database.write(db -> {
+        LoadedGrids loaded = database.writeIdentities(db -> {
             boolean imported;
             try (Statement query = db.createStatement();
                 ResultSet rows = query
@@ -120,7 +120,7 @@ public final class WorldGridStore {
 
     public void save(@NotNull Map<StableKey, GridPersistentData> previous,
         @NotNull Map<StableKey, GridPersistentData> next, @NotNull Set<StableKey> dirty) throws IOException {
-        database.write(db -> {
+        database.writeIdentities(db -> {
             save(db, previous, next, dirty);
             return null;
         });
@@ -163,7 +163,8 @@ public final class WorldGridStore {
                 continue;
             }
             long id = saveSettings(db, key, data.getSettings());
-            if (!changed.contains(key)) continue;
+            if (!changed.contains(key) || data.getControllers()
+                .isEmpty()) continue;
             try (PreparedStatement insert = db.prepareStatement("""
                 INSERT INTO grid_controllers (grid_id, dimension_id, x, y, z)
                 VALUES (?, ?, ?, ?, ?)

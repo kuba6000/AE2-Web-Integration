@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
@@ -14,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import pl.kuba6000.ae2webintegration.core.TestGridFixtures.TestGrid;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
@@ -26,6 +30,72 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind;
 
 class ResourcePinStoreTest extends GridTestScope {
+
+    @Test
+    void capturedHistoryPersistsAnIdentityRetiredBeforeItsFirstFlush() throws Exception {
+        TestGrid grid = new TestGrid(88400, false, AEControllerState.CONTROLLER_ONLINE);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        GridSettingsData retiredSettings = data.getSettings();
+        retiredSettings.setName("Retired");
+        retiredSettings.setTracked(true);
+        retiredSettings.setStorageTracked(true);
+        retiredSettings.setFlowTracked(true);
+        retiredSettings.setStockSampleIntervalSeconds(600);
+        retiredSettings.setFlowFlushIntervalSeconds(120);
+        retiredSettings.setHistoryRetentionDays(14);
+        CoreEngine.GRID_IDENTITIES.controllerRemoved(grid.position());
+        assertNull(CoreEngine.GRID_IDENTITIES.getPersistentData(key));
+        // A stale settings handle must not change the final policy of a retired identity.
+        retiredSettings.setHistoryRetentionDays(1);
+        retiredSettings.setName("Stale");
+        retiredSettings.setTracked(false);
+        retiredSettings.setStorageTracked(false);
+        retiredSettings.setFlowTracked(false);
+        retiredSettings.setStockSampleIntervalSeconds(60);
+        retiredSettings.setFlowFlushIntervalSeconds(60);
+        StableKey item = TestGridFixtures.key(70);
+        long observed = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2);
+        WorldDatabase database = worlds.database(TestGridFixtures.Worlds.source(gridSave));
+        try (HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
+            history.append(
+                key,
+                Collections.singletonMap(item, description(item, "Captured")),
+                Collections
+                    .singletonList(new StorageHistoryPoint(observed, 1, Kind.FLOW, item, 0, 5, 2, observed - 1000)));
+            assertEquals(
+                1,
+                history.read(key, item, 0, 100)
+                    .points()
+                    .size());
+            database.read(db -> {
+                try (PreparedStatement query = db.prepareStatement("SELECT * FROM grids WHERE grid_key = ?")) {
+                    query.setString(1, key.toString());
+                    try (ResultSet row = query.executeQuery()) {
+                        assertTrue(row.next());
+                        assertEquals("Retired", row.getString("name"));
+                        assertTrue(row.getBoolean("crafting_tracked"));
+                        assertTrue(row.getBoolean("stock_tracked"));
+                        assertTrue(row.getBoolean("flow_tracked"));
+                        assertEquals(600, row.getInt("stock_seconds"));
+                        assertEquals(120, row.getInt("flow_seconds"));
+                        assertEquals(14, row.getInt("retention_days"));
+                    }
+                }
+                return null;
+            });
+        }
+        worlds.close(TestGridFixtures.Worlds.source(gridSave));
+        try (HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(
+            worlds.database(TestGridFixtures.Worlds.source(gridSave)))) {
+            assertEquals(
+                1,
+                history.read(key, item, 0, 100)
+                    .points()
+                    .size());
+        }
+    }
 
     @Test
     void terminalAndHomeOrdersRemainIndependentAcrossGridsAndConfigurationIsAtomic() throws Exception {

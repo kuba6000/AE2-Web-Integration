@@ -9,10 +9,15 @@ import java.sql.Statement;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.hsqldb.jdbc.JDBCDriver;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -20,11 +25,14 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
+import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 
 /** One world owns its writer, bounded MVCC readers and file lifetime. */
 public final class WorldDatabase implements AutoCloseable {
 
+    private static final int GRID_FLUSH_INTERVAL_MINUTES = 5;
     private static final Set<Path> OPEN_DATABASES = ConcurrentHashMap.newKeySet();
+    private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
     private final ReentrantLock writerGate = new ReentrantLock(true);
     private final Semaphore readers = new Semaphore(4, true);
@@ -33,6 +41,9 @@ public final class WorldDatabase implements AutoCloseable {
     private volatile @Nullable OpenedDatabase openedDatabase;
     private @Nullable Path ownedPath;
     private boolean closed;
+    private volatile @Nullable GridIdentityRegistry identities;
+    private @Nullable ScheduledFuture<?> gridFlush;
+    private volatile boolean gridFlushStopped;
 
     @Desugar
     private record OpenedDatabase(@NotNull Connection writer, @NotNull String url) {}
@@ -61,6 +72,55 @@ public final class WorldDatabase implements AutoCloseable {
     }
 
     public <T> T write(@NotNull Transaction<T> transaction) throws IOException {
+        flushGridIdentities();
+        return writeIdentities(transaction);
+    }
+
+    /** Bind only after this world's identities have loaded successfully. */
+    public void bindGridIdentities(@NotNull GridIdentityRegistry registry) {
+        identities = registry;
+    }
+
+    /** The world lifecycle owns the executor; this owner fences and cancels its periodic task. */
+    public synchronized void startGridFlush(@NotNull ScheduledExecutorService scheduler) {
+        if (gridFlush != null || gridFlushStopped) return;
+        gridFlush = scheduler.scheduleWithFixedDelay(() -> {
+            if (gridFlushStopped) return;
+            try {
+                flushGridIdentities();
+            } catch (IOException | RuntimeException failure) {
+                LOG.error("Periodic grid identity flush failed; pending changes will be retried", failure);
+            }
+        }, GRID_FLUSH_INTERVAL_MINUTES, GRID_FLUSH_INTERVAL_MINUTES, TimeUnit.MINUTES);
+    }
+
+    public synchronized void stopGridFlush() {
+        gridFlushStopped = true;
+        if (gridFlush != null) gridFlush.cancel(false);
+    }
+
+    /** Acquire the registry before any database locks, so workers never reverse the metadata lock order. */
+    public void flushGridIdentities() throws IOException {
+        GridIdentityRegistry current = identities;
+        if (current == null) return;
+        synchronized (current) {
+            // A final flush may have detached this binding while this worker waited for the registry.
+            if (identities == current) current.saveIfDirty(this);
+        }
+    }
+
+    /** A successful final flush lets draining history use old durable rows after RAM admission closes. */
+    public void finishGridIdentities() throws IOException {
+        GridIdentityRegistry current = identities;
+        if (current == null) return;
+        synchronized (current) {
+            current.saveIfDirty(this);
+            if (identities == current) identities = null;
+        }
+    }
+
+    /** Identity load/save is the only mutation allowed to bypass the dependency flush. */
+    <T> T writeIdentities(@NotNull Transaction<T> transaction) throws IOException {
         lifecycle.readLock()
             .lock();
         writerGate.lock();
@@ -171,6 +231,7 @@ public final class WorldDatabase implements AutoCloseable {
 
     @Override
     public void close() throws IOException {
+        stopGridFlush();
         lifecycle.writeLock()
             .lock();
         try {

@@ -184,6 +184,25 @@ class CoreEngineTest {
     }
 
     @Test
+    void shutdownPersistsAnUnobservedIdentityBeforeClearingWorldState() {
+        CoreEngine.init(new TestPlatform(configRoot, false));
+        Config.INSTANCE.general.port = 0;
+        Config.INSTANCE.general.checkForUpdates = false;
+        try {
+            CoreEngine.onServerStarted();
+            TestGridFixtures.TestGrid grid = TestGridFixtures.grid(771101);
+            StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+            assertNotNull(key);
+            CoreEngine.onServerStopping();
+            CoreEngine.onServerStopped();
+            CoreEngine.onServerStarted();
+            assertEquals(key, CoreEngine.GRID_IDENTITIES.findIdentity(grid.position()));
+        } finally {
+            CoreEngine.onServerStopped();
+        }
+    }
+
+    @Test
     void serverLifecycleOwnsStorageCaptureAndDurableHistory() throws Exception {
         IAE previous = AE2Controller.AE2Interface;
         CoreEngine.init(new TestPlatform(configRoot, false));

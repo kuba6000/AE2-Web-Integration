@@ -184,6 +184,7 @@ class GridPersistentDataTest extends GridTestScope {
         assertNotNull(key);
         GridPersistentData previous = registry.getPersistentData(key);
         assertNotNull(previous);
+        registry.saveIfDirty();
         worlds.initialize(gridSave);
         previous.getSettings()
             .setTracked(true);

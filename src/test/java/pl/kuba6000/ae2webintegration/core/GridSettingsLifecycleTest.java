@@ -73,6 +73,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
     @Test
     void failedPersistenceReturnsInternalErrorAndRetryAfterRestartPersists() throws Exception {
         File file = TestGridFixtures.Worlds.source(gridSave);
+        CoreEngine.GRID_IDENTITIES.saveIfDirty();
         worlds.close(file);
         PatchGridSettings request = new PatchGridSettings();
         request.handle(TestGridFixtures.context(owner, "grid=" + key + "&track=1"));
