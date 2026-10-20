@@ -23,23 +23,23 @@ final class HsqlHistoryRetention {
 
     // Retain the latest expired stock anchors and gap barrier; deleting the barrier would invent continuity.
     private static String expiredPoints(Table table, String cutoff) {
-        if (table == Table.FLOW) return "p.observed_at < " + cutoff + "\n";
+        if (table == Table.FLOW) return "m.observed_at < " + cutoff + "\n";
         String matching = table == Table.STOCK ? "newer.resource_id = p.resource_id" : "newer.kind = 'GAP'";
         String ordinary = table == Table.COVERAGE ? "p.kind <> 'GAP' OR " : "";
-        return "p.observed_at < " + cutoff
+        return "m.observed_at < " + cutoff
             + " AND ("
             + ordinary
             + "EXISTS (SELECT 1 FROM "
             + table.sqlName
-            + " newer\n"
+            + " newer JOIN history_measurements n ON n.id = newer.measurement_id\n"
             + """
-                WHERE newer.grid_id = p.grid_id AND
+                WHERE n.grid_id = m.grid_id AND
                 """
             + matching
             + "\n"
             + """
-                    AND newer.observed_at < %s
-                    AND (newer.observed_at > p.observed_at OR newer.observed_at = p.observed_at AND newer.id > p.id)
+                    AND n.observed_at < %s
+                    AND (n.observed_at > m.observed_at OR n.observed_at = m.observed_at AND newer.id > p.id)
                 ))
                 """.replace("%s", cutoff);
     }
@@ -98,9 +98,15 @@ final class HsqlHistoryRetention {
             String expiryFilter = overCapacity ? "" : "AND " + expiredPoints(table, "?");
             String resource = table == Table.COVERAGE ? "CAST(NULL AS BIGINT)" : "p.resource_id";
             try (PreparedStatement query = db.prepareStatement(
-                "SELECT p.id, " + resource + " AS resource_id, p.observed_at FROM " + table.sqlName + " p\n" + """
-                    WHERE p.grid_id = ?
-                    """ + expiryFilter + "ORDER BY p.observed_at, p.id")) {
+                "SELECT p.id, p.measurement_id, " + resource
+                    + " AS resource_id, m.observed_at FROM "
+                    + table.joined()
+                    + "\n"
+                    + """
+                        WHERE m.grid_id = ?
+                        """
+                    + expiryFilter
+                    + "ORDER BY m.observed_at, p.id")) {
                 query.setLong(1, gridId);
                 if (!overCapacity) {
                     query.setLong(2, expiry);
@@ -113,6 +119,7 @@ final class HsqlHistoryRetention {
                             new PrunePoint(
                                 table,
                                 rows.getLong("id"),
+                                rows.getLong("measurement_id"),
                                 rows.getLong("observed_at"),
                                 (Long) rows.getObject("resource_id")));
                     }
@@ -132,7 +139,8 @@ final class HsqlHistoryRetention {
     }
 
     @Desugar
-    private record PrunePoint(@NotNull Table table, long id, long observedAt, @Nullable Long resourceId) {}
+    private record PrunePoint(@NotNull Table table, long id, long measurementId, long observedAt,
+        @Nullable Long resourceId) {}
 
     @Desugar
     private record PruneBatch(@NotNull List<PrunePoint> points, @NotNull Set<Long> resources, long deletedUntil) {}
@@ -149,6 +157,20 @@ final class HsqlHistoryRetention {
                 }
                 if (pending) delete.executeBatch();
             }
+        }
+        Set<Long> measurements = new HashSet<>();
+        for (PrunePoint point : batch.points) measurements.add(point.measurementId);
+        try (PreparedStatement delete = db.prepareStatement("""
+            DELETE FROM history_measurements m WHERE id = ?
+                AND NOT EXISTS (SELECT 1 FROM history_stock WHERE measurement_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM history_flow WHERE measurement_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM history_coverage WHERE measurement_id = m.id)
+            """)) {
+            for (Long measurement : measurements) {
+                delete.setLong(1, measurement);
+                delete.addBatch();
+            }
+            delete.executeBatch();
         }
         ResourceCatalogue.removeUnreferenced(db, batch.resources);
     }
@@ -184,11 +206,11 @@ final class HsqlHistoryRetention {
                 long expiry = now - TimeUnit.DAYS.toMillis(policies.getInt("retention_days"));
                 for (Table table : Table.values()) {
                     try (PreparedStatement query = db.prepareStatement(
-                        "SELECT p.observed_at, p.id FROM " + table.sqlName
-                            + " p\n"
-                            + "WHERE p.grid_id = ? AND "
+                        "SELECT m.observed_at, p.id FROM " + table.joined()
+                            + "\n"
+                            + "WHERE m.grid_id = ? AND "
                             + expiredPoints(table, "?")
-                            + "ORDER BY p.observed_at, p.id")) {
+                            + "ORDER BY m.observed_at, p.id")) {
                         query.setLong(1, gridId);
                         query.setLong(2, expiry);
                         if (table != Table.FLOW) query.setLong(3, expiry);

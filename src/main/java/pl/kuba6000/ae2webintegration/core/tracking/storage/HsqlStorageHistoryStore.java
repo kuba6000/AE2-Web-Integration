@@ -5,6 +5,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,6 +13,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
@@ -37,6 +39,10 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
 
         Table(@NotNull String sqlName) {
             this.sqlName = sqlName;
+        }
+
+        String joined() {
+            return sqlName + " p JOIN history_measurements m ON m.id = p.measurement_id";
         }
 
         static @NotNull Table forKind(@NotNull StorageHistoryPoint.Kind kind) {
@@ -107,20 +113,33 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         int inserted = 0;
         long firstObserved = Long.MAX_VALUE;
         try (PreparedStatement stock = db.prepareStatement("""
-            INSERT INTO history_stock (id, grid_id, observed_at, generation, resource_id, quantity)
-            VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?, ?)
-            """);
-            PreparedStatement flow = db.prepareStatement(
-                """
-                    INSERT INTO history_flow (id, grid_id, observed_at, generation, resource_id, input_amount, output_amount, flow_from)
-                    VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?, ?, ?, ?)
-                    """);
-            PreparedStatement coverage = db.prepareStatement("""
-                INSERT INTO history_coverage (id, grid_id, observed_at, generation, kind, flow_from)
-                VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?, ?)
-                """)) {
+            INSERT INTO history_stock (id, measurement_id, resource_id, quantity)
+            VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?)
+            """); PreparedStatement flow = db.prepareStatement("""
+            INSERT INTO history_flow (id, measurement_id, resource_id, input_amount, output_amount)
+            VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?)
+            """); PreparedStatement coverage = db.prepareStatement("""
+            INSERT INTO history_coverage (id, measurement_id, kind)
+            VALUES (NEXT VALUE FOR history_event_ids, ?, ?)
+            """)) {
             PreparedStatement pending = null;
-            for (StorageHistoryPoint point : points) {
+            int groupEnd = 0;
+            long measurementId = -1;
+            for (int index = 0; index < points.size(); index++) {
+                StorageHistoryPoint point = points.get(index);
+                if (point.kind() == StorageHistoryPoint.Kind.FLOW && point.flowFrom() == null)
+                    throw new SQLException("Flow history requires an interval start");
+                if (index == groupEnd) {
+                    groupEnd = measurementEnd(points, index);
+                    Long flowFrom = null;
+                    for (int member = index; member < groupEnd; member++) {
+                        StorageHistoryPoint candidate = points.get(member);
+                        if (candidate.kind() == StorageHistoryPoint.Kind.FLOW
+                            || candidate.kind() == StorageHistoryPoint.Kind.FLOW_OBSERVATION)
+                            flowFrom = candidate.flowFrom();
+                    }
+                    measurementId = insertMeasurement(db, gridId, point, flowFrom);
+                }
                 Table table = Table.forKind(point.kind());
                 PreparedStatement insert = switch (table) {
                     case STOCK -> stock;
@@ -132,23 +151,19 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                     pending.executeBatch();
                     pending.clearBatch();
                 }
-                insert.setLong(1, gridId);
-                insert.setLong(2, point.observedAt());
-                insert.setLong(3, point.generation());
+                insert.setLong(1, measurementId);
                 if (table == Table.COVERAGE) {
                     insert.setString(
-                        4,
+                        2,
                         point.kind()
                             .name());
-                    insert.setObject(5, point.flowFrom(), Types.BIGINT);
                 } else {
                     Long resourceId = resourceIds.get(point.itemKey());
-                    if (resourceId == null) insert.setNull(4, Types.BIGINT);
-                    else insert.setLong(4, resourceId);
-                    insert.setLong(5, table == Table.STOCK ? point.quantity() : point.input());
+                    if (resourceId == null) insert.setNull(2, Types.BIGINT);
+                    else insert.setLong(2, resourceId);
+                    insert.setLong(3, table == Table.STOCK ? point.quantity() : point.input());
                     if (table == Table.FLOW) {
-                        insert.setLong(6, point.output());
-                        insert.setObject(7, point.flowFrom(), Types.BIGINT);
+                        insert.setLong(4, point.output());
                     }
                 }
                 insert.addBatch();
@@ -169,6 +184,45 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
             update.setLong(3, firstObserved);
             update.setLong(4, gridId);
             update.executeUpdate();
+        }
+    }
+
+    /** A heterogeneous append may contain several observations; gaps and incompatible flow windows split them. */
+    private static int measurementEnd(List<StorageHistoryPoint> points, int start) {
+        StorageHistoryPoint first = points.get(start);
+        if (first.kind() == StorageHistoryPoint.Kind.GAP) return start + 1;
+        Long flowFrom = null;
+        boolean flowSeen = false;
+        int end = start;
+        while (end < points.size()) {
+            StorageHistoryPoint candidate = points.get(end);
+            if (candidate.observedAt() != first.observedAt() || candidate.generation() != first.generation()
+                || candidate.kind() == StorageHistoryPoint.Kind.GAP) break;
+            if (candidate.kind() == StorageHistoryPoint.Kind.FLOW
+                || candidate.kind() == StorageHistoryPoint.Kind.FLOW_OBSERVATION) {
+                if (flowSeen && !Objects.equals(flowFrom, candidate.flowFrom())) break;
+                flowFrom = candidate.flowFrom();
+                flowSeen = true;
+            }
+            end++;
+        }
+        return end;
+    }
+
+    private static long insertMeasurement(Connection db, long gridId, StorageHistoryPoint point, Long flowFrom)
+        throws SQLException {
+        try (PreparedStatement insert = db.prepareStatement("""
+            INSERT INTO history_measurements (grid_id, observed_at, generation, flow_from) VALUES (?, ?, ?, ?)
+            """, Statement.RETURN_GENERATED_KEYS)) {
+            insert.setLong(1, gridId);
+            insert.setLong(2, point.observedAt());
+            insert.setLong(3, point.generation());
+            insert.setObject(4, flowFrom, Types.BIGINT);
+            insert.executeUpdate();
+            try (ResultSet keys = insert.getGeneratedKeys()) {
+                keys.next();
+                return keys.getLong(1);
+            }
         }
     }
 

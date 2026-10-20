@@ -197,8 +197,10 @@ public final class ResourcePinStore {
             SELECT r.id
             FROM history_resources r
             WHERE r.item_key = ? AND (
-                ? OR EXISTS (SELECT 1 FROM history_stock s WHERE s.grid_id = ? AND s.resource_id = r.id)
-                  OR EXISTS (SELECT 1 FROM history_flow f WHERE f.grid_id = ? AND f.resource_id = r.id)
+                ? OR EXISTS (SELECT 1 FROM history_stock s JOIN history_measurements m ON m.id = s.measurement_id
+                             WHERE m.grid_id = ? AND s.resource_id = r.id)
+                  OR EXISTS (SELECT 1 FROM history_flow f JOIN history_measurements m ON m.id = f.measurement_id
+                             WHERE m.grid_id = ? AND f.resource_id = r.id)
                   OR EXISTS (SELECT 1 FROM resource_pins p WHERE p.owner = ? AND p.grid_id = ? AND p.resource_id = r.id)
             )
             """)) {

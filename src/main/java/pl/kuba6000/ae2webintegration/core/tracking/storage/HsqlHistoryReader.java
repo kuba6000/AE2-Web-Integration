@@ -76,9 +76,10 @@ final class HsqlHistoryReader {
         if (points.stream()
             .anyMatch(point -> point.observedAt() == boundary && point.kind() == StorageHistoryPoint.Kind.GAP)) return;
         try (PreparedStatement query = db.prepareStatement("""
-            SELECT * FROM history_coverage
-            WHERE grid_id = ? AND observed_at = ? AND kind = 'GAP'
-            ORDER BY id DESC
+            SELECT p.*, m.observed_at, m.generation, m.flow_from
+            FROM history_coverage p JOIN history_measurements m ON m.id = p.measurement_id
+            WHERE m.grid_id = ? AND m.observed_at = ? AND p.kind = 'GAP'
+            ORDER BY p.id DESC
             """)) {
             query.setLong(1, gridId);
             query.setLong(2, boundary);
@@ -119,15 +120,15 @@ final class HsqlHistoryReader {
         boolean filtered = resourceId != null && table != Table.COVERAGE;
         String filter = filtered ? "AND p.resource_id = ?\n" : "";
         try (PreparedStatement query = db.prepareStatement(
-            (table == Table.COVERAGE ? "SELECT p.* FROM " + table.sqlName + " p\n"
-                : "SELECT p.*, r.item_key FROM " + table.sqlName
-                    + " p JOIN history_resources r ON r.id = p.resource_id\n")
+            "SELECT p.*, m.observed_at, m.generation, m.flow_from"
+                + (table == Table.COVERAGE ? " FROM " + table.joined() + "\n"
+                    : ", r.item_key FROM " + table.joined() + " JOIN history_resources r ON r.id = p.resource_id\n")
                 + """
-                    WHERE p.grid_id = ?
-                        AND p.observed_at >= ?
+                    WHERE m.grid_id = ?
+                        AND m.observed_at >= ?
                     """
                 + filter
-                + "ORDER BY p.observed_at DESC, p.id DESC")) {
+                + "ORDER BY m.observed_at DESC, p.id DESC")) {
             query.setLong(1, gridId);
             query.setLong(2, fromMillis);
             if (filtered) query.setLong(3, resourceId);
@@ -153,11 +154,11 @@ final class HsqlHistoryReader {
 
     private static boolean hasGap(@NotNull Connection db, long gridId, long fromMillis) throws SQLException {
         try (PreparedStatement query = db.prepareStatement("""
-            SELECT id
-            FROM history_coverage
-            WHERE grid_id = ?
-                AND kind = 'GAP'
-                AND observed_at >= ?
+            SELECT p.id
+            FROM history_coverage p JOIN history_measurements m ON m.id = p.measurement_id
+            WHERE m.grid_id = ?
+                AND p.kind = 'GAP'
+                AND m.observed_at >= ?
             """)) {
             query.setLong(1, gridId);
             query.setLong(2, fromMillis);
@@ -171,12 +172,13 @@ final class HsqlHistoryReader {
     private static @Nullable QueryPoint queryBaseline(@NotNull Connection db, long gridId, long resourceId,
         long boundary) throws SQLException {
         try (PreparedStatement query = db.prepareStatement("""
-            SELECT p.*, r.item_key
-            FROM history_stock p JOIN history_resources r ON r.id = p.resource_id
-            WHERE p.grid_id = ?
+            SELECT p.*, m.observed_at, m.generation, m.flow_from, r.item_key
+            FROM history_stock p JOIN history_measurements m ON m.id = p.measurement_id
+                JOIN history_resources r ON r.id = p.resource_id
+            WHERE m.grid_id = ?
                 AND p.resource_id = ?
-                AND p.observed_at <= ?
-            ORDER BY p.observed_at DESC, p.id DESC
+                AND m.observed_at <= ?
+            ORDER BY m.observed_at DESC, p.id DESC
             """)) {
             query.setLong(1, gridId);
             query.setLong(2, resourceId);
@@ -192,11 +194,11 @@ final class HsqlHistoryReader {
     private static boolean crossesGap(Connection db, long gridId, QueryPoint anchor, long boundary)
         throws SQLException {
         for (Table table : Table.values()) {
-            String barrier = table == Table.COVERAGE ? "(kind = 'GAP' OR generation <> ?)" : "generation <> ?";
-            try (PreparedStatement query = db.prepareStatement("SELECT id FROM " + table.sqlName + "\n" + """
-                WHERE grid_id = ?
-                    AND (observed_at > ? OR observed_at = ? AND id > ?)
-                    AND observed_at <= ?
+            String barrier = table == Table.COVERAGE ? "(p.kind = 'GAP' OR m.generation <> ?)" : "m.generation <> ?";
+            try (PreparedStatement query = db.prepareStatement("SELECT p.id FROM " + table.joined() + "\n" + """
+                WHERE m.grid_id = ?
+                    AND (m.observed_at > ? OR m.observed_at = ? AND p.id > ?)
+                    AND m.observed_at <= ?
                     AND
                 """ + barrier)) {
                 query.setLong(1, gridId);
