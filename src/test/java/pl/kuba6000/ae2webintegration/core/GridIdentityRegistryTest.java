@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -27,6 +29,7 @@ import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
@@ -45,6 +48,71 @@ class GridIdentityRegistryTest {
 
     @TempDir
     Path directory;
+
+    @Test
+    void applyingLiveBoundsClampsRamAndPendingRetiredSettingsWithoutWritingSql() throws Exception {
+        ConfigSettings.Data initial = new ConfigSettings.Data();
+        initial.stockSampleIntervalSeconds = new ConfigSettings.Range(10, 600, 120);
+        initial.flowFlushIntervalSeconds = new ConfigSettings.Range(10, 600, 90);
+        try (WorldDatabase database = new WorldDatabase(directory.resolve("live-policy"), initial)) {
+            GridIdentityRegistry registry = new GridIdentityRegistry();
+            registry.initialize(database, directory.resolve("absent.json"));
+            StableKey active = resolve(registry, controller(1));
+            GridPersistentData activeData = registry.getPersistentData(active);
+            assertNotNull(activeData);
+            GridSettingsData settings = activeData.getSettings();
+            settings.setStockSampleIntervalSeconds(500);
+            settings.setFlowFlushIntervalSeconds(100);
+            settings.setHistoryRetentionDays(30);
+            settings.setName("Keep");
+            settings.setTracked(true);
+            registry.saveIfDirty();
+            StableKey retired = resolve(registry, controller(2));
+            GridPersistentData retiredData = registry.getPersistentData(retired);
+            assertNotNull(retiredData);
+            retiredData.getSettings()
+                .setHistoryRetentionDays(30);
+            registry.controllerRemoved(controller(2));
+            ConfigSettings.Data tightened = new ConfigSettings.Data();
+            tightened.stockSampleIntervalSeconds = new ConfigSettings.Range(20, 90, 60);
+            tightened.flowFlushIntervalSeconds = new ConfigSettings.Range(50, 150, 100);
+            tightened.historyRetentionDays = new ConfigSettings.Range(2, 14, 3);
+            assertTrue(database.applyPolicy(tightened));
+            assertEquals(active, registry.findIdentity(controller(1)));
+            assertEquals(90, settings.getStockSampleIntervalSeconds());
+            assertEquals(100, settings.getFlowFlushIntervalSeconds());
+            assertEquals(14, settings.getHistoryRetentionDays());
+            assertEquals("Keep", settings.getName());
+            assertTrue(settings.isTracked());
+            assertThrows(IllegalArgumentException.class, () -> settings.setStockSampleIntervalSeconds(100));
+            database.read(db -> {
+                try (Statement sql = db.createStatement();
+                    ResultSet rows = sql.executeQuery("SELECT stock_seconds FROM grids")) {
+                    assertTrue(rows.next());
+                    assertEquals(500, rows.getInt(1));
+                    assertFalse(rows.next());
+                }
+                return null;
+            });
+            StableKey created = resolve(registry, controller(3));
+            GridPersistentData createdData = registry.getPersistentData(created);
+            assertNotNull(createdData);
+            GridSettingsData defaults = createdData.getSettings();
+            assertEquals(60, defaults.getStockSampleIntervalSeconds());
+            assertEquals(100, defaults.getFlowFlushIntervalSeconds());
+            assertEquals(3, defaults.getHistoryRetentionDays());
+            registry.saveIfDirty();
+            database.read(db -> {
+                try (Statement sql = db.createStatement();
+                    ResultSet rows = sql
+                        .executeQuery("SELECT retention_days FROM grids WHERE grid_key = '" + retired + "'")) {
+                    assertTrue(rows.next());
+                    assertEquals(14, rows.getInt(1));
+                }
+                return null;
+            });
+        }
+    }
 
     @Test
     void nativeMembershipPublishesImmediatelyAndPersistsOnlyWhenFlushed() throws Exception {

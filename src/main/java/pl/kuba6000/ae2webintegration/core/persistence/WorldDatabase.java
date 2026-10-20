@@ -24,7 +24,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 
 /** One world owns its writer, bounded MVCC readers and file lifetime. */
@@ -37,18 +37,20 @@ public final class WorldDatabase implements AutoCloseable {
     private final ReentrantLock writerGate = new ReentrantLock(true);
     private final Semaphore readers = new Semaphore(4, true);
     private final Path databaseBase;
-    private final DataPolicy policy;
+    private volatile Data policy;
     private volatile @Nullable OpenedDatabase openedDatabase;
     private @Nullable Path ownedPath;
     private boolean closed;
     private volatile @Nullable GridIdentityRegistry identities;
     private @Nullable ScheduledFuture<?> gridFlush;
+    private @Nullable ScheduledExecutorService gridFlushScheduler;
+    private @Nullable Runnable historyMaintenance;
     private volatile boolean gridFlushStopped;
 
     @Desugar
     private record OpenedDatabase(@NotNull Connection writer, @NotNull String url) {}
 
-    public WorldDatabase(@NotNull Path databaseBase, @NotNull DataPolicy policy) {
+    public WorldDatabase(@NotNull Path databaseBase, @NotNull Data policy) {
         if (databaseBase.toString()
             .indexOf(';') >= 0)
             throw new IllegalArgumentException("Database path cannot contain JDBC property separators");
@@ -56,8 +58,22 @@ public final class WorldDatabase implements AutoCloseable {
         this.policy = policy;
     }
 
-    public @NotNull DataPolicy policy() {
+    public @NotNull Data policy() {
         return policy;
+    }
+
+    /** Publishes validated, read-only settings to this active world without database work. */
+    public boolean applyPolicy(@NotNull Data policy) {
+        GridIdentityRegistry current = identities;
+        if (current == null || gridFlushStopped) return false;
+        synchronized (current) {
+            if (identities != current || gridFlushStopped || !current.applyPolicy(this, policy)) return false;
+            this.policy = policy;
+        }
+        synchronized (this) {
+            if (!gridFlushStopped && gridFlushScheduler != null) gridFlushScheduler.execute(this::maintain);
+        }
+        return true;
     }
 
     public void open() throws IOException {
@@ -82,16 +98,26 @@ public final class WorldDatabase implements AutoCloseable {
     }
 
     /** The world lifecycle owns the executor; this owner fences and cancels its periodic task. */
-    public synchronized void startGridFlush(@NotNull ScheduledExecutorService scheduler) {
+    public synchronized void startGridFlush(@NotNull ScheduledExecutorService scheduler,
+        @NotNull Runnable historyMaintenance) {
         if (gridFlush != null || gridFlushStopped) return;
-        gridFlush = scheduler.scheduleWithFixedDelay(() -> {
-            if (gridFlushStopped) return;
-            try {
-                flushGridIdentities();
-            } catch (IOException | RuntimeException failure) {
-                LOG.error("Periodic grid identity flush failed; pending changes will be retried", failure);
-            }
-        }, GRID_FLUSH_INTERVAL_MINUTES, GRID_FLUSH_INTERVAL_MINUTES, TimeUnit.MINUTES);
+        this.historyMaintenance = historyMaintenance;
+        gridFlushScheduler = scheduler;
+        gridFlush = scheduler.scheduleWithFixedDelay(
+            this::maintain,
+            GRID_FLUSH_INTERVAL_MINUTES,
+            GRID_FLUSH_INTERVAL_MINUTES,
+            TimeUnit.MINUTES);
+    }
+
+    private void maintain() {
+        if (gridFlushStopped) return;
+        try {
+            flushGridIdentities();
+            if (!gridFlushStopped && historyMaintenance != null) historyMaintenance.run();
+        } catch (IOException | RuntimeException failure) {
+            LOG.error("World data maintenance failed; pending changes will be retried", failure);
+        }
     }
 
     public synchronized void stopGridFlush() {

@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
-import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 
 class WorldSchemaBootstrapTest {
@@ -34,7 +34,7 @@ class WorldSchemaBootstrapTest {
 
     @Test
     void incompleteInitializationRecoversAfterEveryDdlStage() throws Exception {
-        DataPolicy policy = DataPolicy.from(new ConfigSettings.Data());
+        Data policy = new ConfigSettings.Data();
         List<String> stages = new ArrayList<>();
         try (WorldDatabase pristine = new WorldDatabase(directory.resolve("pristine"), policy)) {
             pristine.write(db -> {
@@ -86,7 +86,7 @@ class WorldSchemaBootstrapTest {
             sql.execute("CREATE SEQUENCE history_event_ids AS BIGINT START WITH 42");
             sql.execute("SHUTDOWN");
         }
-        try (WorldDatabase rejected = new WorldDatabase(path, DataPolicy.from(new ConfigSettings.Data()))) {
+        try (WorldDatabase rejected = new WorldDatabase(path, new ConfigSettings.Data())) {
             assertThrows(IOException.class, rejected::open);
         }
         try (Connection db = connect(path); Statement sql = db.createStatement()) {
@@ -104,7 +104,7 @@ class WorldSchemaBootstrapTest {
 
     @Test
     void recoveryRejectsUnknownObjectsOrApplicationDataWithoutChangingThem() throws Exception {
-        DataPolicy policy = DataPolicy.from(new ConfigSettings.Data());
+        Data policy = new ConfigSettings.Data();
         for (boolean marker : new boolean[] { false, true }) {
             Path path = directory.resolve("unknown-" + marker);
             try (Connection db = connect(path); Statement sql = db.createStatement()) {

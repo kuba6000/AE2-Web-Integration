@@ -164,13 +164,11 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         boolean stock = configuration != null && configuration.isStorageTracked();
         boolean flow = configuration != null && configuration.isFlowTracked();
         long stockInterval = TimeUnit.SECONDS.toMillis(
-            configuration == null ? identities.getDataPolicy()
-                .stockSampleIntervalSeconds()
-                .defaultValue() : configuration.getStockSampleIntervalSeconds());
+            configuration == null ? identities.getDataPolicy().stockSampleIntervalSeconds.defaultValue
+                : configuration.getStockSampleIntervalSeconds());
         long flowInterval = TimeUnit.SECONDS.toMillis(
-            configuration == null ? identities.getDataPolicy()
-                .flowFlushIntervalSeconds()
-                .defaultValue() : configuration.getFlowFlushIntervalSeconds());
+            configuration == null ? identities.getDataPolicy().flowFlushIntervalSeconds.defaultValue
+                : configuration.getFlowFlushIntervalSeconds());
         Binding binding = bindings.get(key);
         if (binding == null || binding.grid.get() != grid || binding.stock != stock || binding.flow != flow) {
             long activeUntil = binding == null ? 0 : binding.activeUntil;

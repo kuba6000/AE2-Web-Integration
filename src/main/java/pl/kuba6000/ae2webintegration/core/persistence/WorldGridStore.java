@@ -19,7 +19,8 @@ import org.jetbrains.annotations.NotNull;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Range;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -59,13 +60,13 @@ public final class WorldGridStore {
     @Desugar
     private record LoadedGrids(@NotNull Map<StableKey, GridPersistentData> records, boolean imported) {}
 
-    static void normalizePolicy(Connection db, DataPolicy policy) throws SQLException {
-        normalize(db, "stock_seconds", policy.stockSampleIntervalSeconds());
-        normalize(db, "flow_seconds", policy.flowFlushIntervalSeconds());
-        normalize(db, "retention_days", policy.historyRetentionDays());
+    public static void normalizePolicy(@NotNull Connection db, @NotNull Data policy) throws SQLException {
+        normalize(db, "stock_seconds", policy.stockSampleIntervalSeconds);
+        normalize(db, "flow_seconds", policy.flowFlushIntervalSeconds);
+        normalize(db, "retention_days", policy.historyRetentionDays);
     }
 
-    private static void normalize(Connection db, String column, DataPolicy.Range range) throws SQLException {
+    private static void normalize(Connection db, String column, Range range) throws SQLException {
         try (PreparedStatement update = db.prepareStatement("""
             UPDATE grids
             SET $column = CASE
@@ -74,11 +75,11 @@ public final class WorldGridStore {
             END
             WHERE $column < ? OR $column > ?
             """.replace("$column", column))) {
-            update.setInt(1, range.min());
-            update.setInt(2, range.min());
-            update.setInt(3, range.max());
-            update.setInt(4, range.min());
-            update.setInt(5, range.max());
+            update.setInt(1, range.min);
+            update.setInt(2, range.min);
+            update.setInt(3, range.max);
+            update.setInt(4, range.min);
+            update.setInt(5, range.max);
             update.executeUpdate();
         }
     }

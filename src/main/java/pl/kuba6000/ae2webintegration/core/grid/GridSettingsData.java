@@ -3,7 +3,7 @@ package pl.kuba6000.ae2webintegration.core.grid;
 import org.jetbrains.annotations.NotNull;
 
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
-import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
 
 /** Mutable configuration owned by one retained grid identity. */
 @SuppressWarnings("SynchronizeOnNonFinalField") // Bound to the registry before publication; never rebound while in use.
@@ -23,7 +23,7 @@ public final class GridSettingsData {
     private int stockSampleIntervalSeconds;
     private int flowFlushIntervalSeconds;
     private int historyRetentionDays;
-    private transient @NotNull DataPolicy policy;
+    private transient @NotNull Data policy;
     /**
      * Custom network name; empty when unnamed.
      *
@@ -34,17 +34,14 @@ public final class GridSettingsData {
     private transient @NotNull Runnable markDirty = () -> {};
 
     public GridSettingsData() {
-        this(DataPolicy.from(new ConfigSettings.Data()));
+        this(new ConfigSettings.Data());
     }
 
-    public GridSettingsData(@NotNull DataPolicy policy) {
+    public GridSettingsData(@NotNull Data policy) {
         this.policy = policy;
-        stockSampleIntervalSeconds = policy.stockSampleIntervalSeconds()
-            .defaultValue();
-        flowFlushIntervalSeconds = policy.flowFlushIntervalSeconds()
-            .defaultValue();
-        historyRetentionDays = policy.historyRetentionDays()
-            .defaultValue();
+        stockSampleIntervalSeconds = policy.stockSampleIntervalSeconds.defaultValue;
+        flowFlushIntervalSeconds = policy.flowFlushIntervalSeconds.defaultValue;
+        historyRetentionDays = policy.historyRetentionDays.defaultValue;
     }
 
     /** Detached settings retained for a retired identity awaiting its final database write. */
@@ -62,33 +59,29 @@ public final class GridSettingsData {
         }
     }
 
-    /** Normalize restored values before publication, preserving identity when server bounds tighten. */
-    public boolean applyPolicy(@NotNull DataPolicy policy) {
-        this.policy = policy;
-        int stock = policy.stockSampleIntervalSeconds()
-            .clamp(stockSampleIntervalSeconds);
-        int flow = policy.flowFlushIntervalSeconds()
-            .clamp(flowFlushIntervalSeconds);
-        int retention = policy.historyRetentionDays()
-            .clamp(historyRetentionDays);
-        boolean changed = stock != stockSampleIntervalSeconds || flow != flowFlushIntervalSeconds
-            || retention != historyRetentionDays;
-        stockSampleIntervalSeconds = stock;
-        flowFlushIntervalSeconds = flow;
-        historyRetentionDays = retention;
-        return changed;
+    /** Normalize retained values under the settings lock when administrator bounds change. */
+    public boolean applyPolicy(@NotNull Data policy) {
+        synchronized (lock) {
+            this.policy = policy;
+            int stock = policy.stockSampleIntervalSeconds.clamp(stockSampleIntervalSeconds);
+            int flow = policy.flowFlushIntervalSeconds.clamp(flowFlushIntervalSeconds);
+            int retention = policy.historyRetentionDays.clamp(historyRetentionDays);
+            boolean changed = stock != stockSampleIntervalSeconds || flow != flowFlushIntervalSeconds
+                || retention != historyRetentionDays;
+            stockSampleIntervalSeconds = stock;
+            flowFlushIntervalSeconds = flow;
+            historyRetentionDays = retention;
+            return changed;
+        }
     }
 
     /** Bound before publication; getters, edits and persistence then share the registry monitor. */
     @SuppressWarnings("ConstantValue") // Gson can load an explicit null into a required field.
     void attach(@NotNull Object lock, @NotNull Runnable markDirty) {
         if (name == null) throw new IllegalArgumentException("Missing grid name");
-        policy.stockSampleIntervalSeconds()
-            .validate(stockSampleIntervalSeconds);
-        policy.flowFlushIntervalSeconds()
-            .validate(flowFlushIntervalSeconds);
-        policy.historyRetentionDays()
-            .validate(historyRetentionDays);
+        policy.stockSampleIntervalSeconds.validate(stockSampleIntervalSeconds);
+        policy.flowFlushIntervalSeconds.validate(flowFlushIntervalSeconds);
+        policy.historyRetentionDays.validate(historyRetentionDays);
         this.lock = lock;
         this.markDirty = markDirty;
     }
@@ -142,9 +135,8 @@ public final class GridSettingsData {
     }
 
     public void setStockSampleIntervalSeconds(int value) {
-        policy.stockSampleIntervalSeconds()
-            .validate(value);
         synchronized (lock) {
+            policy.stockSampleIntervalSeconds.validate(value);
             if (stockSampleIntervalSeconds == value) return;
             stockSampleIntervalSeconds = value;
             markDirty.run();
@@ -158,9 +150,8 @@ public final class GridSettingsData {
     }
 
     public void setFlowFlushIntervalSeconds(int value) {
-        policy.flowFlushIntervalSeconds()
-            .validate(value);
         synchronized (lock) {
+            policy.flowFlushIntervalSeconds.validate(value);
             if (flowFlushIntervalSeconds == value) return;
             flowFlushIntervalSeconds = value;
             markDirty.run();
@@ -174,9 +165,8 @@ public final class GridSettingsData {
     }
 
     public void setHistoryRetentionDays(int value) {
-        policy.historyRetentionDays()
-            .validate(value);
         synchronized (lock) {
+            policy.historyRetentionDays.validate(value);
             if (historyRetentionDays == value) return;
             historyRetentionDays = value;
             markDirty.run();
@@ -201,12 +191,9 @@ public final class GridSettingsData {
         synchronized (lock) {
             return !isTracked && !isStorageTracked
                 && !isFlowTracked
-                && stockSampleIntervalSeconds == policy.stockSampleIntervalSeconds()
-                    .defaultValue()
-                && flowFlushIntervalSeconds == policy.flowFlushIntervalSeconds()
-                    .defaultValue()
-                && historyRetentionDays == policy.historyRetentionDays()
-                    .defaultValue()
+                && stockSampleIntervalSeconds == policy.stockSampleIntervalSeconds.defaultValue
+                && flowFlushIntervalSeconds == policy.flowFlushIntervalSeconds.defaultValue
+                && historyRetentionDays == policy.historyRetentionDays.defaultValue
                 && name.isEmpty();
         }
     }

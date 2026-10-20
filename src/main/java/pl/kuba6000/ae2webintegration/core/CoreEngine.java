@@ -20,7 +20,6 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
-import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuRegistry;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
@@ -70,7 +69,7 @@ public class CoreEngine {
     private static volatile String modVersion;
     private static volatile @Nullable VersionChecker versionChecker;
     private static boolean serverRunning;
-    private static @Nullable WorldDatabase worldDatabase;
+    private static volatile @Nullable WorldDatabase worldDatabase;
     private static @Nullable ScheduledExecutorService gridFlushScheduler;
     private static volatile @Nullable ResourcePinStore resourcePins;
     private static volatile @Nullable IconPack iconPack;
@@ -96,12 +95,18 @@ public class CoreEngine {
         CoreData.loadData();
     }
 
+    /** Publishes reloaded data settings immediately; the world scheduler applies durable changes. */
+    public static void applyDataConfig() {
+        WorldDatabase database = worldDatabase;
+        if (database != null) database.applyPolicy(Config.INSTANCE.data);
+    }
+
     public static void onServerStarted() {
         // Finish the previous world before binding any new identity or storage owner.
         onServerStopping();
         WorldDatabase database = new WorldDatabase(
             new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/grids").toPath(),
-            DataPolicy.from(Config.INSTANCE.data));
+            Config.INSTANCE.data);
         HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database);
         try {
             database.open();
@@ -128,7 +133,7 @@ public class CoreEngine {
                 return thread;
             });
             gridFlushScheduler = scheduler;
-            database.startGridFlush(scheduler);
+            database.startGridFlush(scheduler, history::maintain);
             resourcePins = new ResourcePinStore(database);
             serverRunning = true;
             loadIconPack();

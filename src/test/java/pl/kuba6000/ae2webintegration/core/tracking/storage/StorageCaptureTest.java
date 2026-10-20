@@ -18,7 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.config.DataPolicy.Range;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Range;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;

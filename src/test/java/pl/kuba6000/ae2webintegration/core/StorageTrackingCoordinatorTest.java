@@ -118,16 +118,18 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     }
 
     @Test
-    void eachGridUsesItsFlowCadenceAndEditsKeepPendingCounters() throws Exception {
+    void eachGridUsesItsFlowCadenceAndReloadKeepsPendingCounters() throws Exception {
         Resource item = new Resource("cadence-policy", 20, false);
         Grid fast = new Grid(710041, item);
         Grid slow = new Grid(710042, item);
         StableKey fastKey = TestGridFixtures.resolvedKey(fast);
         StableKey slowKey = TestGridFixtures.resolvedKey(slow);
-        GridSettingsData fastSettings = CoreEngine.GRID_IDENTITIES.getPersistentData(fastKey)
-            .getSettings();
-        GridSettingsData slowSettings = CoreEngine.GRID_IDENTITIES.getPersistentData(slowKey)
-            .getSettings();
+        GridPersistentData fastData = CoreEngine.GRID_IDENTITIES.getPersistentData(fastKey);
+        GridPersistentData slowData = CoreEngine.GRID_IDENTITIES.getPersistentData(slowKey);
+        assertNotNull(fastData);
+        assertNotNull(slowData);
+        GridSettingsData fastSettings = fastData.getSettings();
+        GridSettingsData slowSettings = slowData.getSettings();
         fastSettings.setFlowTracked(true);
         slowSettings.setFlowTracked(true);
         fastSettings.setFlowFlushIntervalSeconds(5);
@@ -140,15 +142,20 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 new ConfigSettings.ResourceTracking())) {
             coordinator.prepareForViewer(fast, 1000);
             coordinator.prepareForViewer(slow, 1000);
-            fast.web$getStorageCapture()
-                .recordFlow(item, 7, 2);
-            slow.web$getStorageCapture()
-                .recordFlow(item, 9, 3);
+            StorageCapture fastCapture = fast.web$getStorageCapture();
+            StorageCapture slowCapture = slow.web$getStorageCapture();
+            assertNotNull(fastCapture);
+            assertNotNull(slowCapture);
+            fastCapture.recordFlow(item, 7, 2);
+            slowCapture.recordFlow(item, 9, 3);
             coordinator.prepareForViewer(fast, 6000);
             coordinator.prepareForViewer(slow, 6000);
-            fast.web$getStorageCapture()
-                .recordFlow(item, 4, 1);
-            fastSettings.setFlowFlushIntervalSeconds(10);
+            fastCapture.recordFlow(item, 4, 1);
+            ConfigSettings.Data reloaded = new ConfigSettings.Data();
+            reloaded.flowFlushIntervalSeconds = new ConfigSettings.Range(10, 300, 10);
+            assertTrue(
+                worlds.database(TestGridFixtures.Worlds.source(gridSave))
+                    .applyPolicy(reloaded));
             coordinator.prepareForViewer(fast, 7000);
             coordinator.prepareForViewer(fast, 16000);
             coordinator.prepareForViewer(slow, 21000);

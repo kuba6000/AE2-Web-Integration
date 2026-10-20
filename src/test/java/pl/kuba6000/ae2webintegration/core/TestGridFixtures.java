@@ -35,7 +35,6 @@ import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.config.Config;
-import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccessSource;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
@@ -71,9 +70,7 @@ final class TestGridFixtures {
                 .normalize();
             WorldDatabase database = databases.get(path);
             if (database == null) {
-                database = new WorldDatabase(
-                    path.resolveSibling(path.getFileName() + ".world"),
-                    DataPolicy.from(Config.INSTANCE.data));
+                database = new WorldDatabase(path.resolveSibling(path.getFileName() + ".world"), Config.INSTANCE.data);
                 database.open();
                 databases.put(path, database);
             }

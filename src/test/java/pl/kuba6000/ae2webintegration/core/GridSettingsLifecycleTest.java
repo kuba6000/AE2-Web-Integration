@@ -16,6 +16,7 @@ import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
@@ -27,6 +28,54 @@ class GridSettingsLifecycleTest extends GridTestScope {
     private final WebPrincipal owner = TestGridFixtures.principal(TestGridFixtures.OWNER_ID);
     private TestGridFixtures.TestGrid grid;
     private StableKey key;
+
+    @Test
+    void changedBoundsRejectTheWholeAuthorizedPatch() throws Exception {
+        ConfigSettings.Data initial = new ConfigSettings.Data();
+        initial.stockSampleIntervalSeconds = new ConfigSettings.Range(60, 900, 300);
+        worlds.database(TestGridFixtures.Worlds.source(gridSave))
+            .applyPolicy(initial);
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        data.getSettings()
+            .setStockSampleIntervalSeconds(600);
+        PatchGridSettings request = new PatchGridSettings();
+        JsonObject body = new JsonObject();
+        body.addProperty("name", "Do not apply");
+        body.addProperty("isTracked", true);
+        body.addProperty("stockSampleIntervalSeconds", 600);
+        assertTrue(
+            request.init(
+                new AE2Controller.RequestContext(
+                    new TestGridFixtures.TestExchange(""),
+                    owner,
+                    Collections.singletonMap("gridKey", key.toString()),
+                    body)));
+        ConfigSettings.Data tighter = new ConfigSettings.Data();
+        tighter.stockSampleIntervalSeconds = new ConfigSettings.Range(60, 90, 60);
+        Thread pending = new Thread(request::handle);
+        synchronized (CoreEngine.GRID_IDENTITIES) {
+            pending.start();
+            assertTrue(
+                worlds.database(TestGridFixtures.Worlds.source(gridSave))
+                    .applyPolicy(tighter));
+        }
+        pending.join(5000);
+        assertFalse(pending.isAlive());
+        assertEquals(
+            "BAD_PARAM",
+            response(request).get("status")
+                .getAsString());
+        assertFalse(TestGridFixtures.isTracked(CoreEngine.GRID_IDENTITIES, key));
+        assertEquals(
+            "",
+            data.getSettings()
+                .getName());
+        assertEquals(
+            90,
+            data.getSettings()
+                .getStockSampleIntervalSeconds());
+    }
 
     @BeforeEach
     void grantGridAccess() {

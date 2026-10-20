@@ -47,14 +47,13 @@ final class HsqlHistoryRetention {
     private static final int PRUNE_BATCH_SIZE = 1000;
     private static final long MAINTENANCE_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(1);
 
-    private final int maxRowsPerGrid;
     private long nextMaintenance;
 
-    HsqlHistoryRetention(int maxRowsPerGrid) {
-        this.maxRowsPerGrid = maxRowsPerGrid;
+    void policyChanged() {
+        nextMaintenance = 0;
     }
 
-    void prune(@NotNull Connection db, long gridId, boolean expire) throws SQLException {
+    void prune(@NotNull Connection db, long gridId, boolean expire, int maxRowsPerGrid) throws SQLException {
         GridBudget budget = budget(db, gridId);
         long count = budget.count();
         long expiry = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(budget.retentionDays());
@@ -191,7 +190,7 @@ final class HsqlHistoryRetention {
         }
     }
 
-    void maintain(@NotNull Connection db) throws SQLException {
+    void maintain(@NotNull Connection db, int maxRowsPerGrid) throws SQLException {
         long now = System.currentTimeMillis();
         if (now < nextMaintenance) return;
         nextMaintenance = now + MAINTENANCE_INTERVAL_MILLIS;
@@ -230,10 +229,10 @@ final class HsqlHistoryRetention {
                 }
             }
         }
-        if (expired != null) prune(db, expired, true);
+        if (expired != null) prune(db, expired, true, maxRowsPerGrid);
     }
 
-    void enforceExistingBudgets(@NotNull Connection db) throws SQLException {
+    void enforceExistingBudgets(@NotNull Connection db, int maxRowsPerGrid) throws SQLException {
         while (true) {
             Long overBudget = null;
             try (PreparedStatement query = db.prepareStatement("""
@@ -248,7 +247,7 @@ final class HsqlHistoryRetention {
                 }
             }
             if (overBudget == null) return;
-            prune(db, overBudget, false);
+            prune(db, overBudget, false, maxRowsPerGrid);
         }
     }
 }

@@ -12,7 +12,7 @@ public final class ConfigSettings {
     public Discord discord = new Discord();
     public Ntfy ntfy = new Ntfy();
     public Tracking tracking = new Tracking();
-    @Comment("Per-network history bounds and defaults. Applied when the server/world starts.")
+    @Comment("Per-network history bounds and defaults. Reload applies bounds immediately; database cleanup follows in the background.")
     public Data data = new Data();
     @Path("resource_tracking")
     @Comment("Live observation and background capacity controls. Changes take effect after restarting the server.")
@@ -139,6 +139,18 @@ public final class ConfigSettings {
             this.min = min;
             this.max = max;
             this.defaultValue = defaultValue;
+        }
+
+        public boolean contains(int value) {
+            return value >= min && value <= max;
+        }
+
+        public int clamp(int value) {
+            return Math.max(min, Math.min(max, value));
+        }
+
+        public void validate(int value) {
+            if (!contains(value)) throw new IllegalArgumentException("Setting is outside the active server bounds");
         }
 
         void validate() {

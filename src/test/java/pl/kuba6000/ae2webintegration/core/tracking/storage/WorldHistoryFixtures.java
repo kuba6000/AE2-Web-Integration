@@ -9,7 +9,6 @@ import java.util.WeakHashMap;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
-import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -25,16 +24,12 @@ final class WorldHistoryFixtures {
 
     private WorldHistoryFixtures() {}
 
-    static HsqlStorageHistoryStore create(Path path, DataPolicy.Range retention, int maxRows) {
+    static HsqlStorageHistoryStore create(Path path, ConfigSettings.Range retention, int maxRows) {
         if (maxRows < 1) throw new IllegalArgumentException("Row limit must be positive");
-        DataPolicy defaults = DataPolicy.from(new ConfigSettings.Data());
-        WorldDatabase database = new WorldDatabase(
-            path,
-            new DataPolicy(
-                defaults.stockSampleIntervalSeconds(),
-                defaults.flowFlushIntervalSeconds(),
-                retention,
-                maxRows));
+        ConfigSettings.Data policy = new ConfigSettings.Data();
+        policy.historyRetentionDays = retention;
+        policy.historyMaxRowsPerGrid = maxRows;
+        WorldDatabase database = new WorldDatabase(path, policy);
         HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(database);
         OWNERS.put(store, database);
         IMPORTS.put(store, path.resolveSibling("absent-import.json"));

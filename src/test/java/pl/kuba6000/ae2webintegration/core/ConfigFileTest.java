@@ -19,8 +19,22 @@ import com.electronwill.nightconfig.toml.TomlWriter;
 
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 
 class ConfigFileTest {
+
+    @Test
+    void publishedDataConfigDirectlyDefinesGridDefaultsAndBounds() {
+        ConfigSettings.Data data = new ConfigSettings.Data();
+        data.stockSampleIntervalSeconds = new ConfigSettings.Range(5, 30, 10);
+        GridSettingsData settings = new GridSettingsData(data);
+        assertEquals(10, settings.getStockSampleIntervalSeconds());
+        settings.setStockSampleIntervalSeconds(30);
+        assertEquals(30, settings.getStockSampleIntervalSeconds());
+        assertThrows(IllegalArgumentException.class, () -> settings.setStockSampleIntervalSeconds(31));
+        assertEquals(30, settings.getStockSampleIntervalSeconds());
+    }
 
     @TempDir
     Path root;

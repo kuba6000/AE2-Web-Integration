@@ -163,6 +163,7 @@ test {
             includeTestsMatching '*TrackingStatisticsResponseTest'
             includeTestsMatching '*ItemIdentityRequestTest'
             includeTestsMatching '*GridIdentityRegistryTest'
+            includeTestsMatching '*GridSettingsLifecycleTest'
             includeTestsMatching '*WorldDatabaseTest'
             includeTestsMatching '*ResourcePinStoreTest'
             includeTestsMatching '*DimensionalCoordsTest'
@@ -198,6 +199,7 @@ tasks.register('testNightConfig383', Test) {
         includeTestsMatching '*ConfigFileTest'
         includeTestsMatching '*ConfigDirectoryTest'
         includeTestsMatching '*CommandProcessorTest'
+        includeTestsMatching '*CoreEngineTest.reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy'
         includeTestsMatching '*ServerLifecycleHttpTest'
         includeTestsMatching '*IconDeliveryHttpTest'
     }

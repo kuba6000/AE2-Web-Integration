@@ -21,9 +21,11 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /** Disk-backed typed history. All JDBC work belongs to detached worker/request threads. */
@@ -58,49 +60,55 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
 
     private final WorldDatabase database;
     private final HsqlHistoryRetention retention;
-    private volatile boolean initialized;
+    private volatile @Nullable Data appliedPolicy;
 
     public HsqlStorageHistoryStore(@NotNull WorldDatabase database) {
         this.database = database;
-        retention = new HsqlHistoryRetention(
-            database.policy()
-                .historyMaxRowsPerGrid());
+        retention = new HsqlHistoryRetention();
     }
 
     /** Enforces persisted budgets before world services publish; standalone callers may initialize lazily. */
     public void initialize() throws IOException {
-        if (initialized) return;
-        database.write(db -> {
-            if (!initialized) {
-                retention.enforceExistingBudgets(db);
-            }
-            return null;
-        });
-        initialized = true;
+        if (appliedPolicy == database.policy()) return;
+        appliedPolicy = database.write(this::applyPolicy);
         maintain();
+    }
+
+    /** Captured inside the writer gate, including when append waited after an earlier initialization. */
+    private @NotNull Data applyPolicy(@NotNull Connection db) throws SQLException {
+        Data current = database.policy();
+        if (appliedPolicy != current) {
+            WorldGridStore.normalizePolicy(db, current);
+            retention.enforceExistingBudgets(db, current.historyMaxRowsPerGrid);
+            retention.policyChanged();
+        }
+        return current;
     }
 
     @Override
     public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
         @NotNull List<StorageHistoryPoint> points) throws IOException {
         initialize();
-        database.write(db -> {
+        appliedPolicy = database.write(db -> {
+            Data current = applyPolicy(db);
             long gridId = gridId(db, gridKey);
             if (gridId == -1) throw new IOException("History requires a durable grid identity");
             updateDescriptions(db, descriptions, points);
             insertPoints(db, gridId, points, resourceIds(db, points));
-            retention.prune(db, gridId, false);
-            return null;
+            retention.prune(db, gridId, false, current.historyMaxRowsPerGrid);
+            return current;
         });
         // Optional expiry yields the fair gate after the atomic measurement transaction.
         maintain();
     }
 
-    private void maintain() {
+    /** Applies pending policy changes and bounded expiry, including for idle worlds. Failures remain retryable. */
+    public void maintain() {
         try {
-            database.write(db -> {
-                retention.maintain(db);
-                return null;
+            appliedPolicy = database.write(db -> {
+                Data current = applyPolicy(db);
+                retention.maintain(db, current.historyMaxRowsPerGrid);
+                return current;
             });
         } catch (IOException failure) {
             // Measurements already committed; optional cleanup failure must not mark those writes lost.

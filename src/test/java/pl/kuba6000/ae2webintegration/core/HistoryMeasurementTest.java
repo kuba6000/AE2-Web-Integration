@@ -15,7 +15,6 @@ import pl.kuba6000.ae2webintegration.core.TestGridFixtures.TestGrid;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
-import pl.kuba6000.ae2webintegration.core.config.DataPolicy;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
@@ -28,12 +27,8 @@ class HistoryMeasurementTest extends GridTestScope {
 
     @Test
     void logicalBudgetPrunesChildrenAndTheirUnusedHeadersAndFailedFlowLeavesNeither() throws Exception {
-        DataPolicy defaults = DataPolicy.from(new ConfigSettings.Data());
-        DataPolicy policy = new DataPolicy(
-            defaults.stockSampleIntervalSeconds(),
-            defaults.flowFlushIntervalSeconds(),
-            defaults.historyRetentionDays(),
-            3);
+        ConfigSettings.Data policy = new ConfigSettings.Data();
+        policy.historyMaxRowsPerGrid = 3;
         WorldDatabase database = new WorldDatabase(
             gridSave.toPath()
                 .resolve("small-budget"),

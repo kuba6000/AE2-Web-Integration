@@ -22,8 +22,12 @@ import com.google.gson.JsonPrimitive;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
+import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetResourceHistory;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -37,6 +41,43 @@ class CoreEngineTest {
 
     @TempDir
     File configRoot;
+
+    @Test
+    void reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy() {
+        CoreEngine.init(new TestPlatform(configRoot, false));
+        try (ConfigTestFixture config = new ConfigTestFixture(configRoot)) {
+            config.write("general.port", ConfigTestFixture.unusedLoopbackPort());
+            config.write("general.check_for_updates", false);
+            Config.reload();
+            CoreEngine.onServerStarted();
+            TestGridFixtures.TestGrid live = TestGridFixtures.grid(89503);
+            StableKey key = CoreEngine.GRID_IDENTITIES.getKey(live);
+            assertNotNull(key);
+            GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            assertNotNull(data);
+            GridSettingsData settings = data.getSettings();
+            settings.setName("Keep");
+            settings.setStockSampleIntervalSeconds(600);
+            config.write("data.stock_sample_interval_seconds.max", 90);
+            config.write("data.stock_sample_interval_seconds.default", 60);
+            assertTrue(
+                CommandProcessor.reload()
+                    .isSuccess());
+            assertEquals(90, settings.getStockSampleIntervalSeconds());
+            assertEquals("Keep", settings.getName());
+            assertEquals(90, CoreEngine.GRID_IDENTITIES.getDataPolicy().stockSampleIntervalSeconds.max);
+            ConfigSettings published = Config.INSTANCE;
+            config.write("data.stock_sample_interval_seconds.default", 91);
+            assertFalse(
+                CommandProcessor.reload()
+                    .isSuccess());
+            assertSame(published, Config.INSTANCE);
+            assertEquals(90, settings.getStockSampleIntervalSeconds());
+            config.write("data.stock_sample_interval_seconds.default", 60);
+        } finally {
+            CoreEngine.onServerStopped();
+        }
+    }
 
     @Test
     void mixedNetworkShowsUnkeyedResourcesButPersistsOnlySupportedIdentities() throws Exception {
