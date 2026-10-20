@@ -8,6 +8,9 @@ import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.stacks.KeyCounter;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
@@ -15,8 +18,10 @@ import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAcc
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
@@ -26,6 +31,27 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICrafting
 
     @Unique
     private @Nullable StableKey web$stableKey;
+
+    // The native config manager reports selection changes through the general persistence callback.
+    @Unique
+    private appeng.api.config.CpuSelectionMode web$selectionMode = appeng.api.config.CpuSelectionMode.ANY;
+
+    @WrapMethod(method = "markDirty")
+    private void web$metadataChanged(Operation<Void> original) {
+        original.call();
+        var selectionMode = ((CraftingCPUCluster) (Object) this).getSelectionMode();
+        if (web$selectionMode != selectionMode) {
+            web$selectionMode = selectionMode;
+            IAEMixinCallbacks.getInstance()
+                .cpuMetadataChanged(this);
+        }
+    }
+
+    @Override
+    public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return !cpu.isDestroyed() && cpu.isActive() && cpu.getGrid() == (Object) grid;
+    }
 
     @Override
     public @NotNull StableKey web$getKey() {

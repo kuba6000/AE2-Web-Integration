@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.ae2interface.mixins.advanced_ae;
 
+import net.minecraft.nbt.CompoundTag;
 import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
 import net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic;
 import net.pedroksl.advanced_ae.common.logic.ExecutingCraftingJob;
@@ -13,6 +14,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.networking.IGrid;
@@ -56,10 +60,18 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
         }
     }
 
-    @Inject(method = "postChange", at = @At("HEAD"))
-    void ae2webintegration$postCraftingStatusChange(AEKey diff, CallbackInfo ci) {
+    @WrapMethod(method = "postChange")
+    private void ae2webintegration$postCraftingStatusChange(AEKey diff, Operation<Void> original) {
         IAEMixinCallbacks.getInstance()
             .craftingStatusPostedUpdate((ICraftingCPUCluster) (Object) cpu, (IAEKey) diff);
+        original.call(diff);
+    }
+
+    @WrapMethod(method = "readFromNBT")
+    private void web$restoreState(CompoundTag data, Operation<Void> original) {
+        original.call(data);
+        IAEMixinCallbacks.getInstance()
+            .cpuStateReplaced((ICraftingCPUCluster) (Object) cpu);
     }
 
     @Inject(method = "finishJob", at = @At("HEAD"))
