@@ -159,6 +159,16 @@ public final class CpuReader {
             Collections.emptyList());
     }
 
+    /** Reads only detached CPU metadata, without enumerating resource lists. Server thread only. */
+    public static @NotNull CpuObservation.Header readHeader(@NotNull IAEGrid grid, @NotNull ICraftingCPUCluster cpu) {
+        boolean busy = cpu.web$isBusy();
+        return header(
+            cpu,
+            busy,
+            busy ? ResourceSnapshot.capture(grid, cpu.web$getFinalOutput()) : null,
+            busy ? AE2JobTracker.findActiveJob(cpu) : null);
+    }
+
     private static CpuObservation.Header header(ICraftingCPUCluster cpu, boolean busy,
         @Nullable ResourceSnapshot finalOutput, @Nullable AE2JobTracker.JobTrackingInfo tracking) {
         return new CpuObservation.Header(

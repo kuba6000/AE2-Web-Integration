@@ -214,6 +214,10 @@ class CoreEngineLifecycleTest extends GridTestScope {
 
     private static final class TestCpu implements ICraftingCPUCluster {
 
+        public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+            return true;
+        }
+
         public @NotNull StableKey web$getKey() {
             return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         }

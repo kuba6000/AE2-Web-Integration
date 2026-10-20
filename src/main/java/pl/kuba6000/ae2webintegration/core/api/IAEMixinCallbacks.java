@@ -22,6 +22,12 @@ public interface IAEMixinCallbacks {
     /** CPU inventory notification; refreshes viewed resources without changing crafting measurements. */
     void cpuInventoryChanged(@NotNull ICraftingCPUCluster cpu, @NotNull IAEKey resource);
 
+    /** Pause or selection metadata changed; does not require reading the CPU's resources. */
+    void cpuMetadataChanged(@NotNull ICraftingCPUCluster cpu);
+
+    /** Native state restoration replaced a CPU's contents; viewers need a fresh snapshot. */
+    void cpuStateReplaced(@NotNull ICraftingCPUCluster cpu);
+
     void pushedPattern(ICraftingCPUCluster cpu, IPatternProviderViewable provider, IAECraftingPatternDetails details);
 
     void jobCompleted(IAEGrid grid, ICraftingCPUCluster cpu);

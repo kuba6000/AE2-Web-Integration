@@ -671,6 +671,10 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
 
     private static final class EqualCpu implements ICraftingCPUCluster {
 
+        public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+            return true;
+        }
+
         public @NotNull StableKey web$getKey() {
             return StableKey.parse("AAAAAAAAAAAAAAAAAAAAAA");
         }

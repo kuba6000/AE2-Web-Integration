@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.cpu;
 
 import java.lang.ref.WeakReference;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -17,6 +18,8 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridFilter;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
@@ -24,14 +27,14 @@ import pl.kuba6000.ae2webintegration.core.live.LiveTopic;
 
 /**
  * Server-thread observation of the crafting CPUs that have viewers. Native change notifications mark resources of
- * a viewed CPU dirty; they are read at the storage view's active cadence and published once for all viewers. A full
- * read every few seconds covers whatever notifications do not, such as pause and removed resources. A CPU nobody
- * views holds no state and is never read. Independent of storage tracking and history.
+ * a viewed CPU dirty; they are read at the storage view's active cadence and published once for all viewers.
+ * Metadata changes read only the header. Idle views validate native membership without enumerating resources.
+ * A CPU nobody views holds no state and is never read. Independent of storage tracking and history.
  */
 public final class CpuLiveCoordinator {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
-    private static final long RECONCILIATION_MILLIS = TimeUnit.SECONDS.toMillis(5);
+    private static final long VALIDATION_MILLIS = TimeUnit.SECONDS.toMillis(1);
     private final CpuRegistry cpus;
     private final GridIdentityRegistry identities;
     private final ConfigSettings.ResourceTracking settings;
@@ -66,6 +69,11 @@ public final class CpuLiveCoordinator {
             byCpu.put(cpu, binding);
         }
         cpus.activate(gridKey, cpuKey, binding.generation, nowMillis);
+        if (!present(grid, binding)) {
+            retire(binding);
+            return;
+        }
+        binding.nextValidation = nowMillis + VALIDATION_MILLIS;
         publish(binding, CpuReader.read(grid, cpu, true), nowMillis);
     }
 
@@ -75,13 +83,17 @@ public final class CpuLiveCoordinator {
         if (binding != null) binding.dirty.add(resource);
     }
 
-    /**
-     * A web mutation makes a full observation due on the next tick. The one-CPU-per-tick bound still applies.
-     * Unviewed CPUs cost nothing.
-     */
-    public void requestFullRead(@NotNull ICraftingCPUCluster cpu) {
+    /** Successful scheduling can change pending outputs without inserting them into the native waiting list. */
+    public void pushedPattern(@NotNull ICraftingCPUCluster cpu, @NotNull IAECraftingPatternDetails details) {
         Binding binding = byCpu.get(cpu);
-        if (binding != null) binding.nextFull = 0;
+        if (binding == null) return;
+        for (IAEGenericStack output : details.web$getCondensedOutputs()) binding.dirty.add(output.web$what());
+    }
+
+    /** A metadata notification schedules only a header read; unviewed CPUs cost nothing. */
+    public void metadataChanged(@NotNull ICraftingCPUCluster cpu) {
+        Binding binding = byCpu.get(cpu);
+        if (binding != null) binding.metadataDirty = true;
     }
 
     /** Native hook: a job started, merged, completed or was cancelled. Viewers fetch a fresh snapshot. */
@@ -114,13 +126,29 @@ public final class CpuLiveCoordinator {
     private void observe(Binding binding, IAEGrid grid, long nowMillis) {
         binding.lastRead = nowMillis;
         try {
-            if (nowMillis < binding.nextFull) {
+            if (!present(grid, binding)) {
+                retire(binding);
+                return;
+            }
+            binding.nextValidation = nowMillis + VALIDATION_MILLIS;
+            if (!binding.dirty.isEmpty() && nowMillis >= binding.nextRead) {
                 CpuObservation observation = CpuReader.read(grid, binding.cpu, binding.dirty);
                 binding.dirty.clear();
                 publish(binding, observation, nowMillis);
-            } else if (present(grid, binding)) {
-                publish(binding, CpuReader.read(grid, binding.cpu, true), nowMillis);
-            } else retire(binding);
+            } else if (binding.metadataDirty) {
+                cpus.observed(
+                    binding.gridKey,
+                    binding.cpuKey,
+                    binding.generation,
+                    new CpuObservation(
+                        false,
+                        CpuReader.readHeader(grid, binding.cpu),
+                        Collections.emptyList(),
+                        Collections.emptySet(),
+                        Collections.emptyMap(),
+                        Collections.emptyList()));
+                binding.metadataDirty = false;
+            }
         } catch (RuntimeException failure) {
             LOG.warn("Crafting CPU {} could not be observed", binding.cpuKey, failure);
             cpus.invalidate(binding.gridKey, binding.cpuKey, binding.generation);
@@ -130,16 +158,15 @@ public final class CpuLiveCoordinator {
     private void publish(Binding binding, CpuObservation observation, long nowMillis) {
         if (observation.full()) {
             binding.dirty.clear();
-            binding.nextFull = nowMillis + RECONCILIATION_MILLIS;
         }
+        binding.metadataDirty = false;
         binding.nextRead = nowMillis + settings.activeIntervalMillis;
         cpus.observed(binding.gridKey, binding.cpuKey, binding.generation, observation);
     }
 
-    /** The CPU object listed under its address is still the one that was viewed, not removed or rebuilt. */
+    /** Native validity and exact grid ownership are checked without enumerating CPU or resource lists. */
     private static boolean present(IAEGrid grid, Binding binding) {
-        return GridFilter.isUsable(grid) && CpuReader.list(grid.web$getCraftingGrid())
-            .get(binding.cpuKey) == binding.cpu;
+        return GridFilter.isUsable(grid) && binding.cpu.web$isValidForGrid(grid);
     }
 
     private void retire(Binding binding) {
@@ -163,7 +190,8 @@ public final class CpuLiveCoordinator {
         private final ICraftingCPUCluster cpu;
         private final Set<IAEKey> dirty = new HashSet<>();
         private long nextRead;
-        private long nextFull;
+        private boolean metadataDirty;
+        private long nextValidation;
         private long lastRead;
 
         private Binding(LiveTopic.Key key, StableKey gridKey, StableKey cpuKey, long generation, IAEGrid grid,
@@ -177,7 +205,7 @@ public final class CpuLiveCoordinator {
         }
 
         private boolean due(long nowMillis) {
-            return nowMillis >= nextFull || !dirty.isEmpty() && nowMillis >= nextRead;
+            return nowMillis >= nextValidation || metadataDirty || !dirty.isEmpty() && nowMillis >= nextRead;
         }
     }
 }

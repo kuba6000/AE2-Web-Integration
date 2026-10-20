@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedReader;
@@ -29,11 +30,13 @@ import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.AEMixinCallbacks;
 
@@ -230,6 +233,7 @@ class CpuLiveHttpTest {
                 "ready",
                 CpuFixtures.readEvent(input)
                     .name());
+            int reads = onGame(() -> cpu.bulkReads);
             for (boolean paused : new boolean[] { true, false }) {
                 HttpURLConnection mutation = connection(base + "/pause");
                 mutation.setRequestMethod("POST");
@@ -253,6 +257,164 @@ class CpuLiveHttpTest {
                         .get("isPaused")
                         .getAsBoolean());
             }
+            assertEquals(reads, onGame(() -> cpu.bulkReads));
+        } finally {
+            stream.disconnect();
+        }
+    }
+
+    @Test
+    void nativeMetadataNotificationsPublishPauseAndSelectionWithoutResourceReads() throws Exception {
+        onGame(() -> {
+            AEMixinCallbacks.INSTANCE.cpuMetadataChanged(cpu);
+            AEMixinCallbacks.INSTANCE.cpuStateReplaced(cpu);
+        });
+        assertEquals(0, onGame(() -> cpu.bulkReads));
+        String token = json(base + "?live=true").get("subscription")
+            .getAsString();
+        HttpURLConnection stream = connection(base + "/events?subscription=" + token);
+        try (BufferedReader input = new BufferedReader(
+            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+            assertEquals(
+                "ready",
+                CpuFixtures.readEvent(input)
+                    .name());
+            int reads = onGame(() -> cpu.bulkReads);
+            onGame(() -> {
+                cpu.paused = true;
+                cpu.selectionMode = CpuSelectionMode.AUTOMATION_ONLY;
+                AEMixinCallbacks.INSTANCE.cpuMetadataChanged(cpu);
+            });
+            CpuFixtures.Event event = CpuFixtures.readEvent(input);
+            assertEquals("delta", event.name());
+            assertTrue(
+                event.data()
+                    .getAsJsonObject("cpu")
+                    .get("isPaused")
+                    .getAsBoolean());
+            assertEquals(
+                "AUTOMATION_ONLY",
+                event.data()
+                    .getAsJsonObject("cpu")
+                    .get("selectionMode")
+                    .getAsString());
+            assertTrue(
+                event.data()
+                    .getAsJsonArray("updates")
+                    .isEmpty());
+            assertTrue(
+                event.data()
+                    .getAsJsonArray("definitions")
+                    .isEmpty());
+            assertEquals(reads, onGame(() -> cpu.bulkReads));
+        } finally {
+            stream.disconnect();
+        }
+    }
+
+    @Test
+    void restoredStateInvalidatesTheViewWithoutChangingJobMeasurements() throws Exception {
+        AE2JobTracker.JobTrackingInfo measured = onGame(() -> {
+            TestGridFixtures.track(grid);
+            AE2JobTracker.addJob(cpu, grid, false);
+            return AE2JobTracker.findActiveJob(cpu);
+        });
+        assertNotNull(measured);
+        CpuFixtures.Resource restored = new CpuFixtures.Resource("restored");
+        String token = json(base + "?live=true").get("subscription")
+            .getAsString();
+        HttpURLConnection stream = connection(base + "/events?subscription=" + token);
+        try (BufferedReader input = new BufferedReader(
+            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+            assertEquals(
+                "ready",
+                CpuFixtures.readEvent(input)
+                    .name());
+            onGame(() -> {
+                cpu.work.clear();
+                cpu.set(restored, 0, 7, 0);
+                AEMixinCallbacks.INSTANCE.cpuStateReplaced(cpu);
+            });
+            assertEquals(
+                "invalidate",
+                CpuFixtures.readEvent(input)
+                    .name());
+            assertSame(measured, onGame(() -> AE2JobTracker.findActiveJob(cpu)));
+        } finally {
+            stream.disconnect();
+        }
+        JsonObject fresh = json(base + "?live=true");
+        assertEquals(
+            1,
+            fresh.getAsJsonObject("data")
+                .getAsJsonArray("items")
+                .size());
+        JsonObject row = fresh.getAsJsonObject("data")
+            .getAsJsonArray("items")
+            .get(0)
+            .getAsJsonObject();
+        assertEquals(
+            restored.key()
+                .toString(),
+            row.get("itemKey")
+                .getAsString());
+        assertEquals(
+            7,
+            row.get("pending")
+                .getAsLong());
+    }
+
+    @Test
+    void successfulPatternPushUpdatesPendingOutputsWithoutJobTrackingOrWaitingNotifications() throws Exception {
+        onGame(() -> {
+            assertNull(AE2JobTracker.findActiveJob(cpu));
+            AEMixinCallbacks.INSTANCE.pushedPattern(cpu, null, () -> {
+                throw new AssertionError("An unviewed, untracked CPU must not inspect pattern outputs");
+            });
+        });
+        String token = json(base + "?live=true").get("subscription")
+            .getAsString();
+        HttpURLConnection stream = connection(base + "/events?subscription=" + token);
+        try (BufferedReader input = new BufferedReader(
+            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+            assertEquals(
+                "ready",
+                CpuFixtures.readEvent(input)
+                    .name());
+            onGame(() -> {
+                AEMixinCallbacks.INSTANCE
+                    .pushedPattern(cpu, null, () -> new IAEGenericStack[] { new CpuFixtures.Stack(gear, 1) });
+                // Fake crafting changes pending work after the successful-push callback, without waiting insertion.
+                cpu.set(gear, 0, 2, 0);
+            });
+            CpuFixtures.Event event = CpuFixtures.readEvent(input);
+            assertEquals("delta", event.name());
+            assertEquals(
+                1,
+                event.data()
+                    .getAsJsonArray("updates")
+                    .size());
+            JsonObject row = event.data()
+                .getAsJsonArray("updates")
+                .get(0)
+                .getAsJsonObject();
+            assertEquals(
+                gear.key()
+                    .toString(),
+                row.get("itemKey")
+                    .getAsString());
+            assertEquals(
+                2,
+                row.get("pending")
+                    .getAsLong());
+            assertEquals(
+                0,
+                row.get("craftedTotal")
+                    .getAsLong());
+            assertFalse(
+                row.get("crafting")
+                    .getAsBoolean());
+            assertNull(onGame(() -> AE2JobTracker.findActiveJob(cpu)));
         } finally {
             stream.disconnect();
         }

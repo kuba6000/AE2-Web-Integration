@@ -112,7 +112,7 @@ public final class PauseCPU extends ISyncedRequest {
         }
         pausable.web$setPaused(input.paused());
         CpuLiveCoordinator live = CoreEngine.getCpuLive();
-        if (live != null) live.requestFullRead(cluster);
+        if (live != null) live.metadataChanged(cluster);
         respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, null));
     }
 }

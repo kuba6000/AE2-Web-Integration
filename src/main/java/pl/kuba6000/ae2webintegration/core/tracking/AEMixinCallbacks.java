@@ -38,8 +38,21 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
     }
 
     @Override
+    public void cpuMetadataChanged(@NotNull ICraftingCPUCluster cpu) {
+        CpuLiveCoordinator live = CoreEngine.getCpuLive();
+        if (live != null) live.metadataChanged(cpu);
+    }
+
+    @Override
+    public void cpuStateReplaced(@NotNull ICraftingCPUCluster cpu) {
+        jobChanged(cpu);
+    }
+
+    @Override
     public void pushedPattern(ICraftingCPUCluster cpu, IPatternProviderViewable provider,
         IAECraftingPatternDetails details) {
+        CpuLiveCoordinator live = CoreEngine.getCpuLive();
+        if (live != null) live.pushedPattern(cpu, details);
         AE2JobTracker.pushedPattern(cpu, provider, details);
     }
 

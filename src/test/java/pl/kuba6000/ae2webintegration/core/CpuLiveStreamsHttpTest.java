@@ -40,7 +40,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class CpuLiveStreamsHttpTest extends GridTestScope {
 
-    private static final long RECONCILIATION_MILLIS = 5000;
+    private static final long QUIET_MILLIS = 6000;
 
     private final CpuFixtures.Resource iron = new CpuFixtures.Resource("iron");
     private final CpuFixtures.Resource gear = new CpuFixtures.Resource("gear");
@@ -172,6 +172,115 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     }
 
     @Test
+    void aQuietViewedCpuDoesNotReadInventoryAsTimePasses() throws Exception {
+        cpu.set(iron, 4, 0, 0);
+        try (Connection stream = open(view(cpu), cpu)) {
+            int reads = cpu.bulkReads;
+            int metadataReads = cpu.busyReads;
+            int cpuLists = nativeGrid.cpuListReads;
+            tick(6000);
+            tick(6000);
+            assertEquals(reads, cpu.bulkReads, "Time alone must not enumerate a viewed CPU's inventory");
+            assertEquals(metadataReads, cpu.busyReads, "Idle validation must not reread metadata or native tasks");
+            assertEquals(cpuLists, nativeGrid.cpuListReads, "Validation must not enumerate all CPUs");
+            cpu.set(iron, 3, 0, 0);
+            coordinator.dirty(cpu, iron);
+            tick(100);
+            assertEquals(
+                3,
+                update(delta(stream), iron).get("active")
+                    .getAsLong());
+        }
+    }
+
+    @Test
+    void aCpuThatMovedGridsCannotPublishForeignWorkEvenForAnUnkeyedChange() throws Exception {
+        cpu.set(exotic, 4, 0, 0);
+        try (Connection stream = open(view(cpu), cpu)) {
+            int reads = cpu.bulkReads;
+            nativeGrid.cpus.remove(cpu);
+            CpuFixtures.Grid destination = new CpuFixtures.Grid(9202, cpu);
+            TestGridFixtures.resolvedKey(destination);
+            cpu.set(exotic, 9, 0, 0);
+            coordinator.dirty(cpu, exotic);
+            tick(100);
+
+            assertEquals(
+                "invalidate",
+                CpuFixtures.readEvent(stream.input)
+                    .name());
+            assertEquals(reads, cpu.bulkReads, "Foreign work must not be read under the former grid's address");
+        }
+    }
+
+    @Test
+    void anInvalidIdleCpuIsRetiredWithoutReadingItsResources() throws Exception {
+        cpu.busy = false;
+        try (Connection stream = open(view(cpu), cpu)) {
+            cpu.valid = false;
+            tick(1500);
+            assertEquals(
+                "invalidate",
+                CpuFixtures.readEvent(stream.input)
+                    .name());
+            assertEquals(0, cpu.bulkReads);
+        }
+    }
+
+    @Test
+    void anUnusableGridEndsAQuietCpuView() throws Exception {
+        try (Connection stream = open(view(cpu), cpu)) {
+            int reads = cpu.bulkReads;
+            nativeGrid.booting();
+            tick(1500);
+            assertEquals(
+                "invalidate",
+                CpuFixtures.readEvent(stream.input)
+                    .name());
+            assertEquals(reads, cpu.bulkReads);
+        }
+    }
+
+    @Test
+    void anIdleViewSurvivesRenewalAndFollowsTheNextJobThroughAFreshSnapshot() throws Exception {
+        cpu.busy = false;
+        CpuRegistry.Bootstrap idle = view(cpu);
+        try (Connection stream = open(idle, cpu)) {
+            tick(30_000);
+            assertTrue(registry.renew(gridKey, cpu.key, session, idle.subscription(), clock));
+            tick(30_000);
+            assertTrue(registry.renew(gridKey, cpu.key, session, idle.subscription(), clock));
+            assertEquals(0, cpu.bulkReads);
+            cpu.busy = true;
+            cpu.set(iron, 0, 4, 0);
+            coordinator.jobChanged(cpu);
+            assertEquals(
+                "invalidate",
+                CpuFixtures.readEvent(stream.input)
+                    .name());
+        }
+        CpuRegistry.Bootstrap started = view(cpu);
+        assertTrue(
+            started.header()
+                .busy());
+        assertEquals(
+            4,
+            started.rows()
+                .get(0)
+                .amounts()
+                .pending());
+        try (Connection stream = open(started, cpu)) {
+            cpu.set(iron, 1, 3, 0);
+            coordinator.dirty(cpu, iron);
+            tick(100);
+            assertEquals(
+                3,
+                update(delta(stream), iron).get("pending")
+                    .getAsLong());
+        }
+    }
+
+    @Test
     void snapshotHasAViewAndTheSharedBaselineOfRowsDescriptionsAndHeader() {
         cpu.set(iron, 4, 2, 1)
             .set(exotic, 7, 0, 0);
@@ -285,9 +394,9 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
         try (Connection stream = open(view(cpu), cpu)) {
             coordinator.dirty(cpu, iron);
             tick(100);
-            tick(RECONCILIATION_MILLIS + 100);
+            tick(QUIET_MILLIS + 100);
             coordinator.dirty(cpu, iron);
-            tick(RECONCILIATION_MILLIS + 100);
+            tick(QUIET_MILLIS + 100);
             cpu.set(gear, 9, 0, 0);
             coordinator.dirty(cpu, gear);
             tick(100);
@@ -425,7 +534,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     }
 
     @Test
-    void dirtyReadPublishesRemainingOutputAndBusyChangesWithoutWaitingForReconciliation() throws Exception {
+    void dirtyReadPublishesRemainingOutputAndBusyChanges() throws Exception {
         cpu.set(iron, 4, 0, 0);
         cpu.outputAmount = 8;
         try (Connection stream = open(view(cpu), cpu)) {
@@ -465,12 +574,12 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     }
 
     @Test
-    void pauseIsFoundByReconciliationAsAHeaderChange() throws Exception {
+    void pauseNotificationPublishesAHeaderChange() throws Exception {
         cpu.set(iron, 4, 0, 0);
         try (Connection stream = open(view(cpu), cpu)) {
             cpu.paused = true;
+            coordinator.metadataChanged(cpu);
             tick(100);
-            tick(RECONCILIATION_MILLIS);
 
             JsonObject delta = delta(stream);
 
@@ -492,28 +601,30 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     }
 
     @Test
-    void requestedFullReadRunsOnTheNextTickAndIsConsumedOnce() throws Exception {
+    void metadataChangePublishesTheHeaderWithoutEnumeratingResources() throws Exception {
         cpu.set(iron, 4, 0, 0);
-        coordinator.requestFullRead(other);
+        coordinator.metadataChanged(other);
         try (Connection stream = open(view(cpu), cpu)) {
             int reads = cpu.bulkReads;
             cpu.paused = true;
             cpu.set(tin, 0, 0, 9);
-            coordinator.requestFullRead(cpu);
+            coordinator.metadataChanged(cpu);
             tick(1);
             JsonObject paused = delta(stream);
             assertTrue(
                 paused.getAsJsonObject("cpu")
                     .get("isPaused")
                     .getAsBoolean());
-            assertKeys(paused.getAsJsonArray("definitions"), tin);
-            assertEquals(reads + 1, cpu.bulkReads);
+            assertTrue(
+                paused.getAsJsonArray("definitions")
+                    .isEmpty());
+            assertEquals(reads, cpu.bulkReads, "A metadata change must not read resource lists");
             tick(1);
-            assertEquals(reads + 1, cpu.bulkReads);
+            assertEquals(reads, cpu.bulkReads);
             assertEquals(0, other.bulkReads);
 
             cpu.paused = false;
-            coordinator.requestFullRead(cpu);
+            coordinator.metadataChanged(cpu);
             tick(1);
             assertFalse(
                 delta(stream).getAsJsonObject("cpu")
@@ -523,12 +634,12 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     }
 
     @Test
-    void reconciliationFindsRemovedResourcesThatSentNoNotification() throws Exception {
+    void anExplicitSnapshotFindsRemovedResourcesThatSentNoNotification() throws Exception {
         cpu.set(iron, 4, 0, 0)
             .set(gear, 1, 0, 0);
         try (Connection stream = open(view(cpu), cpu)) {
             cpu.set(gear, 0, 0, 0);
-            tick(RECONCILIATION_MILLIS + 100);
+            view(cpu);
 
             assertKeys(delta(stream).getAsJsonArray("removed"), gear);
         }
@@ -573,7 +684,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
             nativeGrid.cpus.remove(other);
             CpuFixtures.Cpu replacement = new CpuFixtures.Cpu(2);
             nativeGrid.cpus.add(replacement);
-            tick(RECONCILIATION_MILLIS + 100);
+            tick(QUIET_MILLIS + 100);
             tick(100);
 
             assertEquals(
@@ -625,7 +736,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
         tick(100);
         int reads = cpu.bulkReads;
         coordinator.dirty(cpu, iron);
-        tick(RECONCILIATION_MILLIS + 100);
+        tick(QUIET_MILLIS + 100);
         assertEquals(reads, cpu.bulkReads);
     }
 
@@ -706,7 +817,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
         cpu.set(iron, 4, 0, 0);
         coordinator.dirty(cpu, iron);
         tick(100);
-        tick(RECONCILIATION_MILLIS + 100);
+        tick(QUIET_MILLIS + 100);
         assertEquals(0, cpu.bulkReads, "A CPU nobody views is never read");
 
         CpuRegistry.Bootstrap bootstrap = view(cpu);
@@ -715,7 +826,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
         int reads = cpu.bulkReads;
         coordinator.dirty(cpu, iron);
         tick(100);
-        tick(RECONCILIATION_MILLIS + 100);
+        tick(QUIET_MILLIS + 100);
         assertEquals(reads, cpu.bulkReads);
         assertNull(registry.reserve(gridKey, cpu.key, session, false, null, null, System.currentTimeMillis()));
     }

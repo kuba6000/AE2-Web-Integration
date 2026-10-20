@@ -41,6 +41,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGrids;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingJob;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
@@ -387,6 +388,10 @@ class CpuAddressingRequestTest extends GridTestScope {
     }
 
     private static final class TestCpu implements ICraftingCPUCluster {
+
+        public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+            return true;
+        }
 
         final String id;
         final StableKey key;

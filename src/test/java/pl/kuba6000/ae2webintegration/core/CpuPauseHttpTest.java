@@ -34,6 +34,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.PauseCPU;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
@@ -361,6 +362,10 @@ class CpuPauseHttpTest extends GridTestScope {
     }
 
     private static class TestCpu implements ICraftingCPUCluster {
+
+        public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+            return true;
+        }
 
         final String id;
         final StableKey key;

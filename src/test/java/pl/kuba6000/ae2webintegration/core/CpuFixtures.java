@@ -164,12 +164,14 @@ final class CpuFixtures {
         final Map<IAEKey, long[]> work = new LinkedHashMap<>();
         final StackList waiting = new StackList();
         boolean busy;
+        boolean valid = true;
         @Nullable
         Resource output;
         long outputAmount = 1;
         @Nullable
         CpuSelectionMode selectionMode;
         int bulkReads;
+        int busyReads;
 
         Cpu(long id) {
             key = TestGridFixtures.key(id);
@@ -184,6 +186,10 @@ final class CpuFixtures {
 
         public @NotNull StableKey web$getKey() {
             return key;
+        }
+
+        public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+            return valid && grid instanceof Grid current && current.cpus.contains(this);
         }
 
         public String web$getName() {
@@ -203,6 +209,7 @@ final class CpuFixtures {
         }
 
         public boolean web$isBusy() {
+            busyReads++;
             return busy;
         }
 
@@ -259,6 +266,7 @@ final class CpuFixtures {
     static final class Grid extends TestGridFixtures.TestGrid {
 
         final Set<ICraftingCPUCluster> cpus = new LinkedHashSet<>();
+        int cpuListReads;
 
         Grid(long id, Cpu... initial) {
             super(id, false, AEControllerState.CONTROLLER_ONLINE);
@@ -271,7 +279,10 @@ final class CpuFixtures {
                 getClass().getClassLoader(),
                 new Class<?>[] { IAECraftingGrid.class },
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "web$getCPUs" -> cpus;
+                    case "web$getCPUs" -> {
+                        cpuListReads++;
+                        yield cpus;
+                    }
                     case "web$getCPUCount" -> cpus.size();
                     default -> throw new AssertionError("Unexpected crafting operation: " + method.getName());
                 });

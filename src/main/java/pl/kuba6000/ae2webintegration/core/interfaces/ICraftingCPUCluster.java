@@ -12,6 +12,12 @@ public interface ICraftingCPUCluster extends IIdentityHolder {
     @NotNull
     StableKey web$getKey();
 
+    /**
+     * Whether this native CPU is still valid and belongs to this exact grid. Server thread only; must not enumerate
+     * resources, tasks or other CPUs.
+     */
+    boolean web$isValidForGrid(@NotNull IAEGrid grid);
+
     String web$getName();
 
     long web$getAvailableStorage();
