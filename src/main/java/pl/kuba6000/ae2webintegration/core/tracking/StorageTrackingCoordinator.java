@@ -171,7 +171,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         Set<StableKey> present = new HashSet<>();
         for (IAEGrid grid : grids) {
             Binding known = byGrid.get(grid);
-            if (known != null && backingOff(known, nowMillis)) {
+            if (backingOff(known, nowMillis)) {
                 present.add(known.key);
                 continue;
             }

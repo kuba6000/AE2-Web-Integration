@@ -84,8 +84,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         Resource iron = new Resource("enumeration-iron", 20, false);
         Grid grid = new Grid(710041, iron);
         StableKey key = TestGridFixtures.resolvedKey(grid);
-        GridSettingsData policy = CoreEngine.GRID_IDENTITIES.getPersistentData(key)
-            .getSettings();
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        GridSettingsData policy = data.getSettings();
         policy.setStorageTracked(true);
         policy.setStockSampleIntervalSeconds(1);
         AtomicInteger enumerations = new AtomicInteger();
@@ -120,6 +121,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             coordinator.tick(TestGridFixtures.ae(grid), 1000);
             awaitRevision(service, key, 1);
             StorageCapture capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
             grid.rows.set(0, new Resource("enumeration-iron", 25, false));
             capture.markChanged(iron);
             assertDoesNotThrow(() -> coordinator.tick(unreliable, 2000));
@@ -161,13 +163,14 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             StorageCapture capture = failing.capture;
             failing.failEligibility = true;
             healthy.rows.set(0, new Resource("eligibility-iron", 25, false));
-            healthy.web$getStorageCapture()
-                .markChanged(iron);
+            StorageCapture healthyCapture = healthy.web$getStorageCapture();
+            assertNotNull(healthyCapture);
+            healthyCapture.markChanged(iron);
             assertDoesNotThrow(() -> coordinator.tick(TestGridFixtures.ae(failing, healthy), 2000));
             assertSame(capture, failing.capture);
-            assertFalse(
-                service.snapshot(failingKey)
-                    .stockComplete());
+            StorageSnapshot failedSnapshot = service.snapshot(failingKey);
+            assertNotNull(failedSnapshot);
+            assertFalse(failedSnapshot.stockComplete());
             assertNull(service.snapshot(retiredKey));
             assertNull(retired.web$getStorageCapture());
             assertEquals(
@@ -217,13 +220,15 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             coordinator.tick(failing, 2000);
             assertNotNull(terminals.reserve(key, login, false, null, initial.subscription(), 9000));
             grid.rows.set(0, new Resource("discovery-viewer", 25, false));
-            grid.web$getStorageCapture()
-                .markChanged(iron);
+            StorageCapture capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            capture.markChanged(iron);
             coordinator.tick(failing, 13000);
+            StorageSnapshot snapshot = terminals.snapshot(key);
+            assertNotNull(snapshot);
             assertEquals(
                 25,
-                terminals.snapshot(key)
-                    .rows()
+                snapshot.rows()
                     .get(0)
                     .quantity());
             assertEquals(1, enumerations.get(), "Viewer renewal must not bypass native discovery backoff");
@@ -239,8 +244,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         Grid healthy = new Grid(710056, iron);
         StableKey failingKey = trackStock(failing);
         StableKey healthyKey = trackStock(healthy);
-        GridSettingsData policy = CoreEngine.GRID_IDENTITIES.getPersistentData(failingKey)
-            .getSettings();
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(failingKey);
+        assertNotNull(data);
+        GridSettingsData policy = data.getSettings();
         policy.setFlowTracked(true);
         policy.setFlowFlushIntervalSeconds(1);
         failing.attachmentFailure = failurePoint;
@@ -326,8 +332,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
 
     private static StableKey trackStock(IAEGrid grid) {
         StableKey key = TestGridFixtures.resolvedKey(grid);
-        GridSettingsData policy = CoreEngine.GRID_IDENTITIES.getPersistentData(key)
-            .getSettings();
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        GridSettingsData policy = data.getSettings();
         policy.setStorageTracked(true);
         policy.setStockSampleIntervalSeconds(1);
         return key;

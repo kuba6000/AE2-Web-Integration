@@ -1221,7 +1221,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
             throws Exception {
             assertNotNull(nativeGrid);
             this.nativeGrid = nativeGrid;
-            grid = TestGridFixtures.resolvedKey(nativeGrid);
+            grid = TestGridFixtures.resolvedKey(this.nativeGrid);
             this.principal = principal;
             session = new AuthSession(principal, Long.MAX_VALUE);
             requestSession.set(session);
