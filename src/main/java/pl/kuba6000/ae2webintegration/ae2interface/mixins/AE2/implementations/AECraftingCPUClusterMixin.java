@@ -13,9 +13,11 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 
 import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.stacks.KeyCounter;
+import appeng.crafting.execution.CraftingCpuLogic;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IExecutingCraftingJobAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
@@ -39,7 +41,7 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICrafting
     @WrapMethod(method = "markDirty")
     private void web$metadataChanged(Operation<Void> original) {
         original.call();
-        var selectionMode = ((CraftingCPUCluster) (Object) this).getSelectionMode();
+        appeng.api.config.CpuSelectionMode selectionMode = ((CraftingCPUCluster) (Object) this).getSelectionMode();
         if (web$selectionMode != selectionMode) {
             web$selectionMode = selectionMode;
             IAEMixinCallbacks.getInstance()
@@ -136,8 +138,8 @@ public class AECraftingCPUClusterMixin implements ICraftingCPUCluster, ICrafting
         KeyCounter activeItems = (KeyCounter) (Object) active;
         KeyCounter pendingItems = (KeyCounter) (Object) pending;
         KeyCounter storedItems = (KeyCounter) (Object) stored;
-        var logic = ((CraftingCPUCluster) (Object) this).craftingLogic;
-        var job = ((ICraftingCPULogicAccessor) logic).web$getJob();
+        CraftingCpuLogic logic = ((CraftingCPUCluster) (Object) this).craftingLogic;
+        IExecutingCraftingJobAccessor job = ((ICraftingCPULogicAccessor) logic).web$getJob();
         if (job != null) activeItems.addAll(job.web$getWaitingFor().list);
         storedItems.addAll(logic.getInventory().list);
         logic.getAllItems(pendingItems);

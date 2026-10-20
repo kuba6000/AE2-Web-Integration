@@ -6,6 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
 import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPUCluster;
+import net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -19,6 +20,7 @@ import appeng.api.stacks.KeyCounter;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IAdvCraftingCPUClusterOwnership;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IExecutingCraftingJobAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -137,8 +139,8 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNam
         KeyCounter activeItems = (KeyCounter) (Object) active;
         KeyCounter pendingItems = (KeyCounter) (Object) pending;
         KeyCounter storedItems = (KeyCounter) (Object) stored;
-        var logic = ((AdvCraftingCPU) (Object) this).craftingLogic;
-        var job = ((ICraftingCPULogicAccessor) logic).web$getJob();
+        AdvCraftingCPULogic logic = ((AdvCraftingCPU) (Object) this).craftingLogic;
+        IExecutingCraftingJobAccessor job = ((ICraftingCPULogicAccessor) logic).web$getJob();
         if (job != null) activeItems.addAll(job.web$getWaitingFor().list);
         storedItems.addAll(logic.getInventory().list);
         logic.getAllItems(pendingItems);
