@@ -212,6 +212,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
         settings: {
             [gridA]: {
                 isTracked: false,
+                trackMachineCrafting: false,
                 isStorageTracked: false,
                 isFlowTracked: false,
                 stockSampleIntervalSeconds: 300,
@@ -222,6 +223,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
             },
             [gridB]: {
                 isTracked: false,
+                trackMachineCrafting: false,
                 isStorageTracked: false,
                 isFlowTracked: false,
                 stockSampleIntervalSeconds: 300,

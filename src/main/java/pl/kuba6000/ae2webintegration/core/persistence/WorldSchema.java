@@ -14,7 +14,7 @@ import org.jetbrains.annotations.NotNull;
 /** The current world schema; future versions require explicit, separately implemented migration steps. */
 final class WorldSchema {
 
-    private static final int VERSION = 4;
+    private static final int VERSION = 5;
     private static final String[] OWNED_TABLES = { "RESOURCE_PINS", "HISTORY_STOCK", "HISTORY_FLOW", "HISTORY_COVERAGE",
         "HISTORY_MEASUREMENTS", "GRID_CONTROLLERS", "HISTORY_RESOURCES", "GRIDS" };
 
@@ -59,7 +59,7 @@ final class WorldSchema {
                         version INTEGER NOT NULL,
                         identities_imported BOOLEAN NOT NULL,
                         initialized BOOLEAN NOT NULL
-                    ) AS (VALUES (1, 4, FALSE, FALSE)) WITH DATA
+                    ) AS (VALUES (1, 5, FALSE, FALSE)) WITH DATA
                     """);
             }
         }
@@ -79,6 +79,7 @@ final class WorldSchema {
                     retention_days INTEGER NOT NULL,
                     name VARCHAR(128) NOT NULL,
                     crafting_tracked BOOLEAN NOT NULL,
+                    machine_crafting_tracked BOOLEAN NOT NULL,
                     stock_tracked BOOLEAN NOT NULL,
                     flow_tracked BOOLEAN NOT NULL,
                     stock_seconds INTEGER NOT NULL,

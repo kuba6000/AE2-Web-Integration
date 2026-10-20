@@ -19,8 +19,8 @@ import org.jetbrains.annotations.NotNull;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Range;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -60,7 +60,7 @@ public final class WorldGridStore {
     @Desugar
     private record LoadedGrids(@NotNull Map<StableKey, GridPersistentData> records, boolean imported) {}
 
-    public static void normalizePolicy(@NotNull Connection db, @NotNull Data policy) throws SQLException {
+    public static void normalizePolicy(@NotNull Connection db, @NotNull ResourceHistory policy) throws SQLException {
         normalize(db, "stock_seconds", policy.stockSampleIntervalSeconds);
         normalize(db, "flow_seconds", policy.flowFlushIntervalSeconds);
         normalize(db, "retention_days", policy.historyRetentionDays);
@@ -99,6 +99,7 @@ public final class WorldGridStore {
                     GridSettingsData value = new GridSettingsData(database.policy());
                     value.setName(rows.getString("name"));
                     value.setTracked(rows.getBoolean("crafting_tracked"));
+                    value.setTrackMachineCrafting(rows.getBoolean("machine_crafting_tracked"));
                     value.setStorageTracked(rows.getBoolean("stock_tracked"));
                     value.setFlowTracked(rows.getBoolean("flow_tracked"));
                     value.setStockSampleIntervalSeconds(rows.getInt("stock_seconds"));
@@ -190,9 +191,10 @@ public final class WorldGridStore {
             ON g.grid_key = incoming.grid_key
             WHEN NOT MATCHED THEN INSERT (
                 grid_key, row_count, deleted_until, first_observed, retention_days,
-                name, crafting_tracked, stock_tracked, flow_tracked, stock_seconds, flow_seconds
+                name, crafting_tracked, stock_tracked, flow_tracked, stock_seconds, flow_seconds,
+                machine_crafting_tracked
             )
-            VALUES (incoming.grid_key, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (incoming.grid_key, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """)) {
             update.setString(1, key.toString());
             update.setLong(2, Long.MIN_VALUE);
@@ -204,12 +206,13 @@ public final class WorldGridStore {
             update.setBoolean(8, settings.isFlowTracked());
             update.setInt(9, settings.getStockSampleIntervalSeconds());
             update.setInt(10, settings.getFlowFlushIntervalSeconds());
+            update.setBoolean(11, settings.isTrackMachineCrafting());
             update.executeUpdate();
         }
         try (PreparedStatement update = db.prepareStatement("""
             UPDATE grids
             SET name = ?, crafting_tracked = ?, stock_tracked = ?, flow_tracked = ?,
-                stock_seconds = ?, flow_seconds = ?, retention_days = ?
+                stock_seconds = ?, flow_seconds = ?, retention_days = ?, machine_crafting_tracked = ?
             WHERE grid_key = ?
             """)) {
             update.setString(1, settings.getName());
@@ -219,7 +222,8 @@ public final class WorldGridStore {
             update.setInt(5, settings.getStockSampleIntervalSeconds());
             update.setInt(6, settings.getFlowFlushIntervalSeconds());
             update.setInt(7, settings.getHistoryRetentionDays());
-            update.setString(8, key.toString());
+            update.setBoolean(8, settings.isTrackMachineCrafting());
+            update.setString(9, key.toString());
             update.executeUpdate();
         }
         try (PreparedStatement query = db.prepareStatement("SELECT id FROM grids WHERE grid_key = ?")) {

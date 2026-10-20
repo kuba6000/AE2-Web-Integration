@@ -4,8 +4,9 @@ import org.jetbrains.annotations.NotNull;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
-import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -19,8 +20,11 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
     @Override
     public void jobStarted(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging, boolean isAuthorPlayer) {
         jobChanged(cpuCluster);
-        if (!Config.INSTANCE.tracking.trackMachineCrafting && !isAuthorPlayer) {
-            return;
+        if (!isMerging && !isAuthorPlayer) {
+            StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+            GridPersistentData data = key == null ? null : CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+            if (data == null || !data.getSettings()
+                .isTrackMachineCrafting()) return;
         }
         AE2JobTracker.addJob(cpuCluster, grid, isMerging);
     }

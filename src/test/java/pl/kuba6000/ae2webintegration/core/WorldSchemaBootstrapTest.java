@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 
 class WorldSchemaBootstrapTest {
@@ -26,7 +26,7 @@ class WorldSchemaBootstrapTest {
             version INTEGER NOT NULL,
             identities_imported BOOLEAN NOT NULL,
             initialized BOOLEAN NOT NULL
-        ) AS (VALUES (1, 4, FALSE, FALSE)) WITH DATA
+        ) AS (VALUES (1, 5, FALSE, FALSE)) WITH DATA
         """;
 
     @TempDir
@@ -34,7 +34,7 @@ class WorldSchemaBootstrapTest {
 
     @Test
     void incompleteInitializationRecoversAfterEveryDdlStage() throws Exception {
-        Data policy = new ConfigSettings.Data();
+        ResourceHistory policy = new ConfigSettings.ResourceHistory();
         List<String> stages = new ArrayList<>();
         try (WorldDatabase pristine = new WorldDatabase(directory.resolve("pristine"), policy)) {
             pristine.write(db -> {
@@ -69,7 +69,7 @@ class WorldSchemaBootstrapTest {
                     try (Statement sql = db.createStatement();
                         ResultSet result = sql.executeQuery("SELECT version, initialized FROM world_schema")) {
                         assertTrue(result.next());
-                        assertEquals(4, result.getInt(1));
+                        assertEquals(5, result.getInt(1));
                         assertTrue(result.getBoolean(2));
                         assertFalse(result.next());
                     }
@@ -86,7 +86,7 @@ class WorldSchemaBootstrapTest {
             sql.execute("CREATE SEQUENCE history_event_ids AS BIGINT START WITH 42");
             sql.execute("SHUTDOWN");
         }
-        try (WorldDatabase rejected = new WorldDatabase(path, new ConfigSettings.Data())) {
+        try (WorldDatabase rejected = new WorldDatabase(path, new ConfigSettings.ResourceHistory())) {
             assertThrows(IOException.class, rejected::open);
         }
         try (Connection db = connect(path); Statement sql = db.createStatement()) {
@@ -104,7 +104,7 @@ class WorldSchemaBootstrapTest {
 
     @Test
     void recoveryRejectsUnknownObjectsOrApplicationDataWithoutChangingThem() throws Exception {
-        Data policy = new ConfigSettings.Data();
+        ResourceHistory policy = new ConfigSettings.ResourceHistory();
         for (boolean marker : new boolean[] { false, true }) {
             Path path = directory.resolve("unknown-" + marker);
             try (Connection db = connect(path); Statement sql = db.createStatement()) {

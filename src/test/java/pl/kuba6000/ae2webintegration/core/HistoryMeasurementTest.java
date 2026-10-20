@@ -27,7 +27,7 @@ class HistoryMeasurementTest extends GridTestScope {
 
     @Test
     void logicalBudgetPrunesChildrenAndTheirUnusedHeadersAndFailedFlowLeavesNeither() throws Exception {
-        ConfigSettings.Data policy = new ConfigSettings.Data();
+        ConfigSettings.ResourceHistory policy = new ConfigSettings.ResourceHistory();
         policy.historyMaxRowsPerGrid = 3;
         WorldDatabase database = new WorldDatabase(
             gridSave.toPath()

@@ -26,7 +26,7 @@ final class WorldHistoryFixtures {
 
     static HsqlStorageHistoryStore create(Path path, ConfigSettings.Range retention, int maxRows) {
         if (maxRows < 1) throw new IllegalArgumentException("Row limit must be positive");
-        ConfigSettings.Data policy = new ConfigSettings.Data();
+        ConfigSettings.ResourceHistory policy = new ConfigSettings.ResourceHistory();
         policy.historyRetentionDays = retention;
         policy.historyMaxRowsPerGrid = maxRows;
         WorldDatabase database = new WorldDatabase(path, policy);

@@ -200,6 +200,10 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 In public mode, a player can create an account from the login page. After choosing a password, the page displays
 an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
 
+Enable **Record crafting history** in a network's settings to track its crafting jobs. Enable
+**Include machine-requested crafting** there to also track jobs started by machines on that network.
+The machine option applies to new jobs. Enabling tracking does not reconstruct an ongoing job's history.
+
 ### Resource history
 
 Network settings have independent switches for input/output history and periodic storage quantities.
@@ -221,7 +225,7 @@ History is stored in an embedded HSQLDB database using `grids.*` files in the wo
 No database installation is needed. The defaults retain up to 7 days and 250,000 records per network;
 the oldest records are removed when either limit is reached. One older stock measurement per resource
 may remain as a dated baseline, within the same record limit. Configure minimum, maximum and default
-values, plus the record cap, under `data` in `config.toml` and apply them with `/ae2webintegration reload`
+values, plus the record cap, under `resource_history` in `config.toml` and apply them with `/ae2webintegration reload`
 or a server restart.
 Existing network choices outside new bounds are adjusted to the nearest bound. The record cap can
 shorten the selected retention and is not a byte limit. Expired data is hidden from history queries;

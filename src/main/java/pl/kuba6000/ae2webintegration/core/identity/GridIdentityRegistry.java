@@ -20,7 +20,7 @@ import com.google.common.collect.MapMaker;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.config.Config;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
@@ -35,7 +35,7 @@ public final class GridIdentityRegistry {
     private @Nullable WorldGridStore store;
     private @Nullable WorldDatabase database;
     private final Set<StableKey> dirtyKeys = new HashSet<>();
-    private @NotNull Data dataPolicy = Config.INSTANCE.data;
+    private @NotNull ResourceHistory dataPolicy = Config.INSTANCE.resourceHistory;
     private final WeakHashMap<IAEGrid, StableKey> keys = new WeakHashMap<>();
     private final Map<StableKey, IAEGrid> grids = new MapMaker().weakValues()
         .makeMap();
@@ -151,12 +151,12 @@ public final class GridIdentityRegistry {
         if (!containsIdentity(affected)) GridData.retire(affected);
     }
 
-    public synchronized @NotNull Data getDataPolicy() {
+    public synchronized @NotNull ResourceHistory getDataPolicy() {
         return dataPolicy;
     }
 
     /** Rebinds active and pending-retired settings only for the world that still owns this registry. */
-    public synchronized boolean applyPolicy(@NotNull WorldDatabase owner, @NotNull Data policy) {
+    public synchronized boolean applyPolicy(@NotNull WorldDatabase owner, @NotNull ResourceHistory policy) {
         if (database != owner) return false;
         dataPolicy = policy;
         records.forEach(

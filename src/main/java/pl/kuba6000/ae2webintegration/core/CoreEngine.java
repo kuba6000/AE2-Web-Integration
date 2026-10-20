@@ -98,7 +98,7 @@ public class CoreEngine {
     /** Publishes reloaded data settings immediately; the world scheduler applies durable changes. */
     public static void applyDataConfig() {
         WorldDatabase database = worldDatabase;
-        if (database != null) database.applyPolicy(Config.INSTANCE.data);
+        if (database != null) database.applyPolicy(Config.INSTANCE.resourceHistory);
     }
 
     public static void onServerStarted() {
@@ -106,7 +106,7 @@ public class CoreEngine {
         onServerStopping();
         WorldDatabase database = new WorldDatabase(
             new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/grids").toPath(),
-            Config.INSTANCE.data);
+            Config.INSTANCE.resourceHistory);
         HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database);
         try {
             database.open();

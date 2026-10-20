@@ -156,6 +156,7 @@ class ResourcePinStoreTest extends GridTestScope {
         GridSettingsData retiredSettings = data.getSettings();
         retiredSettings.setName("Retired");
         retiredSettings.setTracked(true);
+        retiredSettings.setTrackMachineCrafting(true);
         retiredSettings.setStorageTracked(true);
         retiredSettings.setFlowTracked(true);
         retiredSettings.setStockSampleIntervalSeconds(600);
@@ -167,6 +168,7 @@ class ResourcePinStoreTest extends GridTestScope {
         retiredSettings.setHistoryRetentionDays(1);
         retiredSettings.setName("Stale");
         retiredSettings.setTracked(false);
+        retiredSettings.setTrackMachineCrafting(false);
         retiredSettings.setStorageTracked(false);
         retiredSettings.setFlowTracked(false);
         retiredSettings.setStockSampleIntervalSeconds(60);
@@ -192,6 +194,7 @@ class ResourcePinStoreTest extends GridTestScope {
                         assertTrue(row.next());
                         assertEquals("Retired", row.getString("name"));
                         assertTrue(row.getBoolean("crafting_tracked"));
+                        assertTrue(row.getBoolean("machine_crafting_tracked"));
                         assertTrue(row.getBoolean("stock_tracked"));
                         assertTrue(row.getBoolean("flow_tracked"));
                         assertEquals(600, row.getInt("stock_seconds"));

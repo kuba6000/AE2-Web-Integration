@@ -35,7 +35,7 @@ class LiveDataPolicyTest {
     @Test
     void scheduledPolicyApplicationRetriesAfterFailureWithoutConsumers() throws Exception {
         Path path = directory.resolve("idle");
-        try (WorldDatabase database = new WorldDatabase(path, new ConfigSettings.Data());
+        try (WorldDatabase database = new WorldDatabase(path, new ConfigSettings.ResourceHistory());
             HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, directory.resolve("absent.json"));
@@ -65,7 +65,7 @@ class LiveDataPolicyTest {
             WorldDatabaseTest.ManualScheduler scheduler = new WorldDatabaseTest.ManualScheduler();
             try {
                 database.startGridFlush(scheduler, history::maintain);
-                ConfigSettings.Data tighter = new ConfigSettings.Data();
+                ConfigSettings.ResourceHistory tighter = new ConfigSettings.ResourceHistory();
                 tighter.historyRetentionDays = new ConfigSettings.Range(1, 2, 2);
                 tighter.historyMaxRowsPerGrid = 1;
                 assertTrue(database.applyPolicy(tighter));
@@ -89,10 +89,12 @@ class LiveDataPolicyTest {
                 database.stopGridFlush();
                 database.finishGridIdentities();
                 registry.clear();
-                try (WorldDatabase next = new WorldDatabase(directory.resolve("next"), new ConfigSettings.Data())) {
+                try (WorldDatabase next = new WorldDatabase(
+                    directory.resolve("next"),
+                    new ConfigSettings.ResourceHistory())) {
                     registry.initialize(next, directory.resolve("absent.json"));
                     dispatched.run();
-                    assertFalse(database.applyPolicy(new ConfigSettings.Data()));
+                    assertFalse(database.applyPolicy(new ConfigSettings.ResourceHistory()));
                     assertEquals(7, registry.getDataPolicy().historyRetentionDays.defaultValue);
                 }
             } finally {
@@ -103,7 +105,7 @@ class LiveDataPolicyTest {
 
     @Test
     void appendWaitingAfterInitializationUsesTheNewWriterPolicy() throws Exception {
-        ConfigSettings.Data initial = new ConfigSettings.Data();
+        ConfigSettings.ResourceHistory initial = new ConfigSettings.ResourceHistory();
         initial.historyMaxRowsPerGrid = 10;
         try (WorldDatabase database = new WorldDatabase(directory.resolve("world"), initial);
             HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
@@ -140,7 +142,7 @@ class LiveDataPolicyTest {
                 while (append.getState() != Thread.State.BLOCKED && append.isAlive() && System.nanoTime() < deadline)
                     Thread.yield();
                 assertEquals(Thread.State.BLOCKED, append.getState());
-                ConfigSettings.Data smaller = new ConfigSettings.Data();
+                ConfigSettings.ResourceHistory smaller = new ConfigSettings.ResourceHistory();
                 smaller.historyMaxRowsPerGrid = 2;
                 assertTrue(database.applyPolicy(smaller));
                 history.initialize();
@@ -158,7 +160,10 @@ class LiveDataPolicyTest {
 
     @Test
     void policyRefreshExpiresRetiredSqlHistoryWithoutAnotherObservation() throws Exception {
-        try (WorldDatabase database = new WorldDatabase(directory.resolve("retired"), new ConfigSettings.Data());
+        try (
+            WorldDatabase database = new WorldDatabase(
+                directory.resolve("retired"),
+                new ConfigSettings.ResourceHistory());
             HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, directory.resolve("absent.json"));
@@ -177,7 +182,7 @@ class LiveDataPolicyTest {
                 Collections.singletonList(new StorageHistoryPoint(old, 1, Kind.FLOW, item, 0, 5, 2, 0, 0, old - 1000)));
             registry.controllerRemoved(live.position());
             registry.saveIfDirty();
-            ConfigSettings.Data shorter = new ConfigSettings.Data();
+            ConfigSettings.ResourceHistory shorter = new ConfigSettings.ResourceHistory();
             shorter.historyRetentionDays = new ConfigSettings.Range(1, 2, 2);
             assertTrue(database.applyPolicy(shorter));
             history.initialize();
@@ -185,7 +190,7 @@ class LiveDataPolicyTest {
                 history.read(grid, item, 0, 100)
                     .points()
                     .isEmpty());
-            assertTrue(database.applyPolicy(new ConfigSettings.Data()));
+            assertTrue(database.applyPolicy(new ConfigSettings.ResourceHistory()));
             history.initialize();
             assertTrue(
                 history.read(grid, item, 0, 100)

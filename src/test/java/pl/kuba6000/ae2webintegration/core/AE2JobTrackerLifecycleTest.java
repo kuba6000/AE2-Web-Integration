@@ -36,6 +36,8 @@ import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.grid.CraftingPlanRegistry.Entry;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
+import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
+import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.crafting.GetCraftingPlan;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTrackingHistory;
@@ -50,6 +52,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.AEMixinCallbacks;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class AE2JobTrackerLifecycleTest extends GridTestScope {
@@ -70,6 +73,42 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         AE2JobTracker.clearActiveJobs();
         GridData data = GridData.find(gridKey);
         if (data != null) data.trackingInfo.clearHistory();
+    }
+
+    @Test
+    void machineAdmissionIsPerGridAndTogglingDoesNotReplaceActiveMeasurements() {
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(gridKey);
+        assertNotNull(data);
+        GridSettingsData settings = data.getSettings();
+        TestGridFixtures.TestGrid other = TestGridFixtures.grid(900_105L);
+        TestGridFixtures.track(other);
+        EqualCpu ignored = new EqualCpu();
+        EqualCpu machine = new EqualCpu();
+        EqualCpu player = new EqualCpu();
+        AEMixinCallbacks callbacks = AEMixinCallbacks.INSTANCE;
+        callbacks.jobStarted(ignored, grid, false, false);
+        assertNull(AE2JobTracker.findActiveJob(ignored));
+        settings.setTrackMachineCrafting(true);
+        callbacks.jobStarted(ignored, grid, true, false);
+        assertNull(AE2JobTracker.findActiveJob(ignored));
+        callbacks.jobStarted(machine, grid, false, false);
+        AE2JobTracker.JobTrackingInfo active = AE2JobTracker.findActiveJob(machine);
+        assertNotNull(active);
+        callbacks.jobStarted(ignored, other, false, false);
+        assertNull(AE2JobTracker.findActiveJob(ignored));
+        callbacks.jobStarted(player, other, false, true);
+        assertNotNull(AE2JobTracker.findActiveJob(player));
+        settings.setTrackMachineCrafting(false);
+        machine.output = new OutputSnapshotTest.Stack(new OutputSnapshotTest.Resource(), 9);
+        callbacks.jobStarted(machine, grid, true, false);
+        assertSame(active, AE2JobTracker.findActiveJob(machine));
+        assertEquals(9, active.finalOutput.quantity());
+        callbacks.jobCompleted(grid, machine);
+        assertSame(active, GridData.getOrCreate(gridKey).trackingInfo.trackingInfos.get(1));
+        settings.setTrackMachineCrafting(true);
+        settings.setTracked(false);
+        callbacks.jobStarted(ignored, grid, false, false);
+        assertNull(AE2JobTracker.findActiveJob(ignored));
     }
 
     @Test

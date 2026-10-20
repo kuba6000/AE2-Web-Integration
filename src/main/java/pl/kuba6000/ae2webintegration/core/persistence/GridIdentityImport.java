@@ -19,7 +19,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -43,7 +43,7 @@ final class GridIdentityImport {
         }
     }
 
-    static @NotNull Map<StableKey, GridPersistentData> read(@NotNull Path source, @NotNull Data policy)
+    static @NotNull Map<StableKey, GridPersistentData> read(@NotNull Path source, @NotNull ResourceHistory policy)
         throws IOException {
         if (Files.notExists(source)) return Collections.emptyMap();
         Gson standard = GSONUtils.GSON_BUILDER.create();

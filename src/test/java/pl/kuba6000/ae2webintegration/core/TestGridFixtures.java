@@ -70,7 +70,9 @@ final class TestGridFixtures {
                 .normalize();
             WorldDatabase database = databases.get(path);
             if (database == null) {
-                database = new WorldDatabase(path.resolveSibling(path.getFileName() + ".world"), Config.INSTANCE.data);
+                database = new WorldDatabase(
+                    path.resolveSibling(path.getFileName() + ".world"),
+                    Config.INSTANCE.resourceHistory);
                 database.open();
                 databases.put(path, database);
             }

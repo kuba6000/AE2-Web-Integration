@@ -51,6 +51,7 @@ export function createGridSettings(
     const empty = (): GridSettings => ({
         name: '',
         isTracked: false,
+        trackMachineCrafting: false,
         isStorageTracked: false,
         isFlowTracked: false,
         stockSampleIntervalSeconds: 0,
@@ -60,6 +61,7 @@ export function createGridSettings(
     const unedited = (): Edited => ({
         name: false,
         isTracked: false,
+        trackMachineCrafting: false,
         isStorageTracked: false,
         isFlowTracked: false,
         stockSampleIntervalSeconds: false,
@@ -132,6 +134,8 @@ export function createGridSettings(
                     : {
                           name: !!previous?.uncertain && previous.desired.name !== undefined,
                           isTracked: !!previous?.uncertain && previous.desired.isTracked !== undefined,
+                          trackMachineCrafting:
+                              !!previous?.uncertain && previous.desired.trackMachineCrafting !== undefined,
                           isStorageTracked: !!previous?.uncertain && previous.desired.isStorageTracked !== undefined,
                           isFlowTracked: !!previous?.uncertain && previous.desired.isFlowTracked !== undefined,
                           stockSampleIntervalSeconds:
@@ -162,6 +166,7 @@ export function createGridSettings(
                 state.limits = limits;
                 if (!state.edited.name) state.draft.name = data.name;
                 if (!state.edited.isTracked) state.draft.isTracked = data.isTracked;
+                if (!state.edited.trackMachineCrafting) state.draft.trackMachineCrafting = data.trackMachineCrafting;
                 if (!state.edited.isStorageTracked) state.draft.isStorageTracked = data.isStorageTracked;
                 if (!state.edited.isFlowTracked) state.draft.isFlowTracked = data.isFlowTracked;
                 for (const field of historySettingFields) if (!state.edited[field]) state.draft[field] = data[field];
@@ -211,6 +216,11 @@ export function createGridSettings(
             const desired: Partial<GridSettings> = {};
             if (state.draft.isTracked !== state.current.isTracked || uncertain?.isTracked !== undefined)
                 desired.isTracked = state.draft.isTracked;
+            if (
+                state.draft.trackMachineCrafting !== state.current.trackMachineCrafting ||
+                uncertain?.trackMachineCrafting !== undefined
+            )
+                desired.trackMachineCrafting = state.draft.trackMachineCrafting;
             if (state.draft.name.trim() !== state.current.name || uncertain?.name !== undefined)
                 desired.name = state.draft.name.trim();
             if (
@@ -280,6 +290,7 @@ export function createGridSettings(
                     Object.assign(state.draft, operation.desired);
                     if (operation.desired.name !== undefined) state.edited.name = true;
                     if (operation.desired.isTracked !== undefined) state.edited.isTracked = true;
+                    if (operation.desired.trackMachineCrafting !== undefined) state.edited.trackMachineCrafting = true;
                     if (operation.desired.isStorageTracked !== undefined) state.edited.isStorageTracked = true;
                     if (operation.desired.isFlowTracked !== undefined) state.edited.isFlowTracked = true;
                     for (const field of historySettingFields)

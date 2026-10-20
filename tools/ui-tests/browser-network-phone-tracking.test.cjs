@@ -21,6 +21,55 @@ const {
     atlasFixture
 } = require('./fixtures.cjs');
 
+test('machine crafting tracking is saved per network and retained while crafting history is disabled', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.settings[gridB].isTracked = true;
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    const tracking = page.getByRole('checkbox', { name: 'Record crafting history', exact: true });
+    const machines = page.getByRole('checkbox', { name: 'Include machine-requested crafting', exact: true });
+    await tracking.waitFor();
+    await machines.waitFor();
+    assert.equal(await machines.isDisabled(), true);
+    assert.equal(await machines.isChecked(), false);
+    await tracking.check();
+    await machines.check();
+    const save = page.getByRole('button', { name: 'Save settings', exact: true });
+    await save.click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /settings saved/i })
+        .waitFor();
+    assert.equal(options.settings[gridA].trackMachineCrafting, true);
+    assert.equal(options.settings[gridB].trackMachineCrafting, false);
+    await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
+    await page.goto(`${base}#/grids/${gridB}/settings`);
+    await machines.waitFor();
+    assert.equal(await machines.isChecked(), false);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    await machines.waitFor();
+    assert.equal(await machines.isChecked(), true);
+    await tracking.uncheck();
+    assert.equal(await machines.isDisabled(), true);
+    assert.equal(await machines.isChecked(), true);
+    await save.click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /settings saved/i })
+        .waitFor();
+    await page.reload();
+    await machines.waitFor();
+    assert.equal(await machines.isDisabled(), true);
+    assert.equal(await machines.isChecked(), true);
+    await tracking.check();
+    await machines.uncheck();
+    await save.click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /settings saved/i })
+        .waitFor();
+    assert.equal(options.settings[gridA].trackMachineCrafting, false);
+});
+
 test('tracking notices use the current network, update after saving, and retain previously recorded history', async (t) => {
     const { page, options, base } = await fixture(t);
     options.settings[gridA].isTracked = false;

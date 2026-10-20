@@ -103,6 +103,7 @@ export type Grid = {
 };
 export type GridSettings = {
     isTracked: boolean;
+    trackMachineCrafting: boolean;
     isStorageTracked: boolean;
     isFlowTracked: boolean;
     stockSampleIntervalSeconds: number;

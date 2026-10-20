@@ -114,9 +114,9 @@ class ApiRoutingHttpTest extends GridTestScope {
         ConfigSettings previous = Config.INSTANCE;
         try {
             ConfigSettings configured = new ConfigSettings();
-            configured.data.stockSampleIntervalSeconds = new ConfigSettings.Range(10, 600, 120);
-            configured.data.flowFlushIntervalSeconds = new ConfigSettings.Range(20, 900, 180);
-            configured.data.historyRetentionDays = new ConfigSettings.Range(2, 30, 14);
+            configured.resourceHistory.stockSampleIntervalSeconds = new ConfigSettings.Range(10, 600, 120);
+            configured.resourceHistory.flowFlushIntervalSeconds = new ConfigSettings.Range(20, 900, 180);
+            configured.resourceHistory.historyRetentionDays = new ConfigSettings.Range(2, 30, 14);
             Config.INSTANCE = configured;
             worlds.close(TestGridFixtures.Worlds.source(gridSave));
             worlds.initialize(gridSave);
@@ -549,6 +549,70 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
+    void machineCraftingSettingIsOptionalValidatedAndDurableWithoutMasterTracking() throws Exception {
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        String path = "/api/grids/" + key + "/settings";
+        String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+        JsonObject initial = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertTrue(initial.has("trackMachineCrafting"));
+        assertFalse(
+            initial.get("trackMachineCrafting")
+                .getAsBoolean());
+        Reply saved = request("PATCH", path, headers, "{\"trackMachineCrafting\":true}");
+        assertEquals(HttpURLConnection.HTTP_OK, saved.status());
+        assertTrue(
+            saved.json()
+                .getAsJsonObject("data")
+                .get("trackMachineCrafting")
+                .getAsBoolean());
+        assertFalse(
+            saved.json()
+                .getAsJsonObject("data")
+                .get("isTracked")
+                .getAsBoolean());
+        GridPersistentData restored = worlds.registry(
+            gridSave.toPath()
+                .resolve("ae2webintegration/grid-identities.json")
+                .toFile())
+            .getPersistentData(key);
+        assertNotNull(restored);
+        assertTrue(
+            restored.getSettings()
+                .isTrackMachineCrafting());
+        for (String invalid : new String[] { "null", "1", "\"true\"", "{}" }) {
+            assertEquals(
+                HttpURLConnection.HTTP_BAD_REQUEST,
+                request("PATCH", path, headers, "{\"isTracked\":true,\"trackMachineCrafting\":" + invalid + "}")
+                    .status());
+        }
+        JsonObject unchanged = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertFalse(
+            unchanged.get("isTracked")
+                .getAsBoolean());
+        assertTrue(
+            unchanged.get("trackMachineCrafting")
+                .getAsBoolean());
+        Reply omitted = request("PATCH", path, headers, "{\"isTracked\":true}");
+        assertEquals(HttpURLConnection.HTTP_OK, omitted.status());
+        assertTrue(
+            omitted.json()
+                .getAsJsonObject("data")
+                .get("trackMachineCrafting")
+                .getAsBoolean());
+        Reply cleared = request("PATCH", path, headers, "{\"trackMachineCrafting\":false}");
+        assertEquals(HttpURLConnection.HTTP_OK, cleared.status());
+        assertFalse(
+            cleared.json()
+                .getAsJsonObject("data")
+                .get("trackMachineCrafting")
+                .getAsBoolean());
+    }
+
+    @Test
     void storageHistorySettingIsIndependentAndPersists() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
@@ -660,12 +724,12 @@ class ApiRoutingHttpTest extends GridTestScope {
     }
 
     @Test
-    void namingUsesExistingGridAuthorizationAndCsrfProtection() throws Exception {
+    void namingAndMachineCraftingUseExistingGridAuthorizationAndCsrfProtection() throws Exception {
         grid = TestGridFixtures.grid(1);
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
         String path = "/api/grids/" + key + "/settings";
         String json = "Content-Type: application/json\r\n";
-        String body = "{\"name\":\"Factory\",\"isTracked\":true}";
+        String body = "{\"name\":\"Factory\",\"isTracked\":true,\"trackMachineCrafting\":true}";
         assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, request("PATCH", path, json, body).status());
         assertEquals(
             HttpURLConnection.HTTP_FORBIDDEN,
@@ -676,6 +740,9 @@ class ApiRoutingHttpTest extends GridTestScope {
         String ownerHeaders = "Authorization: Bearer owner\r\n" + json;
         JsonObject initial = request("GET", path, ownerHeaders, "").json()
             .getAsJsonObject("data");
+        assertFalse(
+            initial.get("trackMachineCrafting")
+                .getAsBoolean());
         assertEquals(
             "",
             initial.get("name")
@@ -687,9 +754,12 @@ class ApiRoutingHttpTest extends GridTestScope {
         grid.withoutSources();
         assertEquals(
             HttpURLConnection.HTTP_FORBIDDEN,
-            request("PATCH", path, ownerHeaders, "{\"name\":\"Changed\"}").status());
+            request("PATCH", path, ownerHeaders, "{\"name\":\"Changed\",\"trackMachineCrafting\":false}").status());
         JsonObject current = request("GET", path, "Authorization: Bearer valid\r\n", "").json()
             .getAsJsonObject("data");
+        assertTrue(
+            current.get("trackMachineCrafting")
+                .getAsBoolean());
         assertEquals(
             "Factory",
             current.get("name")

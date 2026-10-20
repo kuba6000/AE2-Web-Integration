@@ -20,6 +20,42 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 class GridPersistentDataTest extends GridTestScope {
 
     @Test
+    void machineCraftingSettingPersistsIndependentlyAndClearingRestoresDefaults() throws Exception {
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(TestGridFixtures.grid(1));
+        assertNotNull(key);
+        GridPersistentData data = CoreEngine.GRID_IDENTITIES.getPersistentData(key);
+        assertNotNull(data);
+        GridSettingsData settings = data.getSettings();
+        assertFalse(settings.isTrackMachineCrafting());
+        settings.setTrackMachineCrafting(true);
+        assertFalse(settings.isTracked());
+        assertFalse(settings.isDefault());
+        CoreEngine.GRID_IDENTITIES.saveIfDirty();
+        File file = new File(gridSave, "ae2webintegration/grid-identities.json");
+        GridIdentityRegistry restarted = worlds.registry(file);
+        GridPersistentData loaded = restarted.getPersistentData(key);
+        assertNotNull(loaded);
+        assertTrue(
+            loaded.getSettings()
+                .isTrackMachineCrafting());
+        assertFalse(
+            loaded.getSettings()
+                .isTracked());
+        loaded.getSettings()
+            .setTrackMachineCrafting(false);
+        restarted.saveIfDirty();
+        GridPersistentData cleared = worlds.registry(file)
+            .getPersistentData(key);
+        assertNotNull(cleared);
+        assertFalse(
+            cleared.getSettings()
+                .isTrackMachineCrafting());
+        assertTrue(
+            cleared.getSettings()
+                .isDefault());
+    }
+
+    @Test
     void independentFlowAndStockSamplingSettingsPersistAndValidate() throws Exception {
         StableKey key = CoreEngine.GRID_IDENTITIES.getKey(TestGridFixtures.grid(1));
         assertNotNull(key);

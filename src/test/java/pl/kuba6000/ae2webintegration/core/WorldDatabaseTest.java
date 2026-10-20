@@ -26,7 +26,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
@@ -43,7 +43,7 @@ class WorldDatabaseTest {
     void failedDependencyFlushBlocksTheMutationAndPeriodicRetryKeepsPendingIdentity() throws Exception {
         Path path = directory.resolve("retry");
         Path source = directory.resolve("retry.json");
-        try (WorldDatabase database = new WorldDatabase(path, new ConfigSettings.Data())) {
+        try (WorldDatabase database = new WorldDatabase(path, new ConfigSettings.ResourceHistory())) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
             database.write(db -> {
@@ -107,8 +107,10 @@ class WorldDatabaseTest {
     void periodicFlushSavesWithoutConsumersAndStoppedWorldCannotFlushItsReplacement() throws Exception {
         Path source = directory.resolve("periodic.json");
         GridIdentityRegistry registry = new GridIdentityRegistry();
-        try (WorldDatabase first = new WorldDatabase(directory.resolve("first"), new ConfigSettings.Data());
-            WorldDatabase second = new WorldDatabase(directory.resolve("second"), new ConfigSettings.Data())) {
+        try (WorldDatabase first = new WorldDatabase(directory.resolve("first"), new ConfigSettings.ResourceHistory());
+            WorldDatabase second = new WorldDatabase(
+                directory.resolve("second"),
+                new ConfigSettings.ResourceHistory())) {
             ManualScheduler clock = new ManualScheduler();
             try {
                 registry.initialize(first, source);
@@ -200,8 +202,8 @@ class WorldDatabaseTest {
     void failedFinalFlushRejectsOldDependentWritesAfterTheRegistryMovesToAnotherWorld() throws Exception {
         Path source = directory.resolve("fenced.json");
         GridIdentityRegistry registry = new GridIdentityRegistry();
-        try (WorldDatabase first = new WorldDatabase(directory.resolve("old"), new ConfigSettings.Data());
-            WorldDatabase second = new WorldDatabase(directory.resolve("new"), new ConfigSettings.Data())) {
+        try (WorldDatabase first = new WorldDatabase(directory.resolve("old"), new ConfigSettings.ResourceHistory());
+            WorldDatabase second = new WorldDatabase(directory.resolve("new"), new ConfigSettings.ResourceHistory())) {
             registry.initialize(first, source);
             first.write(db -> {
                 try (Statement statement = db.createStatement()) {
@@ -248,7 +250,7 @@ class WorldDatabaseTest {
             ? valid.substring(0, valid.length() - 1) + "," + importJson(other).substring(1)
             : "{broken";
         Files.write(source, invalid.getBytes(StandardCharsets.UTF_8));
-        Data policy = new ConfigSettings.Data();
+        ResourceHistory policy = new ConfigSettings.ResourceHistory();
         try (WorldDatabase database = new WorldDatabase(directory.resolve("world"), policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             assertThrows(IOException.class, () -> registry.initialize(database, source));
@@ -267,7 +269,9 @@ class WorldDatabaseTest {
         Path source = directory.resolve("legacy.json");
         StableKey key = TestGridFixtures.key(38);
         Files.write(source, importJson(key).getBytes(StandardCharsets.UTF_8));
-        try (WorldDatabase database = new WorldDatabase(directory.resolve("world"), new ConfigSettings.Data())) {
+        try (WorldDatabase database = new WorldDatabase(
+            directory.resolve("world"),
+            new ConfigSettings.ResourceHistory())) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
             database.write(db -> {
@@ -319,7 +323,7 @@ class WorldDatabaseTest {
     void absentImportSourceIsCompletedAndLaterJsonCannotOverrideTheDatabase() throws Exception {
         Path source = directory.resolve("missing.json");
         StableKey key = TestGridFixtures.key(36);
-        Data policy = new ConfigSettings.Data();
+        ResourceHistory policy = new ConfigSettings.ResourceHistory();
         try (WorldDatabase database = new WorldDatabase(directory.resolve("world"), policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
@@ -333,13 +337,13 @@ class WorldDatabaseTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = { 1, 2, 3, 999 })
+    @ValueSource(ints = { 1, 2, 3, 4, 999 })
     void unsupportedSchemaCannotPublishOrEraseExistingGridData(int version) throws Exception {
         Path path = directory.resolve("world");
         Path source = directory.resolve("legacy.json");
         StableKey key = TestGridFixtures.key(37);
         Files.write(source, importJson(key).getBytes(StandardCharsets.UTF_8));
-        Data policy = new ConfigSettings.Data();
+        ResourceHistory policy = new ConfigSettings.ResourceHistory();
         try (WorldDatabase database = new WorldDatabase(path, policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
@@ -365,7 +369,7 @@ class WorldDatabaseTest {
                 assertTrue(result.next());
                 assertEquals(version, result.getInt(1));
             }
-            statement.executeUpdate("UPDATE world_schema SET version = 4");
+            statement.executeUpdate("UPDATE world_schema SET version = 5");
             statement.execute("SHUTDOWN");
         }
         try (WorldDatabase restored = new WorldDatabase(path, policy)) {
@@ -390,7 +394,7 @@ class WorldDatabaseTest {
                 + "\":{\"controllers\":[{\"dimid\":\"0\",\"x\":1,\"y\":2,\"z\":3}],"
                 + "\"settings\":{\"name\":\"Imported\",\"isTracked\":true,\"historyRetentionDays\":14}}}")
                 .getBytes(StandardCharsets.UTF_8));
-        Data policy = new ConfigSettings.Data();
+        ResourceHistory policy = new ConfigSettings.ResourceHistory();
         try (WorldDatabase database = new WorldDatabase(directory.resolve("world"), policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, json);
@@ -401,6 +405,9 @@ class WorldDatabaseTest {
                 "Imported",
                 data.getSettings()
                     .getName());
+            assertFalse(
+                data.getSettings()
+                    .isTrackMachineCrafting());
             assertTrue(
                 data.getSettings()
                     .isTracked());
@@ -438,7 +445,7 @@ class WorldDatabaseTest {
         byte[] previous = "previous backup".getBytes(StandardCharsets.UTF_8);
         Files.write(source, original);
         Files.write(archived, previous);
-        Data policy = new ConfigSettings.Data();
+        ResourceHistory policy = new ConfigSettings.ResourceHistory();
         try (WorldDatabase database = new WorldDatabase(directory.resolve("grids"), policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, source);
@@ -456,7 +463,7 @@ class WorldDatabaseTest {
 
     @Test
     void oneOwnerPerWorldCanReopenOnlyAfterClose() throws Exception {
-        Data policy = new ConfigSettings.Data();
+        ResourceHistory policy = new ConfigSettings.ResourceHistory();
         Path path = directory.resolve("world");
         try (WorldDatabase first = new WorldDatabase(path, policy);
             WorldDatabase second = new WorldDatabase(path, policy)) {

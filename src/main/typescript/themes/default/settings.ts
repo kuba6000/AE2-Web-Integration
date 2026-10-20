@@ -81,6 +81,16 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     tracking.id = 'network-tracking';
     const labelText = element('span');
     label.append(tracking, labelText);
+    const machineLabel = element('label');
+    machineLabel.className = 'checkbox';
+    const machineTracking = element('input');
+    machineTracking.type = 'checkbox';
+    machineTracking.id = 'network-machine-tracking';
+    const machineText = element('span');
+    machineLabel.append(machineTracking, machineText);
+    machineTracking.addEventListener('change', () =>
+        application.settings.edit('trackMachineCrafting', machineTracking.checked)
+    );
     const storageLabel = element('label');
     storageLabel.className = 'checkbox';
     const storageTracking = element('input');
@@ -151,7 +161,7 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     const actions = element('div');
     actions.className = 'settings-actions';
     actions.append(save);
-    form.append(settingsTitle, nameLabel, nameHelp, label, flowLabel, storageLabel, intervals, actions);
+    form.append(settingsTitle, nameLabel, nameHelp, label, machineLabel, flowLabel, storageLabel, intervals, actions);
     name.addEventListener('input', () => application.settings.edit('name', name.value));
     tracking.addEventListener('change', () => application.settings.edit('isTracked', tracking.checked));
     form.addEventListener('submit', (event) => {
@@ -228,6 +238,7 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             title.querySelector('span')!.textContent = t('networkDetails');
             scroll.setAttribute('aria-label', t('networkDetails'));
             labelText.textContent = t('recordHistory');
+            machineText.textContent = t('trackMachineCrafting');
             storageText.textContent = t('recordResourceHistory');
             flowText.textContent = t('recordFlowHistory');
             nameText.textContent = t('networkName');
@@ -237,6 +248,7 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             const dirty =
                 state.current &&
                 (state.draft.isTracked !== state.current.isTracked ||
+                    state.draft.trackMachineCrafting !== state.current.trackMachineCrafting ||
                     state.draft.isStorageTracked !== state.current.isStorageTracked ||
                     state.draft.isFlowTracked !== state.current.isFlowTracked ||
                     historySettingFields.some((field) => state.draft[field] !== state.current![field]) ||
@@ -308,6 +320,8 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             }
             tracking.checked = state.draft.isTracked;
             tracking.disabled = state.saving || state.status !== 'ready';
+            machineTracking.checked = state.draft.trackMachineCrafting;
+            machineTracking.disabled = state.saving || state.status !== 'ready' || !state.draft.isTracked;
             save.disabled =
                 state.saving || state.status !== 'ready' || !!error || invalidInterval || (!state.uncertain && !dirty);
             accessTitle.textContent = t('explicitAccess');

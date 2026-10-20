@@ -62,8 +62,9 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         previousConfig = Config.INSTANCE;
         ConfigSettings configured = new ConfigSettings();
         // Short simulated intervals exercise scheduling independently of administrator defaults.
-        configured.data.stockSampleIntervalSeconds.min = 1;
-        configured.data.flowFlushIntervalSeconds.min = 1;
+        configured.resourceHistory.stockSampleIntervalSeconds.min = 1;
+        configured.resourceHistory.stockSampleIntervalSeconds.max = 7200;
+        configured.resourceHistory.flowFlushIntervalSeconds.min = 1;
         Config.INSTANCE = configured;
         super.initializeGridSave();
     }
@@ -151,7 +152,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             coordinator.prepareForViewer(fast, 6000);
             coordinator.prepareForViewer(slow, 6000);
             fastCapture.recordFlow(item, 4, 1);
-            ConfigSettings.Data reloaded = new ConfigSettings.Data();
+            ConfigSettings.ResourceHistory reloaded = new ConfigSettings.ResourceHistory();
             reloaded.flowFlushIntervalSeconds = new ConfigSettings.Range(10, 300, 10);
             assertTrue(
                 worlds.database(TestGridFixtures.Worlds.source(gridSave))

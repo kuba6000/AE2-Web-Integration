@@ -11,9 +11,9 @@ public final class ConfigSettings {
     public Notifications notifications = new Notifications();
     public Discord discord = new Discord();
     public Ntfy ntfy = new Ntfy();
-    public Tracking tracking = new Tracking();
     @Comment("Per-network history bounds and defaults. Reload applies bounds immediately; database cleanup follows in the background.")
-    public Data data = new Data();
+    @Path("resource_history")
+    public ResourceHistory resourceHistory = new ResourceHistory();
     @Path("resource_tracking")
     @Comment("Live observation and background capacity controls. Changes take effect after restarting the server.")
     public ResourceTracking resourceTracking = new ResourceTracking();
@@ -97,27 +97,19 @@ public final class ConfigSettings {
 
     }
 
-    public static final class Tracking {
-
-        @Path("track_machine_crafting")
-        @Comment("Track crafting requested directly by machines, rather than only player requests.")
-        public boolean trackMachineCrafting;
-
-    }
-
-    public static final class Data {
+    public static final class ResourceHistory {
 
         @Path("stock_sample_interval_seconds")
         @Comment("Seconds between saved quantity samples; each network selects a value within these bounds.")
-        public Range stockSampleIntervalSeconds = new Range(60, 86400, 300);
+        public Range stockSampleIntervalSeconds = new Range(60, 900, 300);
 
         @Path("flow_flush_interval_seconds")
         @Comment("Seconds covered by each saved input/output total; recent activity remains independent.")
-        public Range flowFlushIntervalSeconds = new Range(60, 86400, 60);
+        public Range flowFlushIntervalSeconds = new Range(60, 900, 60);
 
         @Path("history_retention_days")
         @Comment("Days of detailed history selected per network, subject to the record cap below.")
-        public Range historyRetentionDays = new Range(1, 365, 7);
+        public Range historyRetentionDays = new Range(1, 15, 7);
 
         @Path("history_max_rows_per_grid")
         @Comment({ "Maximum history records per network; the cap can shorten the selected retention.",
@@ -180,10 +172,11 @@ public final class ConfigSettings {
     }
 
     void validate() {
-        data.stockSampleIntervalSeconds.validate();
-        data.flowFlushIntervalSeconds.validate();
-        data.historyRetentionDays.validate();
-        if (data.historyMaxRowsPerGrid < 1) throw new IllegalArgumentException("History record cap must be positive");
+        resourceHistory.stockSampleIntervalSeconds.validate();
+        resourceHistory.flowFlushIntervalSeconds.validate();
+        resourceHistory.historyRetentionDays.validate();
+        if (resourceHistory.historyMaxRowsPerGrid < 1)
+            throw new IllegalArgumentException("History record cap must be positive");
         if (general.port < 1 || general.port > 65535)
             throw new IllegalArgumentException("general.port must be between 1 and 65535");
         if (general.maxRequestsBeforeLoggedInPerMinute < 1 || general.maxRequestsBeforeLoggedInPerMinute > 1000) {

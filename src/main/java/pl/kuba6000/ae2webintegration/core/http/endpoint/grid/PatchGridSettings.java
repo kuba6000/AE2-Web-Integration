@@ -10,7 +10,7 @@ import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
@@ -77,6 +77,7 @@ public final class PatchGridSettings extends IAsyncRequest {
      * Settings to update; omitted members remain unchanged.
      *
      * @param isTracked                  whether the grid should collect crafting history
+     * @param trackMachineCrafting       whether new machine-origin jobs are recorded while crafting tracking is enabled
      * @param isStorageTracked           whether the grid should collect periodic resource quantities
      * @param isFlowTracked              whether the grid should collect accepted input/output history
      * @param stockSampleIntervalSeconds seconds between stock samples, within the active server bounds
@@ -97,7 +98,7 @@ public final class PatchGridSettings extends IAsyncRequest {
         @OptionalInput @Nullable Boolean isStorageTracked, @OptionalInput @Nullable Boolean isFlowTracked,
         @OptionalInput @Nullable Integer stockSampleIntervalSeconds,
         @OptionalInput @Nullable Integer flowFlushIntervalSeconds,
-        @OptionalInput @Nullable Integer historyRetentionDays) {}
+        @OptionalInput @Nullable Integer historyRetentionDays, @OptionalInput @Nullable Boolean trackMachineCrafting) {}
 
     @Body
     private @NotNull Input input;
@@ -124,7 +125,7 @@ public final class PatchGridSettings extends IAsyncRequest {
                 return;
             }
             try {
-                Data policy = registry.getDataPolicy();
+                ResourceHistory policy = registry.getDataPolicy();
                 if (input.stockSampleIntervalSeconds() != null)
                     policy.stockSampleIntervalSeconds.validate(input.stockSampleIntervalSeconds());
                 if (input.flowFlushIntervalSeconds() != null)
@@ -141,6 +142,8 @@ public final class PatchGridSettings extends IAsyncRequest {
                 if (input.isTracked() != null) {
                     settings.setTracked(input.isTracked());
                 }
+                if (input.trackMachineCrafting() != null)
+                    settings.setTrackMachineCrafting(input.trackMachineCrafting());
                 if (input.isStorageTracked() != null) settings.setStorageTracked(input.isStorageTracked());
                 if (input.isFlowTracked() != null) settings.setFlowTracked(input.isFlowTracked());
                 if (input.stockSampleIntervalSeconds() != null)
@@ -150,6 +153,7 @@ public final class PatchGridSettings extends IAsyncRequest {
                 if (input.historyRetentionDays() != null)
                     settings.setHistoryRetentionDays(input.historyRetentionDays());
                 if (input.name() != null || input.isTracked() != null
+                    || input.trackMachineCrafting() != null
                     || input.isStorageTracked() != null
                     || input.isFlowTracked() != null
                     || input.stockSampleIntervalSeconds() != null

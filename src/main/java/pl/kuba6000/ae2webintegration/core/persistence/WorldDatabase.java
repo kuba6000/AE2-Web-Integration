@@ -24,7 +24,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 
 /** One world owns its writer, bounded MVCC readers and file lifetime. */
@@ -37,7 +37,7 @@ public final class WorldDatabase implements AutoCloseable {
     private final ReentrantLock writerGate = new ReentrantLock(true);
     private final Semaphore readers = new Semaphore(4, true);
     private final Path databaseBase;
-    private volatile Data policy;
+    private volatile ResourceHistory policy;
     private volatile @Nullable OpenedDatabase openedDatabase;
     private @Nullable Path ownedPath;
     private boolean closed;
@@ -50,7 +50,7 @@ public final class WorldDatabase implements AutoCloseable {
     @Desugar
     private record OpenedDatabase(@NotNull Connection writer, @NotNull String url) {}
 
-    public WorldDatabase(@NotNull Path databaseBase, @NotNull Data policy) {
+    public WorldDatabase(@NotNull Path databaseBase, @NotNull ResourceHistory policy) {
         if (databaseBase.toString()
             .indexOf(';') >= 0)
             throw new IllegalArgumentException("Database path cannot contain JDBC property separators");
@@ -58,12 +58,12 @@ public final class WorldDatabase implements AutoCloseable {
         this.policy = policy;
     }
 
-    public @NotNull Data policy() {
+    public @NotNull ResourceHistory policy() {
         return policy;
     }
 
     /** Publishes validated, read-only settings to this active world without database work. */
-    public boolean applyPolicy(@NotNull Data policy) {
+    public boolean applyPolicy(@NotNull ResourceHistory policy) {
         GridIdentityRegistry current = identities;
         if (current == null || gridFlushStopped) return false;
         synchronized (current) {

@@ -51,9 +51,10 @@ class GridIdentityRegistryTest {
 
     @Test
     void applyingLiveBoundsClampsRamAndPendingRetiredSettingsWithoutWritingSql() throws Exception {
-        ConfigSettings.Data initial = new ConfigSettings.Data();
+        ConfigSettings.ResourceHistory initial = new ConfigSettings.ResourceHistory();
         initial.stockSampleIntervalSeconds = new ConfigSettings.Range(10, 600, 120);
         initial.flowFlushIntervalSeconds = new ConfigSettings.Range(10, 600, 90);
+        initial.historyRetentionDays = new ConfigSettings.Range(1, 30, 7);
         try (WorldDatabase database = new WorldDatabase(directory.resolve("live-policy"), initial)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, directory.resolve("absent.json"));
@@ -73,7 +74,7 @@ class GridIdentityRegistryTest {
             retiredData.getSettings()
                 .setHistoryRetentionDays(30);
             registry.controllerRemoved(controller(2));
-            ConfigSettings.Data tightened = new ConfigSettings.Data();
+            ConfigSettings.ResourceHistory tightened = new ConfigSettings.ResourceHistory();
             tightened.stockSampleIntervalSeconds = new ConfigSettings.Range(20, 90, 60);
             tightened.flowFlushIntervalSeconds = new ConfigSettings.Range(50, 150, 100);
             tightened.historyRetentionDays = new ConfigSettings.Range(2, 14, 3);
@@ -155,7 +156,7 @@ class GridIdentityRegistryTest {
         ConfigSettings previous = Config.INSTANCE;
         try {
             ConfigSettings configured = new ConfigSettings();
-            configured.data.stockSampleIntervalSeconds = new ConfigSettings.Range(10, 600, 120);
+            configured.resourceHistory.stockSampleIntervalSeconds = new ConfigSettings.Range(10, 600, 120);
             Config.INSTANCE = configured;
             File file = directory.resolve("policy.json")
                 .toFile();
@@ -175,7 +176,7 @@ class GridIdentityRegistryTest {
                 .setStockSampleIntervalSeconds(500);
             registry.saveIfDirty();
             ConfigSettings tightened = new ConfigSettings();
-            tightened.data.stockSampleIntervalSeconds = new ConfigSettings.Range(20, 90, 60);
+            tightened.resourceHistory.stockSampleIntervalSeconds = new ConfigSettings.Range(20, 90, 60);
             Config.INSTANCE = tightened;
             // A config reload does not replace the policy of an already initialized world.
             registry.getPersistentData(key)

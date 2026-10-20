@@ -58,8 +58,8 @@ class CoreEngineTest {
             GridSettingsData settings = data.getSettings();
             settings.setName("Keep");
             settings.setStockSampleIntervalSeconds(600);
-            config.write("data.stock_sample_interval_seconds.max", 90);
-            config.write("data.stock_sample_interval_seconds.default", 60);
+            config.write("resource_history.stock_sample_interval_seconds.max", 90);
+            config.write("resource_history.stock_sample_interval_seconds.default", 60);
             assertTrue(
                 CommandProcessor.reload()
                     .isSuccess());
@@ -67,13 +67,13 @@ class CoreEngineTest {
             assertEquals("Keep", settings.getName());
             assertEquals(90, CoreEngine.GRID_IDENTITIES.getDataPolicy().stockSampleIntervalSeconds.max);
             ConfigSettings published = Config.INSTANCE;
-            config.write("data.stock_sample_interval_seconds.default", 91);
+            config.write("resource_history.stock_sample_interval_seconds.default", 91);
             assertFalse(
                 CommandProcessor.reload()
                     .isSuccess());
             assertSame(published, Config.INSTANCE);
             assertEquals(90, settings.getStockSampleIntervalSeconds());
-            config.write("data.stock_sample_interval_seconds.default", 60);
+            config.write("resource_history.stock_sample_interval_seconds.default", 60);
         } finally {
             CoreEngine.onServerStopped();
         }

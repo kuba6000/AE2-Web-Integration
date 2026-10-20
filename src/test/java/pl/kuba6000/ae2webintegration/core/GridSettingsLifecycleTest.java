@@ -31,7 +31,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
 
     @Test
     void changedBoundsRejectTheWholeAuthorizedPatch() throws Exception {
-        ConfigSettings.Data initial = new ConfigSettings.Data();
+        ConfigSettings.ResourceHistory initial = new ConfigSettings.ResourceHistory();
         initial.stockSampleIntervalSeconds = new ConfigSettings.Range(60, 900, 300);
         worlds.database(TestGridFixtures.Worlds.source(gridSave))
             .applyPolicy(initial);
@@ -51,7 +51,7 @@ class GridSettingsLifecycleTest extends GridTestScope {
                     owner,
                     Collections.singletonMap("gridKey", key.toString()),
                     body)));
-        ConfigSettings.Data tighter = new ConfigSettings.Data();
+        ConfigSettings.ResourceHistory tighter = new ConfigSettings.ResourceHistory();
         tighter.stockSampleIntervalSeconds = new ConfigSettings.Range(60, 90, 60);
         Thread pending = new Thread(request::handle);
         synchronized (CoreEngine.GRID_IDENTITIES) {

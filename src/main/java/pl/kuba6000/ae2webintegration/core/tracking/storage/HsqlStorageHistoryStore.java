@@ -21,7 +21,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
@@ -60,7 +60,7 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
 
     private final WorldDatabase database;
     private final HsqlHistoryRetention retention;
-    private volatile @Nullable Data appliedPolicy;
+    private volatile @Nullable ResourceHistory appliedPolicy;
 
     public HsqlStorageHistoryStore(@NotNull WorldDatabase database) {
         this.database = database;
@@ -75,8 +75,8 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
     }
 
     /** Captured inside the writer gate, including when append waited after an earlier initialization. */
-    private @NotNull Data applyPolicy(@NotNull Connection db) throws SQLException {
-        Data current = database.policy();
+    private @NotNull ResourceHistory applyPolicy(@NotNull Connection db) throws SQLException {
+        ResourceHistory current = database.policy();
         if (appliedPolicy != current) {
             WorldGridStore.normalizePolicy(db, current);
             retention.enforceExistingBudgets(db, current.historyMaxRowsPerGrid);
@@ -90,7 +90,7 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         @NotNull List<StorageHistoryPoint> points) throws IOException {
         initialize();
         appliedPolicy = database.write(db -> {
-            Data current = applyPolicy(db);
+            ResourceHistory current = applyPolicy(db);
             long gridId = gridId(db, gridKey);
             if (gridId == -1) throw new IOException("History requires a durable grid identity");
             updateDescriptions(db, descriptions, points);
@@ -106,7 +106,7 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
     public void maintain() {
         try {
             appliedPolicy = database.write(db -> {
-                Data current = applyPolicy(db);
+                ResourceHistory current = applyPolicy(db);
                 retention.maintain(db, current.historyMaxRowsPerGrid);
                 return current;
             });

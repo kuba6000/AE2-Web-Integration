@@ -3,7 +3,7 @@ package pl.kuba6000.ae2webintegration.core.grid;
 import org.jetbrains.annotations.NotNull;
 
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Data;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 
 /** Mutable configuration owned by one retained grid identity. */
 @SuppressWarnings("SynchronizeOnNonFinalField") // Bound to the registry before publication; never rebound while in use.
@@ -15,6 +15,8 @@ public final class GridSettingsData {
      * @example true
      */
     private boolean isTracked;
+    /** Whether new machine-origin jobs are admitted while crafting tracking is enabled. */
+    private boolean trackMachineCrafting;
     /** Whether this grid records sampled resource quantities. */
     private boolean isStorageTracked;
     /** Whether this grid records accepted resource input/output history. */
@@ -23,7 +25,7 @@ public final class GridSettingsData {
     private int stockSampleIntervalSeconds;
     private int flowFlushIntervalSeconds;
     private int historyRetentionDays;
-    private transient @NotNull Data policy;
+    private transient @NotNull ResourceHistory policy;
     /**
      * Custom network name; empty when unnamed.
      *
@@ -34,10 +36,10 @@ public final class GridSettingsData {
     private transient @NotNull Runnable markDirty = () -> {};
 
     public GridSettingsData() {
-        this(new ConfigSettings.Data());
+        this(new ConfigSettings.ResourceHistory());
     }
 
-    public GridSettingsData(@NotNull Data policy) {
+    public GridSettingsData(@NotNull ResourceHistory policy) {
         this.policy = policy;
         stockSampleIntervalSeconds = policy.stockSampleIntervalSeconds.defaultValue;
         flowFlushIntervalSeconds = policy.flowFlushIntervalSeconds.defaultValue;
@@ -49,6 +51,7 @@ public final class GridSettingsData {
         synchronized (lock) {
             GridSettingsData result = new GridSettingsData(policy);
             result.isTracked = isTracked;
+            result.trackMachineCrafting = trackMachineCrafting;
             result.isStorageTracked = isStorageTracked;
             result.isFlowTracked = isFlowTracked;
             result.stockSampleIntervalSeconds = stockSampleIntervalSeconds;
@@ -60,7 +63,7 @@ public final class GridSettingsData {
     }
 
     /** Normalize retained values under the settings lock when administrator bounds change. */
-    public boolean applyPolicy(@NotNull Data policy) {
+    public boolean applyPolicy(@NotNull ResourceHistory policy) {
         synchronized (lock) {
             this.policy = policy;
             int stock = policy.stockSampleIntervalSeconds.clamp(stockSampleIntervalSeconds);
@@ -103,6 +106,20 @@ public final class GridSettingsData {
     public boolean isStorageTracked() {
         synchronized (lock) {
             return isStorageTracked;
+        }
+    }
+
+    public boolean isTrackMachineCrafting() {
+        synchronized (lock) {
+            return trackMachineCrafting;
+        }
+    }
+
+    public void setTrackMachineCrafting(boolean value) {
+        synchronized (lock) {
+            if (trackMachineCrafting == value) return;
+            trackMachineCrafting = value;
+            markDirty.run();
         }
     }
 
@@ -189,7 +206,8 @@ public final class GridSettingsData {
 
     public boolean isDefault() {
         synchronized (lock) {
-            return !isTracked && !isStorageTracked
+            return !isTracked && !trackMachineCrafting
+                && !isStorageTracked
                 && !isFlowTracked
                 && stockSampleIntervalSeconds == policy.stockSampleIntervalSeconds.defaultValue
                 && flowFlushIntervalSeconds == policy.flowFlushIntervalSeconds.defaultValue
