@@ -1,5 +1,5 @@
 import type { PinsState } from './pins.js';
-import type { TerminalStreamState } from './terminal.js';
+import type { TerminalStreamState, TerminalUpdateHint } from './terminal.js';
 import type { CraftingState } from './crafting.js';
 import type { CpuState } from './cpus.js';
 import type { HistoryState } from './history.js';
@@ -73,8 +73,8 @@ export type ThemeApplication = {
         pause(id: number, paused: boolean): void;
     };
     readonly state: ThemeState;
-    /** Invoked immediately, then on data changes. Renderer failures terminate this theme mount. */
-    subscribe(listener: (state: ThemeState) => void): () => void;
+    /** Invoked immediately, then with complete state on changes. The optional hint identifies timing-only CPU updates. */
+    subscribe(listener: (state: ThemeState, hint?: TerminalUpdateHint) => void): () => void;
     refresh(options?: { reloadDetail?: boolean }): Promise<void>;
     search(value: string): void;
     /** Optionally choose the selected resource's history period without changing the full tracking view's range. */

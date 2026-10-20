@@ -374,3 +374,157 @@ test('terminal reconnect retains its snapshot and reports only failed recovery u
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(reads, readsBeforeRevokedRetry, 'Revocation cancels the pending reconnect');
 });
+
+async function cpuTerminal(t, tracked = true) {
+    t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 10000 });
+    const originalDocument = global.document;
+    global.document = new EventTarget();
+    global.document.hidden = false;
+    const { createTerminal } = await import(moduleUrl);
+    const row = (itemKey, extra = {}) => ({
+        itemKey,
+        displayName: itemKey ?? 'Anonymous',
+        icon: null,
+        active: 1,
+        pending: 0,
+        stored: 0,
+        timeSpentCrafting: 1000,
+        crafting: true,
+        craftedTotal: 2,
+        shareInCraftingTime: 0.5,
+        shareInCraftingTimeCombined: 0.1,
+        craftsPerSec: 2,
+        ...extra
+    });
+    const detail = {
+        isBusy: true,
+        hasTrackingInfo: tracked,
+        timeElapsed: tracked ? 10000 : 0,
+        timeStarted: 0,
+        finalOutput: null,
+        items: [row('iron'), row(null)]
+    };
+    let events;
+    let snapshotReads = 0;
+    const terminal = createTerminal(
+        {
+            grids: async () => [{ key: 'grid', name: 'Grid' }],
+            resourcePins: async () => ({ data: [], icons: null }),
+            iconPack: async () => ({ available: false, packId: null }),
+            cpus: async () => ({ data: { cpu: detail }, icons: null }),
+            cpu: async () => {
+                snapshotReads++;
+                return { data: detail, icons: null, view: { generation: '1', revision: '1' }, subscription: 'cpu' };
+            },
+            cpuEvents: (_grid, _cpu, _token, _icons, handlers) => {
+                events = handlers;
+                return () => {};
+            }
+        },
+        {
+            values: { autoRefresh: true },
+            set(name, value) {
+                this.values[name] = value;
+            }
+        },
+        { enabled() {}, dispose() {} },
+        {}
+    );
+    t.after(() => {
+        terminal.dispose();
+        global.document = originalDocument;
+    });
+    terminal.route({ view: 'cpus', gridKey: 'grid', cpuKey: 'cpu' });
+    await terminal.refresh();
+    const notifications = [];
+    terminal.subscribe((state, hint) => notifications.push({ hint, elapsed: state.cpus.detail?.timeElapsed }));
+    return { terminal, detail, row, notifications, events: () => events, snapshotReads: () => snapshotReads };
+}
+
+test('CPU clock notifications carry complete state and a timing hint, without advancing snapshot provenance', async (t) => {
+    const { terminal, notifications, events, snapshotReads } = await cpuTerminal(t);
+    const revision = terminal.state.cpus.detailSnapshotRevision;
+    assert.equal(revision, 1);
+    assert.equal(notifications.at(-1).hint, undefined, 'Initial subscription is a complete ordinary update');
+    const reads = snapshotReads();
+    t.mock.timers.tick(1000);
+    assert.deepEqual(notifications.at(-1), { hint: 'cpu-timing', elapsed: 11000 });
+    assert.equal(snapshotReads(), reads, 'The timing clock does not fetch detail');
+    assert.equal(terminal.state.cpus.detailSnapshotRevision, revision);
+    events().delta({
+        view: { generation: '1', revision: '2' },
+        definitions: [],
+        removed: [],
+        icons: null,
+        updates: [
+            {
+                itemKey: 'iron',
+                active: 3,
+                pending: 0,
+                stored: 0,
+                timeSpentCrafting: 2000,
+                crafting: true,
+                craftedTotal: 4
+            }
+        ]
+    });
+    assert.equal(notifications.at(-1).hint, undefined, 'A live data change is an ordinary update');
+    assert.equal(terminal.state.cpus.detail.items[0].active, 3);
+    assert.equal(terminal.state.cpus.detailSnapshotRevision, revision);
+    await terminal.cpus.refresh(true);
+    assert.equal(terminal.state.cpus.detailSnapshotRevision, revision, 'Summary polling does not force grid ordering');
+    await terminal.cpus.refresh();
+    assert.equal(terminal.state.cpus.detailSnapshotRevision, revision + 1, 'Accepted full detail refresh does');
+});
+
+test('CPU clock is quiet while hidden, after leaving the detail, and after disposal', async (t) => {
+    const { terminal, notifications } = await cpuTerminal(t);
+    global.document.hidden = true;
+    const before = notifications.length;
+    t.mock.timers.tick(1000);
+    assert.equal(notifications.length, before);
+    global.document.hidden = false;
+    t.mock.timers.tick(1000);
+    assert.equal(notifications.at(-1).elapsed, 12000, 'Visible timing catches up from the original measurements');
+    terminal.route({ view: 'home', gridKey: null });
+    await Promise.resolve();
+    const departed = notifications.length;
+    t.mock.timers.tick(1000);
+    assert.equal(notifications.length, departed);
+    terminal.dispose();
+    t.mock.timers.tick(1000);
+    assert.equal(notifications.length, departed);
+});
+
+test('busy CPU detail without tracking does not publish pointless clock updates', async (t) => {
+    const { terminal, notifications } = await cpuTerminal(t, false);
+    const before = notifications.length;
+    t.mock.timers.tick(2000);
+    assert.equal(notifications.length, before);
+    assert.equal(terminal.state.cpus.detail.timeElapsed, 0);
+});
+
+test('CPU anonymous replacement provenance distinguishes new rows from unchanged clock and keyed updates', async (t) => {
+    const { terminal, events, row } = await cpuTerminal(t);
+    const initial = terminal.state.cpus.unkeyedRevision;
+    assert.equal(initial, 1);
+    const delta = (revision, extra) =>
+        events().delta({
+            view: { generation: '1', revision: String(revision) },
+            definitions: [],
+            updates: [],
+            removed: [],
+            icons: null,
+            ...extra
+        });
+    delta(2, { unkeyed: null });
+    t.mock.timers.tick(1000);
+    assert.equal(terminal.state.cpus.unkeyedRevision, initial);
+    delta(3, { unkeyed: [row(null, { active: 5 })] });
+    assert.equal(terminal.state.cpus.unkeyedRevision, initial + 1, 'Same description cannot imply anonymous identity');
+    delta(4, {});
+    assert.equal(terminal.state.cpus.unkeyedRevision, initial + 1);
+    delta(5, { unkeyed: [] });
+    assert.equal(terminal.state.cpus.unkeyedRevision, initial + 2);
+    assert.equal(terminal.state.cpus.detail.items.length, 1);
+});

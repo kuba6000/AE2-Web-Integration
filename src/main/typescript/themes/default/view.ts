@@ -140,8 +140,12 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         resourceTerminal.render(state, locale, effectiveDisplay);
     }
 
-    function render(next: ThemeState) {
+    function render(next: ThemeState, hint?: 'cpu-timing') {
         state = next;
+        if (hint === 'cpu-timing') {
+            cpuView.timing(state.cpus, locale);
+            return;
+        }
         if (language !== state.preferences.language) {
             language = state.preferences.language;
             updateLabels();

@@ -19,6 +19,10 @@ export type CpuState = {
     reading: boolean;
     cpus: (CpuInfo & { key: string })[];
     detail: CpuDetail | null;
+    /** Advances only when a full selected-CPU snapshot is accepted. */
+    detailSnapshotRevision: number;
+    /** Anonymous lists replace their rows without establishing identity between matching descriptions. */
+    unkeyedRevision: number;
     icons: IconMetadata | null;
     overviewIcons: IconMetadata | null;
     error: string | null;
@@ -35,13 +39,15 @@ export function createCpuMonitor(
     changed: () => void,
     iconsEnabled: () => boolean,
     notify: Notify,
-    live: { enabled: () => boolean; updated: () => void }
+    live: { enabled: () => boolean; updated: (hint?: 'cpu-timing') => void }
 ) {
     const state: CpuState = {
         status: 'idle',
         reading: false,
         cpus: [],
         detail: null,
+        detailSnapshotRevision: 0,
+        unkeyedRevision: 0,
         icons: null,
         overviewIcons: null,
         error: null,
@@ -63,6 +69,7 @@ export function createCpuMonitor(
         rows: () => source?.rows?.map(({ resource }) => resource) ?? [],
         icons: () => state.icons,
         section(delta, remap) {
+            if (delta.unkeyed) state.unkeyedRevision++;
             if (!delta.cpu || !source) return;
             const { finalOutput, ...cpu } = delta.cpu;
             source = {
@@ -93,12 +100,13 @@ export function createCpuMonitor(
     /** Themes see running measurements advance, so the detail is derived again while the CPU works. */
     function showSource() {
         if (source) state.detail = deriveCpuDetail(source.header, source.headerAt, source.rows, Date.now());
-        const ticking = !!source?.header.isBusy && route.view === 'cpus' && !!route.cpuKey;
+        const ticking =
+            !!source?.header.isBusy && source.header.hasTrackingInfo && route.view === 'cpus' && !!route.cpuKey;
         if (ticking && !clock) {
             clock = setInterval(() => {
                 if (document.hidden) return;
                 showSource();
-                live.updated();
+                live.updated('cpu-timing');
             }, 1000);
         } else if (!ticking && clock) {
             clearInterval(clock);
@@ -151,6 +159,8 @@ export function createCpuMonitor(
         // A snapshot that is not followed keeps the values the server derived for it.
         if (!stream.active || !live.enabled()) source = null;
         state.detail = detail.data;
+        state.detailSnapshotRevision++;
+        state.unkeyedRevision++;
         state.icons = detail.icons;
         showSource();
     }

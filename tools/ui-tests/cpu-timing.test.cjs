@@ -92,7 +92,7 @@ test('data without tracking keeps the values it arrived with and an idle CPU has
     assert.equal(deriveCpuDetail(header, 1000, null, 4000).timeElapsed, 13000);
 });
 
-test('resources keep the server order of active, pending and stored work with stable ties', async () => {
+test('timing preserves incoming resource order so each theme owns presentation order', async () => {
     const { deriveCpuDetail } = await timing;
     const rows = measured(
         0,
@@ -108,13 +108,13 @@ test('resources keep the server order of active, pending and stored work with st
     assert.deepEqual(
         detail.items.map((item) => item.displayName),
         [
-            'active-big',
-            'active-small',
-            'active-small-twin',
+            'stored-small',
             'pending-big',
-            'pending-small',
+            'active-small',
             'stored-big',
-            'stored-small'
+            'active-big',
+            'pending-small',
+            'active-small-twin'
         ]
     );
 });

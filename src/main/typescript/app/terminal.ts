@@ -26,6 +26,8 @@ import { createGridSettings } from './settings.js';
 import { createNotifications } from './notifications.js';
 
 export type TerminalStreamState = LiveStreamState;
+/** Timing-only CPU updates still deliver complete state; themes can skip unrelated presentation. */
+export type TerminalUpdateHint = 'cpu-timing';
 
 export type TerminalData = {
     capabilities: ApplicationContext['capabilities'];
@@ -68,7 +70,7 @@ export function createTerminal(
     const notifications = createNotifications();
     let iconsEnabled = false;
     let selectedHistoryRange: number | undefined;
-    const listeners = new Set<(state: TerminalState) => void>();
+    const listeners = new Set<(state: TerminalState, hint?: TerminalUpdateHint) => void>();
     let gridRequest: AbortController | undefined;
     let itemRequest: AbortController | undefined;
     let iconRequest: AbortController | undefined;
@@ -79,8 +81,8 @@ export function createTerminal(
     let refreshingGrids: Promise<void> | null = null;
     let refreshingAutomatically = false;
     const discoveryUpdates = new Map<string, GridSettings>();
-    const notify = () => {
-        if (!disposed) for (const listener of listeners) listener(state);
+    const notify = (hint?: TerminalUpdateHint) => {
+        if (!disposed) for (const listener of listeners) listener(state, hint);
     };
     const crafting = createCrafting(
         api,
@@ -516,7 +518,7 @@ export function createTerminal(
             void resourceHistory.refresh();
             notify();
         },
-        subscribe(listener: (state: TerminalState) => void) {
+        subscribe(listener: (state: TerminalState, hint?: TerminalUpdateHint) => void) {
             listeners.add(listener);
             listener(state);
             return () => listeners.delete(listener);

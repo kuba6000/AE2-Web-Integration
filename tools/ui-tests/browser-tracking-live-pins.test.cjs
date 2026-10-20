@@ -1911,11 +1911,22 @@ test('live CPU detail applies absolute updates, new and removed resources and un
         removed: ['gold']
     });
     await resources.getByRole('button', { name: /^Silver Ingot.*Active: 2/ }).waitFor();
-    await resources.getByRole('button', { name: /^Gold Ingot/ }).waitFor({ state: 'detached' });
+    assert.equal(await resources.getByRole('button', { name: /^Gold Ingot/ }).isDisabled(), true);
+    assert.doesNotMatch(
+        await resources.getByRole('button', { name: /^Gold Ingot/ }).getAttribute('aria-label'),
+        /Stored: 3/
+    );
     send(4, { unkeyed: [liveCpuRow(null, 'Mystery Resource', { active: 1, pending: 0, stored: 0 })] });
     await resources.getByRole('button', { name: /^Mystery Resource/ }).waitFor();
     assert.equal(await resources.getByRole('button', { name: /^Iron Ingot/ }).count(), 1);
     send(5, { unkeyed: [] });
+    await page.waitForFunction(() =>
+        [...document.querySelectorAll('.cpu-item')].some(
+            (button) => button.textContent.includes('Mystery Resource') && button.disabled
+        )
+    );
+    await page.clock.runFor(5000);
+    await resources.getByRole('button', { name: /^Gold Ingot/ }).waitFor({ state: 'detached' });
     await resources.getByRole('button', { name: /^Mystery Resource/ }).waitFor({ state: 'detached' });
     options.cpus['cpu-b'] = { ...cpu, name: 'Renamed assembler' };
     const listed = page.waitForResponse((response) => new URL(response.url()).pathname === `/api/grids/${gridA}/cpus`);
@@ -2092,4 +2103,69 @@ test('a CPU detail is read by snapshots only while automatic refresh is off', as
     );
     assert.equal(options.cpuStreams?.length ?? 0, 0);
     assert.equal(await page.locator('#refresh .live-icon').isVisible(), false);
+});
+
+test('CPU live counts preserve tile positions until five seconds and explicit sorting stays immediate', async (t) => {
+    const { page, resources, send, options } = await openLiveCpu(t);
+    await page.clock.pauseAt(Date.now() + 1000);
+    await page.getByRole('button', { name: 'Sort by: Active quantity', exact: true }).click();
+    const names = () =>
+        resources
+            .getByRole('button')
+            .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label').split(' · ')[0]));
+    assert.deepEqual(await names(), ['Iron Ingot', 'Gold Ingot']);
+    const ironName = await resources
+        .getByRole('button', { name: /^Iron Ingot/ })
+        .locator('strong')
+        .evaluateHandle((node) => node.firstChild);
+    const selectorName = await page
+        .locator('.cpu-selector-name')
+        .first()
+        .evaluateHandle((node) => node.firstChild);
+    send(2, { updates: [liveUpdate('gold', { active: 20 })] });
+    await resources.getByRole('button', { name: /^Gold Ingot.*Active: 20/ }).waitFor();
+    assert.deepEqual(await names(), ['Iron Ingot', 'Gold Ingot']);
+    await page.clock.runFor(1000);
+    assert.equal(
+        await ironName.evaluate((node) => node.isConnected),
+        true,
+        'Unchanged tile text is retained through delta and clock'
+    );
+    assert.equal(
+        await selectorName.evaluate((node) => node.isConnected),
+        true,
+        'CPU clock does not rebuild the unchanged sidebar'
+    );
+    await page.clock.runFor(3999);
+    assert.deepEqual(await names(), ['Iron Ingot', 'Gold Ingot']);
+    await page.clock.runFor(1);
+    assert.deepEqual(await names(), ['Gold Ingot', 'Iron Ingot']);
+    send(3, { updates: [liveUpdate('iron', { active: 30 })] });
+    await resources.getByRole('button', { name: /^Iron Ingot.*Active: 30/ }).waitFor();
+    assert.deepEqual(await names(), ['Gold Ingot', 'Iron Ingot']);
+    await page.getByRole('button', { name: 'Sort by: Active quantity', exact: true }).click();
+    assert.deepEqual(await names(), ['Iron Ingot', 'Gold Ingot'], 'An explicit sort applies immediately');
+    options.cpuDetails['cpu-a'].items = [
+        liveCpuRow('gold', 'Gold Ingot', { active: 50 }),
+        liveCpuRow('iron', 'Iron Ingot', { active: 1 })
+    ];
+    await page.locator('#refresh').click();
+    await resources.getByRole('button', { name: /^Gold Ingot.*Active: 50/ }).waitFor();
+    assert.deepEqual(await names(), ['Gold Ingot', 'Iron Ingot'], 'Accepted full snapshots apply ordering immediately');
+});
+
+test('replacing anonymous CPU resources keeps slots but never adopts the old focused resource', async (t) => {
+    const { resources, send } = await openLiveCpu(t, {
+        items: [liveCpuRow(null, 'Anonymous', { active: 1 }), liveCpuRow('iron', 'Iron Ingot')]
+    });
+    const anonymous = resources.getByRole('button', { name: /^Anonymous/ });
+    await anonymous.focus();
+    const old = await anonymous.elementHandle();
+    const iron = resources.getByRole('button', { name: /^Iron Ingot/ });
+    const position = await iron.evaluate((node) => [...node.closest('ul').children].indexOf(node.parentElement));
+    send(2, { unkeyed: [liveCpuRow(null, 'Anonymous', { active: 8 })] });
+    await resources.getByRole('button', { name: /^Anonymous.*Active: 8/ }).waitFor();
+    assert.equal(await old.evaluate((node) => node.isConnected), false);
+    assert.equal(await anonymous.evaluate((node) => node === document.activeElement), false);
+    assert.equal(await iron.evaluate((node) => [...node.closest('ul').children].indexOf(node.parentElement)), position);
 });

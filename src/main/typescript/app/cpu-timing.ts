@@ -3,22 +3,10 @@ import type { CpuDetail, CpuHeader, CpuResource } from './api-types.js';
 /** A resource exactly as the server sent it, with the local time that value arrived. */
 export type CpuMeasured = { resource: CpuResource; receivedAt: number };
 
-const counts = ['active', 'pending', 'stored'] as const;
-
-function priority(item: CpuResource) {
-    return item.active > 0 ? 0 : item.pending > 0 ? 1 : 2;
-}
-
-/** Resources with active work first, then pending, then stored, each by descending count. */
-function byWork(a: CpuResource, b: CpuResource) {
-    const rank = priority(a);
-    return rank - priority(b) || b[counts[rank]] - a[counts[rank]];
-}
-
 /**
  * The detail a theme displays at `now`. The server sends measurements as of the moment it built them; a running
  * measurement continues from the local time it arrived, so no traffic is needed for clock progress. Timing ratios
- * are derived here from those values. Without a clock to extend, pass the time the data arrived.
+ * are derived here from those values, preserving input order for theme-owned sorting. Without a clock to extend, pass the time the data arrived.
  */
 export function deriveCpuDetail(
     header: CpuHeader,
@@ -44,5 +32,5 @@ export function deriveCpuDetail(
               }
             : resource
     );
-    return { ...header, timeElapsed, items: items.sort(byWork) };
+    return { ...header, timeElapsed, items };
 }

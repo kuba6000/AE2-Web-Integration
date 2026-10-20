@@ -43,11 +43,14 @@ export function mountTheme(
         if (controller.signal.aborted) cleanup(release);
         else cleanups.add(release);
     }
-    function subscribe<T>(source: (listener: (value: T) => void) => () => void, listener: (value: T) => void) {
-        const unsubscribe = source((value) => {
+    function subscribe<T, Hint = never>(
+        source: (listener: (value: T, hint?: Hint) => void) => () => void,
+        listener: (value: T, hint?: Hint) => void
+    ) {
+        const unsubscribe = source((value, hint) => {
             if (controller.signal.aborted || failure) return;
             try {
-                listener(value);
+                listener(value, hint);
             } catch (error) {
                 fail(error);
             }
