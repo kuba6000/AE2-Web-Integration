@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -32,10 +33,12 @@ import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetItems;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEMeInventoryItem;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEPathingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
@@ -74,6 +77,260 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     void clearGridSave() {
         super.clearGridSave();
         Config.INSTANCE = previousConfig;
+    }
+
+    @Test
+    void failedEnumerationRetainsCaptureAndObservationsUntilACompleteReconciliation() throws Exception {
+        Resource iron = new Resource("enumeration-iron", 20, false);
+        Grid grid = new Grid(710041, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GridSettingsData policy = CoreEngine.GRID_IDENTITIES.getPersistentData(key)
+            .getSettings();
+        policy.setStorageTracked(true);
+        policy.setStockSampleIntervalSeconds(1);
+        AtomicInteger enumerations = new AtomicInteger();
+        AtomicBoolean failEnumeration = new AtomicBoolean(true);
+        TestGridFixtures.TestAE unreliable = new TestGridFixtures.TestAE() {
+
+            @Override
+            public Iterable<IAEGrid> web$getGrids() {
+                enumerations.incrementAndGet();
+                if (!failEnumeration.get()) return Collections.emptyList();
+                return () -> new Iterator<IAEGrid>() {
+
+                    private boolean first = true;
+
+                    public boolean hasNext() {
+                        if (!first) throw new IllegalStateException("Native enumeration interrupted");
+                        return true;
+                    }
+
+                    public IAEGrid next() {
+                        first = false;
+                        return grid;
+                    }
+                };
+            }
+        };
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.tick(TestGridFixtures.ae(grid), 1000);
+            awaitRevision(service, key, 1);
+            StorageCapture capture = grid.web$getStorageCapture();
+            grid.rows.set(0, new Resource("enumeration-iron", 25, false));
+            capture.markChanged(iron);
+            assertDoesNotThrow(() -> coordinator.tick(unreliable, 2000));
+            assertSame(capture, grid.web$getStorageCapture());
+            assertEquals(
+                25,
+                awaitRevision(service, key, 2).rows()
+                    .get(0)
+                    .quantity());
+            coordinator.tick(unreliable, 3000);
+            assertEquals(1, enumerations.get(), "A failed enumeration must back off without stopping observations");
+            failEnumeration.set(false);
+            coordinator.tick(unreliable, 34000);
+            assertNull(grid.web$getStorageCapture());
+            assertNull(service.snapshot(key));
+        }
+    }
+
+    @Test
+    void failedEligibilityPreservesItsBindingWhileHealthyAndRetiredGridsProgress() throws Exception {
+        Resource iron = new Resource("eligibility-iron", 20, false);
+        FaultGrid failing = new FaultGrid(710051, iron);
+        Grid healthy = new Grid(710052, iron);
+        Grid retired = new Grid(710053, iron);
+        StableKey failingKey = trackStock(failing);
+        StableKey healthyKey = trackStock(healthy);
+        StableKey retiredKey = trackStock(retired);
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking())) {
+            coordinator.prepareForViewer(failing, 1000);
+            coordinator.prepareForViewer(healthy, 1000);
+            coordinator.prepareForViewer(retired, 1000);
+            awaitRevision(service, failingKey, 1);
+            awaitRevision(service, healthyKey, 1);
+            awaitRevision(service, retiredKey, 1);
+            StorageCapture capture = failing.capture;
+            failing.failEligibility = true;
+            healthy.rows.set(0, new Resource("eligibility-iron", 25, false));
+            healthy.web$getStorageCapture()
+                .markChanged(iron);
+            assertDoesNotThrow(() -> coordinator.tick(TestGridFixtures.ae(failing, healthy), 2000));
+            assertSame(capture, failing.capture);
+            assertFalse(
+                service.snapshot(failingKey)
+                    .stockComplete());
+            assertNull(service.snapshot(retiredKey));
+            assertNull(retired.web$getStorageCapture());
+            assertEquals(
+                25,
+                awaitRevision(service, healthyKey, 2).rows()
+                    .get(0)
+                    .quantity());
+            int attempts = failing.eligibilityReads;
+            coordinator.tick(TestGridFixtures.ae(failing, healthy), 3000);
+            assertEquals(attempts, failing.eligibilityReads, "Failed eligibility must honor the binding retry delay");
+            failing.failEligibility = false;
+            coordinator.prepareForViewer(failing, 34000);
+            assertSame(capture, failing.capture);
+            assertEquals(
+                20,
+                awaitRevision(service, failingKey, 2).rows()
+                    .get(0)
+                    .quantity());
+        }
+    }
+
+    @Test
+    void enumerationBackoffStillRenewsViewerDemandBeyondTheCaptureLease() throws Exception {
+        Resource iron = new Resource("discovery-viewer", 10, false);
+        Grid grid = new Grid(710054, iron);
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
+        AtomicInteger enumerations = new AtomicInteger();
+        TestGridFixtures.TestAE failing = new TestGridFixtures.TestAE() {
+
+            @Override
+            public Iterable<IAEGrid> web$getGrids() {
+                enumerations.incrementAndGet();
+                throw new IllegalStateException("Native enumeration unavailable");
+            }
+        };
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
+            coordinator.prepareForViewer(grid, 1000);
+            AuthSession login = new AuthSession(WebPrincipal.admin(), Long.MAX_VALUE);
+            TerminalRegistry.Bootstrap initial = terminals.reserve(key, login, false, null, null, 1000);
+            assertNotNull(initial);
+            coordinator.tick(failing, 2000);
+            assertNotNull(terminals.reserve(key, login, false, null, initial.subscription(), 9000));
+            grid.rows.set(0, new Resource("discovery-viewer", 25, false));
+            grid.web$getStorageCapture()
+                .markChanged(iron);
+            coordinator.tick(failing, 13000);
+            assertEquals(
+                25,
+                terminals.snapshot(key)
+                    .rows()
+                    .get(0)
+                    .quantity());
+            assertEquals(1, enumerations.get(), "Viewer renewal must not bypass native discovery backoff");
+            assertNull(service.snapshot(key), "Viewer demand must not enable history tracking");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "access", "before", "after" })
+    void failedAttachmentStaysPendingAndRetriesTheCompleteNativeInstallation(String failurePoint) throws Exception {
+        Resource iron = new Resource("attachment-iron", 20, false);
+        FaultGrid failing = new FaultGrid(710055, iron);
+        Grid healthy = new Grid(710056, iron);
+        StableKey failingKey = trackStock(failing);
+        StableKey healthyKey = trackStock(healthy);
+        GridSettingsData policy = CoreEngine.GRID_IDENTITIES.getPersistentData(failingKey)
+            .getSettings();
+        policy.setFlowTracked(true);
+        policy.setFlowFlushIntervalSeconds(1);
+        failing.attachmentFailure = failurePoint;
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
+            assertDoesNotThrow(() -> coordinator.tick(TestGridFixtures.ae(failing, healthy), 1000));
+            assertNull(service.snapshot(failingKey));
+            assertNull(terminals.snapshot(failingKey));
+            assertNull(failing.hookCapture);
+            assertEquals(
+                20,
+                awaitRevision(service, healthyKey, 1).rows()
+                    .get(0)
+                    .quantity());
+            StorageCapture partial = failing.capture;
+            if (partial != null) partial.recordFlow(iron, 7, 2);
+            int accesses = failing.storageAccesses;
+            assertThrows(IllegalStateException.class, () -> coordinator.prepareForViewer(failing, 2000));
+            coordinator.tick(TestGridFixtures.ae(failing, healthy), 3000);
+            assertEquals(accesses, failing.storageAccesses, "An incomplete installation must respect retry backoff");
+            assertNull(service.snapshot(failingKey));
+            assertNull(terminals.snapshot(failingKey));
+            failing.attachmentFailure = null;
+            coordinator.tick(TestGridFixtures.ae(failing, healthy), 34000);
+            coordinator.tick(TestGridFixtures.ae(failing, healthy), 34001);
+            StorageSnapshot recovered = awaitRevision(service, failingKey, 1);
+            assertNotNull(failing.capture);
+            assertSame(failing.capture, failing.hookCapture);
+            if (partial != null) assertSame(partial, failing.capture);
+            assertEquals(
+                20,
+                recovered.rows()
+                    .get(0)
+                    .quantity());
+            assertFalse(recovered.flowComplete(), "Partial native installation must leave an honest coverage gap");
+            if (partial != null) assertTrue(
+                service.history(failingKey, iron.web$getKey(), 0, 100)
+                    .points()
+                    .stream()
+                    .anyMatch(point -> point.input() == 7 && point.output() == 2));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "access", "getter", "before", "after" })
+    void nativeDetachFailureStillRetiresOwnedViewsWorkersAndOtherGrids(String failurePoint) throws Exception {
+        Resource iron = new Resource("detach-iron", 20, false);
+        FaultGrid failing = new FaultGrid(710057, iron);
+        FaultGrid healthy = new FaultGrid(710058, iron);
+        StableKey failingKey = trackStock(failing);
+        StableKey healthyKey = trackStock(healthy);
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
+            coordinator.prepareForViewer(failing, 1000);
+            coordinator.prepareForViewer(healthy, 1000);
+            awaitRevision(service, failingKey, 1);
+            awaitRevision(service, healthyKey, 1);
+            awaitRecent(terminals, failingKey, 1000);
+            awaitRecent(terminals, healthyKey, 1000);
+            assertNotNull(coordinator.recent(failingKey));
+            failing.detachFailure = failurePoint;
+            assertDoesNotThrow(() -> coordinator.tick(TestGridFixtures.ae(), 2000));
+            assertNull(service.snapshot(failingKey));
+            assertNull(service.snapshot(healthyKey));
+            assertNull(terminals.snapshot(failingKey));
+            assertNull(terminals.snapshot(healthyKey));
+            assertNull(coordinator.recent(failingKey));
+            assertNull(coordinator.recent(healthyKey));
+            assertNull(healthy.capture);
+            assertNull(healthy.hookCapture);
+        }
+    }
+
+    private static StableKey trackStock(IAEGrid grid) {
+        StableKey key = TestGridFixtures.resolvedKey(grid);
+        GridSettingsData policy = CoreEngine.GRID_IDENTITIES.getPersistentData(key)
+            .getSettings();
+        policy.setStorageTracked(true);
+        policy.setStockSampleIntervalSeconds(1);
+        return key;
     }
 
     @Test
@@ -1270,6 +1527,73 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     .points()
                     .isEmpty(),
                 "disabling does not erase history");
+        }
+    }
+
+    private static final class FaultGrid extends TestGridFixtures.TestGrid implements IAEStorageGrid {
+
+        private final Grid contents;
+        private StorageCapture capture;
+        private StorageCapture hookCapture;
+        private String attachmentFailure;
+        private String detachFailure;
+        private int storageAccesses;
+        private boolean failEligibility;
+        private int eligibilityReads;
+
+        private FaultGrid(long id, Resource... resources) {
+            super(id, false, AEControllerState.CONTROLLER_ONLINE);
+            contents = new Grid(id, resources);
+        }
+
+        @Override
+        public IAEPathingGrid web$getPathingGrid() {
+            eligibilityReads++;
+            if (failEligibility) throw new IllegalStateException("Native pathing unavailable");
+            return super.web$getPathingGrid();
+        }
+
+        @Override
+        public IAEStorageGrid web$getStorageGrid() {
+            storageAccesses++;
+            if ("access".equals(attachmentFailure) || "access".equals(detachFailure))
+                throw new IllegalStateException("Native storage unavailable");
+            return this;
+        }
+
+        @Override
+        public IAECraftingGrid web$getCraftingGrid() {
+            return contents;
+        }
+
+        @Override
+        public IStackList web$getStorageList() {
+            return contents.web$getStorageList();
+        }
+
+        @Override
+        public IAEMeInventoryItem web$getInventory() {
+            return contents.web$getInventory();
+        }
+
+        @Override
+        public StorageCapture web$getStorageCapture() {
+            if ("getter".equals(detachFailure)) throw new IllegalStateException("Native capture owner unavailable");
+            return capture;
+        }
+
+        @Override
+        public void web$setStorageCapture(StorageCapture value) {
+            if (value != null && "before".equals(attachmentFailure))
+                throw new IllegalStateException("Native capture installation failed");
+            if (value == null && "before".equals(detachFailure))
+                throw new IllegalStateException("Native capture removal failed");
+            capture = value;
+            if (value != null && "after".equals(attachmentFailure))
+                throw new IllegalStateException("Native capture installation partially failed");
+            if (value == null && "after".equals(detachFailure))
+                throw new IllegalStateException("Native capture removal partially failed");
+            hookCapture = value;
         }
     }
 

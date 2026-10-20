@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,7 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
+import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
@@ -49,6 +51,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     private final Map<StableKey, Binding> bindings = new HashMap<>();
     private final List<Binding> scheduled = new ArrayList<>();
     private long nextDiscovery;
+    private long nextViewerRefresh;
+    private boolean discoveryFailed;
     private long generation = System.currentTimeMillis();
     private int cursor;
 
@@ -73,21 +77,42 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
 
     /** Native reads are shared across viewers; at most one scheduled grid observation runs per tick. */
     public void tick(@NotNull IAE ae, long nowMillis) {
-        if (nowMillis >= nextDiscovery) {
+        if (nowMillis >= nextViewerRefresh) {
+            nextViewerRefresh = nowMillis + DISCOVERY_MILLIS;
             for (StableKey key : terminals.viewedGrids(nowMillis)) {
                 IAEGrid grid = identities.getGrid(key);
-                if (grid != null) touchViewer(grid, nowMillis);
+                Binding existing = bindings.get(key);
+                if (grid == null || backingOff(existing, nowMillis)) continue;
+                long started = System.nanoTime();
+                StableKey eligible;
+                try {
+                    eligible = eligibleKey(grid);
+                } catch (RuntimeException failure) {
+                    if (existing != null) failed(existing, failure, nowMillis, started);
+                    else discoveryFailed(failure, nowMillis, started);
+                    continue;
+                }
+                if (eligible != null) activate(binding(eligible, grid, gridSettings(eligible), nowMillis), nowMillis);
             }
-            discover(ae, nowMillis);
+        }
+        if (nowMillis >= nextDiscovery) {
             nextDiscovery = nowMillis + DISCOVERY_MILLIS;
+            discover(ae, nowMillis);
         }
         for (int visited = 0; visited < scheduled.size(); visited++) {
             if (cursor >= scheduled.size()) cursor = 0;
             Binding binding = scheduled.get(cursor++);
             IAEGrid grid = binding.grid.get();
-            if (grid != null && GridFilter.isUsable(grid)
-                && binding.key.equals(identities.getKey(grid))
-                && due(binding, nowMillis)) {
+            if (grid == null || !due(binding, nowMillis)) continue;
+            long started = System.nanoTime();
+            StableKey eligible;
+            try {
+                eligible = eligibleKey(grid);
+            } catch (RuntimeException failure) {
+                failed(binding, failure, nowMillis, started);
+                continue;
+            }
+            if (binding.key.equals(eligible)) {
                 observe(binding, grid, nowMillis);
                 break;
             }
@@ -104,8 +129,9 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
 
     private void activate(Binding binding, long nowMillis) {
         boolean wasActive = binding.activeUntil > nowMillis;
-        if (terminals.activate(binding.key, binding.generation, nowMillis)) binding.capture.invalidate();
         binding.activeUntil = nowMillis + VIEWER_LEASE_MILLIS;
+        if (!binding.attached) return;
+        if (terminals.activate(binding.key, binding.generation, nowMillis)) binding.capture.invalidate();
         if (!wasActive && binding.lastFailure == null)
             binding.nextViewerRead = Math.min(binding.nextViewerRead, nowMillis);
     }
@@ -128,10 +154,41 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     }
 
     private void discover(IAE ae, long nowMillis) {
+        List<IAEGrid> grids = new ArrayList<>();
+        long started = System.nanoTime();
+        try {
+            for (IAEGrid grid : ae.web$getGrids()) grids.add(grid);
+        } catch (RuntimeException failure) {
+            discoveryFailed(failure, nowMillis, started);
+            return;
+        }
+        Map<IAEGrid, Binding> byGrid = new IdentityHashMap<>();
+        for (Binding binding : bindings.values()) {
+            IAEGrid grid = binding.grid.get();
+            if (grid != null) byGrid.put(grid, binding);
+        }
+        boolean failedDiscovery = false;
         Set<StableKey> present = new HashSet<>();
-        for (IAEGrid grid : ae.web$getGrids()) {
-            if (!GridFilter.isUsable(grid)) continue;
-            StableKey key = identities.getKey(grid);
+        for (IAEGrid grid : grids) {
+            Binding known = byGrid.get(grid);
+            if (known != null && backingOff(known, nowMillis)) {
+                present.add(known.key);
+                continue;
+            }
+            StableKey key;
+            started = System.nanoTime();
+            try {
+                key = eligibleKey(grid);
+            } catch (RuntimeException failure) {
+                if (known != null) {
+                    present.add(known.key);
+                    failed(known, failure, nowMillis, started);
+                } else {
+                    discoveryFailed(failure, nowMillis, started);
+                    failedDiscovery = true;
+                }
+                continue;
+            }
             if (key == null) continue;
             Binding existing = bindings.get(key);
             GridSettingsData configuration = gridSettings(key);
@@ -142,6 +199,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             binding(key, grid, configuration, nowMillis);
             present.add(key);
         }
+        if (!failedDiscovery) discoveryFailed = false;
         Iterator<Map.Entry<StableKey, Binding>> iterator = bindings.entrySet()
             .iterator();
         while (iterator.hasNext()) {
@@ -152,7 +210,21 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             }
         }
         scheduled.clear();
-        scheduled.addAll(bindings.values());
+        for (Binding binding : bindings.values()) if (binding.attached) scheduled.add(binding);
+    }
+
+    private @Nullable StableKey eligibleKey(IAEGrid grid) {
+        return GridFilter.isUsable(grid) ? identities.getKey(grid) : null;
+    }
+
+    private static boolean backingOff(@Nullable Binding binding, long nowMillis) {
+        return binding != null && binding.lastFailure != null && nowMillis < binding.retryAfter;
+    }
+
+    private void discoveryFailed(RuntimeException failure, long nowMillis, long started) {
+        if (!discoveryFailed) LOG.warn("Storage network discovery failed", failure);
+        discoveryFailed = true;
+        nextDiscovery = retryAt(nowMillis, started, DISCOVERY_MILLIS);
     }
 
     private @Nullable GridSettingsData gridSettings(StableKey key) {
@@ -187,14 +259,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             binding.nextFlowFlush = nowMillis + flowInterval;
             binding.nextFlowSample = nowMillis + RecentResourceActivity.BUCKET_MILLIS;
             binding.flowFrom = nowMillis;
+            // Native installation may mutate one owner before failing on another. Retain the candidate for retry.
             bindings.put(key, binding);
-            scheduled.add(binding);
-            grid.web$getStorageGrid()
-                .web$setStorageCapture(binding.capture);
-            if (stock || flow) {
-                service.open(key, binding.generation);
-                recent.open(key, binding.generation, stock, flow, settings.maxResourcesPerGrid, nowMillis);
-            }
         }
         if (binding.flowInterval != flowInterval) {
             binding.flowInterval = flowInterval;
@@ -204,11 +270,27 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             binding.stockInterval = stockInterval;
             binding.nextStockSample = 0;
         }
+        if (!binding.attached && !backingOff(binding, nowMillis)) {
+            long started = System.nanoTime();
+            try {
+                grid.web$getStorageGrid()
+                    .web$setStorageCapture(binding.capture);
+            } catch (RuntimeException failure) {
+                failed(binding, failure, nowMillis, started);
+                return binding;
+            }
+            binding.attached = true;
+            scheduled.add(binding);
+            if (stock || flow) {
+                service.open(key, binding.generation);
+                recent.open(key, binding.generation, stock, flow, settings.maxResourcesPerGrid, nowMillis);
+            }
+        }
         return binding;
     }
 
     private boolean due(Binding binding, long nowMillis) {
-        if (binding.lastFailure != null && nowMillis < binding.retryAfter) return false;
+        if (!binding.attached || backingOff(binding, nowMillis)) return false;
         return binding.stock && nowMillis >= binding.nextStockSample
             || binding.flow && nowMillis >= binding.nextFlowFlush
             || binding.flow && nowMillis >= binding.nextFlowSample
@@ -222,8 +304,6 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         boolean flowFlush = binding.flow && nowMillis >= binding.nextFlowFlush;
         boolean flowSample = binding.flow && (flowFlush || nowMillis >= binding.nextFlowSample);
         boolean liveRead = binding.activeUntil > nowMillis && nowMillis >= binding.nextViewerRead;
-        long interval = binding.activeUntil > nowMillis ? settings.activeIntervalMillis
-            : binding.flow ? binding.flowInterval : binding.stockInterval;
         if (!stockSample && !flowSample && !liveRead) {
             publishRecent(binding, nowMillis);
             return;
@@ -286,15 +366,20 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             if (observation.stockObserved()) binding.nextViewerRead = nowMillis + settings.activeIntervalMillis;
             binding.lastFailure = null;
         } catch (RuntimeException failure) {
-            service.invalidate(binding.key, binding.generation);
-            binding.capture.markGap();
-            recent.invalidate(binding.key, binding.generation, nowMillis);
-            terminals.invalidate(binding.key, binding.generation);
-            if (binding.lastFailure == null)
-                LOG.warn("Storage observation failed for network {}", binding.key, failure);
-            binding.lastFailure = failure;
-            binding.retryAfter = retryAt(nowMillis, started, interval);
+            failed(binding, failure, nowMillis, started);
         }
+    }
+
+    private void failed(Binding binding, RuntimeException failure, long nowMillis, long started) {
+        service.invalidate(binding.key, binding.generation);
+        binding.capture.markGap();
+        recent.invalidate(binding.key, binding.generation, nowMillis);
+        terminals.invalidate(binding.key, binding.generation);
+        if (binding.lastFailure == null) LOG.warn("Storage tracking failed for network {}", binding.key, failure);
+        binding.lastFailure = failure;
+        long interval = binding.activeUntil > nowMillis ? settings.activeIntervalMillis
+            : binding.flow ? binding.flowInterval : binding.stockInterval;
+        binding.retryAfter = retryAt(nowMillis, started, interval);
     }
 
     private void publishRecent(Binding binding, long nowMillis) {
@@ -314,7 +399,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     }
 
     private void detach(Binding binding, long nowMillis) {
-        if (binding.flow && binding.capture.isProducerThread()) {
+        if (binding.attached && binding.flow && binding.capture.isProducerThread()) {
             StorageObservation observation;
             try {
                 observation = binding.capture.flushFlow(nowMillis);
@@ -335,12 +420,19 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             submitHistory(binding, binding.flushHistory(observation), false, true);
         }
         IAEGrid grid = binding.grid.get();
-        if (grid != null && grid.web$getStorageGrid()
-            .web$getStorageCapture() == binding.capture) {
-            grid.web$getStorageGrid()
-                .web$setStorageCapture(null);
-            // Tracking identities expire with this capture, even when the native grid remains live.
-            AE2Controller.itemIdentities.beginListing(grid)
+        if (grid != null) {
+            boolean owned = false;
+            try {
+                IAEStorageGrid storage = grid.web$getStorageGrid();
+                if (storage.web$getStorageCapture() == binding.capture) {
+                    owned = true;
+                    storage.web$setStorageCapture(null);
+                }
+            } catch (RuntimeException failure) {
+                LOG.warn("Native storage capture could not be detached for network {}", binding.key, failure);
+            }
+            // Tracking identities expire even if clearing a known-owned native capture fails partway through.
+            if (owned) AE2Controller.itemIdentities.beginListing(grid)
                 .commit();
         }
         recent.retire(binding.key, binding.generation);
@@ -368,6 +460,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private long nextRecentPublication;
         private boolean stock;
         private boolean flow;
+        private boolean attached;
         private long stockInterval;
         private long flowInterval;
         private long nextStockSample;
