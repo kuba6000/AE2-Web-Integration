@@ -1901,17 +1901,26 @@ test('pending CPU cancellation settles on the revisited CPU and older reads cann
     );
     await poll(page);
     const delayed = await captured;
+    const cancelled = page.waitForResponse(
+        (response) =>
+            response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/cpus/cpu-a/cancel')
+    );
     await page.getByRole('button', { name: 'Cancel current work', exact: true }).click();
-    await page
-        .getByRole('status')
-        .filter({ hasText: /^Idle$/i })
-        .waitFor();
+    const cancellation = await cancelled;
+    assert.equal(cancellation.status(), 200);
+    await cancellation.finished();
+    // The dispatched live read must settle before its replacement can reclaim a returned subscription.
+    // Deliver its stale data after cancellation is acknowledged, then await the authoritative idle snapshot.
     await delayed.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ status: 'OK', data: cpuWork })
     });
     await settleResponse(page, delayed.request());
+    await page
+        .getByRole('status')
+        .filter({ hasText: /^Idle$/i })
+        .waitFor();
     assert.equal(
         await page
             .getByRole('region', { name: 'CPU resources', exact: true })
