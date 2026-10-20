@@ -14,6 +14,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.dto.CpuResource;
 import pl.kuba6000.ae2webintegration.core.http.dto.GetCPUClusterData;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
@@ -52,7 +53,7 @@ public final class CpuTopic extends LiveTopic {
     @Desugar
     private record Delta(@NotNull LiveView view, @NotNull List<Value> updates, @NotNull List<CpuResource> definitions,
         @NotNull List<StableKey> removed, @Nullable List<CpuResource> unkeyed, @Nullable GetCPUClusterData cpu,
-        @Nullable IconMappings icons) {}
+        @Nullable IconMappings icons) implements IResponseBody {}
 
     @Desugar
     private record Update(@NotNull LiveView view, long at, @NotNull List<Value> updates,
@@ -67,7 +68,7 @@ public final class CpuTopic extends LiveTopic {
         }
 
         @Override
-        public @NotNull Object body(@Nullable IconMappings mappings) {
+        public @NotNull Delta body(@Nullable IconMappings mappings) {
             return new Delta(
                 view,
                 updates,

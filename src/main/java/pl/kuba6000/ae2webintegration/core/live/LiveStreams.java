@@ -148,7 +148,7 @@ public final class LiveStreams implements AutoCloseable {
                 session.context.getExchange()
                     .sendResponseHeaders(200, 0);
                 session.ready = true;
-                send(session, "ready", new JsonObject());
+                sendControl(session, "ready");
             }
             LiveUpdate update = hub.drain(session.subscription);
             if (update != null) {
@@ -160,9 +160,9 @@ public final class LiveStreams implements AutoCloseable {
                 else if (session.subscription.end == null) output(session, bytes);
             }
             if (session.subscription.end != null) {
-                send(session, session.subscription.end, new JsonObject());
+                sendControl(session, session.subscription.end);
                 session.finished = true;
-            } else send(session, "heartbeat", new JsonObject());
+            } else sendControl(session, "heartbeat");
             session.lastWrite = System.currentTimeMillis();
         } catch (IOException failure) {
             LOG.debug("Live connection closed", failure);
@@ -208,8 +208,8 @@ public final class LiveStreams implements AutoCloseable {
         return ("event: " + event + "\ndata: " + JSON.toJson(body) + "\n\n").getBytes(StandardCharsets.UTF_8);
     }
 
-    private static void send(Session session, String event, Object body) throws IOException {
-        output(session, encode(event, body));
+    private static void sendControl(Session session, String event) throws IOException {
+        output(session, encode(event, new JsonObject()));
     }
 
     private static void output(Session session, byte[] bytes) throws IOException {

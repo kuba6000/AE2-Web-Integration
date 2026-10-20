@@ -15,6 +15,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.dto.StoredResource;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -45,7 +46,7 @@ public final class StorageTopic extends LiveTopic {
     private record Delta(@NotNull LiveView view, @NotNull List<Amount> updates,
         @NotNull List<StoredResource> definitions, @NotNull List<StableKey> removed,
         @Nullable List<StoredResource> unkeyed, @Nullable IconMappings icons,
-        @Nullable RecentResourceActivity.Summary recent) {}
+        @Nullable RecentResourceActivity.Summary recent) implements IResponseBody {}
 
     @Desugar
     private record Update(@NotNull LiveView view, @NotNull List<Amount> updates,
@@ -59,7 +60,7 @@ public final class StorageTopic extends LiveTopic {
         }
 
         @Override
-        public @NotNull Object body(@Nullable IconMappings mappings) {
+        public @NotNull Delta body(@Nullable IconMappings mappings) {
             return new Delta(
                 view,
                 updates,

@@ -60,7 +60,7 @@ class ConfigFileTest {
         Config.init(root.toFile());
         CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
         assertEquals(120, (Integer) restored.get("data.stock_sample_interval_seconds.default"));
-        Object active = Config.INSTANCE;
+        ConfigSettings active = Config.INSTANCE;
         document.set("data.stock_sample_interval_seconds.default", 5);
         Files.write(
             file,

@@ -64,7 +64,7 @@ public final class IconPackWriter implements Closeable {
     private final byte @NotNull [] comparedPixels = new byte[PackFormat.ICON_BYTES];
     private final @NotNull IntBuffer pixelInts = ByteBuffer.wrap(serializedPixels)
         .asIntBuffer();
-    private final @NotNull Map<String, Object> statistics = new TreeMap<>();
+    private @NotNull List<String> statisticSources = new ArrayList<>();
     private final @NotNull Map<String, Long> statisticCounts = new TreeMap<>();
     private final int pngWorkers = Math.max(
         4,
@@ -210,8 +210,7 @@ public final class IconPackWriter implements Closeable {
             if (!source.matches("[A-Za-z0-9._-]{1,64}")) throw new IllegalArgumentException("Invalid source name");
         statisticCounts.clear();
         statisticCounts.putAll(counts);
-        statistics.put("counts", statisticCounts);
-        statistics.put("sources", new ArrayList<>(sources));
+        statisticSources = new ArrayList<>(sources);
     }
 
     private void flushPage() throws IOException {
@@ -352,8 +351,6 @@ public final class IconPackWriter implements Closeable {
         recordStatistic("pngWorkNanosSum", pngWorkNanosSum);
         recordStatistic("pngQueueWaitNanosSum", pngQueueWaitNanosSum);
         recordStatistic("pngBackpressureNanos", pngBackpressureNanos);
-        statistics.put("counts", statisticCounts);
-        statistics.putIfAbsent("sources", new ArrayList<String>());
         Map<String, Integer> indices = new HashMap<>();
         for (int i = 0; i < sorted.size(); i++) indices.put(
             sorted.get(i)
@@ -397,7 +394,10 @@ public final class IconPackWriter implements Closeable {
         summary.put("count", failureCount);
         summary.put("records", failures);
         root.put("failures", summary);
-        if (!statistics.isEmpty()) root.put("statistics", statistics);
+        Map<String, Object> statistics = new TreeMap<>();
+        statistics.put("counts", statisticCounts);
+        statistics.put("sources", statisticSources);
+        root.put("statistics", statistics);
         return root;
     }
 

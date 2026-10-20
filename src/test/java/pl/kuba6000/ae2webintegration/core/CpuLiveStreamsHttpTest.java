@@ -70,6 +70,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
 
     @BeforeEach
     void start() throws Exception {
+        AE2Controller.itemIdentities.clear();
         settings.activeIntervalMillis = 50;
         previousAe = AE2Controller.AE2Interface;
         AE2Controller.AE2Interface = new CpuFixtures.Ae(nativeGrid);
@@ -103,6 +104,7 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
         ordinary.shutdownNow();
         AE2Controller.AE2Interface = previousAe;
         AE2JobTracker.clearActiveJobs();
+        AE2Controller.itemIdentities.clear();
     }
 
     private void tick(long advanceMillis) {
@@ -659,9 +661,10 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
                 paused.getAsJsonObject("cpu")
                     .get("isPaused")
                     .getAsBoolean());
-            assertTrue(
+            assertEquals(
+                0,
                 paused.getAsJsonArray("definitions")
-                    .isEmpty());
+                    .size());
             assertEquals(reads, cpu.bulkReads, "A metadata change must not read resource lists");
             tick(1);
             assertEquals(reads, cpu.bulkReads);

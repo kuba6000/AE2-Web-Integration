@@ -202,7 +202,7 @@ class OutputSnapshotTest extends GridTestScope {
         ResourceSnapshot snapshot = assertDoesNotThrow(
             () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 9)));
         assertNotNull(snapshot);
-        Map<String, Object> response = new LinkedHashMap<>();
+        Map<String, ResourceStack> response = new LinkedHashMap<>();
         response.put("output", new ResourceStack(snapshot, null));
         response.put("unrelated", null);
         JsonObject json = new JsonParser().parse(
