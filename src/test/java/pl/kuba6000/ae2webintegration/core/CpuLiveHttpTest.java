@@ -36,6 +36,7 @@ import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.api.ILegacyConfigProvider;
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -458,6 +459,96 @@ class CpuLiveHttpTest {
             } finally {
                 stream.disconnect();
             }
+        }
+    }
+
+    @Test
+    void deniedGridInTheSameLoginCannotRetireItsAllowedLiveView() throws Exception {
+        Config.INSTANCE.general.publicMode = true;
+        CoreData.setPassword(
+            TestGridFixtures.playerIdentity(TestGridFixtures.OWNER_ID),
+            PasswordHelper.generateStrongPasswordHash("handoff-test"));
+        CpuFixtures.Grid forbidden = new CpuFixtures.Grid(9302, new CpuFixtures.Cpu(2));
+        forbidden.withoutSources();
+        StableKey forbiddenKey = onGame(() -> {
+            AE2Controller.AE2Interface = new CpuFixtures.Ae(grid, forbidden);
+            return TestGridFixtures.resolvedKey(forbidden);
+        });
+        String host = "http://127.0.0.1:" + Config.INSTANCE.general.port;
+        HttpURLConnection login = connection(host + "/api/auth/login");
+        login.setRequestMethod("POST");
+        login.setRequestProperty("Content-Type", "application/json");
+        login.setRequestProperty("X-AE2-Request", "true");
+        login.setDoOutput(true);
+        try (OutputStream body = login.getOutputStream()) {
+            body.write("{\"username\":\"Player7\",\"password\":\"handoff-test\"}".getBytes(StandardCharsets.UTF_8));
+        }
+        String authorization;
+        try (InputStreamReader input = new InputStreamReader(login.getInputStream(), StandardCharsets.UTF_8)) {
+            JsonObject data = new JsonParser().parse(input)
+                .getAsJsonObject()
+                .getAsJsonObject("data");
+            assertFalse(
+                data.get("isAdmin")
+                    .getAsBoolean());
+            authorization = "Bearer " + data.get("token")
+                .getAsString();
+        } finally {
+            login.disconnect();
+        }
+        HttpURLConnection snapshot = connection(base + "?live=true");
+        snapshot.setRequestProperty("Authorization", authorization);
+        String token;
+        try (InputStreamReader input = new InputStreamReader(snapshot.getInputStream(), StandardCharsets.UTF_8)) {
+            token = new JsonParser().parse(input)
+                .getAsJsonObject()
+                .get("subscription")
+                .getAsString();
+        } finally {
+            snapshot.disconnect();
+        }
+        String denied = host + "/api/grids/"
+            + forbiddenKey
+            + "/cpus/"
+            + TestGridFixtures.key(2)
+            + "?live=true&replace="
+            + token;
+        assertEquals(403, status(denied, "GET", false, authorization));
+        HttpURLConnection stream = connection(base + "/events?subscription=" + token);
+        stream.setRequestProperty("Authorization", authorization);
+        try (BufferedReader input = new BufferedReader(
+            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+            assertEquals(
+                "ready",
+                CpuFixtures.readEvent(input)
+                    .name());
+        } finally {
+            stream.disconnect();
+        }
+    }
+
+    @Test
+    void failedTargetDoesNotRetireThePreviousLiveView() throws Exception {
+        String token = json(base + "?live=true").get("subscription")
+            .getAsString();
+        assertEquals(401, status(base + "?live=true&replace=" + token, "GET", true, "Bearer invalid"));
+        String missing = "http://127.0.0.1:" + Config.INSTANCE.general.port
+            + "/api/grids/"
+            + gridKey
+            + "/cpus/"
+            + TestGridFixtures.key(77)
+            + "?live=true&replace="
+            + token;
+        assertEquals(404, status(missing, "GET", false, null));
+        HttpURLConnection stream = connection(base + "/events?subscription=" + token);
+        try (BufferedReader input = new BufferedReader(
+            new InputStreamReader(stream.getInputStream(), StandardCharsets.UTF_8))) {
+            assertEquals(
+                "ready",
+                CpuFixtures.readEvent(input)
+                    .name());
+        } finally {
+            stream.disconnect();
         }
     }
 

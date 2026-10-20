@@ -13,6 +13,7 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -35,7 +36,9 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
+import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFixtures;
 
 /** Live CPU view through the coordinator, registry and SSE transport, with an explicit server clock. */
 @SuppressWarnings("PMD.AvoidMagicNumbers")
@@ -109,6 +112,46 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
 
     private CpuRegistry.Bootstrap view(CpuFixtures.Cpu target) {
         return view(target, session);
+    }
+
+    @Test
+    void oneAdmissionSlotMovesBetweenCpuAndTerminalWhileOtherViewersStayConnected() throws Exception {
+        CpuRegistry.Bootstrap first = view(cpu);
+        CpuRegistry.Bootstrap sibling = view(other);
+        try (Connection initial = open(first, cpu); Connection independent = open(sibling, other)) {
+            for (int index = 0; index < 4; index++) view(other);
+            CpuRegistry.Bootstrap second = registry
+                .reserve(gridKey, other.key, session, false, null, first.subscription(), clock);
+            assertNotNull(second);
+            assertEquals(
+                "reset",
+                CpuFixtures.readEvent(initial.input)
+                    .name());
+            try (Connection selected = open(second, other)) {
+                TerminalRegistry terminals = new TerminalRegistry(hub);
+                terminals.activate(gridKey, 1, clock);
+                terminals.observed(
+                    gridKey,
+                    1,
+                    StorageObservationFixtures
+                        .observation(clock, true, true, Collections.emptyList(), Collections.emptyList()));
+                TerminalRegistry.Bootstrap terminal = terminals
+                    .reserve(gridKey, session, false, null, second.subscription(), clock);
+                assertNotNull(terminal);
+                assertEquals(
+                    "reset",
+                    CpuFixtures.readEvent(selected.input)
+                        .name());
+                CpuRegistry.Bootstrap restored = registry
+                    .reserve(gridKey, cpu.key, session, false, null, terminal.subscription(), clock);
+                assertNotNull(restored);
+                try (Connection current = open(restored, cpu)) {
+                    assertTrue(registry.renew(gridKey, cpu.key, session, restored.subscription(), clock));
+                    assertTrue(registry.renew(gridKey, other.key, session, sibling.subscription(), clock));
+                    assertNull(registry.reserve(gridKey, cpu.key, session, false, null, null, clock));
+                }
+            }
+        }
     }
 
     private CpuRegistry.Bootstrap view(CpuFixtures.Cpu target, AuthSession login) {

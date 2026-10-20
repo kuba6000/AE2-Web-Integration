@@ -657,7 +657,7 @@ class TerminalStreamsHttpTest extends GridTestScope {
     }
 
     @Test
-    void replacementCannotRetireAnotherLoginOrAnotherGridAtCapacity() throws Exception {
+    void replacementCanMoveToAnotherGridButCannotRetireAnotherLoginAtCapacity() throws Exception {
         boolean publicMode = Config.INSTANCE.general.publicMode;
         Config.INSTANCE.general.publicMode = true;
         try (Fixture fixture = new Fixture(Collections.emptyList())) {
@@ -669,13 +669,13 @@ class TerminalStreamsHttpTest extends GridTestScope {
                 AuthSession otherLogin = new AuthSession(fixture.principal, Long.MAX_VALUE);
                 assertNull(fixture.state.reserve(fixture.grid, otherLogin, false, null, token, now));
                 StableKey otherGrid = TestGridFixtures.key(999);
+                assertNull(fixture.state.reserve(otherGrid, fixture.session, false, null, token, now));
                 fixture.state.activate(otherGrid, 5, now);
                 fixture.state.observed(otherGrid, 5, observation(1, Collections.emptyList()));
-                assertNull(fixture.state.reserve(otherGrid, fixture.session, false, null, token, now));
                 assertNull(fixture.state.reserve(fixture.grid, fixture.session, false, null, "unknown", now));
                 fixture.publish(2, Collections.singletonList(row(TestGridFixtures.key(98), "Iron", 2)));
                 assertEquals("delta", readEvent(connection.input).name());
-                assertNotNull(fixture.state.reserve(fixture.grid, fixture.session, false, null, token, now));
+                assertNotNull(fixture.state.reserve(otherGrid, fixture.session, false, null, token, now));
                 assertEquals("reset", readEvent(connection.input).name());
                 assertNull(fixture.state.reserve(fixture.grid, fixture.session, false, null, token, now));
             }

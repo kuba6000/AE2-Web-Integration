@@ -68,19 +68,19 @@ public final class LiveHub {
         LiveTopic topic = topics.get(key);
         if (closed || topic == null || !topic.initialized()) return null;
         LiveSubscription previous = subscriptions.get(replace);
-        if (previous != null && previous.session == session
-            && previous.topic.key()
-                .equals(key)) {
-            previous.end("reset");
-            release(previous);
-        }
-        if (subscriptions.size() >= MAX_SUBSCRIPTIONS) return null;
+        boolean replaces = previous != null && previous.session == session;
+        int released = replaces ? 1 : 0;
+        if (subscriptions.size() - released >= MAX_SUBSCRIPTIONS) return null;
         boolean publicMode = Config.INSTANCE.general.publicMode;
         long count = subscriptions.values()
             .stream()
             .filter(s -> publicMode ? s.principal.equals(session.principal()) : s.session == session)
             .count();
-        if (count >= MAX_PER_VIEWER) return null;
+        if (count - released >= MAX_PER_VIEWER) return null;
+        if (replaces) {
+            previous.end("reset");
+            release(previous);
+        }
         String token = UUID.randomUUID()
             .toString();
         LiveSubscription subscription = new LiveSubscription(

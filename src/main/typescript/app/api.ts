@@ -157,28 +157,33 @@ export class ApiError extends Error {
 
 /** One transport for the application. Authentication remains in the server's HttpOnly cookie. */
 export function createApi(base: URL, onUnauthorized: () => void): Api {
-    const subscriptionStorageKey = `ae2web:${base.pathname}:terminal-subscriptions`;
-    const subscriptions = new Map<string, string>();
+    const subscriptionStorageKey = `ae2web:${base.pathname}:live-subscription`;
+    let subscription: string | undefined;
+    let liveBootstrap: Promise<void> = Promise.resolve();
+    let loginGeneration = 0;
     try {
         // New tabs may inherit their opener's sessionStorage; only reloads reclaim a previous connection.
         if ((performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming)?.type === 'reload') {
-            const saved: unknown = JSON.parse(sessionStorage.getItem(subscriptionStorageKey) ?? '{}');
-            if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
-                for (const [key, token] of Object.entries(saved))
-                    if (typeof token === 'string') subscriptions.set(key, token);
-            }
+            subscription = sessionStorage.getItem(subscriptionStorageKey) ?? undefined;
         } else sessionStorage.removeItem(subscriptionStorageKey);
     } catch {
         // A blocked or corrupt browser store still permits in-document resync.
     }
-    /** A grid key never contains a slash, so a CPU's subscription cannot collide with its grid's. */
-    const cpuSubscriptionKey = (gridKey: string, cpuKey: string) => `${gridKey}/cpus/${cpuKey}`;
-    function rememberSubscription(key: string, token: string) {
-        subscriptions.set(key, token);
+    function rememberSubscription(token: string) {
+        subscription = token;
         try {
-            sessionStorage.setItem(subscriptionStorageKey, JSON.stringify(Object.fromEntries(subscriptions)));
+            sessionStorage.setItem(subscriptionStorageKey, token);
         } catch {
             // In-memory ownership remains usable when browser storage is unavailable.
+        }
+    }
+    function forgetSubscription() {
+        loginGeneration++;
+        subscription = undefined;
+        try {
+            sessionStorage.removeItem(subscriptionStorageKey);
+        } catch {
+            // Forget in-memory ownership even when browser storage is unavailable.
         }
     }
     async function read<T>(
@@ -225,6 +230,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             throw new ApiError('NETWORK_ERROR', 0);
         }
         if (response.status === 401) {
+            forgetSubscription();
             onUnauthorized();
             throw new ApiError('UNAUTHORIZED', 401);
         }
@@ -266,6 +272,43 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
     }
     function request<T>(path: string, options?: Parameters<typeof read>[1]): Promise<T> {
         return read<T>(path, options).then((result) => result.data);
+    }
+    function snapshot<T>(path: string, signal: AbortSignal | undefined, icons: boolean, live: boolean) {
+        const query = new URLSearchParams();
+        if (icons) query.set('icons', 'true');
+        if (!live) return read<T>(`${path}${query.size ? `?${query}` : ''}`, { signal });
+        const generation = loginGeneration;
+        const requireCurrent = () => {
+            signal?.throwIfAborted();
+            if (generation !== loginGeneration) throw new DOMException('Login changed', 'AbortError');
+        };
+        // A tab owns one view. Finish a dispatched handoff even after navigation, so the next view can reclaim it.
+        const result = liveBootstrap.then(async () => {
+            requireCurrent();
+            query.set('live', 'true');
+            if (subscription) query.set('replace', subscription);
+            const deadline = new AbortController();
+            // The server waits at most ten seconds for game work; bound transport and response-body stalls too.
+            const timeout = setTimeout(() => deadline.abort(), 30000);
+            try {
+                const response = await read<T>(`${path}?${query}`, { signal: deadline.signal });
+                if (generation !== loginGeneration) throw new DOMException('Login changed', 'AbortError');
+                if (response.subscription) rememberSubscription(response.subscription);
+                requireCurrent();
+                return response;
+            } catch (error) {
+                requireCurrent();
+                if (deadline.signal.aborted) throw new ApiError('TIMEOUT', 0);
+                throw error;
+            } finally {
+                clearTimeout(timeout);
+            }
+        });
+        liveBootstrap = result.then(
+            () => {},
+            () => {}
+        );
+        return result;
     }
     /** One server-sent stream of a live subscription; the lease is renewed from its heartbeats. */
     function events<Delta>(path: string, subscription: string, icons: boolean, handlers: EventHandlers<Delta>) {
@@ -330,21 +373,8 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
         deleteResourcePin: (pinKey, icons = false) =>
             read(`api/resource-pins/${encodeURIComponent(pinKey)}?icons=${icons}`, { method: 'DELETE' }),
         grids: (signal) => request('api/grids', { signal }),
-        items: async (gridKey, signal, icons = false, live = false) => {
-            const query = new URLSearchParams();
-            if (icons) query.set('icons', 'true');
-            if (live) {
-                query.set('live', 'true');
-                const previous = subscriptions.get(gridKey);
-                if (previous) query.set('replace', previous);
-            }
-            const result = await read<StoredResource[]>(
-                `api/grids/${encodeURIComponent(gridKey)}/items${query.size ? `?${query}` : ''}`,
-                { signal }
-            );
-            if (live && result.subscription && !signal?.aborted) rememberSubscription(gridKey, result.subscription);
-            return result;
-        },
+        items: (gridKey, signal, icons = false, live = false) =>
+            snapshot<StoredResource[]>(`api/grids/${encodeURIComponent(gridKey)}/items`, signal, icons, live),
         itemEvents: (gridKey, subscription, icons, handlers) =>
             events(`api/grids/${encodeURIComponent(gridKey)}/items/events`, subscription, icons, handlers),
         createPlan: (gridKey, body) =>
@@ -355,22 +385,13 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             }),
         cpus: (gridKey, signal, icons = false) =>
             read(`api/grids/${encodeURIComponent(gridKey)}/cpus${icons ? '?icons=true' : ''}`, { signal }),
-        cpu: async (gridKey, cpuKey, signal, icons = false, live = false) => {
-            const query = new URLSearchParams();
-            if (icons) query.set('icons', 'true');
-            const key = cpuSubscriptionKey(gridKey, cpuKey);
-            if (live) {
-                query.set('live', 'true');
-                const previous = subscriptions.get(key);
-                if (previous) query.set('replace', previous);
-            }
-            const result = await read<CpuDetail>(
-                `api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}${query.size ? `?${query}` : ''}`,
-                { signal }
-            );
-            if (live && result.subscription && !signal?.aborted) rememberSubscription(key, result.subscription);
-            return result;
-        },
+        cpu: (gridKey, cpuKey, signal, icons = false, live = false) =>
+            snapshot<CpuDetail>(
+                `api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}`,
+                signal,
+                icons,
+                live
+            ),
         cpuEvents: (gridKey, cpuKey, subscription, icons, handlers) =>
             events(
                 `api/grids/${encodeURIComponent(gridKey)}/cpus/${encodeURIComponent(cpuKey)}/events`,
@@ -408,6 +429,10 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             }),
         deletePlan: (gridKey, planId) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/crafting-plans/${planId}`, { method: 'DELETE' }),
-        logout: () => request('api/auth/logout', { method: 'POST' })
+        logout: async () => {
+            const result = await request<null>('api/auth/logout', { method: 'POST' });
+            forgetSubscription();
+            return result;
+        }
     };
 }

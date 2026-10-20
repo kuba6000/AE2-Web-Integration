@@ -1098,7 +1098,7 @@ test('flow-only SSE updates and expiry refresh hovered summaries without history
     assert.equal(options.requests.filter((request) => request.path.endsWith('/resource-history')).length, 0);
 });
 
-test('live resync replaces only this tab and grid subscription through reload and navigation', async (t) => {
+test('live resync replaces only this tab subscription through reload and cross-grid navigation', async (t) => {
     const { page, options, base } = await refreshingFixture(t, '', {}, { mockClock: false });
     options.liveView = { generation: '1', revision: '1' };
     await page.goto(`${base}#/grids/${gridA}/items`);
@@ -1113,8 +1113,8 @@ test('live resync replaces only this tab and grid subscription through reload an
     };
     assert.equal((await resync(2, () => page.locator('#refresh').click())).get('replace'), 'subscription-1');
     assert.equal((await resync(3, () => page.reload())).get('replace'), 'subscription-2');
-    assert.equal((await resync(4, () => page.goto(`${base}#/grids/${gridB}/items`))).has('replace'), false);
-    assert.equal((await resync(5, () => page.goto(`${base}#/grids/${gridA}/items`))).get('replace'), 'subscription-3');
+    assert.equal((await resync(4, () => page.goto(`${base}#/grids/${gridB}/items`))).get('replace'), 'subscription-3');
+    assert.equal((await resync(5, () => page.goto(`${base}#/grids/${gridA}/items`))).get('replace'), 'subscription-4');
     options.liveView = { generation: '1', revision: '6' };
     const otherRequest = page.context().waitForEvent('request', {
         predicate: (request) => new URL(request.url()).pathname.endsWith('/items')
@@ -1896,6 +1896,195 @@ const liveUpdate = (itemKey, extra) => ({
     timeSpentCrafting: 5000,
     crafting: false,
     ...extra
+});
+
+test('one tab hands its live subscription across CPUs, terminals and grids', async (t) => {
+    const { page, options } = await openLiveCpu(t);
+    const move = async (hash, endpoint, expected, revision) => {
+        options.cpuLiveView = { generation: '1', revision };
+        options.liveView = { generation: '1', revision };
+        const requested = page.waitForRequest((request) => {
+            const url = new URL(request.url());
+            return url.pathname.endsWith(endpoint) && url.searchParams.get('live') === 'true';
+        });
+        await page.evaluate((next) => {
+            location.hash = next;
+        }, hash);
+        const request = await requested;
+        assert.equal(new URL(request.url()).searchParams.get('replace'), expected);
+        await page.locator('#refresh .live-icon').waitFor();
+    };
+    await move(`#/grids/${gridA}/cpus/cpu-b`, '/cpus/cpu-b', 'cpu-subscription-1', '2');
+    await move(`#/grids/${gridA}/items`, '/items', 'cpu-subscription-2', '3');
+    await move(`#/grids/${gridB}/cpus/cpu-a`, '/cpus/cpu-a', 'subscription-3', '4');
+});
+
+test('navigation reclaims a delayed obsolete live snapshot before opening the next CPU', async (t) => {
+    const { page, options } = await openLiveCpu(t);
+    options.cpuLiveView = { generation: '1', revision: '2' };
+    let received;
+    const held = new Promise((resolve) => {
+        received = resolve;
+    });
+    let release;
+    const resumed = new Promise((resolve) => {
+        release = resolve;
+    });
+    await page.route(
+        (url) => url.pathname.endsWith('/cpus/cpu-a'),
+        async (route) => {
+            const response = await route.fetch();
+            received();
+            await resumed;
+            await route.fulfill({ response }).catch(() => {});
+        }
+    );
+    await page.locator('#refresh').click();
+    await held;
+    options.cpuLiveView = { generation: '1', revision: '3' };
+    const next = page.waitForRequest((request) => new URL(request.url()).pathname.endsWith('/cpus/cpu-b'));
+    await page.evaluate((hash) => {
+        location.hash = hash;
+    }, `#/grids/${gridA}/cpus/cpu-b`);
+    release();
+    const request = await next;
+    assert.equal(new URL(request.url()).searchParams.get('replace'), 'cpu-subscription-2');
+    await page.locator('#refresh .live-icon').waitFor();
+    assert.ok(page.url().endsWith('/cpus/cpu-b'));
+});
+
+test('reload reclaims the tab subscription while an opener-created tab owns an independent view', async (t) => {
+    // Real navigation timing distinguishes a reload from an opener-created tab.
+    const { page, options, base } = await refreshingFixture(t, '', {}, { mockClock: false });
+    options.cpuLiveView = { generation: '1', revision: '1' };
+    await page.goto(`${base}#/grids/${gridA}/cpus/cpu-a`);
+    await page.locator('#refresh .live-icon').waitFor();
+    options.cpuLiveView = { generation: '1', revision: '2' };
+    const popupReady = page.waitForEvent('popup');
+    await page.evaluate((url) => {
+        window.open(url);
+    }, `${base}#/grids/${gridA}/cpus/cpu-b`);
+    const popup = await popupReady;
+    await popup.locator('#refresh .live-icon').waitFor();
+    const requests = () => options.requests.filter((request) => /\/cpus\/cpu-[ab]$/.test(request.path));
+    assert.equal(new URLSearchParams(requests().at(-1).query).get('replace'), null);
+    options.cpuLiveView = { generation: '1', revision: '3' };
+    await popup.reload();
+    await popup.locator('#refresh .live-icon').waitFor();
+    assert.equal(new URLSearchParams(requests().at(-1).query).get('replace'), 'cpu-subscription-2');
+    options.cpuLiveView = { generation: '1', revision: '4' };
+    await page.reload();
+    await page.locator('#refresh .live-icon').waitFor();
+    assert.equal(new URLSearchParams(requests().at(-1).query).get('replace'), 'cpu-subscription-1');
+});
+
+test('logout clears live ownership and a late snapshot cannot restore it', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpuLiveView = { generation: '1', revision: '1' };
+    await page.goto(`${base}#/about`);
+    await page.evaluate(
+        async ({ base, grid }) => {
+            const { createApi } = await import('./assets/web/app/api.js');
+            window.handoffApi = createApi(new URL(base), () => {});
+            await window.handoffApi.cpu(grid, 'cpu-a', undefined, false, true);
+        },
+        { base, grid: gridA }
+    );
+    let received;
+    const held = new Promise((resolve) => {
+        received = resolve;
+    });
+    let release;
+    const resumed = new Promise((resolve) => {
+        release = resolve;
+    });
+    await page.route(
+        (url) => url.pathname.endsWith('/cpus/cpu-b'),
+        async (route) => {
+            const response = await route.fetch();
+            received();
+            await resumed;
+            await route.fulfill({ response });
+        }
+    );
+    options.cpuLiveView = { generation: '1', revision: '2' };
+    await page.evaluate((grid) => {
+        window.pendingHandoff = window.handoffApi.cpu(grid, 'cpu-b', undefined, false, true).then(
+            () => 'OK',
+            (error) => error.name
+        );
+    }, gridA);
+    await held;
+    await page.evaluate((grid) => {
+        window.queuedHandoff = window.handoffApi.cpu(grid, 'cpu-a', undefined, false, true).then(
+            () => 'OK',
+            (error) => error.name
+        );
+    }, gridA);
+    await page.evaluate(() => window.handoffApi.logout());
+    release();
+    assert.equal(await page.evaluate(() => window.pendingHandoff), 'AbortError');
+    assert.equal(await page.evaluate(() => window.queuedHandoff), 'AbortError');
+    await page.evaluate((grid) => window.handoffApi.cpu(grid, 'cpu-a', undefined, false, true), gridA);
+    const last = options.requests.filter((request) => request.path.endsWith('/cpus/cpu-a')).at(-1);
+    assert.equal(new URLSearchParams(last.query).get('replace'), null);
+});
+
+test('a stalled live bootstrap times out and releases the next navigation', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.cpuLiveView = { generation: '1', revision: '1' };
+    await page.goto(`${base}#/about`);
+    await page.evaluate(
+        async ({ base, grid }) => {
+            const { createApi } = await import('./assets/web/app/api.js');
+            window.handoffApi = createApi(new URL(base), () => {});
+            await window.handoffApi.cpu(grid, 'cpu-a', undefined, false, true);
+        },
+        { base, grid: gridA }
+    );
+    let received;
+    const held = new Promise((resolve) => {
+        received = resolve;
+    });
+    let release;
+    const resumed = new Promise((resolve) => {
+        release = resolve;
+    });
+    t.after(() => release());
+    await page.route(
+        (url) => url.pathname.endsWith('/cpus/cpu-b'),
+        async (route) => {
+            received();
+            await resumed;
+            await route.abort().catch(() => {});
+        }
+    );
+    await page.evaluate((grid) => {
+        window.pendingHandoff = window.handoffApi
+            .cpu(grid, 'cpu-b', undefined, false, true)
+            .catch((error) => error.status);
+    }, gridA);
+    await held;
+    await page.evaluate((grid) => {
+        const abandoned = new AbortController();
+        window.abandonedHandoff = window.handoffApi
+            .cpu(grid, 'abandoned', abandoned.signal, false, true)
+            .catch((error) => error.name);
+        abandoned.abort();
+        window.nextHandoff = window.handoffApi.cpu(grid, 'cpu-a', undefined, false, true);
+    }, gridA);
+    options.cpuLiveView = { generation: '1', revision: '3' };
+    await page.clock.fastForward(30001);
+    assert.equal(await page.evaluate(() => window.pendingHandoff), 'TIMEOUT');
+    assert.equal(await page.evaluate(() => window.abandonedHandoff), 'AbortError');
+    assert.equal((await page.evaluate(() => window.nextHandoff)).subscription, 'cpu-subscription-3');
+    assert.equal(
+        options.requests.some((request) => request.path.endsWith('/cpus/abandoned')),
+        false
+    );
+    const last = options.requests.filter((request) => request.path.endsWith('/cpus/cpu-a')).at(-1);
+    assert.equal(new URLSearchParams(last.query).get('replace'), 'cpu-subscription-1');
+    release();
 });
 
 test('live CPU detail applies absolute updates, new and removed resources and unkeyed replacement without rereading', async (t) => {
