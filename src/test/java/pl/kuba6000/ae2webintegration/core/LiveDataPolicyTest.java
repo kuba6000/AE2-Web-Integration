@@ -52,8 +52,8 @@ class LiveDataPolicyTest {
                 grid,
                 Collections.singletonMap(item, description(item)),
                 Arrays.asList(
-                    new StorageHistoryPoint(now, 1, Kind.STOCK, item, 1, 0, 0, null),
-                    new StorageHistoryPoint(now + 1, 1, Kind.STOCK, item, 2, 0, 0, null)));
+                    new StorageHistoryPoint(now, 1, Kind.STOCK, item, 1, 0, 0, 0, 0, null),
+                    new StorageHistoryPoint(now + 1, 1, Kind.STOCK, item, 2, 0, 0, 0, 0, null)));
             registry.controllerRemoved(live.position());
             registry.saveIfDirty();
             database.write(db -> {
@@ -120,7 +120,7 @@ class LiveDataPolicyTest {
             long now = System.currentTimeMillis();
             List<StorageHistoryPoint> points = new ArrayList<>();
             for (int index = 0; index < 5; index++)
-                points.add(new StorageHistoryPoint(now + index, 1, Kind.STOCK, item, index, 0, 0, null));
+                points.add(new StorageHistoryPoint(now + index, 1, Kind.STOCK, item, index, 0, 0, 0, 0, null));
             history.append(grid, Collections.singletonMap(item, description(item)), points);
             AtomicReference<Throwable> failure = new AtomicReference<>();
             Thread append = new Thread(() -> {
@@ -129,7 +129,7 @@ class LiveDataPolicyTest {
                         grid,
                         Collections.emptyMap(),
                         Collections
-                            .singletonList(new StorageHistoryPoint(now + 6, 1, Kind.STOCK, item, 6, 0, 0, null)));
+                            .singletonList(new StorageHistoryPoint(now + 6, 1, Kind.STOCK, item, 6, 0, 0, 0, 0, null)));
                 } catch (Throwable thrown) {
                     failure.set(thrown);
                 }
@@ -174,7 +174,7 @@ class LiveDataPolicyTest {
             history.append(
                 grid,
                 Collections.singletonMap(item, description(item)),
-                Collections.singletonList(new StorageHistoryPoint(old, 1, Kind.FLOW, item, 0, 5, 2, old - 1000)));
+                Collections.singletonList(new StorageHistoryPoint(old, 1, Kind.FLOW, item, 0, 5, 2, 0, 0, old - 1000)));
             registry.controllerRemoved(live.position());
             registry.saveIfDirty();
             ConfigSettings.Data shorter = new ConfigSettings.Data();

@@ -53,7 +53,13 @@ public final class StorageObservationFixtures {
                 .description();
             if (description.itemKey() == null) continue;
             descriptions.put(description.itemKey(), description);
-            flows.add(new StorageObservation.Flow(description.itemKey(), flow.input(), flow.output()));
+            flows.add(
+                new StorageObservation.Flow(
+                    description.itemKey(),
+                    flow.input(),
+                    flow.output(),
+                    flow.input() > 0 ? 1 : 0,
+                    flow.output() > 0 ? 1 : 0));
         }
         return new StorageObservation(at, full, complete, stock, rows, flows, descriptions, unkeyed);
     }

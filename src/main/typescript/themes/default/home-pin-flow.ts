@@ -1,6 +1,7 @@
 import type { ThemeState, Translator } from '../../app/theme-api.js';
 import { element } from './dom.js';
 import type { Tooltips } from './tooltips.js';
+import { flowOperationLines } from './flow-operations.js';
 
 type Pin = ThemeState['pins']['items'][number];
 type History = ThemeState['resourceHistory'];
@@ -101,6 +102,15 @@ export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind
                                 period: locale.duration(duration)
                             })
                         );
+                    if (measured)
+                        recent.tooltipContent.push(
+                            ...flowOperationLines(
+                                measured.inputOperations,
+                                measured.outputOperations,
+                                sample.flowComplete ? duration : null,
+                                locale
+                            )
+                        );
                 }
                 recent.note.textContent = notes.join(' · ');
                 recent.note.hidden = !notes.length;
@@ -109,6 +119,8 @@ export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind
                 historical.heading.textContent = `${locale.common('pinHistoricalFlow')} ${locale.duration(pin.homeConfig.flowRangeMillis)}:`;
                 let input = 0n,
                     output = 0n,
+                    inputOperations = 0n,
+                    outputOperations = 0n,
                     observed = false;
                 const notes = [];
                 if (history?.status === 'ready') {
@@ -118,6 +130,8 @@ export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind
                         if (point.kind === 'FLOW') {
                             input += BigInt(point.input);
                             output += BigInt(point.output);
+                            inputOperations += BigInt(point.inputOperations);
+                            outputOperations += BigInt(point.outputOperations);
                         }
                     }
                     if (!history.enabled) notes.push(locale.common('resourceHistoryDisabled'));
@@ -125,6 +139,10 @@ export function createHomePinFlow(host: HTMLElement, bindTooltip: Tooltips['bind
                 } else if (history?.error) notes.push(locale.common(history.error));
                 else if (history?.status === 'loading') notes.push(locale.common('loading'));
                 counts(historical, observed ? input : null, observed ? output : null, locale);
+                if (observed)
+                    historical.tooltipContent.push(
+                        ...flowOperationLines(inputOperations.toString(), outputOperations.toString(), null, locale)
+                    );
                 historical.note.textContent = notes.join(' · ');
                 historical.note.hidden = !notes.length;
             }

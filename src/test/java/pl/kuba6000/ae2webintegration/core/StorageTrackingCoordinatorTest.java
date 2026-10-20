@@ -315,6 +315,8 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 .get(iron.web$getKey());
             assertNotNull(amount);
             assertEquals("16", amount.input());
+            assertEquals("2", amount.inputOperations());
+            assertEquals("2", amount.outputOperations());
             assertEquals("5", amount.output());
             assertEquals(11000, summary.flowObservedAt());
             assertEquals(5000, summary.bucketMillis());
@@ -330,6 +332,14 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 .filter(point -> point.kind() == StorageHistoryPoint.Kind.FLOW)
                 .collect(Collectors.toList());
             assertEquals(1, flows.size());
+            assertEquals(
+                3,
+                flows.get(0)
+                    .inputOperations());
+            assertEquals(
+                3,
+                flows.get(0)
+                    .outputOperations());
             assertEquals(
                 1000,
                 flows.get(0)

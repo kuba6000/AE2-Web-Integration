@@ -35,6 +35,8 @@ class HsqlStorageHistoryStoreTest {
             0,
             9,
             3,
+            0,
+            0,
             old - 60000);
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, shortGrid, Collections.singletonList(point));
@@ -100,7 +102,17 @@ class HsqlStorageHistoryStoreTest {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
-        StorageHistoryPoint gap = new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0, null);
+        StorageHistoryPoint gap = new StorageHistoryPoint(
+            now,
+            1,
+            StorageHistoryPoint.Kind.GAP,
+            null,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null);
         StorageHistoryPoint flow = new StorageHistoryPoint(
             now,
             1,
@@ -109,6 +121,8 @@ class HsqlStorageHistoryStoreTest {
             0,
             7,
             3,
+            0,
+            0,
             (now) - 1000L);
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(gap, flow));
@@ -133,12 +147,32 @@ class HsqlStorageHistoryStoreTest {
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
         List<StorageHistoryPoint> points = Arrays.asList(
-            new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0, null),
+            new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0, 0, 0, null),
             stock(item, now, 12),
-            new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.FLOW, item, 0, Long.MAX_VALUE, 3, (now) - 1000L),
-            new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.OBSERVATION, null, 0, 0, 0, null),
+            new StorageHistoryPoint(
+                now,
+                7,
+                StorageHistoryPoint.Kind.FLOW,
+                item,
+                0,
+                Long.MAX_VALUE,
+                3,
+                Long.MAX_VALUE - 1,
+                2,
+                (now) - 1000L),
+            new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.OBSERVATION, null, 0, 0, 0, 0, 0, null),
             stock(item, now, 9),
-            new StorageHistoryPoint(now, 7, StorageHistoryPoint.Kind.FLOW_OBSERVATION, null, 0, 0, 0, (now) - 1000L));
+            new StorageHistoryPoint(
+                now,
+                7,
+                StorageHistoryPoint.Kind.FLOW_OBSERVATION,
+                null,
+                0,
+                0,
+                0,
+                0,
+                0,
+                (now) - 1000L));
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, grid, points);
         }
@@ -174,6 +208,8 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             0,
+            0,
+            0,
             null);
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(stock(item, old, 10), gap));
@@ -199,6 +235,8 @@ class HsqlStorageHistoryStoreTest {
             7,
             StorageHistoryPoint.Kind.GAP,
             null,
+            0,
+            0,
             0,
             0,
             0,
@@ -300,6 +338,8 @@ class HsqlStorageHistoryStoreTest {
             0,
             4,
             2,
+            0,
+            0,
             (now) - 1000L);
         try (HsqlStorageHistoryStore store = store(1)) {
             append(store, stockGrid, Collections.singletonList(stock(item, now, 8)));
@@ -436,7 +476,7 @@ class HsqlStorageHistoryStoreTest {
     }
 
     private static StorageHistoryPoint stock(StableKey item, long time, long amount) {
-        return new StorageHistoryPoint(time, 7, StorageHistoryPoint.Kind.STOCK, item, amount, 0, 0, null);
+        return new StorageHistoryPoint(time, 7, StorageHistoryPoint.Kind.STOCK, item, amount, 0, 0, 0, 0, null);
     }
 
     private static ResourceDescriptor description(StableKey item, String name) {
@@ -459,7 +499,17 @@ class HsqlStorageHistoryStoreTest {
         StableKey item = StableKey.random();
         StableKey other = StableKey.random();
         long now = System.currentTimeMillis();
-        StorageHistoryPoint gap = new StorageHistoryPoint(now, 1, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0, null);
+        StorageHistoryPoint gap = new StorageHistoryPoint(
+            now,
+            1,
+            StorageHistoryPoint.Kind.GAP,
+            null,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null);
         StorageHistoryPoint flow = new StorageHistoryPoint(
             now + 2,
             1,
@@ -468,12 +518,16 @@ class HsqlStorageHistoryStoreTest {
             0,
             Long.MAX_VALUE,
             Long.MAX_VALUE - 1,
+            0,
+            0,
             (now + 2) - 1000L);
         StorageHistoryPoint observation = new StorageHistoryPoint(
             now + 3,
             1,
             StorageHistoryPoint.Kind.FLOW_OBSERVATION,
             null,
+            0,
+            0,
             0,
             0,
             0,
@@ -511,6 +565,8 @@ class HsqlStorageHistoryStoreTest {
             7,
             StorageHistoryPoint.Kind.OBSERVATION,
             null,
+            0,
+            0,
             0,
             0,
             0,
@@ -574,6 +630,8 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             0,
+            0,
+            0,
             (now) - 1000L);
         try (HsqlStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(anchor, marker, marker, marker));
@@ -602,6 +660,8 @@ class HsqlStorageHistoryStoreTest {
             7,
             StorageHistoryPoint.Kind.OBSERVATION,
             null,
+            0,
+            0,
             0,
             0,
             0,

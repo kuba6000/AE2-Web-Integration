@@ -90,11 +90,13 @@ public final class GetResourceHistory extends IAsyncRequest {
         @Nullable Point baseline) {}
 
     /**
-     * Decimal strings preserve exact counts; flowFrom starts a FLOW or FLOW_OBSERVATION interval ending at observedAt.
+     * Decimal strings preserve exact quantities and accepted positive-transfer counts. Operation counts are zero for
+     * non-FLOW points; flowFrom starts a FLOW or FLOW_OBSERVATION interval ending at observedAt.
      */
     @Desugar
     public record Point(long observedAt, @NotNull String generation, @NotNull StorageHistoryPoint.Kind kind,
-        @Nullable TrackedResource resource, @NotNull String input, @NotNull String output, @Nullable Long flowFrom) {}
+        @Nullable TrackedResource resource, @NotNull String input, @NotNull String output,
+        @NotNull String inputOperations, @NotNull String outputOperations, @Nullable Long flowFrom) {}
 
     @Override
     public void handle() {
@@ -166,6 +168,8 @@ public final class GetResourceHistory extends IAsyncRequest {
                     references.get(point.itemKey())),
             Long.toString(point.input()),
             Long.toString(point.output()),
+            Long.toString(point.inputOperations()),
+            Long.toString(point.outputOperations()),
             point.flowFrom());
     }
 

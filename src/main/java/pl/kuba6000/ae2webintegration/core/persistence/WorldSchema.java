@@ -14,7 +14,7 @@ import org.jetbrains.annotations.NotNull;
 /** The current world schema; future versions require explicit, separately implemented migration steps. */
 final class WorldSchema {
 
-    private static final int VERSION = 3;
+    private static final int VERSION = 4;
     private static final String[] OWNED_TABLES = { "RESOURCE_PINS", "HISTORY_STOCK", "HISTORY_FLOW", "HISTORY_COVERAGE",
         "HISTORY_MEASUREMENTS", "GRID_CONTROLLERS", "HISTORY_RESOURCES", "GRIDS" };
 
@@ -59,7 +59,7 @@ final class WorldSchema {
                         version INTEGER NOT NULL,
                         identities_imported BOOLEAN NOT NULL,
                         initialized BOOLEAN NOT NULL
-                    ) AS (VALUES (1, 3, FALSE, FALSE)) WITH DATA
+                    ) AS (VALUES (1, 4, FALSE, FALSE)) WITH DATA
                     """);
             }
         }
@@ -130,7 +130,9 @@ final class WorldSchema {
                     measurement_id BIGINT NOT NULL REFERENCES history_measurements(id),
                     resource_id BIGINT NOT NULL REFERENCES history_resources(id),
                     input_amount BIGINT NOT NULL,
-                    output_amount BIGINT NOT NULL
+                    output_amount BIGINT NOT NULL,
+                    input_operations BIGINT NOT NULL,
+                    output_operations BIGINT NOT NULL
                 )
                 """);
             sql.execute("""

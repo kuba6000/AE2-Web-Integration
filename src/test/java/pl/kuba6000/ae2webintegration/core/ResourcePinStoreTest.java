@@ -178,8 +178,8 @@ class ResourcePinStoreTest extends GridTestScope {
             history.append(
                 key,
                 Collections.singletonMap(item, description(item, "Captured")),
-                Collections
-                    .singletonList(new StorageHistoryPoint(observed, 1, Kind.FLOW, item, 0, 5, 2, observed - 1000)));
+                Collections.singletonList(
+                    new StorageHistoryPoint(observed, 1, Kind.FLOW, item, 0, 5, 2, 0, 0, observed - 1000)));
             assertEquals(
                 1,
                 history.read(key, item, 0, 100)
@@ -388,7 +388,8 @@ class ResourcePinStoreTest extends GridTestScope {
             history.append(
                 key,
                 Collections.emptyMap(),
-                Collections.singletonList(new StorageHistoryPoint(old, 1, Kind.FLOW, item, 0, 5, 2, old - 60000)));
+                Collections
+                    .singletonList(new StorageHistoryPoint(old, 1, Kind.FLOW, item, 0, 5, 2, 0, 0, old - 60000)));
         }
         worlds.close(source);
         WorldDatabase reopened = worlds.database(source);
@@ -417,7 +418,17 @@ class ResourcePinStoreTest extends GridTestScope {
                     key,
                     Collections.emptyMap(),
                     Collections.singletonList(
-                        new StorageHistoryPoint(System.currentTimeMillis(), 2, Kind.STOCK, item, 1, 0, 0, null))));
+                        new StorageHistoryPoint(
+                            System.currentTimeMillis(),
+                            2,
+                            Kind.STOCK,
+                            item,
+                            1,
+                            0,
+                            0,
+                            0,
+                            0,
+                            null))));
         }
     }
 

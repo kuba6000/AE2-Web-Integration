@@ -527,6 +527,11 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                         status: options.resourceHistoryError || 'OK',
                         data: {
                             ...options.resourceHistory,
+                            points: options.resourceHistory.points.map((point) => ({
+                                inputOperations: '0',
+                                outputOperations: '0',
+                                ...point
+                            })),
                             enabled: !!options.settings[key].isStorageTracked || !!options.settings[key].isFlowTracked
                         },
                         icons: url.searchParams.get('icons') === 'true' ? (options.historyIcons ?? options.icons) : null

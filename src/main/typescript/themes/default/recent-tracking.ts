@@ -1,5 +1,6 @@
 import type { ThemeState, Translator } from '../../app/theme-api.js';
 import { element } from './dom.js';
+import { flowOperationLines } from './flow-operations.js';
 
 export function recentTrackingLines(
     recent: ThemeState['recent'],
@@ -56,6 +57,11 @@ export function recentTrackingLines(
             counter(input - output, input >= output ? '+' : '')
         );
         result.push(line);
+        const period =
+            recent.flowComplete && recent.flowSince !== null && recent.flowObservedAt !== null
+                ? Math.min(recent.flowWindowMillis, Math.max(0, recent.flowObservedAt - recent.flowSince))
+                : null;
+        result.push(...flowOperationLines(resource.inputOperations, resource.outputOperations, period, locale));
         appendPeriod(recent.flowSince, recent.flowObservedAt, recent.flowWindowMillis, recent.flowComplete, 'flow');
     }
     if (recent.stockSince !== null && recent.stockObservedAt !== null) {

@@ -208,7 +208,12 @@ public final class StorageTopic extends LiveTopic {
         String stockZero = summary.stockSince() == null
             || Objects.equals(summary.stockSince(), summary.stockObservedAt())
             || !summary.stockComplete() ? null : "0";
-        RecentResourceActivity.Amount zero = new RecentResourceActivity.Amount(flowZero, flowZero, stockZero);
+        RecentResourceActivity.Amount zero = new RecentResourceActivity.Amount(
+            flowZero,
+            flowZero,
+            flowZero,
+            flowZero,
+            stockZero);
         for (StableKey item : rows.keySet()) visible.put(
             item,
             summary.resources()

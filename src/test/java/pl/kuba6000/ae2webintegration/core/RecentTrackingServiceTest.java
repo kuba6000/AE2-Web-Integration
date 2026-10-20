@@ -14,6 +14,7 @@ import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity.Summary;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentTrackingService;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
@@ -24,6 +25,61 @@ class RecentTrackingServiceTest extends GridTestScope {
     private final LiveHub hub = new LiveHub();
     private final StableKey grid = TestGridFixtures.key(91);
     private final StableKey iron = TestGridFixtures.key(92);
+
+    @Test
+    void recentOperationsRemainExactBeyondLongRangeAndResetWithTheirBuckets() {
+        RecentResourceActivity recent = new RecentResourceActivity(false, true, 10, 1000);
+        for (long at : new long[] { 6000, 11000 }) {
+            recent.observe(
+                new StorageObservation(
+                    at,
+                    false,
+                    true,
+                    false,
+                    Collections.emptyList(),
+                    Collections.singletonList(
+                        new StorageObservation.Flow(
+                            iron,
+                            Long.MAX_VALUE,
+                            Long.MAX_VALUE,
+                            Long.MAX_VALUE,
+                            Long.MAX_VALUE - 1)),
+                    Collections.emptyMap(),
+                    Collections.emptyList()),
+                false,
+                true);
+        }
+        RecentResourceActivity.Amount amount = recent.snapshot()
+            .resources()
+            .get(iron);
+        assertEquals("18446744073709551614", amount.inputOperations());
+        assertEquals("18446744073709551612", amount.outputOperations());
+        recent.reset(12000);
+        recent.observe(flow(17000, 3), false, true);
+        amount = recent.snapshot()
+            .resources()
+            .get(iron);
+        assertEquals("1", amount.inputOperations());
+        assertEquals("0", amount.outputOperations());
+        recent.advance(141000);
+        assertTrue(
+            recent.snapshot()
+                .resources()
+                .isEmpty());
+
+        RecentResourceActivity stockOnly = new RecentResourceActivity(true, false, 10, 1000);
+        stockOnly.observe(stock(1000), true, false);
+        assertNull(
+            stockOnly.snapshot()
+                .resources()
+                .get(iron)
+                .inputOperations());
+        assertNull(
+            stockOnly.snapshot()
+                .resources()
+                .get(iron)
+                .outputOperations());
+    }
 
     @Test
     void saturatedAdmissionCountsRunningWorkAndPublishesUnknownWithoutAnotherSample() throws Exception {
@@ -187,7 +243,7 @@ class RecentTrackingServiceTest extends GridTestScope {
             true,
             false,
             Collections.emptyList(),
-            Collections.singletonList(new StorageObservation.Flow(iron, input, 0)),
+            Collections.singletonList(new StorageObservation.Flow(iron, input, 0, input > 0 ? 1 : 0, 0)),
             Collections.emptyMap(),
             Collections.emptyList());
     }

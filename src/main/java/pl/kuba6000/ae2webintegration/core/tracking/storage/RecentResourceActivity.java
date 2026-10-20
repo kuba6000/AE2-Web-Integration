@@ -47,7 +47,8 @@ public final class RecentResourceActivity {
 
     /** Decimal strings retain exact quantities in JavaScript, including totals exceeding a signed long. */
     @Desugar
-    public record Amount(@Nullable String input, @Nullable String output, @Nullable String stockChange) {}
+    public record Amount(@Nullable String input, @Nullable String output, @Nullable String inputOperations,
+        @Nullable String outputOperations, @Nullable String stockChange) {}
 
     /** Since fields identify the available observation period; null means the measurement is unavailable. */
     @Desugar
@@ -102,6 +103,8 @@ public final class RecentResourceActivity {
             Bucket bucket = entry.bucket(now);
             bucket.input = bucket.input.add(BigInteger.valueOf(flow.input()));
             bucket.output = bucket.output.add(BigInteger.valueOf(flow.output()));
+            bucket.inputOperations = bucket.inputOperations.add(BigInteger.valueOf(flow.inputOperations()));
+            bucket.outputOperations = bucket.outputOperations.add(BigInteger.valueOf(flow.outputOperations()));
         }
         if (!stockEnabled) for (StorageObservation.Row row : observation.rows()) entry(row.itemKey(), now);
     }
@@ -146,15 +149,21 @@ public final class RecentResourceActivity {
             Entry entry = resource.getValue();
             BigInteger input = BigInteger.ZERO;
             BigInteger output = BigInteger.ZERO;
+            BigInteger inputOperations = BigInteger.ZERO;
+            BigInteger outputOperations = BigInteger.ZERO;
             for (Bucket bucket : entry.buckets) {
                 input = input.add(bucket.input);
                 output = output.add(bucket.output);
+                inputOperations = inputOperations.add(bucket.inputOperations);
+                outputOperations = outputOperations.add(bucket.outputOperations);
             }
             amounts.put(
                 resource.getKey(),
                 new Amount(
                     flowEnabled ? input.toString() : null,
                     flowEnabled ? output.toString() : null,
+                    flowEnabled ? inputOperations.toString() : null,
+                    flowEnabled ? outputOperations.toString() : null,
                     stockEnabled && stockSamples.size() > 1 && entry.stockKnown
                         ? Long.toString(entry.quantity - entry.baseline)
                         : null));
@@ -242,6 +251,8 @@ public final class RecentResourceActivity {
         private final long at;
         private BigInteger input = BigInteger.ZERO;
         private BigInteger output = BigInteger.ZERO;
+        private BigInteger inputOperations = BigInteger.ZERO;
+        private BigInteger outputOperations = BigInteger.ZERO;
 
         private Bucket(long at) {
             this.at = at;

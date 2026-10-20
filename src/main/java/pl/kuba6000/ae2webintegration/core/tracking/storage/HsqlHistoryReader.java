@@ -234,6 +234,8 @@ final class HsqlHistoryReader {
             table == Table.STOCK ? row.getLong("quantity") : 0,
             table == Table.FLOW ? row.getLong("input_amount") : 0,
             table == Table.FLOW ? row.getLong("output_amount") : 0,
+            table == Table.FLOW ? row.getLong("input_operations") : 0,
+            table == Table.FLOW ? row.getLong("output_operations") : 0,
             kind == StorageHistoryPoint.Kind.FLOW || kind == StorageHistoryPoint.Kind.FLOW_OBSERVATION
                 ? row.getLong("flow_from")
                 : null);

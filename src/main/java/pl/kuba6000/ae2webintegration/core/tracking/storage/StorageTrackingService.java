@@ -318,6 +318,8 @@ public final class StorageTrackingService implements AutoCloseable {
                         0,
                         flow.input(),
                         flow.output(),
+                        flow.inputOperations(),
+                        flow.outputOperations(),
                         flowFrom));
             }
             if (complete) points.add(
@@ -326,6 +328,8 @@ public final class StorageTrackingService implements AutoCloseable {
                     generation,
                     StorageHistoryPoint.Kind.FLOW_OBSERVATION,
                     null,
+                    0,
+                    0,
                     0,
                     0,
                     0,
@@ -368,6 +372,8 @@ public final class StorageTrackingService implements AutoCloseable {
                 quantity,
                 input,
                 output,
+                0,
+                0,
                 null);
         }
     }

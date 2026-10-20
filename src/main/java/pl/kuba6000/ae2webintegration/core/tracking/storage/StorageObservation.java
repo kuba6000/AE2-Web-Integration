@@ -37,7 +37,8 @@ public record StorageObservation(long observedAt, boolean full, boolean flowComp
     public record Row(@NotNull StableKey itemKey, long quantity, boolean craftable) {}
 
     @Desugar
-    public record Flow(@NotNull StableKey itemKey, long input, long output) {}
+    public record Flow(@NotNull StableKey itemKey, long input, long output, long inputOperations,
+        long outputOperations) {}
 
     @Desugar
     public record UnkeyedRow(@NotNull ResourceSnapshot resource, boolean craftable) {}

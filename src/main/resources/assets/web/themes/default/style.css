@@ -3414,6 +3414,11 @@ button.toast:hover {
 .tracking-totals strong {
     font-size: 16px;
 }
+.tracking-totals > .flow-operations {
+    flex-basis: 100%;
+    grid-column: 1 / -1;
+    overflow-wrap: anywhere;
+}
 .tracking-count-short {
     display: none;
 }

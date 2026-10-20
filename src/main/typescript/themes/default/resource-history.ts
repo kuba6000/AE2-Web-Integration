@@ -5,6 +5,7 @@ import { createTrackingChart } from './tracking-chart.js';
 import { renderMinecraftText } from './minecraft-text.js';
 import { element } from './dom.js';
 import { createResourceIcon, paintResourceIcon } from './resource-icon.js';
+import { flowOperationLines } from './flow-operations.js';
 
 export function createResourceHistoryView(
     host: HTMLElement,
@@ -146,7 +147,9 @@ export function createResourceHistoryView(
         totals.hidden = !full;
         if (full && history.status === 'ready') {
             let input = 0n,
-                output = 0n;
+                output = 0n,
+                inputOperations = 0n,
+                outputOperations = 0n;
             const flowObserved = history.points.some(
                 (point) =>
                     point.observedAt > history.from &&
@@ -157,6 +160,8 @@ export function createResourceHistoryView(
                 if (point.kind === 'FLOW' && point.observedAt > history.from && point.observedAt <= history.until) {
                     input += BigInt(point.input);
                     output += BigInt(point.output);
+                    inputOperations += BigInt(point.inputOperations);
+                    outputOperations += BigInt(point.outputOperations);
                 }
             const numbers = new Intl.NumberFormat(state.preferences.language);
             for (const [label, value, color] of [
@@ -183,6 +188,10 @@ export function createResourceHistoryView(
                 stat.append(element('span', label), count);
                 totals.append(stat);
             }
+            if (flowObserved)
+                totals.append(
+                    ...flowOperationLines(inputOperations.toString(), outputOperations.toString(), null, locale)
+                );
         }
         if (!chartHost.hidden)
             chart.render(history, locale, settings.get('chartStroke', 'pixel') !== 'smooth', itemKey!);

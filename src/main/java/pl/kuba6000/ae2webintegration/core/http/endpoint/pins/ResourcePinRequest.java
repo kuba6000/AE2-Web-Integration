@@ -96,6 +96,8 @@ public abstract class ResourcePinRequest extends IAsyncRequest {
                 new RecentResourceActivity.Amount(
                     amount == null ? zero : amount.input(),
                     amount == null ? zero : amount.output(),
+                    amount == null ? zero : amount.inputOperations(),
+                    amount == null ? zero : amount.outputOperations(),
                     null)));
     }
 

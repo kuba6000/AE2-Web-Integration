@@ -120,6 +120,8 @@ class StorageCaptureTest {
             0,
             flow.input(),
             flow.output(),
+            flow.inputOperations(),
+            flow.outputOperations(),
             (now) - 1000L);
         try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(database, new Range(1, 365, 30), 100)) {
             WorldHistoryFixtures.register(store, gridKey);
@@ -140,6 +142,64 @@ class StorageCaptureTest {
                     .get(itemKey)
                     .displayName());
         }
+    }
+
+    @Test
+    void countsAcceptedPositiveOperationsByDirectionAndResetsWithTheFlowBucket() {
+        StorageCapture capture = new StorageCapture(grid(), 10);
+        IAEKey resource = resource(new AtomicInteger());
+        capture.recordFlow(resource, 8, 0);
+        capture.recordFlow(resource, 2, 0);
+        capture.recordFlow(resource, 0, 7);
+        capture.recordFlow(resource, 0, 0);
+        capture.recordFlow(unsupported(false), 10, 3);
+        StorageObservation first = capture.flushFlow(1000);
+        assertEquals(
+            1,
+            first.flows()
+                .size());
+        StorageObservation.Flow flow = first.flows()
+            .get(0);
+        assertEquals(10, flow.input());
+        assertEquals(7, flow.output());
+        assertEquals(2, flow.inputOperations());
+        assertEquals(1, flow.outputOperations());
+        assertTrue(
+            capture.flushFlow(2000)
+                .flows()
+                .isEmpty());
+        capture.recordFlow(resource, Long.MAX_VALUE, 0);
+        capture.recordFlow(resource, 1, 3);
+        StorageObservation overflow = capture.flushFlow(3000);
+        assertFalse(overflow.flowComplete());
+        assertEquals(
+            Long.MAX_VALUE,
+            overflow.flows()
+                .get(0)
+                .input());
+        assertEquals(
+            2,
+            overflow.flows()
+                .get(0)
+                .inputOperations());
+        assertEquals(
+            1,
+            overflow.flows()
+                .get(0)
+                .outputOperations());
+        capture.recordFlow(resource, 0, 1);
+        StorageObservation fresh = capture.flushFlow(4000);
+        assertTrue(fresh.flowComplete());
+        assertEquals(
+            0,
+            fresh.flows()
+                .get(0)
+                .inputOperations());
+        assertEquals(
+            1,
+            fresh.flows()
+                .get(0)
+                .outputOperations());
     }
 
     @Test

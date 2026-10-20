@@ -668,7 +668,8 @@ class IconDeliveryHttpTest {
                         new StorageObservation.Row(exact, 5, false),
                         new StorageObservation.Row(fallback, Long.MAX_VALUE, false),
                         new StorageObservation.Row(missing, 7, false)),
-                    Collections.singletonList(new StorageObservation.Flow(exact, 19, 6)),
+                    Collections
+                        .singletonList(new StorageObservation.Flow(exact, Long.MAX_VALUE, 6, Long.MAX_VALUE - 1, 2)),
                     descriptions,
                     Collections.emptyList()),
                 true,
@@ -691,6 +692,23 @@ class IconDeliveryHttpTest {
             JsonObject measured = point.getAsJsonObject();
             String kind = measured.get("kind")
                 .getAsString();
+            assertNotNull(measured.get("inputOperations"));
+            assertTrue(
+                measured.get("inputOperations")
+                    .getAsJsonPrimitive()
+                    .isString());
+            assertTrue(
+                measured.get("outputOperations")
+                    .getAsJsonPrimitive()
+                    .isString());
+            assertEquals(
+                kind.equals("FLOW") ? "9223372036854775806" : "0",
+                measured.get("inputOperations")
+                    .getAsString());
+            assertEquals(
+                kind.equals("FLOW") ? "2" : "0",
+                measured.get("outputOperations")
+                    .getAsString());
             if (kind.equals("FLOW") || kind.equals("FLOW_OBSERVATION")) assertEquals(
                 observedAt - 60000,
                 measured.get("flowFrom")

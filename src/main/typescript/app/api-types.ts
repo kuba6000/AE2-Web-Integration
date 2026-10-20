@@ -42,7 +42,13 @@ export type IconMetadata = {
     pages: { digest: string; width: number; height: number }[];
 };
 export type TerminalView = { generation: string; revision: string };
-export type RecentResource = { input: string | null; output: string | null; stockChange: string | null };
+export type RecentResource = {
+    input: string | null;
+    output: string | null;
+    inputOperations: string | null;
+    outputOperations: string | null;
+    stockChange: string | null;
+};
 export type RecentTracking = {
     flowWindowMillis: number;
     stockWindowMillis: number;
@@ -211,6 +217,8 @@ export type ResourceHistoryPoint = {
     resource: (ResourceDescription & { quantity: string }) | null;
     input: string;
     output: string;
+    inputOperations: string;
+    outputOperations: string;
 };
 export type ResourceHistory = {
     baseline: ResourceHistoryPoint | null;

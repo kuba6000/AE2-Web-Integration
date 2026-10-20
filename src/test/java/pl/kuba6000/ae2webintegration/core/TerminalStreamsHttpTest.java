@@ -229,6 +229,60 @@ class TerminalStreamsHttpTest extends GridTestScope {
     }
 
     @Test
+    void changedOperationCountsPublishEvenWhenRecentQuantitiesAndTimesStayEqual() throws Exception {
+        StableKey iron = TestGridFixtures.key(51);
+        try (Fixture fixture = new Fixture(Collections.singletonList(row(iron, "Iron", 1)))) {
+            Summary initial = new Summary(
+                120000,
+                3600000,
+                5000,
+                6000,
+                6000L,
+                null,
+                1000L,
+                null,
+                true,
+                false,
+                Collections.singletonMap(iron, new RecentResourceActivity.Amount("10", "5", "1", "1", null)));
+            fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), initial);
+            try (Connection connection = fixture.open(fixture.reserve())) {
+                assertEquals("ready", readEvent(connection.input).name());
+                Summary changed = initial.withResources(
+                    Collections.singletonMap(iron, new RecentResourceActivity.Amount("10", "5", "2", "3", null)));
+                fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), changed);
+                JsonObject delta = readEvent(connection.input).data();
+                assertEquals(
+                    0,
+                    delta.getAsJsonArray("updates")
+                        .size());
+                assertEquals(
+                    0,
+                    delta.getAsJsonArray("definitions")
+                        .size());
+                JsonObject amount = delta.getAsJsonObject("recent")
+                    .getAsJsonObject("resources")
+                    .getAsJsonObject(iron.toString());
+                assertEquals(
+                    "10",
+                    amount.get("input")
+                        .getAsString());
+                assertEquals(
+                    "5",
+                    amount.get("output")
+                        .getAsString());
+                assertEquals(
+                    "2",
+                    amount.get("inputOperations")
+                        .getAsString());
+                assertEquals(
+                    "3",
+                    amount.get("outputOperations")
+                        .getAsString());
+            }
+        }
+    }
+
+    @Test
     void recentFlowAndExpiryReachStreamWithoutRepeatingQuantitiesOrDefinitions() throws Exception {
         StableKey iron = TestGridFixtures.key(51);
         List<StorageObservationFixtures.Row> rows = Collections.singletonList(row(iron, "Iron", 1));
@@ -255,7 +309,8 @@ class TerminalStreamsHttpTest extends GridTestScope {
                         true,
                         false,
                         Collections.emptyList(),
-                        Collections.singletonList(new StorageObservation.Flow(iron, Long.MAX_VALUE, 100)),
+                        Collections.singletonList(
+                            new StorageObservation.Flow(iron, Long.MAX_VALUE, 100, Long.MAX_VALUE - 1, 2)),
                         Collections.emptyMap(),
                         Collections.emptyList()),
                     false,
@@ -281,6 +336,14 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     "9223372036854775807",
                     amount.get("input")
                         .getAsString());
+                assertEquals(
+                    "9223372036854775806",
+                    amount.get("inputOperations")
+                        .getAsString());
+                assertEquals(
+                    "2",
+                    amount.get("outputOperations")
+                        .getAsString());
                 recent.advance(131000);
                 assertEquals(
                     6000,
@@ -289,6 +352,20 @@ class TerminalStreamsHttpTest extends GridTestScope {
                     "Expiry is not a new flow measurement");
                 fixture.state.recent(fixture.grid, 5, fixture.state.recentToken(fixture.grid, 5), recent.snapshot());
                 delta = readEvent(connection.input).data();
+                assertEquals(
+                    "0",
+                    delta.getAsJsonObject("recent")
+                        .getAsJsonObject("resources")
+                        .getAsJsonObject(iron.toString())
+                        .get("inputOperations")
+                        .getAsString());
+                assertEquals(
+                    "0",
+                    delta.getAsJsonObject("recent")
+                        .getAsJsonObject("resources")
+                        .getAsJsonObject(iron.toString())
+                        .get("outputOperations")
+                        .getAsString());
                 assertEquals(
                     0,
                     delta.getAsJsonArray("updates")

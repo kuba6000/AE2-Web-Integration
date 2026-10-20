@@ -123,13 +123,16 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
         try (PreparedStatement stock = db.prepareStatement("""
             INSERT INTO history_stock (id, measurement_id, resource_id, quantity)
             VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?)
-            """); PreparedStatement flow = db.prepareStatement("""
-            INSERT INTO history_flow (id, measurement_id, resource_id, input_amount, output_amount)
-            VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?)
-            """); PreparedStatement coverage = db.prepareStatement("""
-            INSERT INTO history_coverage (id, measurement_id, kind)
-            VALUES (NEXT VALUE FOR history_event_ids, ?, ?)
-            """)) {
+            """);
+            PreparedStatement flow = db.prepareStatement(
+                """
+                    INSERT INTO history_flow (id, measurement_id, resource_id, input_amount, output_amount, input_operations, output_operations)
+                    VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?, ?, ?)
+                    """);
+            PreparedStatement coverage = db.prepareStatement("""
+                INSERT INTO history_coverage (id, measurement_id, kind)
+                VALUES (NEXT VALUE FOR history_event_ids, ?, ?)
+                """)) {
             PreparedStatement pending = null;
             int groupEnd = 0;
             long measurementId = -1;
@@ -172,6 +175,8 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                     insert.setLong(3, table == Table.STOCK ? point.quantity() : point.input());
                     if (table == Table.FLOW) {
                         insert.setLong(4, point.output());
+                        insert.setLong(5, point.inputOperations());
+                        insert.setLong(6, point.outputOperations());
                     }
                 }
                 insert.addBatch();

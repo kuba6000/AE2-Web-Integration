@@ -398,6 +398,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                             .get(key)));
                 pending.input = addFlow(pending.input, flow.input());
                 pending.output = addFlow(pending.output, flow.output());
+                pending.inputOperations = addFlow(pending.inputOperations, flow.inputOperations());
+                pending.outputOperations = addFlow(pending.outputOperations, flow.outputOperations());
             }
         }
 
@@ -414,7 +416,13 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
             Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>(observation.descriptions());
             for (Map.Entry<StableKey, PendingFlow> entry : pendingFlow.entrySet()) {
                 PendingFlow pending = entry.getValue();
-                flows.add(new StorageObservation.Flow(entry.getKey(), pending.input, pending.output));
+                flows.add(
+                    new StorageObservation.Flow(
+                        entry.getKey(),
+                        pending.input,
+                        pending.output,
+                        pending.inputOperations,
+                        pending.outputOperations));
                 descriptions.put(entry.getKey(), pending.description);
             }
             StorageObservation history = new StorageObservation(
@@ -438,6 +446,8 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         private final ResourceDescriptor description;
         private long input;
         private long output;
+        private long inputOperations;
+        private long outputOperations;
 
         private PendingFlow(ResourceDescriptor description) {
             this.description = description;

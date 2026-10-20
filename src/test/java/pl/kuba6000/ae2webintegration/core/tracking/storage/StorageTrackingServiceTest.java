@@ -85,7 +85,7 @@ class StorageTrackingServiceTest {
                         false,
                         false,
                         Collections.emptyList(),
-                        Collections.singletonList(new StorageObservation.Flow(item, 7, 3)),
+                        Collections.singletonList(new StorageObservation.Flow(item, 7, 3, 5, 2)),
                         Collections.singletonMap(item, resource(item, 0).description()),
                         Collections.emptyList()),
                     false,
@@ -108,6 +108,8 @@ class StorageTrackingServiceTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Partial flow counters were discarded"));
             assertEquals(7, flow.input());
+            assertEquals(5, flow.inputOperations());
+            assertEquals(2, flow.outputOperations());
             assertEquals(3, flow.output());
         }
     }
@@ -781,7 +783,7 @@ class StorageTrackingServiceTest {
                     false,
                     true,
                     first.rows(),
-                    Collections.singletonList(new StorageObservation.Flow(item, 30, 30)),
+                    Collections.singletonList(new StorageObservation.Flow(item, 30, 30, 1, 1)),
                     first.descriptions(),
                     Collections.emptyList()),
                 true,

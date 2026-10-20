@@ -114,6 +114,8 @@ public final class StorageCapture {
             }
             entry.input = add(entry, entry.input, input);
             entry.output = add(entry, entry.output, output);
+            entry.inputOperations = add(entry, entry.inputOperations, input > 0 ? 1 : 0);
+            entry.outputOperations = add(entry, entry.outputOperations, output > 0 ? 1 : 0);
         }
         dirty(entry);
         entry.hasAbsolute = false;
@@ -342,10 +344,18 @@ public final class StorageCapture {
             if (entry.input != 0 || entry.output != 0) {
                 if (entry.overflow) markGap();
                 descriptions.put(entry.key, AE2Controller.itemIdentities.describe(entry.key));
-                flows.add(new StorageObservation.Flow(entry.key, entry.input, entry.output));
+                flows.add(
+                    new StorageObservation.Flow(
+                        entry.key,
+                        entry.input,
+                        entry.output,
+                        entry.inputOperations,
+                        entry.outputOperations));
             }
             entry.input = 0;
             entry.output = 0;
+            entry.inputOperations = 0;
+            entry.outputOperations = 0;
             entry.overflow = false;
             entry.flowPending = false;
             index++;
@@ -443,6 +453,8 @@ public final class StorageCapture {
         private final StableKey key;
         private long input;
         private long output;
+        private long inputOperations;
+        private long outputOperations;
         private boolean overflow;
         private boolean flowPending;
         private long dirty;
