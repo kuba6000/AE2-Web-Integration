@@ -19,6 +19,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameInde
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
@@ -120,6 +121,12 @@ public abstract class AECraftingCPUClusterMixin implements IPausableCraftingCPU,
     @Override
     public boolean web$isBusy() {
         return ((CraftingCPUCluster) (Object) this).isBusy();
+    }
+
+    @Override
+    public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return !cpu.isDestroyed() && cpu.isActive() && (Object) cpu.getGrid() == grid;
     }
 
     @Override
