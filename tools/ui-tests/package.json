@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "pretest": "npm --prefix ../.. run build:theme-example",
-    "test": "node --test *.test.cjs"
+    "test": "node run-tests.cjs"
   },
   "devDependencies": {
     "playwright": "1.62.1"

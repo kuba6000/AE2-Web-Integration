@@ -14,7 +14,9 @@ npx playwright install chromium
 npm test
 ```
 
-`npm test` builds the frontend, theme SDK and example before running the suite.
+`npm test` builds the frontend, theme SDK and example before running the suite. Every test file runs in its own
+process, up to four at a time (fewer on machines with fewer cores), and each browser file shares one headless browser
+between its tests. `fixtures.cjs` holds the simulated HTTP API and the helpers the browser test files share.
 Tests use a simulated HTTP API; Minecraft is not required.
 
 Set `BROWSER_CHANNEL=msedge` to use an installed Microsoft Edge instead of downloaded
@@ -23,7 +25,7 @@ Chromium.
 Run only login-page browser checks from the core repository root after building the frontend:
 
 ```sh
-node --test --test-name-pattern='login|registration' tools/ui-tests/browser.test.cjs
+node --test --test-name-pattern='login|registration' tools/ui-tests/browser-*.test.cjs
 ```
 
 ## Frontend checks
