@@ -1210,19 +1210,40 @@ test('late CPU reads cannot leak across selection or grid changes and busy state
     );
     await poll(page);
     const delayed = await captured;
+    let select;
+    const selectedRead = new Promise((resolve) => {
+        select = resolve;
+    });
+    await page.route(
+        (url) => url.pathname.endsWith('/cpus/cpu-b'),
+        (route) => select(route),
+        { times: 1 }
+    );
     await clickTab(page, 'CPUs');
     await page.getByRole('link', { name: /Assembler.*cpu-b/ }).click();
-    await page.getByText('Current output unavailable', { exact: true }).waitFor();
-    await page
-        .getByRole('status')
-        .filter({ hasText: /^Busy$/i })
-        .waitFor();
+    await page.waitForURL(new RegExp(`/cpus/cpu-b$`));
+    // A dispatched live read settles before the next selection can reclaim its subscription.
+    // Return stale A after navigation and hold B to prove A cannot populate the new selection.
     await delayed.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ status: 'OK', data: cpuWork })
     });
     await settleResponse(page, delayed.request());
+    const selected = await selectedRead;
+    assert.equal(
+        await page
+            .getByRole('region', { name: 'CPU resources', exact: true })
+            .getByRole('button', { name: /Iron Ingot/ })
+            .count(),
+        0
+    );
+    await selected.continue();
+    await page.getByText('Current output unavailable', { exact: true }).waitFor();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /^Busy$/i })
+        .waitFor();
     assert.equal(
         await page
             .getByRole('region', { name: 'CPU resources', exact: true })

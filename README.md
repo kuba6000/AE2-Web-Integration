@@ -213,15 +213,20 @@ to five minutes. Recent terminal summaries use five-second samples over
 two minutes independently of saved history. Charts show each measured interval's actual span and
 retain available partial counts when collection has gaps.
 
-History is stored in an embedded HSQLDB database under the world's `ae2webintegration/history` directory.
+Flow also records the number of accepted input and output operations. Recent summaries show an
+approximate rate per second when the measured interval is complete. One transfer of 64 items counts
+as one operation; these counts describe network transfers, not individual machine recipes.
+
+History is stored in an embedded HSQLDB database using `grids.*` files in the world's `ae2webintegration` directory.
 No database installation is needed. The defaults retain up to 7 days and 250,000 records per network;
 the oldest records are removed when either limit is reached. One older stock measurement per resource
 may remain as a dated baseline, within the same record limit. Configure minimum, maximum and default
-values, plus the record cap, under `data` in `config.toml` and restart the server to apply them.
+values, plus the record cap, under `data` in `config.toml` and apply them with `/ae2webintegration reload`
+or a server restart.
 Existing network choices outside new bounds are adjusted to the nearest bound. The record cap can
 shorten the selected retention and is not a byte limit. Expired data is hidden from history queries;
-physical cleanup runs during database initialization and writes. Missing measurements are shown as
-gaps, not zero activity.
+physical cleanup runs during database initialization, writes and periodic background maintenance.
+Missing measurements are shown as gaps, not zero activity.
 
 With automatic refresh enabled, the terminal receives live changes over SSE. Live viewing does not
 require history tracking or increase the frequency of saved storage measurements. After a connection
@@ -324,11 +329,10 @@ documentation host.
 Project code and original interface icons are licensed under **LGPL-3.0-or-later**.
 Bundled third-party assets retain their own licenses:
 
-- [uPlot](https://github.com/leeoniya/uPlot), by Leon Sorokin — MIT (default theme charts).
-
 | Component | Author / source | License |
 | --- | --- | --- |
 | Project code and original interface icons | kuba6000 | [LGPL-3.0-or-later](LICENSE) |
+| Charts | [uPlot, Leon Sorokin](https://github.com/leeoniya/uPlot) | MIT |
 | Interface icons | [HackerNoon Pixel Icon Library](https://github.com/hackernoon/pixel-icon-library) | [MIT](src/main/resources/assets/web/themes/default/icons/hackernoon/LICENSE) |
 | Lato font | [Łukasz Dziedzic (tyPoland)](https://github.com/google/fonts/tree/main/ofl/lato) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/lato/LICENSE) |
 | Monocraft font | [Idrees Hassan](https://github.com/IdreesInc/Monocraft) | [SIL Open Font License 1.1](src/main/resources/assets/web/themes/default/fonts/monocraft/LICENSE) |
