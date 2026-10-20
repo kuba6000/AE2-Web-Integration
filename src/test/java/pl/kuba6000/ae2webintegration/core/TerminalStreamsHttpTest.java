@@ -1,5 +1,6 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -38,6 +40,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 
+import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.config.Config;
@@ -59,6 +62,120 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservationFix
 class TerminalStreamsHttpTest extends GridTestScope {
 
     private TestGridFixtures.TestGrid nativeGrid;
+
+    @Test
+    void exchangeCloseFailureDoesNotAbortResetOrLaterStreaming() throws Exception {
+        CountDownLatch ready = new CountDownLatch(1);
+        AtomicBoolean closeAttempted = new AtomicBoolean();
+        OutputStream output = new OutputStream() {
+
+            @Override
+            public void write(int value) {
+                throw new AssertionError("Expected a complete encoded event");
+            }
+
+            @Override
+            public void write(byte @NotNull [] bytes, int offset, int length) {
+                if (new String(bytes, offset, length, StandardCharsets.UTF_8).startsWith("event: heartbeat"))
+                    ready.countDown();
+            }
+        };
+        TestGridFixtures.TestExchange failedClose = new TestGridFixtures.TestExchange(null) {
+
+            @Override
+            public InputStream getRequestBody() {
+                return new ByteArrayInputStream(new byte[0]);
+            }
+
+            @Override
+            public OutputStream getResponseBody() {
+                return output;
+            }
+
+            @Override
+            public void close() {
+                closeAttempted.set(true);
+                throw new IllegalStateException("Exchange close failed");
+            }
+        };
+        StableKey iron = TestGridFixtures.key(51);
+        try (Fixture fixture = new Fixture(Collections.singletonList(row(iron, "Iron", 1)))) {
+            fixture.streams.open(
+                new AE2Controller.RequestContext(failedClose, fixture.session),
+                StorageTopic.keyOf(fixture.grid),
+                fixture.reserve(),
+                false);
+            assertTrue(ready.await(2, TimeUnit.SECONDS));
+            try (Connection healthy = fixture.open(fixture.reserve())) {
+                assertEquals("ready", readAnyEvent(healthy.input).name());
+                assertEquals("heartbeat", readAnyEvent(healthy.input).name());
+                fixture.fillAdmission();
+                assertDoesNotThrow(fixture.streams::reset);
+                assertTrue(closeAttempted.get());
+                assertClosedWithoutDelta(healthy.input);
+                fixture.state.activate(fixture.grid, 5, System.currentTimeMillis());
+                fixture.publish(1, Collections.singletonList(row(iron, "Iron", 1)));
+                try (Connection replacement = fixture.open(fixture.reserve())) {
+                    assertEquals("ready", readEvent(replacement.input).name());
+                    fixture.publish(2, Collections.singletonList(row(iron, "Iron", 2)));
+                    assertEquals("delta", readEvent(replacement.input).name());
+                }
+            }
+        }
+    }
+
+    @Test
+    void permissionFailureClosesOnlyItsSessionAndReclaimsAdmission() throws Exception {
+        AtomicBoolean failFirst = new AtomicBoolean();
+        CountDownLatch failedCheck = new CountDownLatch(1);
+        UUID firstUser = TestGridFixtures.playerIdentity(TestGridFixtures.OWNER_ID).uuid;
+        nativeGrid = new TestGridFixtures.TestGrid(77242, false, AEControllerState.CONTROLLER_ONLINE, 8) {
+
+            @Override
+            public boolean web$hasAccess(@NotNull UUID playerId) {
+                if (failFirst.get() && firstUser.equals(playerId)) {
+                    failedCheck.countDown();
+                    throw new IllegalStateException("Permission provider failed");
+                }
+                return super.web$hasAccess(playerId);
+            }
+        };
+        StableKey key = TestGridFixtures.resolvedKey(nativeGrid);
+        StableKey iron = TestGridFixtures.key(51);
+        try (
+            Fixture fixture = new Fixture(
+                key,
+                TestGridFixtures.principal(TestGridFixtures.OWNER_ID),
+                Collections.singletonList(row(iron, "Iron", 1)));
+            Connection first = fixture.open(fixture.reserve())) {
+            assertEquals("ready", readAnyEvent(first.input).name());
+            assertEquals("heartbeat", readAnyEvent(first.input).name());
+            AuthSession secondSession = new AuthSession(TestGridFixtures.principal(8), Long.MAX_VALUE);
+            fixture.requestSession.set(secondSession);
+            try (Connection second = fixture.open(fixture.reserve(secondSession))) {
+                assertEquals("ready", readAnyEvent(second.input).name());
+                assertEquals("heartbeat", readAnyEvent(second.input).name());
+                fixture.fillAdmission();
+                failFirst.set(true);
+                assertTrue(failedCheck.await(2, TimeUnit.SECONDS));
+                assertClosedWithoutDelta(first.input);
+                assertNotNull(fixture.awaitAdmission());
+                for (int quantity = 2; quantity <= 3; quantity++) {
+                    fixture.publish(quantity, Collections.singletonList(row(iron, "Iron", quantity)));
+                    Event event = readEvent(second.input);
+                    assertEquals("delta", event.name());
+                    assertEquals(
+                        quantity,
+                        event.data()
+                            .getAsJsonArray("updates")
+                            .get(0)
+                            .getAsJsonObject()
+                            .get("quantity")
+                            .getAsLong());
+                }
+            }
+        }
+    }
 
     @Test
     void heartbeatsKeepTheirCadenceDuringActiveAndIdleStreams() throws Exception {
@@ -1048,6 +1165,13 @@ class TerminalStreamsHttpTest extends GridTestScope {
         return fail("Stream ended before its next event");
     }
 
+    private static void assertClosedWithoutDelta(BufferedReader input) throws IOException {
+        // A writer can finish an invalidate control frame while reset closes the connection.
+        for (String line; (line = input.readLine()) != null;) {
+            assertFalse(line.equals("event: delta"), "A failed or reset session must not send another delta");
+        }
+    }
+
     private static final class Connection implements AutoCloseable {
 
         private final HttpURLConnection connection;
@@ -1122,6 +1246,24 @@ class TerminalStreamsHttpTest extends GridTestScope {
             Bootstrap snapshot = state.reserve(grid, login, false, null, null, System.currentTimeMillis());
             assertNotNull(snapshot);
             return snapshot.subscription();
+        }
+
+        private void fillAdmission() {
+            for (int attempt = 0; attempt < 64; attempt++) {
+                if (state.reserve(grid, session, false, null, null, System.currentTimeMillis()) == null) return;
+            }
+            fail("Expected bounded live admission");
+        }
+
+        private Bootstrap awaitAdmission() throws InterruptedException {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            Bootstrap available;
+            do {
+                available = state.reserve(grid, session, false, null, null, System.currentTimeMillis());
+                if (available != null) return available;
+                Thread.sleep(10);
+            } while (System.nanoTime() < deadline);
+            return fail("Closed stream must release live admission before its lease expires");
         }
 
         private String base() {

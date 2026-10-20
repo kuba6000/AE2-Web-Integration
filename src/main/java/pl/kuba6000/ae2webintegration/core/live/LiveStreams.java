@@ -108,16 +108,21 @@ public final class LiveStreams implements AutoCloseable {
             active = new ArrayList<>(sessions);
         }
         for (Session session : active) {
-            authorize(session);
-            if (session.hasTask()) {
-                if (session
-                    .writeTimedOut(now, session.subscription.end == null ? WRITE_TIMEOUT_MILLIS : MAINTENANCE_MILLIS))
-                    finish(session);
-                continue;
+            try {
+                authorize(session);
+                if (session.hasTask()) {
+                    if (session.writeTimedOut(
+                        now,
+                        session.subscription.end == null ? WRITE_TIMEOUT_MILLIS : MAINTENANCE_MILLIS)) finish(session);
+                    continue;
+                }
+                if (session.subscription.end != null || !session.ready
+                    || hub.hasPending(session.subscription)
+                    || now - session.lastHeartbeat >= HEARTBEAT_MILLIS) schedule(session);
+            } catch (RuntimeException failure) {
+                LOG.warn("Live session maintenance failed", failure);
+                finish(session);
             }
-            if (session.subscription.end != null || !session.ready
-                || hub.hasPending(session.subscription)
-                || now - session.lastHeartbeat >= HEARTBEAT_MILLIS) schedule(session);
         }
     }
 
@@ -177,9 +182,12 @@ public final class LiveStreams implements AutoCloseable {
             if (Thread.currentThread()
                 .isInterrupted()) session.finished = true;
             session.completeTask();
-            if (session.finished) finish(session);
-            // Socket cancellation interrupts the writer; the next client must not inherit the flag.
-            Thread.interrupted();
+            try {
+                if (session.finished) finish(session);
+            } finally {
+                // Socket cancellation interrupts the writer; the next client must not inherit the flag.
+                Thread.interrupted();
+            }
         }
     }
 
@@ -199,11 +207,19 @@ public final class LiveStreams implements AutoCloseable {
 
     private void finish(Session session) {
         session.cancelTask();
-        session.context.getExchange()
-            .close();
-        hub.release(session.subscription);
-        synchronized (this) {
-            sessions.remove(session);
+        try {
+            session.context.getExchange()
+                .close();
+        } catch (RuntimeException failure) {
+            LOG.warn("Live connection cleanup failed", failure);
+        } finally {
+            try {
+                hub.release(session.subscription);
+            } finally {
+                synchronized (this) {
+                    sessions.remove(session);
+                }
+            }
         }
     }
 
@@ -288,6 +304,8 @@ public final class LiveStreams implements AutoCloseable {
             FutureTask<Void> pending;
             synchronized (this) {
                 finished = true;
+                // Fence a writer that already started before this session failed authorization or timed out.
+                if (subscription.end == null) subscription.end = "invalidate";
                 pending = task;
             }
             if (pending != null) pending.cancel(true);
