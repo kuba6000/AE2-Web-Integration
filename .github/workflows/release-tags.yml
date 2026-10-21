@@ -1,105 +1,159 @@
-# This workflow will build a Java project with Gradle and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-gradle
-
-# copied from https://github.com/GTNewHorizons/GTNH-Actions-Workflows/blob/master/.github/workflows/release-tags.yml
-
 name: Release tagged build
 
 on:
   push:
-    tags: [ '*' ]
+    tags: ['*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    outputs:
+      snapshot: ${{ steps.notes.outputs.snapshot }}
     env:
       VERSION: ${{ github.ref_name }}
-      RELEASE_VERSION: ${{ github.ref_name }}
-      SNAPSHOT: ${{ endsWith(github.ref_name, '-snapshot') || contains(github.event.head_commit.message, '[snapshot]') }}
-      PRERELEASE: ${{ endsWith(github.ref_name, '-pre') }}
-      MAVEN_PUBLISHING_URL: ${{ vars.MAVEN_PUBLISHING_URL || 'https://nexus.gtnewhorizons.com/repository/releases/' }}
     steps:
-      - name: Checkout mod repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 32
-          submodules: 'recursive'
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
 
-      - name: Set up JDK versions
-        uses: actions/setup-java@v4
-        with:
-          java-version: |
-            17
-            21
-          distribution: 'zulu'
+      - name: Test release preparation
+        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_release_*.py'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          build-scan-publish: true
-          build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
-          build-scan-terms-of-use-agree: "yes"
-          validate-wrappers: true
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      # - name: Setup the workspace
-      #   run: ./gradlew --build-cache --info --stacktrace -PmavenPublishUrl='${{ env.MAVEN_PUBLISHING_URL }}' ${{ inputs.workspace }}
-
-      - name: Build the mod
-        run: ./gradlew --build-cache --info --stacktrace -PmavenPublishUrl='${{ env.MAVEN_PUBLISHING_URL }}' assemble
-
-      # Continue on error in the following steps to make sure releases still get made even if one of the methods fails
-
-      - name: Delete old release if it already exists
-        run: gh release delete --yes "${RELEASE_VERSION}"
-        continue-on-error: true
+      - name: Prepare shared release description
+        id: notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Release under current tag
         run: |
-          PRERELEASE=""
-          if [[ "$SNAPSHOT" == "true" ]]; then
-            PRERELEASE="--prerelease"
-          fi
-          export "CHANGELOG_FILE=$(mktemp --suffix=.md)"
-          echo "CHANGELOG_FILE=${CHANGELOG_FILE}" >> $GITHUB_ENV
-          gh api --method POST -H "Accept: application/vnd.github+json" \
-            "/repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
-            -f tag_name="${RELEASE_VERSION}" \
-            --jq ".body" > "${CHANGELOG_FILE}"
-          cat "${CHANGELOG_FILE}"
-          mapfile -t RELEASE_JARS < <(find build/libs -maxdepth 1 -name '*.jar' ! -name '*-sources*' ! -name '*-slim*')
-          if [[ ${#RELEASE_JARS[@]} -eq 0 ]]; then
-            echo "No production jar found in build/libs"
-            exit 1
-          fi
-          gh release create "${RELEASE_VERSION}" -F "${CHANGELOG_FILE}" $PRERELEASE "${RELEASE_JARS[@]}"
-        shell: bash
-        continue-on-error: true
+          python3 .github/scripts/release_notes.py \
+            --tag "$VERSION" --minecraft '1.21.1' --loader 'neoforge' \
+            --repository "$GITHUB_REPOSITORY" --output build/release/notes.md \
+            --github-output "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and exercise both publishers without uploading
+        run: |
+          chmod +x gradlew
+          python3 .github/scripts/release_preview.py --minecraft '1.21.1' \
+            --release-type "${{ steps.notes.outputs.release_type }}" --notes build/release/notes.md
+
+      - name: Stage verified production JAR and description
+        run: |
+          python3 .github/scripts/release_bundle.py stage \
+            --manifest build/release/manifest.json --metadata build/release/metadata.json \
+            --output build/release/bundle
+          cat build/release/notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-1.21.1
+          path: build/release/bundle/
+          if-no-files-found: error
+          retention-days: 14
+
+  github:
+    needs: build
+    if: github.repository == 'kuba6000/AE2-Web-Integration'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-1.21.1
+          path: release-bundle
+      - name: Create or verify GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 .github/scripts/release_bundle.py github \
+            --bundle release-bundle --repository "$GITHUB_REPOSITORY" --publish
 
-      # - name: Publish to Maven
-      #   run: ./gradlew --build-cache --info --stacktrace -PmavenPublishUrl='${{ env.MAVEN_PUBLISHING_URL }}' assemble publish -x test
-      #   continue-on-error: true
-      #   env:
-      #     MAVEN_USER: ${{ secrets.MAVEN_USER }}
-      #     MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
-      #   if: ${{ env.MAVEN_USER != '' }}
-
-      # - name: Publish to Modrinth
-      #   run: ./gradlew --build-cache --info --stacktrace -PmavenPublishUrl='${{ env.MAVEN_PUBLISHING_URL }}' assemble publish -x test
-      #   continue-on-error: true
-      #   env:
-      #     MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
-      #   if: ${{ env.SNAPSHOT != 'true' && env.PRERELEASE != 'true' }}
-
-      # - name: Publish to Curseforge
-      #   run: ./gradlew --build-cache --info --stacktrace -PmavenPublishUrl='${{ env.MAVEN_PUBLISHING_URL }}' assemble publish -x test
-      #   continue-on-error: true
-      #   env:
-      #     CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
-      #   if: ${{ env.SNAPSHOT != 'true' && env.PRERELEASE != 'true' }}
+  portals:
+    needs: build
+    if: >-
+      github.repository == 'kuba6000/AE2-Web-Integration' &&
+      needs.build.outputs.snapshot != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [modrinth, curseforge]
+    name: Publish to ${{ matrix.platform }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-1.21.1
+          path: release-bundle
+      - name: Verify immutable release bundle
+        id: bundle
+        run: |
+          python3 .github/scripts/release_bundle.py export \
+            --bundle release-bundle --github-output "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Publish to Modrinth
+        if: matrix.platform == 'modrinth'
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          RELEASE_ARTIFACT: ${{ steps.bundle.outputs.artifact }}
+          RELEASE_NOTES: ${{ steps.bundle.outputs.notes }}
+          RELEASE_SHA512: ${{ steps.bundle.outputs.sha512 }}
+          RELEASE_MANIFEST: ${{ steps.bundle.outputs.manifest }}
+          RELEASE_TYPE: ${{ steps.bundle.outputs.release_type }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-configuration-cache --stacktrace releaseModrinth \
+            -PreleaseDryRun=false -PreleaseType="$RELEASE_TYPE" \
+            -PreleaseArtifactFile="$RELEASE_ARTIFACT" -PreleaseArtifactSha512="$RELEASE_SHA512" \
+            -PreleaseBundleManifest="$RELEASE_MANIFEST" \
+            -PreleaseNotesFile="$RELEASE_NOTES"
+      - name: Publish to CurseForge
+        if: matrix.platform == 'curseforge'
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          RELEASE_ARTIFACT: ${{ steps.bundle.outputs.artifact }}
+          RELEASE_NOTES: ${{ steps.bundle.outputs.notes }}
+          RELEASE_SHA512: ${{ steps.bundle.outputs.sha512 }}
+          RELEASE_MANIFEST: ${{ steps.bundle.outputs.manifest }}
+          RELEASE_TYPE: ${{ steps.bundle.outputs.release_type }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-configuration-cache --stacktrace releaseCurseforge \
+            -PreleaseDryRun=false -PreleaseType="$RELEASE_TYPE" \
+            -PreleaseArtifactFile="$RELEASE_ARTIFACT" -PreleaseArtifactSha512="$RELEASE_SHA512" \
+            -PreleaseBundleManifest="$RELEASE_MANIFEST" \
+            -PreleaseNotesFile="$RELEASE_NOTES"

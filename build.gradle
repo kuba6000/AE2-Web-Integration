@@ -6,6 +6,8 @@ plugins {
     id 'maven-publish'
     id 'com.diffplug.spotless' version '8.10.2'
     id 'com.palantir.git-version' version '4.0.0' apply false
+    id 'com.modrinth.minotaur' version '2.8.10' apply false
+    id 'net.darkhax.curseforgegradle' version '1.1.28' apply false
 }
 
 group = maven_group
@@ -97,3 +99,4 @@ tasks.withType(Test).configureEach {
 apply from: 'icon-generator.gradle'
 
 apply from: 'gradle/idea-settings.gradle'
+apply from: 'gradle/release.gradle'
