@@ -107,8 +107,11 @@ public class CoreEngine {
     public static void onServerStarted() {
         // Finish the previous world before binding any new identity or storage owner.
         onServerStopping();
+        File databaseFile = new File(
+            AE2Controller.serverPlatform.getWorldDirectory(),
+            "ae2webintegration/grids.sqlite");
         WorldDatabase database = new WorldDatabase(
-            new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/grids.sqlite").toPath(),
+            databaseFile.toPath(),
             Config.INSTANCE.resourceHistory,
             Config.INSTANCE.craftingHistory);
         SqliteCraftingHistoryStore craftings = new SqliteCraftingHistoryStore(database);
@@ -121,15 +124,15 @@ public class CoreEngine {
                     .toPath());
             history.initialize();
             craftings.maintain();
-        } catch (IOException | RuntimeException failure) {
+        } catch (IOException | RuntimeException | LinkageError failure) {
             GRID_IDENTITIES.clear();
             try {
                 database.close();
-            } catch (IOException closeFailure) {
+            } catch (IOException | RuntimeException | LinkageError closeFailure) {
                 failure.addSuppressed(closeFailure);
             }
-            LOG.error("Failed to open world database; grid services remain unavailable", failure);
-            return;
+            if (failure instanceof LinkageError linkageFailure) throw linkageFailure;
+            throw new IllegalStateException("Failed to initialize world database: " + databaseFile, failure);
         }
         try {
             worldDatabase = database;

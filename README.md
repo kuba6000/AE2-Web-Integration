@@ -226,7 +226,8 @@ approximate rate per second when the measured interval is complete. One transfer
 as one operation; these counts describe network transfers, not individual machine recipes.
 
 History is stored in an embedded SQLite database at `ae2webintegration/grids.sqlite` in the world directory.
-No database installation is needed. The defaults retain up to 7 days and 250,000 records per network;
+No database installation is needed. Server startup fails if the database cannot be initialized.
+The defaults retain up to 7 days and 250,000 records per network;
 the oldest records are removed when either limit is reached. One older stock measurement per resource
 may remain as a dated baseline, within the same record limit. Configure minimum, maximum and default
 values, plus the record cap, under `resource_history` in `config.toml` and apply them with `/ae2webintegration reload`

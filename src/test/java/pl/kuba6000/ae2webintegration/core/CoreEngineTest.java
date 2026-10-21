@@ -4,6 +4,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingTestFixtures.awaitHistory;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -16,6 +21,7 @@ import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
@@ -33,6 +39,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetResourceHist
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
@@ -40,6 +47,86 @@ class CoreEngineTest {
 
     @TempDir
     File configRoot;
+
+    @Test
+    void failedIdentityImportAbortsStartupWithoutPublishingServicesAndCanRetry() throws Exception {
+        TestPlatform platform = new TestPlatform(configRoot, false);
+        CoreEngine.init(platform);
+        Config.INSTANCE.general.port = 0;
+        Config.INSTANCE.general.checkForUpdates = false;
+        Path source = new File(platform.getWorldDirectory(), "ae2webintegration/grid-identities.json").toPath();
+        Path databaseFile = source.resolveSibling("grids.sqlite");
+        byte[] invalid = "{broken".getBytes(StandardCharsets.UTF_8);
+        Files.createDirectories(source.getParent());
+        Files.write(source, invalid);
+        try {
+            IllegalStateException failure = assertThrows(IllegalStateException.class, CoreEngine::onServerStarted);
+            IOException cause = assertInstanceOf(IOException.class, failure.getCause());
+            assertInstanceOf(JsonParseException.class, cause.getCause());
+            assertTrue(
+                failure.getMessage()
+                    .contains(databaseFile.toString()));
+            assertFalse(CoreEngine.GRID_IDENTITIES.isInitialized());
+            assertNull(CoreEngine.getResourcePins());
+            assertNull(CoreEngine.getStorageTracking());
+            assertNull(CoreEngine.getCraftingHistory());
+            assertNull(CoreEngine.getLiveStreams());
+            assertNull(CoreEngine.getTerminalRegistry());
+            assertArrayEquals(invalid, Files.readAllBytes(source));
+            try (WorldDatabase released = new WorldDatabase(databaseFile, Config.INSTANCE.resourceHistory)) {
+                assertDoesNotThrow(released::open);
+            }
+            Files.write(source, "{}".getBytes(StandardCharsets.UTF_8));
+            assertDoesNotThrow(CoreEngine::onServerStarted);
+            assertTrue(CoreEngine.GRID_IDENTITIES.isInitialized());
+            assertNotNull(CoreEngine.getResourcePins());
+            assertNotNull(CoreEngine.getStorageTracking());
+            assertNotNull(CoreEngine.getCraftingHistory());
+        } finally {
+            CoreEngine.onServerStopped();
+        }
+    }
+
+    @Test
+    void invalidDatabaseAbortsStartupPreservesTheFileAndAllowsAnotherWorld() throws Exception {
+        TestPlatform platform = new TestPlatform(configRoot, false);
+        CoreEngine.init(platform);
+        Config.INSTANCE.general.port = 0;
+        Config.INSTANCE.general.checkForUpdates = false;
+        Path databaseFile = new File(platform.getWorldDirectory(), "ae2webintegration/grids.sqlite").toPath();
+        byte[] original = "This existing file is not a SQLite database".getBytes(StandardCharsets.UTF_8);
+        Files.createDirectories(databaseFile.getParent());
+        Files.write(databaseFile, original);
+        try {
+            IllegalStateException failure = assertThrows(IllegalStateException.class, CoreEngine::onServerStarted);
+            IOException cause = assertInstanceOf(IOException.class, failure.getCause());
+            assertInstanceOf(SQLException.class, cause.getCause());
+            assertTrue(
+                failure.getMessage()
+                    .contains(databaseFile.toString()));
+            assertFalse(CoreEngine.GRID_IDENTITIES.isInitialized());
+            assertNull(CoreEngine.getResourcePins());
+            assertNull(CoreEngine.getStorageTracking());
+            assertNull(CoreEngine.getCraftingHistory());
+            assertNull(CoreEngine.getLiveStreams());
+            assertArrayEquals(original, Files.readAllBytes(databaseFile));
+            try (WorldDatabase retry = new WorldDatabase(databaseFile, Config.INSTANCE.resourceHistory)) {
+                IOException rejection = assertThrows(IOException.class, retry::open);
+                assertInstanceOf(SQLException.class, rejection.getCause());
+            }
+            CoreEngine.init(new TestPlatform(new File(configRoot, "another-world"), false));
+            Config.INSTANCE.general.port = 0;
+            Config.INSTANCE.general.checkForUpdates = false;
+            assertDoesNotThrow(CoreEngine::onServerStarted);
+            assertTrue(CoreEngine.GRID_IDENTITIES.isInitialized());
+            assertNotNull(CoreEngine.getResourcePins());
+            assertNotNull(CoreEngine.getStorageTracking());
+            assertNotNull(CoreEngine.getCraftingHistory());
+            assertArrayEquals(original, Files.readAllBytes(databaseFile));
+        } finally {
+            CoreEngine.onServerStopped();
+        }
+    }
 
     @Test
     void reloadPublishesValidDataBoundsAndInvalidConfigKeepsTheActivePolicy() {
