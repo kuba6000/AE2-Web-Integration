@@ -72,8 +72,8 @@ class ReleaseNotesCliTest(unittest.TestCase):
             launcher.chmod(0o755)
         return dict(os.environ, PATH=str(fake.parent) + os.pathsep + os.environ["PATH"])
 
-    def test_composes_authored_notes_before_generated_changes_from_any_working_directory(self):
-        self.write(".releases/common.md", "Common notice.\n")
+    def test_composes_version_introductions_then_changes_then_common_footer(self):
+        self.write(".releases/common.md", "<sub>Common notice.</sub>\n")
         self.write(".releases/2.0.0.md", "Version introduction.\n")
         self.write(".releases/2.0.0-forge-1.7.10.md", "Platform addition.\n")
 
@@ -82,8 +82,8 @@ class ReleaseNotesCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         notes = self.checkout / "build/release/notes.md"
         self.assertEqual(notes.read_text(encoding="utf-8"),
-                         "Common notice.\n\nVersion introduction.\n\nPlatform addition.\n\n"
-                         "## Changes\n\nGenerated changes.\n")
+                         "Version introduction.\n\nPlatform addition.\n\n"
+                         "## Changes\n\nGenerated changes.\n\n<sub>Common notice.</sub>\n")
         self.assertEqual(self.metadata(), {
             "tag": "2.0.0-forge-1.7.10", "version": "2.0.0", "minecraft": "1.7.10",
             "loader": "forge", "release_type": "release", "snapshot": False,
@@ -239,7 +239,7 @@ print(json.dumps({'body': 'Generated notes for ' + payload['tag_name'] + ' since
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.checkout / "build/release/notes.md").read_bytes(),
-                         "Common: zażółć.\n\nBeta introduction.\n\n## Changes\n\nGenerated changes.\n".encode("utf-8"))
+                         "Beta introduction.\n\n## Changes\n\nGenerated changes.\n\nCommon: zażółć.\n".encode("utf-8"))
 
     def test_first_release_uses_local_ancestry_instead_of_github_global_previous_tag(self):
         self.git("tag", "9.0.0-neoforge-1.21.1")
