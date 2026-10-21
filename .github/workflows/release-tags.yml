@@ -53,8 +53,10 @@ jobs:
       - name: Build and exercise both publishers without uploading
         run: |
           chmod +x gradlew
-          python3 .github/scripts/release_preview.py --minecraft '1.20.1' \
-            --release-type "${{ steps.notes.outputs.release_type }}" --notes build/release/notes.md
+          ./gradlew --build-cache --no-configuration-cache --stacktrace \
+            assemble releasePreview releaseModrinth releaseCurseforge \
+            -PreleaseDryRun=true -PreleaseType="${{ steps.notes.outputs.release_type }}" \
+            -PreleaseNotesFile=build/release/notes.md
 
       - name: Stage verified production JAR and description
         run: |
