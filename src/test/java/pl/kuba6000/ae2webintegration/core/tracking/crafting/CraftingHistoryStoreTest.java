@@ -294,6 +294,243 @@ class CraftingHistoryStoreTest {
     }
 
     @Test
+    void rejectedHeadDoesNotBlockValidCompletionsAcrossGrids() throws Exception {
+        StableKey firstGrid = StableKey.random();
+        StableKey secondGrid = StableKey.random();
+        CompletedCrafting good = simpleJob(System.currentTimeMillis(), 1);
+        CompletedCrafting bad = new CompletedCrafting(
+            new ResourceSnapshot(
+                good.finalOutput()
+                    .description(),
+                -1),
+            good.timeStarted(),
+            good.timeDone(),
+            false,
+            good.resources(),
+            good.providers());
+        try (WorldDatabase database = database()) {
+            register(database, firstGrid);
+            register(database, secondGrid, 1);
+            CraftingHistoryService service = new CraftingHistoryService(
+                new HsqlCraftingHistoryStore(database),
+                task -> {});
+            assertTrue(service.enqueue(firstGrid, bad));
+            assertTrue(service.enqueue(firstGrid, good));
+            assertTrue(service.enqueue(secondGrid, good));
+            service.flush();
+            for (StableKey grid : Arrays.asList(firstGrid, secondGrid)) {
+                List<HsqlCraftingHistoryStore.Summary> saved = service.list(grid, null, 10)
+                    .entries();
+                assertEquals(1, saved.size());
+                assertEquals(
+                    good,
+                    service.read(
+                        grid,
+                        saved.get(0)
+                            .id()));
+            }
+            service.close();
+        }
+    }
+
+    @Test
+    void malformedDescriptionsAndProviderReferencesAreRejectedWithoutBlockingTheQueue() throws Exception {
+        StableKey grid = StableKey.random();
+        CompletedCrafting good = simpleJob(System.currentTimeMillis(), 1);
+        List<CompletedCrafting> rejected = new ArrayList<>();
+        for (StableKey key : Arrays.asList(null, StableKey.random())) {
+            for (ResourceDescriptor description : Arrays.asList(
+                new ResourceDescriptor(text(4097), "item", 0, 0, "Product", ResourceType.ITEM, key, null),
+                new ResourceDescriptor("test", text(16385), 0, 0, "Product", ResourceType.ITEM, key, null),
+                new ResourceDescriptor("test", "item", 0, 0, text(1048577), ResourceType.ITEM, key, null))) {
+                rejected.add(
+                    new CompletedCrafting(
+                        new ResourceSnapshot(description, 1),
+                        good.timeStarted(),
+                        good.timeDone(),
+                        false,
+                        good.resources(),
+                        good.providers()));
+            }
+        }
+        for (List<String> links : Arrays
+            .asList(Collections.singletonList("Missing"), Arrays.asList("Machines", "Machines"))) {
+            rejected.add(
+                new CompletedCrafting(
+                    good.finalOutput(),
+                    good.timeStarted(),
+                    good.timeDone(),
+                    false,
+                    Collections.singletonList(
+                        new CompletedCrafting.Resource(good.finalOutput(), 0, Collections.emptyList(), links)),
+                    good.providers()));
+        }
+        for (List<CompletedCrafting.Provider> providers : Arrays.asList(
+            Arrays.asList(
+                good.providers()
+                    .get(0),
+                good.providers()
+                    .get(0)),
+            Collections.singletonList(
+                new CompletedCrafting.Provider(text(1048577), Collections.emptyList(), Collections.emptyList())),
+            Collections.singletonList(
+                new CompletedCrafting.Provider(
+                    "Machines",
+                    Collections.singletonList(new DimensionalCoords(text(4097), 0, 0, 0)),
+                    Collections.emptyList())))) {
+            rejected.add(
+                new CompletedCrafting(
+                    good.finalOutput(),
+                    good.timeStarted(),
+                    good.timeDone(),
+                    false,
+                    good.resources(),
+                    providers));
+        }
+        rejected.add(
+            new CompletedCrafting(
+                good.finalOutput(),
+                good.timeStarted(),
+                good.timeDone(),
+                false,
+                Collections.singletonList(
+                    new CompletedCrafting.Resource(
+                        new ResourceSnapshot(
+                            good.finalOutput()
+                                .description(),
+                            -1),
+                        0,
+                        Collections.emptyList(),
+                        Collections.emptyList())),
+                good.providers()));
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            CraftingHistoryService service = new CraftingHistoryService(store, task -> {});
+            for (CompletedCrafting bad : rejected) {
+                assertThrows(IOException.class, () -> store.append(grid, bad));
+                assertTrue(service.enqueue(grid, bad));
+            }
+            assertTrue(
+                store.list(grid, null, 10)
+                    .entries()
+                    .isEmpty());
+            assertTrue(service.enqueue(grid, good));
+            service.close();
+            List<HsqlCraftingHistoryStore.Summary> saved = service.list(grid, null, 10)
+                .entries();
+            assertEquals(1, saved.size());
+            assertEquals(
+                good,
+                service.read(
+                    grid,
+                    saved.get(0)
+                        .id()));
+        }
+    }
+
+    private static String text(int length) {
+        char[] characters = new char[length];
+        Arrays.fill(characters, 'x');
+        return new String(characters);
+    }
+
+    @Test
+    void prerequisiteConstraintFailureRetainsValidCompletionUntilGridFlushRecovers() throws Exception {
+        StableKey grid = StableKey.random();
+        CompletedCrafting job = simpleJob(System.currentTimeMillis(), 1);
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            database.write(db -> {
+                try (Statement sql = db.createStatement()) {
+                    sql.executeUpdate("ALTER TABLE grids ADD CONSTRAINT test_grid_name CHECK (name <> 'Rejected')");
+                }
+                return null;
+            });
+            GridIdentityRegistry identities = new GridIdentityRegistry();
+            identities.initialize(database, directory.resolve("absent.json"));
+            GridPersistentData identity = identities.getPersistentData(grid);
+            assertNotNull(identity);
+            identity.getSettings()
+                .setName("Rejected");
+            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            CraftingHistoryService service = new CraftingHistoryService(store, task -> {});
+            CompletedCrafting invalid = new CompletedCrafting(
+                new ResourceSnapshot(
+                    job.finalOutput()
+                        .description(),
+                    -1),
+                job.timeStarted(),
+                job.timeDone(),
+                false,
+                job.resources(),
+                job.providers());
+            IOException rejection = assertThrows(IOException.class, () -> store.append(grid, invalid));
+            assertNull(rejection.getCause(), "Malformed payload must be rejected before flushing grid identities");
+            assertTrue(service.enqueue(grid, invalid));
+            assertTrue(service.enqueue(grid, job));
+            IOException failure = assertThrows(IOException.class, service::flush);
+            assertTrue(failure.getCause() instanceof SQLException);
+            assertTrue(
+                ((SQLException) failure.getCause()).getSQLState()
+                    .startsWith("23"));
+            assertTrue(
+                service.list(grid, null, 10)
+                    .entries()
+                    .isEmpty());
+            identity.getSettings()
+                .setName("Recovered");
+            service.close();
+            List<HsqlCraftingHistoryStore.Summary> saved = service.list(grid, null, 10)
+                .entries();
+            assertEquals(1, saved.size());
+            assertEquals(
+                job,
+                service.read(
+                    grid,
+                    saved.get(0)
+                        .id()));
+            assertFalse(service.enqueue(grid, job));
+        }
+    }
+
+    @Test
+    void rejectedJobsReleaseBoundedQueueCapacityAndCloseDrainsLaterWork() throws Exception {
+        StableKey grid = StableKey.random();
+        CompletedCrafting good = simpleJob(System.currentTimeMillis(), 1);
+        CompletedCrafting bad = new CompletedCrafting(
+            new ResourceSnapshot(
+                good.finalOutput()
+                    .description(),
+                -1),
+            good.timeStarted(),
+            good.timeDone(),
+            false,
+            good.resources(),
+            good.providers());
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            List<Runnable> scheduled = new ArrayList<>();
+            CraftingHistoryService service = new CraftingHistoryService(
+                new HsqlCraftingHistoryStore(database),
+                scheduled::add);
+            for (int index = 0; index < 64; index++) assertTrue(service.enqueue(grid, bad));
+            assertFalse(service.enqueue(grid, good));
+            scheduled.remove(0)
+                .run();
+            assertTrue(service.enqueue(grid, good));
+            service.close();
+            for (Runnable worker : scheduled) worker.run();
+            assertEquals(
+                1,
+                service.list(grid, null, 10)
+                    .entries()
+                    .size());
+            assertFalse(service.enqueue(grid, good));
+        }
+    }
+
+    @Test
     void queuedCompletionRetriesAfterIdentityBecomesDurableAndCloseDrains() throws Exception {
         StableKey grid = StableKey.random();
         long now = System.currentTimeMillis();
@@ -530,6 +767,10 @@ class CraftingHistoryStoreTest {
     }
 
     private void register(WorldDatabase database, StableKey grid) throws Exception {
+        register(database, grid, 0);
+    }
+
+    private void register(WorldDatabase database, StableKey grid, int x) throws Exception {
         WorldGridStore store = new WorldGridStore(database);
         store.load(directory.resolve("absent.json"));
         store.save(
@@ -537,7 +778,7 @@ class CraftingHistoryStoreTest {
             Collections.singletonMap(
                 grid,
                 new GridPersistentData(
-                    Collections.singleton(new DimensionalCoords("overworld", 0, 0, 0)),
+                    Collections.singleton(new DimensionalCoords("overworld", x, 0, 0)),
                     new GridSettingsData(database.policy()))),
             Collections.singleton(grid));
     }

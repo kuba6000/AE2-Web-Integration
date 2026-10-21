@@ -47,6 +47,7 @@ public final class HsqlCraftingHistoryStore {
     public record Page(@NotNull List<Summary> entries, @Nullable Long nextBefore) {}
 
     public long append(@NotNull StableKey grid, @NotNull CompletedCrafting job) throws IOException {
+        validate(job);
         return database.write(db -> {
             CraftingHistory policy = database.craftingPolicy();
             WorldGridStore.normalizeCraftingPolicy(db, policy);
@@ -107,6 +108,41 @@ public final class HsqlCraftingHistoryStore {
             prune(db, gridId, System.currentTimeMillis(), policy.historyMaxJobsPerGrid);
             return id;
         });
+    }
+
+    private static void validate(CompletedCrafting job) throws RejectedCraftingException {
+        validate(job.finalOutput());
+        Set<String> providers = new HashSet<>();
+        for (CompletedCrafting.Provider provider : job.providers()) {
+            validateLength(provider.name(), 1048576, "provider name");
+            if (!providers.add(provider.name())) throw new RejectedCraftingException("Duplicate provider group");
+            for (DimensionalCoords location : provider.locations()) {
+                validateLength(location.dimensionId(), 4096, "dimension identifier");
+            }
+        }
+        for (CompletedCrafting.Resource resource : job.resources()) {
+            validate(resource.snapshot());
+            Set<String> linked = new HashSet<>();
+            for (String name : resource.providers()) {
+                if (!providers.contains(name))
+                    throw new RejectedCraftingException("Resource references an absent provider");
+                if (!linked.add(name))
+                    throw new RejectedCraftingException("Resource references the same provider twice");
+            }
+        }
+    }
+
+    private static void validate(ResourceSnapshot resource) throws RejectedCraftingException {
+        if (resource.quantity() < 0) throw new RejectedCraftingException("Negative resource quantity");
+        ResourceDescriptor description = resource.description();
+        validateLength(description.registryNamespace(), 4096, "registry namespace");
+        validateLength(description.registryPath(), 16384, "registry path");
+        validateLength(description.displayName(), 1048576, "resource display name");
+    }
+
+    private static void validateLength(@Nullable String value, int maximum, String field)
+        throws RejectedCraftingException {
+        if (value != null && value.length() > maximum) throw new RejectedCraftingException("Oversized " + field);
     }
 
     private static void describe(Map<StableKey, ResourceDescriptor> descriptions, ResourceSnapshot resource) {

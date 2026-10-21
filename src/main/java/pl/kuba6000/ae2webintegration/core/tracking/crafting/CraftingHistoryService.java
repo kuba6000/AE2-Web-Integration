@@ -78,7 +78,7 @@ public final class CraftingHistoryService implements AutoCloseable {
         }
     }
 
-    /** Worker/maintenance/shutdown drain; a failed transaction leaves the complete job at the queue head. */
+    /** Worker/maintenance/shutdown drain; persistence failures retain the job, malformed payloads are dropped. */
     public void flush() throws IOException {
         drain.lock();
         try {
@@ -88,7 +88,14 @@ public final class CraftingHistoryService implements AutoCloseable {
                     next = pending.peekFirst();
                 }
                 if (next == null) return;
-                store.append(next.grid(), next.job());
+                try {
+                    store.append(next.grid(), next.job());
+                } catch (RejectedCraftingException failure) {
+                    LOG.error(
+                        "Crafting history rejected completed job for grid {}: {}",
+                        next.grid(),
+                        failure.getMessage());
+                }
                 synchronized (pending) {
                     pending.removeFirst();
                 }
