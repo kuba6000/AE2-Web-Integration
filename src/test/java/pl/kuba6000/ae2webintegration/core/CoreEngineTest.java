@@ -1,11 +1,11 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingTestFixtures.awaitHistory;
 
 import java.io.File;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jetbrains.annotations.NotNull;
@@ -34,7 +34,6 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 class CoreEngineTest {
@@ -158,16 +157,13 @@ class CoreEngineTest {
                     .isJsonNull());
             StorageTrackingService service = CoreEngine.getStorageTracking();
             assertNotNull(service);
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-            StorageSnapshot snapshot = service.snapshot(key);
-            assertNotNull(snapshot);
-            while (snapshot.revision() == 0 && System.nanoTime() < deadline) {
-                Thread.sleep(5);
-                snapshot = service.snapshot(key);
-                assertNotNull(snapshot);
-            }
-            assertTrue(snapshot.revision() > 0, "The worker must publish the mixed network observation");
-            List<StorageHistoryPoint> points = service.history(key, null, 0, 30)
+            List<StorageHistoryPoint> points = awaitHistory(
+                service,
+                key,
+                0,
+                history -> history.points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.STOCK))
                 .points();
             assertEquals(
                 2,
@@ -273,19 +269,18 @@ class CoreEngineTest {
             CoreEngine.onServerTick();
             StorageTrackingService service = CoreEngine.getStorageTracking();
             assertNotNull(service);
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-            StorageSnapshot snapshot = service.snapshot(key);
-            while ((snapshot == null || snapshot.revision() == 0) && System.nanoTime() < deadline) {
-                Thread.sleep(5);
-                snapshot = service.snapshot(key);
-            }
-            assertNotNull(snapshot);
-            assertTrue(snapshot.revision() > 0);
-            assertEquals(
-                Long.MAX_VALUE,
-                snapshot.rows()
-                    .get(0)
-                    .quantity());
+            assertTrue(
+                awaitHistory(
+                    service,
+                    key,
+                    0,
+                    history -> history.points()
+                        .stream()
+                        .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.STOCK))
+                    .points()
+                    .stream()
+                    .anyMatch(
+                        point -> point.kind() == StorageHistoryPoint.Kind.STOCK && point.quantity() == Long.MAX_VALUE));
             assertFalse(
                 service.history(key, null, 0, 20)
                     .points()

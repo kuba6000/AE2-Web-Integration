@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingTestFixtures.awaitHistory;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -31,7 +32,7 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
             service.open(grid, 1);
             assertTrue(service.submit(grid, 1, observation(item, 1000, 5), true, false, 0L));
-            awaitRevision(service, grid, 1);
+            drain(service);
             service.invalidate(grid, 1);
             for (int index = 2; index <= 3; index++) {
                 assertTrue(
@@ -43,7 +44,7 @@ class StorageTrackingServiceTest {
                         true,
                         false,
                         0L));
-                awaitRevision(service, grid, index);
+                drain(service);
                 StorageHistory incomplete = service.history(grid, item, index * 1000, 100);
                 assertFalse(incomplete.complete());
                 assertEquals(
@@ -54,7 +55,7 @@ class StorageTrackingServiceTest {
                         .collect(Collectors.toList()));
             }
             assertTrue(service.submit(grid, 1, observation(item, 4000, 5), true, false, 0L));
-            awaitRevision(service, grid, 4);
+            drain(service);
             StorageHistory recovered = service.history(grid, item, 4000, 100);
             assertTrue(recovered.complete());
             assertTrue(
@@ -130,11 +131,7 @@ class StorageTrackingServiceTest {
                     true,
                     false,
                     0L));
-            awaitRevision(service, grid, 1);
-            assertTrue(
-                snapshot(service, grid).rows()
-                    .get(0)
-                    .craftable());
+            drain(service);
             service.invalidate(grid, 1);
             assertTrue(
                 service.submit(
@@ -144,7 +141,7 @@ class StorageTrackingServiceTest {
                     true,
                     false,
                     0L));
-            awaitRevision(service, grid, 2);
+            drain(service);
             assertTrue(
                 service.submit(
                     grid,
@@ -154,7 +151,7 @@ class StorageTrackingServiceTest {
                     true,
                     false,
                     0L));
-            awaitRevision(service, grid, 3);
+            drain(service);
             List<StorageHistoryPoint> points = service.history(grid, item, 0, 100)
                 .points();
             assertFalse(
@@ -175,7 +172,7 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
             service.open(grid, 1);
             assertTrue(service.submit(grid, 1, observation(item, 1000, 5), true, false, 0L));
-            awaitRevision(service, grid, 1);
+            drain(service);
             List<StorageObservationFixtures.Row> emptyCraftable = Collections
                 .singletonList(new StorageObservationFixtures.Row(resource(item, 0), true));
             assertTrue(
@@ -186,7 +183,7 @@ class StorageTrackingServiceTest {
                     true,
                     false,
                     0L));
-            awaitRevision(service, grid, 2);
+            drain(service);
             service.invalidate(grid, 1);
             assertTrue(
                 service.submit(
@@ -196,7 +193,7 @@ class StorageTrackingServiceTest {
                     true,
                     false,
                     0L));
-            awaitRevision(service, grid, 3);
+            drain(service);
             List<StorageHistoryPoint> recovered = service.history(grid, item, 3000, 100)
                 .points()
                 .stream()
@@ -216,7 +213,7 @@ class StorageTrackingServiceTest {
                     true,
                     false,
                     0L));
-            awaitRevision(service, grid, 4);
+            drain(service);
             assertFalse(
                 service.history(grid, item, 4000, 100)
                     .points()
@@ -226,14 +223,14 @@ class StorageTrackingServiceTest {
     }
 
     @Test
-    void recipeChangesUpdateLiveRowsWithoutInventingStockHistory() throws Exception {
+    void recipeChangesDoNotInventStockHistory() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         StableKey recipeOnly = StableKey.random();
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
             service.open(grid, 1);
             assertTrue(service.submit(grid, 1, observation(item, 1000, 50), true, false, 0L));
-            awaitRevision(service, grid, 1);
+            drain(service);
             assertTrue(
                 service.submit(
                     grid,
@@ -249,17 +246,9 @@ class StorageTrackingServiceTest {
                     true,
                     false,
                     0L));
-            awaitRevision(service, grid, 2);
-            assertEquals(
-                2,
-                snapshot(service, grid).rows()
-                    .size());
-            assertTrue(
-                snapshot(service, grid).rows()
-                    .stream()
-                    .allMatch(StorageObservation.Row::craftable));
+            drain(service);
             assertTrue(service.submit(grid, 1, observation(item, 3000, 50), true, false, 0L));
-            awaitRevision(service, grid, 3);
+            drain(service);
             List<StorageHistoryPoint> points = service.history(grid, null, 0, 100)
                 .points();
             assertEquals(
@@ -279,7 +268,7 @@ class StorageTrackingServiceTest {
                     true,
                     false,
                     0L));
-            awaitRevision(service, grid, 4);
+            drain(service);
             assertEquals(
                 Arrays.asList(50L, 0L),
                 service.history(grid, item, 0, 100)
@@ -298,7 +287,7 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
             service.open(grid, 1);
             assertTrue(service.submit(grid, 1, observation(item, 10, 5), true, false, 0L));
-            awaitRevision(service, grid, 1);
+            drain(service);
             service.invalidate(grid, 1);
             assertTrue(
                 service.submit(
@@ -317,7 +306,7 @@ class StorageTrackingServiceTest {
                     true,
                     0L));
             assertTrue(service.submit(grid, 1, observation(item, 30, 5), true, false, 0L));
-            awaitRevision(service, grid, 2);
+            drain(service);
             assertTrue(
                 service.history(grid, item, 0, 100)
                     .points()
@@ -335,7 +324,7 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
             service.open(grid, 1);
             service.submit(grid, 1, observation(item, 1000, 5), true, false, 0L);
-            awaitRevision(service, grid, 1);
+            drain(service);
             service.submit(
                 grid,
                 1,
@@ -344,7 +333,7 @@ class StorageTrackingServiceTest {
                 false,
                 false,
                 0L);
-            awaitRevision(service, grid, 2);
+            drain(service);
             service.submit(
                 grid,
                 1,
@@ -353,7 +342,7 @@ class StorageTrackingServiceTest {
                 true,
                 false,
                 0L);
-            awaitRevision(service, grid, 3);
+            drain(service);
             StorageHistory history = service.history(grid, item, 0, 100);
             assertEquals(
                 "Item",
@@ -396,17 +385,29 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
             service.open(grid, 1);
             service.submit(grid, 1, observation(item, 1000, 5), true, false, 0L);
-            awaitRevision(service, grid, 1);
+            drain(service);
             service.invalidate(grid, 1);
-            assertFalse(snapshot(service, grid).stockComplete());
+            assertTrue(
+                service.submit(
+                    grid,
+                    1,
+                    StorageObservationFixtures
+                        .observation(1500, false, true, Collections.emptyList(), Collections.emptyList()),
+                    true,
+                    false,
+                    0L));
+            drain(service);
+            assertFalse(
+                service.history(grid, item, 1500, 100)
+                    .complete());
             service.submit(grid, 1, observation(item, 2000, 9), true, false, 0L);
-            awaitRevision(service, grid, 2);
-            assertTrue(snapshot(service, grid).stockComplete());
-            assertEquals(
-                9,
-                snapshot(service, grid).rows()
-                    .get(0)
-                    .quantity());
+            drain(service);
+            StorageHistory recovered = service.history(grid, item, 2000, 100);
+            assertTrue(recovered.complete());
+            assertTrue(
+                recovered.points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.STOCK && point.quantity() == 9));
         }
     }
 
@@ -449,9 +450,9 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
             service.open(grid, 1);
             service.submit(grid, 1, observation(item, 1000, 5), true, false, 0L);
-            awaitRevision(service, grid, 1);
+            drain(service);
             service.submit(grid, 1, observation(item, 1250, 8), false, false, 0L);
-            awaitRevision(service, grid, 2);
+            drain(service);
             ResourceSnapshot resource = resource(item, 8);
             service.submit(
                 grid,
@@ -467,7 +468,7 @@ class StorageTrackingServiceTest {
                 true,
                 0L);
             service.submit(grid, 1, observation(item, 10000, 8), true, false, 0L);
-            awaitRevision(service, grid, 3);
+            drain(service);
             List<StorageHistoryPoint> points = service.history(grid, item, 0, 100)
                 .points();
             assertEquals(
@@ -526,7 +527,7 @@ class StorageTrackingServiceTest {
     }
 
     @Test
-    void unkeyedRowsAreEphemeralDisplayStateAndNeverHistoryOrFlow() throws Exception {
+    void unkeyedRowsNeverEnterHistoryOrFlow() throws Exception {
         StableKey grid = StableKey.random();
         StableKey supported = StableKey.random();
         StorageObservationFixtures.Row keyed = new StorageObservationFixtures.Row(resource(supported, 5), false);
@@ -550,16 +551,7 @@ class StorageTrackingServiceTest {
                 true,
                 true,
                 0L);
-            awaitRevision(service, grid, 1);
-            assertEquals(
-                1,
-                snapshot(service, grid).rows()
-                    .size());
-            assertEquals(
-                1,
-                snapshot(service, grid).unkeyed()
-                    .size());
-            assertTrue(snapshot(service, grid).flowComplete());
+            drain(service);
             service.submit(
                 grid,
                 1,
@@ -572,21 +564,7 @@ class StorageTrackingServiceTest {
                 true,
                 true,
                 0L);
-            awaitRevision(service, grid, 2);
-            assertEquals(
-                1,
-                snapshot(service, grid).rows()
-                    .size());
-            assertEquals(
-                1,
-                snapshot(service, grid).unkeyed()
-                    .size());
-            assertEquals(
-                7,
-                snapshot(service, grid).unkeyed()
-                    .get(0)
-                    .resource()
-                    .quantity());
+            drain(service);
             ResourceSnapshot removed = new ResourceSnapshot(
                 new ResourceDescriptor("test", "essentia", 0, 0, "Essentia", ResourceType.OTHER, null, null),
                 0);
@@ -602,14 +580,7 @@ class StorageTrackingServiceTest {
                 true,
                 true,
                 0L);
-            awaitRevision(service, grid, 3);
-            assertTrue(
-                snapshot(service, grid).unkeyed()
-                    .isEmpty());
-            assertEquals(
-                1,
-                snapshot(service, grid).rows()
-                    .size());
+            drain(service);
             service.submit(
                 grid,
                 1,
@@ -618,11 +589,7 @@ class StorageTrackingServiceTest {
                 true,
                 true,
                 0L);
-            awaitRevision(service, grid, 4);
-            assertEquals(
-                1,
-                snapshot(service, grid).rows()
-                    .size());
+            drain(service);
             List<StorageHistoryPoint> history = service.history(grid, null, 0, 100)
                 .points();
             assertEquals(
@@ -647,12 +614,7 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(store, 100)) {
             service.open(grid, 1);
             assertTrue(service.submit(grid, 1, observation(item, 1000, 50), true, true, 0L));
-            awaitRevision(service, grid, 1);
-            assertEquals(
-                50,
-                snapshot(service, grid).rows()
-                    .get(0)
-                    .quantity());
+            drain(service);
             assertTrue(
                 service.submit(
                     grid,
@@ -662,10 +624,7 @@ class StorageTrackingServiceTest {
                     true,
                     true,
                     0L));
-            awaitRevision(service, grid, 2);
-            assertTrue(
-                snapshot(service, grid).rows()
-                    .isEmpty());
+            drain(service);
             StorageHistory history = service.history(grid, item, 0, 100);
             StorageHistoryPoint removal = history.points()
                 .stream()
@@ -687,6 +646,7 @@ class StorageTrackingServiceTest {
         StableKey item = StableKey.random();
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
+        InMemoryStorageHistoryStore stored = new InMemoryStorageHistoryStore();
         IStorageHistoryStore blocked = new IStorageHistoryStore() {
 
             public void append(@NotNull StableKey key, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
@@ -699,11 +659,12 @@ class StorageTrackingServiceTest {
                         .interrupt();
                     throw new IOException(interrupted);
                 }
+                stored.append(key, descriptions, points);
             }
 
             public @NotNull StorageHistory read(@NotNull StableKey key, @Nullable StableKey resource, long from,
                 int limit) {
-                return new StorageHistory(Collections.emptyList(), Collections.emptyMap(), true, false);
+                return stored.read(key, resource, from, limit);
             }
         };
         try (StorageTrackingService service = new StorageTrackingService(blocked, 4)) {
@@ -713,13 +674,31 @@ class StorageTrackingServiceTest {
             assertTrue(service.submit(grid, 1, observation(item, 15, 7), true, true, 0L));
             assertFalse(service.submit(grid, 1, observation(item, 20, 9), true, true, 0L));
             release.countDown();
-            awaitRevision(service, grid, 2);
-            assertFalse(snapshot(service, grid).stockComplete());
-            assertFalse(snapshot(service, grid).flowComplete());
+            drain(service);
+            assertEquals(
+                Arrays.asList(5L, 7L),
+                service.history(grid, item, 0, 100)
+                    .points()
+                    .stream()
+                    .filter(point -> point.kind() == StorageHistoryPoint.Kind.STOCK)
+                    .map(StorageHistoryPoint::quantity)
+                    .collect(Collectors.toList()));
             assertTrue(service.submit(grid, 1, observation(item, 30, 9), true, true, 0L));
-            awaitRevision(service, grid, 3);
-            assertTrue(snapshot(service, grid).stockComplete());
-            assertFalse(snapshot(service, grid).flowComplete());
+            drain(service);
+            StorageHistory recovery = service.history(grid, item, 30, 100);
+            assertFalse(recovery.complete());
+            assertTrue(
+                recovery.points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.GAP));
+            assertTrue(
+                recovery.points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.OBSERVATION));
+            assertFalse(
+                recovery.points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.FLOW_OBSERVATION));
         } finally {
             release.countDown();
         }
@@ -732,17 +711,34 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
             service.open(grid, 1);
             assertTrue(service.submit(grid, 1, observation(item, 10, 5), false, false, 0L));
-            awaitRevision(service, grid, 1);
+            drain(service);
             service.open(grid, 2);
             assertFalse(service.submit(grid, 1, observation(item, 20, 100), true, true, 0L));
-            assertEquals(0, snapshot(service, grid).revision());
             assertTrue(
-                snapshot(service, grid).rows()
-                    .isEmpty());
+                service.submit(
+                    grid,
+                    2,
+                    StorageObservationFixtures
+                        .observation(20, true, true, Collections.emptyList(), Collections.emptyList()),
+                    true,
+                    true,
+                    0L));
+            drain(service);
+            StorageHistory replacement = service.history(grid, item, 0, 100);
+            assertTrue(
+                replacement.points()
+                    .stream()
+                    .allMatch(point -> point.generation() == 2));
+            assertFalse(
+                replacement.points()
+                    .stream()
+                    .anyMatch(
+                        point -> point.kind() == StorageHistoryPoint.Kind.STOCK
+                            || point.kind() == StorageHistoryPoint.Kind.FLOW));
             service.retire(grid, 1);
-            assertNotNull(service.snapshot(grid));
+            assertTrue(service.submit(grid, 2, observation(item, 25, 7), false, false, 0L));
             service.retire(grid, 2);
-            assertNull(service.snapshot(grid));
+            assertFalse(service.submit(grid, 2, observation(item, 30, 9), true, true, 0L));
         }
     }
 
@@ -753,9 +749,9 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
             service.open(grid, 1);
             service.submit(grid, 1, observation(item, 10, 5), true, true, 0L);
-            awaitRevision(service, grid, 1);
+            drain(service);
             service.submit(grid, 1, observation(item, 20, 0), true, true, 0L);
-            awaitRevision(service, grid, 2);
+            drain(service);
             assertEquals(
                 1,
                 service.history(grid, item, 20, 100)
@@ -774,7 +770,7 @@ class StorageTrackingServiceTest {
             service.open(grid, 1);
             StorageObservation first = observation(item, 10, 5);
             service.submit(grid, 1, first, true, true, 0L);
-            awaitRevision(service, grid, 1);
+            drain(service);
             service.submit(
                 grid,
                 1,
@@ -789,7 +785,7 @@ class StorageTrackingServiceTest {
                 true,
                 true,
                 0L);
-            awaitRevision(service, grid, 2);
+            drain(service);
             List<StorageHistoryPoint> points = service.history(grid, item, 0, 100)
                 .points();
             assertEquals(
@@ -803,11 +799,6 @@ class StorageTrackingServiceTest {
                 .orElseThrow(() -> new AssertionError("Accepted flow was not recorded"));
             assertEquals(30, flow.input());
             assertEquals(30, flow.output());
-            assertEquals(
-                5,
-                snapshot(service, grid).rows()
-                    .get(0)
-                    .quantity());
         }
     }
 
@@ -820,7 +811,7 @@ class StorageTrackingServiceTest {
         service.open(grid, 1);
         assertTrue(service.submit(grid, 1, observation(item, 10, 5), true, true, 0L));
         service.retire(grid, 1);
-        assertNull(service.snapshot(grid));
+        assertFalse(service.submit(grid, 1, observation(item, 25, 9), true, true, 0L));
         service.open(grid, 2);
         assertTrue(service.submit(grid, 2, observation(item, 20, 7), true, true, 0L));
         service.close();
@@ -840,11 +831,11 @@ class StorageTrackingServiceTest {
                 .stream()
                 .anyMatch(point -> point.generation() == 2 && point.kind() == StorageHistoryPoint.Kind.GAP));
         assertFalse(service.submit(grid, 2, observation(item, 30, 9), true, true, 0L));
-        assertNull(service.snapshot(grid));
+        assertThrows(IllegalStateException.class, () -> service.open(grid, 3));
     }
 
     @Test
-    void persistenceFailureKeepsPublishingUntilTheNextDurableSampleResumesRecording() throws Exception {
+    void persistenceFailureRemainsVisibleUntilTheNextDurableSampleResumesRecording() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         AtomicBoolean failNextWrite = new AtomicBoolean(true);
@@ -865,33 +856,26 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(failing, 100)) {
             service.open(grid, 1);
             service.submit(grid, 1, observation(item, 10, 5), true, true, 0L);
-            awaitRevision(service, grid, 1);
-            assertEquals(
-                5,
-                snapshot(service, grid).rows()
-                    .get(0)
-                    .quantity());
-            assertFalse(snapshot(service, grid).persistenceComplete());
+            drain(service);
             assertFalse(
                 service.history(grid, item, 0, 10)
                     .complete());
             service.open(grid, 1);
             assertTrue(service.submit(grid, 1, observation(item, 20, 7), false, false, 0L));
-            awaitRevision(service, grid, 2);
-            assertEquals(
-                7,
-                snapshot(service, grid).rows()
-                    .get(0)
-                    .quantity());
-            assertFalse(snapshot(service, grid).persistenceComplete());
+            drain(service);
+            assertFalse(
+                service.history(grid, item, 21, 100)
+                    .complete());
             assertTrue(
                 service.history(grid, item, 0, 100)
                     .points()
                     .isEmpty());
 
             assertTrue(service.submit(grid, 1, observation(item, 30, 7), true, true, 0L));
-            awaitRevision(service, grid, 3);
-            assertTrue(snapshot(service, grid).persistenceComplete());
+            drain(service);
+            assertTrue(
+                service.history(grid, item, 31, 100)
+                    .complete());
             List<StorageHistoryPoint> resumed = service.history(grid, item, 0, 100)
                 .points();
             assertEquals(5, resumed.size());
@@ -922,9 +906,9 @@ class StorageTrackingServiceTest {
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100)) {
             service.open(grid, 1);
             service.submit(grid, 1, observation(item, 10, 5), false, false, 0L);
-            awaitRevision(service, grid, 1);
+            drain(service);
             service.submit(grid, 1, observation(item, 20, 5), true, true, 0L);
-            awaitRevision(service, grid, 2);
+            drain(service);
             List<StorageHistoryPoint> points = service.history(grid, item, 0, 100)
                 .points();
             assertEquals(
@@ -956,15 +940,23 @@ class StorageTrackingServiceTest {
             Collections.emptyList());
     }
 
-    private static @NotNull StorageSnapshot snapshot(StorageTrackingService service, StableKey grid) {
-        StorageSnapshot snapshot = service.snapshot(grid);
-        assertNotNull(snapshot, "Opened grid should have a snapshot");
-        return snapshot;
-    }
-
-    static void awaitRevision(StorageTrackingService service, StableKey grid, long revision) throws Exception {
+    /** An independent fake-store write fences earlier accepted work, including observations with no durable output. */
+    private static void drain(StorageTrackingService service) throws Exception {
+        StableKey fence = StableKey.random();
+        service.open(fence, 1);
+        StorageObservation empty = StorageObservationFixtures
+            .observation(0, true, true, Collections.emptyList(), Collections.emptyList());
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-        while (snapshot(service, grid).revision() < revision && System.nanoTime() < deadline) Thread.sleep(1);
-        assertEquals(revision, snapshot(service, grid).revision());
+        while (!service.submit(fence, 1, empty, true, false, 0)) {
+            if (System.nanoTime() >= deadline) throw new AssertionError("Worker did not release queue capacity");
+            Thread.sleep(1);
+        }
+        awaitHistory(
+            service,
+            fence,
+            0,
+            history -> !history.points()
+                .isEmpty());
+        service.retire(fence, 1);
     }
 }

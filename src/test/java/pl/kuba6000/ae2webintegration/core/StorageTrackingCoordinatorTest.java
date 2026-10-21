@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingTestFixtures.awaitHistory;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
@@ -119,24 +120,24 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 CoreEngine.GRID_IDENTITIES,
                 new ConfigSettings.ResourceTracking())) {
             coordinator.tick(TestGridFixtures.ae(grid), 1000);
-            awaitRevision(service, key, 1);
+            awaitStock(service, key, iron.web$getKey(), 1000, 20);
             StorageCapture capture = grid.web$getStorageCapture();
             assertNotNull(capture);
             grid.rows.set(0, new Resource("enumeration-iron", 25, false));
             capture.markChanged(iron);
             assertDoesNotThrow(() -> coordinator.tick(unreliable, 2000));
             assertSame(capture, grid.web$getStorageCapture());
-            assertEquals(
-                25,
-                awaitRevision(service, key, 2).rows()
-                    .get(0)
-                    .quantity());
+            awaitStock(service, key, iron.web$getKey(), 2000, 25);
             coordinator.tick(unreliable, 3000);
             assertEquals(1, enumerations.get(), "A failed enumeration must back off without stopping observations");
             failEnumeration.set(false);
             coordinator.tick(unreliable, 34000);
             assertNull(grid.web$getStorageCapture());
-            assertNull(service.snapshot(key));
+            assertFalse(
+                service.history(key, iron.web$getKey(), 0, 100)
+                    .points()
+                    .isEmpty(),
+                "Reconciliation retirement must preserve recorded history");
         }
     }
 
@@ -149,17 +150,19 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         StableKey failingKey = trackStock(failing);
         StableKey healthyKey = trackStock(healthy);
         StableKey retiredKey = trackStock(retired);
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
         try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
                 service,
                 CoreEngine.GRID_IDENTITIES,
-                new ConfigSettings.ResourceTracking())) {
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
             coordinator.prepareForViewer(failing, 1000);
             coordinator.prepareForViewer(healthy, 1000);
             coordinator.prepareForViewer(retired, 1000);
-            awaitRevision(service, failingKey, 1);
-            awaitRevision(service, healthyKey, 1);
-            awaitRevision(service, retiredKey, 1);
+            awaitStock(service, failingKey, iron.web$getKey(), 1000, 20);
+            awaitStock(service, healthyKey, iron.web$getKey(), 1000, 20);
+            awaitStock(service, retiredKey, iron.web$getKey(), 1000, 20);
             StorageCapture capture = failing.capture;
             failing.failEligibility = true;
             healthy.rows.set(0, new Resource("eligibility-iron", 25, false));
@@ -168,27 +171,23 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             healthyCapture.markChanged(iron);
             assertDoesNotThrow(() -> coordinator.tick(TestGridFixtures.ae(failing, healthy), 2000));
             assertSame(capture, failing.capture);
-            StorageSnapshot failedSnapshot = service.snapshot(failingKey);
-            assertNotNull(failedSnapshot);
-            assertFalse(failedSnapshot.stockComplete());
-            assertNull(service.snapshot(retiredKey));
+            assertNull(terminals.snapshot(failingKey), "A failed eligibility check invalidates the live baseline");
+            assertNull(terminals.snapshot(retiredKey));
             assertNull(retired.web$getStorageCapture());
-            assertEquals(
-                25,
-                awaitRevision(service, healthyKey, 2).rows()
-                    .get(0)
-                    .quantity());
+            awaitStock(service, healthyKey, iron.web$getKey(), 2000, 25);
             int attempts = failing.eligibilityReads;
             coordinator.tick(TestGridFixtures.ae(failing, healthy), 3000);
             assertEquals(attempts, failing.eligibilityReads, "Failed eligibility must honor the binding retry delay");
             failing.failEligibility = false;
             coordinator.prepareForViewer(failing, 34000);
             assertSame(capture, failing.capture);
-            assertEquals(
-                20,
-                awaitRevision(service, failingKey, 2).rows()
-                    .get(0)
-                    .quantity());
+            StorageHistory recovered = awaitStock(service, failingKey, iron.web$getKey(), 34000, 20);
+            assertTrue(
+                recovered.points()
+                    .stream()
+                    .anyMatch(point -> point.observedAt() == 34000 && point.kind() == StorageHistoryPoint.Kind.GAP),
+                "Retry must record the native observation loss before a fresh stock baseline");
+            assertNotNull(terminals.snapshot(failingKey));
         }
     }
 
@@ -232,7 +231,12 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     .get(0)
                     .quantity());
             assertEquals(1, enumerations.get(), "Viewer renewal must not bypass native discovery backoff");
-            assertNull(service.snapshot(key), "Viewer demand must not enable history tracking");
+            service.close();
+            assertTrue(
+                service.history(key, null, 0, 100)
+                    .points()
+                    .isEmpty(),
+                "Viewer demand must not enable history tracking");
         }
     }
 
@@ -258,35 +262,37 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 new ConfigSettings.ResourceTracking(),
                 terminals)) {
             assertDoesNotThrow(() -> coordinator.tick(TestGridFixtures.ae(failing, healthy), 1000));
-            assertNull(service.snapshot(failingKey));
+            assertTrue(
+                service.history(failingKey, null, 0, 100)
+                    .points()
+                    .isEmpty());
             assertNull(terminals.snapshot(failingKey));
             assertNull(failing.hookCapture);
-            assertEquals(
-                20,
-                awaitRevision(service, healthyKey, 1).rows()
-                    .get(0)
-                    .quantity());
+            awaitStock(service, healthyKey, iron.web$getKey(), 1000, 20);
             StorageCapture partial = failing.capture;
             if (partial != null) partial.recordFlow(iron, 7, 2);
             int accesses = failing.storageAccesses;
             assertThrows(IllegalStateException.class, () -> coordinator.prepareForViewer(failing, 2000));
             coordinator.tick(TestGridFixtures.ae(failing, healthy), 3000);
             assertEquals(accesses, failing.storageAccesses, "An incomplete installation must respect retry backoff");
-            assertNull(service.snapshot(failingKey));
+            assertTrue(
+                service.history(failingKey, null, 0, 100)
+                    .points()
+                    .isEmpty());
             assertNull(terminals.snapshot(failingKey));
             failing.attachmentFailure = null;
             coordinator.tick(TestGridFixtures.ae(failing, healthy), 34000);
             coordinator.tick(TestGridFixtures.ae(failing, healthy), 34001);
-            StorageSnapshot recovered = awaitRevision(service, failingKey, 1);
+            StorageHistory recovered = awaitStock(service, failingKey, iron.web$getKey(), 34000, 20);
             assertNotNull(failing.capture);
             assertSame(failing.capture, failing.hookCapture);
             if (partial != null) assertSame(partial, failing.capture);
-            assertEquals(
-                20,
-                recovered.rows()
-                    .get(0)
-                    .quantity());
-            assertFalse(recovered.flowComplete(), "Partial native installation must leave an honest coverage gap");
+            assertFalse(recovered.complete(), "Partial native installation must leave an honest coverage gap");
+            assertTrue(
+                recovered.points()
+                    .stream()
+                    .noneMatch(point -> point.kind() == StorageHistoryPoint.Kind.FLOW_OBSERVATION),
+                "The interval spanning incomplete installation cannot claim complete flow coverage");
             if (partial != null) assertTrue(
                 service.history(failingKey, iron.web$getKey(), 0, 100)
                     .points()
@@ -312,21 +318,27 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 terminals)) {
             coordinator.prepareForViewer(failing, 1000);
             coordinator.prepareForViewer(healthy, 1000);
-            awaitRevision(service, failingKey, 1);
-            awaitRevision(service, healthyKey, 1);
+            awaitStock(service, failingKey, iron.web$getKey(), 1000, 20);
+            awaitStock(service, healthyKey, iron.web$getKey(), 1000, 20);
             awaitRecent(terminals, failingKey, 1000);
             awaitRecent(terminals, healthyKey, 1000);
             assertNotNull(coordinator.recent(failingKey));
             failing.detachFailure = failurePoint;
             assertDoesNotThrow(() -> coordinator.tick(TestGridFixtures.ae(), 2000));
-            assertNull(service.snapshot(failingKey));
-            assertNull(service.snapshot(healthyKey));
             assertNull(terminals.snapshot(failingKey));
             assertNull(terminals.snapshot(healthyKey));
             assertNull(coordinator.recent(failingKey));
             assertNull(coordinator.recent(healthyKey));
             assertNull(healthy.capture);
             assertNull(healthy.hookCapture);
+            assertFalse(
+                service.history(failingKey, null, 0, 100)
+                    .points()
+                    .isEmpty());
+            assertFalse(
+                service.history(healthyKey, null, 0, 100)
+                    .points()
+                    .isEmpty());
         }
     }
 
@@ -1007,9 +1019,13 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 snapshot.rows()
                     .get(0)
                     .quantity());
-            assertNull(service.snapshot(key));
             coordinator.tick(TestGridFixtures.ae(grid), 20000);
             assertNull(grid.web$getStorageCapture());
+            service.close();
+            assertTrue(
+                service.history(key, null, 0, 100)
+                    .points()
+                    .isEmpty());
         }
     }
 
@@ -1050,7 +1066,12 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 fresh.rows()
                     .get(0)
                     .quantity());
-            assertNull(service.snapshot(key), "Viewer-only observation must not create history state");
+            service.close();
+            assertTrue(
+                service.history(key, null, 0, 100)
+                    .points()
+                    .isEmpty(),
+                "Viewer-only observation must not record history");
         }
     }
 
@@ -1224,6 +1245,61 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
     }
 
     @Test
+    void failedHistoryAppendDoesNotInterruptLiveTerminalChangesOrRetryOnEveryViewerRead() throws Exception {
+        Resource iron = new Resource("failed-history-live", 20, false);
+        Grid grid = new Grid(710059, iron);
+        StableKey key = trackStock(grid);
+        AtomicInteger appends = new AtomicInteger();
+        IStorageHistoryStore failing = new IStorageHistoryStore() {
+
+            @Override
+            public void append(@NotNull StableKey gridKey, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
+                @NotNull List<StorageHistoryPoint> points) throws IOException {
+                appends.incrementAndGet();
+                throw new IOException("History writer unavailable");
+            }
+
+            public @NotNull StorageHistory read(@NotNull StableKey gridKey, @Nullable StableKey resource, long from,
+                int limit) {
+                return new StorageHistory(Collections.emptyList(), Collections.emptyMap(), true, false);
+            }
+        };
+        TerminalRegistry terminals = new TerminalRegistry(new LiveHub());
+        try (StorageTrackingService service = new StorageTrackingService(failing, 100);
+            StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(
+                service,
+                CoreEngine.GRID_IDENTITIES,
+                new ConfigSettings.ResourceTracking(),
+                terminals)) {
+            coordinator.prepareForViewer(grid, 1000);
+            StorageSnapshot initial = terminals.snapshot(key);
+            assertNotNull(initial);
+            assertEquals(
+                20,
+                initial.rows()
+                    .get(0)
+                    .quantity());
+            awaitHistory(service, key, 0, history -> !history.complete());
+            StorageCapture capture = grid.web$getStorageCapture();
+            assertNotNull(capture);
+            grid.rows.set(0, new Resource("failed-history-live", 25, false));
+            capture.markChanged(iron);
+            coordinator.prepareForViewer(grid, 1500);
+            StorageSnapshot updated = terminals.snapshot(key);
+            assertNotNull(updated);
+            assertEquals(
+                25,
+                updated.rows()
+                    .get(0)
+                    .quantity());
+            assertSame(capture, grid.web$getStorageCapture());
+            assertFalse(capture.requiresReconciliation(), "A failed history append must not invalidate live stock");
+            service.close();
+            assertEquals(1, appends.get(), "Viewer reads between durable deadlines must not retry a failed write");
+        }
+    }
+
+    @Test
     void viewerLeaseDefersMetadataAndDescriptionAlwaysContainsBaseKey() throws Exception {
         AtomicInteger copies = new AtomicInteger();
         AtomicInteger bases = new AtomicInteger();
@@ -1296,7 +1372,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 CoreEngine.GRID_IDENTITIES,
                 settings)) {
             coordinator.tick(TestGridFixtures.ae(grid), 1000);
-            awaitRevision(service, key, 1);
+            awaitStock(service, key, iron.web$getKey(), 1000, 20);
             StorageCapture capture = grid.web$getStorageCapture();
             assertNotNull(capture);
             capture.recordFlow(iron, 7, 0);
@@ -1506,18 +1582,12 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 settings)) {
             coordinator.tick(TestGridFixtures.ae(grid), 1000);
             assertNotNull(grid.web$getStorageCapture());
-            StorageSnapshot first = awaitRevision(service, key, 1);
-            assertEquals(
-                20,
-                first.rows()
-                    .get(0)
-                    .quantity());
+            awaitStock(service, key, iron.web$getKey(), 1000, 20);
+            int storageReads = grid.storageReads;
             grid.web$getStorageCapture()
                 .recordFlow(iron, 7, 3);
             coordinator.tick(TestGridFixtures.ae(grid), 2000);
-            StorageSnapshot idle = service.snapshot(key);
-            assertNotNull(idle);
-            assertEquals(1, idle.revision(), "idle tracking must not read storage every tick");
+            assertEquals(storageReads, grid.storageReads, "Idle tracking must not read storage every tick");
             coordinator.observeForViewer(grid, 2000);
             assertTrue(
                 service.history(key, iron.web$getKey(), 0, 100)
@@ -1525,10 +1595,11 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                     .stream()
                     .noneMatch(point -> point.input() != 0 || point.output() != 0));
             coordinator.tick(TestGridFixtures.ae(grid), 6000);
-            awaitRevision(service, key, 2);
-            assertTrue(
-                service.history(key, iron.web$getKey(), 0, 100)
-                    .points()
+            awaitHistory(
+                service,
+                key,
+                6000,
+                history -> history.points()
                     .stream()
                     .anyMatch(point -> point.input() == 7 && point.output() == 3));
             persistentData.getSettings()
@@ -1537,7 +1608,6 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
                 .setStorageTracked(false);
             coordinator.tick(TestGridFixtures.ae(grid), 20000);
             assertNull(grid.web$getStorageCapture(), "disabled tracking without viewers releases native capture");
-            assertNull(service.snapshot(key));
             assertFalse(
                 service.history(key, null, 0, 100)
                     .points()
@@ -1624,14 +1694,16 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         throw new AssertionError("Recent tracking did not publish observation " + observedAt);
     }
 
-    private static @NotNull StorageSnapshot awaitRevision(StorageTrackingService service, StableKey key, long revision)
-        throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-        while (System.nanoTime() < deadline) {
-            StorageSnapshot result = service.snapshot(key);
-            if (result != null && result.revision() >= revision) return result;
-            Thread.sleep(5);
-        }
-        return fail("Observation was not published");
+    private static @NotNull StorageHistory awaitStock(StorageTrackingService service, StableKey grid, StableKey item,
+        long from, long quantity) throws Exception {
+        return awaitHistory(
+            service,
+            grid,
+            from,
+            history -> history.points()
+                .stream()
+                .anyMatch(
+                    point -> point.kind() == StorageHistoryPoint.Kind.STOCK && item.equals(point.itemKey())
+                        && point.quantity() == quantity));
     }
 }

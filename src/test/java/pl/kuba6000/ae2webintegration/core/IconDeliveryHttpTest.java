@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingTestFixtures.awaitHistory;
 
 import java.io.File;
 import java.io.InputStream;
@@ -84,8 +85,8 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 
 /** Public HTTP and server lifecycle contract; generated packs use the public archive writer. */
@@ -676,15 +677,13 @@ class IconDeliveryHttpTest {
                 true,
                 true,
                 observedAt - 60000));
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-        StorageSnapshot snapshot = service.snapshot(gridKey);
-        assertNotNull(snapshot);
-        while (snapshot.revision() == 0 && System.nanoTime() < deadline) {
-            Thread.sleep(5);
-            snapshot = service.snapshot(gridKey);
-            assertNotNull(snapshot);
-        }
-        assertTrue(snapshot.revision() > 0);
+        awaitHistory(
+            service,
+            gridKey,
+            observedAt,
+            history -> history.points()
+                .stream()
+                .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.FLOW));
         AE2Controller.itemIdentities.clear();
         String path = "/api/grids/" + gridKey + "/resource-history";
         JsonObject plain = json(connection(path));
