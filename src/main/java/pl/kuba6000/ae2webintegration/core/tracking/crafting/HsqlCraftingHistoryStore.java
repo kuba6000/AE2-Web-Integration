@@ -73,8 +73,14 @@ public final class HsqlCraftingHistoryStore {
                 long providerId = insertProvider(db, id, ordinal++, provider);
                 providers.put(provider.name(), providerId);
             }
-            insertResource(db, id, -1, job.finalOutput(), 0);
-            ordinal = 0;
+            long product = insertResource(db, id, 0, job.finalOutput(), 0);
+            try (PreparedStatement insert = db
+                .prepareStatement("INSERT INTO crafting_products(job_id, crafting_resource_id) VALUES (?, ?)")) {
+                insert.setLong(1, id);
+                insert.setLong(2, product);
+                insert.executeUpdate();
+            }
+            ordinal = 1;
             for (CompletedCrafting.Resource resource : job.resources()) {
                 long resourceId = insertResource(db, id, ordinal++, resource.snapshot(), resource.timeSpentOn());
                 insertIntervals(
@@ -84,13 +90,14 @@ public final class HsqlCraftingHistoryStore {
                     resourceId,
                     resource.intervals());
                 try (PreparedStatement link = db.prepareStatement("""
-                    INSERT INTO crafting_resource_providers(crafting_resource_id, provider_id) VALUES (?, ?)
+                    INSERT INTO crafting_resource_providers(job_id, crafting_resource_id, provider_id) VALUES (?, ?, ?)
                     """)) {
                     for (String name : resource.providers()) {
                         Long provider = providers.get(name);
                         if (provider == null) throw new SQLException("Crafting resource references an absent provider");
-                        link.setLong(1, resourceId);
-                        link.setLong(2, provider);
+                        link.setLong(1, id);
+                        link.setLong(2, resourceId);
+                        link.setLong(3, provider);
                         link.addBatch();
                     }
                     if (!resource.providers()
@@ -223,7 +230,8 @@ public final class HsqlCraftingHistoryStore {
                         CASE WHEN r.resource_id IS NULL THEN d.display_name ELSE c.display_name END display_name,
                         CASE WHEN r.resource_id IS NULL THEN d.resource_type ELSE c.resource_type END resource_type
                     FROM crafting_jobs j JOIN grids g ON j.grid_id = g.id
-                    JOIN crafting_resources r ON r.job_id = j.id AND r.ordinal = -1
+                    JOIN crafting_products p ON p.job_id = j.id
+                    JOIN crafting_resources r ON r.id = p.crafting_resource_id
                     LEFT JOIN history_resources c ON c.id = r.resource_id
                     LEFT JOIN crafting_resource_descriptions d ON d.crafting_resource_id = r.id
                     WHERE g.grid_key = ? AND j.id < ? ORDER BY j.id DESC
@@ -301,7 +309,9 @@ public final class HsqlCraftingHistoryStore {
     }
 
     private static ResourceSnapshot product(Connection db, long job) throws SQLException {
-        try (PreparedStatement query = db.prepareStatement(descriptionsSql() + " AND r.ordinal = -1")) {
+        try (PreparedStatement query = db.prepareStatement(
+            descriptionsSql()
+                + " AND r.id = (SELECT crafting_resource_id FROM crafting_products WHERE job_id = r.job_id)")) {
             query.setLong(1, job);
             try (ResultSet rows = query.executeQuery()) {
                 if (!rows.next()) throw new SQLException("Crafting history final product is missing");
@@ -330,8 +340,11 @@ public final class HsqlCraftingHistoryStore {
             }
         }
         List<CompletedCrafting.Resource> resources = new ArrayList<>();
-        try (PreparedStatement query = db
-            .prepareStatement(descriptionsSql() + " AND r.ordinal >= 0 ORDER BY r.ordinal")) {
+        try (PreparedStatement query = db.prepareStatement(descriptionsSql() + """
+             AND NOT EXISTS (SELECT 1 FROM crafting_products p
+                 WHERE p.crafting_resource_id = r.id AND p.job_id = r.job_id)
+             ORDER BY r.ordinal
+            """)) {
             query.setLong(1, job);
             try (ResultSet rows = query.executeQuery()) {
                 while (rows.next()) {

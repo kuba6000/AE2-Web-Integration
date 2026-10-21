@@ -10,7 +10,11 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +40,206 @@ class CraftingHistoryStoreTest {
 
     @TempDir
     Path directory;
+
+    @Test
+    void persistedOrderingPositionsAndResourceQuantitiesCannotBeNegative() throws Exception {
+        StableKey grid = StableKey.random();
+        long now = System.currentTimeMillis();
+        CompletedCrafting base = simpleJob(now, 1);
+        CompletedCrafting job = new CompletedCrafting(
+            base.finalOutput(),
+            base.timeStarted(),
+            base.timeDone(),
+            false,
+            Collections.singletonList(
+                new CompletedCrafting.Resource(
+                    base.finalOutput(),
+                    10,
+                    Collections.singletonList(new CompletedCrafting.Interval(now - 10, now)),
+                    Collections.singletonList("Machines"))),
+            base.providers());
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            long id = store.append(grid, job);
+            for (String table : new String[] { "crafting_resources", "crafting_providers",
+                "crafting_provider_locations", "crafting_resource_intervals", "crafting_provider_intervals" }) {
+                assertConstraintViolation(database, "UPDATE " + table + " SET ordinal = -1 WHERE ordinal = 0");
+            }
+            assertConstraintViolation(database, "UPDATE crafting_resources SET quantity = -1 WHERE ordinal = 1");
+            assertEquals(job, store.read(grid, id));
+        }
+    }
+
+    @Test
+    void backwardWallClockAndDistinctProviderNamesPreserveTheirStoredValues() throws Exception {
+        StableKey grid = StableKey.random();
+        long now = System.currentTimeMillis();
+        CompletedCrafting base = simpleJob(now, 1);
+        List<CompletedCrafting.Interval> reversed = Collections
+            .singletonList(new CompletedCrafting.Interval(now, now - 10));
+        CompletedCrafting job = new CompletedCrafting(
+            base.finalOutput(),
+            now,
+            now - 10,
+            false,
+            Collections.singletonList(
+                new CompletedCrafting.Resource(
+                    base.finalOutput(),
+                    -10,
+                    reversed,
+                    Arrays.asList("Machines", "Machines "))),
+            Arrays.asList(
+                new CompletedCrafting.Provider(
+                    "Machines",
+                    Arrays.asList(
+                        new DimensionalCoords("overworld", 1, 2, 3),
+                        new DimensionalCoords("overworld", 4, 5, 6)),
+                    reversed),
+                new CompletedCrafting.Provider("Machines ", Collections.emptyList(), reversed)));
+        long id;
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            id = new HsqlCraftingHistoryStore(database).append(grid, job);
+        }
+        try (WorldDatabase database = database()) {
+            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            assertEquals(job, store.read(grid, id));
+            assertEquals(
+                job.finalOutput(),
+                store.list(grid, null, 10)
+                    .entries()
+                    .get(0)
+                    .finalOutput());
+        }
+    }
+
+    @Test
+    void providersCannotBeLinkedToResourcesFromAnotherJob() throws Exception {
+        StableKey grid = StableKey.random();
+        long now = System.currentTimeMillis();
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            long first = store.append(grid, simpleJob(now, 1));
+            long second = store.append(grid, simpleJob(now, 2));
+            assertConstraintViolation(
+                database,
+                "INSERT INTO crafting_resource_providers(job_id, crafting_resource_id, provider_id)" + " SELECT "
+                    + first
+                    + ", r.id, p.id FROM crafting_resources r, crafting_providers p"
+                    + " WHERE r.job_id = "
+                    + first
+                    + " AND p.job_id = "
+                    + second);
+            assertConstraintViolation(
+                database,
+                "INSERT INTO crafting_resource_providers(job_id, crafting_resource_id, provider_id)" + " SELECT "
+                    + second
+                    + ", r.id, p.id FROM crafting_resources r, crafting_providers p"
+                    + " WHERE r.job_id = "
+                    + first
+                    + " AND p.job_id = "
+                    + second);
+        }
+    }
+
+    @Test
+    void finalProductRelationRejectsResourcesFromAnotherJob() throws Exception {
+        StableKey grid = StableKey.random();
+        long now = System.currentTimeMillis();
+        CompletedCrafting first = simpleJob(now, 1);
+        CompletedCrafting second = simpleJob(now, 2);
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            long firstId = store.append(grid, first);
+            long secondId = store.append(grid, second);
+            database.read(db -> {
+                try (Statement sql = db.createStatement();
+                    ResultSet rows = sql.executeQuery(
+                        "SELECT p.job_id, r.job_id FROM crafting_products p JOIN crafting_resources r"
+                            + " ON r.id = p.crafting_resource_id ORDER BY p.job_id")) {
+                    assertTrue(rows.next());
+                    assertEquals(firstId, rows.getLong(1));
+                    assertEquals(firstId, rows.getLong(2));
+                    assertTrue(rows.next());
+                    assertEquals(secondId, rows.getLong(1));
+                    assertEquals(secondId, rows.getLong(2));
+                    assertFalse(rows.next());
+                }
+                return null;
+            });
+            assertConstraintViolation(
+                database,
+                "UPDATE crafting_products SET crafting_resource_id ="
+                    + " (SELECT crafting_resource_id FROM crafting_products WHERE job_id = "
+                    + secondId
+                    + ")"
+                    + " WHERE job_id = "
+                    + firstId);
+            assertEquals(first, store.read(grid, firstId));
+            assertEquals(second, store.read(grid, secondId));
+            assertConstraintViolation(
+                database,
+                "INSERT INTO crafting_products(job_id, crafting_resource_id) SELECT job_id, crafting_resource_id"
+                    + " FROM crafting_products WHERE job_id = "
+                    + firstId);
+            database.write(db -> {
+                try (Statement sql = db.createStatement()) {
+                    sql.executeUpdate("DELETE FROM crafting_jobs WHERE id = " + firstId);
+                    try (ResultSet rows = sql
+                        .executeQuery("SELECT COUNT(*) FROM crafting_products WHERE job_id = " + firstId)) {
+                        assertTrue(rows.next());
+                        assertEquals(0, rows.getLong(1));
+                    }
+                }
+                return null;
+            });
+            assertNull(store.read(grid, firstId));
+            assertEquals(second, store.read(grid, secondId));
+        }
+    }
+
+    private static void assertConstraintViolation(WorldDatabase database, String statement) {
+        IOException failure = assertThrows(IOException.class, () -> database.write(db -> {
+            try (Statement sql = db.createStatement()) {
+                sql.executeUpdate(statement);
+            }
+            return null;
+        }));
+        assertTrue(failure.getCause() instanceof SQLException);
+        assertTrue(
+            ((SQLException) failure.getCause()).getSQLState()
+                .startsWith("23"));
+    }
+
+    @Test
+    void negativeProductQuantityRollsBackTheWholeJob() throws Exception {
+        StableKey grid = StableKey.random();
+        CompletedCrafting good = simpleJob(System.currentTimeMillis(), 1);
+        CompletedCrafting invalid = new CompletedCrafting(
+            new ResourceSnapshot(
+                good.finalOutput()
+                    .description(),
+                -1),
+            good.timeStarted(),
+            good.timeDone(),
+            false,
+            good.resources(),
+            good.providers());
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            assertThrows(IOException.class, () -> store.append(grid, invalid));
+            assertTrue(
+                store.list(grid, null, 10)
+                    .entries()
+                    .isEmpty());
+            long id = store.append(grid, good);
+            assertEquals(good, store.read(grid, id));
+        }
+    }
 
     @Test
     void completedJobWithUnkeyedResourcesAndProviderLocationsSurvivesReopen() throws Exception {

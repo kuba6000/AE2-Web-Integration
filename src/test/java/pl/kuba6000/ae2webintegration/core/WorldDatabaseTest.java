@@ -337,7 +337,7 @@ class WorldDatabaseTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = { 1, 2, 3, 4, 5, 999 })
+    @ValueSource(ints = { 1, 2, 3, 4, 5, 6, 999 })
     void unsupportedSchemaCannotPublishOrEraseExistingGridData(int version) throws Exception {
         Path path = directory.resolve("world");
         Path source = directory.resolve("legacy.json");
@@ -369,7 +369,7 @@ class WorldDatabaseTest {
                 assertTrue(result.next());
                 assertEquals(version, result.getInt(1));
             }
-            statement.executeUpdate("UPDATE world_schema SET version = 6");
+            statement.executeUpdate("UPDATE world_schema SET version = 7");
             statement.execute("SHUTDOWN");
         }
         try (WorldDatabase restored = new WorldDatabase(path, policy)) {
