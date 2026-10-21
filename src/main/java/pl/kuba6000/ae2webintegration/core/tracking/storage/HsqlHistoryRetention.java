@@ -96,6 +96,7 @@ final class HsqlHistoryRetention {
         for (Table table : Table.values()) {
             String expiryFilter = overCapacity ? "" : "AND " + expiredPoints(table, "?");
             String resource = table == Table.COVERAGE ? "CAST(NULL AS BIGINT)" : "p.resource_id";
+            // Bound the event-ID sort by an index-ordered slice, retaining all equal-time peers at its edge.
             try (PreparedStatement query = db.prepareStatement(
                 "SELECT p.id, p.measurement_id, " + resource
                     + " AS resource_id, m.observed_at FROM "
@@ -103,13 +104,33 @@ final class HsqlHistoryRetention {
                     + "\n"
                     + """
                         WHERE m.grid_id = ?
+                            AND m.observed_at <= (
+                                SELECT MAX(observed_at) FROM (
+                                    SELECT m.observed_at FROM
+                        """
+                    + table.joined()
+                    + "\n"
+                    + "WHERE m.grid_id = ?\n"
+                    + expiryFilter
+                    + """
+                        ORDER BY m.grid_id, m.observed_at, m.id
+                        FETCH FIRST ? ROWS ONLY
+                        ) oldest
+                        )
                         """
                     + expiryFilter
                     + "ORDER BY m.observed_at, p.id")) {
                 query.setLong(1, gridId);
+                query.setLong(2, gridId);
+                int parameter = 3;
                 if (!overCapacity) {
-                    query.setLong(2, expiry);
-                    if (table != Table.FLOW) query.setLong(3, expiry);
+                    query.setLong(parameter++, expiry);
+                    if (table != Table.FLOW) query.setLong(parameter++, expiry);
+                }
+                query.setInt(parameter++, limit);
+                if (!overCapacity) {
+                    query.setLong(parameter++, expiry);
+                    if (table != Table.FLOW) query.setLong(parameter, expiry);
                 }
                 query.setMaxRows(limit);
                 try (ResultSet rows = query.executeQuery()) {
@@ -203,29 +224,13 @@ final class HsqlHistoryRetention {
             while (policies.next()) {
                 long gridId = policies.getLong("id");
                 long expiry = now - TimeUnit.DAYS.toMillis(policies.getInt("retention_days"));
-                for (Table table : Table.values()) {
-                    try (PreparedStatement query = db.prepareStatement(
-                        "SELECT m.observed_at, p.id FROM " + table.joined()
-                            + "\n"
-                            + "WHERE m.grid_id = ? AND "
-                            + expiredPoints(table, "?")
-                            + "ORDER BY m.observed_at, p.id")) {
-                        query.setLong(1, gridId);
-                        query.setLong(2, expiry);
-                        if (table != Table.FLOW) query.setLong(3, expiry);
-                        query.setMaxRows(1);
-                        try (ResultSet rows = query.executeQuery()) {
-                            if (rows.next()) {
-                                long time = rows.getLong("observed_at");
-                                long id = rows.getLong("id");
-                                if (time < earliestTime || time == earliestTime && id < earliestId) {
-                                    expired = gridId;
-                                    earliestTime = time;
-                                    earliestId = id;
-                                }
-                            }
-                        }
-                    }
+                PruneBatch batch = selectBatch(db, gridId, expiry, false, 1);
+                if (batch.points.isEmpty()) continue;
+                PrunePoint point = batch.points.get(0);
+                if (point.observedAt < earliestTime || point.observedAt == earliestTime && point.id < earliestId) {
+                    expired = gridId;
+                    earliestTime = point.observedAt;
+                    earliestId = point.id;
                 }
             }
         }

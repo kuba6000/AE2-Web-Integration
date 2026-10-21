@@ -119,19 +119,38 @@ final class HsqlHistoryReader {
         List<QueryPoint> result = new ArrayList<>();
         boolean filtered = resourceId != null && table != Table.COVERAGE;
         String filter = filtered ? "AND p.resource_id = ?\n" : "";
-        try (PreparedStatement query = db.prepareStatement(
-            "SELECT p.*, m.observed_at, m.generation, m.flow_from"
-                + (table == Table.COVERAGE ? " FROM " + table.joined() + "\n"
-                    : ", r.item_key FROM " + table.joined() + " JOIN history_resources r ON r.id = p.resource_id\n")
-                + """
-                    WHERE m.grid_id = ?
-                        AND m.observed_at >= ?
-                    """
-                + filter
-                + "ORDER BY m.observed_at DESC, p.id DESC")) {
+        // Slice in measurement-index order, then include every peer at the cutoff before sorting by event ID.
+        // Resource-filtered queries retain their selective resource index path.
+        String start = filtered ? "?" : """
+            (SELECT MIN(observed_at) FROM (
+                SELECT m.observed_at FROM
+            """ + table.joined() + "\n" + """
+            WHERE m.grid_id = ? AND m.observed_at >= ?
+            ORDER BY m.grid_id DESC, m.observed_at DESC, m.id DESC
+            FETCH FIRST ? ROWS ONLY
+            ) latest)
+            """;
+        try (
+            PreparedStatement query = db
+                .prepareStatement(
+                    "SELECT p.*, m.observed_at, m.generation, m.flow_from"
+                        + (table == Table.COVERAGE ? " FROM " + table.joined() + "\n"
+                            : ", r.item_key FROM " + table.joined()
+                                + " JOIN history_resources r ON r.id = p.resource_id\n")
+                        + "WHERE m.grid_id = ? AND m.observed_at >= "
+                        + start
+                        + "\n"
+                        + filter
+                        + "ORDER BY m.observed_at DESC, p.id DESC")) {
             query.setLong(1, gridId);
-            query.setLong(2, fromMillis);
-            if (filtered) query.setLong(3, resourceId);
+            if (filtered) {
+                query.setLong(2, fromMillis);
+                query.setLong(3, resourceId);
+            } else {
+                query.setLong(2, gridId);
+                query.setLong(3, fromMillis);
+                query.setInt(4, limit + 1);
+            }
             query.setMaxRows(limit + 1);
             try (ResultSet rows = query.executeQuery()) {
                 while (rows.next()) {
@@ -195,8 +214,10 @@ final class HsqlHistoryReader {
         throws SQLException {
         for (Table table : Table.values()) {
             String barrier = table == Table.COVERAGE ? "(p.kind = 'GAP' OR m.generation <> ?)" : "m.generation <> ?";
+            // The explicit time lower bound exposes the index range hidden by the event-ID tie condition.
             try (PreparedStatement query = db.prepareStatement("SELECT p.id FROM " + table.joined() + "\n" + """
                 WHERE m.grid_id = ?
+                    AND m.observed_at >= ?
                     AND (m.observed_at > ? OR m.observed_at = ? AND p.id > ?)
                     AND m.observed_at <= ?
                     AND
@@ -204,9 +225,10 @@ final class HsqlHistoryReader {
                 query.setLong(1, gridId);
                 query.setLong(2, anchor.point.observedAt());
                 query.setLong(3, anchor.point.observedAt());
-                query.setLong(4, anchor.id);
-                query.setLong(5, boundary);
-                query.setLong(6, anchor.point.generation());
+                query.setLong(4, anchor.point.observedAt());
+                query.setLong(5, anchor.id);
+                query.setLong(6, boundary);
+                query.setLong(7, anchor.point.generation());
                 query.setMaxRows(1);
                 try (ResultSet rows = query.executeQuery()) {
                     if (rows.next()) return true;

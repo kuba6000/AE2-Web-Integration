@@ -560,6 +560,7 @@ class HsqlStorageHistoryStoreTest {
         long now = System.currentTimeMillis();
         StorageHistoryPoint first = stock(item, now, 10);
         StorageHistoryPoint latest = stock(item, now, 20);
+        StorageHistoryPoint earlier = stock(item, now - 1, 5);
         StorageHistoryPoint marker = new StorageHistoryPoint(
             now,
             7,
@@ -572,7 +573,14 @@ class HsqlStorageHistoryStoreTest {
             0,
             null);
         try (HsqlStorageHistoryStore store = store(100)) {
-            append(store, grid, Arrays.asList(first, latest, marker));
+            append(store, grid, Collections.singletonList(first));
+            append(store, grid, Arrays.asList(latest, marker));
+            append(store, grid, Collections.singletonList(earlier));
+
+            assertEquals(
+                Arrays.asList(earlier, first, latest, marker),
+                store.read(grid, item, now - 1, 10)
+                    .points());
 
             StorageHistory limited = store.read(grid, item, now, 2);
             assertEquals(Arrays.asList(latest, marker), limited.points());
@@ -584,6 +592,52 @@ class HsqlStorageHistoryStoreTest {
             assertEquals(Collections.singletonList(marker), markerOnly.points());
             assertEquals(latest, markerOnly.baseline());
             assertEquals(Collections.singletonMap(item, description(item, "Item")), markerOnly.descriptions());
+        }
+    }
+
+    @Test
+    void rowBudgetRetainsLatestEqualTimeEventsAcrossMeasurementKinds() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        long now = System.currentTimeMillis();
+        StorageHistoryPoint future = stock(item, now + 1, 50);
+        StorageHistoryPoint latest = stock(item, now, 20);
+        StorageHistoryPoint flow = new StorageHistoryPoint(
+            now,
+            7,
+            StorageHistoryPoint.Kind.FLOW,
+            item,
+            0,
+            3,
+            2,
+            1,
+            1,
+            now - 1000);
+        StorageHistoryPoint marker = new StorageHistoryPoint(
+            now,
+            7,
+            StorageHistoryPoint.Kind.OBSERVATION,
+            null,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null);
+        try (HsqlStorageHistoryStore store = store(3)) {
+            append(store, grid, Arrays.asList(future, stock(item, now, 10)));
+            append(store, grid, Arrays.asList(flow, marker));
+            append(store, grid, Collections.singletonList(latest));
+            StorageHistory history = store.read(grid, item, now, 10);
+            assertEquals(Arrays.asList(marker, latest, future), history.points());
+            assertTrue(history.truncated());
+            assertFalse(history.complete());
+        }
+        try (HsqlStorageHistoryStore store = store(3)) {
+            assertEquals(
+                Arrays.asList(marker, latest, future),
+                store.read(grid, item, now, 10)
+                    .points());
         }
     }
 
