@@ -1,16 +1,27 @@
 # Release descriptions
 
-Each release uses the same composed Markdown on GitHub, Modrinth and CurseForge. Add any of these
-optional UTF-8 files in this directory, in the order shown:
+Each release uses the same composed Markdown on GitHub, Modrinth and CurseForge, in this order:
 
-1. `common.md`: a notice that should appear on every release until removed.
-2. `<version>.md`: an introduction shared by that mod version, such as `2.0.0.md` or `2.0.0-beta.1.md`.
-3. `<full-tag>.md`: an addition for one target, such as `2.0.0-forge-1.20.1.md`.
+1. Optional `<version>.md`: an introduction shared by that mod version, such as `2.0.0.md` or `2.0.0-beta.1.md`.
+2. Optional `<full-tag>.md`: an addition for one target, such as `2.0.0-forge-1.20.1.md`.
+3. The generated changelog.
+4. Optional `common.md`: a footer repeated on every release until removed.
 
-Generated changes follow those sections. Missing or empty files are omitted. For example, `2.0.0.md`
+Use UTF-8 for authored files. Missing or empty files are omitted. For example, `2.0.0.md`
 could contain a short feature introduction and any required user actions. If telemetry is introduced
 later, `common.md` can explain what it sends, its purpose and how users control it. Add that notice
 only when it describes implemented behavior.
+
+For a short footer in smaller text, `common.md` can use inline `<sub>` markup, optionally below a divider:
+
+```markdown
+---
+
+<sub>Telemetry disclosure and details go here.</sub>
+```
+
+The helper preserves this Markdown/HTML rather than adding formatting automatically. Each portal
+controls its rendered appearance, so text sizing may differ.
 
 Tags use a SemVer mod version followed by the loader and Minecraft version:
 
