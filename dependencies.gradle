@@ -34,7 +34,8 @@
  * For more details, see https://docs.gradle.org/8.0.1/userguide/java_library_plugin.html#sec:java_library_configurations_graph
  */
 dependencies {
-    shadowImplementation('org.hsqldb:hsqldb:2.7.4:jdk8') { transitive = false }
+    // SQLite JNI entry points require the original package and complete native resources.
+    shadowImplementation('org.xerial:sqlite-jdbc:3.53.4.0') { transitive = false }
     implementation project(':core')
     // Select the jar explicitly so shadow resolution does not hit variant ambiguity on the submodule.
     shadowImplementation(project(path: ':core', configuration: 'default')) {
@@ -54,12 +55,11 @@ dependencies {
 }
 
 tasks.named("shadowJar").configure {
-    relocate('org.hsqldb', 'pl.kuba6000.ae2webintegration.internal.hsqldb')
     relocate('com.electronwill.nightconfig', 'pl.kuba6000.ae2webintegration.internal.nightconfig')
     if (minimizeShadowedDependencies.toBoolean()) {
         // Object conversion discovers field annotations reflectively.
         minimize {
-            exclude(dependency('org.hsqldb:hsqldb:.*'))
+            exclude(dependency('org.xerial:sqlite-jdbc:.*'))
             exclude(dependency('com.electronwill.night-config:core:.*'))
             exclude(dependency('com.electronwill.night-config:toml:.*'))
         }
