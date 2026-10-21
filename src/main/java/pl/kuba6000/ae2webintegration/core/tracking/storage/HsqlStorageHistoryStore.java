@@ -47,6 +47,10 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
             return sqlName + " p JOIN history_measurements m ON m.id = p.measurement_id";
         }
 
+        String fromMeasurements() {
+            return "history_measurements m JOIN " + sqlName + " p ON p.measurement_id = m.id";
+        }
+
         static @NotNull Table forKind(@NotNull StorageHistoryPoint.Kind kind) {
             return switch (kind) {
                 case STOCK -> STOCK;

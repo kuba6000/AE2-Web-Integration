@@ -100,7 +100,7 @@ final class HsqlHistoryRetention {
             try (PreparedStatement query = db.prepareStatement(
                 "SELECT p.id, p.measurement_id, " + resource
                     + " AS resource_id, m.observed_at FROM "
-                    + table.joined()
+                    + table.fromMeasurements()
                     + "\n"
                     + """
                         WHERE m.grid_id = ?
@@ -108,13 +108,13 @@ final class HsqlHistoryRetention {
                                 SELECT MAX(observed_at) FROM (
                                     SELECT m.observed_at FROM
                         """
-                    + table.joined()
+                    + table.fromMeasurements()
                     + "\n"
                     + "WHERE m.grid_id = ?\n"
                     + expiryFilter
                     + """
                         ORDER BY m.grid_id, m.observed_at, m.id
-                        FETCH FIRST ? ROWS ONLY
+                        FETCH FIRST ? ROWS ONLY USING INDEX
                         ) oldest
                         )
                         """
