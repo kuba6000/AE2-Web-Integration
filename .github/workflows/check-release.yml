@@ -7,14 +7,12 @@ on:
       - '.github/scripts/**'
       - '.github/workflows/release-*.yml'
       - '.github/workflows/check-release.yml'
-      - '.releases/**'
   push:
     branches: ['1.12.2']
     paths:
       - '.github/scripts/**'
       - '.github/workflows/release-*.yml'
       - '.github/workflows/check-release.yml'
-      - '.releases/**'
 
 permissions:
   contents: read

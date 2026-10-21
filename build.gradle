@@ -13,8 +13,6 @@ import com.gtnewhorizons.retrofuturagradle.minecraft.MinecraftTasks
 import com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar
 import com.gtnewhorizons.retrofuturagradle.minecraft.RunMinecraftTask
 import com.gtnewhorizons.retrofuturagradle.util.Distribution
-import com.modrinth.minotaur.dependencies.ModDependency
-import com.modrinth.minotaur.dependencies.VersionDependency
 import de.undercouch.gradle.tasks.download.DownloadExtension
 import org.apache.commons.io.FileUtils
 import org.gradle.api.artifacts.Configuration
@@ -35,8 +33,7 @@ plugins {
     id 'maven-publish'
     id 'org.jetbrains.gradle.plugin.idea-ext' version '1.1.8'
     id 'com.gtnewhorizons.retrofuturagradle' version '2.0.6'
-    id 'net.darkhax.curseforgegradle' version '1.1.28' apply false
-    id 'com.modrinth.minotaur' version '2.8.10' apply false
+    id 'me.modmuss50.mod-publish-plugin' version '2.2.1' apply false
     id 'com.diffplug.spotless' version '6.24.0' apply false
     id 'com.palantir.git-version' version '3.0.0' apply false
     id 'com.gradleup.shadow' version '9.6.1' apply false
@@ -91,12 +88,6 @@ propertyDefaultIfUnset("usesShadowedDependencies", false)
 propertyDefaultIfUnset("minimizeShadowedDependencies", true)
 propertyDefaultIfUnset("relocateShadowedDependencies", true)
 propertyDefaultIfUnset("separateRunDirectories", false)
-propertyDefaultIfUnset("versionDisplayFormat", '$MOD_NAME \u2212 $VERSION')
-propertyDefaultIfUnsetWithEnvVar("modrinthProjectId", "", "MODRINTH_PROJECT_ID")
-propertyDefaultIfUnset("modrinthRelations", "")
-propertyDefaultIfUnsetWithEnvVar("curseForgeProjectId", "", "CURSEFORGE_PROJECT_ID")
-propertyDefaultIfUnset("curseForgeRelations", "")
-propertyDefaultIfUnsetWithEnvVar("releaseType", "release", "RELEASE_TYPE")
 propertyDefaultIfUnset("generateDefaultChangelog", false)
 propertyDefaultIfUnset("customMavenPublishUrl", "")
 propertyDefaultIfUnset("mavenArtifactGroup", getDefaultArtifactGroup())
@@ -1142,8 +1133,6 @@ idea {
 
 
 // Deployment
-def final modrinthApiKey = providers.environmentVariable('MODRINTH_API_KEY')
-def final cfApiKey = providers.environmentVariable('CURSEFORGE_API_KEY')
 final boolean isCIEnv = providers.environmentVariable('CI').getOrElse('false').toBoolean()
 
 if (isCIEnv || deploymentDebug.toBoolean()) {
@@ -1182,146 +1171,7 @@ tasks.register('generateChangelog') {
         def f = getFile('build/changelog.md')
         changelog = changelog ?: 'There have been no changes.'
         f.write(changelog, 'UTF-8')
-
-        // Set changelog for Modrinth
-        if (modrinthApiKey.isPresent() || deploymentDebug.toBoolean()) {
-            modrinth.changelog.set(changelog)
-        }
     }
-}
-
-if (cfApiKey.isPresent() || deploymentDebug.toBoolean()) {
-    apply plugin: 'net.darkhax.curseforgegradle'
-    //noinspection UnnecessaryQualifiedReference
-    tasks.register('curseforge', net.darkhax.curseforgegradle.TaskPublishCurseForge) {
-        disableVersionDetection()
-        debugMode = deploymentDebug.toBoolean()
-        apiToken = cfApiKey.getOrElse('debug_token')
-
-        doFirst {
-            def mainFile = upload(curseForgeProjectId, reobfJar)
-            def changelogFile = getChangelog()
-            def changelogRaw = changelogFile.exists() ? changelogFile.getText('UTF-8') : ""
-
-            mainFile.displayName = versionDisplayFormat.replace('$MOD_NAME', modName).replace('$VERSION', modVersion)
-            mainFile.releaseType = getReleaseType()
-            mainFile.changelog = changelogRaw
-            mainFile.changelogType = 'markdown'
-            mainFile.addModLoader 'Forge'
-            mainFile.addJavaVersion "Java 8"
-            mainFile.addGameVersion minecraftVersion
-
-            if (curseForgeRelations.size() != 0) {
-                String[] deps = curseForgeRelations.split(';')
-                deps.each { dep ->
-                    if (dep.size() == 0) {
-                        return
-                    }
-                    String[] parts = dep.split(':')
-                    String type = parts[0], slug = parts[1]
-                    def types = [
-                            'req'   : 'requiredDependency', 'required': 'requiredDependency',
-                            'opt'   : 'optionalDependency', 'optional': 'optionalDependency',
-                            'embed' : 'embeddedLibrary',    'embedded': 'embeddedLibrary',
-                            'incomp': 'incompatible',       'fail'    : 'incompatible']
-                    if (types.containsKey(type)) type = types[type]
-                    if (!(type in ['requiredDependency', 'embeddedLibrary', 'optionalDependency', 'tool', 'incompatible'])) {
-                        throw new Exception('Invalid Curseforge dependency type: ' + type)
-                    }
-                    mainFile.addRelation(slug, type)
-                }
-            }
-
-            for (artifact in getSecondaryArtifacts()) {
-                def additionalFile = mainFile.withAdditionalFile(artifact)
-                additionalFile.changelog = changelogRaw
-            }
-        }
-        doLast {
-            // No File IDs in Debug Mode
-            if (!deploymentDebug.toBoolean()) {
-                def list = []
-                for (def artifact : tasks.curseforge.getUploadArtifacts()) {
-                    list.add(artifact)
-                    for (def additionalArtifact : artifact.getAdditionalArtifacts()) {
-                        list.add(additionalArtifact)
-                    }
-                }
-                def summary = "## CurseForge Build Summary (Mod ${modName} | Project ID ${curseForgeProjectId})"
-                for (def artifact : list) {
-                    def fileId = artifact.getCurseFileId()
-                    def fileName = artifact.getArtifact().getSingleFile().name
-                    println("Uploaded File ${fileName}, With File ID: ${fileId}")
-                    summary = summary + "\n  - File: ${fileName} | File ID: ${fileId}"
-                }
-                println(summary)
-                def stepSummary = providers.environmentVariable("GITHUB_STEP_SUMMARY")
-                if (stepSummary.isPresent()) {
-                    file(stepSummary.get()).write(summary)
-                }
-            }
-        }
-    }
-    tasks.curseforge.dependsOn(build)
-    tasks.curseforge.dependsOn('generateChangelog')
-}
-
-if (modrinthApiKey.isPresent() || deploymentDebug.toBoolean()) {
-    apply plugin: 'com.modrinth.minotaur'
-    def final changelogFile = getChangelog()
-
-    modrinth {
-        token = modrinthApiKey.getOrElse('debug_token')
-        projectId = modrinthProjectId
-        versionName = versionDisplayFormat.replace('$MOD_NAME', modName).replace('$VERSION', modVersion)
-        changelog = changelogFile.exists() ? changelogFile.getText('UTF-8') : ""
-        versionType = getReleaseType()
-        versionNumber = modVersion
-        gameVersions = [minecraftVersion]
-        loaders = ["forge"]
-        debugMode = deploymentDebug.toBoolean()
-        uploadFile = reobfJar
-        additionalFiles = getSecondaryArtifacts()
-    }
-    if (modrinthRelations.size() != 0) {
-        String[] deps = modrinthRelations.split(';')
-        deps.each { dep ->
-            if (dep.size() == 0) {
-                return
-            }
-            String[] parts = dep.split(':')
-            String[] qual = parts[0].split('-')
-            addModrinthDep(qual[0], qual.length > 1 ? qual[1] : 'project', parts[1])
-        }
-    }
-    tasks.modrinth.dependsOn(build)
-    tasks.modrinth.dependsOn('generateChangelog')
-}
-
-def addModrinthDep(String scope, String type, String name) {
-    com.modrinth.minotaur.dependencies.Dependency dep
-    def types = [
-            'req'   : 'required',
-            'opt'   : 'optional',
-            'embed' : 'embedded',
-            'incomp': 'incompatible', 'fail': 'incompatible']
-    if (types.containsKey(scope)) scope = types[scope]
-    if (!(scope in ['required', 'optional', 'incompatible', 'embedded'])) {
-        throw new Exception('Invalid modrinth dependency scope: ' + scope)
-    }
-    types = ['proj': 'project', '': 'project', 'p': 'project', 'ver': 'version', 'v': 'version']
-    if (types.containsKey(type)) type = types[type]
-    switch (type) {
-        case 'project':
-            dep = new ModDependency(name, scope)
-            break
-        case 'version':
-            dep = new VersionDependency(name, scope)
-            break
-        default:
-            throw new Exception('Invalid modrinth dependency type: ' + type)
-    }
-    project.modrinth.dependencies.add(dep)
 }
 
 if (customMavenPublishUrl) {
@@ -1356,38 +1206,6 @@ if (customMavenPublishUrl) {
         }
     }
 }
-
-def getSecondaryArtifacts() {
-    def secondaryArtifacts = [usesShadowedDependencies.toBoolean() ? tasks.shadowJar : tasks.jar]
-    if (!noPublishedSources.toBoolean()) secondaryArtifacts += [sourcesJar]
-    if (apiPackage) secondaryArtifacts += [apiJar]
-    return secondaryArtifacts
-}
-
-def getReleaseType() {
-    String type = project.releaseType
-    if (!(type in ['release', 'beta', 'alpha'])) {
-        throw new Exception("Release type invalid! Found \"" + type + "\", allowed: \"release\", \"beta\", \"alpha\"")
-    }
-    return type
-}
-
-/*
- * If CHANGELOG_LOCATION env var is set, that takes highest precedence.
- * Next, if 'generateDefaultChangelog' option is enabled, use that.
- * Otherwise, try to use a CHANGELOG.md file at root directory.
- */
-def getChangelog() {
-    def final changelogEnv = providers.environmentVariable('CHANGELOG_LOCATION')
-    if (changelogEnv.isPresent()) {
-        return new File(changelogEnv.get())
-    }
-    if (generateDefaultChangelog.toBoolean()) {
-        return getFile('build/changelog.md')
-    }
-    return getFile('CHANGELOG.md')
-}
-
 
 // Buildscript updating
 
