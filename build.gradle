@@ -17,7 +17,7 @@ import com.modrinth.minotaur.dependencies.ModDependency
 import com.modrinth.minotaur.dependencies.VersionDependency
 import de.undercouch.gradle.tasks.download.DownloadExtension
 import org.apache.commons.io.FileUtils
-import org.gradle.api.internal.artifacts.configurations.DefaultUnlockedConfiguration
+import org.gradle.api.artifacts.Configuration
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.gradle.internal.logging.text.StyledTextOutputFactory
@@ -34,12 +34,12 @@ plugins {
     id 'eclipse'
     id 'maven-publish'
     id 'org.jetbrains.gradle.plugin.idea-ext' version '1.1.8'
-    id 'com.gtnewhorizons.retrofuturagradle' version '1.4.9'
+    id 'com.gtnewhorizons.retrofuturagradle' version '2.0.6'
     id 'net.darkhax.curseforgegradle' version '1.1.28' apply false
     id 'com.modrinth.minotaur' version '2.8.10' apply false
     id 'com.diffplug.spotless' version '6.24.0' apply false
     id 'com.palantir.git-version' version '3.0.0' apply false
-    id 'com.github.johnrengelman.shadow' version '8.1.1' apply false
+    id 'com.gradleup.shadow' version '9.6.1' apply false
     id 'org.jetbrains.kotlin.jvm' version '1.8.0' apply false
     id 'org.jetbrains.kotlin.kapt' version '1.8.0' apply false
     id 'com.google.devtools.ksp' version '1.8.0-1.0.9' apply false
@@ -274,7 +274,7 @@ if (project.file('.git/HEAD').isFile() || project.file('.git').isFile()) {
 
 // Shadowing
 if (usesShadowedDependencies.toBoolean()) {
-    apply plugin: 'com.github.johnrengelman.shadow'
+    apply plugin: 'com.gradleup.shadow'
 }
 
 
@@ -860,11 +860,11 @@ if (enableJava17RunTasks.toBoolean()) {
         spec.vendor.set(JvmVendorSpec.matching("jetbrains"))
     }
 
-    ext.java17DependenciesCfg = (DefaultUnlockedConfiguration) configurations.create("java17Dependencies") {
+    ext.java17DependenciesCfg = (Configuration) configurations.create("java17Dependencies") {
         extendsFrom(configurations.getByName("runtimeClasspath")) // Ensure consistent transitive dependency resolution
         canBeConsumed = false
     }
-    ext.java17PatchDependenciesCfg = (DefaultUnlockedConfiguration) configurations.create("java17PatchDependencies") {
+    ext.java17PatchDependenciesCfg = (Configuration) configurations.create("java17PatchDependencies") {
         canBeConsumed = false
     }
 
@@ -1391,7 +1391,7 @@ def getChangelog() {
 
 // Buildscript updating
 
-def buildscriptGradleVersion = '8.9'
+def buildscriptGradleVersion = '9.4.0'
 
 tasks.named('wrapper', Wrapper).configure {
     gradleVersion = buildscriptGradleVersion
