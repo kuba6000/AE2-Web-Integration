@@ -32,8 +32,13 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         <div class="workspace" id="workspace">
             <div class="window-frame" id="window">
                 <div id="network-message" role="status"></div>
-                <section id="server-settings" hidden><h2 data-text="serverSettings"></h2></section>
-                <section id="web-settings" hidden></section>
+                <section id="server-settings" class="page-view" hidden>
+                    <div class="terminal-heading"><h2 id="server-settings-title" data-text="serverSettings"></h2></div>
+                    <div class="terminal-body">
+                        <div class="terminal-scroll page-scroll" role="region" aria-labelledby="server-settings-title" tabindex="0"></div>
+                    </div>
+                </section>
+                <section id="web-settings" class="page-view" hidden></section>
                 <p id="missing" data-text="invalidRoute" hidden></p>
             </div>
         </div>`;

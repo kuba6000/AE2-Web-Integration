@@ -19,7 +19,9 @@ export function createWebSettings(
     onDisplayChange: () => void
 ) {
     root.innerHTML = `
-        <h2 data-text="webSettings"></h2>
+        <div class="terminal-heading"><h2 id="web-settings-title" data-text="webSettings"></h2></div>
+        <div class="terminal-body">
+        <div class="terminal-scroll page-scroll" role="region" aria-labelledby="web-settings-title" tabindex="0">
         <div class="web-preferences">
             <section class="web-preferences-section" aria-labelledby="general-options-title">
                 <h3 id="general-options-title" data-theme-text="generalOptions"></h3>
@@ -74,6 +76,8 @@ export function createWebSettings(
                     <select id="terminal-page-size"></select>
                 </label>
             </section>
+        </div>
+        </div>
         </div>`;
     const controls = {
         terminalDisplay: root.querySelector<HTMLSelectElement>('#terminal-display')!,
