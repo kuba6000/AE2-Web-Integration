@@ -6,3 +6,4 @@ plugins {
 apply from: 'icon-generator.gradle'
 
 apply from: 'gradle/idea-settings.gradle'
+apply from: 'gradle/release.gradle'
