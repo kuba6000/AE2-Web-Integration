@@ -2,7 +2,7 @@ name: Coordinate release tags
 
 on:
   push:
-    tags: ['release/*']
+    tags: ['*']
 
 permissions:
   contents: read

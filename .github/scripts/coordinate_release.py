@@ -43,13 +43,12 @@ def github_api(path, token=None):
 
 
 def version_from_tag(tag):
-    if not tag.startswith("release/"):
-        raise ReleaseError("Source tag must be release/<SemVer>")
-    version = tag[len("release/"):]
-    match = SEMVER.fullmatch(version)
+    match = SEMVER.fullmatch(tag)
     if not match or (match[1] and any(re.fullmatch(r"0[0-9]+", part) for part in match[1].split("."))):
-        raise ReleaseError("Source tag must contain a valid full SemVer")
-    return version
+        raise ReleaseError("Source tag must be a valid bare SemVer")
+    if any(tag.endswith(f"-{loader}-{branch}") for branch, loader in TARGETS.items()):
+        raise ReleaseError("Source tag must be a base version without a Minecraft/loader suffix")
+    return tag
 
 
 def source_commit(args):

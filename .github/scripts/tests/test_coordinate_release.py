@@ -31,7 +31,7 @@ class CoordinateReleaseTest(unittest.TestCase):
         self.commit("Initial core")
         self.core_sha = self.git(self.source, "rev-parse", "HEAD")
         self.git(self.source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
-                 "-c", "tag.gpgsign=false", "tag", "-a", "release/2.0.0-beta.1", "-m", "Core release")
+                 "-c", "tag.gpgsign=false", "tag", "-a", "2.0.0-beta.1", "-m", "Core release")
         self.heads = {}
         for branch in TARGETS:
             self.git(self.source, "checkout", "-b", branch, "core")
@@ -45,13 +45,14 @@ class CoordinateReleaseTest(unittest.TestCase):
         self.git(self.root, "init", "--bare", str(self.remote))
         self.git(self.source, "remote", "add", "origin", str(self.remote))
         self.git(self.source, "push", "origin", "--all")
-        self.git(self.source, "push", "origin", "refs/tags/release/2.0.0-beta.1")
+        self.git(self.source, "push", "origin", "refs/tags/2.0.0-beta.1")
         self.git(self.root, "clone", "--branch", "core", str(self.remote), str(self.checkout))
         self.runs = {}
         for index, (branch, sha) in enumerate({"core": self.core_sha, **self.heads}.items()):
             self.runs[branch] = [self.run_record(branch, sha, index + 1)]
         self.login = "kuba6000-agent"
         self.bot_token = "bot-fixture"
+        self.api_writes = []
 
         fixture = self
 
@@ -76,6 +77,10 @@ class CoordinateReleaseTest(unittest.TestCase):
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps(value).encode("utf-8"))
+
+            def do_POST(self):
+                fixture.api_writes.append(self.path)
+                self.send_error(405)
 
             def log_message(self, *args):
                 pass
@@ -109,7 +114,7 @@ class CoordinateReleaseTest(unittest.TestCase):
 
     def coordinate(self, command, **overrides):
         arguments = {"checkout": str(self.checkout), "repository": "fixture/releases",
-                     "source-tag": "release/2.0.0-beta.1", "core-sha": self.core_sha,
+                     "source-tag": "2.0.0-beta.1", "core-sha": self.core_sha,
                      "plan": str(self.plan)}
         arguments.update(overrides)
         environment = dict(os.environ, GITHUB_API_URL=f"http://127.0.0.1:{self.server.server_port}",
@@ -142,7 +147,7 @@ class CoordinateReleaseTest(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         plan = json.loads(self.plan.read_text(encoding="utf-8"))
         self.assertEqual(self.core_sha, plan["core_sha"])
-        self.assertEqual("release/2.0.0-beta.1", plan["source_tag"])
+        self.assertEqual("2.0.0-beta.1", plan["source_tag"])
         self.assertEqual(list(zip(TARGETS, TAGS, self.heads.values())),
                          [(item["branch"], item["tag"], item["sha"]) for item in plan["targets"]])
         self.assertEqual("", self.native_refs())
@@ -164,6 +169,7 @@ class CoordinateReleaseTest(unittest.TestCase):
         repeated = self.coordinate("publish")
         self.assertEqual(0, repeated.returncode, repeated.stderr)
         self.assertEqual(frozen, self.plan.read_bytes())
+        self.assertEqual([], self.api_writes)
 
     def test_later_failed_or_pending_rerun_cannot_be_hidden_by_a_green_newer_run_id(self):
         branch = "1.12.2"
@@ -296,9 +302,9 @@ class CoordinateReleaseTest(unittest.TestCase):
                 self.assertEqual("", self.native_refs())
 
     def test_invalid_source_tag_or_core_sha_never_prepares_or_publishes(self):
-        for tag in ("2.0.0", "release/2.0", "release/02.0.0", "release/2.0.0-beta.01",
-                    "release/2.0.0-beta..1", "release/2.0.0+build..1", "release/2.0.\u0660",
-                    "release/2.0.0-\u0661", "release/2.0.0/extra"):
+        self.remote_tag("release/2.0.0-beta.1", self.core_sha)
+        for tag in ("release/2.0.0-beta.1", "v2.0.0", "2.0", "02.0.0", "2.0.0-beta.01",
+                    "2.0.0-beta..1", "2.0.0+build..1", "2.0.\u0660", "2.0.0-\u0661", "2.0.0/extra"):
             with self.subTest(tag=tag):
                 result = self.coordinate("prepare", **{"source-tag": tag})
                 self.assertNotEqual(0, result.returncode)
@@ -312,9 +318,9 @@ class CoordinateReleaseTest(unittest.TestCase):
                 self.assertEqual("", self.native_refs())
 
     def test_full_semver_metadata_is_kept_in_all_four_planned_tags(self):
-        self.remote_tag("release/2.0.0-rc.1+build.007", self.core_sha)
+        self.remote_tag("2.0.0-rc.1+build.007", self.core_sha)
 
-        result = self.coordinate("prepare", **{"source-tag": "release/2.0.0-rc.1+build.007"})
+        result = self.coordinate("prepare", **{"source-tag": "2.0.0-rc.1+build.007"})
 
         self.assertEqual(0, result.returncode, result.stderr)
         plan = json.loads(self.plan.read_text(encoding="utf-8"))
@@ -323,10 +329,10 @@ class CoordinateReleaseTest(unittest.TestCase):
                          [item["tag"] for item in plan["targets"]])
         self.assertEqual("", self.native_refs())
 
-    def test_pre_suffix_is_preserved_when_only_the_source_prefix_is_removed(self):
-        self.remote_tag("release/2.0.1-pre", self.core_sha)
+    def test_bare_pre_source_tag_preserves_the_version_in_all_native_tags(self):
+        self.remote_tag("2.0.1-pre", self.core_sha)
 
-        result = self.coordinate("prepare", **{"source-tag": "release/2.0.1-pre"})
+        result = self.coordinate("prepare", **{"source-tag": "2.0.1-pre"})
 
         self.assertEqual(0, result.returncode, result.stderr)
         plan = json.loads(self.plan.read_text(encoding="utf-8"))
@@ -339,9 +345,9 @@ class CoordinateReleaseTest(unittest.TestCase):
         tree = self.git(self.source, "rev-parse", "core^{tree}")
         alien = self.git(self.source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                          "commit-tree", tree, "-m", "Unrelated history")
-        self.remote_tag("release/3.0.0", alien)
+        self.remote_tag("3.0.0", alien)
 
-        result = self.coordinate("prepare", **{"source-tag": "release/3.0.0", "core-sha": alien})
+        result = self.coordinate("prepare", **{"source-tag": "3.0.0", "core-sha": alien})
 
         self.assertNotEqual(0, result.returncode)
         self.assertFalse(self.plan.exists())
@@ -376,9 +382,9 @@ class CoordinateReleaseTest(unittest.TestCase):
 
     def test_changed_source_tag_object_cannot_publish_even_at_the_same_core_commit(self):
         self.assertEqual(0, self.coordinate("prepare").returncode)
-        self.git(self.source, "tag", "-d", "release/2.0.0-beta.1")
-        self.git(self.source, "tag", "release/2.0.0-beta.1", self.core_sha)
-        self.git(self.source, "push", "--force", "origin", "refs/tags/release/2.0.0-beta.1")
+        self.git(self.source, "tag", "-d", "2.0.0-beta.1")
+        self.git(self.source, "tag", "2.0.0-beta.1", self.core_sha)
+        self.git(self.source, "push", "--force", "origin", "refs/tags/2.0.0-beta.1")
 
         result = self.coordinate("publish")
 
@@ -389,7 +395,7 @@ class CoordinateReleaseTest(unittest.TestCase):
         self.assertEqual(0, self.coordinate("prepare").returncode)
         frozen = self.plan.read_text(encoding="utf-8")
         for field, value in (("schema", True), ("repository", "other/repository"),
-                             ("source_tag", "release/3.0.0"), ("core_sha", self.heads["1.7.10"]),
+                             ("source_tag", "3.0.0"), ("core_sha", self.heads["1.7.10"]),
                              ("targets", [])):
             with self.subTest(field=field):
                 plan = json.loads(frozen)
@@ -405,6 +411,19 @@ class CoordinateReleaseTest(unittest.TestCase):
         self.plan.write_text(json.dumps(plan), encoding="utf-8")
         self.assertNotEqual(0, self.coordinate("publish").returncode)
         self.assertEqual("", self.native_refs())
+
+    def test_native_release_name_cannot_be_used_as_a_core_source_version(self):
+        for index, tag in enumerate(TAGS):
+            with self.subTest(tag=tag):
+                self.remote_tag(tag, self.core_sha)
+                before = self.native_refs()
+                output = self.root / f"native-source-{index}.json"
+
+                result = self.coordinate("prepare", **{"source-tag": tag, "plan": str(output)})
+
+                self.assertNotEqual(0, result.returncode)
+                self.assertFalse(output.exists())
+                self.assertEqual(before, self.native_refs())
 
 
 if __name__ == "__main__":
