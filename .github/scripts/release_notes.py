@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compose authored release introductions and generated GitHub release notes."""
+"""Compose version introductions, generated GitHub changes and a shared footer."""
 
 import argparse
 import json
@@ -92,11 +92,14 @@ def prepare(args, checkout):
     if prerelease:
         release_type = "alpha" if re.match(r"alpha(?:[.-]|$)", suffix, re.IGNORECASE) else "beta"
     sections = []
-    for name in ("common", version, args.tag):
+    for name in (version, args.tag):
         path = checkout / ".releases" / f"{name}.md"
         if path.is_file():
             sections.append(path.read_text(encoding="utf-8").strip("\n"))
     sections.append(generated_notes(args, checkout, previous, anchor).replace("\r\n", "\n").strip("\n"))
+    footer = checkout / ".releases" / "common.md"
+    if footer.is_file():
+        sections.append(footer.read_text(encoding="utf-8").strip("\n"))
     output = (checkout / args.output).resolve()
     metadata = {
         "tag": args.tag, "version": version, "minecraft": minecraft, "loader": loader,
