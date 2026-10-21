@@ -23,7 +23,7 @@ import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
-import pl.kuba6000.ae2webintegration.core.tracking.crafting.HsqlCraftingHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.SqliteCraftingHistoryStore;
 
 /**
  * Lists crafting history entries.
@@ -125,11 +125,11 @@ public final class GetTrackingHistory extends IAsyncRequest {
             return;
         }
         try {
-            HsqlCraftingHistoryStore.Page page = service.list(gridKey, cursor, limit);
+            SqliteCraftingHistoryStore.Page page = service.list(gridKey, cursor, limit);
             IconPack pack = icons ? CoreEngine.getIconPack() : null;
             IconMappings mappings = pack == null ? null : new IconMappings(pack);
             ArrayList<HistoryEntry> jobs = new ArrayList<>();
-            for (HsqlCraftingHistoryStore.Summary entry : page.entries()) {
+            for (SqliteCraftingHistoryStore.Summary entry : page.entries()) {
                 jobs.add(
                     new HistoryEntry(
                         entry.timeStarted(),

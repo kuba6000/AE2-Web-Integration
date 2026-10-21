@@ -48,8 +48,8 @@ class WorldDatabaseTest {
             registry.initialize(database, source);
             database.write(db -> {
                 try (Statement statement = db.createStatement()) {
-                    statement
-                        .execute("ALTER TABLE grids ADD CONSTRAINT temporary_write_failure CHECK (name <> 'Retry')");
+                    statement.execute(
+                        "CREATE TRIGGER temporary_write_failure BEFORE INSERT ON grids WHEN NEW.name = 'Retry' BEGIN SELECT RAISE(ABORT, 'Test write failure'); END");
                 }
                 return null;
             });
@@ -79,12 +79,9 @@ class WorldDatabaseTest {
                     new WorldGridStore(database).load(source)
                         .isEmpty());
                 // Repair through a separate JDBC connection, as an operator would; dependent writes remain guarded.
-                try (Connection repair = DriverManager.getConnection(
-                    "jdbc:hsqldb:file:" + path.toString()
-                        .replace('\\', '/'),
-                    "SA",
-                    ""); Statement statement = repair.createStatement()) {
-                    statement.execute("ALTER TABLE grids DROP CONSTRAINT temporary_write_failure");
+                try (Connection repair = DriverManager.getConnection("jdbc:sqlite:" + path.toUri());
+                    Statement statement = repair.createStatement()) {
+                    statement.execute("DROP TRIGGER temporary_write_failure");
                 }
                 clock.advance(TimeUnit.MINUTES.toMillis(5));
                 assertEquals(
@@ -207,7 +204,8 @@ class WorldDatabaseTest {
             registry.initialize(first, source);
             first.write(db -> {
                 try (Statement statement = db.createStatement()) {
-                    statement.execute("ALTER TABLE grids ADD CONSTRAINT fail_final_flush CHECK (name <> 'Unsaved')");
+                    statement.execute(
+                        "CREATE TRIGGER fail_final_flush BEFORE INSERT ON grids WHEN NEW.name = 'Unsaved' BEGIN SELECT RAISE(ABORT, 'Test write failure'); END");
                 }
                 return null;
             });
@@ -276,8 +274,8 @@ class WorldDatabaseTest {
             registry.initialize(database, source);
             database.write(db -> {
                 try (Statement statement = db.createStatement()) {
-                    statement
-                        .execute("ALTER TABLE grids ADD CONSTRAINT temporary_write_failure CHECK (name <> 'Retry')");
+                    statement.execute(
+                        "CREATE TRIGGER temporary_write_failure BEFORE INSERT ON grids WHEN NEW.name = 'Retry' BEGIN SELECT RAISE(ABORT, 'Test write failure'); END");
                 }
                 return null;
             });
@@ -300,7 +298,7 @@ class WorldDatabaseTest {
                     .getHistoryRetentionDays());
             database.write(db -> {
                 try (Statement statement = db.createStatement()) {
-                    statement.execute("ALTER TABLE grids DROP CONSTRAINT temporary_write_failure");
+                    statement.execute("DROP TRIGGER temporary_write_failure");
                 }
                 return null;
             });
@@ -360,17 +358,13 @@ class WorldDatabaseTest {
             assertThrows(IOException.class, () -> registry.initialize(unsupported, source));
             assertFalse(registry.isInitialized());
         }
-        try (Connection connection = DriverManager.getConnection(
-            "jdbc:hsqldb:file:" + path.toString()
-                .replace('\\', '/'),
-            "SA",
-            ""); Statement statement = connection.createStatement()) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path.toUri());
+            Statement statement = connection.createStatement()) {
             try (ResultSet result = statement.executeQuery("SELECT version FROM world_schema")) {
                 assertTrue(result.next());
                 assertEquals(version, result.getInt(1));
             }
             statement.executeUpdate("UPDATE world_schema SET version = 7");
-            statement.execute("SHUTDOWN");
         }
         try (WorldDatabase restored = new WorldDatabase(path, policy)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();

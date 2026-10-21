@@ -16,10 +16,10 @@ import org.jetbrains.annotations.Nullable;
 import com.github.bsideup.jabel.Desugar;
 
 import pl.kuba6000.ae2webintegration.core.persistence.ResourceCatalogue;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore.Table;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore.Table;
 
 /** Retention and row budgets, executed inside the owning store transaction. */
-final class HsqlHistoryRetention {
+final class SqliteHistoryRetention {
 
     // Retain the latest expired stock anchors and gap barrier; deleting the barrier would invent continuity.
     private static String expiredPoints(Table table, String cutoff) {
@@ -96,43 +96,21 @@ final class HsqlHistoryRetention {
         for (Table table : Table.values()) {
             String expiryFilter = overCapacity ? "" : "AND " + expiredPoints(table, "?");
             String resource = table == Table.COVERAGE ? "CAST(NULL AS BIGINT)" : "p.resource_id";
-            // Bound the event-ID sort by an index-ordered slice, retaining all equal-time peers at its edge.
             try (PreparedStatement query = db.prepareStatement(
                 "SELECT p.id, p.measurement_id, " + resource
                     + " AS resource_id, m.observed_at FROM "
-                    + table.fromMeasurements()
-                    + "\n"
-                    + """
-                        WHERE m.grid_id = ?
-                            AND m.observed_at <= (
-                                SELECT MAX(observed_at) FROM (
-                                    SELECT m.observed_at FROM
-                        """
-                    + table.fromMeasurements()
+                    + table.joined()
                     + "\n"
                     + "WHERE m.grid_id = ?\n"
                     + expiryFilter
-                    + """
-                        ORDER BY m.grid_id, m.observed_at, m.id
-                        FETCH FIRST ? ROWS ONLY USING INDEX
-                        ) oldest
-                        )
-                        """
-                    + expiryFilter
-                    + "ORDER BY m.observed_at, p.id")) {
+                    + "ORDER BY m.observed_at, p.id LIMIT ?")) {
                 query.setLong(1, gridId);
-                query.setLong(2, gridId);
-                int parameter = 3;
+                int parameter = 2;
                 if (!overCapacity) {
                     query.setLong(parameter++, expiry);
                     if (table != Table.FLOW) query.setLong(parameter++, expiry);
                 }
-                query.setInt(parameter++, limit);
-                if (!overCapacity) {
-                    query.setLong(parameter++, expiry);
-                    if (table != Table.FLOW) query.setLong(parameter, expiry);
-                }
-                query.setMaxRows(limit);
+                query.setInt(parameter, limit);
                 try (ResultSet rows = query.executeQuery()) {
                     while (rows.next()) {
                         candidates.add(
@@ -141,7 +119,7 @@ final class HsqlHistoryRetention {
                                 rows.getLong("id"),
                                 rows.getLong("measurement_id"),
                                 rows.getLong("observed_at"),
-                                (Long) rows.getObject("resource_id")));
+                                nullableLong(rows, "resource_id")));
                     }
                 }
             }
@@ -156,6 +134,11 @@ final class HsqlHistoryRetention {
             deletedUntil = Math.max(deletedUntil, point.observedAt);
         }
         return new PruneBatch(selected, resources, deletedUntil);
+    }
+
+    private static @Nullable Long nullableLong(ResultSet rows, String column) throws SQLException {
+        long value = rows.getLong(column);
+        return rows.wasNull() ? null : value;
     }
 
     @Desugar
@@ -181,7 +164,7 @@ final class HsqlHistoryRetention {
         Set<Long> measurements = new HashSet<>();
         for (PrunePoint point : batch.points) measurements.add(point.measurementId);
         try (PreparedStatement delete = db.prepareStatement("""
-            DELETE FROM history_measurements m WHERE id = ?
+            DELETE FROM history_measurements AS m WHERE id = ?
                 AND NOT EXISTS (SELECT 1 FROM history_stock WHERE measurement_id = m.id)
                 AND NOT EXISTS (SELECT 1 FROM history_flow WHERE measurement_id = m.id)
                 AND NOT EXISTS (SELECT 1 FROM history_coverage WHERE measurement_id = m.id)
@@ -243,10 +226,9 @@ final class HsqlHistoryRetention {
             try (PreparedStatement query = db.prepareStatement("""
                 SELECT id
                 FROM grids
-                WHERE row_count > ?
+                WHERE row_count > ? LIMIT 1
                 """)) {
                 query.setInt(1, maxRowsPerGrid);
-                query.setMaxRows(1);
                 try (ResultSet rows = query.executeQuery()) {
                     if (rows.next()) overBudget = rows.getLong(1);
                 }

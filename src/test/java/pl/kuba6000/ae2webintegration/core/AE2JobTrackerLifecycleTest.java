@@ -58,7 +58,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.AEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
-import pl.kuba6000.ae2webintegration.core.tracking.crafting.HsqlCraftingHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.SqliteCraftingHistoryStore;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class AE2JobTrackerLifecycleTest extends GridTestScope {
@@ -359,7 +359,7 @@ class AE2JobTrackerLifecycleTest extends GridTestScope {
         try {
             CraftingHistoryService history = CoreEngine.getCraftingHistory();
             assertNotNull(history);
-            List<HsqlCraftingHistoryStore.Summary> entries = history.list(key, null, 100)
+            List<SqliteCraftingHistoryStore.Summary> entries = history.list(key, null, 100)
                 .entries();
             assertEquals(1, entries.size());
             CompletedCrafting job = history.read(

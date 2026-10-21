@@ -29,7 +29,7 @@ import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
 /** Disk-backed typed history. All JDBC work belongs to detached worker/request threads. */
-public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
+public final class SqliteStorageHistoryStore implements IStorageHistoryStore {
 
     enum Table {
 
@@ -47,10 +47,6 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
             return sqlName + " p JOIN history_measurements m ON m.id = p.measurement_id";
         }
 
-        String fromMeasurements() {
-            return "history_measurements m JOIN " + sqlName + " p ON p.measurement_id = m.id";
-        }
-
         static @NotNull Table forKind(@NotNull StorageHistoryPoint.Kind kind) {
             return switch (kind) {
                 case STOCK -> STOCK;
@@ -63,12 +59,12 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
 
     private final WorldDatabase database;
-    private final HsqlHistoryRetention retention;
+    private final SqliteHistoryRetention retention;
     private volatile @Nullable ResourceHistory appliedPolicy;
 
-    public HsqlStorageHistoryStore(@NotNull WorldDatabase database) {
+    public SqliteStorageHistoryStore(@NotNull WorldDatabase database) {
         this.database = database;
-        retention = new HsqlHistoryRetention();
+        retention = new SqliteHistoryRetention();
     }
 
     /** Enforces persisted budgets before world services publish; standalone callers may initialize lazily. */
@@ -122,20 +118,21 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
 
     private static void insertPoints(@NotNull Connection db, long gridId, @NotNull List<StorageHistoryPoint> points,
         @NotNull Map<StableKey, Long> resourceIds) throws SQLException {
+        long nextId = reserveEventIds(db, points.size());
         int inserted = 0;
         long firstObserved = Long.MAX_VALUE;
         try (PreparedStatement stock = db.prepareStatement("""
             INSERT INTO history_stock (id, measurement_id, resource_id, quantity)
-            VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?)
+            VALUES (?, ?, ?, ?)
             """);
             PreparedStatement flow = db.prepareStatement(
                 """
                     INSERT INTO history_flow (id, measurement_id, resource_id, input_amount, output_amount, input_operations, output_operations)
-                    VALUES (NEXT VALUE FOR history_event_ids, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """);
             PreparedStatement coverage = db.prepareStatement("""
                 INSERT INTO history_coverage (id, measurement_id, kind)
-                VALUES (NEXT VALUE FOR history_event_ids, ?, ?)
+                VALUES (?, ?, ?)
                 """)) {
             PreparedStatement pending = null;
             int groupEnd = 0;
@@ -161,26 +158,27 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
                     case FLOW -> flow;
                     case COVERAGE -> coverage;
                 };
-                // Flush each contiguous group so the shared sequence preserves cross-table append order.
+                // Bound each pending batch; IDs are reserved together in the original cross-table append order.
                 if (pending != null && pending != insert) {
                     pending.executeBatch();
                     pending.clearBatch();
                 }
-                insert.setLong(1, measurementId);
+                insert.setLong(1, nextId++);
+                insert.setLong(2, measurementId);
                 if (table == Table.COVERAGE) {
                     insert.setString(
-                        2,
+                        3,
                         point.kind()
                             .name());
                 } else {
                     Long resourceId = resourceIds.get(point.itemKey());
-                    if (resourceId == null) insert.setNull(2, Types.BIGINT);
-                    else insert.setLong(2, resourceId);
-                    insert.setLong(3, table == Table.STOCK ? point.quantity() : point.input());
+                    if (resourceId == null) insert.setNull(3, Types.BIGINT);
+                    else insert.setLong(3, resourceId);
+                    insert.setLong(4, table == Table.STOCK ? point.quantity() : point.input());
                     if (table == Table.FLOW) {
-                        insert.setLong(4, point.output());
-                        insert.setLong(5, point.inputOperations());
-                        insert.setLong(6, point.outputOperations());
+                        insert.setLong(5, point.output());
+                        insert.setLong(6, point.inputOperations());
+                        insert.setLong(7, point.outputOperations());
                     }
                 }
                 insert.addBatch();
@@ -201,6 +199,21 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
             update.setLong(3, firstObserved);
             update.setLong(4, gridId);
             update.executeUpdate();
+        }
+    }
+
+    /** The counter survives pruning and commits or rolls back with the events that reserve it. */
+    private static long reserveEventIds(Connection db, int count) throws SQLException {
+        if (count == 0) return 0;
+        try (PreparedStatement update = db
+            .prepareStatement("UPDATE history_event_ids SET last_id = last_id + ? WHERE singleton = 1")) {
+            update.setInt(1, count);
+            if (update.executeUpdate() != 1) throw new SQLException("Missing history event counter");
+        }
+        try (Statement query = db.createStatement();
+            ResultSet rows = query.executeQuery("SELECT last_id FROM history_event_ids WHERE singleton = 1")) {
+            if (!rows.next()) throw new SQLException("Missing history event counter");
+            return rows.getLong(1) - count + 1;
         }
     }
 
@@ -302,7 +315,7 @@ public final class HsqlStorageHistoryStore implements IStorageHistoryStore {
             .isInterrupted()) throw new IOException("Interrupted while waiting to read history");
         initialize();
         return database
-            .read(db -> HsqlHistoryReader.read(db, gridKey, itemKey, fromMillis, System.currentTimeMillis(), limit));
+            .read(db -> SqliteHistoryReader.read(db, gridKey, itemKey, fromMillis, System.currentTimeMillis(), limit));
     }
 
     /** Called only after registry admission stops and the history worker drains. */

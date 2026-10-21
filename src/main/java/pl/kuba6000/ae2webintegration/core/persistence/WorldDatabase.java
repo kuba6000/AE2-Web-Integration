@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.Driver;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
@@ -18,9 +20,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.hsqldb.jdbc.JDBCDriver;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.sqlite.JDBC;
 
 import com.github.bsideup.jabel.Desugar;
 
@@ -28,10 +30,12 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 
-/** One world owns its writer, bounded MVCC readers and file lifetime. */
+/** One world owns its writer, bounded snapshot readers and file lifetime. */
 public final class WorldDatabase implements AutoCloseable {
 
     private static final int GRID_FLUSH_INTERVAL_MINUTES = 5;
+    private static final int BUSY_TIMEOUT_MILLIS = 5000;
+    private static final Driver DRIVER = new JDBC();
     private static final Set<Path> OPEN_DATABASES = ConcurrentHashMap.newKeySet();
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
@@ -58,9 +62,6 @@ public final class WorldDatabase implements AutoCloseable {
 
     public WorldDatabase(@NotNull Path databaseBase, @NotNull ResourceHistory policy,
         @NotNull CraftingHistory craftingPolicy) {
-        if (databaseBase.toString()
-            .indexOf(';') >= 0)
-            throw new IllegalArgumentException("Database path cannot contain JDBC property separators");
         this.databaseBase = databaseBase.toAbsolutePath();
         this.policy = policy;
         this.craftingPolicy = craftingPolicy;
@@ -212,9 +213,13 @@ public final class WorldDatabase implements AutoCloseable {
                     writerGate.unlock();
                 }
             }
-            try (Connection db = connect(initialized.url())) {
-                db.setReadOnly(true);
-                db.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+            try (Connection db = connect(initialized.url(), false)) {
+                try (Statement sql = db.createStatement()) {
+                    // Each bounded reader gets a small private page cache; the writer owns the larger working set.
+                    sql.execute("PRAGMA cache_size = -2048");
+                    sql.execute("PRAGMA query_only = ON");
+                }
+                db.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
                 db.setAutoCommit(false);
                 T result = transaction.run(db);
                 db.commit();
@@ -239,18 +244,32 @@ public final class WorldDatabase implements AutoCloseable {
             .resolve(databaseBase.getFileName());
         if (!OPEN_DATABASES.add(canonical)) throw new IOException("World database is still owned by an active service");
         ownedPath = canonical;
-        String address = "jdbc:hsqldb:file:" + canonical.toString()
-            .replace('\\', '/');
-        Connection opened;
+        String address = "jdbc:sqlite:" + canonical.toUri();
+        Connection opened = null;
         try {
-            opened = connect(address);
-        } catch (SQLException failure) {
-            releaseOwnership();
-            throw failure;
-        }
-        try {
-            WorldSchema.initialize(opened);
+            // Read-only preflight cannot checkpoint or change a foreign database's persistent journal mode.
+            boolean existing = Files.exists(canonical);
+            if (existing) {
+                try (Connection validation = connect(address, true)) {
+                    requireSupportedEngine(validation);
+                    WorldSchema.validate(validation);
+                }
+            }
+            opened = connect(address, false);
+            if (!existing) requireSupportedEngine(opened);
+            WorldSchema.validate(opened);
+            try (Statement sql = opened.createStatement();
+                ResultSet mode = sql.executeQuery("PRAGMA journal_mode = WAL")) {
+                if (!mode.next() || !"wal".equalsIgnoreCase(mode.getString(1)))
+                    throw new SQLException("World database requires WAL journal mode");
+            }
+            try (Statement sql = opened.createStatement()) {
+                sql.execute("PRAGMA synchronous = FULL");
+                sql.execute("PRAGMA cache_size = -16384");
+                sql.execute("PRAGMA wal_autocheckpoint = 1000");
+            }
             opened.setAutoCommit(false);
+            WorldSchema.initialize(opened);
             WorldGridStore.normalizePolicy(opened, policy);
             WorldGridStore.normalizeCraftingPolicy(opened, craftingPolicy);
             opened.commit();
@@ -258,20 +277,37 @@ public final class WorldDatabase implements AutoCloseable {
             openedDatabase = initialized;
             return initialized;
         } catch (SQLException | IOException | RuntimeException | Error failure) {
-            try {
-                shutdown(opened);
-            } catch (SQLException closeFailure) {
-                failure.addSuppressed(closeFailure);
+            if (opened != null) {
+                try {
+                    opened.close();
+                    releaseOwnership();
+                } catch (SQLException closeFailure) {
+                    failure.addSuppressed(closeFailure);
+                }
+            } else {
+                releaseOwnership();
             }
             throw failure;
         }
     }
 
-    private static @NotNull Connection connect(@NotNull String url) throws SQLException {
+    private static @NotNull Connection connect(@NotNull String url, boolean readOnly) throws SQLException {
         Properties properties = new Properties();
-        properties.setProperty("user", "SA");
-        properties.setProperty("password", "");
-        return new JDBCDriver().connect(url, properties);
+        if (readOnly) properties.setProperty("open_mode", "1");
+        properties.setProperty("busy_timeout", Integer.toString(BUSY_TIMEOUT_MILLIS));
+        properties.setProperty("foreign_keys", "true");
+        return DRIVER.connect(url, properties);
+    }
+
+    /** This is the tested coexistence baseline, not a claim that every earlier SQLite release is incompatible. */
+    private static void requireSupportedEngine(Connection db) throws SQLException, IOException {
+        String version = db.getMetaData()
+            .getDatabaseProductVersion();
+        String[] components = version.split("\\.");
+        int major = Integer.parseInt(components[0]);
+        int minor = Integer.parseInt(components[1]);
+        if (major < 3 || major == 3 && minor < 36)
+            throw new IOException("SQLite 3.36 or newer is required; found " + version);
     }
 
     @Override
@@ -298,22 +334,8 @@ public final class WorldDatabase implements AutoCloseable {
     }
 
     private void shutdown(@NotNull Connection db) throws SQLException {
-        SQLException failure = null;
-        boolean stopped = false;
-        try (Statement sql = db.createStatement()) {
-            sql.execute("SHUTDOWN");
-            stopped = true;
-        } catch (SQLException failed) {
-            failure = failed;
-        }
-        try {
-            db.close();
-        } catch (SQLException failed) {
-            if (failure == null) failure = failed;
-            else failure.addSuppressed(failed);
-        }
-        if (stopped) releaseOwnership();
-        if (failure != null) throw failure;
+        db.close();
+        releaseOwnership();
     }
 
     private void releaseOwnership() {

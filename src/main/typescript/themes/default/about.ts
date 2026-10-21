@@ -66,7 +66,7 @@ export function createAboutView(root: HTMLElement, modVersion: string | null) {
     head.append(headings);
     const body = element('tbody');
     for (const resource of [
-        { name: 'HSQLDB', url: 'https://hsqldb.org/', license: 'HSQLDB License (BSD)' },
+        { name: 'SQLite JDBC', url: 'https://github.com/xerial/sqlite-jdbc', license: 'Apache 2.0; BSD 2-Clause' },
         { name: 'uPlot', url: 'https://github.com/leeoniya/uPlot', license: 'MIT' },
         {
             name: 'Lato',

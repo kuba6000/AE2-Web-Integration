@@ -19,46 +19,27 @@ public final class ResourceCatalogue {
     public static void upsert(@NotNull Connection db, @NotNull Map<StableKey, ResourceDescriptor> descriptions,
         @NotNull Set<StableKey> referenced) throws SQLException {
         try (PreparedStatement upsert = db.prepareStatement("""
-            MERGE INTO history_resources r
-            USING (VALUES (
-                CAST(? AS VARCHAR(22)),
-                CAST(? AS VARCHAR(4096)),
-                CAST(? AS VARCHAR(16384)),
-                CAST(? AS INTEGER),
-                CAST(? AS INTEGER),
-                CAST(? AS VARCHAR(1048576)),
-                CAST(? AS VARCHAR(16)),
-                CAST(? AS VARCHAR(22)),
-                CAST(? AS BOOLEAN)
-            )) AS incoming (
-                item_key, registry_namespace, registry_path, components, damage,
-                display_name, resource_type, base_key, referenced
-            )
-            ON r.item_key = incoming.item_key
-            WHEN MATCHED AND (
-                r.registry_namespace IS DISTINCT FROM incoming.registry_namespace
-                OR r.registry_path IS DISTINCT FROM incoming.registry_path
-                OR r.components IS DISTINCT FROM incoming.components
-                OR r.damage IS DISTINCT FROM incoming.damage
-                OR r.display_name IS DISTINCT FROM incoming.display_name
-                OR r.resource_type IS DISTINCT FROM incoming.resource_type
-                OR r.base_key IS DISTINCT FROM COALESCE(incoming.base_key, r.base_key)
-            ) THEN UPDATE SET
-                registry_namespace = incoming.registry_namespace,
-                registry_path = incoming.registry_path,
-                components = incoming.components,
-                damage = incoming.damage,
-                display_name = incoming.display_name,
-                resource_type = incoming.resource_type,
-                base_key = COALESCE(incoming.base_key, r.base_key)
-            WHEN NOT MATCHED AND incoming.referenced THEN INSERT (
+            INSERT INTO history_resources (
                 item_key, registry_namespace, registry_path, components, damage,
                 display_name, resource_type, base_key
-            ) VALUES (
-                incoming.item_key, incoming.registry_namespace, incoming.registry_path,
-                incoming.components, incoming.damage, incoming.display_name,
-                incoming.resource_type, incoming.base_key
             )
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?
+            WHERE ? OR EXISTS (SELECT 1 FROM history_resources WHERE item_key = ?)
+            ON CONFLICT(item_key) DO UPDATE SET
+                registry_namespace = excluded.registry_namespace,
+                registry_path = excluded.registry_path,
+                components = excluded.components,
+                damage = excluded.damage,
+                display_name = excluded.display_name,
+                resource_type = excluded.resource_type,
+                base_key = COALESCE(excluded.base_key, history_resources.base_key)
+            WHERE history_resources.registry_namespace IS NOT excluded.registry_namespace
+                OR history_resources.registry_path IS NOT excluded.registry_path
+                OR history_resources.components IS NOT excluded.components
+                OR history_resources.damage IS NOT excluded.damage
+                OR history_resources.display_name IS NOT excluded.display_name
+                OR history_resources.resource_type IS NOT excluded.resource_type
+                OR history_resources.base_key IS NOT COALESCE(excluded.base_key, history_resources.base_key)
             """)) {
             for (Map.Entry<StableKey, ResourceDescriptor> entry : descriptions.entrySet()) {
                 ResourceDescriptor description = entry.getValue();
@@ -81,6 +62,10 @@ public final class ResourceCatalogue {
                         : description.baseKey()
                             .toString());
                 upsert.setBoolean(9, referenced.contains(entry.getKey()));
+                upsert.setString(
+                    10,
+                    entry.getKey()
+                        .toString());
                 upsert.addBatch();
             }
             upsert.executeBatch();

@@ -3,151 +3,107 @@ package pl.kuba6000.ae2webintegration.core;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Properties;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.sqlite.JDBC;
 
-import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 
 class WorldSchemaBootstrapTest {
 
-    private static final String INITIALIZATION_MARKER = """
-        CREATE TABLE world_schema (
-            singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-            version INTEGER NOT NULL,
-            identities_imported BOOLEAN NOT NULL,
-            initialized BOOLEAN NOT NULL
-        ) AS (VALUES (1, 7, FALSE, FALSE)) WITH DATA
-        """;
-
     @TempDir
     Path directory;
 
     @Test
-    void incompleteInitializationRecoversAfterEveryDdlStage() throws Exception {
-        ResourceHistory policy = new ConfigSettings.ResourceHistory();
-        List<String> stages = new ArrayList<>();
-        try (WorldDatabase pristine = new WorldDatabase(directory.resolve("pristine"), policy)) {
-            pristine.write(db -> {
-                try (Statement sql = db.createStatement(); ResultSet script = sql.executeQuery("SCRIPT")) {
-                    while (script.next()) {
-                        String command = script.getString(1);
-                        if (command.contains("PUBLIC.") && !command.contains("WORLD_SCHEMA")
-                            && (command.startsWith("CREATE CACHED TABLE") || command.startsWith("CREATE MEMORY TABLE")
-                                || command.startsWith("CREATE INDEX")
-                                || command.startsWith("CREATE SEQUENCE")
-                                || command.startsWith("ALTER TABLE")
-                                || command.startsWith("ALTER SEQUENCE"))) {
-                            stages.add(command);
-                        }
+    void anInterruptedUncommittedSchemaDoesNotPublishPartialInitialization() throws Exception {
+        Path file = directory.resolve("interrupted.sqlite");
+        try (Connection db = connect(file); Statement sql = db.createStatement()) {
+            db.setAutoCommit(false);
+            sql.execute("CREATE TABLE world_schema (singleton INTEGER PRIMARY KEY, version INTEGER)");
+            sql.execute("INSERT INTO world_schema VALUES (1, 7)");
+            sql.execute("CREATE TABLE grids (value INTEGER)");
+        }
+        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+            database.open();
+            database.read(db -> {
+                try (Statement sql = db.createStatement();
+                    ResultSet rows = sql.executeQuery("SELECT version FROM world_schema")) {
+                    assertTrue(rows.next());
+                    assertEquals(7, rows.getLong(1));
+                    assertFalse(rows.next());
+                }
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void aFailedWorldTransactionRollsBackBothSchemaChangesAndRowsAcrossReopen() throws Exception {
+        Path file = directory.resolve("rollback.sqlite");
+        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+            assertThrows(IOException.class, () -> database.write(db -> {
+                try (Statement sql = db.createStatement()) {
+                    sql.execute("CREATE TABLE transaction_probe (value INTEGER)");
+                    sql.execute("INSERT INTO transaction_probe VALUES (42)");
+                    sql.execute("UPDATE world_schema SET identities_imported = 1");
+                }
+                throw new IOException("Interrupted transaction");
+            }));
+        }
+        try (WorldDatabase reopened = new WorldDatabase(file, new ResourceHistory())) {
+            reopened.read(db -> {
+                try (Statement sql = db.createStatement()) {
+                    try (ResultSet rows = sql.executeQuery("SELECT identities_imported FROM world_schema")) {
+                        assertTrue(rows.next());
+                        assertFalse(rows.getBoolean(1));
+                    }
+                    try (ResultSet rows = sql
+                        .executeQuery("SELECT 1 FROM sqlite_master WHERE name = 'transaction_probe'")) {
+                        assertFalse(rows.next());
                     }
                 }
                 return null;
             });
         }
-        assertFalse(stages.isEmpty());
-        // -1 is interruption before the atomic marker; 0 is immediately after it.
-        for (int completed = -1; completed <= stages.size(); completed++) {
-            Path path = directory.resolve("interrupted-" + completed);
-            try (Connection db = connect(path); Statement sql = db.createStatement()) {
-                if (completed >= 0) sql.execute(INITIALIZATION_MARKER);
-                for (int stage = 0; stage < completed; stage++) sql.execute(stages.get(stage));
-                sql.execute("SHUTDOWN");
-            }
-            try (WorldDatabase recovered = new WorldDatabase(path, policy)) {
-                recovered.open();
-                recovered.read(db -> {
-                    try (Statement sql = db.createStatement();
-                        ResultSet result = sql.executeQuery("SELECT version, initialized FROM world_schema")) {
-                        assertTrue(result.next());
-                        assertEquals(7, result.getInt(1));
-                        assertTrue(result.getBoolean(2));
-                        assertFalse(result.next());
-                    }
-                    return null;
-                });
-            }
-        }
     }
 
-    @Test
-    void anUnknownSequenceDoesNotAdmitInitializationOrAdvanceTheSequence() throws Exception {
-        Path path = directory.resolve("unknown-sequence");
-        try (Connection db = connect(path); Statement sql = db.createStatement()) {
-            sql.execute("CREATE SEQUENCE history_event_ids AS BIGINT START WITH 42");
-            sql.execute("SHUTDOWN");
-        }
-        try (WorldDatabase rejected = new WorldDatabase(path, new ConfigSettings.ResourceHistory())) {
-            assertThrows(IOException.class, rejected::open);
-        }
-        try (Connection db = connect(path); Statement sql = db.createStatement()) {
-            try (ResultSet tables = db.getMetaData()
-                .getTables(null, "PUBLIC", null, new String[] { "TABLE" })) {
-                assertFalse(tables.next());
-            }
-            try (ResultSet value = sql.executeQuery("VALUES NEXT VALUE FOR history_event_ids")) {
-                assertTrue(value.next());
-                assertEquals(42, value.getLong(1));
-            }
-            sql.execute("SHUTDOWN");
-        }
-    }
-
-    @Test
-    void recoveryRejectsUnknownObjectsOrApplicationDataWithoutChangingThem() throws Exception {
-        ResourceHistory policy = new ConfigSettings.ResourceHistory();
-        for (boolean marker : new boolean[] { false, true }) {
-            Path path = directory.resolve("unknown-" + marker);
-            try (Connection db = connect(path); Statement sql = db.createStatement()) {
-                if (marker) sql.execute(INITIALIZATION_MARKER);
+    @ParameterizedTest
+    @ValueSource(ints = { 0, 1, 2 })
+    void aForeignOrIncompleteSchemaIsRejectedBeforeAnyPersistentChange(int kind) throws Exception {
+        Path file = directory.resolve("foreign-" + kind + ".sqlite");
+        try (Connection db = connect(file); Statement sql = db.createStatement()) {
+            if (kind == 0) {
                 sql.execute("CREATE TABLE unrelated (value INTEGER)");
                 sql.execute("INSERT INTO unrelated VALUES (42)");
-                sql.execute("SHUTDOWN");
-            }
-            try (WorldDatabase rejected = new WorldDatabase(path, policy)) {
-                assertThrows(IOException.class, rejected::open);
-            }
-            try (Connection db = connect(path); Statement sql = db.createStatement()) {
-                try (ResultSet rows = sql.executeQuery("SELECT value FROM unrelated")) {
-                    assertTrue(rows.next());
-                    assertEquals(42, rows.getInt(1));
-                }
-                sql.execute("SHUTDOWN");
+            } else if (kind == 1) {
+                sql.execute(
+                    "CREATE TABLE world_schema (singleton INTEGER, version INTEGER, identities_imported INTEGER)");
+                sql.execute("INSERT INTO world_schema VALUES (1, 7, 0)");
+            } else {
+                sql.execute(
+                    "CREATE VIEW world_schema AS SELECT 1 AS singleton, 7 AS version, 0 AS identities_imported");
             }
         }
-        Path path = directory.resolve("nonempty-owned-table");
-        try (Connection db = connect(path); Statement sql = db.createStatement()) {
-            sql.execute(INITIALIZATION_MARKER);
-            sql.execute("CREATE TABLE grids (value INTEGER)");
-            sql.execute("INSERT INTO grids VALUES (43)");
-            sql.execute("SHUTDOWN");
+        byte[] original = Files.readAllBytes(file);
+        try (WorldDatabase database = new WorldDatabase(file, new ResourceHistory())) {
+            assertThrows(IOException.class, database::open);
+            assertThrows(IOException.class, database::open);
         }
-        try (WorldDatabase rejected = new WorldDatabase(path, policy)) {
-            assertThrows(IOException.class, rejected::open);
-        }
-        try (Connection db = connect(path); Statement sql = db.createStatement()) {
-            try (ResultSet rows = sql.executeQuery("SELECT value FROM grids")) {
-                assertTrue(rows.next());
-                assertEquals(43, rows.getInt(1));
-            }
-            sql.execute("SHUTDOWN");
-        }
+        assertArrayEquals(original, Files.readAllBytes(file));
+        assertFalse(Files.exists(file.resolveSibling(file.getFileName() + "-wal")));
     }
 
-    private static Connection connect(Path path) throws Exception {
-        return DriverManager.getConnection(
-            "jdbc:hsqldb:file:" + path.toString()
-                .replace('\\', '/'),
-            "SA",
-            "");
+    private static Connection connect(Path file) throws Exception {
+        return new JDBC().connect("jdbc:sqlite:" + file.toUri(), new Properties());
     }
 }

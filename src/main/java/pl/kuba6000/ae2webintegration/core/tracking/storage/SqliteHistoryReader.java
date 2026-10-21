@@ -21,14 +21,14 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore.Table;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore.Table;
 
 /** Bounded history queries; connection and transaction belong to the store. */
-final class HsqlHistoryReader {
+final class SqliteHistoryReader {
 
     private static final int DESCRIPTION_QUERY_BATCH_SIZE = 500;
 
-    private HsqlHistoryReader() {}
+    private SqliteHistoryReader() {}
 
     static @NotNull StorageHistory read(@NotNull Connection db, @NotNull StableKey gridKey, @Nullable StableKey itemKey,
         long fromMillis, long nowMillis, int limit) throws SQLException {
@@ -79,11 +79,10 @@ final class HsqlHistoryReader {
             SELECT p.*, m.observed_at, m.generation, m.flow_from
             FROM history_coverage p JOIN history_measurements m ON m.id = p.measurement_id
             WHERE m.grid_id = ? AND m.observed_at = ? AND p.kind = 'GAP'
-            ORDER BY p.id DESC
+            ORDER BY p.id DESC LIMIT 1
             """)) {
             query.setLong(1, gridId);
             query.setLong(2, boundary);
-            query.setMaxRows(1);
             try (ResultSet rows = query.executeQuery()) {
                 if (rows.next()) points.add(0, readPoint(rows, Table.COVERAGE));
             }
@@ -119,37 +118,21 @@ final class HsqlHistoryReader {
         List<QueryPoint> result = new ArrayList<>();
         boolean filtered = resourceId != null && table != Table.COVERAGE;
         String filter = filtered ? "AND p.resource_id = ?\n" : "";
-        String joined = filtered ? table.joined() : table.fromMeasurements();
-        // Slice in measurement-index order, then include every peer at the cutoff before sorting by event ID.
-        // Resource-filtered queries retain their selective resource index path.
-        String start = filtered ? "?" : """
-            (SELECT MIN(observed_at) FROM (
-                SELECT m.observed_at FROM
-            """ + table.fromMeasurements() + "\n" + """
-            WHERE m.grid_id = ? AND m.observed_at >= ?
-            ORDER BY m.grid_id DESC, m.observed_at DESC, m.id DESC
-            FETCH FIRST ? ROWS ONLY USING INDEX
-            ) latest)
-            """;
-        try (PreparedStatement query = db.prepareStatement(
-            "SELECT p.*, m.observed_at, m.generation, m.flow_from"
-                + (table == Table.COVERAGE ? " FROM " + joined + "\n"
-                    : ", r.item_key FROM " + joined + " JOIN history_resources r ON r.id = p.resource_id\n")
-                + "WHERE m.grid_id = ? AND m.observed_at >= "
-                + start
-                + "\n"
-                + filter
-                + "ORDER BY m.observed_at DESC, p.id DESC")) {
+        try (
+            PreparedStatement query = db
+                .prepareStatement(
+                    "SELECT p.*, m.observed_at, m.generation, m.flow_from"
+                        + (table == Table.COVERAGE ? " FROM " + table.joined() + "\n"
+                            : ", r.item_key FROM " + table.joined()
+                                + " JOIN history_resources r ON r.id = p.resource_id\n")
+                        + "WHERE m.grid_id = ? AND m.observed_at >= ?\n"
+                        + filter
+                        + "ORDER BY m.observed_at DESC, p.id DESC LIMIT ?")) {
             query.setLong(1, gridId);
-            if (filtered) {
-                query.setLong(2, fromMillis);
-                query.setLong(3, resourceId);
-            } else {
-                query.setLong(2, gridId);
-                query.setLong(3, fromMillis);
-                query.setInt(4, limit + 1);
-            }
-            query.setMaxRows(limit + 1);
+            query.setLong(2, fromMillis);
+            int parameter = 3;
+            if (filtered) query.setLong(parameter++, resourceId);
+            query.setInt(parameter, limit + 1);
             try (ResultSet rows = query.executeQuery()) {
                 while (rows.next()) {
                     StorageHistoryPoint point = readPoint(rows, table);
@@ -176,10 +159,10 @@ final class HsqlHistoryReader {
             WHERE m.grid_id = ?
                 AND p.kind = 'GAP'
                 AND m.observed_at >= ?
+            LIMIT 1
             """)) {
             query.setLong(1, gridId);
             query.setLong(2, fromMillis);
-            query.setMaxRows(1);
             try (ResultSet rows = query.executeQuery()) {
                 return rows.next();
             }
@@ -195,12 +178,11 @@ final class HsqlHistoryReader {
             WHERE m.grid_id = ?
                 AND p.resource_id = ?
                 AND m.observed_at <= ?
-            ORDER BY m.observed_at DESC, p.id DESC
+            ORDER BY m.observed_at DESC, p.id DESC LIMIT 1
             """)) {
             query.setLong(1, gridId);
             query.setLong(2, resourceId);
             query.setLong(3, boundary);
-            query.setMaxRows(1);
             try (ResultSet rows = query.executeQuery()) {
                 if (!rows.next()) return null;
                 return new QueryPoint(rows.getLong("id"), readPoint(rows, Table.STOCK));
@@ -212,23 +194,18 @@ final class HsqlHistoryReader {
         throws SQLException {
         for (Table table : Table.values()) {
             String barrier = table == Table.COVERAGE ? "(p.kind = 'GAP' OR m.generation <> ?)" : "m.generation <> ?";
-            // The explicit time lower bound exposes the index range hidden by the event-ID tie condition.
-            try (PreparedStatement query = db
-                .prepareStatement("SELECT p.id FROM " + table.fromMeasurements() + "\n" + """
-                    WHERE m.grid_id = ?
-                        AND m.observed_at >= ?
-                        AND (m.observed_at > ? OR m.observed_at = ? AND p.id > ?)
-                        AND m.observed_at <= ?
-                        AND
-                    """ + barrier)) {
+            try (PreparedStatement query = db.prepareStatement("SELECT p.id FROM " + table.joined() + "\n" + """
+                WHERE m.grid_id = ?
+                    AND (m.observed_at > ? OR m.observed_at = ? AND p.id > ?)
+                    AND m.observed_at <= ?
+                    AND
+                """ + barrier + " LIMIT 1")) {
                 query.setLong(1, gridId);
                 query.setLong(2, anchor.point.observedAt());
                 query.setLong(3, anchor.point.observedAt());
-                query.setLong(4, anchor.point.observedAt());
-                query.setLong(5, anchor.id);
-                query.setLong(6, boundary);
-                query.setLong(7, anchor.point.generation());
-                query.setMaxRows(1);
+                query.setLong(4, anchor.id);
+                query.setLong(5, boundary);
+                query.setLong(6, anchor.point.generation());
                 try (ResultSet rows = query.executeQuery()) {
                     if (rows.next()) return true;
                 }
@@ -247,6 +224,11 @@ final class HsqlHistoryReader {
             case FLOW -> StorageHistoryPoint.Kind.FLOW;
             case COVERAGE -> StorageHistoryPoint.Kind.valueOf(row.getString("kind"));
         };
+        Long flowFrom = null;
+        if (kind == StorageHistoryPoint.Kind.FLOW || kind == StorageHistoryPoint.Kind.FLOW_OBSERVATION) {
+            long value = row.getLong("flow_from");
+            if (!row.wasNull()) flowFrom = value;
+        }
         return new StorageHistoryPoint(
             row.getLong("observed_at"),
             row.getLong("generation"),
@@ -257,9 +239,7 @@ final class HsqlHistoryReader {
             table == Table.FLOW ? row.getLong("output_amount") : 0,
             table == Table.FLOW ? row.getLong("input_operations") : 0,
             table == Table.FLOW ? row.getLong("output_operations") : 0,
-            kind == StorageHistoryPoint.Kind.FLOW || kind == StorageHistoryPoint.Kind.FLOW_OBSERVATION
-                ? row.getLong("flow_from")
-                : null);
+            flowFrom);
     }
 
     private static @NotNull Map<StableKey, ResourceDescriptor> readDescriptions(@NotNull Connection db,

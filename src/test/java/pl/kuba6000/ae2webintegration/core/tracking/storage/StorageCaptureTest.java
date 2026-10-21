@@ -367,12 +367,12 @@ class StorageCaptureTest {
             flow.inputOperations(),
             flow.outputOperations(),
             (now) - 1000L);
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(database, new Range(1, 365, 30), 100)) {
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures.create(database, new Range(1, 365, 30), 100)) {
             WorldHistoryFixtures.register(store, gridKey);
             store.append(gridKey, observation.descriptions(), Collections.singletonList(point));
         }
         AE2Controller.itemIdentities.clear();
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(database, new Range(1, 365, 30), 100)) {
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures.create(database, new Range(1, 365, 30), 100)) {
             StorageHistory history = store.read(gridKey, itemKey, now, 10);
             assertEquals(Collections.singletonList(point), history.points());
             assertEquals(

@@ -45,7 +45,7 @@ class StorageTrackingRecoveryTest {
         StableKey removed = StableKey.random();
         StableKey uncertain = StableKey.random();
         long start = System.currentTimeMillis() - 10000;
-        try (HsqlStorageHistoryStore stored = store()) {
+        try (SqliteStorageHistoryStore stored = store()) {
             WorldHistoryFixtures.register(stored, grid);
             IStorageHistoryStore failing = failAfterCommit(stored, start + 1000);
             StorageTrackingService service = new StorageTrackingService(failing, 100);
@@ -81,7 +81,7 @@ class StorageTrackingRecoveryTest {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         long start = System.currentTimeMillis() - 10000;
-        try (HsqlStorageHistoryStore stored = store()) {
+        try (SqliteStorageHistoryStore stored = store()) {
             WorldHistoryFixtures.register(stored, grid);
             StorageTrackingService service = new StorageTrackingService(failAfterCommit(stored, start + 1000), 100);
             service.open(grid, 1);
@@ -240,7 +240,7 @@ class StorageTrackingRecoveryTest {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         long start = System.currentTimeMillis() - 10000;
-        try (HsqlStorageHistoryStore stored = store()) {
+        try (SqliteStorageHistoryStore stored = store()) {
             WorldHistoryFixtures.register(stored, grid);
             StorageTrackingService service = new StorageTrackingService(failAfterCommit(stored, start + 1000), 100);
             service.open(grid, 1);
@@ -263,7 +263,7 @@ class StorageTrackingRecoveryTest {
         StableKey healthy = StableKey.random();
         StableKey item = StableKey.random();
         long start = System.currentTimeMillis() - 10000;
-        try (HsqlStorageHistoryStore stored = store()) {
+        try (SqliteStorageHistoryStore stored = store()) {
             WorldHistoryFixtures.register(stored, grid);
             WorldHistoryFixtures.register(stored, healthy);
             try (StorageTrackingService service = new StorageTrackingService(
@@ -406,7 +406,7 @@ class StorageTrackingRecoveryTest {
         }
     }
 
-    private HsqlStorageHistoryStore store() {
+    private SqliteStorageHistoryStore store() {
         return WorldHistoryFixtures.create(directory.resolve("database/history"), new Range(1, 365, 7), 1000);
     }
 

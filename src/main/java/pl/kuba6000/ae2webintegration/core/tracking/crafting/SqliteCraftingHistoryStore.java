@@ -31,11 +31,11 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /** Completed jobs use the same world transactions and resource catalogue as stock/flow history. */
-public final class HsqlCraftingHistoryStore {
+public final class SqliteCraftingHistoryStore {
 
     private final WorldDatabase database;
 
-    public HsqlCraftingHistoryStore(@NotNull WorldDatabase database) {
+    public SqliteCraftingHistoryStore(@NotNull WorldDatabase database) {
         this.database = database;
     }
 
@@ -270,11 +270,11 @@ public final class HsqlCraftingHistoryStore {
                     JOIN crafting_resources r ON r.id = p.crafting_resource_id
                     LEFT JOIN history_resources c ON c.id = r.resource_id
                     LEFT JOIN crafting_resource_descriptions d ON d.crafting_resource_id = r.id
-                    WHERE g.grid_key = ? AND j.id < ? ORDER BY j.id DESC
+                    WHERE g.grid_key = ? AND j.id < ? ORDER BY j.id DESC LIMIT ?
                     """)) {
                 query.setString(1, grid.toString());
                 query.setLong(2, before == null ? Long.MAX_VALUE : before);
-                query.setMaxRows(limit + 1);
+                query.setInt(3, limit + 1);
                 try (ResultSet rows = query.executeQuery()) {
                     while (rows.next()) entries.add(
                         new Summary(

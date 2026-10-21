@@ -194,15 +194,13 @@ public final class WorldGridStore {
 
     private static long saveSettings(Connection db, StableKey key, GridSettingsData settings) throws SQLException {
         try (PreparedStatement update = db.prepareStatement("""
-            MERGE INTO grids g
-            USING (VALUES (CAST(? AS VARCHAR(22)))) incoming(grid_key)
-            ON g.grid_key = incoming.grid_key
-            WHEN NOT MATCHED THEN INSERT (
+            INSERT INTO grids (
                 grid_key, row_count, deleted_until, first_observed, retention_days,
                 name, crafting_tracked, stock_tracked, flow_tracked, stock_seconds, flow_seconds,
                 machine_crafting_tracked, crafting_retention_days
             )
-            VALUES (incoming.grid_key, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(grid_key) DO NOTHING
             """)) {
             update.setString(1, key.toString());
             update.setLong(2, Long.MIN_VALUE);

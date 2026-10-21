@@ -18,25 +18,26 @@ import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 /** Real world owners for isolated history tests; identities are created through the shared persistence seam. */
 final class WorldHistoryFixtures {
 
-    private static final Map<HsqlStorageHistoryStore, WorldDatabase> OWNERS = Collections
+    private static final Map<SqliteStorageHistoryStore, WorldDatabase> OWNERS = Collections
         .synchronizedMap(new WeakHashMap<>());
-    private static final Map<HsqlStorageHistoryStore, Path> IMPORTS = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<SqliteStorageHistoryStore, Path> IMPORTS = Collections
+        .synchronizedMap(new WeakHashMap<>());
 
     private WorldHistoryFixtures() {}
 
-    static HsqlStorageHistoryStore create(Path path, ConfigSettings.Range retention, int maxRows) {
+    static SqliteStorageHistoryStore create(Path path, ConfigSettings.Range retention, int maxRows) {
         if (maxRows < 1) throw new IllegalArgumentException("Row limit must be positive");
         ConfigSettings.ResourceHistory policy = new ConfigSettings.ResourceHistory();
         policy.historyRetentionDays = retention;
         policy.historyMaxRowsPerGrid = maxRows;
         WorldDatabase database = new WorldDatabase(path, policy);
-        HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(database);
+        SqliteStorageHistoryStore store = new SqliteStorageHistoryStore(database);
         OWNERS.put(store, database);
         IMPORTS.put(store, path.resolveSibling("absent-import.json"));
         return store;
     }
 
-    static void register(HsqlStorageHistoryStore store, StableKey key) throws IOException {
+    static void register(SqliteStorageHistoryStore store, StableKey key) throws IOException {
         WorldDatabase owner = OWNERS.get(store);
         WorldGridStore persistence = new WorldGridStore(owner);
         Map<StableKey, GridPersistentData> previous = persistence.load(IMPORTS.get(store));
@@ -50,7 +51,7 @@ final class WorldHistoryFixtures {
         persistence.save(previous, next, Collections.emptySet());
     }
 
-    static void retention(HsqlStorageHistoryStore store, StableKey key, int days) throws IOException {
+    static void retention(SqliteStorageHistoryStore store, StableKey key, int days) throws IOException {
         WorldGridStore persistence = new WorldGridStore(OWNERS.get(store));
         Map<StableKey, GridPersistentData> records = persistence.load(IMPORTS.get(store));
         records.get(key)

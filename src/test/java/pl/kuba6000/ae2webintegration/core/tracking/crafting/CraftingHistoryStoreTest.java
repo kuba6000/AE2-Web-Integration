@@ -33,7 +33,7 @@ import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 
 class CraftingHistoryStoreTest {
@@ -60,7 +60,7 @@ class CraftingHistoryStoreTest {
             base.providers());
         try (WorldDatabase database = database()) {
             register(database, grid);
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             long id = store.append(grid, job);
             for (String table : new String[] { "crafting_resources", "crafting_providers",
                 "crafting_provider_locations", "crafting_resource_intervals", "crafting_provider_intervals" }) {
@@ -100,10 +100,10 @@ class CraftingHistoryStoreTest {
         long id;
         try (WorldDatabase database = database()) {
             register(database, grid);
-            id = new HsqlCraftingHistoryStore(database).append(grid, job);
+            id = new SqliteCraftingHistoryStore(database).append(grid, job);
         }
         try (WorldDatabase database = database()) {
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             assertEquals(job, store.read(grid, id));
             assertEquals(
                 job.finalOutput(),
@@ -120,7 +120,7 @@ class CraftingHistoryStoreTest {
         long now = System.currentTimeMillis();
         try (WorldDatabase database = database()) {
             register(database, grid);
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             long first = store.append(grid, simpleJob(now, 1));
             long second = store.append(grid, simpleJob(now, 2));
             assertConstraintViolation(
@@ -152,7 +152,7 @@ class CraftingHistoryStoreTest {
         CompletedCrafting second = simpleJob(now, 2);
         try (WorldDatabase database = database()) {
             register(database, grid);
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             long firstId = store.append(grid, first);
             long secondId = store.append(grid, second);
             database.read(db -> {
@@ -209,9 +209,7 @@ class CraftingHistoryStoreTest {
             return null;
         }));
         assertTrue(failure.getCause() instanceof SQLException);
-        assertTrue(
-            ((SQLException) failure.getCause()).getSQLState()
-                .startsWith("23"));
+        assertEquals(19, ((SQLException) failure.getCause()).getErrorCode() & 0xff);
     }
 
     @Test
@@ -230,7 +228,7 @@ class CraftingHistoryStoreTest {
             good.providers());
         try (WorldDatabase database = database()) {
             register(database, grid);
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             assertThrows(IOException.class, () -> store.append(grid, invalid));
             assertTrue(
                 store.list(grid, null, 10)
@@ -248,32 +246,32 @@ class CraftingHistoryStoreTest {
         long now = System.currentTimeMillis();
         CompletedCrafting job = new CompletedCrafting(
             new ResourceSnapshot(
-                new ResourceDescriptor("test", "product", 0, 0, "Product", ResourceType.ITEM, output, null),
-                64),
+                new ResourceDescriptor("test", "路径", 0, 0, "Produkt Żółć 日本語 🧪", ResourceType.ITEM, output, null),
+                Long.MAX_VALUE),
             now - 1000,
             now,
             true,
             Collections.singletonList(
                 new CompletedCrafting.Resource(
                     new ResourceSnapshot(
-                        new ResourceDescriptor(null, null, 0, 0, "Essentia", ResourceType.OTHER, null, null),
+                        new ResourceDescriptor(null, null, 0, 0, "Essentia Łódź 🧪", ResourceType.OTHER, null, null),
                         80),
                     500,
                     Collections.singletonList(new CompletedCrafting.Interval(now - 900, now - 400)),
-                    Collections.singletonList("Furnaces"))),
+                    Collections.singletonList("工場 🛠️ "))),
             Collections.singletonList(
                 new CompletedCrafting.Provider(
-                    "Furnaces",
-                    Collections.singletonList(new DimensionalCoords("overworld", 1, 2, 3)),
+                    "工場 🛠️ ",
+                    Collections.singletonList(new DimensionalCoords("test:świat/世界", 1, 2, 3)),
                     Collections.singletonList(new CompletedCrafting.Interval(now - 800, now - 300)))));
         long id;
         try (WorldDatabase database = database()) {
             register(database, grid);
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             id = store.append(grid, job);
         }
         try (WorldDatabase database = database()) {
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             assertEquals(job, store.read(grid, id));
             assertNull(store.read(StableKey.random(), id));
             assertEquals(
@@ -312,14 +310,14 @@ class CraftingHistoryStoreTest {
             register(database, firstGrid);
             register(database, secondGrid, 1);
             CraftingHistoryService service = new CraftingHistoryService(
-                new HsqlCraftingHistoryStore(database),
+                new SqliteCraftingHistoryStore(database),
                 task -> {});
             assertTrue(service.enqueue(firstGrid, bad));
             assertTrue(service.enqueue(firstGrid, good));
             assertTrue(service.enqueue(secondGrid, good));
             service.flush();
             for (StableKey grid : Arrays.asList(firstGrid, secondGrid)) {
-                List<HsqlCraftingHistoryStore.Summary> saved = service.list(grid, null, 10)
+                List<SqliteCraftingHistoryStore.Summary> saved = service.list(grid, null, 10)
                     .entries();
                 assertEquals(1, saved.size());
                 assertEquals(
@@ -405,7 +403,7 @@ class CraftingHistoryStoreTest {
                 good.providers()));
         try (WorldDatabase database = database()) {
             register(database, grid);
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             CraftingHistoryService service = new CraftingHistoryService(store, task -> {});
             for (CompletedCrafting bad : rejected) {
                 assertThrows(IOException.class, () -> store.append(grid, bad));
@@ -417,7 +415,7 @@ class CraftingHistoryStoreTest {
                     .isEmpty());
             assertTrue(service.enqueue(grid, good));
             service.close();
-            List<HsqlCraftingHistoryStore.Summary> saved = service.list(grid, null, 10)
+            List<SqliteCraftingHistoryStore.Summary> saved = service.list(grid, null, 10)
                 .entries();
             assertEquals(1, saved.size());
             assertEquals(
@@ -443,7 +441,8 @@ class CraftingHistoryStoreTest {
             register(database, grid);
             database.write(db -> {
                 try (Statement sql = db.createStatement()) {
-                    sql.executeUpdate("ALTER TABLE grids ADD CONSTRAINT test_grid_name CHECK (name <> 'Rejected')");
+                    sql.executeUpdate(
+                        "CREATE TRIGGER test_grid_name BEFORE INSERT ON grids WHEN NEW.name = 'Rejected' BEGIN SELECT RAISE(ABORT, 'Test write failure'); END");
                 }
                 return null;
             });
@@ -453,7 +452,7 @@ class CraftingHistoryStoreTest {
             assertNotNull(identity);
             identity.getSettings()
                 .setName("Rejected");
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             CraftingHistoryService service = new CraftingHistoryService(store, task -> {});
             CompletedCrafting invalid = new CompletedCrafting(
                 new ResourceSnapshot(
@@ -471,9 +470,7 @@ class CraftingHistoryStoreTest {
             assertTrue(service.enqueue(grid, job));
             IOException failure = assertThrows(IOException.class, service::flush);
             assertTrue(failure.getCause() instanceof SQLException);
-            assertTrue(
-                ((SQLException) failure.getCause()).getSQLState()
-                    .startsWith("23"));
+            assertEquals(19, ((SQLException) failure.getCause()).getErrorCode() & 0xff);
             assertTrue(
                 service.list(grid, null, 10)
                     .entries()
@@ -481,7 +478,7 @@ class CraftingHistoryStoreTest {
             identity.getSettings()
                 .setName("Recovered");
             service.close();
-            List<HsqlCraftingHistoryStore.Summary> saved = service.list(grid, null, 10)
+            List<SqliteCraftingHistoryStore.Summary> saved = service.list(grid, null, 10)
                 .entries();
             assertEquals(1, saved.size());
             assertEquals(
@@ -512,7 +509,7 @@ class CraftingHistoryStoreTest {
             register(database, grid);
             List<Runnable> scheduled = new ArrayList<>();
             CraftingHistoryService service = new CraftingHistoryService(
-                new HsqlCraftingHistoryStore(database),
+                new SqliteCraftingHistoryStore(database),
                 scheduled::add);
             for (int index = 0; index < 64; index++) assertTrue(service.enqueue(grid, bad));
             assertFalse(service.enqueue(grid, good));
@@ -544,7 +541,7 @@ class CraftingHistoryStoreTest {
             Collections.emptyList(),
             Collections.emptyList());
         try (WorldDatabase database = database()) {
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             List<Runnable> scheduled = new ArrayList<>();
             CraftingHistoryService service = new CraftingHistoryService(store, scheduled::add);
             assertTrue(service.enqueue(grid, job));
@@ -580,19 +577,19 @@ class CraftingHistoryStoreTest {
             new ConfigSettings.ResourceHistory(),
             policy)) {
             register(database, grid);
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             long first = store.append(grid, simpleJob(now - 2, 1));
             long second = store.append(grid, simpleJob(now - 1, 2));
             long third = store.append(grid, simpleJob(now, 3));
             assertNull(store.read(grid, first));
-            HsqlCraftingHistoryStore.Page page = store.list(grid, null, 1);
+            SqliteCraftingHistoryStore.Page page = store.list(grid, null, 1);
             assertEquals(
                 third,
                 page.entries()
                     .get(0)
                     .id());
             assertEquals(third, page.nextBefore());
-            HsqlCraftingHistoryStore.Page next = store.list(grid, page.nextBefore(), 1);
+            SqliteCraftingHistoryStore.Page next = store.list(grid, page.nextBefore(), 1);
             assertEquals(
                 second,
                 next.entries()
@@ -621,12 +618,50 @@ class CraftingHistoryStoreTest {
     }
 
     @Test
+    void prunedJobCursorsAreNeverReusedAfterTheLastOrHighestJobIsRemoved() throws Exception {
+        StableKey grid = StableKey.random();
+        long now = System.currentTimeMillis();
+        long firstRemoved;
+        try (WorldDatabase database = database()) {
+            register(database, grid);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            firstRemoved = store.append(grid, simpleJob(now - TimeUnit.DAYS.toMillis(20), 1));
+            assertTrue(
+                store.list(grid, null, 10)
+                    .entries()
+                    .isEmpty());
+        }
+        long highestRemoved;
+        try (WorldDatabase database = database()) {
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            long current = store.append(grid, simpleJob(now, 2));
+            assertTrue(current > firstRemoved);
+            assertNull(store.read(grid, firstRemoved));
+            highestRemoved = store.append(grid, simpleJob(now - TimeUnit.DAYS.toMillis(20), 3));
+            assertTrue(highestRemoved > current);
+            assertNull(store.read(grid, highestRemoved));
+        }
+        try (WorldDatabase database = database()) {
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
+            long latest = store.append(grid, simpleJob(now, 4));
+            assertTrue(latest > highestRemoved);
+            assertEquals(
+                latest,
+                store.list(grid, null, 1)
+                    .entries()
+                    .get(0)
+                    .id());
+            assertNull(store.read(grid, highestRemoved));
+        }
+    }
+
+    @Test
     void expiredJobsAndFailedWritesDoNotPublishPartialHistory() throws Exception {
         StableKey grid = StableKey.random();
         long now = System.currentTimeMillis();
         try (WorldDatabase database = database()) {
             register(database, grid);
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             long old = store.append(grid, simpleJob(now - TimeUnit.DAYS.toMillis(20), 1));
             assertNull(store.read(grid, old));
             CompletedCrafting good = simpleJob(now, 2);
@@ -677,9 +712,9 @@ class CraftingHistoryStoreTest {
         policy.historyMaxRowsPerGrid = 1;
         try (WorldDatabase database = new WorldDatabase(directory.resolve("world"), policy)) {
             register(database, grid);
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             long id = store.append(grid, job);
-            HsqlStorageHistoryStore stock = new HsqlStorageHistoryStore(database);
+            SqliteStorageHistoryStore stock = new SqliteStorageHistoryStore(database);
             stock.append(
                 grid,
                 Collections.singletonMap(item, description),
@@ -702,7 +737,7 @@ class CraftingHistoryStoreTest {
             register(database, grid);
             GridIdentityRegistry identities = new GridIdentityRegistry();
             identities.initialize(database, directory.resolve("absent.json"));
-            HsqlCraftingHistoryStore store = new HsqlCraftingHistoryStore(database);
+            SqliteCraftingHistoryStore store = new SqliteCraftingHistoryStore(database);
             long expired = store.append(grid, simpleJob(now - TimeUnit.DAYS.toMillis(2), 1));
             long capped = store.append(grid, simpleJob(now - 20000, 2));
             long retained = store.append(grid, simpleJob(now - 10000, 3));

@@ -122,8 +122,8 @@ public final class ResourcePinStore {
                                 ResourceType.valueOf(rows.getString("resource_type")),
                                 item,
                                 base == null ? null : StableKey.parse(base)),
-                            (Integer) rows.getObject("terminal_order"),
-                            (Integer) rows.getObject("home_order"),
+                            nullableInt(rows, "terminal_order"),
+                            nullableInt(rows, "home_order"),
                             new HomeConfig(
                                 rows.getBoolean("show_stock"),
                                 rows.getBoolean("show_flow"),
@@ -139,6 +139,11 @@ public final class ResourcePinStore {
             }
         }
         return pins;
+    }
+
+    private static @Nullable Integer nullableInt(ResultSet rows, String column) throws SQLException {
+        int value = rows.getInt(column);
+        return rows.wasNull() ? null : value;
     }
 
     public boolean add(@NotNull WebPrincipal principal, @NotNull StableKey grid, @NotNull StableKey item,

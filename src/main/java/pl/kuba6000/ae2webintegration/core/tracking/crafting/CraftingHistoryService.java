@@ -20,7 +20,7 @@ public final class CraftingHistoryService implements AutoCloseable {
 
     private static final Logger LOG = LogManager.getLogger("ae2webintegration");
     private static final int MAX_PENDING_JOBS = 64;
-    private final HsqlCraftingHistoryStore store;
+    private final SqliteCraftingHistoryStore store;
     private final Executor executor;
     private final ArrayDeque<Pending> pending = new ArrayDeque<>();
     private final ReentrantLock drain = new ReentrantLock();
@@ -30,7 +30,7 @@ public final class CraftingHistoryService implements AutoCloseable {
     @Desugar
     private record Pending(@NotNull StableKey grid, @NotNull CompletedCrafting job) {}
 
-    public CraftingHistoryService(@NotNull HsqlCraftingHistoryStore store, @NotNull Executor executor) {
+    public CraftingHistoryService(@NotNull SqliteCraftingHistoryStore store, @NotNull Executor executor) {
         this.store = store;
         this.executor = executor;
     }
@@ -110,7 +110,7 @@ public final class CraftingHistoryService implements AutoCloseable {
         store.maintain();
     }
 
-    public @NotNull HsqlCraftingHistoryStore.Page list(@NotNull StableKey grid, @Nullable Long before, int limit)
+    public @NotNull SqliteCraftingHistoryStore.Page list(@NotNull StableKey grid, @Nullable Long before, int limit)
         throws IOException {
         return store.list(grid, before, limit);
     }

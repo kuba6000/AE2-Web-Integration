@@ -25,7 +25,7 @@ import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.HomeConfig;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Pin;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore.Placement;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind;
 
@@ -52,7 +52,7 @@ class ResourcePinStoreTest extends GridTestScope {
             try (Statement sql = db.createStatement()) {
                 sql.execute("""
                     CREATE TRIGGER reject_resource_update BEFORE UPDATE ON history_resources
-                    FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unexpected catalogue update'
+                    FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'Unexpected catalogue update'); END
                     """);
             }
             return null;
@@ -88,7 +88,7 @@ class ResourcePinStoreTest extends GridTestScope {
             try (Statement sql = db.createStatement()) {
                 sql.execute("""
                     CREATE TRIGGER reject_resource_update BEFORE UPDATE ON history_resources
-                    FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unexpected catalogue update'
+                    FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'Unexpected catalogue update'); END
                     """);
             }
             return null;
@@ -103,7 +103,7 @@ class ResourcePinStoreTest extends GridTestScope {
             item,
             null);
         assertTrue(pins.add(WebPrincipal.admin(), grid, item, withoutBase, Placement.HOME));
-        try (HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
+        try (SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             history.append(grid, Collections.singletonMap(item, withoutBase), Collections.emptyList());
             assertEquals(
                 known,
@@ -176,7 +176,7 @@ class ResourcePinStoreTest extends GridTestScope {
         StableKey item = TestGridFixtures.key(70);
         long observed = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2);
         WorldDatabase database = worlds.database(TestGridFixtures.Worlds.source(gridSave));
-        try (HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
+        try (SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             history.append(
                 key,
                 Collections.singletonMap(item, description(item, "Captured")),
@@ -206,7 +206,7 @@ class ResourcePinStoreTest extends GridTestScope {
             });
         }
         worlds.close(TestGridFixtures.Worlds.source(gridSave));
-        try (HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(
+        try (SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(
             worlds.database(TestGridFixtures.Worlds.source(gridSave)))) {
             assertEquals(
                 1,
@@ -344,7 +344,8 @@ class ResourcePinStoreTest extends GridTestScope {
         assertTrue(pins.add(player, key, item, description(item, "Before"), Placement.HOME));
         database.write(db -> {
             try (Statement sql = db.createStatement()) {
-                sql.execute("ALTER TABLE resource_pins ADD CONSTRAINT temporary_pin_failure CHECK (owner <> 'admin')");
+                sql.execute(
+                    "CREATE TRIGGER temporary_pin_failure BEFORE INSERT ON resource_pins WHEN NEW.owner = 'admin' BEGIN SELECT RAISE(ABORT, 'Test pin failure'); END");
             }
             return null;
         });
@@ -362,7 +363,7 @@ class ResourcePinStoreTest extends GridTestScope {
                 .displayName());
         database.write(db -> {
             try (Statement sql = db.createStatement()) {
-                sql.execute("ALTER TABLE resource_pins DROP CONSTRAINT temporary_pin_failure");
+                sql.execute("DROP TRIGGER temporary_pin_failure");
             }
             return null;
         });
@@ -387,7 +388,7 @@ class ResourcePinStoreTest extends GridTestScope {
         ResourcePinStore pins = new ResourcePinStore(database);
         assertTrue(pins.add(WebPrincipal.admin(), key, item, description(item, "Pinned"), Placement.HOME));
         long old = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(9);
-        try (HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
+        try (SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             history.append(
                 key,
                 Collections.emptyMap(),
@@ -397,7 +398,7 @@ class ResourcePinStoreTest extends GridTestScope {
         worlds.close(source);
         WorldDatabase reopened = worlds.database(source);
         ResourcePinStore restored = new ResourcePinStore(reopened);
-        try (HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(reopened)) {
+        try (SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(reopened)) {
             assertTrue(
                 history.read(key, item, 0, 100)
                     .points()

@@ -19,7 +19,7 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Range;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
-class HsqlStorageHistoryStoreTest {
+class SqliteStorageHistoryStoreTest {
 
     @Test
     void startupMaintenanceDeletesOnlyFlowsExpiredByTheirOwnGridPolicy() throws Exception {
@@ -38,12 +38,12 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             old - 60000);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, shortGrid, Collections.singletonList(point));
             append(store, longGrid, Collections.singletonList(point));
             WorldHistoryFixtures.retention(store, shortGrid, 1);
         }
-        try (HsqlStorageHistoryStore reopened = WorldHistoryFixtures
+        try (SqliteStorageHistoryStore reopened = WorldHistoryFixtures
             .create(directory.resolve("database/history"), new Range(1, 365, 7), 100)) {
             assertTrue(
                 reopened.read(shortGrid, item, 0, 100)
@@ -69,7 +69,7 @@ class HsqlStorageHistoryStoreTest {
         StableKey item = StableKey.random();
         long old = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2);
         StorageHistoryPoint point = stock(item, old, 9);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, shortGrid, Collections.singletonList(point));
             append(store, longGrid, Collections.singletonList(point));
             WorldHistoryFixtures.retention(store, shortGrid, 1);
@@ -85,7 +85,7 @@ class HsqlStorageHistoryStoreTest {
                 store.read(longGrid, item, 0, 100)
                     .points());
         }
-        try (HsqlStorageHistoryStore reopened = store(100)) {
+        try (SqliteStorageHistoryStore reopened = store(100)) {
             assertTrue(
                 reopened.read(shortGrid, item, 0, 100)
                     .points()
@@ -124,7 +124,7 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             (now) - 1000L);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(gap, flow));
             StorageHistory history = store.read(grid, item, now, 1);
             assertEquals(Arrays.asList(gap, flow), history.points());
@@ -173,10 +173,10 @@ class HsqlStorageHistoryStoreTest {
                 0,
                 0,
                 (now) - 1000L));
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, points);
         }
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             StorageHistory history = store.read(grid, item, now, 20);
             assertEquals(points, history.points());
             assertEquals(
@@ -211,13 +211,13 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             null);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(stock(item, old, 10), gap));
             assertNull(
                 store.read(grid, item, now - 1000, 10)
                     .baseline());
         }
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             assertNull(
                 store.read(grid, item, now - 1000, 10)
                     .baseline());
@@ -241,7 +241,7 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             null);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(initial, gap));
             assertNull(
                 store.read(grid, item, now + 200, 10)
@@ -268,7 +268,7 @@ class HsqlStorageHistoryStoreTest {
         long now = System.currentTimeMillis();
         StorageHistoryPoint first = stock(item, now, Long.MAX_VALUE);
         StorageHistoryPoint second = stock(item, now + 1, 11);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             WorldHistoryFixtures.register(store, grid);
             store.append(
                 grid,
@@ -279,7 +279,7 @@ class HsqlStorageHistoryStoreTest {
                 Collections.singletonMap(item, description(item, "After")),
                 Collections.singletonList(second));
         }
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             StorageHistory history = store.read(grid, item, now, 10);
             assertEquals(Arrays.asList(first, second), history.points());
             assertEquals(Collections.singletonMap(item, description(item, "After")), history.descriptions());
@@ -305,7 +305,7 @@ class HsqlStorageHistoryStoreTest {
             item,
             null);
         StorageHistoryPoint retained = stock(item, now, 42);
-        try (HsqlStorageHistoryStore store = store(1)) {
+        try (SqliteStorageHistoryStore store = store(1)) {
             append(store, firstGrid, Collections.singletonList(retained));
             WorldHistoryFixtures.register(store, secondGrid);
             store.append(secondGrid, Collections.singletonMap(item, updated), Collections.singletonList(retained));
@@ -314,7 +314,7 @@ class HsqlStorageHistoryStoreTest {
             assertEquals(Collections.singletonList(retained), remaining.points());
             assertEquals(Collections.singletonMap(item, description(item, "Renamed")), remaining.descriptions());
         }
-        try (HsqlStorageHistoryStore store = store(1)) {
+        try (SqliteStorageHistoryStore store = store(1)) {
             assertEquals(
                 description(item, "Renamed"),
                 store.read(secondGrid, item, now, 10)
@@ -341,7 +341,7 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             (now) - 1000L);
-        try (HsqlStorageHistoryStore store = store(1)) {
+        try (SqliteStorageHistoryStore store = store(1)) {
             append(store, stockGrid, Collections.singletonList(stock(item, now, 8)));
             append(store, flowGrid, Collections.singletonList(flow));
             append(store, stockGrid, Collections.singletonList(stock(other, now + 1, 1)));
@@ -372,7 +372,7 @@ class HsqlStorageHistoryStoreTest {
         StableKey missing = StableKey.random();
         long now = System.currentTimeMillis();
         StorageHistoryPoint first = stock(item, now, 42);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, Collections.singletonList(first));
             assertThrows(
                 IOException.class,
@@ -399,7 +399,7 @@ class HsqlStorageHistoryStoreTest {
         StableKey unobserved = StableKey.random();
         long now = System.currentTimeMillis();
         StorageHistoryPoint first = stock(item, now, 42);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, Collections.singletonList(first));
             Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
             descriptions.put(item, description(item, "Renamed"));
@@ -415,7 +415,7 @@ class HsqlStorageHistoryStoreTest {
         }
     }
 
-    private HsqlStorageHistoryStore store(int rows) {
+    private SqliteStorageHistoryStore store(int rows) {
         return WorldHistoryFixtures.create(directory.resolve("database/history"), new Range(1, 365, 7), rows);
     }
 
@@ -428,7 +428,7 @@ class HsqlStorageHistoryStoreTest {
         StorageHistoryPoint second = stock(item, now + 1, 2);
         StorageHistoryPoint third = stock(item, now + 2, 3);
         StorageHistoryPoint fourth = stock(item, now + 3, 4);
-        try (HsqlStorageHistoryStore store = store(2)) {
+        try (SqliteStorageHistoryStore store = store(2)) {
             append(store, grid, Arrays.asList(first, second, third));
             assertEquals(
                 Arrays.asList(second, third),
@@ -442,7 +442,7 @@ class HsqlStorageHistoryStoreTest {
                     .complete());
             append(store, grid, Collections.singletonList(fourth));
         }
-        try (HsqlStorageHistoryStore store = store(2)) {
+        try (SqliteStorageHistoryStore store = store(2)) {
             StorageHistory current = store.read(grid, item, now + 2, 10);
             assertEquals(Arrays.asList(third, fourth), current.points());
             assertTrue(current.complete());
@@ -458,7 +458,7 @@ class HsqlStorageHistoryStoreTest {
         long now = System.currentTimeMillis();
         StorageHistoryPoint expired = stock(item, now - TimeUnit.DAYS.toMillis(8), 1);
         StorageHistoryPoint recent = stock(item, now, 2);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, firstGrid, Arrays.asList(expired, recent));
             append(store, otherGrid, Collections.singletonList(recent));
             assertEquals(
@@ -479,11 +479,37 @@ class HsqlStorageHistoryStoreTest {
         return new StorageHistoryPoint(time, 7, StorageHistoryPoint.Kind.STOCK, item, amount, 0, 0, 0, 0, null);
     }
 
+    @Test
+    void anAbsentFlowObservationStartRemainsAbsentAcrossReopen() throws Exception {
+        StableKey grid = StableKey.random();
+        long now = System.currentTimeMillis();
+        StorageHistoryPoint observation = new StorageHistoryPoint(
+            now,
+            7,
+            StorageHistoryPoint.Kind.FLOW_OBSERVATION,
+            null,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null);
+        try (SqliteStorageHistoryStore history = store(100)) {
+            append(history, grid, Collections.singletonList(observation));
+        }
+        try (SqliteStorageHistoryStore reopened = store(100)) {
+            assertEquals(
+                Collections.singletonList(observation),
+                reopened.read(grid, null, now, 10)
+                    .points());
+        }
+    }
+
     private static ResourceDescriptor description(StableKey item, String name) {
         return new ResourceDescriptor("test", "item", 2, 3, name, ResourceType.ITEM, item, item);
     }
 
-    private static void append(HsqlStorageHistoryStore store, StableKey grid, List<StorageHistoryPoint> points)
+    private static void append(SqliteStorageHistoryStore store, StableKey grid, List<StorageHistoryPoint> points)
         throws IOException {
         Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
         for (StorageHistoryPoint point : points) {
@@ -532,7 +558,7 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             (now + 3) - 1000L);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(
                 store,
                 grid,
@@ -572,7 +598,7 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             null);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, Collections.singletonList(first));
             append(store, grid, Arrays.asList(latest, marker));
             append(store, grid, Collections.singletonList(earlier));
@@ -624,7 +650,7 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             null);
-        try (HsqlStorageHistoryStore store = store(3)) {
+        try (SqliteStorageHistoryStore store = store(3)) {
             append(store, grid, Arrays.asList(future, stock(item, now, 10)));
             append(store, grid, Arrays.asList(flow, marker));
             append(store, grid, Collections.singletonList(latest));
@@ -633,9 +659,42 @@ class HsqlStorageHistoryStoreTest {
             assertTrue(history.truncated());
             assertFalse(history.complete());
         }
-        try (HsqlStorageHistoryStore store = store(3)) {
+        try (SqliteStorageHistoryStore store = store(3)) {
             assertEquals(
                 Arrays.asList(marker, latest, future),
+                store.read(grid, item, now, 10)
+                    .points());
+            assertThrows(
+                IOException.class,
+                () -> store.append(
+                    grid,
+                    Collections.emptyMap(),
+                    Arrays.asList(stock(item, now, 70), stock(StableKey.random(), now, 80))));
+            StorageHistoryPoint nextFlow = new StorageHistoryPoint(
+                now,
+                7,
+                StorageHistoryPoint.Kind.FLOW,
+                item,
+                0,
+                6,
+                4,
+                2,
+                2,
+                now - 1000);
+            StorageHistoryPoint nextMarker = new StorageHistoryPoint(
+                now,
+                7,
+                StorageHistoryPoint.Kind.FLOW_OBSERVATION,
+                null,
+                0,
+                0,
+                0,
+                0,
+                0,
+                now - 1000);
+            append(store, grid, Arrays.asList(stock(item, now, 30), nextFlow, nextMarker));
+            assertEquals(
+                Arrays.asList(nextFlow, nextMarker, future),
                 store.read(grid, item, now, 10)
                     .points());
         }
@@ -648,10 +707,10 @@ class HsqlStorageHistoryStoreTest {
         long now = System.currentTimeMillis();
         StorageHistoryPoint old = stock(item, now - TimeUnit.DAYS.toMillis(2), 1);
         StorageHistoryPoint recent = stock(item, now, 2);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(old, recent));
         }
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures
             .create(directory.resolve("database/history"), new Range(1, 1, 1), 100)) {
             StorageHistory history = store.read(grid, item, 0, 10);
             assertEquals(Collections.singletonList(recent), history.points());
@@ -662,7 +721,7 @@ class HsqlStorageHistoryStoreTest {
 
     @Test
     void closeIsIdempotentAndClosedStoreRejectsOperations() throws Exception {
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             store.close();
             store.close();
             assertThrows(IOException.class, () -> store.read(StableKey.random(), null, 0, 1));
@@ -687,7 +746,7 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             (now) - 1000L);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(anchor, marker, marker, marker));
             StorageHistory history = store.read(grid, item, now - 1000, 2);
             assertEquals(Arrays.asList(marker, marker), history.points());
@@ -695,7 +754,7 @@ class HsqlStorageHistoryStoreTest {
             assertTrue(history.truncated());
             assertTrue(history.complete());
         }
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             assertEquals(
                 anchor,
                 store.read(grid, item, now - 1000, 2)
@@ -720,7 +779,7 @@ class HsqlStorageHistoryStoreTest {
             0,
             0,
             null);
-        try (HsqlStorageHistoryStore store = store(2)) {
+        try (SqliteStorageHistoryStore store = store(2)) {
             append(store, grid, Arrays.asList(old, marker, marker));
             StorageHistory lost = store.read(grid, item, 0, 10);
             assertNull(lost.baseline());
@@ -740,10 +799,10 @@ class HsqlStorageHistoryStoreTest {
         StorageHistoryPoint first = stock(item, now, 1);
         StorageHistoryPoint second = stock(item, now + 1, 2);
         StorageHistoryPoint third = stock(item, now + 2, 3);
-        try (HsqlStorageHistoryStore store = store(100)) {
+        try (SqliteStorageHistoryStore store = store(100)) {
             append(store, grid, Arrays.asList(first, second, third));
         }
-        try (HsqlStorageHistoryStore store = store(2)) {
+        try (SqliteStorageHistoryStore store = store(2)) {
             StorageHistory history = store.read(grid, item, now, 10);
             assertEquals(Arrays.asList(second, third), history.points());
             assertTrue(history.truncated());
@@ -757,8 +816,8 @@ class HsqlStorageHistoryStoreTest {
         StableKey item = StableKey.random();
         long now = System.currentTimeMillis();
         StorageHistoryPoint point = stock(item, now, 42);
-        try (HsqlStorageHistoryStore first = store(100);
-            HsqlStorageHistoryStore second = WorldHistoryFixtures
+        try (SqliteStorageHistoryStore first = store(100);
+            SqliteStorageHistoryStore second = WorldHistoryFixtures
                 .create(directory.resolve("database/./history"), new Range(1, 365, 7), 100)) {
             append(first, grid, Collections.singletonList(point));
             for (int attempt = 0; attempt < 10; attempt++)

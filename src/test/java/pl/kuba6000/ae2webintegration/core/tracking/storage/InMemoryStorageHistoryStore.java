@@ -12,7 +12,7 @@ import org.jetbrains.annotations.Nullable;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
-/** Test persistence boundary for collector scheduling; real durability is covered by HSQLDB tests. */
+/** Test persistence boundary for collector scheduling; real durability is covered by SQLite tests. */
 public final class InMemoryStorageHistoryStore implements IStorageHistoryStore {
 
     private final Map<StableKey, ResourceDescriptor> resources = new HashMap<>();

@@ -108,7 +108,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.hsqldb:hsqldb:2.7.4:jdk8'
+    implementation 'org.xerial:sqlite-jdbc:3.53.4.0'
     compileOnly 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
     testCompileOnly 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
     annotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.1'
@@ -172,7 +172,7 @@ test {
             includeTestsMatching '*CraftingOptionsHttpTest'
             includeTestsMatching '*CpuPauseHttpTest'
             includeTestsMatching '*UpdateSkipHttpTest'
-            includeTestsMatching '*HsqlStorageHistoryStoreTest'
+            includeTestsMatching '*SqliteStorageHistoryStoreTest'
             includeTestsMatching '*TerminalStreamsHttpTest'
             includeTestsMatching '*CpuLiveStreamsHttpTest'
             includeTestsMatching '*LiveTerminalHttpTest'
@@ -207,6 +207,42 @@ tasks.register('testNightConfig383', Test) {
     shouldRunAfter tasks.named('test')
 }
 tasks.named('check') { dependsOn tasks.named('testNightConfig383') }
+
+// Modern loaders may select this supported shared SQLite driver when another mod requests it first.
+def sqlite336Runtime = configurations.create('sqlite336TestRuntime') {
+    canBeConsumed = false
+    extendsFrom configurations.testImplementation, configurations.testRuntimeOnly
+    resolutionStrategy.force 'org.xerial:sqlite-jdbc:3.36.0.3'
+}
+tasks.register('testSqlite336', Test) {
+    group = 'verification'
+    description = 'Test world persistence and its HTTP/lifecycle consumers with SQLite JDBC 3.36.0.3.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.output + sourceSets.main.output + sqlite336Runtime
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching '*WorldDatabase*Test'
+        includeTestsMatching '*WorldSchemaBootstrapTest'
+        includeTestsMatching '*GridIdentityRegistryTest'
+        includeTestsMatching '*GridSettingsLifecycleTest'
+        includeTestsMatching '*ResourcePinStoreTest'
+        includeTestsMatching '*HistoryMeasurementTest'
+        includeTestsMatching '*LiveDataPolicyTest'
+        includeTestsMatching '*SqliteStorageHistory*Test'
+        includeTestsMatching '*StorageTracking*Test'
+        includeTestsMatching '*StorageCaptureTest'
+        includeTestsMatching '*CraftingHistoryStoreTest'
+        includeTestsMatching '*AE2JobTrackerLifecycleTest'
+        includeTestsMatching '*CoreEngine*Test'
+        includeTestsMatching '*ApiRoutingHttpTest'
+        includeTestsMatching '*ServerLifecycleHttpTest'
+        includeTestsMatching '*TrackingStatisticsResponseTest'
+        includeTestsMatching '*TerminalStreamsHttpTest'
+        includeTestsMatching '*LiveTerminalHttpTest'
+    }
+    shouldRunAfter tasks.named('test')
+}
+tasks.named('check') { dependsOn tasks.named('testSqlite336') }
 
 java {
     toolchain {

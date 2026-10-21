@@ -23,7 +23,7 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind;
 
@@ -36,7 +36,7 @@ class LiveDataPolicyTest {
     void scheduledPolicyApplicationRetriesAfterFailureWithoutConsumers() throws Exception {
         Path path = directory.resolve("idle");
         try (WorldDatabase database = new WorldDatabase(path, new ConfigSettings.ResourceHistory());
-            HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
+            SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, directory.resolve("absent.json"));
             TestGridFixtures.TestGrid live = new TestGridFixtures.TestGrid(
@@ -58,7 +58,8 @@ class LiveDataPolicyTest {
             registry.saveIfDirty();
             database.write(db -> {
                 try (Statement sql = db.createStatement()) {
-                    sql.execute("ALTER TABLE grids ADD CONSTRAINT reject_policy CHECK (retention_days > 2)");
+                    sql.execute(
+                        "CREATE TRIGGER reject_policy BEFORE UPDATE ON grids WHEN NEW.retention_days <= 2 BEGIN SELECT RAISE(ABORT, 'Test policy failure'); END");
                 }
                 return null;
             });
@@ -74,7 +75,7 @@ class LiveDataPolicyTest {
                 assertEquals(2, stockRows(database));
                 database.write(db -> {
                     try (Statement sql = db.createStatement()) {
-                        sql.execute("ALTER TABLE grids DROP CONSTRAINT reject_policy");
+                        sql.execute("DROP TRIGGER reject_policy");
                     }
                     return null;
                 });
@@ -108,7 +109,7 @@ class LiveDataPolicyTest {
         ConfigSettings.ResourceHistory initial = new ConfigSettings.ResourceHistory();
         initial.historyMaxRowsPerGrid = 10;
         try (WorldDatabase database = new WorldDatabase(directory.resolve("world"), initial);
-            HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
+            SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, directory.resolve("absent.json"));
             TestGridFixtures.TestGrid live = new TestGridFixtures.TestGrid(
@@ -164,7 +165,7 @@ class LiveDataPolicyTest {
             WorldDatabase database = new WorldDatabase(
                 directory.resolve("retired"),
                 new ConfigSettings.ResourceHistory());
-            HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
+            SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             GridIdentityRegistry registry = new GridIdentityRegistry();
             registry.initialize(database, directory.resolve("absent.json"));
             TestGridFixtures.TestGrid live = new TestGridFixtures.TestGrid(

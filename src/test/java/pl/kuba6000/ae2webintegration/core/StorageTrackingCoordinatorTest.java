@@ -45,11 +45,11 @@ import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.IStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.InMemoryStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity.Amount;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity.Summary;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistory;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
@@ -361,7 +361,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             .getSettings();
         settings.setFlowTracked(true);
         long startedAt = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10);
-        HsqlStorageHistoryStore store = new HsqlStorageHistoryStore(
+        SqliteStorageHistoryStore store = new SqliteStorageHistoryStore(
             worlds.database(TestGridFixtures.Worlds.source(gridSave)));
         try (StorageTrackingService service = new StorageTrackingService(store, 100);
             StorageTrackingCoordinator coordinator = new StorageTrackingCoordinator(

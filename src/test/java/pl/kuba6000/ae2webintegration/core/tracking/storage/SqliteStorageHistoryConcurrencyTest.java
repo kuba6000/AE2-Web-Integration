@@ -28,7 +28,7 @@ import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.Range;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
-class HsqlStorageHistoryConcurrencyTest {
+class SqliteStorageHistoryConcurrencyTest {
 
     @TempDir
     Path directory;
@@ -42,7 +42,7 @@ class HsqlStorageHistoryConcurrencyTest {
         CountDownLatch writing = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(3);
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures
             .create(directory.resolve("history"), new Range(1, 365, 7), 100)) {
             WorldHistoryFixtures.register(store, grid);
             store.append(
@@ -97,7 +97,7 @@ class HsqlStorageHistoryConcurrencyTest {
         long now = System.currentTimeMillis();
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(4);
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures
             .create(directory.resolve("history"), new Range(1, 365, 7), items.size())) {
             appendRevision(store, grid, items, now, 0);
             Future<?> writer = tasks.submit(() -> {
@@ -153,8 +153,8 @@ class HsqlStorageHistoryConcurrencyTest {
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(2);
         Path path = directory.resolve("history");
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100);
-            HsqlStorageHistoryStore next = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100);
+            SqliteStorageHistoryStore next = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
             WorldHistoryFixtures.register(store, grid);
             Future<?> writer = tasks.submit(() -> {
                 store.append(
@@ -199,7 +199,7 @@ class HsqlStorageHistoryConcurrencyTest {
         Path path = directory.resolve("history");
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService tasks = Executors.newFixedThreadPool(6);
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
             List<Future<?>> operations = new ArrayList<>();
             WorldHistoryFixtures.register(store, grid);
             operations.add(tasks.submit(() -> {
@@ -226,7 +226,7 @@ class HsqlStorageHistoryConcurrencyTest {
             start.countDown();
             tasks.shutdownNow();
         }
-        try (HsqlStorageHistoryStore reopened = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
+        try (SqliteStorageHistoryStore reopened = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
             assertEquals(
                 1,
                 reopened.read(grid, item, now, 10)
@@ -240,7 +240,7 @@ class HsqlStorageHistoryConcurrencyTest {
     void interruptedReadDoesNotInitializeOrConsumeReaderCapacity() throws Exception {
         Path path = directory.resolve("database/history");
         StableKey grid = StableKey.random();
-        try (HsqlStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
+        try (SqliteStorageHistoryStore store = WorldHistoryFixtures.create(path, new Range(1, 365, 7), 100)) {
             for (int attempt = 0; attempt < 10; attempt++) {
                 Thread.currentThread()
                     .interrupt();
@@ -281,8 +281,8 @@ class HsqlStorageHistoryConcurrencyTest {
         };
     }
 
-    private static void appendRevision(HsqlStorageHistoryStore store, StableKey grid, List<StableKey> items, long time,
-        int revision) throws Exception {
+    private static void appendRevision(SqliteStorageHistoryStore store, StableKey grid, List<StableKey> items,
+        long time, int revision) throws Exception {
         Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
         List<StorageHistoryPoint> points = new ArrayList<>();
         for (StableKey item : items) {

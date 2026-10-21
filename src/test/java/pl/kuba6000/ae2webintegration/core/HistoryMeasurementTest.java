@@ -19,7 +19,7 @@ import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageHistoryPoint.Kind;
 
@@ -53,7 +53,7 @@ class HistoryMeasurementTest extends GridTestScope {
             item,
             null);
         long now = System.currentTimeMillis();
-        try (HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
+        try (SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             history.append(
                 grid,
                 Collections.singletonMap(item, description),
@@ -129,7 +129,7 @@ class HistoryMeasurementTest extends GridTestScope {
             new StorageHistoryPoint(now, 1, Kind.OBSERVATION, null, 0, 0, 0, 0, 0, null),
             new StorageHistoryPoint(now, 1, Kind.FLOW, item, 0, 5, 2, 0, 0, now - 1000),
             new StorageHistoryPoint(now, 1, Kind.FLOW_OBSERVATION, null, 0, 0, 0, 0, 0, now - 1000));
-        try (HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database)) {
+        try (SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database)) {
             history.append(grid, Collections.singletonMap(item, description), shared);
             assertEquals(
                 shared,
@@ -168,7 +168,7 @@ class HistoryMeasurementTest extends GridTestScope {
             });
         }
         worlds.close(TestGridFixtures.Worlds.source(gridSave));
-        try (HsqlStorageHistoryStore reopened = new HsqlStorageHistoryStore(
+        try (SqliteStorageHistoryStore reopened = new SqliteStorageHistoryStore(
             worlds.database(TestGridFixtures.Worlds.source(gridSave)))) {
             assertEquals(
                 shared,

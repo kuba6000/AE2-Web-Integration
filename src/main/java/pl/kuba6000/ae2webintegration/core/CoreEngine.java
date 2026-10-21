@@ -38,9 +38,9 @@ import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
 import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
-import pl.kuba6000.ae2webintegration.core.tracking.crafting.HsqlCraftingHistoryStore;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.SqliteCraftingHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.SqliteStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingService;
 import pl.kuba6000.ae2webintegration.core.utils.ReleaseManifest;
@@ -108,11 +108,11 @@ public class CoreEngine {
         // Finish the previous world before binding any new identity or storage owner.
         onServerStopping();
         WorldDatabase database = new WorldDatabase(
-            new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/grids").toPath(),
+            new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/grids.sqlite").toPath(),
             Config.INSTANCE.resourceHistory,
             Config.INSTANCE.craftingHistory);
-        HsqlCraftingHistoryStore craftings = new HsqlCraftingHistoryStore(database);
-        HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database);
+        SqliteCraftingHistoryStore craftings = new SqliteCraftingHistoryStore(database);
+        SqliteStorageHistoryStore history = new SqliteStorageHistoryStore(database);
         try {
             database.open();
             GRID_IDENTITIES.initialize(
