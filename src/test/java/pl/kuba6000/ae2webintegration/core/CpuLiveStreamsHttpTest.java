@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URL;
@@ -30,10 +31,12 @@ import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
+import pl.kuba6000.ae2webintegration.core.cpu.CpuReader;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuRegistry;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuTopic;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
@@ -110,6 +113,89 @@ class CpuLiveStreamsHttpTest extends GridTestScope {
     private void tick(long advanceMillis) {
         clock += advanceMillis;
         coordinator.tick(clock);
+    }
+
+    @Test
+    void jobChangeReleasesLiveRowsOutputAndPendingNotificationsWithoutAnotherRead() throws Exception {
+        cpu.set(iron, 4, 0, 0);
+        CpuRegistry.Bootstrap snapshot = view(cpu);
+        try (Connection stream = open(snapshot, cpu)) {
+            WeakReference<IAEKey> row = new WeakReference<>(AE2Controller.itemIdentities.resolve(iron.key()));
+            WeakReference<IAEKey> output = new WeakReference<>(AE2Controller.itemIdentities.resolve(gear.key()));
+            WeakReference<IAEKey> pending = dirtyTemporaryResource();
+            assertNotNull(row.get());
+            assertNotNull(output.get());
+            coordinator.jobChanged(cpu);
+            assertEquals(
+                "invalidate",
+                CpuFixtures.readEvent(stream.input)
+                    .name());
+            CpuFixtures.awaitCollected(row);
+            CpuFixtures.awaitCollected(output);
+            CpuFixtures.awaitCollected(pending);
+            assertEquals(
+                4,
+                snapshot.rows()
+                    .get(0)
+                    .amounts()
+                    .active());
+            assertEquals(
+                gear.key(),
+                snapshot.header()
+                    .finalOutput()
+                    .description()
+                    .itemKey());
+        }
+    }
+
+    private WeakReference<IAEKey> dirtyTemporaryResource() {
+        CpuFixtures.Resource resource = new CpuFixtures.Resource("pending-native-notification");
+        coordinator.dirty(cpu, resource);
+        return new WeakReference<>(resource);
+    }
+
+    @Test
+    void retiringLastViewerPreservesThePlainHttpJobOwner() throws Exception {
+        cpu.set(iron, 4, 0, 0);
+        CpuReader.read(cpu, true);
+        cpu.set(tin, 0, 2, 0);
+        CpuRegistry.Bootstrap first = view(cpu);
+        CpuRegistry.Bootstrap second = view(cpu);
+        WeakReference<IAEKey> liveOnly = new WeakReference<>(AE2Controller.itemIdentities.resolve(tin.key()));
+        assertNotNull(liveOnly.get());
+
+        registry.cancel(first.subscription());
+        tick(100);
+        System.gc();
+        assertNotNull(
+            AE2Controller.itemIdentities.resolve(tin.key()),
+            "The second viewer retains the shared live observation");
+        registry.cancel(second.subscription());
+        tick(100);
+        CpuFixtures.awaitCollected(liveOnly);
+        assertNotNull(
+            AE2Controller.itemIdentities.resolve(iron.key()),
+            "Closing the live view must preserve the plain HTTP job owner");
+        assertNotNull(AE2Controller.itemIdentities.resolve(gear.key()));
+    }
+
+    @Test
+    void metadataReadsDoNotMoveLiveOutputOwnershipToTheCpu() throws Exception {
+        CpuRegistry.Bootstrap snapshot = view(cpu);
+        WeakReference<IAEKey> output = new WeakReference<>(AE2Controller.itemIdentities.resolve(gear.key()));
+        assertNotNull(output.get());
+        coordinator.metadataChanged(cpu);
+        tick(100);
+        registry.cancel(snapshot.subscription());
+        tick(100);
+        CpuFixtures.awaitCollected(output);
+        assertEquals(
+            gear.key(),
+            snapshot.header()
+                .finalOutput()
+                .description()
+                .itemKey());
+        assertTrue(cpu.busy);
     }
 
     private CpuRegistry.Bootstrap view(CpuFixtures.Cpu target) {

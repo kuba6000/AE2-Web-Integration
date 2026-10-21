@@ -23,6 +23,48 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 class ItemIdentityRegistryTest {
 
     @Test
+    void endingAnOwnerPreservesOtherOwnersAndAnUncommittedListing() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid first = grid();
+        IAEGrid second = grid();
+        StableKey shared = registry.remember(first, new Resource("shared", false));
+        registry.remember(second, new Resource("shared", false));
+        StableKey pending = registry.remember(first, new Resource("pending", false));
+        WeakReference<IAEKey> identity = new WeakReference<>(registry.resolve(pending));
+        Listing listing = registry.beginListing(second);
+        listing.remember(new Resource("pending", false));
+
+        registry.release(first);
+        System.gc();
+        assertNotNull(registry.resolve(shared));
+        assertNotNull(registry.resolve(pending), "An unfinished traversal retains its own entries");
+        listing.commit();
+        registry.release(second);
+        awaitCollected(identity, registry::cleanUp);
+        assertNull(registry.resolve(pending));
+    }
+
+    @Test
+    void detachedDescriptionKeepsConflictDetectionWithoutRetainingAnOwner() {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid owner = grid();
+        Resource original = new Resource("original", false, "collision");
+        StableKey key = registry.remember(owner, original);
+        ResourceDescriptor description = registry.describe(original);
+        assertEquals(key, description.itemKey());
+        assertSame(description, registry.describe(key), "Existing legitimate ownership shares detached metadata");
+
+        ResourceDescriptor conflicting = registry.describe(new Resource("other", false, "collision"));
+        assertNull(conflicting.itemKey());
+        assertEquals("other", conflicting.displayName());
+        assertThrows(ItemIdentityRegistry.Ambiguous.class, () -> registry.resolve(key));
+        assertNull(
+            registry.describe(original)
+                .itemKey(),
+            "An observed collision remains unkeyed on later capture");
+    }
+
+    @Test
     void releasingOneOwnerPreservesOthersAndReclaimsTheLastOwnership() throws Exception {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid first = grid();

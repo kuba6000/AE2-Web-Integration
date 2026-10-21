@@ -19,9 +19,9 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
@@ -57,19 +57,28 @@ public final class CpuReader {
     }
 
     /**
-     * Reads the header and every resource of the CPU, and replaces the identities the CPU retains. The optional base
+     * Reads the header and every resource of the CPU, replacing identities retained until its next job boundary. The
+     * optional base
      * variant of a resource, only needed for icon fallback, is materialized by the shared description cache when
      * {@code baseKeys} is set; otherwise descriptions are captured without it.
      */
-    public static @NotNull CpuObservation read(@NotNull IAEGrid grid, @NotNull ICraftingCPUCluster cpu,
+    public static @NotNull CpuObservation read(@NotNull ICraftingCPUCluster cpu, boolean baseKeys) {
+        return read(cpu, cpu, baseKeys);
+    }
+
+    static @NotNull CpuObservation read(@NotNull IIdentityHolder owner, @NotNull ICraftingCPUCluster cpu,
         boolean baseKeys) {
-        ItemIdentityRegistry.Listing listing = AE2Controller.itemIdentities.beginListing(cpu);
+        ItemIdentityRegistry.Listing listing = AE2Controller.itemIdentities.beginListing(owner);
         boolean busy = cpu.web$isBusy();
         ResourceSnapshot finalOutput = null;
         AE2JobTracker.JobTrackingInfo tracking = null;
         Map<IAEKey, Draft> drafts = new HashMap<>();
         if (busy) {
-            finalOutput = ResourceSnapshot.capture(grid, cpu.web$getFinalOutput());
+            IAEGenericStack output = cpu.web$getFinalOutput();
+            if (output != null) {
+                Draft outputDraft = draft(output.web$what(), listing, true);
+                finalOutput = new ResourceSnapshot(outputDraft.description, output.web$amount());
+            }
             tracking = AE2JobTracker.findActiveJob(cpu);
             IStackList active = AE2Controller.AE2Interface.web$createStackList();
             IStackList pending = AE2Controller.AE2Interface.web$createStackList();
@@ -113,18 +122,18 @@ public final class CpuReader {
      * without a stable identity can only be replaced together with its siblings, and an idle CPU has no resources,
      * so those cases return the full observation instead.
      */
-    public static @NotNull CpuObservation read(@NotNull IAEGrid grid, @NotNull ICraftingCPUCluster cpu,
+    public static @NotNull CpuObservation read(@NotNull IIdentityHolder owner, @NotNull ICraftingCPUCluster cpu,
         @NotNull Collection<IAEKey> keys) {
-        if (!cpu.web$isBusy()) return read(grid, cpu, true);
+        if (!cpu.web$isBusy()) return read(owner, cpu, true);
         Map<IAEKey, StableKey> itemKeys = new LinkedHashMap<>();
         for (IAEKey key : keys) {
             StableKey itemKey;
             try {
-                itemKey = AE2Controller.itemIdentities.remember(cpu, key);
+                itemKey = AE2Controller.itemIdentities.remember(owner, key);
             } catch (RuntimeException conflicted) {
-                return read(grid, cpu, true);
+                return read(owner, cpu, true);
             }
-            if (itemKey == null) return read(grid, cpu, true);
+            if (itemKey == null) return read(owner, cpu, true);
             itemKeys.put(key, itemKey);
         }
         AE2JobTracker.JobTrackingInfo tracking = AE2JobTracker.findActiveJob(cpu);
@@ -135,6 +144,7 @@ public final class CpuReader {
         List<CpuObservation.Row> rows = new ArrayList<>();
         Set<StableKey> missing = new HashSet<>();
         Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
+        ResourceSnapshot finalOutput = readOutput(owner, cpu.web$getFinalOutput());
         for (Map.Entry<IAEKey, StableKey> entry : itemKeys.entrySet()) {
             IAEKey key = entry.getKey();
             StableKey itemKey = entry.getValue();
@@ -143,16 +153,22 @@ public final class CpuReader {
                 pending.web$getAmount(key),
                 stored.web$getAmount(key),
                 tracking == null ? null : tracking(tracking, key));
-            if (amounts.active() == 0 && amounts.pending() == 0 && amounts.stored() == 0 && amounts.tracking() == null)
+            if (amounts.active() == 0 && amounts.pending() == 0
+                && amounts.stored() == 0
+                && amounts.tracking() == null) {
                 missing.add(itemKey);
-            else {
+                if (finalOutput == null || !itemKey.equals(
+                    finalOutput.description()
+                        .itemKey()))
+                    AE2Controller.itemIdentities.release(owner, itemKey);
+            } else {
                 rows.add(new CpuObservation.Row(itemKey, amounts));
                 descriptions.put(itemKey, ResourceSnapshot.describe(key, itemKey));
             }
         }
         return new CpuObservation(
             false,
-            header(cpu, true, ResourceSnapshot.capture(grid, cpu.web$getFinalOutput()), tracking),
+            header(cpu, true, finalOutput, tracking),
             rows,
             missing,
             descriptions,
@@ -160,13 +176,27 @@ public final class CpuReader {
     }
 
     /** Reads only detached CPU metadata, without enumerating resource lists. Server thread only. */
-    public static @NotNull CpuObservation.Header readHeader(@NotNull IAEGrid grid, @NotNull ICraftingCPUCluster cpu) {
+    static @NotNull CpuObservation.Header readHeader(@NotNull IIdentityHolder owner, @NotNull ICraftingCPUCluster cpu) {
         boolean busy = cpu.web$isBusy();
         return header(
             cpu,
             busy,
-            busy ? ResourceSnapshot.capture(grid, cpu.web$getFinalOutput()) : null,
+            busy ? readOutput(owner, cpu.web$getFinalOutput()) : null,
             busy ? AE2JobTracker.findActiveJob(cpu) : null);
+    }
+
+    /** Retains the current output for subsequent actions under its job or live-view owner. */
+    public static @Nullable ResourceSnapshot readOutput(@NotNull IIdentityHolder owner,
+        @Nullable IAEGenericStack output) {
+        if (output == null) return null;
+        IAEKey resource = output.web$what();
+        StableKey itemKey;
+        try {
+            itemKey = AE2Controller.itemIdentities.remember(owner, resource);
+        } catch (RuntimeException unavailable) {
+            itemKey = null;
+        }
+        return ResourceSnapshot.capture(resource, output.web$amount(), itemKey);
     }
 
     private static CpuObservation.Header header(ICraftingCPUCluster cpu, boolean busy,

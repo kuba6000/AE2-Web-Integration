@@ -112,7 +112,7 @@ public class AE2JobTracker {
             if (data == null || !data.getSettings()
                 .isTracked()) return;
         }
-        ResourceSnapshot finalOutput = ResourceSnapshot.capture(grid, cpuCluster.web$getFinalOutput());
+        ResourceSnapshot finalOutput = ResourceSnapshot.capture(cpuCluster.web$getFinalOutput());
         if (finalOutput == null) {
             trackingInfoMap.remove(cpuCluster);
             return;
@@ -224,8 +224,7 @@ public class AE2JobTracker {
         info.isDone = true;
         info.timeDone = now;
         for (IAEKey resource : info.timeSpentOn.keySet()) {
-            info.resourceSnapshots
-                .put(resource, ResourceSnapshot.capture(grid, resource, info.craftedTotal.get(resource)));
+            info.resourceSnapshots.put(resource, ResourceSnapshot.capture(resource, info.craftedTotal.get(resource)));
         }
         CraftingHistoryService history = CoreEngine.getCraftingHistory();
         if (history != null) history.enqueue(key, CompletedCrafting.capture(info));

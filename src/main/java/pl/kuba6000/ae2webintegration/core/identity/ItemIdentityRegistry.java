@@ -15,7 +15,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 
-/** Server-thread-only shared identities retained by the grids, CPUs and plans that last reported them. */
+/** Server-thread-only shared identities retained for the lifetime of their consumer owners. */
 public final class ItemIdentityRegistry {
 
     // Values must not refer back to their owner: that would defeat the weak owner key.
@@ -47,6 +47,11 @@ public final class ItemIdentityRegistry {
         if (retained != null) retained.remove(key);
     }
 
+    /** End an owner's lifetime without invalidating another owner or an in-progress listing. */
+    public void release(@NotNull IIdentityHolder owner) {
+        owners.invalidate(owner);
+    }
+
     /** Start a replacement list; the previous list stays owned until commit succeeds. */
     public @NotNull Listing beginListing(@NotNull IIdentityHolder owner) {
         return new Listing(owner);
@@ -57,6 +62,10 @@ public final class ItemIdentityRegistry {
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry entry = entries.getIfPresent(key);
         if (entry == null) return null;
+        return resolveBaseKey(entry);
+    }
+
+    private static @Nullable StableKey resolveBaseKey(Entry entry) {
         if (!entry.baseComputed) {
             try {
                 entry.base = entry.identity.web$getBaseKey();
@@ -74,8 +83,23 @@ public final class ItemIdentityRegistry {
         if (ambiguous.contains(key)) throw new Ambiguous();
         Entry entry = entries.getIfPresent(key);
         if (entry == null) return null;
+        return describe(entry);
+    }
+
+    /** Capture detached metadata without retaining native data; unavailable identities remain unkeyed. */
+    public @NotNull ResourceDescriptor describe(@NotNull IAEKey resource) {
+        Entry entry;
+        try {
+            entry = findOrCreate(resource);
+        } catch (RuntimeException unavailable) {
+            entry = null;
+        }
+        return entry == null ? ResourceDescriptor.capture(resource, null, null) : describe(entry);
+    }
+
+    private static @NotNull ResourceDescriptor describe(Entry entry) {
         if (entry.description == null) {
-            entry.description = ResourceDescriptor.capture(entry.identity, key, resolveBaseKey(key));
+            entry.description = ResourceDescriptor.capture(entry.identity, entry.key, resolveBaseKey(entry));
         }
         return entry.description;
     }

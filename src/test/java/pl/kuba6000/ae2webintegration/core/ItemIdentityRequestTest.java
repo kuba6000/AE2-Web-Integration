@@ -84,7 +84,7 @@ class ItemIdentityRequestTest extends GridTestScope {
         assertTrue(
             row.get("icon")
                 .isJsonNull());
-        ResourceSnapshot captured = ResourceSnapshot.capture(grid, resource, 21);
+        ResourceSnapshot captured = ResourceSnapshot.capture(resource, 21);
         assertNull(
             captured.description()
                 .itemKey());

@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -9,6 +10,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.jetbrains.annotations.NotNull;
@@ -52,12 +54,42 @@ class OutputSnapshotTest extends GridTestScope {
     }
 
     @Test
+    void detachedHistoryDoesNotRetainNativeIdentitiesThroughASurvivingGrid() throws Exception {
+        IAEGrid grid = TestGridFixtures.grid(990125);
+        for (int job = 0; job < 12; job++) {
+            CpuFixtures.Resource resource = new CpuFixtures.Resource("completed-" + job);
+            ResourceSnapshot snapshot = ResourceSnapshot.capture(resource, 5);
+            WeakReference<IAEKey> identity = new WeakReference<>(AE2Controller.itemIdentities.resolve(resource.key()));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (identity.get() != null && System.nanoTime() < deadline) {
+                System.gc();
+                AE2Controller.itemIdentities.cleanUp();
+                Thread.sleep(10);
+            }
+            assertNull(identity.get(), "Detached history must not retain a native identity under its grid");
+            assertNull(AE2Controller.itemIdentities.resolve(resource.key()));
+            assertEquals(
+                resource.key(),
+                snapshot.description()
+                    .itemKey());
+            assertEquals(
+                "Display completed-" + job,
+                snapshot.description()
+                    .displayName());
+            assertEquals(5, snapshot.quantity());
+        }
+        assertNotNull(TestGridFixtures.resolvedKey(grid), "The native grid remains usable after history capture");
+    }
+
+    @Test
     void amountsShareDetachedDescriptionAcrossOwnersAndSurviveRegistryRetirement() {
         Resource resource = new Resource();
         IAEGrid firstGrid = TestGridFixtures.grid(990125);
         IAEGrid secondGrid = TestGridFixtures.grid(990126);
-        ResourceSnapshot first = ResourceSnapshot.capture(firstGrid, resource, 5);
-        ResourceSnapshot second = ResourceSnapshot.capture(secondGrid, resource, 17);
+        AE2Controller.itemIdentities.remember(firstGrid, resource);
+        AE2Controller.itemIdentities.remember(secondGrid, resource);
+        ResourceSnapshot first = ResourceSnapshot.capture(resource, 5);
+        ResourceSnapshot second = ResourceSnapshot.capture(resource, 17);
         assertSame(first.description(), second.description());
         assertEquals(5, first.quantity());
         assertEquals(17, second.quantity());
@@ -72,8 +104,7 @@ class OutputSnapshotTest extends GridTestScope {
     void capturedOutputSerializesAfterNativeAccessIsUnavailable() {
         Resource key = new Resource();
         Stack stack = new Stack(key, 5);
-        IAEGrid grid = TestGridFixtures.grid(990125);
-        ResourceSnapshot snapshot = ResourceSnapshot.capture(grid, stack);
+        ResourceSnapshot snapshot = ResourceSnapshot.capture(stack);
         key.unavailable = true;
         stack.unavailable = true;
         JsonObject json = new JsonParser().parse(
@@ -111,18 +142,15 @@ class OutputSnapshotTest extends GridTestScope {
         assertFalse(json.has("itemname"));
         assertFalse(json.has("baseKey"));
         assertNotNull(
-            AE2Controller.itemIdentities.resolve(
-                StableKey.parse(
-                    json.get("itemKey")
-                        .getAsString())));
-        AE2Controller.itemIdentities.beginListing(grid)
-            .commit();
+            StableKey.parse(
+                json.get("itemKey")
+                    .getAsString()));
     }
 
     @Test
     void outputIconsBelongToIndependentResponsePageTables(@TempDir Path directory) throws Exception {
         Resource key = new Resource();
-        ResourceSnapshot snapshot = ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 5));
+        ResourceSnapshot snapshot = ResourceSnapshot.capture(new Stack(key, 5));
         assertNotNull(snapshot);
         assertNotNull(
             snapshot.description()
@@ -199,8 +227,7 @@ class OutputSnapshotTest extends GridTestScope {
     void failedIdentityPreservesDisplayWithOrdinaryNullableJsonFields() {
         Resource key = new Resource();
         key.brokenIdentity = true;
-        ResourceSnapshot snapshot = assertDoesNotThrow(
-            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 9)));
+        ResourceSnapshot snapshot = assertDoesNotThrow(() -> ResourceSnapshot.capture(new Stack(key, 9)));
         assertNotNull(snapshot);
         Map<String, ResourceStack> response = new LinkedHashMap<>();
         response.put("output", new ResourceStack(snapshot, null));
@@ -244,8 +271,7 @@ class OutputSnapshotTest extends GridTestScope {
     void unsupportedNativeIdentityCannotEscapeSnapshotCapture() {
         Resource key = new Resource();
         key.unsupportedIdentity = true;
-        ResourceSnapshot snapshot = assertDoesNotThrow(
-            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 4)));
+        ResourceSnapshot snapshot = assertDoesNotThrow(() -> ResourceSnapshot.capture(new Stack(key, 4)));
         assertNotNull(snapshot);
         JsonObject json = new JsonParser().parse(
             GSONUtils.GSON_BUILDER.create()
@@ -264,9 +290,7 @@ class OutputSnapshotTest extends GridTestScope {
     void brokenDisplayCallbackFailsSnapshotCapture() {
         Resource key = new Resource();
         key.brokenName = true;
-        assertThrows(
-            IllegalStateException.class,
-            () -> ResourceSnapshot.capture(TestGridFixtures.grid(990125), new Stack(key, 6)));
+        assertThrows(IllegalStateException.class, () -> ResourceSnapshot.capture(new Stack(key, 6)));
     }
 
     @ParameterizedTest

@@ -12,6 +12,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.URL;
@@ -27,6 +28,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonObject;
@@ -40,6 +43,7 @@ import pl.kuba6000.ae2webintegration.core.config.CoreData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.AEMixinCallbacks;
 
@@ -99,6 +103,70 @@ class CpuLiveHttpTest {
     private void onGame(Runnable task) throws Exception {
         game.submit(task)
             .get(3, TimeUnit.SECONDS);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "complete", "cancel", "replace", "start", "merge" })
+    void plainCpuReadsReleaseTheirJobIdentitiesWithoutAnotherRead(String boundary) throws Exception {
+        for (int job = 0; job < 3; job++) {
+            CpuFixtures.Resource row = new CpuFixtures.Resource("job-" + job);
+            onGame(() -> {
+                cpu.set(row, 1, 0, 0);
+                AE2Controller.itemIdentities.remember(grid, iron);
+            });
+            json(base);
+            WeakReference<IAEKey> rowIdentity = onGame(
+                () -> new WeakReference<>(AE2Controller.itemIdentities.resolve(row.key())));
+            WeakReference<IAEKey> outputIdentity = onGame(
+                () -> new WeakReference<>(AE2Controller.itemIdentities.resolve(gear.key())));
+            assertNotNull(rowIdentity.get());
+            assertNotNull(outputIdentity.get());
+            System.gc();
+            assertNotNull(
+                onGame(() -> AE2Controller.itemIdentities.resolve(row.key())),
+                "The current HTTP job remains actionable");
+            onGame(() -> {
+                switch (boundary) {
+                    case "complete" -> AEMixinCallbacks.INSTANCE.jobCompleted(grid, cpu);
+                    case "cancel" -> AEMixinCallbacks.INSTANCE.jobCancelled(grid, cpu);
+                    case "replace" -> AEMixinCallbacks.INSTANCE.cpuStateReplaced(cpu);
+                    case "start" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, false, true);
+                    case "merge" -> AEMixinCallbacks.INSTANCE.jobStarted(cpu, grid, true, true);
+                    default -> throw new AssertionError(boundary);
+                }
+            });
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while ((rowIdentity.get() != null || outputIdentity.get() != null) && System.nanoTime() < deadline) {
+                System.gc();
+                onGame(() -> AE2Controller.itemIdentities.cleanUp());
+                Thread.sleep(10);
+            }
+            assertNull(rowIdentity.get(), "The job boundary must release the last HTTP resource snapshot");
+            assertNull(outputIdentity.get(), "The job boundary must release its output identity");
+            assertNotNull(
+                onGame(() -> AE2Controller.itemIdentities.resolve(iron.key())),
+                "The grid keeps its independent ownership");
+            onGame(() -> cpu.work.remove(row));
+        }
+    }
+
+    @Test
+    void aListOnlyOutputRemainsActionableUntilItsJobEnds() throws Exception {
+        String cpus = "http://127.0.0.1:" + Config.INSTANCE.general.port + "/api/grids/" + gridKey + "/cpus";
+        json(cpus);
+        WeakReference<IAEKey> identity = onGame(
+            () -> new WeakReference<>(AE2Controller.itemIdentities.resolve(gear.key())));
+        assertNotNull(identity.get());
+        System.gc();
+        assertNotNull(onGame(() -> AE2Controller.itemIdentities.resolve(gear.key())));
+        onGame(() -> AEMixinCallbacks.INSTANCE.jobCompleted(grid, cpu));
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (identity.get() != null && System.nanoTime() < deadline) {
+            System.gc();
+            onGame(() -> AE2Controller.itemIdentities.cleanUp());
+            Thread.sleep(10);
+        }
+        assertNull(identity.get(), "A list-only output must not accumulate on a surviving grid or CPU");
     }
 
     @Test

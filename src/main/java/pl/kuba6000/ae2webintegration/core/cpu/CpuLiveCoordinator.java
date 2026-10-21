@@ -14,6 +14,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridFilter;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
@@ -23,6 +24,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
+import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
 import pl.kuba6000.ae2webintegration.core.live.LiveTopic;
 
 /**
@@ -74,7 +76,7 @@ public final class CpuLiveCoordinator {
             return;
         }
         binding.nextValidation = nowMillis + VALIDATION_MILLIS;
-        publish(binding, CpuReader.read(grid, cpu, true), nowMillis);
+        publish(binding, CpuReader.read(binding, cpu, true), nowMillis);
     }
 
     /** Native hook: a resource of this CPU changed. Costs one identity lookup, and nothing for unviewed CPUs. */
@@ -99,7 +101,7 @@ public final class CpuLiveCoordinator {
     /** Native hook: a job started, merged, completed or was cancelled. Viewers fetch a fresh snapshot. */
     public void jobChanged(@NotNull ICraftingCPUCluster cpu) {
         Binding binding = byCpu.get(cpu);
-        if (binding != null) cpus.invalidate(binding.gridKey, binding.cpuKey, binding.generation);
+        if (binding != null) retire(binding);
     }
 
     /** Releases CPUs without viewers or grid, then performs at most one read, so a tick cost stays bounded. */
@@ -132,7 +134,7 @@ public final class CpuLiveCoordinator {
             }
             binding.nextValidation = nowMillis + VALIDATION_MILLIS;
             if (!binding.dirty.isEmpty() && nowMillis >= binding.nextRead) {
-                CpuObservation observation = CpuReader.read(grid, binding.cpu, binding.dirty);
+                CpuObservation observation = CpuReader.read(binding, binding.cpu, binding.dirty);
                 binding.dirty.clear();
                 publish(binding, observation, nowMillis);
             } else if (binding.metadataDirty) {
@@ -142,7 +144,7 @@ public final class CpuLiveCoordinator {
                     binding.generation,
                     new CpuObservation(
                         false,
-                        CpuReader.readHeader(grid, binding.cpu),
+                        CpuReader.readHeader(binding, binding.cpu),
                         Collections.emptyList(),
                         Collections.emptySet(),
                         Collections.emptyMap(),
@@ -177,10 +179,12 @@ public final class CpuLiveCoordinator {
     private void release(Binding binding) {
         // A surviving CPU may already be indexed by a newer binding; only remove this binding's own entry.
         byCpu.remove(binding.cpu, binding);
+        AE2Controller.itemIdentities.release(binding);
+        binding.dirty.clear();
         cpus.retire(binding.gridKey, binding.cpuKey, binding.generation);
     }
 
-    private static final class Binding {
+    private static final class Binding implements IIdentityHolder {
 
         private final LiveTopic.Key key;
         private final StableKey gridKey;

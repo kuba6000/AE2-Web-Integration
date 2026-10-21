@@ -156,7 +156,7 @@ public final class GetCPU extends LiveSnapshotRequest {
             return;
         }
         long now = System.currentTimeMillis();
-        CpuObservation observation = CpuReader.read(grid, cpu, mappings != null);
+        CpuObservation observation = CpuReader.read(cpu, mappings != null);
         CpuObservation.Header header = observation.header();
         respond(
             HttpURLConnection.HTTP_OK,

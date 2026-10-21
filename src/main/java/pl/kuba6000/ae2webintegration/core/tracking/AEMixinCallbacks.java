@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.tracking;
 
 import org.jetbrains.annotations.NotNull;
 
+import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.cpu.CpuLiveCoordinator;
@@ -72,8 +73,9 @@ public class AEMixinCallbacks implements IAEMixinCallbacks {
         AE2JobTracker.cancelCrafting(grid, cpu);
     }
 
-    /** Independent of job tracking: viewers of the live CPU view must refetch even when nothing is measured. */
+    /** Ends plain HTTP job ownership and the live view independently of whether the job was tracked. */
     private static void jobChanged(ICraftingCPUCluster cpu) {
+        AE2Controller.itemIdentities.release(cpu);
         CpuLiveCoordinator live = CoreEngine.getCpuLive();
         if (live != null) live.jobChanged(cpu);
     }

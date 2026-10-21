@@ -1,8 +1,10 @@
 package pl.kuba6000.ae2webintegration.core;
 
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.BufferedReader;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -12,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jetbrains.annotations.NotNull;
@@ -37,6 +40,17 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 final class CpuFixtures {
 
     private CpuFixtures() {}
+
+    @SuppressWarnings("BusyWait") // Bounded polling is required for GC, which has no completion callback.
+    static void awaitCollected(WeakReference<?> identity) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (identity.get() != null && System.nanoTime() < deadline) {
+            System.gc();
+            AE2Controller.itemIdentities.cleanUp();
+            Thread.sleep(10);
+        }
+        assertNull(identity.get(), "An obsolete CPU identity must be reclaimable while the CPU survives");
+    }
 
     /** A native resource whose identity is its name; an unstable one models an unsupported variant. */
     static final class Resource implements IAEKey {

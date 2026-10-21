@@ -1140,7 +1140,7 @@ class IconDeliveryHttpTest {
         String gridPath = "/api/grids/" + TestGridFixtures.resolvedKey(grid);
         CompletableFuture<IAECraftingJob> future = new CompletableFuture<>();
         int id = GridData.getOrCreate(TestGridFixtures.resolvedKey(grid))
-            .addJob(future, ResourceSnapshot.capture(grid, resources[0], 37), new CraftingOptions(false, false), false);
+            .addJob(future, ResourceSnapshot.capture(resources[0], 37), new CraftingOptions(false, false), false);
         String path = gridPath + "/crafting-plans/" + id;
         JsonObject pending = syncedJson(path + "?icons=true");
         assertFalse(

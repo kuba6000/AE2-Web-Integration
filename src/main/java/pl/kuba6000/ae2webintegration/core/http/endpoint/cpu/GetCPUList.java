@@ -162,7 +162,7 @@ public final class GetCPUList extends ISyncedRequest {
             cpuInfo.isPaused = cpuInfo.isBusy && cluster instanceof IPausableCraftingCPU pausable
                 && pausable.web$isPaused();
             if (cpuInfo.isBusy) {
-                ResourceSnapshot output = ResourceSnapshot.capture(grid, cluster.web$getFinalOutput());
+                ResourceSnapshot output = CpuReader.readOutput(cluster, cluster.web$getFinalOutput());
                 cpuInfo.finalOutput = output == null ? null : new ResourceStack(output, mappings);
                 AE2JobTracker.JobTrackingInfo trackingInfo = AE2JobTracker.findActiveJob(cluster);
                 if (trackingInfo != null) {
