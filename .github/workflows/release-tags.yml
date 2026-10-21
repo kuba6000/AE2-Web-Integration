@@ -52,12 +52,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build and exercise both publishers without uploading
+      - name: Build and prepare release artifacts
         run: |
           chmod +x gradlew
           ./gradlew --build-cache --no-configuration-cache --stacktrace \
-            assemble releasePreview releaseModrinth releaseCurseforge \
-            -PreleaseDryRun=true -PreleaseType="${{ steps.notes.outputs.release_type }}" \
+            assemble prepareRelease \
+            -PreleaseType="${{ steps.notes.outputs.release_type }}" \
             -PreleaseNotesFile=build/release/notes.md
 
       - name: Stage verified production JAR and description
