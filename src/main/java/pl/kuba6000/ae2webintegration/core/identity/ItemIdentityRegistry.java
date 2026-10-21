@@ -1,6 +1,8 @@
 package pl.kuba6000.ae2webintegration.core.identity;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import org.jetbrains.annotations.NotNull;
@@ -17,7 +19,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 public final class ItemIdentityRegistry {
 
     // Values must not refer back to their owner: that would defeat the weak owner key.
-    private final Cache<IIdentityHolder, Set<Entry>> owners = CacheBuilder.newBuilder()
+    private final Cache<IIdentityHolder, Map<StableKey, Entry>> owners = CacheBuilder.newBuilder()
         .weakKeys()
         .build();
     private final Cache<StableKey, Entry> entries = CacheBuilder.newBuilder()
@@ -34,9 +36,15 @@ public final class ItemIdentityRegistry {
         Entry entry = findOrCreate(resource);
         if (entry == null) return null;
         owners.asMap()
-            .computeIfAbsent(owner, ignored -> new HashSet<>())
-            .add(entry);
+            .computeIfAbsent(owner, ignored -> new HashMap<>())
+            .put(entry.key, entry);
         return entry.key;
+    }
+
+    /** Release one owner's need without invalidating another owner or an in-progress listing. */
+    public void release(@NotNull IIdentityHolder owner, @NotNull StableKey key) {
+        Map<StableKey, Entry> retained = owners.getIfPresent(owner);
+        if (retained != null) retained.remove(key);
     }
 
     /** Start a replacement list; the previous list stays owned until commit succeeds. */
@@ -125,7 +133,7 @@ public final class ItemIdentityRegistry {
     public final class Listing {
 
         private IIdentityHolder owner;
-        private Set<Entry> collected = new HashSet<>();
+        private Map<StableKey, Entry> collected = new HashMap<>();
 
         private Listing(@NotNull IIdentityHolder owner) {
             this.owner = owner;
@@ -135,17 +143,8 @@ public final class ItemIdentityRegistry {
             requireOpen();
             Entry entry = findOrCreate(resource);
             if (entry == null) return null;
-            collected.add(entry);
+            collected.put(entry.key, entry);
             return entry.key;
-        }
-
-        /** Keep a known resource needed by tracking even when it is absent from the new inventory. */
-        public void retain(@NotNull StableKey key) {
-            requireOpen();
-            if (ambiguous.contains(key)) throw new Ambiguous();
-            Entry entry = entries.getIfPresent(key);
-            if (entry == null) throw new IllegalStateException("Resource identity is no longer retained: " + key);
-            collected.add(entry);
         }
 
         public void commit() {

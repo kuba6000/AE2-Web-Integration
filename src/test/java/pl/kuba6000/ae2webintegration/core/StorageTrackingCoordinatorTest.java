@@ -1371,6 +1371,7 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
         data.getSettings()
             .setFlowTracked(true);
         ConfigSettings.ResourceTracking settings = new ConfigSettings.ResourceTracking();
+        settings.maxResourcesPerGrid = 1;
         CoreEngine.GRID_IDENTITIES.getPersistentData(key)
             .getSettings()
             .setFlowFlushIntervalSeconds(5);
@@ -1385,7 +1386,15 @@ class StorageTrackingCoordinatorTest extends GridTestScope {
             Resource iron = new Resource("iron", 20, false);
             capture[0].recordFlow(iron, 7, 3);
             coordinator.tick(TestGridFixtures.ae(grid), 6000);
+            Resource gold = new Resource("gold", 10, false);
+            capture[0].recordFlow(gold, 9, 2);
+            coordinator.tick(TestGridFixtures.ae(grid), 11000);
             service.close();
+            assertTrue(
+                store.read(key, gold.web$getKey(), 0, 100)
+                    .points()
+                    .stream()
+                    .anyMatch(point -> point.input() == 9 && point.output() == 2));
             assertTrue(
                 store.read(key, iron.web$getKey(), 0, 100)
                     .points()

@@ -17,7 +17,6 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import pl.kuba6000.ae2webintegration.core.AE2Controller;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.grid.GridFilter;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -130,6 +129,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     private void activate(Binding binding, long nowMillis) {
         boolean wasActive = binding.activeUntil > nowMillis;
         binding.activeUntil = nowMillis + VIEWER_LEASE_MILLIS;
+        binding.capture.setStockNeeded(true);
         if (!binding.attached) return;
         if (terminals.activate(binding.key, binding.generation, nowMillis)) binding.capture.invalidate();
         if (!wasActive && binding.lastFailure == null)
@@ -254,6 +254,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
                 grid,
                 new StorageCapture(grid, settings.maxResourcesPerGrid, flow));
             binding.activeUntil = activeUntil;
+            binding.capture.setStockNeeded(stock || activeUntil > nowMillis);
             binding.stock = stock;
             binding.flow = flow;
             binding.nextFlowFlush = nowMillis + flowInterval;
@@ -299,6 +300,7 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
     }
 
     private void observe(Binding binding, IAEGrid grid, long nowMillis) {
+        binding.capture.setStockNeeded(binding.stock || binding.activeUntil > nowMillis);
         long started = System.nanoTime();
         boolean stockSample = binding.stock && nowMillis >= binding.nextStockSample;
         boolean flowFlush = binding.flow && nowMillis >= binding.nextFlowFlush;
@@ -421,20 +423,16 @@ public final class StorageTrackingCoordinator implements AutoCloseable {
         }
         IAEGrid grid = binding.grid.get();
         if (grid != null) {
-            boolean owned = false;
             try {
                 IAEStorageGrid storage = grid.web$getStorageGrid();
                 if (storage.web$getStorageCapture() == binding.capture) {
-                    owned = true;
                     storage.web$setStorageCapture(null);
                 }
             } catch (RuntimeException failure) {
                 LOG.warn("Native storage capture could not be detached for network {}", binding.key, failure);
             }
-            // Tracking identities expire even if clearing a known-owned native capture fails partway through.
-            if (owned) AE2Controller.itemIdentities.beginListing(grid)
-                .commit();
         }
+        binding.capture.close();
         recent.retire(binding.key, binding.generation);
         service.retire(binding.key, binding.generation);
         terminals.retire(binding.key, binding.generation);

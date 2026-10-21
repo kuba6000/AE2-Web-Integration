@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.core.tracking.storage;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -9,8 +10,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
@@ -30,6 +33,247 @@ import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
 
 class StorageCaptureTest {
+
+    @Test
+    void metadataTriggeredStockChangeSurvivesZeroRowCleanup() {
+        IAEGrid grid = grid();
+        StorageCapture capture = new StorageCapture(grid, 1);
+        capture.observe(grid, 0, true);
+        AtomicReference<IAEKey> changed = new AtomicReference<>();
+        IAEKey metadata = resource(new AtomicInteger());
+        IAEKey item = (IAEKey) Proxy.newProxyInstance(
+            IAEKey.class.getClassLoader(),
+            new Class<?>[] { IAEKey.class },
+            (proxy, method, args) -> switch (method.getName()) {
+                case "web$copyIdentity" -> proxy;
+                case "web$getDisplayName" -> {
+                    capture.beginAbsoluteChanges();
+                    capture.absoluteChanged(changed.get(), 7);
+                    capture.endAbsoluteChanges(true);
+                    yield "Item";
+                }
+                case "hashCode" -> System.identityHashCode(proxy);
+                case "equals" -> proxy == args[0];
+                default -> method.invoke(metadata, args);
+            });
+        changed.set(item);
+        capture.recordFlow(item, 0, 4);
+        StorageObservation first = capture.observe(grid, 1, false, false);
+        assertEquals(
+            1,
+            first.rows()
+                .size());
+        assertEquals(
+            0,
+            first.rows()
+                .get(0)
+                .quantity());
+        StorageObservation second = capture.observe(grid, 2, false);
+        assertFalse(second.full());
+        assertEquals(
+            1,
+            second.rows()
+                .size());
+        assertEquals(
+            item.web$getKey(),
+            second.rows()
+                .get(0)
+                .itemKey());
+        assertEquals(
+            7,
+            second.rows()
+                .get(0)
+                .quantity());
+        assertEquals(
+            1,
+            second.flows()
+                .size());
+        assertEquals(
+            4,
+            second.flows()
+                .get(0)
+                .output());
+    }
+
+    @Test
+    void failedFullObservationKeepsFlowForAnAbsentResource() {
+        IAEKey item = resource(new AtomicInteger());
+        List<IAEKey> craftables = new ArrayList<>(Collections.singletonList(item));
+        IAEGrid grid = grid(craftables);
+        StorageCapture capture = new StorageCapture(grid, 2);
+        capture.observe(grid, 0, true);
+        capture.recordFlow(item, 12, 5);
+        IAEKey metadata = resource(new AtomicInteger());
+        IAEKey broken = (IAEKey) Proxy.newProxyInstance(
+            IAEKey.class.getClassLoader(),
+            new Class<?>[] { IAEKey.class },
+            (proxy, method, args) -> switch (method.getName()) {
+                case "web$copyIdentity" -> proxy;
+                case "web$getDisplayName" -> throw new IllegalStateException("Native metadata unavailable");
+                case "hashCode" -> System.identityHashCode(proxy);
+                case "equals" -> proxy == args[0];
+                default -> method.invoke(metadata, args);
+            });
+        craftables.clear();
+        craftables.add(broken);
+        assertThrows(IllegalStateException.class, () -> capture.observe(grid, 1, true));
+        StorageObservation drained = capture.flushFlow(2);
+        assertEquals(
+            1,
+            drained.flows()
+                .size());
+        StorageObservation.Flow flow = drained.flows()
+            .get(0);
+        assertEquals(item.web$getKey(), flow.itemKey());
+        assertEquals(12, flow.input());
+        assertEquals(5, flow.output());
+        assertNotNull(
+            drained.descriptions()
+                .get(flow.itemKey()));
+        assertTrue(
+            capture.flushFlow(3)
+                .flows()
+                .isEmpty());
+    }
+
+    @Test
+    void drainedFlowIdentityIsCollectibleWhileItsGridAndCaptureRemainAlive() throws Exception {
+        IAEGrid grid = grid();
+        StorageCapture capture = new StorageCapture(grid, 1);
+        capture.setStockNeeded(false);
+        WeakReference<IAEKey> identity = recordTemporaryFlow(capture);
+        capture.flushFlow(1);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (identity.get() != null && System.nanoTime() < deadline) {
+            System.gc();
+            AE2Controller.itemIdentities.cleanUp();
+            Thread.sleep(10);
+        }
+        assertNull(identity.get());
+        capture.recordFlow(resource(new AtomicInteger()), 2, 0);
+        assertEquals(
+            2,
+            capture.flushFlow(2)
+                .flows()
+                .get(0)
+                .input());
+        assertNotNull(grid.web$getStorageGrid());
+    }
+
+    private static WeakReference<IAEKey> recordTemporaryFlow(StorageCapture capture) {
+        IAEKey resource = resource(new AtomicInteger());
+        capture.recordFlow(resource, 1, 0);
+        return new WeakReference<>(AE2Controller.itemIdentities.resolve(resource.web$getKey()));
+    }
+
+    @Test
+    void idleFlowCaptureReleasesDrainedResourcesAndReconcilesWhenStockReturns() {
+        IAEKey item = resource(new AtomicInteger());
+        List<IAEKey> craftables = new ArrayList<>(Collections.singletonList(item));
+        IAEGrid grid = grid(craftables);
+        StorageCapture capture = new StorageCapture(grid, 1);
+        capture.observe(grid, 0, true);
+        capture.recordFlow(item, 5, 0);
+        capture.setStockNeeded(false);
+        assertEquals(
+            5,
+            capture.flushFlow(1)
+                .flows()
+                .get(0)
+                .input());
+        IAEKey second = resource(new AtomicInteger());
+        capture.recordFlow(second, 9, 0);
+        assertEquals(
+            9,
+            capture.flushFlow(2)
+                .flows()
+                .get(0)
+                .input());
+        craftables.clear();
+        craftables.add(second);
+        capture.setStockNeeded(true);
+        StorageObservation resumed = capture.observe(grid, 3, false);
+        assertTrue(resumed.full());
+        assertEquals(
+            second.web$getKey(),
+            resumed.rows()
+                .get(0)
+                .itemKey());
+    }
+
+    @Test
+    void stockRemovalWaitsForItsObservationEvenAfterFlowHasDrained() {
+        IAEKey item = resource(new AtomicInteger());
+        List<IAEKey> craftables = new ArrayList<>(Collections.singletonList(item));
+        IAEGrid grid = grid(craftables);
+        StorageCapture capture = new StorageCapture(grid, 1);
+        capture.observe(grid, 0, true);
+        craftables.clear();
+        capture.recordFlow(item, 0, 3);
+        capture.flushFlow(1);
+        StorageObservation changed = capture.observe(grid, 2, false);
+        assertEquals(
+            item.web$getKey(),
+            changed.rows()
+                .get(0)
+                .itemKey());
+        assertEquals(
+            0,
+            changed.rows()
+                .get(0)
+                .quantity());
+        assertFalse(
+            changed.rows()
+                .get(0)
+                .craftable());
+        IAEKey replacement = resource(new AtomicInteger());
+        craftables.add(replacement);
+        assertEquals(
+            replacement.web$getKey(),
+            capture.observe(grid, 3, true)
+                .rows()
+                .get(0)
+                .itemKey());
+    }
+
+    @Test
+    void closedCaptureCannotReacquireIdentitiesFromLateNativeCallbacks() {
+        StorageCapture capture = new StorageCapture(grid(), 1);
+        capture.close();
+        AtomicInteger copies = new AtomicInteger();
+        IAEKey item = resource(copies);
+        capture.recordFlow(item, 1, 0);
+        capture.markChanged(item);
+        capture.beginAbsoluteChanges();
+        capture.absoluteChanged(item, 1);
+        capture.endAbsoluteChanges(true);
+        assertEquals(0, copies.get());
+        assertTrue(
+            capture.flushFlow(1)
+                .flows()
+                .isEmpty());
+    }
+
+    @Test
+    void fullReconciliationReleasesAbsentResourcesBeforeAdmittingTheirReplacements() {
+        List<IAEKey> craftables = new ArrayList<>();
+        IAEGrid grid = grid(craftables);
+        StorageCapture capture = new StorageCapture(grid, 2);
+        for (int generation = 0; generation < 8; generation++) {
+            craftables.clear();
+            craftables.add(resource(new AtomicInteger()));
+            craftables.add(resource(new AtomicInteger()));
+            StorageObservation observation = capture.observe(grid, generation, true);
+            assertEquals(
+                2,
+                observation.rows()
+                    .size());
+            assertTrue(observation.flowComplete());
+            for (StorageObservation.Row row : observation.rows()) {
+                assertNotNull(AE2Controller.itemIdentities.resolve(row.itemKey()));
+            }
+        }
+    }
 
     @Test
     void unsupportedVariantAtCapacityStaysUnkeyedWithoutLosingKnownFlow() {
@@ -264,7 +508,6 @@ class StorageCaptureTest {
             assertDoesNotThrow(() -> capture.recordFlow(conflicting, 1, 0));
             if (retainFirst) {
                 ItemIdentityRegistry.Listing listing = AE2Controller.itemIdentities.beginListing(grid);
-                assertDoesNotThrow(() -> capture.retainIdentities(listing));
                 listing.commit();
             }
             StorageObservation flow = capture.flushFlow(1000);
@@ -590,11 +833,10 @@ class StorageCaptureTest {
         AtomicInteger otherCopies = new AtomicInteger();
         IAEGrid grid = grid();
         StorageCapture capture = new StorageCapture(grid, 1);
-        capture.markChanged(resource(firstCopies));
+        IAEKey first = resource(firstCopies);
+        capture.markChanged(first);
         IAEKey other = resource(otherCopies);
-        assertThrows(
-            IllegalStateException.class,
-            () -> capture.observe(grid(Collections.singletonList(other)), 1000, true));
+        assertThrows(IllegalStateException.class, () -> capture.observe(grid(Arrays.asList(first, other)), 1000, true));
         assertEquals(1, firstCopies.get());
         assertEquals(0, otherCopies.get());
     }

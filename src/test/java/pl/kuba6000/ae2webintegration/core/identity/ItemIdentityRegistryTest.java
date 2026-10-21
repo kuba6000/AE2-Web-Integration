@@ -23,6 +23,38 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 class ItemIdentityRegistryTest {
 
     @Test
+    void releasingOneOwnerPreservesOthersAndReclaimsTheLastOwnership() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid first = grid();
+        IAEGrid second = grid();
+        StableKey key = registry.remember(first, new Resource("shared", false));
+        assertNotNull(key);
+        registry.remember(second, new Resource("shared", false));
+        WeakReference<IAEKey> identity = new WeakReference<>(registry.resolve(key));
+        registry.release(first, key);
+        System.gc();
+        assertNotNull(registry.resolve(key));
+        registry.release(second, key);
+        awaitCollected(identity, registry::cleanUp);
+        assertNull(registry.resolve(key));
+    }
+
+    @Test
+    void releaseAlsoReclaimsAnIdentityInvalidatedByACollision() throws Exception {
+        ItemIdentityRegistry registry = new ItemIdentityRegistry();
+        IAEGrid owner = grid();
+        StableKey key = registry.remember(owner, new Resource("original", false, "collision"));
+        assertNotNull(key);
+        WeakReference<IAEKey> identity = new WeakReference<>(registry.resolve(key));
+        assertThrows(
+            ItemIdentityRegistry.Ambiguous.class,
+            () -> registry.remember(owner, new Resource("different", false, "collision")));
+        registry.release(owner, key);
+        awaitCollected(identity, registry::cleanUp);
+        assertThrows(ItemIdentityRegistry.Ambiguous.class, () -> registry.resolve(key));
+    }
+
+    @Test
     void supportedTypeMayLackAnEncodableVariantWithoutCreatingAnIdentityEntry() {
         ItemIdentityRegistry registry = new ItemIdentityRegistry();
         IAEGrid owner = grid();
@@ -99,25 +131,6 @@ class ItemIdentityRegistryTest {
         StableKey supported = registry.remember(owner, new Resource("known", false));
         assertNotNull(supported);
         assertNotNull(registry.resolve(supported));
-    }
-
-    @Test
-    void aListingCanKeepAnAbsentResourceNeededByPendingFlow() throws Exception {
-        ItemIdentityRegistry registry = new ItemIdentityRegistry();
-        IAEGrid grid = grid();
-        StableKey key = registry.remember(grid, new Resource("removed", false));
-        assertNotNull(key);
-        WeakReference<IAEKey> identity = new WeakReference<>(registry.resolve(key));
-        Listing listing = registry.beginListing(grid);
-        listing.retain(key);
-        listing.commit();
-        System.gc();
-        assertNotNull(registry.resolve(key), "A removed item is still needed to describe its pending flow");
-
-        registry.beginListing(grid)
-            .commit();
-        awaitCollected(identity, registry::cleanUp);
-        assertNull(registry.resolve(key));
     }
 
     @Test
@@ -358,7 +371,6 @@ class ItemIdentityRegistryTest {
         listing.commit();
         assertThrows(IllegalStateException.class, listing::commit);
         assertThrows(IllegalStateException.class, () -> listing.remember(new Resource("gold", true)));
-        assertThrows(IllegalStateException.class, () -> listing.retain(new Resource("gold", true).web$getKey()));
     }
 
     private static WeakReference<IAEGrid> rememberTemporaryGrid(ItemIdentityRegistry registry) {

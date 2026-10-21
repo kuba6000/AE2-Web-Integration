@@ -35,7 +35,6 @@ import pl.kuba6000.ae2webintegration.core.live.LiveView;
 import pl.kuba6000.ae2webintegration.core.terminal.StorageTopic;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
-import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
 
 /**
@@ -187,8 +186,6 @@ public final class GetItems extends LiveSnapshotRequest {
             addItem(items, AE2Controller.AE2Interface.web$stackOf(craftable, 0), grid, listing, mappings);
         }
 
-        StorageCapture capture = storageGrid.web$getStorageCapture();
-        if (capture != null) capture.retainIdentities(listing);
         listing.commit();
         respondDetached(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, items, mappings));
     }

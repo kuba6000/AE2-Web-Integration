@@ -21,12 +21,13 @@ import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IIdentityHolder;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 
 /** Producer-owned stable keys and primitive counters; native identities belong to the shared registry. */
-public final class StorageCapture {
+public final class StorageCapture implements IIdentityHolder, AutoCloseable {
 
     private final Thread producer = Thread.currentThread();
     private final int maxResources;
@@ -41,6 +42,8 @@ public final class StorageCapture {
     private int absoluteDepth;
     private boolean absoluteFailed;
     private boolean hasUnkeyedResources;
+    private boolean stockNeeded = true;
+    private boolean closed;
     private final List<Entry> staged = new ArrayList<>();
 
     public StorageCapture(@NotNull IAEGrid grid, int maxResources) {
@@ -52,6 +55,41 @@ public final class StorageCapture {
         this.flowEnabled = flowEnabled;
         if (maxResources < 1) throw new IllegalArgumentException("Resource limit must be positive");
         this.maxResources = maxResources;
+    }
+
+    /** Idle flow capture needs only undrained counters; returning viewers require a fresh stock baseline. */
+    public void setStockNeeded(boolean needed) {
+        if (!isProducerThread()) throw new IllegalStateException("Stock demand requires the producer thread");
+        if (closed || stockNeeded == needed) return;
+        stockNeeded = needed;
+        invalidate();
+        if (needed) return;
+        hasUnkeyedResources = false;
+        for (Iterator<Entry> iterator = resources.values()
+            .iterator(); iterator.hasNext();) {
+            Entry entry = iterator.next();
+            entry.present = false;
+            entry.dirty = 0;
+            entry.hasAbsolute = false;
+            entry.pending = false;
+            if (unused(entry)) {
+                iterator.remove();
+                releaseIfUnused(entry);
+            }
+        }
+        pending.clear();
+    }
+
+    /** Owner cleanup runs after native detachment, or after the world producer has stopped. */
+    @Override
+    public void close() {
+        closed = true;
+        resources.clear();
+        pending.clear();
+        flowPending.clear();
+        staged.clear();
+        AE2Controller.itemIdentities.beginListing(this)
+            .commit();
     }
 
     public boolean isProducerThread() {
@@ -74,11 +112,12 @@ public final class StorageCapture {
     }
 
     private @Nullable Entry admit(IAEKey resource) {
+        if (closed) return null;
         if (!resource.web$supportsStableIdentity()) {
             hasUnkeyedResources = true;
             return null;
         }
-        // At saturation, avoid retaining new identities in the grid's shared registry ownership.
+        // At saturation, avoid retaining new identities in this capture's shared registry ownership.
         if (resources.size() >= maxResources) {
             StableKey key = resource.web$getKey();
             if (key == null) {
@@ -93,7 +132,7 @@ public final class StorageCapture {
         }
         IAEGrid owner = grid.get();
         if (owner == null) throw new IllegalStateException("Storage grid is no longer available");
-        StableKey key = AE2Controller.itemIdentities.remember(owner, resource);
+        StableKey key = AE2Controller.itemIdentities.remember(this, resource);
         if (key == null) {
             hasUnkeyedResources = true;
             return null;
@@ -117,30 +156,18 @@ public final class StorageCapture {
             entry.inputOperations = add(entry, entry.inputOperations, input > 0 ? 1 : 0);
             entry.outputOperations = add(entry, entry.outputOperations, output > 0 ? 1 : 0);
         }
-        dirty(entry);
-        entry.hasAbsolute = false;
+        if (stockNeeded) {
+            dirty(entry);
+            entry.hasAbsolute = false;
+        }
     }
 
     public void markChanged(@NotNull IAEKey resource) {
+        if (!stockNeeded || closed) return;
         Entry entry = tryAdmit(resource);
         if (entry == null) return;
         dirty(entry);
         entry.hasAbsolute = false;
-    }
-
-    /** Keep removed resources available while this capture still needs their identity for stock or flow. */
-    public void retainIdentities(@NotNull ItemIdentityRegistry.Listing listing) {
-        Iterator<Entry> iterator = resources.values()
-            .iterator();
-        while (iterator.hasNext()) {
-            Entry entry = iterator.next();
-            if (identity(entry) == null) {
-                iterator.remove();
-                discard(entry);
-            } else {
-                listing.retain(entry.key);
-            }
-        }
     }
 
     private final AtomicLong terminalEpoch = new AtomicLong();
@@ -175,6 +202,7 @@ public final class StorageCapture {
     }
 
     public void beginAbsoluteChanges() {
+        if (closed) return;
         if (!isProducerThread()) {
             markGap();
             return;
@@ -183,6 +211,7 @@ public final class StorageCapture {
     }
 
     public void absoluteChanged(@NotNull IAEKey resource, long amount) {
+        if (!stockNeeded || closed) return;
         Entry entry = tryAdmit(resource);
         if (entry == null) return;
         if (absoluteDepth == 0 || amount < 0) {
@@ -197,6 +226,7 @@ public final class StorageCapture {
     }
 
     public void endAbsoluteChanges(boolean success) {
+        if (closed) return;
         if (!isProducerThread()) {
             markGap();
             return;
@@ -206,11 +236,12 @@ public final class StorageCapture {
         if (--absoluteDepth != 0) return;
         for (Entry entry : staged) {
             entry.staged = false;
-            if (!absoluteFailed) {
+            if (!absoluteFailed && stockNeeded) {
                 entry.absolute = entry.stagedAmount;
                 entry.hasAbsolute = true;
                 dirty(entry);
             }
+            releaseIfUnused(entry);
         }
         staged.clear();
         if (absoluteFailed) invalidate();
@@ -225,7 +256,9 @@ public final class StorageCapture {
     public @NotNull StorageObservation observe(@NotNull IAEGrid grid, long observedAt, boolean full,
         boolean flushFlow) {
         if (!isProducerThread()) throw new IllegalStateException("Native observation requires the producer thread");
+        if (closed) throw new IllegalStateException("Storage capture is closed");
         if (absoluteDepth != 0) throw new IllegalStateException("Native stock refresh is incomplete");
+        setStockNeeded(true);
         boolean requested = reconcile.getAndSet(false);
         boolean complete = full || requested;
         List<StorageObservation.Row> rows = new ArrayList<>();
@@ -241,13 +274,37 @@ public final class StorageCapture {
             long through = sequence;
             if (complete) {
                 Set<IAEKey> included = new HashSet<>();
+                Set<IAEKey> craftables = grid.web$getCraftingGrid()
+                    .web$getCraftables(null);
+                if (!resources.isEmpty()) {
+                    // Reclaim proven absences before admission, so replacing a full catalogue fits the same cap.
+                    for (IAEGenericStack stack : list.web$stacks()) included.add(stack.web$what());
+                    included.addAll(craftables);
+                    for (Iterator<Entry> iterator = resources.values()
+                        .iterator(); iterator.hasNext();) {
+                        Entry entry = iterator.next();
+                        IAEKey identity = identity(entry);
+                        if (identity == null) {
+                            iterator.remove();
+                            discard(entry);
+                        } else if (!included.contains(identity)) {
+                            entry.present = false;
+                            if (entry.dirty <= through) entry.dirty = 0;
+                            if (unused(entry)) {
+                                iterator.remove();
+                                releaseIfUnused(entry);
+                            }
+                        }
+                    }
+                    prunePending();
+                    included.clear();
+                }
                 for (IAEGenericStack stack : list.web$stacks()) {
                     IAEKey key = stack.web$what();
                     row(grid, key, stack.web$amount(), rows, descriptions, unkeyed);
                     included.add(key);
                 }
-                for (IAEKey craftable : grid.web$getCraftingGrid()
-                    .web$getCraftables(null)) {
+                for (IAEKey craftable : craftables) {
                     if (included.add(craftable)) row(grid, craftable, 0, rows, descriptions, unkeyed);
                 }
             } else {
@@ -309,6 +366,7 @@ public final class StorageCapture {
         if (!isProducerThread()) throw new IllegalStateException("Flow capture requires the producer thread");
         Map<StableKey, ResourceDescriptor> descriptions = new HashMap<>();
         List<StorageObservation.Flow> flows = drainFlow(descriptions);
+        prunePending();
         return new StorageObservation(
             observedAt,
             false,
@@ -358,6 +416,7 @@ public final class StorageCapture {
             entry.outputOperations = 0;
             entry.overflow = false;
             entry.flowPending = false;
+            releaseIfUnused(entry);
             index++;
         }
         flowPending.clear();
@@ -372,6 +431,7 @@ public final class StorageCapture {
             int last = pending.size() - 1;
             pending.set(index, pending.get(last));
             pending.remove(last);
+            releaseIfUnused(entry);
         }
     }
 
@@ -396,12 +456,11 @@ public final class StorageCapture {
             return;
         }
         descriptions.put(entry.key, AE2Controller.itemIdentities.describe(entry.key));
-        rows.add(
-            new StorageObservation.Row(
-                entry.key,
-                amount,
-                grid.web$getCraftingGrid()
-                    .web$isCurrentlyCraftable(key)));
+        boolean craftable = grid.web$getCraftingGrid()
+            .web$isCurrentlyCraftable(key);
+        entry.present = amount != 0 || craftable;
+        rows.add(new StorageObservation.Row(entry.key, amount, craftable));
+        releaseIfUnused(entry);
     }
 
     private @Nullable IAEKey identity(Entry entry) {
@@ -412,8 +471,19 @@ public final class StorageCapture {
         }
     }
 
+    private static boolean unused(Entry entry) {
+        return !entry.present && entry.dirty == 0 && !entry.flowPending && !entry.staged;
+    }
+
+    private void releaseIfUnused(Entry entry) {
+        if (!unused(entry)) return;
+        resources.remove(entry.key);
+        AE2Controller.itemIdentities.release(this, entry.key);
+    }
+
     private void discard(Entry entry) {
         resources.remove(entry.key);
+        AE2Controller.itemIdentities.release(this, entry.key);
         pending.remove(entry);
         flowPending.remove(entry);
         staged.remove(entry);
@@ -457,6 +527,7 @@ public final class StorageCapture {
         private long outputOperations;
         private boolean overflow;
         private boolean flowPending;
+        private boolean present;
         private long dirty;
         private boolean pending;
         private boolean hasAbsolute;
