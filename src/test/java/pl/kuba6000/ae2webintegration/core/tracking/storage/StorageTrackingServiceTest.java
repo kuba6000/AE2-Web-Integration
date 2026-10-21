@@ -844,7 +844,7 @@ class StorageTrackingServiceTest {
     }
 
     @Test
-    void persistenceFailureKeepsPublishingButOnlyANewGenerationResumesRecording() throws Exception {
+    void persistenceFailureKeepsPublishingUntilTheNextDurableSampleResumesRecording() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
         AtomicBoolean failNextWrite = new AtomicBoolean(true);
@@ -876,7 +876,7 @@ class StorageTrackingServiceTest {
                 service.history(grid, item, 0, 10)
                     .complete());
             service.open(grid, 1);
-            assertTrue(service.submit(grid, 1, observation(item, 20, 7), true, true, 0L));
+            assertTrue(service.submit(grid, 1, observation(item, 20, 7), false, false, 0L));
             awaitRevision(service, grid, 2);
             assertEquals(
                 7,
@@ -889,16 +889,18 @@ class StorageTrackingServiceTest {
                     .points()
                     .isEmpty());
 
-            service.open(grid, 2);
-            assertTrue(service.submit(grid, 2, observation(item, 30, 7), true, true, 0L));
-            awaitRevision(service, grid, 1);
+            assertTrue(service.submit(grid, 1, observation(item, 30, 7), true, true, 0L));
+            awaitRevision(service, grid, 3);
             assertTrue(snapshot(service, grid).persistenceComplete());
             List<StorageHistoryPoint> resumed = service.history(grid, item, 0, 100)
                 .points();
-            assertEquals(4, resumed.size());
+            assertEquals(5, resumed.size());
             assertTrue(
                 resumed.stream()
-                    .allMatch(point -> point.generation() == 2 && point.observedAt() == 30));
+                    .allMatch(point -> point.generation() == 1));
+            assertTrue(
+                resumed.stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.GAP && point.observedAt() == 10));
             assertTrue(
                 resumed.stream()
                     .anyMatch(

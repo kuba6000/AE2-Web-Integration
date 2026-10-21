@@ -136,9 +136,11 @@ public final class StorageTrackingService implements AutoCloseable {
     /** Blocking detached-store query: call on HTTP/background threads, never the game thread. */
     public @NotNull StorageHistory history(@NotNull StableKey gridKey, @Nullable StableKey itemKey, long fromMillis,
         int limit) throws IOException {
+        State before = states.get(gridKey);
+        boolean persistence = before == null || before.snapshot.persistenceComplete();
         StorageHistory result = store.read(gridKey, itemKey, fromMillis, limit);
         State state = states.get(gridKey);
-        boolean complete = result.complete() && (state == null || state.snapshot.persistenceComplete());
+        boolean complete = persistence && result.complete() && (state == null || state.snapshot.persistenceComplete());
         return new StorageHistory(
             result.points(),
             result.descriptions(),
@@ -188,9 +190,22 @@ public final class StorageTrackingService implements AutoCloseable {
         descriptions.putAll(observation.descriptions());
 
         boolean persistence = state.snapshot.persistenceComplete();
-        if (persistence && (persistStock || persistFlow)) {
+        if (persistStock || persistFlow) {
             List<StorageHistoryPoint> points = state
-                .historyPoints(observation, next, persistStock, persistFlow, flowFrom, gap);
+                .historyPoints(observation, next, persistStock, persistFlow, flowFrom, gap, !persistence);
+            if (!persistence && state.persistenceGapFrom != observation.observedAt()) points.add(
+                0,
+                new StorageHistoryPoint(
+                    state.persistenceGapFrom,
+                    state.generation,
+                    StorageHistoryPoint.Kind.GAP,
+                    null,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    null));
             Map<StableKey, ResourceDescriptor> writtenDescriptions = descriptionsFor(points, observation, descriptions);
             try {
                 store.append(gridKey, writtenDescriptions, points);
@@ -207,14 +222,19 @@ public final class StorageTrackingService implements AutoCloseable {
                     state.needsStockBaseline = !(observation.full() || state.snapshot.stockComplete() && !gap);
                 }
                 if (persistFlow) state.flowStarted = true;
+                persistence = true;
             } catch (IOException failure) {
-                // A failed store stays failed until a new generation is opened. Live capture remains useful.
+                // The commit may have succeeded. Retry only the next current batch, never uncertain flow.
+                if (persistence) {
+                    state.persistenceGapFrom = observation.observedAt();
+                    LOG.warn(
+                        "Storage history recording failed for network {} generation {}; a later sample will retry",
+                        gridKey,
+                        state.generation,
+                        failure);
+                }
                 persistence = false;
-                LOG.warn(
-                    "Storage history recording stopped for network {} generation {}",
-                    gridKey,
-                    state.generation,
-                    failure);
+                state.needsStockBaseline = true;
             }
         }
         state.publish(observation, next, descriptions, persistence, lossEpoch);
@@ -239,6 +259,7 @@ public final class StorageTrackingService implements AutoCloseable {
         private boolean flowStarted;
         private boolean needsStockBaseline;
         private boolean workerFailureLogged;
+        private long persistenceGapFrom;
         private @Nullable Map<StableKey, Long> sampledQuantities;
         private List<StorageObservation.UnkeyedRow> unkeyed = Collections.emptyList();
         private Map<StableKey, StorageObservation.Row> rows = new HashMap<>();
@@ -275,12 +296,16 @@ public final class StorageTrackingService implements AutoCloseable {
 
         private List<StorageHistoryPoint> historyPoints(StorageObservation observation,
             Map<StableKey, StorageObservation.Row> next, boolean persistStock, boolean persistFlow, long flowFrom,
-            boolean gap) {
+            boolean gap, boolean persistenceGap) {
             List<StorageHistoryPoint> points = new ArrayList<>();
             boolean initialStock = persistStock && sampledQuantities == null;
             boolean initialFlow = persistFlow && !flowStarted;
             boolean completeStock = observation.full() || snapshot.stockComplete() && !gap;
-            if (gap || !observation.flowComplete() || initialStock || initialFlow || persistStock && !completeStock)
+            if (gap || persistenceGap
+                || !observation.flowComplete()
+                || initialStock
+                || initialFlow
+                || persistStock && !completeStock)
                 points.add(point(observation, StorageHistoryPoint.Kind.GAP, null, 0, 0, 0));
             if (persistStock) appendStockPoints(points, observation, next, gap);
             if (persistFlow) appendFlowPoints(points, observation, flowFrom, gap);
@@ -292,12 +317,13 @@ public final class StorageTrackingService implements AutoCloseable {
             for (StorageObservation.Row row : next.values()) {
                 Long previous = sampledQuantities == null ? null : sampledQuantities.get(row.itemKey());
                 if (row.quantity() != (previous == null ? 0 : previous)
-                    || needsStockBaseline && observation.full() && previous != null)
+                    || needsStockBaseline && (observation.full() || snapshot.stockComplete() && !gap)
+                        && previous != null)
                     points.add(point(observation, StorageHistoryPoint.Kind.STOCK, row.itemKey(), row.quantity(), 0, 0));
             }
             if (sampledQuantities != null) {
                 for (Map.Entry<StableKey, Long> sampled : sampledQuantities.entrySet()) {
-                    if (sampled.getValue() != 0 && !next.containsKey(sampled.getKey()))
+                    if ((sampled.getValue() != 0 || needsStockBaseline) && !next.containsKey(sampled.getKey()))
                         points.add(point(observation, StorageHistoryPoint.Kind.STOCK, sampled.getKey(), 0, 0, 0));
                 }
             }
