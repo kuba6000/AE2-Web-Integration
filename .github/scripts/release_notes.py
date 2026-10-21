@@ -35,9 +35,20 @@ def parse_tag(tag):
     return version, loader, pre_before, minecraft, pre_after
 
 
-def git(checkout, *arguments):
-    return subprocess.run(["git", "-C", str(checkout), *arguments], check=True,
-                          capture_output=True, encoding="utf-8").stdout.strip()
+def git(checkout, *arguments, strip=True):
+    output = subprocess.run(["git", "-C", str(checkout), *arguments], check=True,
+                            capture_output=True, encoding="utf-8").stdout
+    return output.strip() if strip else output
+
+
+def authored_notes(checkout, commit, name):
+    path = f"release-notes/{name}.md"
+    kind = git(checkout, "ls-tree", "--format=%(objecttype)", commit, "--", path)
+    if not kind:
+        return ""
+    if kind != "blob":
+        raise ValueError(f"Authored notes must be a file: {path}")
+    return git(checkout, "show", f"{commit}:{path}", strip=False).strip("\n")
 
 
 def previous_tag(checkout, current, minecraft, loader):
@@ -84,6 +95,8 @@ def prepare(args, checkout):
     version, loader, pre_before, minecraft, pre_after = parse_tag(args.tag)
     if (minecraft, loader) != (args.minecraft, args.loader):
         raise ValueError("Tag Minecraft target and loader must match --minecraft and --loader")
+    notes_source_commit = git(checkout, "rev-parse", "--verify", "--end-of-options",
+                              f"{args.notes_source_ref}^{{commit}}")
     previous, anchor = previous_tag(checkout, args.tag, minecraft, loader)
     suffix = version.partition("+")[0].partition("-")[2]
     snapshot = "snapshot" in args.tag.lower()
@@ -91,20 +104,14 @@ def prepare(args, checkout):
     release_type = "release"
     if prerelease:
         release_type = "alpha" if re.match(r"alpha(?:[.-]|$)", suffix, re.IGNORECASE) else "beta"
-    sections = []
-    for name in (version, args.tag):
-        path = checkout / ".releases" / f"{name}.md"
-        if path.is_file():
-            sections.append(path.read_text(encoding="utf-8").strip("\n"))
+    sections = [authored_notes(checkout, notes_source_commit, name) for name in (version, args.tag)]
     sections.append(generated_notes(args, checkout, previous, anchor).replace("\r\n", "\n").strip("\n"))
-    footer = checkout / ".releases" / "common.md"
-    if footer.is_file():
-        sections.append(footer.read_text(encoding="utf-8").strip("\n"))
+    sections.append(authored_notes(checkout, notes_source_commit, "common"))
     output = (checkout / args.output).resolve()
     metadata = {
         "tag": args.tag, "version": version, "minecraft": minecraft, "loader": loader,
         "release_type": release_type, "snapshot": snapshot, "prerelease": prerelease,
-        "previous_tag": previous, "notes_file": str(output),
+        "previous_tag": previous, "notes_file": str(output), "notes_source_commit": notes_source_commit,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n\n".join(section for section in sections if section.strip()) + "\n",
@@ -113,7 +120,7 @@ def prepare(args, checkout):
                                                  encoding="utf-8", newline="\n")
     if args.github_output:
         with (checkout / args.github_output).open("a", encoding="utf-8", newline="\n") as stream:
-            for key in ("release_type", "snapshot", "prerelease", "version", "previous_tag"):
+            for key in ("release_type", "snapshot", "prerelease", "version", "previous_tag", "notes_source_commit"):
                 value = metadata[key]
                 if value is not None:
                     stream.write(f"{key}={str(value).lower() if isinstance(value, bool) else value}\n")
@@ -126,6 +133,8 @@ def main():
     parser.add_argument("--loader", required=True, choices=("forge", "neoforge"))
     parser.add_argument("--repository", required=True, help="GitHub owner/repository")
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--notes-source-ref", default="refs/remotes/origin/version",
+                        help="Local Git ref or commit containing release-notes/ (default: refs/remotes/origin/version)")
     parser.add_argument("--changelog-file", type=Path, help="Use offline generated Markdown instead of GitHub")
     parser.add_argument("--github-output", type=Path, help="Append validated single-line workflow outputs")
     args = parser.parse_args()
