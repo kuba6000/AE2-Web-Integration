@@ -118,7 +118,7 @@ def validateRelease = tasks.register('validateRelease') {
     }
 }
 
-def releasePreview = tasks.register('releasePreview') {
+def prepareRelease = tasks.register('prepareRelease') {
     group = 'publishing'
     description = 'Builds or verifies the release JARs and writes build/release/manifest.json.'
     dependsOn(validateRelease)
@@ -224,7 +224,7 @@ publishingOptions.curseforge {
 
 [Modrinth: modrinthToken, Curseforge: curseforgeToken].each { platform, token ->
     tasks.named('publish' + platform).configure {
-        dependsOn(releasePreview)
+        dependsOn(prepareRelease)
         doFirst {
             if (!dryRun && snapshot) {
                 throw new GradleException('Snapshot builds cannot be published to portals')
