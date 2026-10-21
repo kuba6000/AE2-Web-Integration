@@ -29,6 +29,8 @@ class ReleaseNotesCliTest(unittest.TestCase):
         self.commit_number = 0
         self.git("init", "--quiet")
         self.commit()
+        self.notes_commit = self.git("rev-parse", "HEAD")
+        self.git("update-ref", "refs/remotes/origin/version", self.notes_commit)
         self.write("changelog.md", "## Changes\n\nGenerated changes.\n")
 
     def git(self, *arguments):
@@ -63,6 +65,13 @@ class ReleaseNotesCliTest(unittest.TestCase):
     def metadata(self):
         return json.loads((self.checkout / "build/release/metadata.json").read_text(encoding="utf-8"))
 
+    def commit_notes(self):
+        self.git("add", "--", "release-notes")
+        self.commit()
+        self.notes_commit = self.git("rev-parse", "HEAD")
+        self.git("update-ref", "refs/remotes/origin/version", self.notes_commit)
+        return self.notes_commit
+
     def fake_gh(self, program):
         fake = self.write("fake-tools/gh.py", program)
         if os.name == "nt":
@@ -73,9 +82,11 @@ class ReleaseNotesCliTest(unittest.TestCase):
         return dict(os.environ, PATH=str(fake.parent) + os.pathsep + os.environ["PATH"])
 
     def test_composes_version_introductions_then_changes_then_common_footer(self):
-        self.write(".releases/common.md", "<sub>Common notice.</sub>\n")
-        self.write(".releases/2.0.0.md", "Version introduction.\n")
-        self.write(".releases/2.0.0-forge-1.7.10.md", "Platform addition.\n")
+        self.write("release-notes/common.md", "<sub>Common notice.</sub>\n")
+        self.write("release-notes/2.0.0.md", "Version introduction.\n")
+        self.write("release-notes/2.0.0-forge-1.7.10.md", "Platform addition.\n")
+        self.commit_notes()
+        self.write(".releases/common.md", "Adapter copies must not be selected.\n")
 
         result = self.run_cli()
 
@@ -88,6 +99,7 @@ class ReleaseNotesCliTest(unittest.TestCase):
             "tag": "2.0.0-forge-1.7.10", "version": "2.0.0", "minecraft": "1.7.10",
             "loader": "forge", "release_type": "release", "snapshot": False,
             "prerelease": False, "previous_tag": None, "notes_file": str(notes),
+            "notes_source_commit": self.notes_commit,
         })
         self.assertFalse((self.foreign / "build").exists())
 
@@ -113,6 +125,68 @@ class ReleaseNotesCliTest(unittest.TestCase):
                 metadata = self.metadata()
                 self.assertEqual((metadata["version"], metadata["release_type"], metadata["snapshot"],
                                   metadata["prerelease"]), (version, release_type, snapshot, prerelease))
+
+    def test_explicit_source_uses_one_commit_even_if_the_ref_moves_during_generation(self):
+        self.git("tag", "1.9.0-forge-1.7.10")
+        self.write("release-notes/2.0.0.md", "    Zażółć: 日本語.\n")
+        self.write("release-notes/common.md", "<sub>Original footer.</sub>\n")
+        selected = self.commit_notes()
+        self.git("branch", "notes-preview", selected)
+        self.write("release-notes/2.0.0.md", "New introduction.\n")
+        self.write("release-notes/common.md", "New footer.\n")
+        newer = self.commit_notes()
+        self.write("release-notes/common.md", "Uncommitted footer.\n")
+        environment = self.fake_gh(f"""import json
+import subprocess
+import sys
+
+json.load(sys.stdin)
+subprocess.run(['git', 'update-ref', 'refs/heads/notes-preview', '{newer}'], check=True)
+print(json.dumps({{'body': 'Generated snapshot changes.'}}))
+""")
+
+        for source, online in (("notes-preview", True), (selected, False)):
+            with self.subTest(source=source):
+                result = self.run_cli("2.0.0-forge-1.7.10", "1.7.10", "forge",
+                                      "--notes-source-ref", source, online=online, environment=environment)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                generated = "Generated snapshot changes." if online else "## Changes\n\nGenerated changes."
+                self.assertEqual((self.checkout / "build/release/notes.md").read_text(encoding="utf-8"),
+                                 "    Zażółć: 日本語.\n\n" + generated + "\n\n<sub>Original footer.</sub>\n")
+                self.assertEqual(self.metadata()["notes_source_commit"], selected)
+        self.assertEqual(self.git("rev-parse", "notes-preview"), newer)
+
+    def test_missing_or_invalid_notes_source_cannot_fall_back_to_adapter_files(self):
+        self.git("update-ref", "-d", "refs/remotes/origin/version")
+        self.write(".releases/common.md", "Adapter fallback must not be used.\n")
+        for extra in ((), ("--notes-source-ref", "missing-notes"),
+                      ("--notes-source-ref=--all",), ("--notes-source-ref", "")):
+            with self.subTest(arguments=extra):
+                result = self.run_cli("2.0.0-forge-1.7.10", "1.7.10", "forge", *extra)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(result.stderr.strip())
+                self.assertFalse((self.checkout / "build").exists())
+
+    def test_default_source_requires_remote_version_branch_despite_colliding_tag(self):
+        self.write("release-notes/common.md", "Remote branch footer.\n")
+        selected = self.commit_notes()
+        self.write("release-notes/common.md", "Colliding tag footer.\n")
+        self.commit_notes()
+        self.git("tag", "origin/version")
+        self.git("update-ref", "refs/remotes/origin/version", selected)
+
+        result = self.run_cli()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.checkout / "build/release/notes.md").read_text(encoding="utf-8"),
+                         "## Changes\n\nGenerated changes.\n\nRemote branch footer.\n")
+        self.assertEqual(self.metadata()["notes_source_commit"], selected)
+
+        self.git("update-ref", "-d", "refs/remotes/origin/version")
+        result = self.run_cli("2.0.0-forge-1.7.10", "1.7.10", "forge",
+                              "--output", "build/missing-source/notes.md")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.checkout / "build/missing-source").exists())
 
     def test_rejects_invalid_tags_and_mismatched_targets_before_writing_outputs(self):
         cases = [
@@ -175,7 +249,8 @@ class ReleaseNotesCliTest(unittest.TestCase):
         values = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
         self.assertEqual(values, {"existing": "value", "release_type": "beta", "snapshot": "false",
                                   "prerelease": "true", "version": "2.0.0-rc.1",
-                                  "previous_tag": "1.9.0-forge-1.7.10"})
+                                  "previous_tag": "1.9.0-forge-1.7.10",
+                                  "notes_source_commit": self.notes_commit})
 
     def test_generates_github_notes_with_the_selected_previous_tag(self):
         self.git("tag", "1.9.0-forge-1.7.10")
@@ -231,9 +306,10 @@ print(json.dumps({'body': 'Generated notes for ' + payload['tag_name'] + ' since
         self.assertEqual(self.metadata()["previous_tag"], "1.9.0-forge-1.7.10")
 
     def test_prerelease_authored_intro_and_common_crlf_are_optional_and_preserved(self):
-        (self.write(".releases/common.md", "")).write_bytes("Common: zażółć.\r\n".encode("utf-8"))
-        self.write(".releases/2.0.0-beta.1.md", "Beta introduction.\n")
-        self.write(".releases/2.0.0.md", "Stable introduction must not be selected.\n")
+        (self.write("release-notes/common.md", "")).write_bytes("Common: zażółć.\r\n".encode("utf-8"))
+        self.write("release-notes/2.0.0-beta.1.md", "Beta introduction.\n")
+        self.write("release-notes/2.0.0.md", "Stable introduction must not be selected.\n")
+        self.commit_notes()
 
         result = self.run_cli("2.0.0-beta.1-forge-1.7.10")
 
