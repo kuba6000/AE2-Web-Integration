@@ -280,23 +280,7 @@ public final class StorageCapture implements IIdentityHolder, AutoCloseable {
                     // Reclaim proven absences before admission, so replacing a full catalogue fits the same cap.
                     for (IAEGenericStack stack : list.web$stacks()) included.add(stack.web$what());
                     included.addAll(craftables);
-                    for (Iterator<Entry> iterator = resources.values()
-                        .iterator(); iterator.hasNext();) {
-                        Entry entry = iterator.next();
-                        IAEKey identity = identity(entry);
-                        if (identity == null) {
-                            iterator.remove();
-                            discard(entry);
-                        } else if (!included.contains(identity)) {
-                            entry.present = false;
-                            if (entry.dirty <= through) entry.dirty = 0;
-                            if (unused(entry)) {
-                                iterator.remove();
-                                releaseIfUnused(entry);
-                            }
-                        }
-                    }
-                    prunePending();
+                    releaseAbsent(included, through);
                     included.clear();
                 }
                 for (IAEGenericStack stack : list.web$stacks()) {
@@ -473,6 +457,27 @@ public final class StorageCapture implements IIdentityHolder, AutoCloseable {
 
     private static boolean unused(Entry entry) {
         return !entry.present && entry.dirty == 0 && !entry.flowPending && !entry.staged;
+    }
+
+    private void releaseAbsent(Set<IAEKey> included, long through) {
+        for (Iterator<Entry> iterator = resources.values()
+            .iterator(); iterator.hasNext();) {
+            Entry entry = iterator.next();
+            IAEKey identity = identity(entry);
+            if (identity == null) {
+                iterator.remove();
+                discard(entry);
+                continue;
+            }
+            if (included.contains(identity)) continue;
+            entry.present = false;
+            if (entry.dirty <= through) entry.dirty = 0;
+            if (unused(entry)) {
+                iterator.remove();
+                releaseIfUnused(entry);
+            }
+        }
+        prunePending();
     }
 
     private void releaseIfUnused(Entry entry) {
