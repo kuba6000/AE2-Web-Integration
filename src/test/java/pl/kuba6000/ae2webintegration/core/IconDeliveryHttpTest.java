@@ -82,6 +82,7 @@ import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceDescriptor;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageObservation;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
@@ -1720,6 +1721,9 @@ class IconDeliveryHttpTest {
             "Every captured description retains its base variant independently of icons");
         unavailable.set(true);
         AE2Controller.itemIdentities.clear();
+        CraftingHistoryService history = CoreEngine.getCraftingHistory();
+        assertNotNull(history);
+        history.flush();
         String path = "/api/grids/" + CoreEngine.GRID_IDENTITIES.getKey(grid) + "/crafting-history";
         JsonObject response = json(connection(path + "?icons=true"));
         assertEquals(

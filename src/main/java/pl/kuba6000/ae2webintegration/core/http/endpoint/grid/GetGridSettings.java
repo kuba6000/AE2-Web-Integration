@@ -74,7 +74,9 @@ public final class GetGridSettings extends IAsyncRequest {
             // Completion serializes under the same monitor used by settings mutations and file writes.
             respond(
                 HttpURLConnection.HTTP_OK,
-                new Response(ApiStatus.OK, GridSettingsView.from(settings, registry.getDataPolicy())));
+                new Response(
+                    ApiStatus.OK,
+                    GridSettingsView.from(settings, registry.getDataPolicy(), registry.getCraftingHistoryPolicy())));
         }
     }
 }

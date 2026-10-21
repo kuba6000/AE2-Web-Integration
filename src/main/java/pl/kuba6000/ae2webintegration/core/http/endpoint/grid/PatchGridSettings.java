@@ -76,20 +76,22 @@ public final class PatchGridSettings extends IAsyncRequest {
     /**
      * Settings to update; omitted members remain unchanged.
      *
-     * @param isTracked                  whether the grid should collect crafting history
-     * @param trackMachineCrafting       whether new machine-origin jobs are recorded while crafting tracking is enabled
-     * @param isStorageTracked           whether the grid should collect periodic resource quantities
-     * @param isFlowTracked              whether the grid should collect accepted input/output history
-     * @param stockSampleIntervalSeconds seconds between stock samples, within the active server bounds
-     * @param flowFlushIntervalSeconds   seconds covered by durable flow totals, within the active server bounds
-     * @param historyRetentionDays       detailed history days, within the active server bounds
-     * @param name                       custom network name; empty clears it. Outer Unicode spaces and U+FEFF are
-     *                                   trimmed,
-     *                                   matching JavaScript String.trim after control characters are rejected.
-     *                                   At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
-     *                                   U+007F–009F) are rejected even at the edges. Null is invalid; omission
-     *                                   preserves the
-     *                                   name.
+     * @param isTracked                    whether the grid should collect crafting history
+     * @param trackMachineCrafting         whether new machine-origin jobs are recorded while crafting tracking is
+     *                                     enabled
+     * @param isStorageTracked             whether the grid should collect periodic resource quantities
+     * @param isFlowTracked                whether the grid should collect accepted input/output history
+     * @param stockSampleIntervalSeconds   seconds between stock samples, within the active server bounds
+     * @param flowFlushIntervalSeconds     seconds covered by durable flow totals, within the active server bounds
+     * @param historyRetentionDays         resource history days, within the active server bounds
+     * @param craftingHistoryRetentionDays completed crafting history days, within the active server bounds
+     * @param name                         custom network name; empty clears it. Outer Unicode spaces and U+FEFF are
+     *                                     trimmed,
+     *                                     matching JavaScript String.trim after control characters are rejected.
+     *                                     At most 128 UTF-16 code units after trimming. C0/C1 controls (U+0000–001F and
+     *                                     U+007F–009F) are rejected even at the edges. Null is invalid; omission
+     *                                     preserves the
+     *                                     name.
      * @example isTracked true
      * @example name Factory
      */
@@ -98,7 +100,8 @@ public final class PatchGridSettings extends IAsyncRequest {
         @OptionalInput @Nullable Boolean isStorageTracked, @OptionalInput @Nullable Boolean isFlowTracked,
         @OptionalInput @Nullable Integer stockSampleIntervalSeconds,
         @OptionalInput @Nullable Integer flowFlushIntervalSeconds,
-        @OptionalInput @Nullable Integer historyRetentionDays, @OptionalInput @Nullable Boolean trackMachineCrafting) {}
+        @OptionalInput @Nullable Integer historyRetentionDays, @OptionalInput @Nullable Boolean trackMachineCrafting,
+        @OptionalInput @Nullable Integer craftingHistoryRetentionDays) {}
 
     @Body
     private @NotNull Input input;
@@ -132,6 +135,9 @@ public final class PatchGridSettings extends IAsyncRequest {
                     policy.flowFlushIntervalSeconds.validate(input.flowFlushIntervalSeconds());
                 if (input.historyRetentionDays() != null)
                     policy.historyRetentionDays.validate(input.historyRetentionDays());
+                if (input.craftingHistoryRetentionDays() != null)
+                    registry.getCraftingHistoryPolicy().historyRetentionDays
+                        .validate(input.craftingHistoryRetentionDays());
             } catch (IllegalArgumentException e) {
                 deny(ApiStatus.BAD_PARAM);
                 return;
@@ -152,14 +158,17 @@ public final class PatchGridSettings extends IAsyncRequest {
                     settings.setFlowFlushIntervalSeconds(input.flowFlushIntervalSeconds());
                 if (input.historyRetentionDays() != null)
                     settings.setHistoryRetentionDays(input.historyRetentionDays());
+                if (input.craftingHistoryRetentionDays() != null)
+                    settings.setCraftingHistoryRetentionDays(input.craftingHistoryRetentionDays());
                 if (input.name() != null || input.isTracked() != null
                     || input.trackMachineCrafting() != null
                     || input.isStorageTracked() != null
                     || input.isFlowTracked() != null
                     || input.stockSampleIntervalSeconds() != null
                     || input.flowFlushIntervalSeconds() != null
-                    || input.historyRetentionDays() != null) registry.saveIfDirty();
-                result = GridSettingsView.from(settings, registry.getDataPolicy());
+                    || input.historyRetentionDays() != null
+                    || input.craftingHistoryRetentionDays() != null) registry.saveIfDirty();
+                result = GridSettingsView.from(settings, registry.getDataPolicy(), registry.getCraftingHistoryPolicy());
             } catch (IOException e) {
                 deny(ApiStatus.INTERNAL_ERROR);
                 return;

@@ -37,6 +37,8 @@ import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
 import pl.kuba6000.ae2webintegration.core.themes.ThemeCatalog;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.StorageTrackingCoordinator;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.HsqlCraftingHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.HsqlStorageHistoryStore;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.RecentResourceActivity;
 import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageSnapshot;
@@ -75,6 +77,7 @@ public class CoreEngine {
     private static volatile @Nullable IconPack iconPack;
     private static volatile ThemeCatalog themes = new ThemeCatalog();
     private static volatile @Nullable StorageTrackingService storageTracking;
+    private static volatile @Nullable CraftingHistoryService craftingHistory;
     private static volatile @Nullable StorageTrackingCoordinator storageCoordinator;
     private static volatile @Nullable LiveStreams liveStreams;
     private static volatile @Nullable TerminalRegistry terminalRegistry;
@@ -98,7 +101,7 @@ public class CoreEngine {
     /** Publishes reloaded data settings immediately; the world scheduler applies durable changes. */
     public static void applyDataConfig() {
         WorldDatabase database = worldDatabase;
-        if (database != null) database.applyPolicy(Config.INSTANCE.resourceHistory);
+        if (database != null) database.applyPolicy(Config.INSTANCE.resourceHistory, Config.INSTANCE.craftingHistory);
     }
 
     public static void onServerStarted() {
@@ -106,7 +109,9 @@ public class CoreEngine {
         onServerStopping();
         WorldDatabase database = new WorldDatabase(
             new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/grids").toPath(),
-            Config.INSTANCE.resourceHistory);
+            Config.INSTANCE.resourceHistory,
+            Config.INSTANCE.craftingHistory);
+        HsqlCraftingHistoryStore craftings = new HsqlCraftingHistoryStore(database);
         HsqlStorageHistoryStore history = new HsqlStorageHistoryStore(database);
         try {
             database.open();
@@ -115,6 +120,7 @@ public class CoreEngine {
                 new File(AE2Controller.serverPlatform.getWorldDirectory(), "ae2webintegration/grid-identities.json")
                     .toPath());
             history.initialize();
+            craftings.maintain();
         } catch (IOException | RuntimeException failure) {
             GRID_IDENTITIES.clear();
             try {
@@ -133,7 +139,16 @@ public class CoreEngine {
                 return thread;
             });
             gridFlushScheduler = scheduler;
-            database.startGridFlush(scheduler, history::maintain);
+            CraftingHistoryService craftingService = new CraftingHistoryService(craftings, scheduler);
+            craftingHistory = craftingService;
+            database.startGridFlush(scheduler, () -> {
+                history.maintain();
+                try {
+                    craftingService.maintain();
+                } catch (IOException failure) {
+                    LOG.error("Crafting history maintenance failed; a later pass will retry", failure);
+                }
+            });
             resourcePins = new ResourcePinStore(database);
             serverRunning = true;
             loadIconPack();
@@ -362,6 +377,10 @@ public class CoreEngine {
         if (previousStreams != null) previousStreams.close();
     }
 
+    public static @Nullable CraftingHistoryService getCraftingHistory() {
+        return craftingHistory;
+    }
+
     private static void stopStorageTracking() {
         WorldDatabase database = worldDatabase;
         if (database != null) database.stopGridFlush();
@@ -387,6 +406,15 @@ public class CoreEngine {
         StorageTrackingService previous = storageTracking;
         storageTracking = null;
         worldDatabase = null;
+        CraftingHistoryService completed = craftingHistory;
+        craftingHistory = null;
+        if (completed != null) {
+            try {
+                completed.close();
+            } catch (IOException | RuntimeException failure) {
+                LOG.error("Cannot finish writing crafting history", failure);
+            }
+        }
         if (previous != null) previous.close();
         else if (database != null) {
             try {

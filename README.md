@@ -204,6 +204,10 @@ Enable **Record crafting history** in a network's settings to track its crafting
 **Include machine-requested crafting** there to also track jobs started by machines on that network.
 The machine option applies to new jobs. Enabling tracking does not reconstruct an ongoing job's history.
 
+Completed and cancelled jobs are saved with the world and remain available after a server restart.
+Choose crafting history retention in the network settings. The default is 7 days, with a limit of
+1,000 jobs per network. Administrators can change the retention bounds and job limit in `crafting_history`.
+
 ### Resource history
 
 Network settings have independent switches for input/output history and periodic storage quantities.

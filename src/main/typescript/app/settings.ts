@@ -1,4 +1,11 @@
-import type { AccessSources, GridSettings, GridSettingsLimits, SettingRange } from './api-types.js';
+import type {
+    AccessSources,
+    GridSettings,
+    GridSettingsLimits,
+    CraftingHistoryLimits,
+    HistorySetting,
+    SettingRange
+} from './api-types.js';
 import type { Api, ApiFailure } from './api.js';
 import type { Route } from './router.js';
 import type { Notify } from './notifications.js';
@@ -8,6 +15,7 @@ export type SettingsState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     current: GridSettings | null;
     limits: GridSettingsLimits | null;
+    craftingLimits: CraftingHistoryLimits | null;
     draft: GridSettings;
     edited: Edited;
     sources: AccessSources;
@@ -22,6 +30,7 @@ type SaveOperation = {
     uncertain: boolean;
     result?: GridSettings;
     limits?: GridSettingsLimits;
+    craftingLimits?: CraftingHistoryLimits;
     error?: string;
 };
 export function networkNameError(name: string) {
@@ -35,8 +44,16 @@ export function networkNameError(name: string) {
 export const historySettingFields = [
     'stockSampleIntervalSeconds',
     'flowFlushIntervalSeconds',
-    'historyRetentionDays'
+    'historyRetentionDays',
+    'craftingHistoryRetentionDays'
 ] as const;
+export function historySettingRange(
+    field: HistorySetting,
+    limits: GridSettingsLimits | null,
+    craftingLimits: CraftingHistoryLimits | null
+) {
+    return field === 'craftingHistoryRetentionDays' ? craftingLimits?.historyRetentionDays : limits?.[field];
+}
 export function settingRangeError(value: number, range: SettingRange) {
     return Number.isInteger(value) && value >= range.min && value <= range.max ? null : 'historySettingInvalid';
 }
@@ -56,7 +73,8 @@ export function createGridSettings(
         isFlowTracked: false,
         stockSampleIntervalSeconds: 0,
         flowFlushIntervalSeconds: 0,
-        historyRetentionDays: 0
+        historyRetentionDays: 0,
+        craftingHistoryRetentionDays: 0
     });
     const unedited = (): Edited => ({
         name: false,
@@ -66,12 +84,14 @@ export function createGridSettings(
         isFlowTracked: false,
         stockSampleIntervalSeconds: false,
         flowFlushIntervalSeconds: false,
-        historyRetentionDays: false
+        historyRetentionDays: false,
+        craftingHistoryRetentionDays: false
     });
     const state: SettingsState = {
         status: 'idle',
         current: null,
         limits: null,
+        craftingLimits: null,
         draft: empty(),
         edited: unedited(),
         sources: {},
@@ -96,6 +116,7 @@ export function createGridSettings(
             status: 'error',
             current: null,
             limits: null,
+            craftingLimits: null,
             draft: empty(),
             edited: unedited(),
             sources: {},
@@ -128,6 +149,7 @@ export function createGridSettings(
                 status: next.view === 'settings' ? 'loading' : 'idle',
                 current: null,
                 limits: null,
+                craftingLimits: null,
                 draft: draft ? { ...draft.draft } : { ...empty(), ...(previous?.uncertain ? previous.desired : {}) },
                 edited: draft
                     ? { ...draft.edited }
@@ -143,7 +165,9 @@ export function createGridSettings(
                           flowFlushIntervalSeconds:
                               !!previous?.uncertain && previous.desired.flowFlushIntervalSeconds !== undefined,
                           historyRetentionDays:
-                              !!previous?.uncertain && previous.desired.historyRetentionDays !== undefined
+                              !!previous?.uncertain && previous.desired.historyRetentionDays !== undefined,
+                          craftingHistoryRetentionDays:
+                              !!previous?.uncertain && previous.desired.craftingHistoryRetentionDays !== undefined
                       },
                 sources: {},
                 saving: !!previous?.pending,
@@ -160,10 +184,11 @@ export function createGridSettings(
             request = new AbortController();
             reading = true;
             try {
-                const { limits, ...data } = await api.settings(route.gridKey, request.signal);
+                const { limits, craftingLimits, ...data } = await api.settings(route.gridKey, request.signal);
                 if (version !== generation) return;
                 state.current = data;
                 state.limits = limits;
+                state.craftingLimits = craftingLimits;
                 if (!state.edited.name) state.draft.name = data.name;
                 if (!state.edited.isTracked) state.draft.isTracked = data.isTracked;
                 if (!state.edited.trackMachineCrafting) state.draft.trackMachineCrafting = data.trackMachineCrafting;
@@ -198,13 +223,17 @@ export function createGridSettings(
                 state.saving ||
                 state.status !== 'ready' ||
                 !state.current ||
-                !state.limits
+                !state.limits ||
+                !state.craftingLimits
             )
                 return;
             const invalidSetting =
                 networkNameError(state.draft.name) ||
                 historySettingFields
-                    .map((field) => settingRangeError(state.draft[field], state.limits![field]))
+                    .map((field) => {
+                        const range = historySettingRange(field, state.limits, state.craftingLimits);
+                        return range ? settingRangeError(state.draft[field], range) : 'historySettingInvalid';
+                    })
                     .find(Boolean);
             if (invalidSetting) {
                 state.error = invalidSetting;
@@ -244,9 +273,10 @@ export function createGridSettings(
             state.notice = null;
             changed();
             try {
-                const { limits, ...result } = await api.saveSettings(key, desired);
+                const { limits, craftingLimits, ...result } = await api.saveSettings(key, desired);
                 operation.result = result;
                 operation.limits = limits;
+                operation.craftingLimits = craftingLimits;
                 operation.uncertain = false;
             } catch (caught) {
                 const error = caught as ApiFailure;
@@ -279,6 +309,7 @@ export function createGridSettings(
                         status: 'ready',
                         current: operation.result,
                         limits: operation.limits,
+                        craftingLimits: operation.craftingLimits,
                         draft: { ...operation.result },
                         edited: unedited(),
                         sources: sourcesForRoute,

@@ -9,8 +9,8 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collections;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -19,7 +19,6 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
-import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.cpu.GetCPU;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetTracking;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -31,6 +30,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.interfaces.service.IAECraftingGrid;
 import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
 import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
 
 @SuppressWarnings("PMD.AvoidMagicNumbers")
 class TrackingStatisticsResponseTest extends GridTestScope {
@@ -48,16 +49,23 @@ class TrackingStatisticsResponseTest extends GridTestScope {
         }
     };
 
+    private CraftingHistoryWorld historyWorld;
+
+    @BeforeEach
+    void startHistory() {
+        historyWorld = new CraftingHistoryWorld(gridSave);
+    }
+
     @AfterEach
     void tearDown() {
-        GridData.getOrCreate(GRID).trackingInfo.clearHistory();
+        historyWorld.close();
         AE2JobTracker.clearActiveJobs();
     }
 
     @ParameterizedTest
     @CsvSource({ "0,0,0,0,0,ITEM", "0,0,10,0,0,FLUID", "1000,0,10,0,0,OTHER", "1000,500,10,0.5,20,ITEM" })
     void historySerializesFiniteStatisticsEvenWhenNoTimeWasMeasured(long elapsed, long spent, long crafted,
-        double expectedShare, double expectedRate, ResourceType resourceType) {
+        double expectedShare, double expectedRate, ResourceType resourceType) throws Exception {
         TestGridFixtures.TestGrid grid = TestGridFixtures.grid(GRID);
         OutputSnapshotTest.Resource key = new OutputSnapshotTest.Resource();
         key.resourceType = resourceType;
@@ -68,19 +76,30 @@ class TrackingStatisticsResponseTest extends GridTestScope {
                 .itemKey());
         AE2JobTracker.JobTrackingInfo info = new AE2JobTracker.JobTrackingInfo(output);
         // Completed measurement records, including legitimate sub-millisecond intervals rounded to zero.
-        info.timeStarted = 1000;
-        info.timeDone = 1000 + elapsed;
+        info.timeDone = System.currentTimeMillis();
+        info.timeStarted = info.timeDone - elapsed;
         info.isDone = true;
         info.timeSpentOn.put(key, spent);
         info.craftedTotal.put(key, crafted);
         info.resourceSnapshots.put(key, ResourceSnapshot.capture(grid, key, crafted));
-        info.itemShare.put(key, new ArrayList<>(Collections.singletonList(Pair.of(1000L, 1000L + spent))));
+        info.itemShare.put(
+            key,
+            new ArrayList<>(
+                Collections.singletonList(new CompletedCrafting.Interval(info.timeStarted, info.timeStarted + spent))));
         StableKey actualKey = CoreEngine.GRID_IDENTITIES.getKey(grid);
-        GridData.getOrCreate(actualKey).trackingInfo.trackingInfos.put(1, info);
+        assertNotNull(actualKey);
+        CraftingHistoryService history = CoreEngine.getCraftingHistory();
+        assertNotNull(history);
+        assertTrue(history.enqueue(actualKey, CompletedCrafting.capture(info)));
+        history.flush();
+        long entryId = history.list(actualKey, null, 100)
+            .entries()
+            .get(0)
+            .id();
         key.unavailable = true;
 
         GetTracking request = new GetTracking();
-        request.handle(TestGridFixtures.context(-1, "grid=" + actualKey + "&id=1"));
+        request.handle(TestGridFixtures.context(-1, "grid=" + actualKey + "&id=" + entryId));
         JsonObject response = new JsonParser().parse(request.getJSON())
             .getAsJsonObject();
         assertEquals(
@@ -155,7 +174,7 @@ class TrackingStatisticsResponseTest extends GridTestScope {
             item.getAsJsonArray("timings")
                 .size());
         GetTracking requestedIcons = new GetTracking();
-        requestedIcons.handle(TestGridFixtures.context(-1, "grid=" + actualKey + "&id=1&icons=true"));
+        requestedIcons.handle(TestGridFixtures.context(-1, "grid=" + actualKey + "&id=" + entryId + "&icons=true"));
         JsonObject withoutPack = new JsonParser().parse(requestedIcons.getJSON())
             .getAsJsonObject();
         assertTrue(

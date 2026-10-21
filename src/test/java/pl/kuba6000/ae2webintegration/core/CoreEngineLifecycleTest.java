@@ -69,7 +69,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
             .addJob(pendingPlan, TestGridFixtures.planOutput(), new CraftingOptions(false, false), false);
         ICraftingCPUCluster cpu = new TestCpu();
         AE2JobTracker.addJob(cpu, grid, false);
-        gridData.trackingInfo.trackingInfos.put(1, AE2JobTracker.findActiveJob(cpu));
+        assertNotNull(AE2JobTracker.findActiveJob(cpu));
         try (RegistrationTestFixture registrations = new RegistrationTestFixture()) {
             PlayerIdentity registeringPlayer = new PlayerIdentity(UUID.randomUUID(), "RegisteringPlayer");
             String registrationToken = registrations.begin(registeringPlayer, "test-password");
@@ -142,7 +142,7 @@ class CoreEngineLifecycleTest extends GridTestScope {
             assertNull(AE2Controller.itemIdentities.resolve(itemKey));
             assertNull(CoreEngine.GRID_IDENTITIES.getGrid(gridKey));
             assertNull(AE2JobTracker.findActiveJob(cpu));
-            assertTrue(gridData.trackingInfo.trackingInfos.isEmpty());
+            assertNull(CoreEngine.getCraftingHistory());
             assertNull(gridData.getJob(planId));
             assertTrue(pendingPlan.isCancelled());
             assertEquals(

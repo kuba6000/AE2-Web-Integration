@@ -25,6 +25,58 @@ import pl.kuba6000.ae2webintegration.core.grid.GridSettingsData;
 class ConfigFileTest {
 
     @Test
+    void craftingRetentionUsesIndependentBoundsAndSurvivesDetachedCopy() {
+        ConfigSettings.ResourceHistory resource = new ConfigSettings.ResourceHistory();
+        ConfigSettings.CraftingHistory crafting = new ConfigSettings.CraftingHistory();
+        crafting.historyRetentionDays = new ConfigSettings.Range(2, 12, 4);
+        GridSettingsData settings = new GridSettingsData(resource, crafting);
+        assertEquals(4, settings.getCraftingHistoryRetentionDays());
+        settings.setCraftingHistoryRetentionDays(10);
+        assertEquals(7, settings.getHistoryRetentionDays());
+        assertEquals(
+            10,
+            settings.copy()
+                .getCraftingHistoryRetentionDays());
+        assertThrows(IllegalArgumentException.class, () -> settings.setCraftingHistoryRetentionDays(13));
+        ConfigSettings.CraftingHistory tighter = new ConfigSettings.CraftingHistory();
+        tighter.historyRetentionDays = new ConfigSettings.Range(2, 5, 3);
+        assertTrue(settings.applyPolicy(resource, tighter));
+        assertEquals(5, settings.getCraftingHistoryRetentionDays());
+        assertFalse(settings.applyPolicy(resource, tighter));
+        assertEquals(7, settings.getHistoryRetentionDays());
+    }
+
+    @Test
+    void craftingHistoryBoundsRoundTripAndRejectInvalidCaps() throws Exception {
+        Config.init(root.toFile());
+        Path file = root.resolve("ae2webintegration/config.toml");
+        CommentedConfig document = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(7, (Integer) document.get("crafting_history.history_retention_days.default"));
+        assertEquals(1000, (Integer) document.get("crafting_history.history_max_jobs_per_grid"));
+        document.set("crafting_history.history_retention_days.min", 2);
+        document.set("crafting_history.history_retention_days.max", 12);
+        document.set("crafting_history.history_retention_days.default", 4);
+        document.set("crafting_history.history_max_jobs_per_grid", 20);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        Config.reload();
+        Config.init(root.toFile());
+        CommentedConfig restored = new TomlParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        assertEquals(4, (Integer) restored.get("crafting_history.history_retention_days.default"));
+        assertEquals(20, (Integer) restored.get("crafting_history.history_max_jobs_per_grid"));
+        ConfigSettings active = Config.INSTANCE;
+        document.set("crafting_history.history_max_jobs_per_grid", 0);
+        Files.write(
+            file,
+            new TomlWriter().writeToString(document)
+                .getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, Config::reload);
+        assertSame(active, Config.INSTANCE);
+    }
+
+    @Test
     void publishedDataConfigDirectlyDefinesGridDefaultsAndBounds() {
         ConfigSettings.ResourceHistory data = new ConfigSettings.ResourceHistory();
         data.stockSampleIntervalSeconds = new ConfigSettings.Range(5, 30, 10);

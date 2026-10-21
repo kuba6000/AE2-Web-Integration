@@ -20,6 +20,7 @@ import com.google.common.collect.MapMaker;
 import pl.kuba6000.ae2webintegration.core.api.AEApi.AEControllerState;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.config.Config;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
@@ -36,6 +37,7 @@ public final class GridIdentityRegistry {
     private @Nullable WorldDatabase database;
     private final Set<StableKey> dirtyKeys = new HashSet<>();
     private @NotNull ResourceHistory dataPolicy = Config.INSTANCE.resourceHistory;
+    private @NotNull CraftingHistory craftingPolicy = Config.INSTANCE.craftingHistory;
     private final WeakHashMap<IAEGrid, StableKey> keys = new WeakHashMap<>();
     private final Map<StableKey, IAEGrid> grids = new MapMaker().weakValues()
         .makeMap();
@@ -52,6 +54,7 @@ public final class GridIdentityRegistry {
         throws IOException {
         clear();
         dataPolicy = database.policy();
+        craftingPolicy = database.craftingPolicy();
         WorldGridStore persistence = new WorldGridStore(database);
         Map<StableKey, GridPersistentData> loaded = persistence.load(importSource);
         store = persistence;
@@ -124,7 +127,7 @@ public final class GridIdentityRegistry {
         GridPersistentData current = records.get(selected);
         GridPersistentData data;
         if (current == null) {
-            data = new GridPersistentData(controllers, new GridSettingsData(dataPolicy));
+            data = new GridPersistentData(controllers, new GridSettingsData(dataPolicy, craftingPolicy));
             bindSettings(selected, data);
         } else {
             data = current.withControllers(controllers);
@@ -155,25 +158,31 @@ public final class GridIdentityRegistry {
         return dataPolicy;
     }
 
+    public synchronized @NotNull CraftingHistory getCraftingHistoryPolicy() {
+        return craftingPolicy;
+    }
+
     /** Rebinds active and pending-retired settings only for the world that still owns this registry. */
-    public synchronized boolean applyPolicy(@NotNull WorldDatabase owner, @NotNull ResourceHistory policy) {
+    public synchronized boolean applyPolicy(@NotNull WorldDatabase owner, @NotNull ResourceHistory policy,
+        @NotNull CraftingHistory craftingPolicy) {
         if (database != owner) return false;
         dataPolicy = policy;
+        this.craftingPolicy = craftingPolicy;
         records.forEach(
             (key, data) -> {
                 if (data.getSettings()
-                    .applyPolicy(policy)) dirtyKeys.add(key);
+                    .applyPolicy(policy, craftingPolicy)) dirtyKeys.add(key);
             });
         retired.values()
             .forEach(
                 data -> data.getSettings()
-                    .applyPolicy(policy));
+                    .applyPolicy(policy, craftingPolicy));
         return true;
     }
 
     private void bindSettings(StableKey key, GridPersistentData data) {
         GridSettingsData settings = data.getSettings();
-        boolean normalized = settings.applyPolicy(dataPolicy);
+        boolean normalized = settings.applyPolicy(dataPolicy, craftingPolicy);
         if (normalized) dirtyKeys.add(key);
         data.attach(this, () -> {
             // Runs under this registry's monitor; retired or previous-save settings must not dirty persisted settings.

@@ -337,7 +337,7 @@ class WorldDatabaseTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = { 1, 2, 3, 4, 999 })
+    @ValueSource(ints = { 1, 2, 3, 4, 5, 999 })
     void unsupportedSchemaCannotPublishOrEraseExistingGridData(int version) throws Exception {
         Path path = directory.resolve("world");
         Path source = directory.resolve("legacy.json");
@@ -369,7 +369,7 @@ class WorldDatabaseTest {
                 assertTrue(result.next());
                 assertEquals(version, result.getInt(1));
             }
-            statement.executeUpdate("UPDATE world_schema SET version = 5");
+            statement.executeUpdate("UPDATE world_schema SET version = 6");
             statement.execute("SHUTDOWN");
         }
         try (WorldDatabase restored = new WorldDatabase(path, policy)) {
@@ -382,6 +382,45 @@ class WorldDatabaseTest {
     private static String importJson(StableKey key) {
         return "{\"" + key
             + "\":{\"controllers\":[{\"dimensionId\":\"test:dimension\",\"x\":1,\"y\":2,\"z\":3}],\"settings\":{\"name\":\"Preserved\"}}}";
+    }
+
+    @Test
+    void releasedImportUsesConfiguredCraftingRetentionDefault() throws Exception {
+        StableKey key = TestGridFixtures.key(74);
+        Path source = directory.resolve("released-crafting.json");
+        Files.write(source, importJson(key).getBytes(StandardCharsets.UTF_8));
+        ConfigSettings.CraftingHistory crafting = new ConfigSettings.CraftingHistory();
+        crafting.historyRetentionDays = new ConfigSettings.Range(1, 3, 2);
+        try (WorldDatabase database = new WorldDatabase(
+            directory.resolve("import-crafting"),
+            new ResourceHistory(),
+            crafting)) {
+            GridIdentityRegistry registry = new GridIdentityRegistry();
+            registry.initialize(database, source);
+            GridPersistentData data = registry.getPersistentData(key);
+            assertNotNull(data);
+            assertEquals(
+                2,
+                data.getSettings()
+                    .getCraftingHistoryRetentionDays());
+            assertEquals(
+                "Preserved",
+                data.getSettings()
+                    .getName());
+        }
+        try (WorldDatabase database = new WorldDatabase(
+            directory.resolve("import-crafting"),
+            new ResourceHistory(),
+            crafting)) {
+            GridIdentityRegistry registry = new GridIdentityRegistry();
+            registry.initialize(database, source);
+            GridPersistentData data = registry.getPersistentData(key);
+            assertNotNull(data);
+            assertEquals(
+                2,
+                data.getSettings()
+                    .getCraftingHistoryRetentionDays());
+        }
     }
 
     @Test

@@ -1,7 +1,7 @@
 import type { ThemeState as TerminalState, ThemeApplication as Terminal } from '../../app/theme-api.js';
 import type { AccessSource, HistorySetting } from '../../app/api-types.js';
 import type { Translator as Locale } from '../../app/i18n.js';
-import { historySettingFields, networkNameError, settingRangeError } from '../../app/settings.js';
+import { historySettingFields, historySettingRange, networkNameError, settingRangeError } from '../../app/settings.js';
 import { networkIcon } from './icons/hackernoon/chart-network.js';
 import { networkLabel } from './network.js';
 
@@ -154,7 +154,13 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
     const intervalControls = [
         intervalControl('stockSampleIntervalSeconds', 'network-stock-interval', 'stockSampleInterval', 1000),
         intervalControl('flowFlushIntervalSeconds', 'network-flow-interval', 'flowFlushInterval', 1000),
-        intervalControl('historyRetentionDays', 'network-history-retention', 'historyRetention', 86400000)
+        intervalControl('historyRetentionDays', 'network-history-retention', 'historyRetention', 86400000),
+        intervalControl(
+            'craftingHistoryRetentionDays',
+            'network-crafting-retention',
+            'craftingHistoryRetention',
+            86400000
+        )
     ];
     const save = element('button');
     save.type = 'submit';
@@ -286,10 +292,10 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
             let invalidInterval = false;
             for (const control of intervalControls) {
                 const { field, range, number, unitMillis } = control;
-                const limits = state.limits?.[field];
+                const limits = historySettingRange(field, state.limits, state.craftingLimits);
                 const value = state.draft[field];
                 control.label.textContent = t(control.labelKey);
-                control.unit.textContent = t(field === 'historyRetentionDays' ? 'historyDays' : 'historySeconds');
+                control.unit.textContent = t(unitMillis === 86400000 ? 'historyDays' : 'historySeconds');
                 const duration = Number.isFinite(value) ? locale.duration(value * unitMillis) : '—';
                 control.value.textContent = duration;
                 range.setAttribute('aria-valuetext', duration);
@@ -303,6 +309,8 @@ export function createSettingsView(root: HTMLElement, application: Terminal) {
                         max: locale.duration(limits.max * unitMillis),
                         default: locale.duration(limits.defaultValue * unitMillis)
                     });
+                    if (field === 'craftingHistoryRetentionDays' && state.craftingLimits)
+                        control.help.textContent += ` ${t('craftingHistoryRetentionCap', { count: state.craftingLimits.historyMaxJobsPerGrid })}`;
                     if (field === 'historyRetentionDays' && state.limits)
                         control.help.textContent += ` ${t('historyRetentionCap', { count: state.limits.historyMaxRowsPerGrid })}`;
                 }

@@ -21,6 +21,31 @@ const {
     atlasFixture
 } = require('./fixtures.cjs');
 
+test('crafting retention is independent per network and persists while collection is disabled', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/grids/${gridA}/settings`);
+    const retention = page.getByRole('spinbutton', { name: /Crafting history retention.*days/i });
+    await retention.waitFor({ timeout: 5000 });
+    assert.equal(await retention.inputValue(), '7');
+    await retention.fill('12');
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page
+        .getByRole('status')
+        .filter({ hasText: /settings saved/i })
+        .waitFor();
+    assert.equal(options.settings[gridA].craftingHistoryRetentionDays, 12);
+    assert.equal(options.settings[gridA].historyRetentionDays, 7);
+    assert.equal(options.settings[gridA].isTracked, false);
+    assert.equal(options.settings[gridB].craftingHistoryRetentionDays, 7);
+    await page.reload();
+    await retention.waitFor();
+    assert.equal(await retention.inputValue(), '12');
+    const patches = options.requests.filter((request) => request.method === 'PATCH').length;
+    await retention.fill('16');
+    assert.equal(await page.getByRole('button', { name: 'Save settings', exact: true }).isDisabled(), true);
+    assert.equal(options.requests.filter((request) => request.method === 'PATCH').length, patches);
+});
+
 test('machine crafting tracking is saved per network and retained while crafting history is disabled', async (t) => {
     const { page, options, base } = await fixture(t);
     options.settings[gridB].isTracked = true;
@@ -1256,7 +1281,7 @@ test('network history sliders use server policy and save exact independent value
         await page.goto(`${base}#/grids/${gridA}/settings`);
         await page.locator('#network-name').waitFor();
         const sliders = page.getByRole('slider');
-        assert.equal(await sliders.count(), 3);
+        assert.equal(await sliders.count(), 4);
         for (const [index, min, max] of [
             [0, 5, 900],
             [1, 7, 120],
@@ -1277,7 +1302,8 @@ test('network history sliders use server policy and save exact independent value
         assert.deepEqual(await sliders.evaluateAll((nodes) => nodes.map((node) => node.value)), [
             String(stock),
             String(flow),
-            String(retention)
+            String(retention),
+            String(options.settings[gridA].craftingHistoryRetentionDays)
         ]);
         assert.match(await sliders.first().getAttribute('aria-valuetext'), new RegExp(`2.*${stock % 60}`));
         const panel = page.locator('.network-tracking-controls');

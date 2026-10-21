@@ -42,7 +42,16 @@ export function createHistoryView(root: HTMLElement, application: Terminal, bind
     const trackingNotice = element('div');
     trackingNotice.className = 'history-tracking-notice';
     trackingNotice.innerHTML = `${infoCircle}<p><span></span> <a></a></p>`;
-    scroll.append(trackingNotice, list, detail);
+    const pagination = element('nav');
+    pagination.className = 'settings-actions';
+    const newer = element('button');
+    newer.type = 'button';
+    newer.addEventListener('click', () => void application.history.previous());
+    const older = element('button');
+    older.type = 'button';
+    older.addEventListener('click', () => void application.history.next());
+    pagination.append(newer, older);
+    scroll.append(trackingNotice, list, pagination, detail);
     body.append(status, scroll);
     view.append(header, body);
     root.append(view);
@@ -137,6 +146,12 @@ export function createHistoryView(root: HTMLElement, application: Terminal, bind
                       ? ''
                       : t('historyEmpty');
             list.hidden = route.entryId !== null;
+            pagination.hidden = list.hidden || (!state.hasPrevious && state.nextBefore === null);
+            pagination.setAttribute('aria-label', t('history'));
+            newer.textContent = t('historyNewer');
+            older.textContent = t('historyOlder');
+            newer.disabled = state.reading || !state.hasPrevious;
+            older.disabled = state.reading || state.nextBefore === null;
             detail.hidden = route.entryId === null;
             status.hidden = !status.textContent;
             status.classList.toggle('api-error', !!state.error);

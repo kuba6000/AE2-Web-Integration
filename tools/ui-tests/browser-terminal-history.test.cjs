@@ -24,6 +24,38 @@ const {
     textStyle
 } = require('./fixtures.cjs');
 
+test('crafting history pages preserve large IDs and replace rows when navigating', async (t) => {
+    const { page, base } = await fixture(t);
+    const newest = '9007199254740995';
+    const oldest = '9007199254740993';
+    const seen = [];
+    await page.route('**/api/grids/*/crafting-history*', async (route) => {
+        const before = new URL(route.request().url()).searchParams.get('before');
+        seen.push(before);
+        await route.fulfill({
+            json: {
+                status: 'OK',
+                data: [{ ...historyEntry, id: before ? oldest : newest }],
+                nextBefore: before ? null : newest,
+                icons: null
+            }
+        });
+    });
+    await page.goto(`${base}#/grids/${gridA}/history`);
+    await page.getByRole('link', { name: new RegExp(`#${newest}$`) }).waitFor({ timeout: 5000 });
+    const older = page.getByRole('button', { name: 'Older craftings', exact: true });
+    await older.waitFor({ timeout: 5000 });
+    await older.click();
+    const oldLink = page.getByRole('link', { name: new RegExp(`#${oldest}$`) });
+    await oldLink.waitFor();
+    assert.equal(await page.getByRole('link', { name: new RegExp(`#${newest}$`) }).count(), 0);
+    assert.equal(await oldLink.getAttribute('href'), `#/grids/${gridA}/history/${oldest}`);
+    assert.equal(await older.isDisabled(), true);
+    await page.getByRole('button', { name: 'Newer craftings', exact: true }).click();
+    await page.getByRole('link', { name: new RegExp(`#${newest}$`) }).waitFor({ timeout: 5000 });
+    assert.deepEqual(seen, [null, newest, null]);
+});
+
 // Public seam: global settings are navigable without a grid, preserve the selected grid's
 // links, and persist browser preferences without pretending to mutate server settings.
 test('global settings tabs preserve grid navigation and browser preferences', async (t) => {
@@ -1300,6 +1332,8 @@ test('uncertain settings saves preserve the draft and remain unconfirmed until e
         options.settings[gridA] = {
             flowFlushIntervalSeconds: 60,
             historyRetentionDays: 7,
+            craftingHistoryRetentionDays: 7,
+            craftingLimits: { historyRetentionDays: { min: 1, max: 15, defaultValue: 7 }, historyMaxJobsPerGrid: 1000 },
             limits: structuredClone(defaultSettingsLimits),
             isTracked: false,
             name: '',
@@ -1313,6 +1347,8 @@ test('uncertain settings saves preserve the draft and remain unconfirmed until e
         options.settings[gridA] = {
             flowFlushIntervalSeconds: 60,
             historyRetentionDays: 7,
+            craftingHistoryRetentionDays: 7,
+            craftingLimits: { historyRetentionDays: { min: 1, max: 15, defaultValue: 7 }, historyMaxJobsPerGrid: 1000 },
             limits: structuredClone(defaultSettingsLimits),
             isTracked: true,
             name: '',
@@ -1382,6 +1418,8 @@ test('settings drafts survive transient discovery failures and pending saves rec
     options.settings[gridA] = {
         flowFlushIntervalSeconds: 60,
         historyRetentionDays: 7,
+        craftingHistoryRetentionDays: 7,
+        craftingLimits: { historyRetentionDays: { min: 1, max: 15, defaultValue: 7 }, historyMaxJobsPerGrid: 1000 },
         limits: structuredClone(defaultSettingsLimits),
         isTracked: true,
         name: '',
@@ -1397,6 +1435,11 @@ test('settings drafts survive transient discovery failures and pending saves rec
             data: {
                 flowFlushIntervalSeconds: 60,
                 historyRetentionDays: 7,
+                craftingHistoryRetentionDays: 7,
+                craftingLimits: {
+                    historyRetentionDays: { min: 1, max: 15, defaultValue: 7 },
+                    historyMaxJobsPerGrid: 1000
+                },
                 limits: structuredClone(defaultSettingsLimits),
                 isTracked: true,
                 name: '',
@@ -1484,6 +1527,11 @@ test('settings save remains single-flight across grids and uses the returned val
             data: {
                 flowFlushIntervalSeconds: 60,
                 historyRetentionDays: 7,
+                craftingHistoryRetentionDays: 7,
+                craftingLimits: {
+                    historyRetentionDays: { min: 1, max: 15, defaultValue: 7 },
+                    historyMaxJobsPerGrid: 1000
+                },
                 limits: structuredClone(defaultSettingsLimits),
                 isTracked: false,
                 name: '',
@@ -1532,6 +1580,11 @@ test('old settings reads cannot replace saved data and denied saves clear access
             data: {
                 flowFlushIntervalSeconds: 60,
                 historyRetentionDays: 7,
+                craftingHistoryRetentionDays: 7,
+                craftingLimits: {
+                    historyRetentionDays: { min: 1, max: 15, defaultValue: 7 },
+                    historyMaxJobsPerGrid: 1000
+                },
                 limits: structuredClone(defaultSettingsLimits),
                 isTracked: false,
                 name: '',

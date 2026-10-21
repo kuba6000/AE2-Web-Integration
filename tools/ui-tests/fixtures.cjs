@@ -111,7 +111,7 @@ const cpuWork = {
 };
 
 const historyEntry = {
-    id: 1,
+    id: '1',
     finalOutput: { ...iron, quantity: 12 },
     timeStarted: 1700000000000,
     timeDone: 1700000010000,
@@ -218,6 +218,11 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                 stockSampleIntervalSeconds: 300,
                 flowFlushIntervalSeconds: 60,
                 historyRetentionDays: 7,
+                craftingHistoryRetentionDays: 7,
+                craftingLimits: {
+                    historyRetentionDays: { min: 1, max: 15, defaultValue: 7 },
+                    historyMaxJobsPerGrid: 1000
+                },
                 limits: structuredClone(defaultSettingsLimits),
                 name: ''
             },
@@ -229,6 +234,11 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                 stockSampleIntervalSeconds: 300,
                 flowFlushIntervalSeconds: 60,
                 historyRetentionDays: 7,
+                craftingHistoryRetentionDays: 7,
+                craftingLimits: {
+                    historyRetentionDays: { min: 1, max: 15, defaultValue: 7 },
+                    historyMaxJobsPerGrid: 1000
+                },
                 limits: structuredClone(defaultSettingsLimits),
                 name: ''
             }

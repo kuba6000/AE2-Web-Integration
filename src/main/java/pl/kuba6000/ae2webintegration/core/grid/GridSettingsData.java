@@ -3,6 +3,7 @@ package pl.kuba6000.ae2webintegration.core.grid;
 import org.jetbrains.annotations.NotNull;
 
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 
 /** Mutable configuration owned by one retained grid identity. */
@@ -25,6 +26,8 @@ public final class GridSettingsData {
     private int stockSampleIntervalSeconds;
     private int flowFlushIntervalSeconds;
     private int historyRetentionDays;
+    private int craftingHistoryRetentionDays;
+    private transient @NotNull CraftingHistory craftingPolicy;
     private transient @NotNull ResourceHistory policy;
     /**
      * Custom network name; empty when unnamed.
@@ -40,7 +43,13 @@ public final class GridSettingsData {
     }
 
     public GridSettingsData(@NotNull ResourceHistory policy) {
+        this(policy, new CraftingHistory());
+    }
+
+    public GridSettingsData(@NotNull ResourceHistory policy, @NotNull CraftingHistory craftingPolicy) {
         this.policy = policy;
+        this.craftingPolicy = craftingPolicy;
+        craftingHistoryRetentionDays = craftingPolicy.historyRetentionDays.defaultValue;
         stockSampleIntervalSeconds = policy.stockSampleIntervalSeconds.defaultValue;
         flowFlushIntervalSeconds = policy.flowFlushIntervalSeconds.defaultValue;
         historyRetentionDays = policy.historyRetentionDays.defaultValue;
@@ -49,7 +58,7 @@ public final class GridSettingsData {
     /** Detached settings retained for a retired identity awaiting its final database write. */
     public @NotNull GridSettingsData copy() {
         synchronized (lock) {
-            GridSettingsData result = new GridSettingsData(policy);
+            GridSettingsData result = new GridSettingsData(policy, craftingPolicy);
             result.isTracked = isTracked;
             result.trackMachineCrafting = trackMachineCrafting;
             result.isStorageTracked = isStorageTracked;
@@ -57,23 +66,28 @@ public final class GridSettingsData {
             result.stockSampleIntervalSeconds = stockSampleIntervalSeconds;
             result.flowFlushIntervalSeconds = flowFlushIntervalSeconds;
             result.historyRetentionDays = historyRetentionDays;
+            result.craftingHistoryRetentionDays = craftingHistoryRetentionDays;
             result.name = name;
             return result;
         }
     }
 
     /** Normalize retained values under the settings lock when administrator bounds change. */
-    public boolean applyPolicy(@NotNull ResourceHistory policy) {
+    public boolean applyPolicy(@NotNull ResourceHistory policy, @NotNull CraftingHistory craftingPolicy) {
         synchronized (lock) {
+            this.craftingPolicy = craftingPolicy;
+            int craftingRetention = craftingPolicy.historyRetentionDays.clamp(craftingHistoryRetentionDays);
             this.policy = policy;
             int stock = policy.stockSampleIntervalSeconds.clamp(stockSampleIntervalSeconds);
             int flow = policy.flowFlushIntervalSeconds.clamp(flowFlushIntervalSeconds);
             int retention = policy.historyRetentionDays.clamp(historyRetentionDays);
             boolean changed = stock != stockSampleIntervalSeconds || flow != flowFlushIntervalSeconds
-                || retention != historyRetentionDays;
+                || retention != historyRetentionDays
+                || craftingRetention != craftingHistoryRetentionDays;
             stockSampleIntervalSeconds = stock;
             flowFlushIntervalSeconds = flow;
             historyRetentionDays = retention;
+            craftingHistoryRetentionDays = craftingRetention;
             return changed;
         }
     }
@@ -85,6 +99,7 @@ public final class GridSettingsData {
         policy.stockSampleIntervalSeconds.validate(stockSampleIntervalSeconds);
         policy.flowFlushIntervalSeconds.validate(flowFlushIntervalSeconds);
         policy.historyRetentionDays.validate(historyRetentionDays);
+        craftingPolicy.historyRetentionDays.validate(craftingHistoryRetentionDays);
         this.lock = lock;
         this.markDirty = markDirty;
     }
@@ -190,6 +205,21 @@ public final class GridSettingsData {
         }
     }
 
+    public int getCraftingHistoryRetentionDays() {
+        synchronized (lock) {
+            return craftingHistoryRetentionDays;
+        }
+    }
+
+    public void setCraftingHistoryRetentionDays(int value) {
+        synchronized (lock) {
+            craftingPolicy.historyRetentionDays.validate(value);
+            if (craftingHistoryRetentionDays == value) return;
+            craftingHistoryRetentionDays = value;
+            markDirty.run();
+        }
+    }
+
     public @NotNull String getName() {
         synchronized (lock) {
             return name;
@@ -212,6 +242,7 @@ public final class GridSettingsData {
                 && stockSampleIntervalSeconds == policy.stockSampleIntervalSeconds.defaultValue
                 && flowFlushIntervalSeconds == policy.flowFlushIntervalSeconds.defaultValue
                 && historyRetentionDays == policy.historyRetentionDays.defaultValue
+                && craftingHistoryRetentionDays == craftingPolicy.historyRetentionDays.defaultValue
                 && name.isEmpty();
         }
     }

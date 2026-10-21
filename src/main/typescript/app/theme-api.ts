@@ -104,6 +104,7 @@ export type ThemeApplication = {
         submit(): Promise<void>;
         remove(): Promise<void>;
     };
+    readonly history: { next(): Promise<void>; previous(): Promise<void> };
     readonly cpus: { cancel(key: string): Promise<void>; pause(key: string, paused: boolean): Promise<void> };
     readonly settings: {
         edit<K extends keyof GridSettings>(field: K, value: GridSettings[K]): void;

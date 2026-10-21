@@ -4,10 +4,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -16,7 +14,6 @@ import com.google.common.collect.MapMaker;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.api.DimensionalCoords;
 import pl.kuba6000.ae2webintegration.core.config.Config;
-import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.grid.GridPersistentData;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
@@ -28,6 +25,9 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
 import pl.kuba6000.ae2webintegration.core.notification.message.CraftingMessage;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CompletedCrafting.Interval;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
 
 public class AE2JobTracker {
 
@@ -63,10 +63,10 @@ public class AE2JobTracker {
         public HashMap<IAEKey, Long> startedWaitingFor = new HashMap<>();
         public HashMap<IAEKey, Long> craftedTotal = new HashMap<>();
         public HashMap<IAEKey, Long> waitingFor = new HashMap<>();
-        public HashMap<IAEKey, ArrayList<Pair<Long, Long>>> itemShare = new HashMap<>();
+        public HashMap<IAEKey, ArrayList<Interval>> itemShare = new HashMap<>();
         /** Provider groups used for each output, retained after the active waiting intervals are removed. */
         public final HashMap<IAEKey, HashSet<String>> resourceProviders = new HashMap<>();
-        public HashMap<AEInterface, ArrayList<Pair<Long, Long>>> interfaceShare = new HashMap<>();
+        public HashMap<AEInterface, ArrayList<Interval>> interfaceShare = new HashMap<>();
         public HashMap<AEInterface, Long> interfaceStarted = new HashMap<>();
         public HashMap<String, AEInterface> interfaceLookup = new HashMap<>();
         public HashMap<AEInterface, HashSet<IAEKey>> interfaceWaitingFor = new HashMap<>();
@@ -89,26 +89,10 @@ public class AE2JobTracker {
             return time;
         }
 
-        public double getShareInCraftingTime(IAEKey key) {
-            long total = 0L;
-            long stackTime = 0L;
-            for (IAEKey itemKey : timeSpentOn.keySet()) {
-                long timeSpent = getTimeSpentOn(itemKey);
-                total += timeSpent;
-                if (key.equals(itemKey)) {
-                    stackTime = timeSpent;
-                }
-            }
-            if (total == 0L) return 1d;
-            return (double) stackTime / (double) total;
-        }
     }
 
     private static final ConcurrentMap<ICraftingCPUCluster, JobTrackingInfo> trackingInfoMap = new MapMaker().weakKeys()
         .makeMap();
-    public ConcurrentHashMap<Integer, JobTrackingInfo> trackingInfos = new ConcurrentHashMap<>();
-
-    private int nextFreeTrackingInfoID = 1;
 
     public static JobTrackingInfo findActiveJob(ICraftingCPUCluster cpu) {
         return trackingInfoMap.get(cpu);
@@ -116,11 +100,6 @@ public class AE2JobTracker {
 
     public static void clearActiveJobs() {
         trackingInfoMap.clear();
-    }
-
-    public void clearHistory() {
-        trackingInfos.clear();
-        nextFreeTrackingInfoID = 1;
     }
 
     public static void addJob(ICraftingCPUCluster cpuCluster, IAEGrid grid, boolean isMerging) {
@@ -171,7 +150,7 @@ public class AE2JobTracker {
                 info.timeSpentOn.merge(keyDiff, elapsed, Long::sum);
                 info.craftedTotal.merge(keyDiff, info.waitingFor.remove(keyDiff), Long::sum);
                 info.itemShare.computeIfAbsent(keyDiff, k -> new ArrayList<>())
-                    .add(Pair.of(started, endedReal));
+                    .add(new Interval(started, endedReal));
                 if (info.interfaceWaitingForLookup.containsKey(keyDiff)) {
                     for (Map.Entry<AEInterface, HashSet<IAEKey>> entry : info.interfaceWaitingForLookup.get(keyDiff)
                         .entrySet()) {
@@ -182,7 +161,7 @@ public class AE2JobTracker {
                             info.interfaceWaitingFor.remove(aeInterface);
                             long interfaceStarted = info.interfaceStarted.remove(aeInterface);
                             info.interfaceShare.computeIfAbsent(aeInterface, k -> new ArrayList<>())
-                                .add(Pair.of(interfaceStarted, endedReal));
+                                .add(new Interval(interfaceStarted, endedReal));
                         }
                     }
                     info.interfaceWaitingForLookup.remove(keyDiff);
@@ -231,11 +210,11 @@ public class AE2JobTracker {
         for (Map.Entry<IAEKey, Long> entry : info.startedWaitingFor.entrySet()) {
             info.timeSpentOn.merge(entry.getKey(), now - entry.getValue(), Long::sum);
             info.itemShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
-                .add(Pair.of(entry.getValue(), now));
+                .add(new Interval(entry.getValue(), now));
         }
         for (Map.Entry<AEInterface, Long> entry : info.interfaceStarted.entrySet()) {
             info.interfaceShare.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
-                .add(Pair.of(entry.getValue(), now));
+                .add(new Interval(entry.getValue(), now));
         }
         info.interfaceStarted.clear();
         info.interfaceWaitingFor.clear();
@@ -248,8 +227,8 @@ public class AE2JobTracker {
             info.resourceSnapshots
                 .put(resource, ResourceSnapshot.capture(grid, resource, info.craftedTotal.get(resource)));
         }
-        GridData gridData = GridData.getOrCreate(key);
-        gridData.trackingInfo.trackingInfos.put(gridData.trackingInfo.nextFreeTrackingInfoID++, info);
+        CraftingHistoryService history = CoreEngine.getCraftingHistory();
+        if (history != null) history.enqueue(key, CompletedCrafting.capture(info));
         long durationMillis = info.timeDone - info.timeStarted;
         long craftedAmount = info.finalOutput.quantity();
         if (!Config.INSTANCE.general.publicMode

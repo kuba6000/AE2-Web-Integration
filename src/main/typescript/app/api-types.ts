@@ -79,6 +79,7 @@ export type ResourceResponse<T> = {
     view?: TerminalView;
     subscription?: string;
     recent?: RecentTracking;
+    nextBefore?: string | null;
 };
 export type StoredResource = ResourceStack & {
     craftable: boolean;
@@ -109,12 +110,15 @@ export type GridSettings = {
     stockSampleIntervalSeconds: number;
     flowFlushIntervalSeconds: number;
     historyRetentionDays: number;
+    craftingHistoryRetentionDays: number;
     name: string;
 };
-export type HistorySetting = 'stockSampleIntervalSeconds' | 'flowFlushIntervalSeconds' | 'historyRetentionDays';
+export type ResourceHistorySetting = 'stockSampleIntervalSeconds' | 'flowFlushIntervalSeconds' | 'historyRetentionDays';
+export type HistorySetting = ResourceHistorySetting | 'craftingHistoryRetentionDays';
 export type SettingRange = { min: number; max: number; defaultValue: number };
-export type GridSettingsLimits = Record<HistorySetting, SettingRange> & { historyMaxRowsPerGrid: number };
-export type GridSettingsResponse = GridSettings & { limits: GridSettingsLimits };
+export type GridSettingsLimits = Record<ResourceHistorySetting, SettingRange> & { historyMaxRowsPerGrid: number };
+export type CraftingHistoryLimits = { historyRetentionDays: SettingRange; historyMaxJobsPerGrid: number };
+export type GridSettingsResponse = GridSettings & { limits: GridSettingsLimits; craftingLimits: CraftingHistoryLimits };
 export type CpuSelectionMode = 'PLAYER_ONLY' | 'AUTOMATION_ONLY' | 'ALL';
 export type CpuInfo = {
     acceptsPlayerJobs: boolean;
@@ -187,7 +191,7 @@ export type HistoryEntry = {
     timeDone: number;
     wasCancelled: boolean;
     finalOutput: ResourceStack;
-    id: number;
+    id: string;
 };
 export type Timing = { started: number; ended: number };
 export type ResourceTiming = ResourceDescription & {

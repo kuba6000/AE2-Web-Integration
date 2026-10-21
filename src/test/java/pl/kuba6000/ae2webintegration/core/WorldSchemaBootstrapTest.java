@@ -26,7 +26,7 @@ class WorldSchemaBootstrapTest {
             version INTEGER NOT NULL,
             identities_imported BOOLEAN NOT NULL,
             initialized BOOLEAN NOT NULL
-        ) AS (VALUES (1, 5, FALSE, FALSE)) WITH DATA
+        ) AS (VALUES (1, 6, FALSE, FALSE)) WITH DATA
         """;
 
     @TempDir
@@ -69,7 +69,7 @@ class WorldSchemaBootstrapTest {
                     try (Statement sql = db.createStatement();
                         ResultSet result = sql.executeQuery("SELECT version, initialized FROM world_schema")) {
                         assertTrue(result.next());
-                        assertEquals(5, result.getInt(1));
+                        assertEquals(6, result.getInt(1));
                         assertTrue(result.getBoolean(2));
                         assertFalse(result.next());
                     }

@@ -122,10 +122,15 @@ export type Api = {
     ) => () => void;
     cancelCpu: (gridKey: string, cpuKey: string) => Promise<null>;
     pauseCpu: (gridKey: string, cpuKey: string, paused: boolean) => Promise<null>;
-    history: (gridKey: string, signal?: AbortSignal, icons?: boolean) => Promise<ResourceResponse<HistoryEntry[]>>;
+    history: (
+        gridKey: string,
+        signal?: AbortSignal,
+        icons?: boolean,
+        before?: string | null
+    ) => Promise<ResourceResponse<HistoryEntry[]>>;
     historyEntry: (
         gridKey: string,
-        entryId: string | number,
+        entryId: string,
         signal?: AbortSignal,
         icons?: boolean
     ) => Promise<ResourceResponse<CraftingHistory>>;
@@ -255,6 +260,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             status: string;
             data: T;
             icons?: IconMetadata | null;
+            nextBefore?: string | null;
             view?: TerminalView;
             subscription?: string;
             recent?: import('./api-types.js').RecentTracking;
@@ -266,6 +272,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
             data: envelope.data,
             recent: envelope.recent,
             icons: envelope.icons ?? null,
+            nextBefore: envelope.nextBefore ?? null,
             view: envelope.view,
             subscription: envelope.subscription
         };
@@ -408,8 +415,12 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
                 method: 'POST',
                 body: { paused }
             }),
-        history: (gridKey, signal, icons = false) =>
-            read(`api/grids/${encodeURIComponent(gridKey)}/crafting-history${icons ? '?icons=true' : ''}`, { signal }),
+        history: (gridKey, signal, icons = false, before = null) => {
+            const query = new URLSearchParams({ limit: '50' });
+            if (icons) query.set('icons', 'true');
+            if (before !== null) query.set('before', before);
+            return read(`api/grids/${encodeURIComponent(gridKey)}/crafting-history?${query}`, { signal });
+        },
         historyEntry: (gridKey, entryId, signal, icons = false) =>
             read(`api/grids/${encodeURIComponent(gridKey)}/crafting-history/${entryId}${icons ? '?icons=true' : ''}`, {
                 signal

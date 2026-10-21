@@ -24,6 +24,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.bsideup.jabel.Desugar;
 
+import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.CraftingHistory;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings.ResourceHistory;
 import pl.kuba6000.ae2webintegration.core.identity.GridIdentityRegistry;
 
@@ -38,6 +39,7 @@ public final class WorldDatabase implements AutoCloseable {
     private final Semaphore readers = new Semaphore(4, true);
     private final Path databaseBase;
     private volatile ResourceHistory policy;
+    private volatile CraftingHistory craftingPolicy;
     private volatile @Nullable OpenedDatabase openedDatabase;
     private @Nullable Path ownedPath;
     private boolean closed;
@@ -51,24 +53,40 @@ public final class WorldDatabase implements AutoCloseable {
     private record OpenedDatabase(@NotNull Connection writer, @NotNull String url) {}
 
     public WorldDatabase(@NotNull Path databaseBase, @NotNull ResourceHistory policy) {
+        this(databaseBase, policy, new CraftingHistory());
+    }
+
+    public WorldDatabase(@NotNull Path databaseBase, @NotNull ResourceHistory policy,
+        @NotNull CraftingHistory craftingPolicy) {
         if (databaseBase.toString()
             .indexOf(';') >= 0)
             throw new IllegalArgumentException("Database path cannot contain JDBC property separators");
         this.databaseBase = databaseBase.toAbsolutePath();
         this.policy = policy;
+        this.craftingPolicy = craftingPolicy;
     }
 
     public @NotNull ResourceHistory policy() {
         return policy;
     }
 
+    public @NotNull CraftingHistory craftingPolicy() {
+        return craftingPolicy;
+    }
+
     /** Publishes validated, read-only settings to this active world without database work. */
     public boolean applyPolicy(@NotNull ResourceHistory policy) {
+        return applyPolicy(policy, craftingPolicy);
+    }
+
+    public boolean applyPolicy(@NotNull ResourceHistory policy, @NotNull CraftingHistory craftingPolicy) {
         GridIdentityRegistry current = identities;
         if (current == null || gridFlushStopped) return false;
         synchronized (current) {
-            if (identities != current || gridFlushStopped || !current.applyPolicy(this, policy)) return false;
+            if (identities != current || gridFlushStopped || !current.applyPolicy(this, policy, craftingPolicy))
+                return false;
             this.policy = policy;
+            this.craftingPolicy = craftingPolicy;
         }
         synchronized (this) {
             if (!gridFlushStopped && gridFlushScheduler != null) gridFlushScheduler.execute(this::maintain);
@@ -234,6 +252,7 @@ public final class WorldDatabase implements AutoCloseable {
             WorldSchema.initialize(opened);
             opened.setAutoCommit(false);
             WorldGridStore.normalizePolicy(opened, policy);
+            WorldGridStore.normalizeCraftingPolicy(opened, craftingPolicy);
             opened.commit();
             OpenedDatabase initialized = new OpenedDatabase(opened, address);
             openedDatabase = initialized;

@@ -1,9 +1,10 @@
 package pl.kuba6000.ae2webintegration.core.http.endpoint.tracking;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -21,7 +22,8 @@ import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.http.dto.ResourceStack;
 import pl.kuba6000.ae2webintegration.core.icons.IconMappings;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
-import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.CraftingHistoryService;
+import pl.kuba6000.ae2webintegration.core.tracking.crafting.HsqlCraftingHistoryStore;
 
 /**
  * Lists crafting history entries.
@@ -40,6 +42,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
  * @response 429 {@link ErrorResponse} TOO_MANY_REQUESTS: the unauthenticated request rate limit was exceeded.
  * @response 500 {@link ErrorResponse} INTERNAL_ERROR: the request could not be completed because of an unexpected
  *           failure.
+ * @response 503 {@link ErrorResponse} SERVER_STOPPING: the world history service is unavailable.
  * @responseExample 400 {"status":"BAD_PARAM","data":null}
  * @responseExample 401 {"status":"UNAUTHORIZED","data":null}
  * @responseExample 403 {"status":"NO_PERMISSIONS","data":null}
@@ -48,6 +51,7 @@ import pl.kuba6000.ae2webintegration.core.tracking.AE2JobTracker;
  * @responseExample 413 {"status":"REQUEST_TOO_LARGE","data":null}
  * @responseExample 429 {"status":"TOO_MANY_REQUESTS","data":null}
  * @responseExample 500 {"status":"INTERNAL_ERROR","data":null}
+ * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/crafting-history")
 public final class GetTrackingHistory extends IAsyncRequest {
@@ -56,17 +60,27 @@ public final class GetTrackingHistory extends IAsyncRequest {
     @QueryParam("icons")
     private boolean icons;
 
+    /** Maximum number of entries, from 1 to 100; defaults to 50. */
+    @QueryParam("limit")
+    private int limit = 50;
+
+    /** Exclusive decimal job ID cursor from the preceding page. */
+    @QueryParam("before")
+    private String before;
+
     /**
      * Successful operation result.
      * 
-     * @param status {@code OK} for a successful request
-     * @param data   history entries ordered by completion time, newest first; empty when no history has been recorded
-     * @param icons  atlas metadata for product references; null when not requested or no pack is available
+     * @param status     {@code OK} for a successful request
+     * @param data       history entries ordered by durable completion ID, newest first; empty when no history has been
+     *                   recorded
+     * @param icons      atlas metadata for product references; null when not requested or no pack is available
+     * @param nextBefore exclusive decimal ID cursor for the next page, or null when this is the last page
      * @example status OK
      */
     @Desugar
-    public record Response(@NotNull ApiStatus status, @NotNull List<HistoryEntry> data, @Nullable IconMappings icons)
-        implements IResponseBody {}
+    public record Response(@NotNull ApiStatus status, @NotNull List<HistoryEntry> data, @Nullable IconMappings icons,
+        @Nullable String nextBefore) implements IResponseBody {}
 
     /**
      * One completed or cancelled crafting job.
@@ -75,42 +89,64 @@ public final class GetTrackingHistory extends IAsyncRequest {
      * @param timeDone     completion time in Unix epoch milliseconds
      * @param wasCancelled whether the crafting work was cancelled
      * @param finalOutput  detached snapshot of the final crafting output
-     * @param id           runtime history entry identifier
+     * @param id           durable decimal history entry identifier
      * @example timeStarted 1700000000000
      * @example timeDone 1700000010000
      * @example wasCancelled false
-     * @example id 12
+     * @example id "12"
      */
     @Desugar
     public record HistoryEntry(long timeStarted, long timeDone, boolean wasCancelled,
-        @NotNull ResourceStack finalOutput, int id) {}
+        @NotNull ResourceStack finalOutput, @NotNull String id) {}
 
     @Override
     public void handle() {
-        IconPack pack = icons ? CoreEngine.getIconPack() : null;
-        IconMappings mappings = pack == null ? null : new IconMappings(pack);
-        if (grid == null) {
-            // Nothing has ever been tracked on this grid; an empty history is the honest answer.
-            respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, new ArrayList<HistoryEntry>(), mappings));
+        Long cursor = null;
+        if (before != null) {
+            try {
+                cursor = Long.parseLong(before);
+            } catch (NumberFormatException invalid) {
+                deny(ApiStatus.BAD_PARAM);
+                return;
+            }
+            if (cursor < 1 || !Long.toString(cursor)
+                .equals(before)) {
+                deny(ApiStatus.BAD_PARAM);
+                return;
+            }
+        }
+        if (limit < 1 || limit > 100) {
+            deny(ApiStatus.BAD_PARAM);
             return;
         }
-        ArrayList<HistoryEntry> jobs = new ArrayList<>(grid.trackingInfo.trackingInfos.size());
-
-        for (Map.Entry<Integer, AE2JobTracker.JobTrackingInfo> integerJobTrackingInfoEntry : grid.trackingInfo.trackingInfos
-            .entrySet()) {
-            AE2JobTracker.JobTrackingInfo info = integerJobTrackingInfoEntry.getValue();
-            jobs.add(
-                new HistoryEntry(
-                    info.timeStarted,
-                    info.timeDone,
-                    info.wasCancelled,
-                    new ResourceStack(info.finalOutput, mappings),
-                    integerJobTrackingInfoEntry.getKey()));
+        CraftingHistoryService service = CoreEngine.getCraftingHistory();
+        if (service == null) {
+            deny(ApiStatus.SERVER_STOPPING);
+            return;
         }
-
-        jobs.sort((i1, i2) -> Long.compare(i2.timeDone(), i1.timeDone()));
-
-        respond(HttpURLConnection.HTTP_OK, new Response(ApiStatus.OK, jobs, mappings));
+        try {
+            HsqlCraftingHistoryStore.Page page = service.list(gridKey, cursor, limit);
+            IconPack pack = icons ? CoreEngine.getIconPack() : null;
+            IconMappings mappings = pack == null ? null : new IconMappings(pack);
+            ArrayList<HistoryEntry> jobs = new ArrayList<>();
+            for (HsqlCraftingHistoryStore.Summary entry : page.entries()) {
+                jobs.add(
+                    new HistoryEntry(
+                        entry.timeStarted(),
+                        entry.timeDone(),
+                        entry.wasCancelled(),
+                        new ResourceStack(entry.finalOutput(), mappings),
+                        Long.toString(entry.id())));
+            }
+            respondDetached(
+                HttpURLConnection.HTTP_OK,
+                new Response(
+                    ApiStatus.OK,
+                    jobs,
+                    mappings,
+                    page.nextBefore() == null ? null : Long.toString(page.nextBefore())));
+        } catch (IOException failure) {
+            throw new UncheckedIOException(failure);
+        }
     }
-
 }

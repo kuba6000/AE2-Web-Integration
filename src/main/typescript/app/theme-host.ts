@@ -94,6 +94,7 @@ export function mountTheme(
             submit: () => crafting.submit(),
             remove: crafting.remove
         },
+        history: { next: application.history.next, previous: application.history.previous },
         cpus: { cancel: cpus.cancel, pause: cpus.pause },
         settings: { edit: settings.edit, save: settings.save },
         icons: {

@@ -4,7 +4,6 @@ import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.CoreEngine;
 import pl.kuba6000.ae2webintegration.core.ae2request.IRequest;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
-import pl.kuba6000.ae2webintegration.core.grid.GridData;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
@@ -15,7 +14,6 @@ public abstract class IAsyncRequest extends IRequest {
 
     @PathParam("gridKey")
     protected StableKey gridKey;
-    protected GridData grid;
 
     @Override
     public boolean init(RequestContext context) {
@@ -30,7 +28,6 @@ public abstract class IAsyncRequest extends IRequest {
                 deny(ApiStatus.NO_PERMISSIONS);
                 return false;
             }
-            grid = GridData.find(gridKey);
         }
         return true;
     }

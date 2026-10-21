@@ -1244,7 +1244,12 @@ test('CPU overview and history products share atlas pages and respect the displa
         await missing.locator('.resource-icon').evaluate((node) => getComputedStyle(node, '::before').content),
         '"?"'
     );
-    assert.equal(options.requests.filter((r) => r.path.endsWith('/crafting-history')).at(-1).query, '?icons=true');
+    assert.equal(
+        new URLSearchParams(options.requests.filter((r) => r.path.endsWith('/crafting-history')).at(-1).query).get(
+            'icons'
+        ),
+        'true'
+    );
     assert.equal(atlasReads().length, 1, 'overview and history reuse the same atlas page');
     await page.setViewportSize({ width: 390, height: 844 });
     const bounds = await first.evaluate((node) => ({ width: node.clientWidth, content: node.scrollWidth }));
@@ -1268,9 +1273,12 @@ test('CPU overview and history products share atlas pages and respect the displa
             0
         );
         assert.equal(
-            options.requests.filter((r) => r.path.endsWith(route === 'history' ? '/crafting-history' : '/cpus')).at(-1)
-                .query,
-            ''
+            new URLSearchParams(
+                options.requests
+                    .filter((r) => r.path.endsWith(route === 'history' ? '/crafting-history' : '/cpus'))
+                    .at(-1).query
+            ).has('icons'),
+            false
         );
     }
     assert.equal(atlasReads().length, before);
@@ -1402,7 +1410,9 @@ for (const view of ['cpus', 'history']) {
         assert.ok(pages.at(-1).path.includes('c'.repeat(64)));
         options.pack = { available: false, packId: null, width: 0, height: 0 };
         const absent = page.waitForResponse(
-            (response) => new URL(response.url()).pathname.endsWith(endpoint) && !new URL(response.url()).search
+            (response) =>
+                new URL(response.url()).pathname.endsWith(endpoint) &&
+                !new URL(response.url()).searchParams.has('icons')
         );
         await poll(page);
         await settleResponse(page, (await absent).request());
@@ -1431,7 +1441,10 @@ for (const view of ['cpus', 'history']) {
         const captured = new Promise((resolve) => {
             release = resolve;
         });
-        await page.route(`**${endpoint}?icons=true`, (route) => release(route));
+        await page.route(
+            (url) => url.pathname.endsWith(endpoint) && url.searchParams.get('icons') === 'true',
+            (route) => release(route)
+        );
         await page.goto(`${base}#/grids/${gridA}/${view}`);
         const delayed = await captured;
         await clickTab(page, 'Web settings');
@@ -1453,7 +1466,12 @@ for (const view of ['cpus', 'history']) {
             0
         );
         assert.equal(options.requests.filter((request) => request.path.startsWith('/api/icon-packs/')).length, 0);
-        assert.equal(options.requests.filter((request) => request.path.endsWith(endpoint)).at(-1).query, '');
+        assert.equal(
+            new URLSearchParams(options.requests.filter((request) => request.path.endsWith(endpoint)).at(-1).query).has(
+                'icons'
+            ),
+            false
+        );
     });
 }
 

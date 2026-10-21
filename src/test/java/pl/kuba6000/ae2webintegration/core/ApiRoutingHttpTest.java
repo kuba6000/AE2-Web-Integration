@@ -50,6 +50,7 @@ import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.GetGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.grid.PatchGridSettings;
 import pl.kuba6000.ae2webintegration.core.http.endpoint.tracking.GetResourceHistory;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
+import pl.kuba6000.ae2webintegration.core.persistence.WorldGridStore;
 
 class ApiRoutingHttpTest extends GridTestScope {
 
@@ -546,6 +547,75 @@ class ApiRoutingHttpTest extends GridTestScope {
         assertFalse(
             settings.get("isTracked")
                 .getAsBoolean());
+    }
+
+    @Test
+    void craftingRetentionIsIndependentDurableAndValidatesBeforeMutation() throws Exception {
+        grid = TestGridFixtures.grid(1);
+        StableKey key = CoreEngine.GRID_IDENTITIES.getKey(grid);
+        assertNotNull(key);
+        String path = "/api/grids/" + key + "/settings";
+        String headers = "Authorization: Bearer valid\r\nContent-Type: application/json\r\n";
+        JsonObject initial = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        int max = initial.getAsJsonObject("craftingLimits")
+            .getAsJsonObject("historyRetentionDays")
+            .get("max")
+            .getAsInt();
+        Reply saved = request("PATCH", path, headers, "{\"craftingHistoryRetentionDays\":" + max + "}");
+        assertEquals(HttpURLConnection.HTTP_OK, saved.status());
+        JsonObject current = saved.json()
+            .getAsJsonObject("data");
+        assertEquals(
+            max,
+            current.get("craftingHistoryRetentionDays")
+                .getAsInt());
+        assertEquals(initial.get("historyRetentionDays"), current.get("historyRetentionDays"));
+        assertFalse(
+            current.get("isTracked")
+                .getAsBoolean());
+        GridPersistentData restored = new WorldGridStore(worlds.database(TestGridFixtures.Worlds.source(gridSave)))
+            .load(
+                TestGridFixtures.Worlds.source(gridSave)
+                    .toPath())
+            .get(key);
+        assertNotNull(restored);
+        assertEquals(
+            max,
+            restored.getSettings()
+                .getCraftingHistoryRetentionDays());
+        for (String invalid : new String[] { "null", "0", Integer.toString(max + 1), "1.5", "\"7\"", "{}" }) {
+            assertEquals(
+                HttpURLConnection.HTTP_BAD_REQUEST,
+                request("PATCH", path, headers, "{\"isTracked\":true,\"craftingHistoryRetentionDays\":" + invalid + "}")
+                    .status());
+        }
+        JsonObject unchanged = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertFalse(
+            unchanged.get("isTracked")
+                .getAsBoolean());
+        assertEquals(
+            max,
+            unchanged.get("craftingHistoryRetentionDays")
+                .getAsInt());
+        ConfigSettings.CraftingHistory tighter = new ConfigSettings.CraftingHistory();
+        tighter.historyRetentionDays = new ConfigSettings.Range(1, 3, 2);
+        assertTrue(
+            worlds.database(TestGridFixtures.Worlds.source(gridSave))
+                .applyPolicy(Config.INSTANCE.resourceHistory, tighter));
+        JsonObject clamped = request("GET", path, headers, "").json()
+            .getAsJsonObject("data");
+        assertEquals(
+            3,
+            clamped.get("craftingHistoryRetentionDays")
+                .getAsInt());
+        assertEquals(
+            3,
+            clamped.getAsJsonObject("craftingLimits")
+                .getAsJsonObject("historyRetentionDays")
+                .get("max")
+                .getAsInt());
     }
 
     @Test

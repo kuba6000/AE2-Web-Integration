@@ -14,6 +14,9 @@ public final class ConfigSettings {
     @Comment("Per-network history bounds and defaults. Reload applies bounds immediately; database cleanup follows in the background.")
     @Path("resource_history")
     public ResourceHistory resourceHistory = new ResourceHistory();
+    @Path("crafting_history")
+    @Comment("Completed crafting history bounds and defaults. Reload applies bounds immediately; database cleanup follows in the background.")
+    public CraftingHistory craftingHistory = new CraftingHistory();
     @Path("resource_tracking")
     @Comment("Live observation and background capacity controls. Changes take effect after restarting the server.")
     public ResourceTracking resourceTracking = new ResourceTracking();
@@ -118,6 +121,17 @@ public final class ConfigSettings {
         public int historyMaxRowsPerGrid = 250000;
     }
 
+    public static final class CraftingHistory {
+
+        @Path("history_retention_days")
+        @Comment("Days of completed crafting history selected per network, subject to the job cap below.")
+        public Range historyRetentionDays = new Range(1, 15, 7);
+
+        @Path("history_max_jobs_per_grid")
+        @Comment("Maximum completed or cancelled crafting jobs per network; oldest jobs are removed in full.")
+        public int historyMaxJobsPerGrid = 1000;
+    }
+
     public static final class Range {
 
         public int min;
@@ -172,6 +186,9 @@ public final class ConfigSettings {
     }
 
     void validate() {
+        craftingHistory.historyRetentionDays.validate();
+        if (craftingHistory.historyMaxJobsPerGrid < 1)
+            throw new IllegalArgumentException("Crafting history job cap must be positive");
         resourceHistory.stockSampleIntervalSeconds.validate();
         resourceHistory.flowFlushIntervalSeconds.validate();
         resourceHistory.historyRetentionDays.validate();
