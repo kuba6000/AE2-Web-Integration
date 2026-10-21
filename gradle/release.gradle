@@ -1,0 +1,269 @@
+def target = [
+    minecraft: '1.12.2', loader: 'forge', java: 8, archiveTask: 'reobfJar',
+    generatorTask: 'reobfIconGeneratorJar',
+    modrinth: ['mixinbooter'], curseforge: ['ae2-extended-life', 'mixin-booter'],
+    // AE2UEL has a CurseForge project but no matching Modrinth project.
+    external: [[name: 'AE2 Unofficial Extended Life', required: true,
+                url: 'https://www.curseforge.com/minecraft/mc-mods/ae2-extended-life']]
+]
+
+apply plugin: 'com.modrinth.minotaur'
+apply plugin: 'net.darkhax.curseforgegradle'
+
+def productionTask = target.archiveTask == 'publishableObfJar'
+    ? project.property('publishableObfJar')
+    : tasks.named(target.archiveTask)
+def suppliedArtifact = providers.gradleProperty('releaseArtifactFile')
+def suppliedManifest = providers.gradleProperty('releaseBundleManifest')
+def selectedArchive = providers.provider {
+    suppliedArtifact.isPresent() ? project.file(suppliedArtifact.get()) : productionTask.get().archiveFile.get().asFile
+}
+def bundle = providers.provider {
+    if (!suppliedManifest.isPresent()) {
+        throw new GradleException('releaseBundleManifest is required with releaseArtifactFile')
+    }
+    new groovy.json.JsonSlurper().parse(project.file(suppliedManifest.get()), 'UTF-8')
+}
+def additionalArtifacts = [
+    [role: 'icon-generator', task: tasks.named(target.generatorTask)],
+    [role: 'sources', task: tasks.named('sourcesJar')]
+].collect { entry ->
+    def archive = suppliedArtifact.isPresent()
+        ? providers.provider {
+            def recorded = bundle.get().additional_artifacts.find { it.role == entry.role }
+            if (recorded == null) {
+                throw new GradleException('Release bundle is missing ' + entry.role)
+            }
+            new File(selectedArchive.get().parentFile, new File(recorded.artifact.toString()).name)
+        }
+        : providers.provider { entry.task.get().archiveFile.get().asFile }
+    [role: entry.role, task: entry.task, file: archive]
+}
+def notesFile = project.file(providers.gradleProperty('releaseNotesFile').getOrElse('build/release/notes.md'))
+def releaseVersion = providers.environmentVariable('VERSION').getOrElse('')
+def dryRunInput = providers.gradleProperty('releaseDryRun').getOrElse('true')
+if (!(dryRunInput in ['true', 'false'])) {
+    throw new GradleException('releaseDryRun must be true or false')
+}
+def dryRun = dryRunInput == 'true'
+def tagMatch = releaseVersion =~ /^(.+)-(forge|neoforge)(-pre)?-(1\.7\.10|1\.12\.2|1\.20\.1|1\.21\.1)(-pre)?$/
+def tag = tagMatch.matches() ? tagMatch[0] : null
+def versionMatch = tag == null ? null : tag[1] =~ /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/
+def semver = versionMatch != null && versionMatch.matches() ? versionMatch[0] : null
+def suffix = semver == null ? '' : semver[4] ?: ''
+def snapshot = releaseVersion.toLowerCase(Locale.ROOT).contains('snapshot')
+def prerelease = suffix || (tag != null && (tag[3] || tag[5])) || snapshot
+def inferredType = suffix.toLowerCase(Locale.ROOT).find(/^alpha(?:[.-]|$)/) != null
+    ? 'alpha' : (prerelease ? 'beta' : 'release')
+def releaseKind = providers.gradleProperty('releaseType').getOrElse(inferredType)
+def manifestFile = layout.buildDirectory.file('release/manifest.json')
+def expectedSha512 = providers.gradleProperty('releaseArtifactSha512')
+def hashFile = { File archive, String algorithm ->
+    def digest = java.security.MessageDigest.getInstance(algorithm)
+    archive.withInputStream { stream ->
+        byte[] buffer = new byte[65536]
+        int count
+        while ((count = stream.read(buffer)) != -1) {
+            digest.update(buffer, 0, count)
+        }
+    }
+    digest.digest().encodeHex().toString()
+}
+
+def validateRelease = tasks.register('validateRelease') {
+    group = 'publishing'
+    description = 'Validates release inputs without contacting a publishing service.'
+    notCompatibleWithConfigurationCache('Release plugins read project and environment state during execution.')
+    doLast {
+        if (tag == null || semver == null || tag[2] != target.loader || tag[4] != target.minecraft) {
+            throw new GradleException('VERSION must be a release tag for ' + target.loader + ' ' + target.minecraft)
+        }
+        if ((semver[4] != null && semver[4].split('\\.', -1).any { !it || it ==~ /0[0-9]+/ }) ||
+            (semver[5] != null && semver[5].split('\\.', -1).any { !it })) {
+            throw new GradleException('VERSION contains invalid SemVer identifiers')
+        }
+        if (!(releaseKind in ['release', 'alpha', 'beta'])) {
+            throw new GradleException('releaseType must be release, alpha or beta')
+        }
+        if (releaseKind != inferredType) {
+            throw new GradleException('releaseType must be ' + inferredType + ' for VERSION=' + releaseVersion)
+        }
+        if (project.version.toString() != releaseVersion ||
+            productionTask.get().archiveVersion.get() != releaseVersion) {
+            throw new GradleException('VERSION must equal the project and production archive version')
+        }
+        if (!notesFile.isFile() || notesFile.getText('UTF-8').trim().isEmpty()) {
+            throw new GradleException('Release notes must be a nonempty UTF-8 file: ' + notesFile)
+        }
+        if (suppliedArtifact.isPresent()) {
+            if (selectedArchive.get().name != productionTask.get().archiveFile.get().asFile.name) {
+                throw new GradleException('releaseArtifactFile must have the exact production archive filename')
+            }
+            def recorded = bundle.get()
+            if (recorded.tag != releaseVersion || recorded.minecraft != target.minecraft || recorded.loader != target.loader) {
+                throw new GradleException('Release bundle metadata does not match VERSION and target')
+            }
+            if (new File(recorded.artifact.toString()).name != selectedArchive.get().name) {
+                throw new GradleException('Release bundle primary artifact filename does not match')
+            }
+            if (!(recorded.sha512 ==~ /[0-9a-f]{128}/)) {
+                throw new GradleException('Release bundle primary artifact must have a SHA-512 digest')
+            }
+            if (recorded.additional_artifacts*.role.sort() != ['icon-generator', 'sources']) {
+                throw new GradleException('Release bundle must contain exactly the icon generator and sources')
+            }
+        }
+        if (expectedSha512.isPresent() && !(expectedSha512.get() ==~ /[0-9a-f]{128}/)) {
+            throw new GradleException('releaseArtifactSha512 must be a lowercase SHA-512 digest')
+        }
+    }
+}
+
+def releasePreview = tasks.register('releasePreview') {
+    group = 'publishing'
+    description = 'Builds or verifies the release JARs and writes build/release/manifest.json.'
+    dependsOn(validateRelease)
+    if (!suppliedArtifact.isPresent()) {
+        dependsOn(productionTask, additionalArtifacts*.task)
+    }
+    outputs.file(manifestFile)
+    outputs.upToDateWhen { false }
+    notCompatibleWithConfigurationCache('Release manifest reads selected archives and notes at execution time.')
+    doLast {
+        File archive = selectedArchive.get()
+        if (!archive.isFile()) {
+            throw new GradleException('Production archive is missing: ' + archive)
+        }
+        new java.util.zip.ZipFile(archive).withCloseable { jar ->
+            ['pl/kuba6000/ae2webintegration/ae2interface/AE2WebIntegration.class',
+             'pl/kuba6000/ae2webintegration/core/api/IAEWebInterface.class',
+             'mixins.ae2webintegration.json'].each { entry ->
+                if (jar.getEntry(entry) == null) {
+                    throw new GradleException('Production archive is missing ' + entry)
+                }
+            }
+        }
+        def sha512 = hashFile(archive, 'SHA-512')
+        if ((expectedSha512.isPresent() && sha512 != expectedSha512.get()) ||
+            (suppliedArtifact.isPresent() && sha512 != bundle.get().sha512)) {
+            throw new GradleException('Selected production archive differs from the release SHA-512 digest')
+        }
+        def extras = additionalArtifacts.collect { entry ->
+            File extra = entry.file.get()
+            if (!extra.isFile() || extra.name != entry.task.get().archiveFile.get().asFile.name) {
+                throw new GradleException('Missing or incorrect release artifact: ' + entry.role)
+            }
+            def extraSha512 = hashFile(extra, 'SHA-512')
+            if (suppliedArtifact.isPresent() &&
+                extraSha512 != bundle.get().additional_artifacts.find { it.role == entry.role }.sha512) {
+                throw new GradleException('Release artifact differs from its SHA-512 digest: ' + entry.role)
+            }
+            [artifact: extra.absolutePath, sha1: hashFile(extra, 'SHA-1'), sha512: extraSha512, role: entry.role,
+             environment: entry.role == 'icon-generator' ? [client: 'required', server: 'unsupported'] : null]
+        }
+        def manifest = [
+            artifact: archive.absolutePath, sha1: hashFile(archive, 'SHA-1'), sha512: sha512,
+            tag: releaseVersion, version: releaseVersion, minecraft: target.minecraft,
+            loader: target.loader, java: target.java,
+            project_ids: [modrinth: '8MGTfmHF', curseforge: '1122761'],
+            release_type: releaseKind, environment: [client: 'unsupported', server: 'required'],
+            dependencies: [modrinth: target.modrinth, curseforge: target.curseforge, external: target.external],
+            notes_file: notesFile.absolutePath, additional_artifacts: extras
+        ]
+        File output = manifestFile.get().asFile
+        output.parentFile.mkdirs()
+        output.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(manifest)) + '\n', 'UTF-8')
+        logger.lifecycle('Release manifest: ' + output)
+        logger.lifecycle('Production archive: ' + archive + ' (SHA-512 ' + sha512 + ')')
+    }
+}
+([productionTask] + additionalArtifacts*.task).each { archiveTask ->
+    archiveTask.configure { mustRunAfter(validateRelease) }
+}
+
+def modrinthToken = providers.environmentVariable('MODRINTH_TOKEN')
+modrinth {
+    // Debug runs deliberately never use credentials, even if the shell contains real tokens.
+    token.set(dryRun ? providers.provider { 'release-preview' } : modrinthToken.orElse(''))
+    projectId.set('8MGTfmHF')
+    versionNumber.set(releaseVersion)
+    versionName.set(releaseVersion)
+    versionType.set(releaseKind)
+    file.set(layout.file(selectedArchive))
+    additionalFiles.set(providers.provider { additionalArtifacts.collect { it.file.get() } })
+    changelog.set(providers.provider { notesFile.getText('UTF-8') })
+    gameVersions.set([target.minecraft])
+    loaders.set([target.loader])
+    detectLoaders.set(false)
+    debugMode.set(dryRun)
+    failSilently.set(false)
+    dependencies.set([])
+    dependencies {
+        target.modrinth.each { required.project(it) }
+    }
+}
+tasks.named('modrinth').configure {
+    setDependsOn([releasePreview])
+    notCompatibleWithConfigurationCache('Minotaur reads the project during upload.')
+    doFirst {
+        if (!dryRun && snapshot) {
+            throw new GradleException('Snapshot builds cannot be published to portals')
+        }
+        if (!dryRun && !modrinthToken.getOrElse('').trim()) {
+            throw new GradleException('MODRINTH_TOKEN is required for a real release')
+        }
+    }
+}
+tasks.register('releaseModrinth') {
+    group = 'publishing'
+    description = 'Publishes the release JARs to Modrinth (debug mode by default).'
+    dependsOn('modrinth')
+}
+
+def curseforgeToken = providers.environmentVariable('CURSEFORGE_TOKEN')
+def curseforgeEndpoint = providers.gradleProperty('releaseCurseforgeApiEndpoint')
+if (curseforgeEndpoint.isPresent()) {
+    def endpoint = new URI(curseforgeEndpoint.get())
+    if (!dryRun || endpoint.scheme != 'http' || endpoint.host != '127.0.0.1' ||
+        endpoint.port < 1 || endpoint.port > 65535 || !(endpoint.path in ['', '/']) ||
+        endpoint.rawQuery != null || endpoint.rawFragment != null || endpoint.rawUserInfo != null) {
+        throw new GradleException('A custom CurseForge API endpoint must be a loopback HTTP debug fixture')
+    }
+}
+def curseforgeTaskType = plugins.findPlugin('net.darkhax.curseforgegradle').class.classLoader.loadClass(
+    'net.darkhax.curseforgegradle.TaskPublishCurseForge')
+tasks.register('releaseCurseforge', curseforgeTaskType) {
+    group = 'publishing'
+    description = 'Publishes the release JARs to CurseForge (debug mode by default).'
+    dependsOn(releasePreview)
+    notCompatibleWithConfigurationCache('CurseForgeGradle reads the project during upload.')
+    apiToken = dryRun ? 'release-preview' : curseforgeToken.getOrElse('')
+    if (curseforgeEndpoint.isPresent()) {
+        apiEndpoint = curseforgeEndpoint.get()
+    }
+    debugMode = dryRun
+    disableVersionDetection()
+    def artifact = upload('1122761', selectedArchive)
+    artifact.displayName = releaseVersion
+    artifact.changelog = notesFile
+    artifact.changelogType = 'markdown'
+    artifact.releaseType = releaseKind
+    artifact.addGameVersion(target.minecraft)
+    artifact.addModLoader(target.loader == 'neoforge' ? 'NeoForge' : 'Forge')
+    artifact.addJavaVersion('Java ' + target.java)
+    artifact.addEnvironment('Server')
+    target.curseforge.each { artifact.addRequirement(it) }
+    additionalArtifacts.each { entry ->
+        // CurseForge child files inherit their parent's tags; its API forbids independent environments.
+        def child = artifact.withAdditionalFile(entry.file)
+        child.displayName = releaseVersion + (entry.role == 'icon-generator' ? ' icon generator (client tool)' : ' sources')
+    }
+    doFirst {
+        if (!dryRun && snapshot) {
+            throw new GradleException('Snapshot builds cannot be published to portals')
+        }
+        if (!dryRun && !curseforgeToken.getOrElse('').trim()) {
+            throw new GradleException('CURSEFORGE_TOKEN is required for a real release')
+        }
+    }
+}
