@@ -124,7 +124,7 @@ test('About shows runtime metadata and resource links while retaining the select
     await page.getByRole('button', { name: /Iron Ingot/ }).waitFor();
     await page.getByRole('link', { name: 'About', exact: true }).click();
     assert.match(page.url(), /#\/about$/);
-    const about = page.getByRole('heading', { name: 'About', exact: true }).locator('..');
+    const about = page.getByRole('region', { name: 'About', exact: true });
     await about.getByText(options.modVersion).waitFor();
     await about.getByText('AE2 Web Integration', { exact: true }).waitFor();
     await about.getByText('kuba6000').first().waitFor();
