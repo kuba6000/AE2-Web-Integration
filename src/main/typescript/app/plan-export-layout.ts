@@ -119,7 +119,7 @@ export function readPlanExportSettings(get: (key: string) => JsonValue): PlanExp
 
 /** Conservative allocation budget, followed by an actual browser canvas probe before drawing. */
 export function planExportFits(layout: PlanExportLayout): boolean {
-    return layout.width <= 16384 && layout.height <= 16384 && layout.width * layout.height <= 16_777_216;
+    return layout.width <= 16384 && layout.height <= 16384 && layout.width * layout.height <= 67_108_864;
 }
 
 export function smallerPlanExportLayout(

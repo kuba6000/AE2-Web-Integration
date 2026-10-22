@@ -88,6 +88,72 @@ test('plan PNG exports every row independently of search, without icons, and rem
     assert.equal(smaller.pixels.height, 166);
 });
 
+test('missing-only export clamps rows and columns to the selection and validates edited counts', async (t) => {
+    const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
+    options.plan = {
+        ...readyPlan,
+        plan: Array.from({ length: 40 }, (_, i) => ({
+            ...readyPlan.plan[0],
+            displayName: `Resource ${i}`,
+            missing: i < 3 ? 1 : 0
+        }))
+    };
+    const dialog = await openExport(page, base);
+    const layout = dialog.getByRole('combobox', { name: 'Layout', exact: true });
+    const onlyMissing = dialog.getByRole('checkbox', { name: 'Only missing resources', exact: true });
+    const download = dialog.getByRole('button', { name: 'Download PNG', exact: true });
+    for (const axis of ['columns', 'rows']) {
+        await onlyMissing.uncheck();
+        await layout.selectOption(axis);
+        const count = dialog.getByRole('spinbutton');
+        await count.fill('10');
+        await onlyMissing.check();
+        assert.equal(await count.inputValue(), '3');
+        assert.equal(await count.getAttribute('max'), '3');
+        assert.ok(await download.isEnabled());
+        await png(page, dialog);
+        for (const invalid of ['', '0', '1.5']) {
+            await count.fill(invalid);
+            assert.equal(await count.getAttribute('aria-invalid'), 'true');
+            assert.equal(await download.isEnabled(), false);
+        }
+        await count.fill('2');
+        assert.equal(await count.getAttribute('aria-invalid'), 'false');
+        assert.ok(await download.isEnabled());
+    }
+});
+
+test('closing a large PNG export interrupts drawing before the remaining resources and prevents a download', async (t) => {
+    const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
+    options.plan = {
+        ...readyPlan,
+        plan: Array.from({ length: 4000 }, (_, i) => ({
+            ...readyPlan.plan[0],
+            displayName: `Resource${String(i).padStart(5, '0')}`
+        }))
+    };
+    const dialog = await openExport(page, base);
+    let downloads = 0;
+    page.on('download', () => downloads++);
+    await dialog.evaluate((node) => {
+        const fillText = CanvasRenderingContext2D.prototype.fillText;
+        window.exportDrewLastResource = false;
+        CanvasRenderingContext2D.prototype.fillText = function (text, ...args) {
+            if (text === 'Resource00000') {
+                setTimeout(() => node.querySelector('.close-dialog').click(), 0);
+            }
+            if (text === 'Resource03999') window.exportDrewLastResource = true;
+            return fillText.call(this, text, ...args);
+        };
+    });
+    await dialog.getByRole('button', { name: 'Download PNG', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    assert.equal(await page.evaluate(() => window.exportDrewLastResource), false);
+    assert.equal(downloads, 0);
+    await page.getByRole('button', { name: 'Export PNG', exact: true }).click();
+    assert.ok(await dialog.getByRole('button', { name: 'Download PNG', exact: true }).isEnabled());
+});
+
 test('PNG header includes the output icon only when both header and icons are enabled', async (t) => {
     const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
     await atlasFixture(page, options);

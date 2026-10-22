@@ -131,6 +131,7 @@ export function createPlanExporter(loader: Pick<ReturnType<typeof createIconLoad
                             style.fontSize * layout.scale
                         );
                     }
+                    let yieldAt = performance.now() + 8;
                     for (let index = 0; index < layout.columns * layout.rows; index++) {
                         ctx.save();
                         ctx.translate(
@@ -143,6 +144,12 @@ export function createPlanExporter(loader: Pick<ReturnType<typeof createIconLoad
                         ctx.clip();
                         drawTile(ctx, rows[index], resolved.icons, request);
                         ctx.restore();
+                        if (index % 32 === 31 && performance.now() >= yieldAt) {
+                            // Let input (including cancellation) run between batches of canvas commands.
+                            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+                            signal.throwIfAborted();
+                            yieldAt = performance.now() + 8;
+                        }
                     }
                     const blob = await new Promise<Blob | null>((resolve) => {
                         try {

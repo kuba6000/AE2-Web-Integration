@@ -70,22 +70,39 @@ export function createPlanExportDialog(
         opener?.focus({ preventScroll: true });
     });
 
+    function resourceCount() {
+        return snapshot?.plan?.reduce((count, row) => count + Number(!settings.onlyMissing || row.missing > 0), 0) ?? 0;
+    }
     function currentLayout() {
-        const rows = snapshot?.plan?.filter((row) => !settings.onlyMissing || row.missing > 0) ?? [];
-        return planExportLayout(rows.length, settings, grid, style.geometry);
+        return planExportLayout(resourceCount(), settings, grid, style.geometry);
     }
     function refresh() {
         const t = locale.t;
+        const selectedCount = resourceCount();
+        count.max = String(Math.max(1, selectedCount));
+        count.disabled = axis.value === 'square' || selectedCount === 0;
+        if (
+            (grid.axis === 'rows' || grid.axis === 'columns') &&
+            Number.isSafeInteger(grid.value) &&
+            grid.value > selectedCount &&
+            selectedCount > 0
+        ) {
+            grid.value = selectedCount;
+            count.value = String(selectedCount);
+        }
+        const invalidCount = !count.disabled && !count.validity.valid;
+        count.setAttribute('aria-invalid', String(invalidCount));
         style = planExportStyle(dialog, effectiveSettings(), snapshot!, !!metadata && settings.icon);
         let layout = currentLayout();
         while (layout && !planExportFits(layout)) layout = smallerPlanExportLayout(layout, style.geometry);
         submit.disabled = !layout || !!operation;
-        count.disabled = axis.value === 'square';
         if (axis.value === 'square' && layout) count.value = String(layout.columns);
         gridLabel.textContent = t(axis.value === 'rows' ? 'exportRows' : 'exportColumns');
         if (!layout) {
-            const empty = !snapshot?.plan?.some((row) => !settings.onlyMissing || row.missing > 0);
-            readout.textContent = t(empty ? 'exportEmptyPlan' : 'exportTooLarge');
+            readout.textContent = t(
+                selectedCount === 0 ? 'exportEmptyPlan' : invalidCount ? 'exportInvalidCount' : 'exportTooLarge'
+            );
+            message.textContent = '';
             return;
         }
         readout.textContent = `${locale.number(layout.width)} × ${locale.number(layout.height)} px · ${locale.number((layout.width * layout.height) / 1_000_000)} MP · ${t('exportRatio')}: ${planExportRatio(layout.width, layout.height)}`;
@@ -173,6 +190,7 @@ export function createPlanExportDialog(
         count.type = 'number';
         count.min = '1';
         count.step = '1';
+        count.required = true;
         count.max = String(snapshot.plan!.length);
         count.value = String(currentLayout()?.columns ?? 1);
         if (grid.axis === 'ratio') grid = { axis: 'columns', value: Number(count.value) };

@@ -62,3 +62,21 @@ test('bad saved settings do not discard valid preferences and count is not persi
     assert.equal('columns' in options, false);
     assert.equal('rows' in options, false);
 });
+
+test('PNG allocation budget permits 64 megapixels while limiting either side', async () => {
+    const { planExportLayout, defaultPlanExportSettings, planExportFits } = await exporter;
+    const layout = planExportLayout(
+        1,
+        { ...defaultPlanExportSettings, header: false },
+        { axis: 'columns', value: 1 },
+        {
+            width: 8192,
+            height: 8192,
+            headerHeight: 0
+        }
+    );
+    assert.equal(planExportFits(layout), true);
+    assert.equal(planExportFits({ ...layout, height: 8193 }), false);
+    assert.equal(planExportFits({ ...layout, width: 16384, height: 4096 }), true);
+    assert.equal(planExportFits({ ...layout, width: 16385, height: 1 }), false);
+});

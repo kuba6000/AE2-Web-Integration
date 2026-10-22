@@ -169,7 +169,7 @@ empty selection or invalid grid dimensions. Use `readPlanExportSettings(key => c
 to validate persisted `planExport.*` values independently. Store the chosen ratio, not row/column counts,
 to reuse it with differently sized plans.
 
-Exports have a 16-megapixel allocation budget and a 16384-pixel side limit. Smaller browser limits are
+Exports have a 64-megapixel allocation budget and a 16384-pixel side limit. Smaller browser limits are
 probed at runtime. If needed, the whole grid is scaled down while the chosen rows and columns stay
 fixed; the returned layout reports the resulting resolution. Cells touch and unused final-row cells
 are framed like the rest of the grid. Missing icons are optional. Catch failures and display a
