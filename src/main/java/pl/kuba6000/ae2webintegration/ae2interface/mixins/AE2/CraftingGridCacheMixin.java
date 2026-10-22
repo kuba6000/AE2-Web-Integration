@@ -28,6 +28,7 @@ import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.helpers.IInterfaceHost;
 import appeng.me.cache.CraftingGridCache;
+import appeng.me.cluster.implementations.CraftingCPUCluster;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
@@ -72,15 +73,26 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
         CallbackInfoReturnable<ICraftingLink> cir) {
         ICraftingLink link = cir.getReturnValue();
         if (link != null) { // job started successfully
+            ICraftingCPU cpu = ((CraftingLinkAccessor) (Object) link).callGetCpu();
+            if (cpu == null) {
+                // Requester links carry no CPU; the CPU's own link has the same native crafting ID.
+                for (ICraftingCPU candidate : ((CraftingGridCache) (Object) this).getCpus()) {
+                    if (candidate instanceof CraftingCPUCluster cluster) {
+                        ICraftingLink cpuLink = cluster.getLastCraftingLink();
+                        if (cpuLink != null && cpuLink.getCraftingID()
+                            .equals(link.getCraftingID())) {
+                            cpu = candidate;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (cpu == null) return;
             boolean isMachine = (requestingMachine != null || src.machine()
                 .isPresent()) && !src.player()
                     .isPresent();
             IAEMixinCallbacks.getInstance()
-                .jobStarted(
-                    (ICraftingCPUCluster) (Object) ((CraftingLinkAccessor) (Object) link).callGetCpu(),
-                    (IAEGrid) grid,
-                    false,
-                    !isMachine);
+                .jobStarted((ICraftingCPUCluster) cpu, (IAEGrid) grid, false, !isMachine);
         }
     }
 

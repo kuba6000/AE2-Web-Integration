@@ -9,8 +9,8 @@ import org.spongepowered.asm.mixin.Mixin;
 
 import appeng.api.storage.data.IAEFluidStack;
 import appeng.fluids.util.AEFluidStack;
-import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyIconBaseline;
 import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyItemIdentity;
+import pl.kuba6000.ae2webintegration.ae2interface.legacy.LegacyResourceBaseline;
 import pl.kuba6000.ae2webintegration.core.api.ResourceType;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
@@ -26,15 +26,21 @@ public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStac
     }
 
     @Override
-    default @NotNull StableKey web$getKey() {
+    default boolean web$supportsStableIdentity() {
+        IAEFluidStack stack = this;
+        return stack instanceof AEFluidStack;
+    }
+
+    @Override
+    default @Nullable StableKey web$getKey() {
         return LegacyItemIdentity.encode(this);
     }
 
     @Override
-    default @Nullable StableKey web$getIconBaseKey() {
+    default @Nullable StableKey web$getBaseKey() {
         IAEFluidStack stack = this;
         if (!(stack instanceof AEFluidStack nativeStack)) return null;
-        AEFluidStack baseline = LegacyIconBaseline.fluid(nativeStack);
+        AEFluidStack baseline = LegacyResourceBaseline.fluid(nativeStack);
         return baseline == null ? null : LegacyItemIdentity.encode(baseline);
     }
 
@@ -44,9 +50,9 @@ public interface AEFluidStackMixin extends IAEFluidStack, IAEKey, IAEGenericStac
     }
 
     @Override
-    default @NotNull String web$getRegistryNamespace() {
+    default @Nullable String web$getRegistryNamespace() {
         String name = FluidRegistry.getDefaultFluidName(getFluid());
-        return name.substring(0, name.indexOf(':'));
+        return name == null ? null : name.substring(0, name.indexOf(':'));
     }
 
     @Override

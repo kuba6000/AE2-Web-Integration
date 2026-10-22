@@ -65,7 +65,7 @@ public final class GridDiscovery {
     }
 
     public static @Nullable GridAccessSource ownerSource(@NotNull IGridNode node) {
-        Object machine = node.getMachine();
+        IGridHost machine = node.getMachine();
         String kind = accessSourceKind(machine.getClass());
         if (kind == null || machine instanceof ISecurityProvider) return null;
         PlayerIdentity owner = players().web$getPlayerProfile(node.getPlayerID());
