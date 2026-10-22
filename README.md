@@ -79,6 +79,15 @@ Icons are optional; without an icon pack, the terminal displays item names.
 - Track active and completed crafting jobs
 - Send crafting updates through a Discord webhook
 
+### Crafting plan images
+
+After calculating a plan, choose **Export** at the bottom left of the plan in the default theme
+(the image icon on mobile). Choose the grid layout, tile contents, ordering and background, then
+download a single PNG. The export includes
+the full plan independently of the current search and works without an icon pack. Settings and the
+image proportions are remembered for the next export; very large images use a lower resolution to fit.
+At 1×, exported slots are 180 pixels wide with 32-pixel icons, independent of screen size.
+
 ### Web themes
 
 Choose a theme in **Web Settings → Choose a theme**. To install one for everyone, place its
