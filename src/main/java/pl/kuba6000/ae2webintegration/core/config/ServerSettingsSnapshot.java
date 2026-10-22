@@ -9,8 +9,8 @@ import com.github.bsideup.jabel.Desugar;
 public record ServerSettingsSnapshot(@NotNull String revision, @NotNull EditableServerSettings settings,
     @NotNull ReadOnly readOnly) {
 
-    /** File-only settings. Password state deliberately reveals neither its value nor its length. */
+    /** File-only settings and secret-presence flags; never secret values or lengths. */
     @Desugar
     public record ReadOnly(int port, boolean publicMode, boolean allowNoPasswordOnLocalhost,
-        boolean adminPasswordConfigured) {}
+        boolean adminPasswordConfigured, boolean discordWebhookConfigured, boolean ntfyPasswordConfigured) {}
 }

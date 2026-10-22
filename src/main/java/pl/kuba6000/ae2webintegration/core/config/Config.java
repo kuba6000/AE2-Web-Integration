@@ -115,12 +115,15 @@ public class Config {
                 loaded.general.port,
                 loaded.general.publicMode,
                 loaded.general.allowNoPasswordOnLocalhost,
-                !loaded.general.password.isEmpty()));
+                !loaded.general.password.isEmpty(),
+                !loaded.discord.webhook.isEmpty(),
+                !loaded.ntfy.password.isEmpty()));
     }
 
     /** Returns null when another file edit superseded the submitted revision. */
     public static synchronized @Nullable ServerSettingsSnapshot saveServerSettings(@NotNull String expectedRevision,
-        @NotNull EditableServerSettings settings) throws IOException {
+        @NotNull EditableServerSettings settings, @Nullable EditableServerSettings.SecretUpdates secrets)
+        throws IOException {
         File file = getConfigFile("config.toml");
         byte[] bytes = Files.readAllBytes(file.toPath());
         if (!revision(bytes).equals(expectedRevision)) return null;
@@ -128,6 +131,10 @@ public class Config {
         CommentedConfig edits = newDocument();
         CONVERTER.toConfig(settings, edits);
         mergeEdits(document, edits);
+        if (secrets != null) {
+            if (secrets.discordWebhook() != null) document.set("discord.webhook", secrets.discordWebhook());
+            if (secrets.ntfyPassword() != null) document.set("ntfy.password", secrets.ntfyPassword());
+        }
         publish(file, document, true);
         return readServerSettings();
     }

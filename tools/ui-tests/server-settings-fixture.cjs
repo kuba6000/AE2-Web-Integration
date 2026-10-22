@@ -6,8 +6,8 @@ const settings = () => ({
         defaultTheme: 'builtin:default'
     },
     notifications: { minimumCraftingDurationSeconds: 0, minimumCraftingAmount: 0, fullDomain: '' },
-    discord: { webhook: '', roleId: '' },
-    ntfy: { host: '', topic: '', user: '', password: '' },
+    discord: { roleId: '' },
+    ntfy: { host: '', topic: '', user: '' },
     resourceHistory: {
         stockSampleIntervalSeconds: { min: 60, max: 900, defaultValue: 300 },
         flowFlushIntervalSeconds: { min: 60, max: 900, defaultValue: 60 },
@@ -27,7 +27,9 @@ const readOnly = () => ({
     port: 2324,
     publicMode: true,
     allowNoPasswordOnLocalhost: true,
-    adminPasswordConfigured: true
+    adminPasswordConfigured: true,
+    discordWebhookConfigured: false,
+    ntfyPasswordConfigured: false
 });
 
 module.exports = { settings, readOnly };

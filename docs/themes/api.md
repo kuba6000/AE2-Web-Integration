@@ -59,11 +59,21 @@ without automatic polling. Edits survive navigation within the application; they
 the browser. The administrator password, web port, player-account access and password-free localhost
 access cannot be edited here.
 
-`state.serverSettings.readOnly` contains confirmed file-only metadata: `port`, `publicMode`,
-`allowNoPasswordOnLocalhost` and `adminPasswordConfigured`. It is null until loaded, and clears on
-denial or application disposal. The administrator password's value and length are never exposed;
-`adminPasswordConfigured` only indicates whether it is set. Keep this metadata outside the editable
-draft. The HTTP write contract is `{revision, settings}`; `readOnly` is response-only.
+`state.serverSettings.readOnly` contains confirmed metadata: `port`, `publicMode`,
+`allowNoPasswordOnLocalhost`, `adminPasswordConfigured`, `discordWebhookConfigured` and
+`ntfyPasswordConfigured`. It is null until loaded, and clears on denial or application disposal.
+Secret values and lengths are never returned; the configured flags only indicate whether a value is
+set. Keep this metadata outside the editable draft. The HTTP write contract is
+`{revision, settings, secrets?}`; `readOnly` is response-only.
+
+Notification credentials are write-only. Use `serverSettings.editSecret(name, value)` for a replacement,
+`removeSecret(name)` for explicit deletion, and `resetSecret(name)` to undo a pending credential change.
+Names are `discordWebhook` and `ntfyPassword`. An empty replacement input cancels its pending change;
+it never deletes the stored secret. `state.serverSettings.secretChanges` contains only pending edits:
+an absent key means keep the stored value, and an empty string means explicit removal. Saving submits
+these changes separately and clears their values on success. Successful reload, denial and disposal
+also clear them; an unconfirmed save retains them until explicitly reconciled. Never persist these
+values in browser storage or log them.
 
 Use `serverSettings.edit(section, field, value)` and `save()` to save and apply the complete draft.
 `serverSettings.reload()` explicitly discards edits and reloads the configuration. Ordinary refresh

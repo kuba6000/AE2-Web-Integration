@@ -11,8 +11,8 @@ export type ServerConfiguration = {
         defaultTheme: string;
     };
     notifications: { minimumCraftingDurationSeconds: number; minimumCraftingAmount: number; fullDomain: string };
-    discord: { webhook: string; roleId: string };
-    ntfy: { host: string; topic: string; user: string; password: string };
+    discord: { roleId: string };
+    ntfy: { host: string; topic: string; user: string };
     resourceHistory: {
         stockSampleIntervalSeconds: SettingRange;
         flowFlushIntervalSeconds: SettingRange;
@@ -32,14 +32,23 @@ export type ServerSettingsReadOnly = {
     publicMode: boolean;
     allowNoPasswordOnLocalhost: boolean;
     adminPasswordConfigured: boolean;
+    discordWebhookConfigured: boolean;
+    ntfyPasswordConfigured: boolean;
 };
-export type ServerSettingsUpdate = { revision: string; settings: ServerConfiguration };
-export type ServerSettingsResponse = ServerSettingsUpdate & { readOnly: ServerSettingsReadOnly };
+export type ServerSecretName = 'discordWebhook' | 'ntfyPassword';
+export type ServerSecretChanges = Partial<Record<ServerSecretName, string>>;
+export type ServerSettingsUpdate = { revision: string; settings: ServerConfiguration; secrets?: ServerSecretChanges };
+export type ServerSettingsResponse = {
+    revision: string;
+    settings: ServerConfiguration;
+    readOnly: ServerSettingsReadOnly;
+};
 export type ServerSettingsState = {
     status: 'idle' | 'loading' | 'ready' | 'error';
     current: ServerConfiguration | null;
     draft: ServerConfiguration | null;
     readOnly: ServerSettingsReadOnly | null;
+    secretChanges: ServerSecretChanges;
     dirty: boolean;
     saving: boolean;
     error: string | null;
@@ -53,6 +62,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
         current: null,
         draft: null,
         readOnly: null,
+        secretChanges: {},
         dirty: false,
         saving: false,
         error: null,
@@ -73,9 +83,23 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
             current: null,
             draft: null,
             readOnly: null,
+            secretChanges: {},
             dirty: false
         });
         revision = null;
+    }
+    function edited() {
+        state.dirty =
+            Object.keys(state.secretChanges).length > 0 ||
+            JSON.stringify(state.draft) !== JSON.stringify(state.current);
+        state.saved = false;
+        changed();
+    }
+    function changeSecret(name: ServerSecretName, value: string | undefined) {
+        if (disposed || !isAdmin || !state.draft || state.saving || state.status !== 'ready') return;
+        if (value === undefined) delete state.secretChanges[name];
+        else state.secretChanges[name] = value;
+        edited();
     }
     async function load(discard = false) {
         if (disposed || !active || state.saving) return;
@@ -101,6 +125,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                     current: result.settings,
                     readOnly: result.readOnly,
                     draft: structuredClone(result.settings),
+                    secretChanges: {},
                     dirty: false,
                     uncertain: false
                 });
@@ -145,10 +170,11 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
         ) {
             if (disposed || !isAdmin || !state.draft || state.saving || state.status !== 'ready') return;
             state.draft[section][field] = value;
-            state.dirty = JSON.stringify(state.draft) !== JSON.stringify(state.current);
-            state.saved = false;
-            changed();
+            edited();
         },
+        editSecret: (name: ServerSecretName, value: string) => changeSecret(name, value === '' ? undefined : value),
+        removeSecret: (name: ServerSecretName) => changeSecret(name, ''),
+        resetSecret: (name: ServerSecretName) => changeSecret(name, undefined),
         async save() {
             if (
                 disposed ||
@@ -163,7 +189,8 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                 state.error === 'CONFIG_CHANGED'
             )
                 return;
-            const body = { revision, settings: structuredClone(state.draft) };
+            const body: ServerSettingsUpdate = { revision, settings: structuredClone(state.draft) };
+            if (Object.keys(state.secretChanges).length) body.secrets = { ...state.secretChanges };
             state.saving = true;
             state.error = null;
             state.saved = false;
@@ -177,6 +204,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
                     current: result.settings,
                     readOnly: result.readOnly,
                     draft: structuredClone(result.settings),
+                    secretChanges: {},
                     dirty: false,
                     saved: true,
                     uncertain: false
@@ -205,6 +233,7 @@ export function createServerSettings(api: Api, changed: () => void, isAdmin: boo
             state.current = null;
             state.draft = null;
             state.readOnly = null;
+            state.secretChanges = {};
         }
     };
 }

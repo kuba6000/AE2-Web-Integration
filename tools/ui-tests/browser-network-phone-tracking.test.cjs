@@ -110,6 +110,80 @@ test('server settings keep neighboring inputs aligned when labels wrap at differ
     }
 });
 
+test('notification secrets use empty inputs with placeholders and clear only after an explicit saved removal', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.isAdmin = true;
+    options.serverConfigurationReadOnly.discordWebhookConfigured = true;
+    options.serverConfigurationReadOnly.ntfyPasswordConfigured = true;
+    options.serverConfigurationSecrets = { discordWebhook: 'stored-webhook', ntfyPassword: 'stored-password' };
+    await page.goto(`${base}#/server-settings`);
+    const webhook = page.getByLabel('Webhook URL', { exact: true });
+    const password = page.locator('#server-ntfy-password');
+    await webhook.waitFor();
+    assert.equal(await webhook.inputValue(), '');
+    assert.equal(await password.inputValue(), '');
+    assert.ok(await webhook.getAttribute('placeholder'));
+    assert.ok(await password.getAttribute('placeholder'));
+    const remove = page.getByRole('button', { name: 'Remove: Webhook URL', exact: true });
+    await remove.click();
+    assert.equal(await webhook.getAttribute('placeholder'), '');
+    assert.equal(await page.locator('#server-discord-webhook-status').isVisible(), true);
+    assert.equal(options.serverConfigurationSecrets.discordWebhook, 'stored-webhook');
+    await page.getByRole('button', { name: 'Undo: Webhook URL', exact: true }).click();
+    assert.ok(await webhook.getAttribute('placeholder'));
+    const save = page.getByRole('button', { name: 'Save and apply', exact: true });
+    assert.equal(await save.isDisabled(), true);
+    await webhook.fill('replacement-webhook');
+    await webhook.fill('');
+    assert.equal(await save.isDisabled(), true);
+    await remove.click();
+    await save.click();
+    await page
+        .locator('#server-settings [role="status"]')
+        .filter({ hasText: /saved and applied/ })
+        .waitFor();
+    assert.equal(options.serverConfigurationSecrets.discordWebhook, '');
+    assert.equal(options.serverConfigurationSecrets.ntfyPassword, 'stored-password');
+    assert.equal(await webhook.getAttribute('placeholder'), '');
+    assert.equal(await remove.isVisible(), false);
+    await password.fill('replacement-password');
+    await save.click();
+    await page.waitForFunction(() => document.querySelector('#server-ntfy-password').value === '');
+    assert.equal(options.serverConfigurationSecrets.ntfyPassword, 'replacement-password');
+    assert.ok(await password.getAttribute('placeholder'));
+});
+
+test('a completed settings save clears a replacement secret even after navigating away', async (t) => {
+    const { page, options, base } = await fixture(t);
+    options.isAdmin = true;
+    await page.goto(`${base}#/server-settings`);
+    await page.locator('#server-ntfy-password').fill('pending-replacement');
+    let release;
+    const captured = new Promise((resolve) => {
+        release = resolve;
+    });
+    await page.route('**/api/server/settings', (route) =>
+        route.request().method() === 'POST' ? release(route) : route.continue()
+    );
+    await page.getByRole('button', { name: 'Save and apply', exact: true }).click();
+    const pending = await captured;
+    await clickTab(page, 'About');
+    await pending.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+            status: 'OK',
+            data: {
+                revision: 'saved',
+                settings: options.serverConfiguration,
+                readOnly: { ...options.serverConfigurationReadOnly, ntfyPasswordConfigured: true }
+            }
+        })
+    });
+    await page.waitForFunction(() => document.querySelector('#server-ntfy-password').value === '');
+    assert.equal(await page.locator('#server-settings').isVisible(), false);
+});
+
 test('crafting retention is independent per network and persists while collection is disabled', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/settings`);

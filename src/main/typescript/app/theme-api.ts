@@ -10,6 +10,8 @@ export type {
     ServerConfiguration,
     ServerSettingsReadOnly,
     ServerSettingsUpdate,
+    ServerSecretName,
+    ServerSecretChanges,
     ServerSettingsResponse
 } from './server-settings.js';
 import type {
@@ -118,7 +120,10 @@ export type ThemeApplication = {
         edit<K extends keyof GridSettings>(field: K, value: GridSettings[K]): void;
         save(): Promise<void>;
     };
-    readonly serverSettings: Pick<ReturnType<typeof createServerSettings>, 'edit' | 'save' | 'reload'>;
+    readonly serverSettings: Pick<
+        ReturnType<typeof createServerSettings>,
+        'edit' | 'editSecret' | 'removeSecret' | 'resetSecret' | 'save' | 'reload'
+    >;
     readonly icons: {
         observe(root: HTMLElement, paint: (target: HTMLElement, sprite: IconSprite | null) => void): IconView;
     };

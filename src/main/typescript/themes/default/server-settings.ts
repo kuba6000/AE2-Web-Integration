@@ -1,4 +1,10 @@
-import type { ServerConfiguration, SettingRange, ThemeApplication, ThemeState } from '../../app/theme-api.js';
+import type {
+    ServerConfiguration,
+    ServerSecretName,
+    SettingRange,
+    ThemeApplication,
+    ThemeState
+} from '../../app/theme-api.js';
 import type { Translator } from '../../app/i18n.js';
 import type { TooltipBindings } from './tooltip-bindings.js';
 import { element } from './dom.js';
@@ -38,6 +44,7 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
     const inputs: { input: HTMLInputElement; update(draft: Draft): void }[] = [];
     const validations: (() => void)[] = [];
     const fileControls: { input: HTMLInputElement; update(settings: FileSettings): void }[] = [];
+    const secretControls: ((state: ThemeState['serverSettings']) => void)[] = [];
     const passwordMask = 'x'.repeat(8 + Math.floor(Math.random() * 5));
     const translated = <T extends HTMLElement>(node: T, key: string) => {
         labels.push({ node, key });
@@ -143,6 +150,66 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
             }
         });
     }
+    function secretControl(
+        container: HTMLElement,
+        name: ServerSecretName,
+        configuredField: 'discordWebhookConfigured' | 'ntfyPasswordConfigured',
+        key: string,
+        id: string
+    ) {
+        const wrapper = element('div', '', 'server-setting');
+        const header = element('div', '', 'server-setting-label server-secret-label');
+        const caption = element('div');
+        const label = translated(element('label'), key);
+        label.htmlFor = id;
+        const notice = element('span', '', 'server-secret-notice');
+        notice.id = `${id}-status`;
+        notice.role = 'status';
+        caption.append(label, notice);
+        const action = element('button', '', 'server-secret-action');
+        action.type = 'button';
+        const input = element('input');
+        input.id = id;
+        input.type = 'password';
+        input.autocomplete = 'new-password';
+        input.setAttribute('aria-describedby', notice.id);
+        tooltips.bind(input, () => [
+            element(
+                'span',
+                locale.t(
+                    application.state.serverSettings.secretChanges[name] === ''
+                        ? 'serverSecretRemoving'
+                        : 'serverSecretUnchanged'
+                )
+            )
+        ]);
+        const field = element('div', '', 'server-setting-value');
+        field.append(input);
+        header.append(caption, action);
+        wrapper.append(header, field);
+        container.append(wrapper);
+        input.addEventListener('input', () => application.serverSettings.editSecret(name, input.value));
+        action.addEventListener('click', () => {
+            if (application.state.serverSettings.secretChanges[name] !== undefined)
+                application.serverSettings.resetSecret(name);
+            else application.serverSettings.removeSecret(name);
+        });
+        secretControls.push((state) => {
+            const change = state.secretChanges[name];
+            const configured = !!state.readOnly?.[configuredField];
+            const removing = change === '';
+            const value = change ?? '';
+            if (input.value !== value) input.value = value;
+            input.placeholder = configured && !removing ? '••••••••••' : '';
+            input.disabled = state.saving || state.status !== 'ready';
+            action.disabled = input.disabled;
+            action.hidden = !configured && change === undefined;
+            action.textContent = locale.t(change !== undefined ? 'serverSecretUndo' : 'serverSecretRemove');
+            action.setAttribute('aria-label', `${action.textContent}: ${locale.t(key)}`);
+            notice.textContent = locale.t(removing ? 'serverSecretRemoving' : 'serverSecretUnchanged');
+            notice.hidden = !removing;
+        });
+    }
     function range(
         container: HTMLElement,
         id: string,
@@ -208,13 +275,13 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
     control(notifications, 'notifications', 'minimumCraftingAmount', 'serverMinimumAmount', 'number');
     control(notifications, 'notifications', 'fullDomain', 'serverWebAddress', 'text', { help: 'serverWebAddressHelp' });
     const discord = group('serverDiscord', 'serverDiscordHelp');
-    control(discord, 'discord', 'webhook', 'serverWebhook', 'password');
+    secretControl(discord, 'discordWebhook', 'discordWebhookConfigured', 'serverWebhook', 'server-discord-webhook');
     control(discord, 'discord', 'roleId', 'serverRole');
     const ntfy = group('serverNtfy', 'serverNtfyHelp');
     control(ntfy, 'ntfy', 'host', 'serverNtfyHost');
     control(ntfy, 'ntfy', 'topic', 'serverNtfyTopic');
     control(ntfy, 'ntfy', 'user', 'serverNtfyUser');
-    control(ntfy, 'ntfy', 'password', 'serverNtfyPassword', 'password');
+    secretControl(ntfy, 'ntfyPassword', 'ntfyPasswordConfigured', 'serverNtfyPassword', 'server-ntfy-password');
     const history = group('serverResourceHistory', 'serverHistoryHelp');
     range(
         history,
@@ -269,9 +336,10 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
 
     return {
         render(state: ThemeState, nextLocale: Translator) {
+            locale = nextLocale;
+            for (const update of secretControls) update(state.serverSettings);
             view.hidden = state.route.view !== 'server-settings';
             if (view.hidden) return;
-            locale = nextLocale;
             const config = state.serverSettings;
             title.textContent = locale.common('serverSettings');
             for (const { node, key } of labels) {

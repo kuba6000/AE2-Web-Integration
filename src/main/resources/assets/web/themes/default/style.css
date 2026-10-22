@@ -2872,6 +2872,21 @@ code {
     outline: 1px dashed var(--muted);
     outline-offset: 4px;
 }
+.server-secret-label {
+    align-items: start;
+    justify-content: space-between;
+}
+.server-secret-action {
+    flex: 0 0 auto;
+    padding: 3px 6px;
+    font-size: 10px;
+}
+.server-secret-notice {
+    display: block;
+    font-size: 10px;
+    line-height: 1.6;
+    color: var(--muted);
+}
 .server-settings-range {
     grid-column: 1 / -1;
     grid-row: span 2;

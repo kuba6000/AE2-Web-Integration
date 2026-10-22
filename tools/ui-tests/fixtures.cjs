@@ -187,6 +187,7 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
         isAdmin: false,
         serverConfiguration: require('./server-settings-fixture.cjs').settings(),
         serverConfigurationReadOnly: require('./server-settings-fixture.cjs').readOnly(),
+        serverConfigurationSecrets: {},
         serverConfigurationRevision: 1,
         availableUpdate: {
             version: '10.0.0',
@@ -367,12 +368,26 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                         'readOnly' in input ||
                         ['password', 'port', 'publicMode', 'allowNoPasswordOnLocalhost'].some(
                             (key) => key in input.settings.general
-                        )
+                        ) ||
+                        'webhook' in input.settings.discord ||
+                        'password' in input.settings.ntfy ||
+                        (input.secrets !== undefined &&
+                            (input.secrets === null ||
+                                typeof input.secrets !== 'object' ||
+                                Array.isArray(input.secrets) ||
+                                Object.entries(input.secrets).some(
+                                    ([key, value]) =>
+                                        !['discordWebhook', 'ntfyPassword'].includes(key) || typeof value !== 'string'
+                                )))
                     )
                         status = 'BAD_PARAM';
                     else if (input.revision !== String(options.serverConfigurationRevision)) status = 'CONFIG_CHANGED';
                     else {
                         options.serverConfiguration = input.settings;
+                        for (const [key, value] of Object.entries(input.secrets || {})) {
+                            options.serverConfigurationSecrets[key] = value;
+                            options.serverConfigurationReadOnly[`${key}Configured`] = value !== '';
+                        }
                         options.serverConfigurationRevision++;
                     }
                 }

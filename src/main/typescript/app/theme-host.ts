@@ -99,6 +99,9 @@ export function mountTheme(
         settings: { edit: settings.edit, save: settings.save },
         serverSettings: {
             edit: application.serverSettings.edit,
+            editSecret: application.serverSettings.editSecret,
+            removeSecret: application.serverSettings.removeSecret,
+            resetSecret: application.serverSettings.resetSecret,
             save: application.serverSettings.save,
             reload: application.serverSettings.reload
         },

@@ -204,6 +204,8 @@ Administrators and trusted localhost users can edit the configuration in **Serve
 **Save and apply** writes `config.toml` and applies the changes without restarting the web server.
 The listener port, administrator password, public mode and password-free localhost access are read-only
 in the panel; change them directly in the configuration file.
+Saved Discord webhooks and ntfy passwords are never displayed. Leave their replacement fields unchanged
+to keep them, or explicitly replace or clear them.
 
 Enable **Record crafting history** in a network's settings to track its crafting jobs. Enable
 **Include machine-requested crafting** there to also track jobs started by machines on that network.

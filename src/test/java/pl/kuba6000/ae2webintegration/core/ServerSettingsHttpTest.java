@@ -20,7 +20,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.config.Config;
@@ -45,6 +48,8 @@ class ServerSettingsHttpTest {
         config.write("general.password", "test-password");
         config.write("general.allow_no_password_on_localhost", false);
         config.write("general.check_for_updates", false);
+        config.write("discord.webhook", "https://example.invalid/stored-webhook-secret");
+        config.write("ntfy.password", "stored-ntfy-secret");
         Config.reload();
         AE2Controller.AE2Interface = TestGridFixtures.ae();
         AE2Controller.startHTTPServer();
@@ -74,9 +79,18 @@ class ServerSettingsHttpTest {
         assertFalse(
             settings.getAsJsonObject("general")
                 .has("port"));
-        assertTrue(
+        assertFalse(
             settings.getAsJsonObject("ntfy")
                 .has("password"));
+        assertFalse(
+            settings.getAsJsonObject("discord")
+                .has("webhook"));
+        assertFalse(
+            data.toString()
+                .contains("stored-webhook-secret"));
+        assertFalse(
+            data.toString()
+                .contains("stored-ntfy-secret"));
         assertTrue(settings.has("resourceHistory"));
         assertFalse(
             settings.getAsJsonObject("general")
@@ -101,6 +115,12 @@ class ServerSettingsHttpTest {
         assertFalse(
             data.toString()
                 .contains("test-password"));
+        assertTrue(
+            readOnly.get("discordWebhookConfigured")
+                .getAsBoolean());
+        assertTrue(
+            readOnly.get("ntfyPasswordConfigured")
+                .getAsBoolean());
         request("POST", "/api/server/settings", token, data.toString(), 400);
         config.write("general.password", "");
         assertFalse(
@@ -145,6 +165,8 @@ class ServerSettingsHttpTest {
             saved.get("revision")
                 .getAsString());
         assertEquals(123, Config.INSTANCE.notifications.minimumCraftingAmount);
+        assertEquals("stored-ntfy-secret", Config.INSTANCE.ntfy.password);
+        assertEquals("https://example.invalid/stored-webhook-secret", Config.INSTANCE.discord.webhook);
         assertEquals("test-password", Config.INSTANCE.general.password);
         assertEquals(port, Config.INSTANCE.general.port);
         assertTrue(Config.INSTANCE.general.publicMode);
@@ -160,6 +182,8 @@ class ServerSettingsHttpTest {
         assertFalse(Config.INSTANCE.general.publicMode);
         assertTrue(Config.INSTANCE.general.allowNoPasswordOnLocalhost);
         assertEquals(123, Config.INSTANCE.notifications.minimumCraftingAmount);
+        assertEquals("stored-ntfy-secret", Config.INSTANCE.ntfy.password);
+        assertEquals("https://example.invalid/stored-webhook-secret", Config.INSTANCE.discord.webhook);
     }
 
     @Test
@@ -174,6 +198,12 @@ class ServerSettingsHttpTest {
             "CONFIG_CHANGED",
             request("POST", "/api/server/settings", token, old.toString(), 409).get("status")
                 .getAsString());
+        setSecret(old, "ntfyPassword", "replacement-ntfy-secret");
+        assertEquals(
+            "CONFIG_CHANGED",
+            request("POST", "/api/server/settings", token, old.toString(), 409).get("status")
+                .getAsString());
+        assertEquals("stored-ntfy-secret", Config.INSTANCE.ntfy.password);
         JsonObject fresh = readSettings();
         config.write("general.password", "external-change");
         assertEquals(
@@ -219,9 +249,7 @@ class ServerSettingsHttpTest {
             .remove("ntfy");
         request("POST", "/api/server/settings", token, edit.toString(), 400);
         edit = new Gson().fromJson(original.toString(), JsonObject.class);
-        edit.getAsJsonObject("settings")
-            .getAsJsonObject("ntfy")
-            .addProperty("password", "bad\u0000secret");
+        setSecret(edit, "ntfyPassword", "bad\u0000secret");
         request("POST", "/api/server/settings", token, edit.toString(), 400);
         assertArrayEquals(
             contents,
@@ -234,9 +262,9 @@ class ServerSettingsHttpTest {
     @Test
     void failedAtomicWriteLeavesDiskAndRuntimeUntouched() throws Exception {
         JsonObject edit = readSettings();
-        edit.getAsJsonObject("settings")
-            .getAsJsonObject("ntfy")
-            .addProperty("password", "ntfy-secret");
+        setSecret(edit, "ntfyPassword", "replacement-ntfy-secret");
+        edit.getAsJsonObject("secrets")
+            .addProperty("discordWebhook", "https://example.invalid/replacement-webhook-secret");
         byte[] contents = Files.readAllBytes(
             Config.getConfigFile("config.toml")
                 .toPath());
@@ -258,7 +286,8 @@ class ServerSettingsHttpTest {
                 Config.getConfigFile("config.toml")
                     .toPath()));
         request("POST", "/api/server/settings", token, edit.toString(), 200);
-        assertEquals("ntfy-secret", Config.INSTANCE.ntfy.password);
+        assertEquals("replacement-ntfy-secret", Config.INSTANCE.ntfy.password);
+        assertEquals("https://example.invalid/replacement-webhook-secret", Config.INSTANCE.discord.webhook);
     }
 
     @Test
@@ -316,6 +345,124 @@ class ServerSettingsHttpTest {
                 .addProperty(field, true);
             request("POST", "/api/server/settings", token, edit.toString(), 400);
         }
+    }
+
+    @Test
+    void notificationSecretsAreWriteOnlyAndEachCanBePreservedReplacedOrCleared() throws Exception {
+        JsonObject unchanged = readSettings();
+        unchanged.getAsJsonObject("settings")
+            .getAsJsonObject("discord")
+            .addProperty("roleId", "123");
+        unchanged.add("secrets", new JsonObject());
+        JsonObject saved = request("POST", "/api/server/settings", token, unchanged.toString(), 200);
+        assertSecretsAbsent(saved);
+        assertEquals("https://example.invalid/stored-webhook-secret", Config.INSTANCE.discord.webhook);
+        assertEquals("stored-ntfy-secret", Config.INSTANCE.ntfy.password);
+
+        JsonObject edit = readSettings();
+        setSecret(edit, "ntfyPassword", "replacement-ntfy-secret");
+        assertSecretsAbsent(request("POST", "/api/server/settings", token, edit.toString(), 200));
+        assertEquals("replacement-ntfy-secret", Config.INSTANCE.ntfy.password);
+        assertEquals("https://example.invalid/stored-webhook-secret", Config.INSTANCE.discord.webhook);
+
+        edit = readSettings();
+        setSecret(edit, "discordWebhook", "");
+        saved = request("POST", "/api/server/settings", token, edit.toString(), 200);
+        assertSecretsAbsent(saved);
+        assertFalse(
+            saved.getAsJsonObject("data")
+                .getAsJsonObject("readOnly")
+                .get("discordWebhookConfigured")
+                .getAsBoolean());
+        assertEquals("", Config.INSTANCE.discord.webhook);
+        assertEquals("replacement-ntfy-secret", Config.INSTANCE.ntfy.password);
+
+        edit = readSettings();
+        setSecret(edit, "discordWebhook", "https://example.invalid/replacement-webhook-secret");
+        assertSecretsAbsent(request("POST", "/api/server/settings", token, edit.toString(), 200));
+        assertEquals("https://example.invalid/replacement-webhook-secret", Config.INSTANCE.discord.webhook);
+        assertEquals("replacement-ntfy-secret", Config.INSTANCE.ntfy.password);
+
+        edit = readSettings();
+        setSecret(edit, "ntfyPassword", "");
+        saved = request("POST", "/api/server/settings", token, edit.toString(), 200);
+        assertSecretsAbsent(saved);
+        assertFalse(
+            saved.getAsJsonObject("data")
+                .getAsJsonObject("readOnly")
+                .get("ntfyPasswordConfigured")
+                .getAsBoolean());
+        assertEquals("", Config.INSTANCE.ntfy.password);
+        assertEquals("https://example.invalid/replacement-webhook-secret", Config.INSTANCE.discord.webhook);
+        Config.reload();
+        assertEquals("", Config.INSTANCE.ntfy.password);
+        assertEquals("https://example.invalid/replacement-webhook-secret", Config.INSTANCE.discord.webhook);
+    }
+
+    @Test
+    void invalidSecretUpdatesCannotOverwriteEitherSecret() throws Exception {
+        JsonObject original = readSettings();
+        Path file = Config.getConfigFile("config.toml")
+            .toPath();
+        byte[] bytes = Files.readAllBytes(file);
+        Object active = Config.INSTANCE;
+        JsonObject edit = new Gson().fromJson(original.toString(), JsonObject.class);
+        edit.add("secrets", JsonNull.INSTANCE);
+        request("POST", "/api/server/settings", token, edit.toString(), 400);
+        for (String field : new String[] { "discordWebhook", "ntfyPassword" }) {
+            for (JsonElement invalid : new JsonElement[] { JsonNull.INSTANCE, new JsonPrimitive(123),
+                new JsonPrimitive(true), new JsonObject() }) {
+                edit = new Gson().fromJson(original.toString(), JsonObject.class);
+                setSecret(edit, "discordWebhook", "https://example.invalid/replacement-webhook-secret");
+                edit.getAsJsonObject("secrets")
+                    .add(field, invalid);
+                request("POST", "/api/server/settings", token, edit.toString(), 400);
+            }
+        }
+        edit = new Gson().fromJson(original.toString(), JsonObject.class);
+        setSecret(edit, "unknownSecret", "value");
+        request("POST", "/api/server/settings", token, edit.toString(), 400);
+        for (String section : new String[] { "ntfy", "discord" }) {
+            edit = new Gson().fromJson(original.toString(), JsonObject.class);
+            edit.getAsJsonObject("settings")
+                .getAsJsonObject(section)
+                .addProperty(section.equals("ntfy") ? "password" : "webhook", "value");
+            request("POST", "/api/server/settings", token, edit.toString(), 400);
+        }
+        assertSame(active, Config.INSTANCE);
+        assertArrayEquals(bytes, Files.readAllBytes(file));
+        assertEquals("stored-ntfy-secret", Config.INSTANCE.ntfy.password);
+        assertEquals("https://example.invalid/stored-webhook-secret", Config.INSTANCE.discord.webhook);
+    }
+
+    private static void assertSecretsAbsent(JsonObject response) {
+        JsonObject data = response.getAsJsonObject("data");
+        JsonObject settings = data.getAsJsonObject("settings");
+        assertFalse(data.has("secrets"));
+        assertFalse(
+            settings.getAsJsonObject("ntfy")
+                .has("password"));
+        assertFalse(
+            settings.getAsJsonObject("discord")
+                .has("webhook"));
+        assertFalse(
+            response.toString()
+                .contains("stored-webhook-secret"));
+        assertFalse(
+            response.toString()
+                .contains("stored-ntfy-secret"));
+        assertFalse(
+            response.toString()
+                .contains("replacement-webhook-secret"));
+        assertFalse(
+            response.toString()
+                .contains("replacement-ntfy-secret"));
+    }
+
+    private static void setSecret(JsonObject input, String name, String value) {
+        JsonObject secrets = new JsonObject();
+        secrets.addProperty(name, value);
+        input.add("secrets", secrets);
     }
 
     private JsonObject readSettings() throws Exception {

@@ -5,6 +5,7 @@ import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.electronwill.nightconfig.core.io.ParsingException;
 import com.github.bsideup.jabel.Desugar;
@@ -21,11 +22,14 @@ import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
+import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 
 /**
  * Saves and applies the complete editable server configuration without restarting the web listener.
  * Listener port, administrator password, public mode and localhost trust are file-only.
- * Requests contain only revision and editable settings; readOnly metadata is rejected.
+ * Requests contain revision, editable settings and optional secrets updates; readOnly metadata is rejected.
+ * Omit discordWebhook or ntfyPassword to preserve it, send a nonempty string to replace it, or an empty
+ * string to clear it. Explicit null values are invalid; saved secrets are never returned.
  * 
  * @response 200 {@link Response} Saved configuration and its new opaque file revision.
  * @response 400 {@link ErrorResponse} BAD_PARAM: invalid, missing, unknown or file-only settings.
@@ -46,9 +50,10 @@ public final class PostServerSettings extends IAsyncRequest {
     @Body
     private @NotNull Input input;
 
-    /** Complete editable values and the revision returned by the most recent read. */
+    /** Complete editable values, current file revision and optional write-only notification secret updates. */
     @Desugar
-    public record Input(@NotNull String revision, @NotNull EditableServerSettings settings) {}
+    public record Input(@NotNull String revision, @NotNull EditableServerSettings settings,
+        @OptionalInput @Nullable EditableServerSettings.SecretUpdates secrets) {}
 
     @Desugar
     public record Response(@NotNull ApiStatus status, @NotNull ServerSettingsSnapshot data) implements IResponseBody {}
@@ -67,7 +72,7 @@ public final class PostServerSettings extends IAsyncRequest {
             }
             ServerSettingsSnapshot saved;
             try {
-                saved = Config.saveServerSettings(input.revision(), input.settings());
+                saved = Config.saveServerSettings(input.revision(), input.settings(), input.secrets());
             } catch (ParsingException invalidFile) {
                 deny(ApiStatus.INTERNAL_ERROR);
                 return;
