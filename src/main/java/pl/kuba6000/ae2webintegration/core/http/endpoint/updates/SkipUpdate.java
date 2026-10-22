@@ -40,7 +40,8 @@ import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 public final class SkipUpdate extends IAsyncRequest {
 
     @Body
-    private @NotNull Input input;
+    @NotNull
+    Input input;
 
     /** @param tag exact tag supplied by availableUpdate; 1–256 non-whitespace ASCII characters */
     @Desugar

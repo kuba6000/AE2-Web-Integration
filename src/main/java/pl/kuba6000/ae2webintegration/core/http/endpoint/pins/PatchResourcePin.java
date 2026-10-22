@@ -11,7 +11,6 @@ import com.github.bsideup.jabel.Desugar;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
-import pl.kuba6000.ae2webintegration.core.http.contract.GenerateHttpBinding;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
@@ -30,7 +29,6 @@ import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
  * @response 404 {@link pl.kuba6000.ae2webintegration.core.http.ErrorResponse} NOT_FOUND: the owned pin does not exist.
  */
 @Endpoint(method = HttpMethod.PATCH, path = "/api/resource-pins/{pinKey}")
-@GenerateHttpBinding
 public final class PatchResourcePin extends ResourcePinRequest {
 
     @Desugar

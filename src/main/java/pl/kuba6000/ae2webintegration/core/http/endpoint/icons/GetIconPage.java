@@ -17,7 +17,6 @@ import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.RequestInputs;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
-import pl.kuba6000.ae2webintegration.core.http.contract.GenerateHttpBinding;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.PathParam;
 import pl.kuba6000.ae2webintegration.core.icons.IconPack;
@@ -53,7 +52,6 @@ import pl.kuba6000.ae2webintegration.core.icons.IconPack;
  * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/icon-packs/{packId}/pages/{pageDigest}")
-@GenerateHttpBinding
 public final class GetIconPage {
 
     private static final int STREAM_BUFFER_BYTES = 8 * 1024;

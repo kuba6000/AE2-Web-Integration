@@ -58,15 +58,15 @@ public final class GetTrackingHistory extends IAsyncRequest {
 
     /** Include product icon references and atlas metadata; omitted means false. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
 
     /** Maximum number of entries, from 1 to 100; defaults to 50. */
     @QueryParam("limit")
-    private int limit = 50;
+    int limit = 50;
 
     /** Exclusive decimal job ID cursor from the preceding page. */
     @QueryParam("before")
-    private String before;
+    String before;
 
     /**
      * Successful operation result.

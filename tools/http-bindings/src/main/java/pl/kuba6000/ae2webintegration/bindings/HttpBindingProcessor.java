@@ -1,6 +1,7 @@
 package pl.kuba6000.ae2webintegration.bindings;
 
 import java.io.IOException;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -26,6 +27,7 @@ import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.ElementFilter;
 import javax.tools.Diagnostic;
+import javax.tools.StandardLocation;
 
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.CodeBlock;
@@ -37,7 +39,7 @@ import com.palantir.javapoet.TypeSpec;
 import com.palantir.javapoet.WildcardTypeName;
 
 /** Generates ordinary Java companions using only the standard compiler model. */
-@SupportedAnnotationTypes("pl.kuba6000.ae2webintegration.core.http.contract.GenerateHttpBinding")
+@SupportedAnnotationTypes("pl.kuba6000.ae2webintegration.core.http.contract.Endpoint")
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
 @SupportedOptions("httpBindings.catalog")
 public final class HttpBindingProcessor extends AbstractProcessor {
@@ -55,7 +57,7 @@ public final class HttpBindingProcessor extends AbstractProcessor {
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment round) {
         TypeElement marker = processingEnv.getElementUtils()
-            .getTypeElement(CONTRACT + "GenerateHttpBinding");
+            .getTypeElement(CONTRACT + "Endpoint");
         if (marker == null || round.processingOver()) return false;
         List<TypeElement> endpoints = new ArrayList<>();
         for (Element element : round.getElementsAnnotatedWith(marker)) endpoints.add((TypeElement) element);
@@ -66,10 +68,6 @@ public final class HttpBindingProcessor extends AbstractProcessor {
                     .toString()));
         try {
             for (TypeElement endpoint : endpoints) {
-                if (annotation(endpoint, "Endpoint") == null) {
-                    error(endpoint, "Generated binding requires @Endpoint");
-                    return true;
-                }
                 for (TypeElement owner : hierarchy(endpoint)) emitOwner(owner);
             }
             emitCatalog(endpoints);
@@ -81,7 +79,8 @@ public final class HttpBindingProcessor extends AbstractProcessor {
 
     private void emitOwner(TypeElement owner) throws IOException {
         List<VariableElement> fields = inputFields(owner);
-        if (fields.isEmpty()) return;
+        boolean endpoint = annotation(owner, "Endpoint") != null;
+        if (fields.isEmpty() && !endpoint) return;
         ClassName name = companion(owner);
         if (!emitted.add(name.canonicalName()) || processingEnv.getElementUtils()
             .getTypeElement(name.canonicalName()) != null) return;
@@ -113,6 +112,12 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             }
             AnnotationMirror query = annotation(field, "QueryParam");
             AnnotationMirror path = annotation(field, "PathParam");
+            AnnotationMirror body = annotation(field, "Body");
+            int transports = (query == null ? 0 : 1) + (path == null ? 0 : 1) + (body == null ? 0 : 1);
+            if (transports != 1) {
+                error(field, "HTTP input must have exactly one transport annotation");
+                continue;
+            }
             if (query == null && path == null) {
                 TypeElement input = (TypeElement) processingEnv.getTypeUtils()
                     .asElement(field.asType());
@@ -145,6 +150,21 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             }
         }
         companion.addMethod(bind.build());
+        if (endpoint) {
+            FieldSpec binding = endpointBinding(owner);
+            companion.addField(binding)
+                .addMethod(
+                    MethodSpec.methodBuilder("get")
+                        .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                        .addAnnotation(ClassName.get("org.jetbrains.annotations", "Nullable"))
+                        .returns(HTTP_BINDING)
+                        .addParameter(
+                            ParameterizedTypeName
+                                .get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
+                            "type")
+                        .addStatement("return type == $T.class ? $N : null", ClassName.get(owner), binding)
+                        .build());
+        }
         List<TypeElement> pending = new ArrayList<>(shapes.keySet());
         for (int shapeIndex = 0; shapeIndex < pending.size(); shapeIndex++) {
             companion.addMethod(shapeValidator(pending.get(shapeIndex), shapes));
@@ -157,65 +177,68 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             .writeTo(processingEnv.getFiler());
     }
 
+    private FieldSpec endpointBinding(TypeElement endpoint) {
+        TypeElement requestType = processingEnv.getElementUtils()
+            .getTypeElement("pl.kuba6000.ae2webintegration.core.ae2request.IRequest");
+        AnnotationMirror route = annotation(endpoint, "Endpoint");
+        ClassName endpointName = ClassName.get(endpoint);
+        boolean request = processingEnv.getTypeUtils()
+            .isSubtype(endpoint.asType(), requestType.asType());
+        CodeBlock factory = request ? CodeBlock.of("$T::new", endpointName) : CodeBlock.of("null");
+        CodeBlock.Builder initializer = CodeBlock.builder()
+            .add(
+                "new $T($T.$L,$W$S,$W$T.$L,$W$L,$W(request, values) -> {\n",
+                HTTP_BINDING,
+                ClassName.get(HTTP + ".contract", "HttpMethod"),
+                value(route, "method"),
+                value(route, "path"),
+                ClassName.get(HTTP + ".contract", "Authentication"),
+                value(route, "authentication"),
+                factory)
+            .indent();
+        List<TypeElement> owners = hierarchy(endpoint);
+        for (TypeElement owner : owners) {
+            if (!inputFields(owner).isEmpty())
+                initializer.addStatement("$T.bind(($T) request, values)", companion(owner), endpointName);
+        }
+        long bodies = owners.stream()
+            .flatMap(type -> inputFields(type).stream())
+            .filter(field -> annotation(field, "Body") != null)
+            .count();
+        if (bodies > 1) error(endpoint, "Only one body field is allowed");
+        if (bodies == 0) initializer.addStatement("values.noBody()");
+        initializer.unindent()
+            .add("})");
+        FieldSpec binding = FieldSpec
+            .builder(HTTP_BINDING, "BINDING", Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+            .initializer(initializer.build())
+            .build();
+        return binding;
+    }
+
     private void emitCatalog(List<TypeElement> endpoints) throws IOException {
         String configuredName = processingEnv.getOptions()
             .getOrDefault("httpBindings.catalog", HTTP + ".GeneratedHttpBindings");
         int lastDot = configuredName.lastIndexOf('.');
         ClassName name = ClassName.get(configuredName.substring(0, lastDot), configuredName.substring(lastDot + 1));
+        ClassName catalogType = ClassName.get(HTTP, "HttpBindingCatalog");
         TypeSpec.Builder catalog = TypeSpec.classBuilder(name)
             .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-            .addMethod(
-                MethodSpec.constructorBuilder()
-                    .addModifiers(Modifier.PRIVATE)
-                    .build());
+            .addSuperinterface(catalogType);
         MethodSpec.Builder lookup = MethodSpec.methodBuilder("get")
-            .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(Override.class)
             .addAnnotation(ClassName.get("org.jetbrains.annotations", "Nullable"))
             .returns(HTTP_BINDING)
             .addParameter(
                 ParameterizedTypeName.get(ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class)),
-                "type");
-        TypeElement requestType = processingEnv.getElementUtils()
-            .getTypeElement("pl.kuba6000.ae2webintegration.core.ae2request.IRequest");
-        for (int index = 0; index < endpoints.size(); index++) {
-            TypeElement endpoint = endpoints.get(index);
+                "type")
+            .addStatement("$T binding", HTTP_BINDING);
+        for (TypeElement endpoint : endpoints) {
             catalog.addOriginatingElement(endpoint);
-            AnnotationMirror route = annotation(endpoint, "Endpoint");
-            ClassName endpointName = ClassName.get(endpoint);
-            boolean request = processingEnv.getTypeUtils()
-                .isSubtype(endpoint.asType(), requestType.asType());
-            CodeBlock factory = request ? CodeBlock.of("$T::new", endpointName) : CodeBlock.of("null");
-            CodeBlock.Builder initializer = CodeBlock.builder()
-                .add(
-                    "new $T($T.$L,$W$S,$W$T.$L,$W$L,$W(request, values) -> {\n",
-                    HTTP_BINDING,
-                    ClassName.get(HTTP + ".contract", "HttpMethod"),
-                    value(route, "method"),
-                    value(route, "path"),
-                    ClassName.get(HTTP + ".contract", "Authentication"),
-                    value(route, "authentication"),
-                    factory)
-                .indent();
-            List<TypeElement> owners = hierarchy(endpoint);
-            for (TypeElement owner : owners) {
-                if (!inputFields(owner).isEmpty())
-                    initializer.addStatement("$T.bind(($T) request, values)", companion(owner), endpointName);
-            }
-            long bodies = owners.stream()
-                .flatMap(type -> inputFields(type).stream())
-                .filter(field -> annotation(field, "Body") != null)
-                .count();
-            if (bodies > 1) error(endpoint, "Only one body field is allowed");
-            if (bodies == 0) initializer.addStatement("values.noBody()");
-            initializer.unindent()
-                .add("})");
-            FieldSpec binding = FieldSpec
-                .builder(HTTP_BINDING, "BINDING_" + index, Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
-                .initializer(initializer.build())
-                .build();
-            catalog.addField(binding);
-            lookup.beginControlFlow("if (type == $T.class)", endpointName)
-                .addStatement("return $N", binding)
+            lookup.addStatement("binding = $T.get(type)", companion(endpoint))
+                .beginControlFlow("if (binding != null)")
+                .addStatement("return binding")
                 .endControlFlow();
         }
         catalog.addMethod(
@@ -226,6 +249,15 @@ public final class HttpBindingProcessor extends AbstractProcessor {
             .skipJavaLangImports(true)
             .build()
             .writeTo(processingEnv.getFiler());
+        try (Writer writer = processingEnv.getFiler()
+            .createResource(
+                StandardLocation.CLASS_OUTPUT,
+                "",
+                "META-INF/services/" + catalogType.canonicalName(),
+                endpoints.toArray(new Element[0]))
+            .openWriter()) {
+            writer.write(name.canonicalName() + "\n");
+        }
     }
 
     private String shape(TypeElement type, Map<TypeElement, String> shapes) {

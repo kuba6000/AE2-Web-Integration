@@ -21,7 +21,6 @@ import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
 import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
-import pl.kuba6000.ae2webintegration.core.http.contract.GenerateHttpBinding;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.QueryParam;
 import pl.kuba6000.ae2webintegration.core.http.dto.TrackedResource;
@@ -58,7 +57,6 @@ import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageTrackingServic
  * @responseExample 503 {"status":"SERVER_STOPPING","data":null}
  */
 @Endpoint(method = HttpMethod.GET, path = "/api/grids/{gridKey}/resource-history")
-@GenerateHttpBinding
 public final class GetResourceHistory extends IAsyncRequest {
 
     private static final int DEFAULT_QUERY_LIMIT = 200;

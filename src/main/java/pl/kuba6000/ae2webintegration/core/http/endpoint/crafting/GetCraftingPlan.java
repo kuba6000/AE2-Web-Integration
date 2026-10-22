@@ -77,7 +77,7 @@ public final class GetCraftingPlan extends ISyncedRequest {
 
     /** Include resource icon references and atlas metadata; omitted means false. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
 
     @SuppressWarnings("unused") // Gson reads the fields reflectively.
     public static class PlanData {
@@ -188,7 +188,7 @@ public final class GetCraftingPlan extends ISyncedRequest {
         implements IResponseBody {}
 
     @PathParam("planId")
-    private int jobId;
+    int jobId;
 
     @Override
     protected void handle(IAEGrid grid) {

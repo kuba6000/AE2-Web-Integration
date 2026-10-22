@@ -105,10 +105,11 @@ public final class SubmitCraftingPlan extends ISyncedRequest {
     public record Input(@OptionalInput @Nullable StableKey cpuKey) {}
 
     @Body
-    private @NotNull Input input;
+    @NotNull
+    Input input;
 
     @PathParam("planId")
-    private int jobId;
+    int jobId;
 
     @Override
     protected void handle(IAEGrid grid) {

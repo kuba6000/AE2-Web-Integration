@@ -30,6 +30,7 @@ import com.google.gson.JsonParser;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
 import pl.kuba6000.ae2webintegration.core.WebPrincipal;
+import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;
 import pl.kuba6000.ae2webintegration.core.http.InputValues;
 
 class HttpBindingProcessorTest {
@@ -38,8 +39,43 @@ class HttpBindingProcessorTest {
     Path directory;
 
     @Test
-    void compilesAnOptedInEndpointWithDefaultedQueryInput() throws Exception {
+    void endpointDeclarationAloneGeneratesDefaultedQueryBinding() throws Exception {
         assertCompiles("  @QueryParam(\"limit\") int limit = 200;");
+    }
+
+    @Test
+    void separatelyCompiledCatalogCanConstructAPackageAccessibleNestedEndpoint() throws Exception {
+        Compilation result = compileSource(
+            "package fixture;\n" + "import pl.kuba6000.ae2webintegration.core.http.contract.*;\n"
+                + "import pl.kuba6000.ae2webintegration.core.http.*;\n"
+                + "import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;\n"
+                + "class Owner {\n"
+                + " @Endpoint(method=HttpMethod.GET,path=\"/api/nested\")\n"
+                + " static final class Nested extends IAsyncRequest { public void handle() { done(); } }\n"
+                + "}\n"
+                + "public final class Example {\n"
+                + " public static Object create() {\n"
+                + "  for (HttpBindingCatalog catalog : java.util.ServiceLoader.load(HttpBindingCatalog.class, Example.class.getClassLoader())) {\n"
+                + "   HttpBinding binding = catalog.get(Owner.Nested.class);\n"
+                + "   if (binding != null) return binding.factory().get();\n"
+                + "  }\n"
+                + "  throw new AssertionError(\"No catalog binding\");\n"
+                + " }\n"
+                + "}");
+        assertTrue(
+            result.success(),
+            result.diagnostics()
+                .getDiagnostics()
+                .toString());
+        try (URLClassLoader loader = new URLClassLoader(
+            new URL[] { directory.toUri()
+                .toURL() },
+            getClass().getClassLoader())) {
+            Object request = loader.loadClass("fixture.Example")
+                .getMethod("create")
+                .invoke(null);
+            assertInstanceOf(IAsyncRequest.class, request);
+        }
     }
 
     @Test
@@ -129,6 +165,19 @@ class HttpBindingProcessorTest {
                         .contains("Unsupported HTTP parameter type")));
     }
 
+    @Test
+    void rejectsAnInputWithConflictingTransportAnnotations() throws Exception {
+        Compilation result = compile("  @QueryParam(\"value\") @PathParam(\"value\") int value;");
+        assertFalse(result.success());
+        assertTrue(
+            result.diagnostics()
+                .getDiagnostics()
+                .stream()
+                .anyMatch(
+                    diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR && diagnostic.getMessage(null)
+                        .contains("one transport annotation")));
+    }
+
     private void assertCompiles(String inputs) throws Exception {
         Compilation result = compile(inputs);
         assertTrue(
@@ -139,20 +188,24 @@ class HttpBindingProcessorTest {
     }
 
     private Compilation compile(String inputs) throws Exception {
+        return compileSource(
+            String.join(
+                "\n",
+                Arrays.asList(
+                    "package fixture;",
+                    "import pl.kuba6000.ae2webintegration.core.http.contract.*;",
+                    "import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;",
+                    "@Endpoint(method=HttpMethod.GET,path=\"/api/example\")",
+                    "public final class Example extends IAsyncRequest {",
+                    inputs,
+                    "  public void bind(pl.kuba6000.ae2webintegration.core.http.InputValues values) { Example_HttpBinding.bind(this, values); }",
+                    "  public void handle() {}",
+                    "}")));
+    }
+
+    private Compilation compileSource(String sourceText) throws Exception {
         Path source = directory.resolve("Example.java");
-        Files.write(
-            source,
-            Arrays.asList(
-                "package fixture;",
-                "import pl.kuba6000.ae2webintegration.core.http.contract.*;",
-                "import pl.kuba6000.ae2webintegration.core.ae2request.async.IAsyncRequest;",
-                "@GenerateHttpBinding @Endpoint(method=HttpMethod.GET,path=\"/api/example\")",
-                "public final class Example extends IAsyncRequest {",
-                inputs,
-                "  public void bind(pl.kuba6000.ae2webintegration.core.http.InputValues values) { Example_HttpBinding.bind(this, values); }",
-                "  public void handle() {}",
-                "}"),
-            StandardCharsets.UTF_8);
+        Files.write(source, sourceText.getBytes(StandardCharsets.UTF_8));
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
         try (StandardJavaFileManager files = compiler

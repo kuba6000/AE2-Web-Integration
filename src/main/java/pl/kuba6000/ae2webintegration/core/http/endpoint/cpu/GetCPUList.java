@@ -63,7 +63,7 @@ public final class GetCPUList extends ISyncedRequest {
 
     /** Include product icon references and atlas metadata; omitted means false. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
 
     /**
      * Successful operation result.

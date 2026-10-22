@@ -71,7 +71,8 @@ public final class CancelCPU extends ISyncedRequest {
     public record Response(@NotNull ApiStatus status, @Nullable Void data) implements IResponseBody {}
 
     @PathParam("cpuKey")
-    private @NotNull StableKey cpuId;
+    @NotNull
+    StableKey cpuId;
 
     @Override
     protected void handle(IAEGrid grid) {

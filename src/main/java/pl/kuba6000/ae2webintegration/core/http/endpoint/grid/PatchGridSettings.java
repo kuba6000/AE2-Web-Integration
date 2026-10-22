@@ -104,7 +104,8 @@ public final class PatchGridSettings extends IAsyncRequest {
         @OptionalInput @Nullable Integer craftingHistoryRetentionDays) {}
 
     @Body
-    private @NotNull Input input;
+    @NotNull
+    Input input;
 
     @Override
     public void handle() {

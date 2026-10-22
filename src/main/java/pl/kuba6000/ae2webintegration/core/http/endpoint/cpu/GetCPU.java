@@ -87,10 +87,11 @@ public final class GetCPU extends LiveSnapshotRequest {
 
     /** Include icon atlas references and page metadata in the response. */
     @QueryParam("icons")
-    private boolean icons;
+    boolean icons;
 
     @PathParam("cpuKey")
-    private @NotNull StableKey cpuId;
+    @NotNull
+    StableKey cpuId;
 
     @Override
     protected void cancel(String token) {

@@ -19,7 +19,6 @@ import pl.kuba6000.ae2webintegration.core.http.ErrorResponse;
 import pl.kuba6000.ae2webintegration.core.http.IResponseBody;
 import pl.kuba6000.ae2webintegration.core.http.contract.Body;
 import pl.kuba6000.ae2webintegration.core.http.contract.Endpoint;
-import pl.kuba6000.ae2webintegration.core.http.contract.GenerateHttpBinding;
 import pl.kuba6000.ae2webintegration.core.http.contract.HttpMethod;
 import pl.kuba6000.ae2webintegration.core.http.contract.OptionalInput;
 import pl.kuba6000.ae2webintegration.core.identity.ItemIdentityRegistry;
@@ -67,7 +66,6 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
  * @responseExample 503 {"status":"SERVER_BUSY","data":null}
  */
 @Endpoint(method = HttpMethod.POST, path = "/api/grids/{gridKey}/crafting-plans")
-@GenerateHttpBinding
 public final class CreateCraftingPlan extends ISyncedRequest {
 
     /**
