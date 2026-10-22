@@ -66,7 +66,7 @@ public class DiscordDestination implements INotificationDestination {
                     + "\nCPU: "
                     + craftingMessage.cpuName(),
                 craftingMessage.wasCancelled() ? COLOR_RED : COLOR_GREEN);
-            if (Config.INSTANCE.discord.imageCards) {
+            if (Config.INSTANCE.discord.generateImage) {
                 byte[] png = null;
                 try {
                     if (card == null) card = new DiscordCraftingCard();
@@ -79,7 +79,7 @@ public class DiscordDestination implements INotificationDestination {
                             .getSimpleName());
                 }
                 if (png != null) {
-                    payload.includeImage();
+                    payload.attachImage(Config.INSTANCE.discord.imageInEmbed);
                     WebhookHelper.sendPng(webhook, payload, png);
                     return;
                 }

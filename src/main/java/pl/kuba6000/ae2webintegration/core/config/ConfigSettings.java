@@ -78,12 +78,16 @@ public final class ConfigSettings {
         @Comment("Discord webhook URL. Empty disables notifications; public mode must also be disabled.")
         public String webhook = "";
 
-        @Path("image_cards")
-        @Comment("Attach dark image cards to crafting notifications, using the installed icon pack when available.")
-        public boolean imageCards = true;
+        @Path("generate_image")
+        @Comment("Generate dark crafting notification images, using the installed icon pack when available. False sends a text embed.")
+        public boolean generateImage = true;
+
+        @Path("image_in_embed")
+        @Comment("Put generated images in a text embed. False sends only the image attachment and configured role mention. Ignored when no image is generated.")
+        public boolean imageInEmbed = true;
 
         @Path("role_id")
-        @Comment("Role to mention on errors. Empty disables mentions.")
+        @Comment("Role to mention in notification content. Empty disables mentions.")
         public String roleId = "";
 
     }

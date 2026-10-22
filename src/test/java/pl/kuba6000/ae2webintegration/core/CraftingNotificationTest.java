@@ -77,7 +77,7 @@ class CraftingNotificationTest extends GridTestScope {
         server.start();
         try (ConfigTestFixture ignored = new ConfigTestFixture()) {
             Config.INSTANCE.general.publicMode = false;
-            Config.INSTANCE.discord.imageCards = false;
+            Config.INSTANCE.discord.generateImage = false;
             String endpoint = "http://127.0.0.1:" + server.getAddress()
                 .getPort();
             Config.INSTANCE.discord.webhook = endpoint + "/discord";
