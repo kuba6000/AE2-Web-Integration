@@ -6,6 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
 import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPUCluster;
+import net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -15,15 +16,16 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
 import appeng.api.networking.crafting.ICraftingCPU;
-import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IAdvCraftingCPUClusterOwnership;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IExecutingCraftingJobAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
@@ -42,6 +44,12 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNam
 
     @Unique
     private @Nullable StableKey web$stableKey;
+
+    @Override
+    public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+        return !cluster.isDestroyed() && cluster.getGrid() == (Object) grid
+            && ((IAdvCraftingCPUClusterOwnership) cluster).web$ownsCpu(uniqueId, (AdvCraftingCPU) (Object) this);
+    }
 
     @Override
     public @NotNull StableKey web$getKey() {
@@ -127,23 +135,21 @@ public class AdvCraftingCPUMixin implements ICraftingCPUCluster, ICraftingCPUNam
     }
 
     @Override
-    public void web$getAllItems(IStackList list) {
-        ((AdvCraftingCPU) (Object) this).craftingLogic.getAllItems((KeyCounter) (Object) list);
-    }
-
-    @Override
-    public long web$getActiveItems(IAEKey key) {
-        return ((AdvCraftingCPU) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
-    }
-
-    @Override
-    public long web$getPendingItems(IAEKey key) {
-        return ((AdvCraftingCPU) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
-    }
-
-    @Override
-    public long web$getStorageItems(IAEKey key) {
-        return ((AdvCraftingCPU) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
+    public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored) {
+        KeyCounter activeItems = (KeyCounter) (Object) active;
+        KeyCounter pendingItems = (KeyCounter) (Object) pending;
+        KeyCounter storedItems = (KeyCounter) (Object) stored;
+        AdvCraftingCPULogic logic = ((AdvCraftingCPU) (Object) this).craftingLogic;
+        IExecutingCraftingJobAccessor job = ((ICraftingCPULogicAccessor) logic).web$getJob();
+        if (job != null) activeItems.addAll(job.web$getWaitingFor().list);
+        storedItems.addAll(logic.getInventory().list);
+        logic.getAllItems(pendingItems);
+        // Native getAllItems is active + pending + stored; subtract the copied counters to isolate pending.
+        pendingItems.removeAll(activeItems);
+        pendingItems.removeAll(storedItems);
+        activeItems.removeZeros();
+        pendingItems.removeZeros();
+        storedItems.removeZeros();
     }
 
     @Override

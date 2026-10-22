@@ -20,10 +20,10 @@ public final class NativeItemIdentity {
 
     private NativeItemIdentity() {}
 
-    public static @NotNull StableKey getKey(@NotNull AEKey key) {
+    public static @Nullable StableKey getKey(@NotNull AEKey key) {
         CompoundTag tag = key.toTagGeneric();
         // The native codec allocates its tag first. Bounds cover only the subsequent traversal.
-        return StableKey.create(sink -> {
+        return StableKey.createOptional(sink -> {
             StableKey.writeText(sink, kind(key));
             StableKey.writeText(
                 sink,
@@ -31,12 +31,13 @@ public final class NativeItemIdentity {
                     .toString());
             sink.putInt(0);
             sink.putByte((byte) 1);
-            CanonicalNbt.write(tag, sink);
+            return CanonicalNbt.write(tag, sink);
         });
     }
 
     /** Encodes an existing nonempty stack and its captured Forge capabilities without an AE wrapper. */
-    public static @NotNull StableKey getKey(@NotNull ItemStack stack, @Nullable CompoundTag caps) {
+    public static @Nullable StableKey getKey(@NotNull ItemStack stack, @Nullable CompoundTag caps) {
+        if (stack.isEmpty()) return null;
         return getStackKey(
             "item",
             AEKeyType.items()
@@ -49,7 +50,8 @@ public final class NativeItemIdentity {
     }
 
     /** AEItemKey.dropSecondary removes both tags and capabilities, including native defaults. */
-    public static @NotNull StableKey getBaseKey(@NotNull ItemStack stack) {
+    public static @Nullable StableKey getBaseKey(@NotNull ItemStack stack) {
+        if (stack.isEmpty()) return null;
         return getStackKey(
             "item",
             AEKeyType.items()
@@ -61,7 +63,8 @@ public final class NativeItemIdentity {
             null);
     }
 
-    public static @NotNull StableKey getKey(@NotNull FluidStack stack) {
+    public static @Nullable StableKey getKey(@NotNull FluidStack stack) {
+        if (stack.isEmpty()) return null;
         return getStackKey(
             "fluid",
             AEKeyType.fluids()
@@ -73,7 +76,8 @@ public final class NativeItemIdentity {
             null);
     }
 
-    public static @NotNull StableKey getBaseKey(@NotNull FluidStack stack) {
+    public static @Nullable StableKey getBaseKey(@NotNull FluidStack stack) {
+        if (stack.isEmpty()) return null;
         return getStackKey(
             "fluid",
             AEKeyType.fluids()
@@ -85,14 +89,14 @@ public final class NativeItemIdentity {
             null);
     }
 
-    private static @NotNull StableKey getStackKey(@NotNull String kind, @NotNull String type, @NotNull String id,
+    private static @Nullable StableKey getStackKey(@NotNull String kind, @NotNull String type, @NotNull String id,
         @Nullable CompoundTag tag, @Nullable CompoundTag caps) {
-        return StableKey.create(sink -> {
+        return StableKey.createOptional(sink -> {
             StableKey.writeText(sink, kind);
             StableKey.writeText(sink, id);
             sink.putInt(0);
             sink.putByte((byte) 1);
-            CanonicalNbt.writeKey(type, id, tag, caps, sink);
+            return CanonicalNbt.writeKey(type, id, tag, caps, sink);
         });
     }
 
