@@ -62,6 +62,14 @@ body {
 
 header {
     margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 8px;
+}
+header h1,
+header .intro {
+    grid-column: 1 / -1;
 }
 p {
     margin: 0 0 16px;
@@ -76,6 +84,8 @@ h2 {
     font-size: 20px;
 }
 .brand {
+    grid-row: 1;
+    grid-column: 1;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -289,15 +299,31 @@ footer p {
     margin-bottom: 10px;
 }
 .appearance-control {
+    grid-row: 1;
+    grid-column: 2;
     display: flex;
     justify-content: flex-end;
-    gap: 4px;
-    margin-bottom: 12px;
+    gap: 2px;
 }
 .appearance-control button {
     position: relative;
-    width: 44px;
-    padding: 8px;
+    width: 26px;
+    min-height: 26px;
+    padding: 3px;
+}
+.appearance-control .login-icon {
+    flex-basis: 16px;
+    width: 16px;
+    height: 16px;
+}
+.appearance-control [data-appearance='light'] .login-icon {
+    color: light-dark(#92651d, #f4cf65);
+}
+.appearance-control [data-appearance='dark'] .login-icon {
+    color: light-dark(#455975, #c6d7f0);
+}
+.appearance-control [data-appearance='system'] .login-icon {
+    color: light-dark(#325d75, #8eb5d3);
 }
 .appearance-control [aria-pressed='true'] {
     background: var(--panel);
@@ -332,6 +358,18 @@ footer p {
 a {
     color: var(--text);
     text-underline-offset: 3px;
+}
+
+@media (width <= 400px) {
+    .brand {
+        gap: 6px;
+        font-size: 14px;
+    }
+    .brand-mark {
+        flex-basis: 24px;
+        width: 24px;
+        height: 24px;
+    }
 }
 
 @media (width <= 360px) {
