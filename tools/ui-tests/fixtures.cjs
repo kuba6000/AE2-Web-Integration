@@ -185,6 +185,8 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
         loggedOut: false,
         username: 'ExamplePlayer',
         isAdmin: false,
+        serverConfiguration: require('./server-settings-fixture.cjs').settings(),
+        serverConfigurationRevision: 1,
         availableUpdate: {
             version: '10.0.0',
             tag: '1.7.10-10.0.0',
@@ -352,6 +354,29 @@ async function fixture(t, mount = '', contextOptions = {}, { mockClock = true, a
                                       user: options.loggedOut
                                           ? null
                                           : { username: options.username, isAdmin: options.isAdmin }
+                                  }
+                                : null
+                    })
+                );
+            } else if (resource === '/api/server/settings') {
+                let status = options.isAdmin ? 'OK' : 'NO_PERMISSIONS';
+                if (status === 'OK' && request.method === 'POST') {
+                    const input = JSON.parse(Buffer.concat(body).toString());
+                    if (input.revision !== String(options.serverConfigurationRevision)) status = 'CONFIG_CHANGED';
+                    else {
+                        options.serverConfiguration = input.settings;
+                        options.serverConfigurationRevision++;
+                    }
+                }
+                response.statusCode = status === 'OK' ? 200 : status === 'CONFIG_CHANGED' ? 409 : 403;
+                response.end(
+                    JSON.stringify({
+                        status,
+                        data:
+                            status === 'OK'
+                                ? {
+                                      revision: String(options.serverConfigurationRevision),
+                                      settings: options.serverConfiguration
                                   }
                                 : null
                     })

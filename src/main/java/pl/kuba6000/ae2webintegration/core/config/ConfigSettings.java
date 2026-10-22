@@ -18,7 +18,7 @@ public final class ConfigSettings {
     @Comment("Completed crafting history bounds and defaults. Reload applies bounds immediately; database cleanup follows in the background.")
     public CraftingHistory craftingHistory = new CraftingHistory();
     @Path("resource_tracking")
-    @Comment("Live observation and background capacity controls. Changes take effect after restarting the server.")
+    @Comment("Live observation and background capacity controls. Changes apply on the next server tick.")
     public ResourceTracking resourceTracking = new ResourceTracking();
 
     public static final class General {

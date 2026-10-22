@@ -97,6 +97,11 @@ export function mountTheme(
         history: { next: application.history.next, previous: application.history.previous },
         cpus: { cancel: cpus.cancel, pause: cpus.pause },
         settings: { edit: settings.edit, save: settings.save },
+        serverSettings: {
+            edit: application.serverSettings.edit,
+            save: application.serverSettings.save,
+            reload: application.serverSettings.reload
+        },
         icons: {
             observe(host, paint) {
                 const observer = application.icons.observe(host, (target, sprite) => {

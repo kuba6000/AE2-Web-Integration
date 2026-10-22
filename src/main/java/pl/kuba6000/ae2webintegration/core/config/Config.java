@@ -7,13 +7,21 @@ import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.UnmodifiableConfig;
@@ -37,6 +45,10 @@ public class Config {
     public static volatile ConfigSettings INSTANCE = new ConfigSettings();
 
     private static File configDirectory;
+    private static final byte[] REVISION_KEY = new byte[32];
+    static {
+        new SecureRandom().nextBytes(REVISION_KEY);
+    }
 
     // --- Directory / file setup ---
 
@@ -81,6 +93,66 @@ public class Config {
             publish(file, read(file));
         } catch (IOException e) {
             throw new UncheckedIOException("Could not reload configuration: " + file, e);
+        }
+    }
+
+    /** Reads editable values from disk, without exposing the file-only administrator credentials. */
+    public static synchronized @NotNull ServerSettingsSnapshot readServerSettings() throws IOException {
+        byte[] bytes = Files.readAllBytes(getConfigFile("config.toml").toPath());
+        CommentedConfig document = new TomlParser().parse(new String(bytes, StandardCharsets.UTF_8));
+        ConfigSettings loaded = new ConfigSettings();
+        CommentedConfig defaults = newDocument();
+        CONVERTER.toConfig(loaded, defaults);
+        fillDefaults(document, defaults);
+        CONVERTER.toObject(document, loaded);
+        loaded.validate();
+        EditableServerSettings editable = new EditableServerSettings();
+        CONVERTER.toObject(document, editable);
+        return new ServerSettingsSnapshot(revision(bytes), editable);
+    }
+
+    /** Returns null when another file edit superseded the submitted revision. */
+    public static synchronized @Nullable ServerSettingsSnapshot saveServerSettings(@NotNull String expectedRevision,
+        @NotNull EditableServerSettings settings) throws IOException {
+        File file = getConfigFile("config.toml");
+        byte[] bytes = Files.readAllBytes(file.toPath());
+        if (!revision(bytes).equals(expectedRevision)) return null;
+        CommentedConfig document = new TomlParser().parse(new String(bytes, StandardCharsets.UTF_8));
+        CommentedConfig edits = newDocument();
+        CONVERTER.toConfig(settings, edits);
+        mergeEdits(document, edits);
+        publish(file, document, true);
+        return readServerSettings();
+    }
+
+    private static void mergeEdits(CommentedConfig document, UnmodifiableConfig edits) {
+        for (UnmodifiableConfig.Entry entry : edits.entrySet()) {
+            String key = entry.getKey();
+            if (entry.getValue() instanceof UnmodifiableConfig section) {
+                Object existing = document.get(key);
+                if (existing == null) {
+                    existing = newDocument();
+                    document.set(key, existing);
+                }
+                if (!(existing instanceof CommentedConfig target)) {
+                    throw new IllegalArgumentException("Expected a configuration table");
+                }
+                mergeEdits(target, section);
+            } else {
+                document.set(key, entry.getValue());
+            }
+        }
+    }
+
+    private static String revision(byte[] bytes) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(REVISION_KEY, "HmacSHA256"));
+            return Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(mac.doFinal(bytes));
+        } catch (GeneralSecurityException unavailable) {
+            throw new IllegalStateException("Configuration revision algorithm unavailable", unavailable);
         }
     }
 
@@ -130,6 +202,11 @@ public class Config {
     }
 
     private static void publish(File file, CommentedConfig document) throws IOException {
+        publish(file, document, false);
+    }
+
+    private static void publish(File file, CommentedConfig document, boolean preserveFileOnlySettings)
+        throws IOException {
         document.remove("tracking");
         ConfigSettings loaded = new ConfigSettings();
         CommentedConfig defaults = newDocument();
@@ -143,6 +220,10 @@ public class Config {
         serializer.setWriteStringLiteralPredicate(Config::useLiteralString);
         disableMultilineStrings(serializer);
         AtomicFileWriter.write(file, writer -> serializer.write(document, writer));
+        if (preserveFileOnlySettings) {
+            loaded.general.port = INSTANCE.general.port;
+            loaded.general.password = INSTANCE.general.password;
+        }
         INSTANCE = loaded;
     }
 

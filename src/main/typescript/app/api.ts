@@ -1,4 +1,5 @@
 import type { ThemeManifest } from './theme-manifest.js';
+import type { ServerSettingsResponse } from './server-settings.js';
 import type {
     Grid,
     StoredResource,
@@ -40,6 +41,7 @@ const responseStatuses = new Set([
     'JOB_NOT_DONE',
     'FAIL',
     'UPDATE_CHANGED',
+    'CONFIG_CHANGED',
     'REQUEST_TOO_LARGE',
     'UNSUPPORTED_MEDIA_TYPE',
     'NOT_FOUND',
@@ -59,6 +61,8 @@ export type EventHandlers<Delta> = {
 };
 export type ApiFailure = Error & { status?: string; data?: unknown };
 export type Api = {
+    serverSettings(signal?: AbortSignal): Promise<ServerSettingsResponse>;
+    saveServerSettings(body: ServerSettingsResponse): Promise<ServerSettingsResponse>;
     resourcePins(signal?: AbortSignal, icons?: boolean): Promise<ResourceResponse<ResourcePin[]>>;
     addResourcePin(
         gridKey: string,
@@ -210,6 +214,7 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
                   }
                 | { cpuKey?: string }
                 | Partial<GridSettings>
+                | ServerSettingsResponse
                 | { paused: boolean }
                 | { tag: string }
                 | { itemKey: string; placement: PinPlacement }
@@ -430,6 +435,8 @@ export function createApi(base: URL, onUnauthorized: () => void): Api {
                 `api/grids/${encodeURIComponent(gridKey)}/resource-history?itemKey=${encodeURIComponent(itemKey)}&from=${from}&limit=10000${icons ? '&icons=true' : ''}`,
                 { signal }
             ),
+        serverSettings: (signal) => request('api/server/settings', { signal }),
+        saveServerSettings: (body) => request('api/server/settings', { method: 'POST', body }),
         settings: (gridKey, signal) => request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { signal }),
         saveSettings: (gridKey, body) =>
             request(`api/grids/${encodeURIComponent(gridKey)}/settings`, { method: 'PATCH', body }),

@@ -39,7 +39,7 @@ public final class CpuLiveCoordinator {
     private static final long VALIDATION_MILLIS = TimeUnit.SECONDS.toMillis(1);
     private final CpuRegistry cpus;
     private final GridIdentityRegistry identities;
-    private final ConfigSettings.ResourceTracking settings;
+    private ConfigSettings.ResourceTracking settings;
     private final Map<LiveTopic.Key, Binding> bindings = new HashMap<>();
     // Native notifications find their CPU by instance: no hashing of native objects, no identity resolution.
     private final Map<ICraftingCPUCluster, Binding> byCpu = new IdentityHashMap<>();
@@ -50,6 +50,14 @@ public final class CpuLiveCoordinator {
         this.cpus = cpus;
         this.identities = identities;
         this.settings = settings;
+    }
+
+    /** Called on the server thread; subscribers and dirty native resource identities remain intact. */
+    public void applySettings(@NotNull ConfigSettings.ResourceTracking updated, long nowMillis) {
+        if (settings == updated) return;
+        for (Binding binding : bindings.values())
+            binding.nextRead = Math.min(binding.nextRead, nowMillis + updated.activeIntervalMillis);
+        settings = updated;
     }
 
     /**

@@ -1,7 +1,9 @@
 import type { Dictionaries } from '../../app/i18n.js';
+import { serverSettingsTranslations } from './server-settings-translations.js';
 
 export const translations = {
     en: {
+        ...serverSettingsTranslations.en,
         liveUpdates: 'Live updates',
         liveLastEvent: 'Last event',
         liveResync: 'Click to resync',
@@ -80,6 +82,7 @@ export const translations = {
         dismissIcons: 'Dismiss icon suggestion'
     },
     pl: {
+        ...serverSettingsTranslations.pl,
         liveUpdates: 'Aktualizacje na żywo',
         liveLastEvent: 'Ostatnie zdarzenie',
         liveResync: 'Kliknij, aby zsynchronizować ponownie',

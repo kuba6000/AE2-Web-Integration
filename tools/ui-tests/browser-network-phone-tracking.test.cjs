@@ -21,6 +21,63 @@ const {
     atlasFixture
 } = require('./fixtures.cjs');
 
+test('server configuration is hidden from players and a direct route never requests it', async (t) => {
+    const { page, options, base } = await fixture(t);
+    await page.goto(`${base}#/server-settings`);
+    await page
+        .locator('#server-settings [role="status"]')
+        .filter({ hasText: /permission|access/i })
+        .waitFor();
+    assert.equal(await page.getByRole('link', { name: 'Server settings', exact: true }).isVisible(), false);
+    assert.equal(await page.locator('#server-settings form').isVisible(), false);
+    assert.equal(
+        options.requests.some((request) => request.path === '/api/server/settings'),
+        false
+    );
+});
+
+test('server configuration phone form preserves focus and drafts, detects conflicts and saves explicitly', async (t) => {
+    const { page, options, base } = await refreshingFixture(t, '/ae2', {
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true
+    });
+    options.isAdmin = true;
+    await page.goto(`${base}#/server-settings`);
+    const rate = page.getByRole('spinbutton', { name: 'Unauthenticated requests per minute', exact: true });
+    await rate.waitFor();
+    assert.equal(await page.locator('#server-general-port, #server-general-password').count(), 0);
+    assert.equal(await page.locator('#server-ntfy-password').getAttribute('type'), 'password');
+    await rate.fill('37');
+    const reads = options.requests.filter((request) => request.path === '/api/server/settings').length;
+    await page.clock.fastForward(15000);
+    assert.equal(await rate.evaluate((input) => document.activeElement === input), true);
+    assert.equal(await rate.inputValue(), '37');
+    assert.equal(options.requests.filter((request) => request.path === '/api/server/settings').length, reads);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+    const save = page.getByRole('button', { name: 'Save and apply', exact: true });
+    options.serverConfigurationRevision++;
+    await save.click();
+    await page
+        .locator('#server-settings [role="status"]')
+        .filter({ hasText: /changed on the server/ })
+        .waitFor();
+    assert.equal(await rate.inputValue(), '37');
+    assert.equal(await save.isDisabled(), true);
+    await page.getByRole('button', { name: 'Discard changes and reload', exact: true }).click();
+    await page.waitForFunction(
+        () => document.querySelector('#server-general-maxRequestsBeforeLoggedInPerMinute')?.value === '20'
+    );
+    await rate.fill('38');
+    await save.click();
+    await page
+        .locator('#server-settings [role="status"]')
+        .filter({ hasText: /saved and applied/ })
+        .waitFor();
+    assert.equal(options.serverConfiguration.general.maxRequestsBeforeLoggedInPerMinute, 38);
+    assert.equal(await save.isDisabled(), true);
+});
+
 test('crafting retention is independent per network and persists while collection is disabled', async (t) => {
     const { page, options, base } = await fixture(t);
     await page.goto(`${base}#/grids/${gridA}/settings`);

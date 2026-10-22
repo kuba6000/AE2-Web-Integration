@@ -18,6 +18,7 @@ import { createHomeView } from './home.js';
 import { createCpuView } from './cpus.js';
 import { createHistoryView } from './history.js';
 import { createSettingsView } from './settings.js';
+import { createServerSettingsView } from './server-settings.js';
 import { createAboutView } from './about.js';
 import { createResourceHistoryView } from './resource-history.js';
 import { infoCircle } from './icons/hackernoon/info-circle.js';
@@ -32,12 +33,6 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         <div class="workspace" id="workspace">
             <div class="window-frame" id="window">
                 <div id="network-message" role="status"></div>
-                <section id="server-settings" class="page-view" hidden>
-                    <div class="terminal-heading"><h2 id="server-settings-title" data-text="serverSettings"></h2></div>
-                    <div class="terminal-body">
-                        <div class="terminal-scroll page-scroll" role="region" aria-labelledby="server-settings-title" tabindex="0"></div>
-                    </div>
-                </section>
                 <section id="web-settings" class="page-view" hidden></section>
                 <p id="missing" data-text="invalidRoute" hidden></p>
             </div>
@@ -46,7 +41,6 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     const windowFrame = root.querySelector<HTMLDivElement>('#window')!;
     const networkStatus = root.querySelector<HTMLDivElement>('#network-message')!;
     const webSettingsRoot = root.querySelector<HTMLElement>('#web-settings')!;
-    const serverSettingsRoot = root.querySelector<HTMLElement>('#server-settings')!;
     const missingView = root.querySelector<HTMLParagraphElement>('#missing')!;
     const tooltips = createTooltips(root, lifetime);
     let language: ThemeState['preferences']['language'];
@@ -104,6 +98,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
     const historyView = createHistoryView(windowFrame, application, tooltips.bind);
     lifetime.onCleanup(() => historyView.dispose());
     const settingsView = createSettingsView(windowFrame, application);
+    const serverSettingsView = createServerSettingsView(windowFrame, application, tooltips);
     const aboutView = createAboutView(windowFrame, modVersion);
     const trackingView = createResourceHistoryView(windowFrame, application, settings, true);
     lifetime.onCleanup(trackingView.dispose);
@@ -158,7 +153,7 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
         header.render(state, locale);
         windowFrame.hidden = state.route.view === 'home';
         workspace.classList.toggle('with-home', state.route.view === 'home');
-        serverSettingsRoot.hidden = state.route.view !== 'server-settings';
+        serverSettingsView.render(state, locale);
         workspace.classList.toggle(
             'with-terminal',
             state.route.view === 'items' ||

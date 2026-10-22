@@ -17,6 +17,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigSettings;
 import pl.kuba6000.ae2webintegration.core.config.CoreData;
@@ -31,6 +32,7 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAE;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.live.LiveHub;
 import pl.kuba6000.ae2webintegration.core.live.LiveStreams;
+import pl.kuba6000.ae2webintegration.core.notification.NotificationManager;
 import pl.kuba6000.ae2webintegration.core.persistence.WorldDatabase;
 import pl.kuba6000.ae2webintegration.core.pins.ResourcePinStore;
 import pl.kuba6000.ae2webintegration.core.terminal.TerminalRegistry;
@@ -102,6 +104,13 @@ public class CoreEngine {
     public static void applyDataConfig() {
         WorldDatabase database = worldDatabase;
         if (database != null) database.applyPolicy(Config.INSTANCE.resourceHistory, Config.INSTANCE.craftingHistory);
+    }
+
+    /** Applies HTTP/worker policy now; native observation settings are picked up on the next game tick. */
+    public static void applyServerConfig() {
+        AuthService.reloadHttpSettings();
+        applyDataConfig();
+        NotificationManager.reloadSettings();
     }
 
     public static void onServerStarted() {
@@ -193,10 +202,15 @@ public class CoreEngine {
         IAE ae = AE2Controller.AE2Interface;
         if (coordinator != null && ae != null) {
             long now = System.currentTimeMillis();
+            coordinator.applySettings(Config.INSTANCE.resourceTracking, now);
             coordinator.tick(ae, now);
         }
         CpuLiveCoordinator cpus = cpuLive;
-        if (cpus != null) cpus.tick(System.currentTimeMillis());
+        if (cpus != null) {
+            long now = System.currentTimeMillis();
+            cpus.applySettings(Config.INSTANCE.resourceTracking, now);
+            cpus.tick(now);
+        }
         maintainVersionChecker();
     }
 

@@ -200,6 +200,10 @@ By default, the panel is available at `http://your-server-ip-or-domain:2324/`. T
 In public mode, a player can create an account from the login page. After choosing a password, the page displays
 an `/ae2webintegration auth <token>` command. The player must run that command in game to finish registration.
 
+Administrators and trusted localhost users can edit the configuration in **Server settings**.
+**Save and apply** writes `config.toml` and applies the changes without restarting the web server.
+The listener port and administrator password must be changed directly in the configuration file.
+
 Enable **Record crafting history** in a network's settings to track its crafting jobs. Enable
 **Include machine-requested crafting** there to also track jobs started by machines on that network.
 The machine option applies to new jobs. Enabling tracking does not reconstruct an ongoing job's history.

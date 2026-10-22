@@ -5,6 +5,8 @@ import type { CpuState } from './cpus.js';
 import type { HistoryState } from './history.js';
 import type { ResourceHistoryState } from './resource-history.js';
 import type { SettingsState } from './settings.js';
+import type { ServerSettingsState, createServerSettings } from './server-settings.js';
+export type { ServerConfiguration, ServerSettingsResponse } from './server-settings.js';
 import type {
     StoredResource,
     Grid,
@@ -54,6 +56,7 @@ export type ThemeState = ReadonlyData<{
     resourceHistory: ResourceHistoryState;
     recent: RecentTracking | null;
     settings: SettingsState;
+    serverSettings: ServerSettingsState;
     pins: PinsState;
 }>;
 export type ThemeView = Exclude<Route['view'], 'missing'>;
@@ -110,6 +113,7 @@ export type ThemeApplication = {
         edit<K extends keyof GridSettings>(field: K, value: GridSettings[K]): void;
         save(): Promise<void>;
     };
+    readonly serverSettings: Pick<ReturnType<typeof createServerSettings>, 'edit' | 'save' | 'reload'>;
     readonly icons: {
         observe(root: HTMLElement, paint: (target: HTMLElement, sprite: IconSprite | null) => void): IconView;
     };

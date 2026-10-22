@@ -52,6 +52,17 @@ Network `settings.current` contains confirmed values and `settings.draft` contai
 and retention days, plus the read-only `historyMaxRowsPerGrid` cap. It is null until settings load.
 Use those limits for controls and validation; pass only editable fields to `settings.edit`.
 
+Server configuration is available at `#/server-settings` only for `context.user.isAdmin`.
+Hide its navigation entry for players. `state.serverSettings` contains confirmed `current` values,
+an editable `draft`, `dirty`, `saving`, `saved`, `error` and `uncertain` state. It is loaded on entry,
+without automatic polling. Edits survive navigation within the application; they are not stored in
+the browser. The administrator password and web port are excluded from this contract.
+
+Use `serverSettings.edit(section, field, value)` and `save()` to save and apply the complete draft.
+`serverSettings.reload()` explicitly discards edits and reloads the configuration. Ordinary refresh
+preserves a dirty draft. A `CONFIG_CHANGED` conflict or an uncertain save retains edits and requires
+an explicit reload before another save. Render these states visibly; do not retry mutations automatically.
+
 | Service                                                                    | Purpose                                                   |
 | -------------------------------------------------------------------------- | --------------------------------------------------------- |
 | `refresh({ reloadDetail: true })`                                          | Explicit refresh, including an open detail view           |

@@ -26,6 +26,33 @@ import pl.kuba6000.ae2webintegration.core.tracking.ResourceSnapshot;
 class StorageTrackingServiceTest {
 
     @Test
+    void liveQueueLimitChangesAdmissionWithoutReplacingTheWriter() throws Exception {
+        StableKey grid = StableKey.random();
+        StableKey item = StableKey.random();
+        try (StorageTrackingService service = new StorageTrackingService(new InMemoryStorageHistoryStore(), 1)) {
+            service.open(grid, 1);
+            service.setMaximumQueuedRows(4);
+            assertTrue(service.submit(grid, 1, observation(item, 10, 5), true, false, 0));
+            drain(service);
+            service.setMaximumQueuedRows(1);
+            assertFalse(service.submit(grid, 1, observation(item, 20, 7), true, false, 0));
+            assertTrue(
+                service.history(grid, item, 0, 100)
+                    .points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.STOCK && point.quantity() == 5));
+            service.setMaximumQueuedRows(4);
+            assertTrue(service.submit(grid, 1, observation(item, 30, 9), true, false, 0));
+            drain(service);
+            assertTrue(
+                service.history(grid, item, 0, 100)
+                    .points()
+                    .stream()
+                    .anyMatch(point -> point.kind() == StorageHistoryPoint.Kind.STOCK && point.quantity() == 9));
+        }
+    }
+
+    @Test
     void incompleteStockAttemptsRemainGapsUntilFullObservationReestablishesBaseline() throws Exception {
         StableKey grid = StableKey.random();
         StableKey item = StableKey.random();
@@ -672,6 +699,7 @@ class StorageTrackingServiceTest {
             assertTrue(service.submit(grid, 1, observation(item, 10, 5), true, true, 0L));
             assertTrue(entered.await(5, TimeUnit.SECONDS));
             assertTrue(service.submit(grid, 1, observation(item, 15, 7), true, true, 0L));
+            service.setMaximumQueuedRows(1);
             assertFalse(service.submit(grid, 1, observation(item, 20, 9), true, true, 0L));
             release.countDown();
             drain(service);
@@ -683,6 +711,7 @@ class StorageTrackingServiceTest {
                     .filter(point -> point.kind() == StorageHistoryPoint.Kind.STOCK)
                     .map(StorageHistoryPoint::quantity)
                     .collect(Collectors.toList()));
+            service.setMaximumQueuedRows(4);
             assertTrue(service.submit(grid, 1, observation(item, 30, 9), true, true, 0L));
             drain(service);
             StorageHistory recovery = service.history(grid, item, 30, 100);

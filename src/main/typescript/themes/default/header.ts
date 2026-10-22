@@ -67,6 +67,7 @@ export function createHeader(
         updated: panel.querySelector<HTMLSpanElement>('#updated')!
     };
     const navigation = panel.querySelector<HTMLElement>('.view-tabs')!;
+    navigation.querySelector<HTMLAnchorElement>('[data-view="server-settings"]')!.hidden = !user.isAdmin;
     const links = navigation.querySelectorAll<HTMLAnchorElement>('[data-view]');
     controls.username.textContent = user.username;
     let state: ThemeState;
@@ -149,12 +150,14 @@ export function createHeader(
             updateNotice.pending ||
             cpuMutations.length > 0 ||
             (craftingVisible && !!state.crafting.mutation) ||
-            (state.route.view === 'settings' && state.settings.saving);
+            (state.route.view === 'settings' && state.settings.saving) ||
+            (state.route.view === 'server-settings' && state.serverSettings.saving);
         const viewLoading =
             (state.route.view === 'cpus' && (state.cpus.reading || state.cpus.status === 'loading')) ||
             (craftingVisible && ['loading', 'calculating'].includes(state.crafting.status)) ||
             (state.route.view === 'history' && (state.history.reading || state.history.status === 'loading')) ||
-            (state.route.view === 'settings' && state.settings.status === 'loading');
+            (state.route.view === 'settings' && state.settings.status === 'loading') ||
+            (state.route.view === 'server-settings' && state.serverSettings.status === 'loading');
         const active =
             state.refreshingView || state.refreshing || state.gridStatus === 'loading' || viewLoading || actionPending;
         const stream = currentStream();
