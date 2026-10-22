@@ -85,7 +85,8 @@ export function mount(root: HTMLElement, application: ThemeApplication, context:
             metadata: (resource) => resourceMetadata(resource, 'span', locale)
         },
         mobile.beforeDialog,
-        lifetime
+        lifetime,
+        context.settings
     );
     lifetime.onCleanup(() => craftingView.dispose());
     const resourceTerminal = createResourceTerminal(root, application, {

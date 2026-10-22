@@ -1,5 +1,13 @@
 import type { PlanItem, ResourceDescription, StoredResource } from './api-types.js';
 import { plainMinecraftText } from './minecraft-text.js';
+export {
+    planExportLayout,
+    planExportFits,
+    planExportRatio,
+    readPlanExportSettings,
+    defaultPlanExportSettings,
+    smallerPlanExportLayout
+} from './plan-export-layout.js';
 
 type ResourceIdentity = Readonly<Pick<ResourceDescription, 'registryNamespace' | 'registryPath'>>;
 type SearchableResource = ResourceIdentity & Readonly<Pick<ResourceDescription, 'displayName'>>;
@@ -22,6 +30,7 @@ export type ResourceSortOptions = Readonly<{
 }>;
 export type ResourceSelectionOptions = ResourceFilterOptions & ResourceSortOptions;
 export type PlanResourceOptions = Readonly<{
+    groupByState?: boolean;
     search: string;
     language: string;
     sort: 'name' | 'quantity' | 'steps';
@@ -113,7 +122,7 @@ export function selectPlanResources<
         .sort((a, b) => {
             const groupA = planGroup(a.item);
             const groupB = planGroup(b.item);
-            if (groupA !== groupB) return groupA - groupB;
+            if (options.groupByState !== false && groupA !== groupB) return groupA - groupB;
             const names = a.name.localeCompare(b.name, options.language);
             let primary: number;
             if (options.sort === 'name') primary = names;

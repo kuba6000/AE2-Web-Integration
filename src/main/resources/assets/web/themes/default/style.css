@@ -204,6 +204,21 @@ header {
 .plan-start-controls {
     display: flex;
 }
+.plan-export-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-inline-end: auto;
+}
+.plan-export-button .theme-icon {
+    width: 18px;
+    height: 18px;
+}
+@media (width <= 600px) {
+    .plan-export-label {
+        display: none;
+    }
+}
 .plan-start-controls > button + button {
     margin-left: -2px;
     padding-inline: 10px;
@@ -402,11 +417,13 @@ header {
 .resource-grid.plan-four-metrics {
     --slot-height: 120px;
 }
-#workspace[data-resource-display='icons'] .resource-grid.cpu-items {
+#workspace[data-resource-display='icons'] .resource-grid.cpu-items,
+.plan-export-probe[data-resource-display='icons'] .resource-grid.cpu-items {
     --slot-height: 80px;
 }
 #workspace[data-resource-display='icons'] .resource-grid.cpu-items-tracked,
-#workspace[data-resource-display='icons'] .resource-grid.plan-four-metrics {
+#workspace[data-resource-display='icons'] .resource-grid.plan-four-metrics,
+.plan-export-probe[data-resource-display='icons'] .resource-grid.plan-four-metrics {
     --slot-height: 100px;
 }
 #workspace[data-resource-display='icons'] .cpu-item > strong {
@@ -3696,4 +3713,56 @@ button.toast:hover {
     flex: 0 0 18px;
     width: 18px;
     height: 18px;
+}
+
+/* Export geometry stays the same at every viewport size. */
+.plan-export-probe .resource-grid {
+    grid-template-columns: 240px;
+}
+.plan-export-probe.cpu-icons-enabled .cpu-item {
+    --resource-icon-size: 32px;
+
+    padding-left: 52px;
+}
+.plan-export-probe .item strong,
+.plan-export-probe .item.cpu-item .quantity {
+    font-size: 12px;
+}
+.plan-export-dialog {
+    width: min(760px, calc(100vw - 24px));
+    height: fit-content;
+    max-height: calc(100dvh - 24px);
+    overflow: auto;
+    box-sizing: border-box;
+}
+.plan-export-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+.plan-export-fields fieldset {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid var(--border);
+}
+.plan-export-fields label:not(.checkbox) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(70px, 1fr);
+    gap: 8px;
+    align-items: center;
+}
+.plan-export-fields input,
+.plan-export-fields select {
+    min-width: 0;
+    max-width: 100%;
+}
+.plan-export-readout {
+    overflow-wrap: anywhere;
+}
+@media (width <= 560px) {
+    .plan-export-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
