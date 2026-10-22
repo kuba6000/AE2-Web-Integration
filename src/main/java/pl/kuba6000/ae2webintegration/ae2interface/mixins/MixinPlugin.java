@@ -47,6 +47,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 "AE2.CraftingCPULogicMixin",
                 "AE2.ExecutingCraftingJobMixin",
                 "AE2.NetworkCraftingProvidersMixin",
+                "AE2.NetworkStorageMixin",
                 "AE2.ProviderStateMixin",
                 "AE2.implementations.AECraftingCPUClusterMixin",
                 "AE2.implementations.AECraftingJobMixin",
@@ -73,7 +74,8 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 Arrays.asList(
                     "advanced_ae.CraftingCPULogicMixin",
                     "advanced_ae.ExecutingCraftingJobMixin",
-                    "advanced_ae.AdvCraftingCPUMixin"));
+                    "advanced_ae.AdvCraftingCPUMixin",
+                    "advanced_ae.AdvCraftingCPUClusterMixin"));
         }
 
         return mixins;

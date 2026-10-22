@@ -8,17 +8,22 @@ import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+
 import appeng.api.networking.crafting.ICraftingCPU;
-import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
+import appeng.crafting.execution.CraftingCpuLogic;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPUNameIndex;
+import pl.kuba6000.ae2webintegration.ae2interface.accessors.IExecutingCraftingJobAccessor;
 import pl.kuba6000.ae2webintegration.ae2interface.implementations.AE;
 import pl.kuba6000.ae2webintegration.core.api.CpuSelectionMode;
+import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
 import pl.kuba6000.ae2webintegration.core.identity.StableKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGenericStack;
-import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
+import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPausableCraftingCPU;
 import pl.kuba6000.ae2webintegration.core.interfaces.IStackList;
 
@@ -28,6 +33,27 @@ public class AECraftingCPUClusterMixin implements IPausableCraftingCPU, ICraftin
 
     @Unique
     private @Nullable StableKey web$stableKey;
+
+    // The native config manager reports selection changes through the general persistence callback.
+    @Unique
+    private appeng.api.config.CpuSelectionMode web$selectionMode = appeng.api.config.CpuSelectionMode.ANY;
+
+    @WrapMethod(method = "markDirty")
+    private void web$metadataChanged(Operation<Void> original) {
+        original.call();
+        appeng.api.config.CpuSelectionMode selectionMode = ((CraftingCPUCluster) (Object) this).getSelectionMode();
+        if (web$selectionMode != selectionMode) {
+            web$selectionMode = selectionMode;
+            IAEMixinCallbacks.getInstance()
+                .cpuMetadataChanged(this);
+        }
+    }
+
+    @Override
+    public boolean web$isValidForGrid(@NotNull IAEGrid grid) {
+        CraftingCPUCluster cpu = (CraftingCPUCluster) (Object) this;
+        return !cpu.isDestroyed() && cpu.isActive() && cpu.getGrid() == (Object) grid;
+    }
 
     @Override
     public @NotNull StableKey web$getKey() {
@@ -118,23 +144,21 @@ public class AECraftingCPUClusterMixin implements IPausableCraftingCPU, ICraftin
     }
 
     @Override
-    public void web$getAllItems(IStackList list) {
-        ((CraftingCPUCluster) (Object) this).craftingLogic.getAllItems((KeyCounter) (Object) list);
-    }
-
-    @Override
-    public long web$getActiveItems(IAEKey key) {
-        return ((CraftingCPUCluster) (Object) this).craftingLogic.getWaitingFor((AEKey) key);
-    }
-
-    @Override
-    public long web$getPendingItems(IAEKey key) {
-        return ((CraftingCPUCluster) (Object) this).craftingLogic.getPendingOutputs((AEKey) key);
-    }
-
-    @Override
-    public long web$getStorageItems(IAEKey key) {
-        return ((CraftingCPUCluster) (Object) this).craftingLogic.getStored((AEKey) key);
+    public void web$getItemLists(@NotNull IStackList active, @NotNull IStackList pending, @NotNull IStackList stored) {
+        KeyCounter activeItems = (KeyCounter) (Object) active;
+        KeyCounter pendingItems = (KeyCounter) (Object) pending;
+        KeyCounter storedItems = (KeyCounter) (Object) stored;
+        CraftingCpuLogic logic = ((CraftingCPUCluster) (Object) this).craftingLogic;
+        IExecutingCraftingJobAccessor job = ((ICraftingCPULogicAccessor) logic).web$getJob();
+        if (job != null) activeItems.addAll(job.web$getWaitingFor().list);
+        storedItems.addAll(logic.getInventory().list);
+        logic.getAllItems(pendingItems);
+        // Native getAllItems is active + pending + stored; subtract the copied counters to isolate pending.
+        pendingItems.removeAll(activeItems);
+        pendingItems.removeAll(storedItems);
+        activeItems.removeZeros();
+        pendingItems.removeZeros();
+        storedItems.removeZeros();
     }
 
     @Override

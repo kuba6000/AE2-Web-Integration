@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.function.Consumer;
 
 import net.minecraft.ReportedException;
 import net.minecraft.client.Minecraft;
@@ -104,8 +105,8 @@ final class ModernIconRenderer implements IIconCapture<IconCandidate> {
         });
     }
 
-    private void capture(@NotNull StableKey key, @NotNull List<Capture> captures,
-        @NotNull java.util.function.Consumer<GuiGraphics> draw) throws RenderFailure {
+    private void capture(@NotNull StableKey key, @NotNull List<Capture> captures, @NotNull Consumer<GuiGraphics> draw)
+        throws RenderFailure {
         RenderSystem.assertOnRenderThread();
         // Export runs at the exclusive RenderFrame.Pre boundary, before ordinary GUI/world tessellation.
         ByteBufferBuilder immediate = Tesselator.getInstance().buffer;

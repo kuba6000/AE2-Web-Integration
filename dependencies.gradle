@@ -1,6 +1,14 @@
 dependencies {
     compileOnly(libs.jetbrains.annotations)
 
+    jarJar(implementation('org.xerial:sqlite-jdbc')) {
+        version {
+            strictly '[3.36.0.3,4.0)'
+            prefer '3.53.4.0'
+        }
+    }
+    additionalRuntimeClasspath 'org.xerial:sqlite-jdbc:3.53.4.0'
+
     // Core submodule (pure Java — no NeoForge/MC/AE2 references)
     implementation project(':core')
     // MC 1.21.1 dev runs load only this mod's classes dir; core must be on the run classpath
