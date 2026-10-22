@@ -12,6 +12,8 @@ import pl.kuba6000.ae2webintegration.core.WebPrincipal;
 /** One login's identity and lifetime, shared by requests and long-lived subscriptions. */
 public final class AuthSession {
 
+    static final int MAX_REMEMBERED_PER_ACCOUNT = 20;
+
     public static final long SESSION_MILLIS = TimeUnit.HOURS.toMillis(1);
     public static final long REMEMBERED_MILLIS = TimeUnit.DAYS.toMillis(7);
     public static final long SESSION_CAP_MILLIS = TimeUnit.HOURS.toMillis(12);

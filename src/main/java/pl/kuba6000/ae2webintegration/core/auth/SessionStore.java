@@ -11,7 +11,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -71,6 +73,7 @@ public final class SessionStore {
                 .fromJson(reader, Document.class);
             if (document == null || document.version() != 1 || document.sessions() == null)
                 throw new IllegalArgumentException("Invalid session file");
+            List<Entry> candidates = new ArrayList<>();
             for (Entry entry : document.sessions()) {
                 if (entry == null || entry.hash() == null
                     || !entry.hash()
@@ -79,10 +82,13 @@ public final class SessionStore {
                     || entry.credentialProof() == null
                     || !entry.credentialProof()
                         .matches("65536:[0-9a-f]{32}:[0-9a-f]{128}")
-                    || entry.expires() > entry.absolute()
-                    || entry.absolute() - now > AuthSession.REMEMBERED_CAP_MILLIS)
+                    || entry.expires() > entry.absolute())
                     throw new IllegalArgumentException("Invalid persisted session");
-                if (entry.expires() <= now) continue;
+                if (entry.expires() <= now || entry.absolute() - now > AuthSession.REMEMBERED_CAP_MILLIS) continue;
+                candidates.add(entry);
+            }
+            boolean limited = trimToAccountLimit(candidates);
+            for (Entry entry : candidates) {
                 WebPrincipal principal = entry.uuid() == null ? WebPrincipal.admin()
                     : WebPrincipal.forPlayer(new PlayerIdentity(entry.uuid(), entry.username()));
                 String credential = credentials.apply(principal);
@@ -99,6 +105,9 @@ public final class SessionStore {
                             credential,
                             entry.credentialProof())));
             }
+            dirty = restored.size() != document.sessions()
+                .size();
+            revocationPending |= limited;
         } catch (IOException | RuntimeException | GeneralSecurityException failure) {
             File backup = new File(file + ".bad");
             if (backup.exists()) backup = new File(file + ".bad." + UUID.randomUUID());
@@ -111,6 +120,20 @@ public final class SessionStore {
             throw new IOException("Could not read remembered sessions; backup: " + backup, failure);
         }
         for (Map.Entry<String, AuthSession> entry : restored) sessions.put(entry.getKey(), entry.getValue());
+    }
+
+    /** Bound both restore work and snapshots that span concurrent login/eviction mutations. */
+    private static boolean trimToAccountLimit(@NotNull List<Entry> entries) {
+        entries.sort(
+            Comparator.comparingLong(Entry::absolute)
+                .reversed());
+        Map<UUID, Integer> counts = new HashMap<>();
+        return entries.removeIf(entry -> {
+            int count = counts.getOrDefault(entry.uuid(), 0);
+            if (count >= AuthSession.MAX_REMEMBERED_PER_ACCOUNT) return true;
+            counts.put(entry.uuid(), count + 1);
+            return false;
+        });
     }
 
     public synchronized void save(long now) throws IOException {
@@ -132,6 +155,7 @@ public final class SessionStore {
                     session.absoluteExpiresAtMillis(),
                     session.credentialProof()));
         }
+        trimToAccountLimit(entries);
         GSONUtils.writeAtomically(file, new Document(1, entries));
         if (Files.getFileStore(file.toPath())
             .supportsFileAttributeView("posix")) {

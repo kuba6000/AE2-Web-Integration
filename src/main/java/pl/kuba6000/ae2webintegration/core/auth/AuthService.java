@@ -3,6 +3,8 @@ package pl.kuba6000.ae2webintegration.core.auth;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -218,15 +220,51 @@ public final class AuthService {
         String token = PasswordHelper.generateToken(SESSION_TOKEN_LENGTH);
         AuthSession session = AuthSession.create(principal, rememberMe, System.currentTimeMillis(), credential);
         SessionStore store;
+        boolean evicted;
         synchronized (authenticationStateLock) {
             if (!AE2Controller.isCurrentHTTPLifecycle(generation))
                 return LoginResult.failure(ApiStatus.SERVER_STOPPING);
             if (!credential.equals(credentialFor(principal))) return LoginResult.failure(ApiStatus.INVALID_PASSWORD);
+            evicted = rememberMe && evictOldestRemembered(principal);
             sessions.put(SessionStore.hashToken(token), session);
             store = sessionStore;
         }
-        if (rememberMe && store != null) saveSessions(store);
+        if (rememberMe && store != null) {
+            if (evicted) {
+                try {
+                    store.saveRevocation(System.currentTimeMillis());
+                } catch (IOException failure) {
+                    session.invalidate();
+                    sessions.remove(SessionStore.hashToken(token), session);
+                    LOG.warn("Could not persist remembered-session eviction", failure);
+                    return LoginResult.failure(ApiStatus.INTERNAL_ERROR);
+                }
+            } else saveSessions(store);
+        }
         return new LoginResult(ApiStatus.OK, token, principal);
+    }
+
+    /** Called inside the admission lock; fixed absolute lifetimes also order remembered logins by age. */
+    private static boolean evictOldestRemembered(@NotNull WebPrincipal principal) {
+        List<Map.Entry<String, AuthSession>> remembered = new ArrayList<>();
+        for (Map.Entry<String, AuthSession> entry : sessions.entrySet()) {
+            AuthSession existing = entry.getValue();
+            if (existing.persistent() && existing.principal()
+                .equals(principal)) remembered.add(entry);
+        }
+        int excess = remembered.size() - AuthSession.MAX_REMEMBERED_PER_ACCOUNT + 1;
+        if (excess <= 0) return false;
+        remembered.sort(
+            Comparator.comparingLong(
+                entry -> entry.getValue()
+                    .absoluteExpiresAtMillis()));
+        for (int i = 0; i < excess; i++) {
+            Map.Entry<String, AuthSession> oldest = remembered.get(i);
+            oldest.getValue()
+                .invalidate();
+            sessions.remove(oldest.getKey(), oldest.getValue());
+        }
+        return true;
     }
 
     /** The online-player lookup runs on the game thread; password hashing runs on the caller's HTTP thread. */
@@ -318,7 +356,7 @@ public final class AuthService {
             .forEach(AuthSession::invalidate);
     }
 
-    /** Validity checks are read-only: only actual client requests renew idle expiry. */
+    /** Checks may revoke changed credentials; only actual client requests renew idle expiry. */
     public static boolean isValid(@NotNull AuthSession session, long now) {
         if (!session.isValid(now)) return false;
         String credential = session.credential();

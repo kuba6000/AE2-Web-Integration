@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.Reader;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.HttpURLConnection;
@@ -26,7 +27,9 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
@@ -59,6 +62,7 @@ import pl.kuba6000.ae2webintegration.core.api.IServerPlatform;
 import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.api.ServerCapability;
 import pl.kuba6000.ae2webintegration.core.auth.AuthService;
+import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.commands.CommandProcessor;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 import pl.kuba6000.ae2webintegration.core.config.ConfigTestFixture;
@@ -222,6 +226,91 @@ class ServerLifecycleHttpTest {
         AE2Controller.serverPlatform = previousServerPlatform;
         config.close();
         worlds.close();
+    }
+
+    @Test
+    void rememberedLoginLimitRevokesOldestWithoutAffectingOtherAccountsOrOrdinarySessions() throws Exception {
+        CoreDataTestFixture.reset();
+        try {
+            config.set("general.public_mode", true);
+            PlayerIdentity player = new PlayerIdentity(UUID.randomUUID(), "SessionPlayer");
+            CoreData.setPassword(player, PasswordHelper.generateStrongPasswordHash("player-password"));
+            startApi();
+            String ordinary = login();
+            String playerToken = rememberedLogin("SessionPlayer", "player-password", ordinary);
+            String oldest = rememberedLogin("admin", "lifecycle-password", ordinary);
+            TestGridFixtures.TestExchange retainedRequest = new TestGridFixtures.TestExchange(null);
+            retainedRequest.getRequestHeaders()
+                .set("Authorization", "Bearer " + oldest);
+            AE2Controller.RequestContext retainedContext = AuthService.authenticate(retainedRequest);
+            assertNotNull(retainedContext);
+            AuthSession retained = retainedContext.getSession();
+            assertNotNull(retained);
+            for (int i = 0; i < 19; i++) rememberedLogin("admin", "lifecycle-password", ordinary);
+            String laterOrdinary = login();
+            assertTrue(retained.isValid(System.currentTimeMillis()));
+            assertEquals(200, get("/api/themes", oldest).status());
+            String newest = rememberedLogin("admin", "lifecycle-password", ordinary);
+            assertFalse(
+                retained.isValid(System.currentTimeMillis()),
+                "live subscriptions must see eviction immediately");
+            assertEquals(401, get("/api/themes", oldest).status());
+            assertEquals(200, get("/api/themes", newest).status());
+            assertEquals(200, get("/api/themes", ordinary).status());
+            assertEquals(200, get("/api/themes", laterOrdinary).status());
+            assertEquals(200, get("/api/themes", playerToken).status());
+            try (Reader reader = Files.newBufferedReader(
+                Config.getConfigFile("sessions.json")
+                    .toPath(),
+                StandardCharsets.UTF_8)) {
+                assertEquals(
+                    21,
+                    new Gson().fromJson(reader, JsonObject.class)
+                        .getAsJsonArray("sessions")
+                        .size());
+            }
+            CoreEngine.onServerStopped();
+            startApi();
+            assertEquals(401, get("/api/themes", oldest).status());
+            assertEquals(200, get("/api/themes", newest).status());
+            assertEquals(200, get("/api/themes", playerToken).status());
+        } finally {
+            CoreDataTestFixture.reset();
+        }
+    }
+
+    @Test
+    void concurrentRememberedLoginsKeepOnlyTwentyUsableTokensAfterRestart() throws Exception {
+        startApi();
+        String ordinary = login();
+        ExecutorService clients = Executors.newFixedThreadPool(6);
+        List<String> tokens = new ArrayList<>();
+        try {
+            List<Future<String>> logins = new ArrayList<>();
+            for (int i = 0; i < 24; i++)
+                logins.add(clients.submit(() -> rememberedLogin("admin", "lifecycle-password", ordinary)));
+            for (Future<String> login : logins) tokens.add(login.get(30, TimeUnit.SECONDS));
+        } finally {
+            clients.shutdownNow();
+        }
+        int live = 0;
+        for (String token : tokens) if (get("/api/themes", token).status() == 200) live++;
+        assertEquals(20, live);
+        try (Reader reader = Files.newBufferedReader(
+            Config.getConfigFile("sessions.json")
+                .toPath(),
+            StandardCharsets.UTF_8)) {
+            assertEquals(
+                20,
+                new Gson().fromJson(reader, JsonObject.class)
+                    .getAsJsonArray("sessions")
+                    .size());
+        }
+        CoreEngine.onServerStopped();
+        startApi();
+        int restored = 0;
+        for (String token : tokens) if (get("/api/themes", token).status() == 200) restored++;
+        assertEquals(20, restored);
     }
 
     @Test
@@ -1699,6 +1788,19 @@ class ServerLifecycleHttpTest {
 
     private String login() throws IOException {
         return login("admin", "lifecycle-password");
+    }
+
+    private String rememberedLogin(String username, String password, String authenticatedToken) throws IOException {
+        JsonObject body = new JsonObject();
+        body.addProperty("username", username);
+        body.addProperty("password", password);
+        body.addProperty("rememberMe", true);
+        Response response = read(jsonPost("/api/auth/login", authenticatedToken, body.toString()));
+        assertEquals(200, response.status());
+        return new Gson().fromJson(response.body(), JsonObject.class)
+            .getAsJsonObject("data")
+            .get("token")
+            .getAsString();
     }
 
     private static void fillServerThreadQueue() {

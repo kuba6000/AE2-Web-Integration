@@ -113,6 +113,7 @@ Player passwords are stored as salted PBKDF2-HMAC-SHA1 hashes. Sessions expire a
 and can be extended by use for up to twelve hours from login. **Remember me** survives server restarts,
 expires after seven days without activity and can be extended for up to sixty days from login. Watching a
 live terminal or CPU counts as activity. Changing the password revokes existing sessions.
+Each account can keep twenty remembered sessions; another remembered login signs out the oldest one.
 
 ### Public mode disabled
 
