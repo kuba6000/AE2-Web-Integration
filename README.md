@@ -272,9 +272,8 @@ Create a Discord webhook and set its URL as `discord.webhook` in the AE2 Web Int
 
 Crafting notifications include a dark image card with the result, network name, CPU, duration and requesters.
 Install an icon pack to include item icons. Set `discord.generate_image = false` for text-only embeds.
-By default, generated images are standalone attachments with only the configured role mention in the
-message content. Set `discord.image_in_embed = true` to put the image in a text embed instead.
-If rendering fails, a text embed is sent instead.
+Set `discord.image_in_embed = false` to send generated images as standalone attachments with only the
+configured role mention in the message content. If rendering fails, a text embed is sent instead.
 
 #### NTFY Integration
 

@@ -83,8 +83,7 @@ class DiscordNotificationTest {
     }
 
     @Test
-    void craftingNotificationUploadsADecodablePngWithoutAnEmbedByDefault() throws Exception {
-        Config.INSTANCE.discord.roleId = "123456789";
+    void craftingNotificationUploadsADecodablePngReferencedByTheEmbed() throws Exception {
         new DiscordDestination().sendNotification(crafting("Powered Rail", false));
         Upload upload = upload();
         assertTrue(upload.contentType.startsWith("multipart/form-data; boundary="), upload.contentType);
@@ -95,10 +94,13 @@ class DiscordNotificationTest {
         int jsonStart = body.indexOf("\r\n\r\n") + 4;
         String jsonText = body.substring(jsonStart, body.indexOf("\r\n--" + boundary, jsonStart));
         JsonObject payload = parse(jsonText.getBytes(StandardCharsets.ISO_8859_1));
-        assertFalse(payload.has("embeds"));
+        JsonObject embed = payload.getAsJsonArray("embeds")
+            .get(0)
+            .getAsJsonObject();
         assertEquals(
-            "<@&123456789>",
-            payload.get("content")
+            "attachment://crafting.png",
+            embed.getAsJsonObject("image")
+                .get("url")
                 .getAsString());
         JsonObject attachment = payload.getAsJsonArray("attachments")
             .get(0)
@@ -111,6 +113,14 @@ class DiscordNotificationTest {
             "crafting.png",
             attachment.get("filename")
                 .getAsString());
+        assertTrue(
+            embed.get("title")
+                .getAsString()
+                .contains("Factory \"A\" – Łódź"));
+        assertTrue(
+            embed.get("description")
+                .getAsString()
+                .contains("Powered Rail"));
         int imageStart = body.indexOf("\r\n\r\n", body.indexOf("name=\"files[0]\"")) + 4;
         int imageEnd = body.indexOf("\r\n--" + boundary, imageStart);
         BufferedImage image = ImageIO.read(new ByteArrayInputStream(upload.body, imageStart, imageEnd - imageStart));
@@ -166,11 +176,6 @@ class DiscordNotificationTest {
                 .get(0)
                 .getAsJsonObject();
             assertEquals(generateImage, embed.has("image"));
-            if (generateImage) assertEquals(
-                "attachment://crafting.png",
-                embed.getAsJsonObject("image")
-                    .get("url")
-                    .getAsString());
             assertTrue(
                 embed.get("description")
                     .getAsString()
