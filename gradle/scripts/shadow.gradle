@@ -15,6 +15,7 @@ dependencies {
 
 tasks.named('shadowJar').configure {
     dependsOn(':core:jar')
+    from(tasks.named('jarJar'))
     archiveClassifier = ''
     configurations = [project.configurations.coreShadow]
 

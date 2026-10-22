@@ -33,25 +33,27 @@ public final class NativeItemIdentity {
 
     private NativeItemIdentity() {}
 
-    public static @NotNull StableKey getKey(@NotNull AEKey key) {
+    public static @Nullable StableKey getKey(@NotNull AEKey key) {
         return getKey(key, registries());
     }
 
     /** Uses the owning world's registries for the same codec on clients and servers. */
-    public static @NotNull StableKey getKey(@NotNull AEKey key, @NotNull HolderLookup.Provider registries) {
+    public static @Nullable StableKey getKey(@NotNull AEKey key, @NotNull HolderLookup.Provider registries) {
         if (key instanceof AEItemKey item) {
-            checkPersistent(
+            if (!isPersistent(
                 item.getReadOnlyStack()
-                    .getComponentsPatch());
+                    .getComponentsPatch()))
+                return null;
         } else if (key instanceof AEFluidKey fluid) {
             // FluidStack copies its component map shallowly; component values are immutable.
-            checkPersistent(
+            if (!isPersistent(
                 fluid.toStack(1)
-                    .getComponentsPatch());
+                    .getComponentsPatch()))
+                return null;
         }
         CompoundTag tag = key.toTagGeneric(registries);
         // The native codec allocates its tag first. Bounds cover only the subsequent traversal.
-        return StableKey.create(sink -> {
+        return StableKey.createOptional(sink -> {
             StableKey.writeText(sink, kind(key));
             StableKey.writeText(
                 sink,
@@ -59,13 +61,13 @@ public final class NativeItemIdentity {
                     .toString());
             sink.putInt(0);
             sink.putByte((byte) 1);
-            CanonicalNbt.write(tag, sink);
+            return CanonicalNbt.write(tag, sink);
         });
     }
 
     /** Encodes the native item directly without creating an AE key or copying its stack. */
-    public static @NotNull StableKey getKey(@NotNull ItemStack stack, @NotNull HolderLookup.Provider registries) {
-        if (stack.isEmpty()) throw new IllegalArgumentException("Empty item has no identity");
+    public static @Nullable StableKey getKey(@NotNull ItemStack stack, @NotNull HolderLookup.Provider registries) {
+        if (stack.isEmpty()) return null;
         CustomData original = stack.is(AEItems.MISSING_CONTENT.asItem())
             ? stack.get(AEComponents.MISSING_CONTENT_AEKEY_DATA)
             : null;
@@ -82,8 +84,8 @@ public final class NativeItemIdentity {
     }
 
     /** Encodes the native fluid directly without creating an AE key or copying its stack. */
-    public static @NotNull StableKey getKey(@NotNull FluidStack stack, @NotNull HolderLookup.Provider registries) {
-        if (stack.isEmpty()) throw new IllegalArgumentException("Empty fluid has no identity");
+    public static @Nullable StableKey getKey(@NotNull FluidStack stack, @NotNull HolderLookup.Provider registries) {
+        if (stack.isEmpty()) return null;
         return getKey(
             "fluid",
             BuiltInRegistries.FLUID.getKey(stack.getFluid())
@@ -96,19 +98,19 @@ public final class NativeItemIdentity {
             null);
     }
 
-    private static @NotNull StableKey getKey(@NotNull String kind, @NotNull String id, @NotNull String type,
+    private static @Nullable StableKey getKey(@NotNull String kind, @NotNull String id, @NotNull String type,
         @NotNull DataComponentPatch patch, @NotNull HolderLookup.Provider registries, @Nullable CompoundTag original) {
-        checkPersistent(patch);
+        if (!isPersistent(patch)) return null;
         // Keep native component codecs; only their patch output needs a materialized tag.
         Tag components = patch.isEmpty() ? null
             : DataComponentPatch.CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), patch)
                 .getOrThrow();
-        return StableKey.create(sink -> {
+        return StableKey.createOptional(sink -> {
             StableKey.writeText(sink, kind);
             StableKey.writeText(sink, id);
             sink.putInt(0);
             sink.putByte((byte) 1);
-            CanonicalNbt.writeResource(type, id, components, original, sink);
+            return CanonicalNbt.writeResource(type, id, components, original, sink);
         });
     }
 
@@ -129,13 +131,14 @@ public final class NativeItemIdentity {
         return copy;
     }
 
-    private static void checkPersistent(@NotNull DataComponentPatch patch) {
+    private static boolean isPersistent(@NotNull DataComponentPatch patch) {
         for (Map.Entry<DataComponentType<?>, Optional<?>> entry : patch.entrySet()) {
             if (entry.getKey()
                 .isTransient()) {
-                throw new UnsupportedOperationException("Transient component cannot be serialized as native identity");
+                return false;
             }
         }
+        return true;
     }
 
     private static @NotNull HolderLookup.Provider registries() {
