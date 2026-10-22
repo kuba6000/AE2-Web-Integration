@@ -42,13 +42,14 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
         return node;
     };
     function help(target: HTMLElement, key: string) {
-        const button = element('button', '', 'server-setting-help');
-        button.type = 'button';
-        button.innerHTML = infoCircle;
-        button.setAttribute('aria-label', key);
-        labels.push({ node: button, key });
-        tooltips.bind(button, () => [element('span', locale.t(key))]);
-        target.append(button);
+        const icon = element('span', '', 'server-setting-help');
+        icon.tabIndex = 0;
+        icon.role = 'img';
+        icon.innerHTML = infoCircle;
+        icon.setAttribute('aria-label', key);
+        labels.push({ node: icon, key });
+        tooltips.bind(icon, () => [element('span', locale.t(key))]);
+        target.append(icon);
     }
     function group(key: string, description?: string) {
         const group = element('section', '', 'server-settings-group');
@@ -235,7 +236,7 @@ export function createServerSettingsView(root: HTMLElement, application: ThemeAp
             title.textContent = locale.common('serverSettings');
             intro.textContent = locale.t('serverSettingsIntro');
             for (const { node, key } of labels) {
-                if (node.tagName === 'BUTTON') node.setAttribute('aria-label', locale.t(key));
+                if (node.hasAttribute('aria-label')) node.setAttribute('aria-label', locale.t(key));
                 else node.textContent = locale.t(key);
             }
             form.hidden = !config.draft;

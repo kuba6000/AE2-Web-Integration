@@ -2829,11 +2829,15 @@ code {
     position: absolute;
     top: 0;
     right: 0;
-    padding: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 24px;
     height: 24px;
+    cursor: help;
 }
-.server-setting-help .theme-icon {
+.server-setting-help .info-icon {
+    flex: 0 0 16px;
     width: 16px;
     height: 16px;
 }
