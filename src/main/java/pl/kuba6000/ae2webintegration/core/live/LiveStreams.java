@@ -22,6 +22,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import pl.kuba6000.ae2webintegration.core.AE2Controller.RequestContext;
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.grid.GridAccess;
 import pl.kuba6000.ae2webintegration.core.http.ApiResponse;
 import pl.kuba6000.ae2webintegration.core.http.ApiStatus;
@@ -195,7 +196,7 @@ public final class LiveStreams implements AutoCloseable {
         LiveSubscription subscription = session.subscription;
         if (subscription.end != null) return;
         if (!session.context.isLifecycleUnchanged()) subscription.end = "invalidate";
-        else if (!subscription.session.isValid(System.currentTimeMillis())) subscription.end = "revoked";
+        else if (!AuthService.isValid(subscription.session, System.currentTimeMillis())) subscription.end = "revoked";
         else {
             IAEGrid grid = identities.getGrid(
                 subscription.topic.key()

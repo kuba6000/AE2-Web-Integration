@@ -11,6 +11,7 @@ import java.util.function.Supplier;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import pl.kuba6000.ae2webintegration.core.auth.AuthService;
 import pl.kuba6000.ae2webintegration.core.auth.AuthSession;
 import pl.kuba6000.ae2webintegration.core.config.Config;
 
@@ -64,7 +65,7 @@ public final class LiveHub {
     public synchronized @Nullable LiveSubscription reserve(@NotNull LiveTopic.Key key, @Nullable AuthSession session,
         boolean icons, @Nullable String packId, @Nullable String replace, long now) {
         expire(now);
-        if (session == null || !session.isValid(now)) return null;
+        if (session == null || !AuthService.isValid(session, now)) return null;
         LiveTopic topic = topics.get(key);
         if (closed || topic == null || !topic.initialized()) return null;
         LiveSubscription previous = subscriptions.get(replace);
@@ -165,7 +166,7 @@ public final class LiveHub {
 
     public synchronized void expire(long now) {
         for (LiveSubscription subscription : subscriptions.values()) {
-            if (!subscription.session.isValid(now)) subscription.end("revoked");
+            if (!AuthService.isValid(subscription.session, now)) subscription.end("revoked");
             else if (subscription.attached && subscription.expires <= now) subscription.end("reset");
         }
         Iterator<LiveSubscription> expired = subscriptions.values()

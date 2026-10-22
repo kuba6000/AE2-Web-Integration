@@ -156,6 +156,9 @@ test {
         filter {
             includeTestsMatching '*ApiRoutingHttpTest'
             includeTestsMatching '*ServerLifecycleHttpTest'
+            includeTestsMatching '*AuthSessionTest'
+            includeTestsMatching '*SessionStoreTest'
+            includeTestsMatching '*CoreDataTest'
             includeTestsMatching '*IconDeliveryHttpTest'
             includeTestsMatching '*RequestCompletionTest'
             includeTestsMatching '*IconPackTest'
