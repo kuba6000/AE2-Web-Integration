@@ -34,7 +34,10 @@ async function png(page, dialog) {
             if (values[i] === 255 && values[i + 1] === 0 && values[i + 2] === 0 && values[i + 3] === 255) red++;
             if (values[i] === 0 && values[i + 1] === 255 && values[i + 2] === 0 && values[i + 3] === 255) green++;
         }
-        return { width: canvas.width, height: canvas.height, cornerAlpha: values[3], opaque, red, green };
+        const pixelHash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', values))]
+            .map((value) => value.toString(16).padStart(2, '0'))
+            .join('');
+        return { width: canvas.width, height: canvas.height, cornerAlpha: values[3], opaque, red, green, pixelHash };
     }, bytes.toString('base64'));
     return { bytes, pixels, download };
 }
@@ -68,6 +71,49 @@ test('PNG export stays left-aligned below the grid on the same row as Start on d
     await png(page, dialog);
 });
 
+test('the same export settings produce identical pixels across desktop, mobile and display density', async (t) => {
+    const rendered = [];
+    for (const [width, deviceScaleFactor] of [
+        [1280, 1],
+        [390, 2],
+        [1920, 1]
+    ]) {
+        const { page, options, base } = await fixture(
+            t,
+            '',
+            { viewport: { width, height: 900 }, deviceScaleFactor },
+            { mockClock: false }
+        );
+        await atlasFixture(page, options);
+        options.capabilities.craftingPlanSteps = true;
+        options.plan = {
+            ...readyPlan,
+            plan: Array.from({ length: 6 }, (_, i) => ({
+                ...readyPlan.plan[0],
+                displayName: `Resource ${i}`,
+                missing: 1,
+                stored: 10,
+                requested: 2,
+                steps: 3,
+                usedPercent: 0.25,
+                icon: { page: 0, x: (i % 2) * 64, y: 0 }
+            }))
+        };
+        const dialog = await openExport(page, base);
+        await dialog.getByRole('combobox', { name: 'Layout', exact: true }).selectOption('columns');
+        await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).fill('2');
+        const detailed = (await png(page, dialog)).pixels;
+        assert.deepEqual([detailed.width, detailed.height], [360, 392]);
+        assert.equal(detailed.red, 3 * 32 * 32, 'three unscaled 32px resource icons');
+        await dialog.getByRole('checkbox', { name: 'Name', exact: true }).uncheck();
+        const compact = (await png(page, dialog)).pixels;
+        assert.deepEqual([compact.width, compact.height], [360, 332]);
+        rendered.push([detailed.pixelHash, compact.pixelHash]);
+    }
+    assert.deepEqual(rendered[1], rendered[0]);
+    assert.deepEqual(rendered[2], rendered[0]);
+});
+
 test('plan PNG exports every row independently of search, without icons, and remembers settings', async (t) => {
     const { page, options, base } = await fixture(t, '', {}, { mockClock: false });
     options.plan = {
@@ -78,10 +124,7 @@ test('plan PNG exports every row independently of search, without icons, and rem
     assert.ok(await dialog.getByRole('checkbox', { name: 'Icons', exact: true }).isDisabled());
     await dialog.getByRole('combobox', { name: 'Layout', exact: true }).selectOption('columns');
     await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).fill('3');
-    const tileWidth = await page
-        .locator('.crafting-plan .item')
-        .first()
-        .evaluate((node) => Math.round(node.getBoundingClientRect().width));
+    const tileWidth = 180;
     await dialog.getByRole('combobox', { name: 'Background', exact: true }).selectOption('transparent');
     const { pixels, bytes, download } = await png(page, dialog);
     assert.equal(pixels.width, tileWidth * 3);
@@ -109,11 +152,7 @@ test('plan PNG exports every row independently of search, without icons, and rem
     await dialog.getByRole('combobox', { name: 'Scale', exact: true }).selectOption('0.5');
     assert.equal(await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).inputValue(), '3');
     const smaller = await png(page, dialog);
-    const mobileWidth = await page
-        .locator('.crafting-plan .item')
-        .first()
-        .evaluate((node) => Math.round(node.getBoundingClientRect().width));
-    assert.equal(smaller.pixels.width, Math.round(mobileWidth * 0.5) * 3);
+    assert.equal(smaller.pixels.width, 270);
     assert.equal(smaller.pixels.height, 166);
 });
 
@@ -211,10 +250,7 @@ test('PNG uses authenticated atlas crops and falls back without changing grid po
     const dialog = await openExport(page, base);
     await dialog.getByRole('combobox', { name: 'Scale', exact: true }).selectOption('2');
     // Simulate a browser rejecting large canvas allocation through the platform API.
-    const tileWidth = await page
-        .locator('.crafting-plan .item')
-        .first()
-        .evaluate((node) => Math.round(node.getBoundingClientRect().width));
+    const tileWidth = 180;
     await page.evaluate((limit) => {
         const getContext = HTMLCanvasElement.prototype.getContext;
         HTMLCanvasElement.prototype.getContext = function (...args) {
@@ -240,10 +276,7 @@ test('restoring a saved ratio chooses columns once rather than changing them beh
     await dialog.getByRole('spinbutton', { name: 'Columns', exact: true }).fill('2');
     await dialog.getByRole('combobox', { name: 'Scale', exact: true }).selectOption('2');
     const original = await png(page, dialog);
-    const tileWidth = await page
-        .locator('.crafting-plan .item')
-        .first()
-        .evaluate((node) => Math.round(node.getBoundingClientRect().width));
+    const tileWidth = 180;
     assert.deepEqual([original.pixels.width, original.pixels.height], [tileWidth * 4, 464]);
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByRole('button', { name: 'Export PNG', exact: true }).click();

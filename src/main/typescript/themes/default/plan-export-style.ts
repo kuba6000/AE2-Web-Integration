@@ -9,8 +9,6 @@ export function planExportStyle(
 ): PlanExportStyle {
     const computed = getComputedStyle(root);
     const value = (name: string) => computed.getPropertyValue(name).trim();
-    const sourceGrid = document.querySelector('.crafting-plan .resource-grid')!;
-    const width = Math.round(Number.parseFloat(getComputedStyle(sourceGrid).gridTemplateColumns));
     const probeRoot = element('div', '', `plan-export-probe ${icons ? 'cpu-icons-enabled' : ''}`);
     probeRoot.dataset.resourceDisplay = settings.name ? 'detailed' : 'icons';
     probeRoot.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;left:-10000px;top:0';
@@ -24,7 +22,6 @@ export function planExportStyle(
         maxMetrics = Math.max(maxMetrics, count);
     }
     grid.classList.toggle('plan-four-metrics', maxMetrics > 3);
-    grid.style.gridTemplateColumns = `${width}px`;
     const li = element('li');
     const probe = element('button', '', 'item cpu-item slot-frame');
     const name = element('strong', 'Name');
@@ -42,7 +39,12 @@ export function planExportStyle(
     document.body.append(probeRoot);
     const cell = getComputedStyle(probe),
         metricStyle = getComputedStyle(metric);
-    const geometry = { width, height: Number.parseFloat(getComputedStyle(grid).gridAutoRows), headerHeight: 32 };
+    const gridStyle = getComputedStyle(grid);
+    const geometry = {
+        width: Number.parseFloat(gridStyle.gridTemplateColumns),
+        height: Number.parseFloat(gridStyle.gridAutoRows),
+        headerHeight: 32
+    };
     const tints = { missing: '', pending: '', stored: '' };
     for (const state of ['missing', 'pending', 'stored'] as const) {
         probe.dataset.crafting = state;

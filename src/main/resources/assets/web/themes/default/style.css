@@ -3715,6 +3715,19 @@ button.toast:hover {
     height: 18px;
 }
 
+/* Export geometry stays the same at every viewport size. */
+.plan-export-probe .resource-grid {
+    grid-template-columns: 180px;
+}
+.plan-export-probe.cpu-icons-enabled .cpu-item {
+    --resource-icon-size: 32px;
+
+    padding-left: 52px;
+}
+.plan-export-probe .item strong,
+.plan-export-probe .item.cpu-item .quantity {
+    font-size: 12px;
+}
 .plan-export-dialog {
     width: min(760px, calc(100vw - 24px));
     height: fit-content;
