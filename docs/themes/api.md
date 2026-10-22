@@ -142,7 +142,7 @@ Available through `context.helpers`:
 Resource filtering options are `search`, `language`, `filter` (`all`, `stored`, `craftable`),
 `showItems` and `showFluids`. Ordering options are `language`, `sort` (`name`, `quantity`, `id`) and
 `sortOrder` (`ascending`, `descending`). Plan options use `search`, `language`, `sort`
-(`name`, `quantity`, `steps`) and `sortOrder`.
+(`name`, `quantity`, `steps`) and `sortOrder`. Set `groupByState: false` to sort a plan without state groups.
 
 Array helpers accept readonly inputs, return new arrays and preserve resource object references and
 additional theme fields. They do not mutate application state and can be used independently.
@@ -171,6 +171,37 @@ cleanup. The paint callback receives the target element and `IconSprite | null`;
 coordinates and image URL, while the theme chooses CSS/layout and its missing-icon appearance.
 Do not persist temporary blob URLs. Explicit `dispose()` permits early release; mount cleanup also
 releases observers. Call `displayIcons(false)` if your theme never renders resource icons.
+
+For canvas rendering, `application.icons.resolve(references, metadata, signal)` loads drawable atlas
+crops. The returned `icons` map uses the supplied reference objects as keys; unavailable or invalid
+icons are omitted. Each value supplies `image`, `x`, `y`, `width` and `height` for `drawImage`.
+Decoded images contain only the requested sprite crops, rather than retaining whole atlas pages.
+Call the result's `dispose()` after drawing. Its images remain valid independently of normal icon
+cache eviction; theme disposal also releases them. Aborting rejects the pending resolution.
+
+## Crafting plan PNG export
+
+`application.exportPlan(request, signal)` downloads one PNG and returns its actual `PlanExportLayout`.
+Pass the loaded plan, icon metadata, `PlanExportSettings`, grid choice, language, translated title and
+metric labels, a quantity formatter, and `PlanExportStyle` (rectangular cell geometry, font/spacing
+metrics, palette, state tints and bevel colours).
+The theme owns the controls and appearance. The export ignores the plan view's search and uses the
+request's ordering and optional missing-only filter. It does not submit or modify the crafting plan.
+An abort signal cancels the operation; unmounting the theme also cancels it.
+
+`context.helpers` supplies `defaultPlanExportSettings`, `readPlanExportSettings(get)`,
+`planExportLayout(count, settings, grid, geometry)`, `planExportRatio(width, height)`, `planExportFits(layout)` and
+`smallerPlanExportLayout(layout, geometry)` for controls and size previews. Geometry supplies unscaled
+cell width, cell height and header height. Layout is `null` for an
+empty selection or invalid grid dimensions. Use `readPlanExportSettings(key => context.settings.get(key))`
+to validate persisted `planExport.*` values independently. Store the chosen ratio, not row/column counts,
+to reuse it with differently sized plans.
+
+Exports have a 64-megapixel allocation budget and a 16384-pixel side limit. Smaller browser limits are
+probed at runtime. If needed, the whole grid is scaled down while the chosen rows and columns stay
+fixed; the returned layout reports the resulting resolution. Cells touch and unused final-row cells
+are framed like the rest of the grid. Missing icons are optional. Catch failures and display a
+translated error in the theme.
 
 ## Theme selection and package assets
 

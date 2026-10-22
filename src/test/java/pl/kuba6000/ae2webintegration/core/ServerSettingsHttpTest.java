@@ -67,6 +67,35 @@ class ServerSettingsHttpTest {
     }
 
     @Test
+    void settingsSavePreservesOrdinaryAndRememberedAdminAndPlayerSessions() throws Exception {
+        CoreData.setPassword(
+            new PlayerIdentity(UUID.randomUUID(), "SettingsPlayer"),
+            PasswordHelper.generateStrongPasswordHash("player-password"));
+        String[] sessions = new String[4];
+        for (int i = 0; i < sessions.length; i++) {
+            JsonObject login = new JsonObject();
+            boolean admin = i < 2;
+            login.addProperty("username", admin ? "admin" : "SettingsPlayer");
+            login.addProperty("password", admin ? "test-password" : "player-password");
+            login.addProperty("rememberMe", i % 2 == 1);
+            sessions[i] = request("POST", "/api/auth/login", token, login.toString(), 200).getAsJsonObject("data")
+                .get("token")
+                .getAsString();
+            request("GET", "/api/themes", sessions[i], null, 200);
+        }
+        config.write("general.password", "pending-password");
+        config.write("general.public_mode", false);
+        JsonObject edit = readSettings();
+        edit.getAsJsonObject("settings")
+            .getAsJsonObject("notifications")
+            .addProperty("minimumCraftingAmount", 123);
+        request("POST", "/api/server/settings", token, edit.toString(), 200);
+        for (String session : sessions) request("GET", "/api/themes", session, null, 200);
+        assertEquals("test-password", Config.INSTANCE.general.password);
+        assertTrue(Config.INSTANCE.general.publicMode);
+    }
+
+    @Test
     void unrelatedSettingsSaveDoesNotResetLoginRateLimit() throws Exception {
         config.set("general.max_requests_before_logged_in_per_minute", 2);
         AuthService.reloadHttpSettings();

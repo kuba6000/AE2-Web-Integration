@@ -19,6 +19,7 @@ import type { HistoryState } from './history.js';
 import type { SettingsState } from './settings.js';
 import type { Api, ApiFailure } from './api.js';
 import { createCrafting } from './crafting.js';
+import { createPlanExporter } from './plan-export.js';
 import { createCpuMonitor } from './cpus.js';
 import { createHistory } from './history.js';
 import { createResourceHistory, type ResourceHistoryState } from './resource-history.js';
@@ -509,6 +510,7 @@ export function createTerminal(
         serverSettings,
         pins,
         resourceHistory,
+        exportPlan: createPlanExporter(icons),
         icons,
         displayIcons(enabled: boolean) {
             if (iconsEnabled === enabled) return;
