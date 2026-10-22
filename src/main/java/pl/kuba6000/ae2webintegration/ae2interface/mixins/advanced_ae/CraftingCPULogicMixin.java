@@ -2,6 +2,7 @@ package pl.kuba6000.ae2webintegration.ae2interface.mixins.advanced_ae;
 
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.player.Player;
 import net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU;
 import net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic;
 import net.pedroksl.advanced_ae.common.logic.ExecutingCraftingJob;
@@ -33,6 +34,7 @@ import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingCPULogicAcc
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.ICraftingMediumTracker;
 import pl.kuba6000.ae2webintegration.ae2interface.accessors.IExecutingCraftingJobAccessor;
 import pl.kuba6000.ae2webintegration.core.api.IAEMixinCallbacks;
+import pl.kuba6000.ae2webintegration.core.api.PlayerIdentity;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAECraftingPatternDetails;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
@@ -54,10 +56,15 @@ public class CraftingCPULogicMixin implements ICraftingCPULogicAccessor {
         @Nullable ICraftingRequester requester, CallbackInfoReturnable<ICraftingSubmitResult> ci) {
         if (ci.getReturnValue()
             .successful()) {
-            boolean isMachine = src.player()
-                .isEmpty();
+            Player player = src.player()
+                .orElse(null);
+            PlayerIdentity identity = player == null ? null
+                : new PlayerIdentity(
+                    player.getUUID(),
+                    player.getGameProfile()
+                        .getName());
             IAEMixinCallbacks.getInstance()
-                .jobStarted((ICraftingCPUCluster) (Object) cpu, (IAEGrid) grid, false, !isMachine);
+                .jobStarted((ICraftingCPUCluster) (Object) cpu, (IAEGrid) grid, false, player != null, identity);
         }
     }
 
