@@ -303,7 +303,6 @@ footer p {
     grid-column: 2;
     display: flex;
     justify-content: flex-end;
-    gap: 2px;
 }
 .appearance-control button {
     position: relative;
@@ -321,13 +320,6 @@ footer p {
 }
 .appearance-control [data-appearance='dark'] .login-icon {
     color: light-dark(#455975, #c6d7f0);
-}
-.appearance-control [data-appearance='system'] .login-icon {
-    color: light-dark(#325d75, #8eb5d3);
-}
-.appearance-control [aria-pressed='true'] {
-    background: var(--panel);
-    border-color: var(--edge-dark) var(--edge-light) var(--edge-light) var(--edge-dark);
 }
 .appearance-control button::after {
     content: attr(aria-label);

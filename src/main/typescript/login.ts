@@ -19,24 +19,30 @@ const command = element<HTMLTextAreaElement>('registrationCommand');
 const controller = new AbortController();
 let disposed = false;
 
-const appearanceButtons = document.querySelectorAll<HTMLButtonElement>('[data-appearance]');
+const appearanceButton = element<HTMLButtonElement>('appearance');
 const settings = createSettings(new URL('./', location.href), 'login');
 const savedAppearance = settings.get('appearance');
-let appearance = savedAppearance === 'light' || savedAppearance === 'dark' ? savedAppearance : 'system';
+let appearance =
+    savedAppearance === 'light' || savedAppearance === 'dark'
+        ? savedAppearance
+        : matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark'
+          : 'light';
 function applyAppearance(): void {
-    document.documentElement.style.colorScheme = appearance === 'system' ? 'light dark' : appearance;
-    for (const button of appearanceButtons)
-        button.setAttribute('aria-pressed', String(button.dataset.appearance === appearance));
+    document.documentElement.style.colorScheme = appearance;
+    appearanceButton.dataset.appearance = appearance;
+    appearanceButton.setAttribute('aria-label', `Switch to ${appearance === 'light' ? 'dark' : 'light'} mode`);
+    appearanceButton
+        .querySelector('use')!
+        .setAttribute('href', `./assets/web/login-icons.svg#${appearance === 'light' ? 'sun' : 'moon'}`);
 }
 applyAppearance();
-for (const button of appearanceButtons)
-    button.addEventListener('click', () => {
-        const choice = button.dataset.appearance;
-        if (choice !== 'light' && choice !== 'dark' && choice !== 'system') return;
-        appearance = choice;
-        applyAppearance();
-        settings.set('appearance', appearance);
-    });
+if (savedAppearance !== appearance) settings.set('appearance', appearance);
+appearanceButton.addEventListener('click', () => {
+    appearance = appearance === 'light' ? 'dark' : 'light';
+    applyAppearance();
+    settings.set('appearance', appearance);
+});
 
 function showForm(registration: boolean): void {
     login.hidden = registration;
