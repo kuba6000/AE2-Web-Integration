@@ -41,8 +41,7 @@ public interface AECraftingJobMixin extends IAECraftingJob {
             .web$getInventory();
 
         final List<ICraftingPlanSummaryEntry> entries = new ArrayList<>();
-        for (Object obj : plan) {
-            final IAEStack<?> captured = (IAEStack<?>) obj;
+        for (final IAEStack<?> captured : plan) {
             final IAEKey key = (IAEKey) (Object) captured;
 
             final long stored;

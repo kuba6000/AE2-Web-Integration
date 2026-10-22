@@ -25,6 +25,7 @@ import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.crafting.ICraftingProviderHelper;
 import appeng.api.networking.crafting.ICraftingRequester;
 import appeng.api.networking.security.BaseActionSource;
+import appeng.api.networking.storage.IStorageGrid;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.util.IInterfaceViewable;
 import appeng.me.cache.CraftingGridCache;
@@ -35,6 +36,8 @@ import pl.kuba6000.ae2webintegration.core.interfaces.IAEGrid;
 import pl.kuba6000.ae2webintegration.core.interfaces.IAEKey;
 import pl.kuba6000.ae2webintegration.core.interfaces.ICraftingCPUCluster;
 import pl.kuba6000.ae2webintegration.core.interfaces.IPatternProviderViewable;
+import pl.kuba6000.ae2webintegration.core.interfaces.service.IAEStorageGrid;
+import pl.kuba6000.ae2webintegration.core.tracking.storage.StorageCapture;
 
 @Mixin(value = CraftingGridCache.class, remap = false)
 public class CraftingGridCacheMixin implements ICraftingMediumTracker {
@@ -119,6 +122,12 @@ public class CraftingGridCacheMixin implements ICraftingMediumTracker {
             && !web$mediumToViewable.containsKey(medium)) {
             web$mediumToViewable.put(medium, viewable);
         }
+    }
+
+    @Inject(method = "updatePatterns", at = @At("RETURN"))
+    private void web$craftablesChanged(CallbackInfo callback) {
+        StorageCapture capture = ((IAEStorageGrid) grid.getCache(IStorageGrid.class)).web$getStorageCapture();
+        if (capture != null) capture.invalidate();
     }
 
     // --- ICraftingMediumTracker ---

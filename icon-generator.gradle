@@ -26,7 +26,7 @@ dependencies {
     iconGeneratorShared(project(path: ':core', configuration: 'iconPackElements')) {
         transitive = false
     }
-    iconGeneratorCompileOnly('com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-1030-GTNH:dev') {
+    iconGeneratorCompileOnly('com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-1083-GTNH:dev') {
         transitive = false
     }
     iconGeneratorCompileOnly('com.github.GTNewHorizons:NotEnoughItems:2.8.125-GTNH:dev') {
