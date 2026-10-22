@@ -99,6 +99,9 @@ h2 {
     width: 32px;
     height: 32px;
 }
+.registration-icon {
+    color: light-dark(#283b4b, #1f2834);
+}
 .brand span {
     color: var(--muted);
     font-weight: 400;
@@ -129,7 +132,6 @@ label {
 }
 input,
 textarea,
-select,
 button {
     display: inline-flex;
     align-items: center;
@@ -140,8 +142,7 @@ button {
     border-radius: 0;
 }
 input,
-textarea,
-select {
+textarea {
     background: var(--surface);
     color: var(--surface-text);
     border: 2px solid;
@@ -289,18 +290,37 @@ footer p {
 }
 .appearance-control {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 16px;
-    font-size: 14px;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-bottom: 12px;
 }
-.appearance-control label {
-    margin: 0;
+.appearance-control button {
+    position: relative;
+    width: 44px;
+    padding: 8px;
 }
-.appearance-control select {
-    min-height: 44px;
-    padding: 8px 12px;
+.appearance-control [aria-pressed='true'] {
+    background: var(--panel);
+    border-color: var(--edge-dark) var(--edge-light) var(--edge-light) var(--edge-dark);
+}
+.appearance-control button::after {
+    content: attr(aria-label);
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 1;
+    padding: 6px 8px;
+    white-space: nowrap;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--edge-dark);
+    font-size: 12px;
+    pointer-events: none;
+}
+.appearance-control button:hover::after,
+.appearance-control button:focus-visible::after {
+    display: block;
 }
 .credits {
     margin: 16px 0 0;

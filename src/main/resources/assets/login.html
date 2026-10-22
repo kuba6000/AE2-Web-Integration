@@ -18,6 +18,23 @@
     <body>
         <main class="login-card">
             <header>
+                <div class="appearance-control" role="group" aria-label="Color mode">
+                    <button type="button" data-appearance="light" aria-label="Light mode" aria-pressed="false">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#sun" />
+                        </svg>
+                    </button>
+                    <button type="button" data-appearance="dark" aria-label="Dark mode" aria-pressed="false">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#moon" />
+                        </svg>
+                    </button>
+                    <button type="button" data-appearance="system" aria-label="Use system theme" aria-pressed="true">
+                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                            <use href="./assets/web/login-icons.svg#pc" />
+                        </svg>
+                    </button>
+                </div>
                 <div class="brand">
                     <svg class="login-icon brand-mark" aria-hidden="true" focusable="false">
                         <use href="./assets/web/login-icons.svg#brand" />
@@ -39,7 +56,7 @@
                         ><span>Log in</span>
                     </button>
                     <button id="registerSwitch" type="button" aria-pressed="false">
-                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                        <svg class="login-icon registration-icon" aria-hidden="true" focusable="false">
                             <use href="./assets/web/login-icons.svg#register" /></svg
                         ><span>Register</span>
                     </button>
@@ -119,7 +136,7 @@
                         Use a password unique to this server. Its administrator controls this service.
                     </p>
                     <button class="primary" type="submit">
-                        <svg class="login-icon" aria-hidden="true" focusable="false">
+                        <svg class="login-icon registration-icon" aria-hidden="true" focusable="false">
                             <use href="./assets/web/login-icons.svg#register" /></svg
                         ><span>Continue</span>
                     </button>
@@ -143,14 +160,6 @@
                 </section>
             </section>
             <footer>
-                <div class="appearance-control">
-                    <label for="appearance">Appearance</label>
-                    <select id="appearance">
-                        <option value="system">System</option>
-                        <option value="light">Light</option>
-                        <option value="dark">Dark</option>
-                    </select>
-                </div>
                 <p class="cookie-notice">
                     <svg class="login-icon" aria-hidden="true" focusable="false">
                         <use href="./assets/web/login-icons.svg#cookie" /></svg

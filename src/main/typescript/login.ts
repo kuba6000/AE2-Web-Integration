@@ -19,18 +19,24 @@ const command = element<HTMLTextAreaElement>('registrationCommand');
 const controller = new AbortController();
 let disposed = false;
 
-const appearance = element<HTMLSelectElement>('appearance');
+const appearanceButtons = document.querySelectorAll<HTMLButtonElement>('[data-appearance]');
 const settings = createSettings(new URL('./', location.href), 'login');
 const savedAppearance = settings.get('appearance');
-appearance.value = savedAppearance === 'light' || savedAppearance === 'dark' ? savedAppearance : 'system';
+let appearance = savedAppearance === 'light' || savedAppearance === 'dark' ? savedAppearance : 'system';
 function applyAppearance(): void {
-    document.documentElement.style.colorScheme = appearance.value === 'system' ? 'light dark' : appearance.value;
+    document.documentElement.style.colorScheme = appearance === 'system' ? 'light dark' : appearance;
+    for (const button of appearanceButtons)
+        button.setAttribute('aria-pressed', String(button.dataset.appearance === appearance));
 }
 applyAppearance();
-appearance.addEventListener('change', () => {
-    applyAppearance();
-    settings.set('appearance', appearance.value);
-});
+for (const button of appearanceButtons)
+    button.addEventListener('click', () => {
+        const choice = button.dataset.appearance;
+        if (choice !== 'light' && choice !== 'dark' && choice !== 'system') return;
+        appearance = choice;
+        applyAppearance();
+        settings.set('appearance', appearance);
+    });
 
 function showForm(registration: boolean): void {
     login.hidden = registration;
